@@ -1,7 +1,5 @@
 import {
   assert,
-  assertBoxedError,
-  assertBoxedFalse,
   linkModules,
   unlinkModules,
 } from "../../../assets/js/test_support.mjs";
@@ -23,80 +21,10 @@ describe("inspect/1", () => {
   });
 });
 
+// Important: keep Interpreter.inspect() consistency tests in sync.
 describe("inspect/2", () => {
-  const opts = Type.list([]);
-
-  describe("atom", () => {
-    it("true", () => {
-      const result = Elixir_Kernel["inspect/2"](Type.boolean(true), opts);
-      assert.deepStrictEqual(result, Type.bitstring("true"));
-    });
-
-    it("false", () => {
-      const result = Elixir_Kernel["inspect/2"](Type.boolean(false), opts);
-      assert.deepStrictEqual(result, Type.bitstring("false"));
-    });
-
-    it("nil", () => {
-      const result = Elixir_Kernel["inspect/2"](Type.nil(), opts);
-      assert.deepStrictEqual(result, Type.bitstring("nil"));
-    });
-
-    it("non-boolean and non-nil", () => {
-      const result = Elixir_Kernel["inspect/2"](Type.atom("abc"), opts);
-      assert.deepStrictEqual(result, Type.bitstring(":abc"));
-    });
-
-    describe("float", () => {
-      it("integer-representable", () => {
-        const result = Elixir_Kernel["inspect/2"](Type.float(123.0), opts);
-        assert.deepStrictEqual(result, Type.bitstring("123.0"));
-      });
-
-      it("not integer-representable", () => {
-        const result = Elixir_Kernel["inspect/2"](Type.float(123.45), opts);
-        assert.deepStrictEqual(result, Type.bitstring("123.45"));
-      });
-    });
-
-    it("integer", () => {
-      const result = Elixir_Kernel["inspect/2"](Type.integer(123), opts);
-      assert.deepStrictEqual(result, Type.bitstring("123"));
-    });
-
-    describe("list", () => {
-      it("empty", () => {
-        const result = Elixir_Kernel["inspect/2"](Type.list([]), opts);
-        assert.deepStrictEqual(result, Type.bitstring("[]"));
-      });
-
-      it("non-empty, proper", () => {
-        const result = Elixir_Kernel["inspect/2"](
-          Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
-          opts,
-        );
-
-        assert.deepStrictEqual(result, Type.bitstring("[1, 2, 3]"));
-      });
-
-      it("non-empty, improper", () => {
-        const result = Elixir_Kernel["inspect/2"](
-          Type.improperList([
-            Type.integer(1),
-            Type.integer(2),
-            Type.integer(3),
-          ]),
-          opts,
-        );
-
-        assert.deepStrictEqual(result, Type.bitstring("[1, 2 | 3]"));
-      });
-    });
-  });
-
-  // TODO: remove when all types are supported
-  it("default", () => {
-    const result = Elixir_Kernel["inspect/2"]({type: "x"}, Type.list([]));
-    assert.deepStrictEqual(result, Type.bitstring('{"type":"x"}'));
+  it("delegates to Interpreter.inspect()", () => {
+    const result = Elixir_Kernel["inspect/2"](Type.integer(123));
+    assert.deepStrictEqual(result, Type.bitstring("123"));
   });
 });

@@ -239,8 +239,62 @@ export default class Interpreter {
     return jsError.struct.data["atom(__struct__)"][1].value.substring(7);
   }
 
-  static inspect(term) {
-    return Bitstring.toText(Elixir_Kernel["inspect/1"](term));
+  // Important: keep Kernel.inspect/2 consistency tests in sync.
+  // TODO: finish (e.g. implement text detection in binaries and other types such as pid, etc.)
+  static inspect(term, opts = {}) {
+    switch (term.type) {
+      // TODO: handle correctly atoms which need to be double quoted, e.g. :"1"
+      case "atom":
+        if (Type.isBoolean(term) || Type.isNil(term)) {
+          return term.value;
+        }
+        return ":" + term.value;
+
+      case "float":
+        if (Number.isInteger(term.value)) {
+          return term.value.toString() + ".0";
+        }
+        return term.value.toString();
+
+      case "integer":
+        return term.value.toString();
+
+      case "list":
+        if (term.isProper) {
+          return (
+            "[" +
+            term.data
+              .map((elem) => Interpreter.inspect(elem, opts))
+              .join(", ") +
+            "]"
+          );
+        } else {
+          return (
+            "[" +
+            term.data
+              .slice(0, -1)
+              .map((elem) => Interpreter.inspect(elem, opts))
+              .join(", ") +
+            " | " +
+            Interpreter.inspect(term.data.slice(-1)[0]) +
+            "]"
+          );
+        }
+
+      // case "string":
+      //   return '"' + term.value.toString() + '"';
+
+      // case "tuple":
+      //   return (
+      //     "{" +
+      //     term.data.map((item) => Elixir_Kernel["inspect/1"](item)).join(", ") +
+      //     "}"
+      //   );
+
+      // TODO: remove when all types are supported
+      default:
+        return Interpreter.serialize(term);
+    }
   }
 
   static inspectModuleName(moduleName) {

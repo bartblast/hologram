@@ -1680,10 +1680,80 @@ it("fetchErrorType()", () => {
   assert.equal(result, "MyError");
 });
 
+// Important: keep Kernel.inspect/2 consistency tests in sync.
 describe("inspect()", () => {
-  it("delegates to Kernel.inspect/1", () => {
-    const result = Interpreter.inspect(Type.integer(123));
-    assert.equal(result, "123");
+  describe("atom", () => {
+    it("true", () => {
+      const result = Interpreter.inspect(Type.boolean(true), {});
+      assert.deepStrictEqual(result, "true");
+    });
+
+    it("false", () => {
+      const result = Interpreter.inspect(Type.boolean(false), {});
+      assert.deepStrictEqual(result, "false");
+    });
+
+    it("nil", () => {
+      const result = Interpreter.inspect(Type.nil(), {});
+      assert.deepStrictEqual(result, "nil");
+    });
+
+    it("non-boolean and non-nil", () => {
+      const result = Interpreter.inspect(Type.atom("abc"), {});
+      assert.deepStrictEqual(result, ":abc");
+    });
+
+    describe("float", () => {
+      it("integer-representable", () => {
+        const result = Interpreter.inspect(Type.float(123.0), {});
+        assert.deepStrictEqual(result, "123.0");
+      });
+
+      it("not integer-representable", () => {
+        const result = Interpreter.inspect(Type.float(123.45), {});
+        assert.deepStrictEqual(result, "123.45");
+      });
+    });
+
+    it("integer", () => {
+      const result = Interpreter.inspect(Type.integer(123), {});
+      assert.deepStrictEqual(result, "123");
+    });
+
+    describe("list", () => {
+      it("empty", () => {
+        const result = Interpreter.inspect(Type.list([]), {});
+        assert.deepStrictEqual(result, "[]");
+      });
+
+      it("non-empty, proper", () => {
+        const result = Interpreter.inspect(
+          Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+          {},
+        );
+
+        assert.deepStrictEqual(result, "[1, 2, 3]");
+      });
+
+      it("non-empty, improper", () => {
+        const result = Interpreter.inspect(
+          Type.improperList([
+            Type.integer(1),
+            Type.integer(2),
+            Type.integer(3),
+          ]),
+          {},
+        );
+
+        assert.deepStrictEqual(result, "[1, 2 | 3]");
+      });
+    });
+  });
+
+  // TODO: remove when all types are supported
+  it("default", () => {
+    const result = Interpreter.inspect({type: "x"}, {});
+    assert.deepStrictEqual(result, '{"type":"x"}');
   });
 });
 

@@ -13,6 +13,7 @@ defmodule Hologram.ExJsConsistency.Elixir.KernelTest do
     end
   end
 
+  # Important: keep Interpreter.inspect() consistency tests in sync.
   describe "inspect/2" do
     test "atom, true" do
       assert Kernel.inspect(true, []) == "true"
