@@ -58,6 +58,11 @@ describe("inspect/2", () => {
         assert.deepStrictEqual(result, Type.bitstring("123.45"));
       });
     });
+
+    it("integer", () => {
+      const result = Elixir_Kernel["inspect/2"](Type.integer(123), opts);
+      assert.deepStrictEqual(result, Type.bitstring("123"));
+    });
   });
 
   // TODO: remove when all types are supported

@@ -30,8 +30,9 @@ const Elixir_Kernel = {
         }
         break;
 
-      // case "integer":
-      //   output = term.value.toString();
+      case "integer":
+        output = term.value.toString();
+        break;
 
       // case "list":
       //   if (term.isProper) {
