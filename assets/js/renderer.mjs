@@ -7,8 +7,8 @@ import Type from "./type.mjs";
 export default class Renderer {
   // TODO: implement
   static renderPage(pageModule, pageParams, clientsData) {
-    const _layoutModule =
-      Interpreter.module(pageModule)["__layout_module__/0"]();
+    const pageModuleRef = Interpreter.module(pageModule);
+    const _layoutModule = pageModuleRef["__layout_module__/0"]();
 
     const pageClient = Renderer.#mapFetch(clientsData, Type.bitstring("page"));
     const pageState = Renderer.#mapFetch(pageClient, Type.atom("state"));
@@ -19,7 +19,9 @@ export default class Renderer {
     );
 
     const vars = Renderer.#aggregateVars(pageParams, pageState);
-    console.inspect(vars);
+    const pageDOM = pageModuleRef["template/0"](vars);
+
+    console.inspect(pageDOM);
   }
 
   static #aggregateVars(props, state) {
