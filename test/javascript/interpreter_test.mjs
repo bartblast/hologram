@@ -1748,6 +1748,22 @@ describe("inspect()", () => {
         assert.deepStrictEqual(result, "[1, 2 | 3]");
       });
     });
+
+    describe("tuple", () => {
+      it("empty", () => {
+        const result = Interpreter.inspect(Type.tuple([]), {});
+        assert.deepStrictEqual(result, "{}");
+      });
+
+      it("non-empty", () => {
+        const result = Interpreter.inspect(
+          Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+          {},
+        );
+
+        assert.deepStrictEqual(result, "{1, 2, 3}");
+      });
+    });
   });
 
   // TODO: remove when all types are supported

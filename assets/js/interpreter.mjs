@@ -284,12 +284,12 @@ export default class Interpreter {
       // case "string":
       //   return '"' + term.value.toString() + '"';
 
-      // case "tuple":
-      //   return (
-      //     "{" +
-      //     term.data.map((item) => Elixir_Kernel["inspect/1"](item)).join(", ") +
-      //     "}"
-      //   );
+      case "tuple":
+        return (
+          "{" +
+          term.data.map((elem) => Interpreter.inspect(elem, opts)).join(", ") +
+          "}"
+        );
 
       // TODO: remove when all types are supported
       default:

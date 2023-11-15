@@ -54,5 +54,13 @@ defmodule Hologram.ExJsConsistency.Elixir.KernelTest do
     test "list, non-empty, improper" do
       assert Kernel.inspect([1, 2 | 3], []) == "[1, 2 | 3]"
     end
+
+    test "tuple, empty" do
+      assert Kernel.inspect({}, []) == "{}"
+    end
+
+    test "tuple, non-empty" do
+      assert Kernel.inspect({1, 2, 3}, []) == "{1, 2, 3}"
+    end
   end
 end
