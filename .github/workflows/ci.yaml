@@ -17,9 +17,9 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  lib_tests:
     runs-on: ubuntu-latest
-    name: Test on OTP ${{ matrix.otp }} / Elixir ${{ matrix.elixir }}
+    name: Lib Tests on OTP ${{ matrix.otp }} / Elixir ${{ matrix.elixir }}
     strategy:
       # Specify the OTP and Elixir versions to use when building
       # and running the workflow steps.
@@ -167,6 +167,37 @@ jobs:
     # Step: Execute lib JavaScript unit tests.
     - name: Run lib JavaScript unit tests
       run: mix test.js
+
+  feature_tests:
+    runs-on: ubuntu-latest
+    name: Feature Test on OTP ${{ matrix.otp }} / Elixir ${{ matrix.elixir }}
+    defaults:
+      run:
+        working-directory: test/features
+    strategy:
+      # Specify the OTP and Elixir versions to use when building
+      # and running the workflow steps.
+      matrix:
+        otp: ['26.0.2']
+        elixir: ['1.15.5-otp-26']
+    steps:
+
+    # Step: Setup Elixir + Erlang image as the base.
+    - name: Set up Elixir
+      uses: erlef/setup-beam@v1
+      with:
+        otp-version: ${{ matrix.otp }}
+        elixir-version: ${{ matrix.elixir }}
+
+    # Step: Checkout the code.
+    - name: Checkout code
+      uses: actions/checkout@v3
+      
+    # Step: Setup Node.js using the version specified in .tool-versions file.
+    - name: Set up Node.JS
+      uses: actions/setup-node@v3
+      with:
+        node-version-file: .tool-versions    
       
     ### FEATURE TESTS APP CHECKS ###  
       
@@ -198,27 +229,27 @@ jobs:
     # Step: Download feature tests app Elixir dependencies.
     # If unchanged, uses the cached version.
     - name: Download feature tests app Elixir deps
-      run: cd test/features && mix deps.get
+      run: mix deps.get
       
     # Step: Compile the feature tests app project treating any warnings as errors.
     - name: Check feature tests app project compiles without warnings
-      run: cd test/features && mix compile --all-warnings --warnings-as-errors      
+      run: mix compile --all-warnings --warnings-as-errors      
       
     # Step: Check if feature tests app mix.lock has any unused dependencies.
     - name: Check feature tests app unused Elixir deps
-      run: cd test/features && mix deps.unlock --check-unused
+      run: mix deps.unlock --check-unused
       
     # Step: Check if there are any feature tests app Elixir dependencies which have been marked as retired.
     - name: Check feature tests app retired Elixir deps
-      run: cd test/features && mix hex.audit
+      run: mix hex.audit
       
     # Step: Check that the feature tests app Elixir code has already been formatted.
     - name: Check feature tests app Elixir code formatted
-      run: cd test/features && mix format --check-formatted
+      run: mix format --check-formatted
       
     # Step: Run feature tests app Elixir static code analysis with Credo.
     - name: Run feature tests app Elixir static code analysis with Credo
-      run: cd test/features && mix credo --strict
+      run: mix credo --strict
       
     # Step: Restore feature tests app Dialyzer PLT cache.
     # Cache key is based on Erlang/Elixir version and the mix.lock hash.
@@ -236,7 +267,7 @@ jobs:
     # Step: Create feature tests app Dialyzer PLTs if no cache was found.
     - name: Create feature tests app Dialyzer PLTs
       if: steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true'
-      run: cd test/features && mix dialyzer --plt
+      run: mix dialyzer --plt
       
     # Step: Save feature tests app Dialyzer PLT cache.
     # By default, the GitHub Cache action will only save the cache if all steps in the job succeed,
@@ -253,12 +284,12 @@ jobs:
           
     # Step: Run feature tests app Elixir static code analysis with Dialyzer.
     - name: Run feature tests app Elixir static code analysis with Dialyzer
-      run: cd test/features && mix dialyzer --format github
+      run: mix dialyzer --format github
       
     # Step: Check that all feature tests app test scripts have valid file names.
     - name: Check feature tests app test file names
-      run: cd test/features && mix holo.test.check_file_names test/hologram_feature_tests test/hologram_feature_tests_web
+      run: mix holo.test.check_file_names test/hologram_feature_tests test/hologram_feature_tests_web
       
     # Step: Execute feature tests app Elixir unit tests.
     - name: Run feature tests app Elixir unit tests
-      run: cd test/features && mix test --warnings-as-errors
+      run: mix test --warnings-as-errors
