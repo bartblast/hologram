@@ -480,7 +480,7 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
-  describe "render_page" do
+  describe "page" do
     setup do
       stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
       stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
