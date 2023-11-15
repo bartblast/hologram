@@ -243,60 +243,26 @@ export default class Interpreter {
   // TODO: finish (e.g. implement text detection in binaries and other types such as pid, etc.)
   static inspect(term, opts = {}) {
     switch (term.type) {
-      // TODO: handle correctly atoms which need to be double quoted, e.g. :"1"
       case "atom":
-        if (Type.isBoolean(term) || Type.isNil(term)) {
-          return term.value;
-        }
-        return ":" + term.value;
+        return Interpreter.#inspectAtom(term, opts);
 
       case "bitstring":
-        if (Bitstring.isText(term)) {
-          return '"' + Bitstring.toText(term) + '"';
-        }
-        // TODO: support bitstrings which are not text
-        return Interpreter.serialize(term);
+        return Interpreter.#inspectBitstring(term, opts);
 
       case "float":
-        if (Number.isInteger(term.value)) {
-          return term.value.toString() + ".0";
-        }
-        return term.value.toString();
+        return Interpreter.#inspectFloat(term, opts);
 
       case "integer":
         return term.value.toString();
 
       case "list":
-        if (term.isProper) {
-          return (
-            "[" +
-            term.data
-              .map((elem) => Interpreter.inspect(elem, opts))
-              .join(", ") +
-            "]"
-          );
-        } else {
-          return (
-            "[" +
-            term.data
-              .slice(0, -1)
-              .map((elem) => Interpreter.inspect(elem, opts))
-              .join(", ") +
-            " | " +
-            Interpreter.inspect(term.data.slice(-1)[0]) +
-            "]"
-          );
-        }
+        return Interpreter.#inspectList(term, opts);
 
       case "string":
         return `"${term.value}"`;
 
       case "tuple":
-        return (
-          "{" +
-          term.data.map((elem) => Interpreter.inspect(elem, opts)).join(", ") +
-          "}"
-        );
+        return Interpreter.#inspectTuple(term, opts);
 
       // TODO: remove when all types are supported
       default:
@@ -604,6 +570,61 @@ export default class Interpreter {
     }
 
     return false;
+  }
+
+  // TODO: handle correctly atoms which need to be double quoted, e.g. :"1"
+  static #inspectAtom(term, _opts) {
+    if (Type.isBoolean(term) || Type.isNil(term)) {
+      return term.value;
+    }
+
+    return ":" + term.value;
+  }
+
+  // TODO: support bitstrings which are not text
+  static #inspectBitstring(term, _opts) {
+    if (Bitstring.isText(term)) {
+      return '"' + Bitstring.toText(term) + '"';
+    }
+
+    return Interpreter.serialize(term);
+  }
+
+  static #inspectFloat(term, _opts) {
+    if (Number.isInteger(term.value)) {
+      return term.value.toString() + ".0";
+    }
+
+    return term.value.toString();
+  }
+
+  static #inspectList(term, opts) {
+    if (term.isProper) {
+      return (
+        "[" +
+        term.data.map((elem) => Interpreter.inspect(elem, opts)).join(", ") +
+        "]"
+      );
+    }
+
+    return (
+      "[" +
+      term.data
+        .slice(0, -1)
+        .map((elem) => Interpreter.inspect(elem, opts))
+        .join(", ") +
+      " | " +
+      Interpreter.inspect(term.data.slice(-1)[0]) +
+      "]"
+    );
+  }
+
+  static #inspectTuple(term, opts) {
+    return (
+      "{" +
+      term.data.map((elem) => Interpreter.inspect(elem, opts)).join(", ") +
+      "}"
+    );
   }
 
   static #matchBitstringPattern(right, left, vars) {
