@@ -63,6 +63,35 @@ describe("inspect/2", () => {
       const result = Elixir_Kernel["inspect/2"](Type.integer(123), opts);
       assert.deepStrictEqual(result, Type.bitstring("123"));
     });
+
+    describe("list", () => {
+      it("empty", () => {
+        const result = Elixir_Kernel["inspect/2"](Type.list([]), opts);
+        assert.deepStrictEqual(result, Type.bitstring("[]"));
+      });
+
+      it("non-empty, proper", () => {
+        const result = Elixir_Kernel["inspect/2"](
+          Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+          opts,
+        );
+
+        assert.deepStrictEqual(result, Type.bitstring("[1, 2, 3]"));
+      });
+
+      it("non-empty, improper", () => {
+        const result = Elixir_Kernel["inspect/2"](
+          Type.improperList([
+            Type.integer(1),
+            Type.integer(2),
+            Type.integer(3),
+          ]),
+          opts,
+        );
+
+        assert.deepStrictEqual(result, Type.bitstring("[1, 2 | 3]"));
+      });
+    });
   });
 
   // TODO: remove when all types are supported

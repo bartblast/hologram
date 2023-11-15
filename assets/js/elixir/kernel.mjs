@@ -34,27 +34,26 @@ const Elixir_Kernel = {
         output = term.value.toString();
         break;
 
-      // case "list":
-      //   if (term.isProper) {
-      //     output = (
-      //       "[" +
-      //       term.data
-      //         .map((item) => Elixir_Kernel["inspect/1"](item, opts))
-      //         .join(", ") +
-      //       "]"
-      //     );
-      //   } else {
-      //     output = (
-      //       "[" +
-      //       term.data
-      //         .slice(0, -1)
-      //         .map((item) => Elixir_Kernel["inspect/1"](item, opts))
-      //         .join(", ") +
-      //       " | " +
-      //       Elixir_Kernel["inspect/1"](term.data.slice(-1)[0]) +
-      //       "]"
-      //     );
-      //   }
+      case "list":
+        if (term.isProper) {
+          output =
+            "[" +
+            term.data
+              .map((elem) => Elixir_Kernel["inspect/2"](elem, opts))
+              .join(", ") +
+            "]";
+        } else {
+          output =
+            "[" +
+            term.data
+              .slice(0, -1)
+              .map((elem) => Elixir_Kernel["inspect/2"](elem, opts))
+              .join(", ") +
+            " | " +
+            Elixir_Kernel["inspect/2"](term.data.slice(-1)[0]) +
+            "]";
+        }
+        break;
 
       // case "string":
       //   return '"' + term.value.toString() + '"';
