@@ -74,12 +74,12 @@ describe("foldl/3", () => {
     [
       {
         params: (_vars) => [
-          Type.variablePattern("value"),
+          Type.variablePattern("elem"),
           Type.variablePattern("acc"),
         ],
         guards: [],
         body: (vars) => {
-          return Erlang["+/2"](vars.acc, vars.value);
+          return Erlang["+/2"](vars.acc, vars.elem);
         },
       },
     ],
@@ -210,6 +210,83 @@ describe("keyfind/3", () => {
         ),
       "ArgumentError",
       "errors were found at the given arguments:\n\n  * 3rd argument: not a list\n",
+    );
+  });
+});
+
+describe("map/2", () => {
+  const fun = Type.anonymousFunction(
+    1,
+    [
+      {
+        params: (_vars) => [Type.variablePattern("elem")],
+        guards: [],
+        body: (vars) => {
+          return Erlang["*/2"](vars.elem, Type.integer(10));
+        },
+      },
+    ],
+    {},
+  );
+
+  const emptyList = Type.list([]);
+
+  it("maps empty list", () => {
+    const result = Erlang_Lists["map/2"](fun, emptyList);
+    assert.deepStrictEqual(result, emptyList);
+  });
+
+  it("maps non-empty list", () => {
+    const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+    const result = Erlang_Lists["map/2"](fun, list);
+
+    const expected = Type.list([
+      Type.integer(10),
+      Type.integer(20),
+      Type.integer(30),
+    ]);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
+    assertBoxedError(
+      () => Erlang_Lists["map/2"](Type.atom("abc"), emptyList),
+      "FunctionClauseError",
+      "no function clause matching in :lists.map/2",
+    );
+  });
+
+  it("raises FunctionClauseError if the first argument is an anonymous function with arity different than 1", () => {
+    const fun = Type.anonymousFunction(
+      2,
+      [
+        {
+          params: (_vars) => [
+            Type.variablePattern("x"),
+            Type.variablePattern("y"),
+          ],
+          guards: [],
+          body: (vars) => {
+            return Erlang["+/2"](vars.x, vars.y);
+          },
+        },
+      ],
+      {},
+    );
+
+    assertBoxedError(
+      () => Erlang_Lists["map/2"](fun, emptyList),
+      "FunctionClauseError",
+      "no function clause matching in :lists.map/2",
+    );
+  });
+
+  it("raises CaseClauseError if the second argument is not a list", () => {
+    assertBoxedError(
+      () => Erlang_Lists["map/2"](fun, Type.atom("abc")),
+      "CaseClauseError",
+      "no case clause matching: :abc",
     );
   });
 });

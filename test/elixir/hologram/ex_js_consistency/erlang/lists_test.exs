@@ -29,7 +29,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
   describe "foldl/3" do
     setup do
-      [fun: fn value, acc -> acc + value end]
+      [fun: fn elem, acc -> acc + elem end]
     end
 
     test "reduces empty list", %{fun: fun} do
@@ -90,6 +90,38 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
                    fn ->
                      :lists.keyfind(:abc, 1, :xyz)
                    end
+    end
+  end
+
+  describe "map/2" do
+    setup do
+      [fun: fn elem -> elem * 10 end]
+    end
+
+    test "maps empty list", %{fun: fun} do
+      assert :lists.map(fun, []) == []
+    end
+
+    test "maps non-empty list", %{fun: fun} do
+      assert :lists.map(fun, [1, 2, 3]) == [10, 20, 30]
+    end
+
+    test "raises FunctionClauseError if the first argument is not an anonymous function" do
+      assert_raise FunctionClauseError, "no function clause matching in :lists.map/2", fn ->
+        :lists.map(:abc, [])
+      end
+    end
+
+    test "raises FunctionClauseError if the first argument is an anonymous function with arity different than 1" do
+      assert_raise FunctionClauseError, "no function clause matching in :lists.map/2", fn ->
+        :lists.map(fn x, y -> x + y end, [])
+      end
+    end
+
+    test "raises CaseClauseError if the second argument is not a list", %{fun: fun} do
+      assert_raise CaseClauseError, "no case clause matching: :abc", fn ->
+        :lists.map(fun, :abc)
+      end
     end
   end
 

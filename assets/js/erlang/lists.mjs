@@ -43,7 +43,7 @@ const Erlang_Lists = {
     }
 
     return list.data.reduce(
-      (acc, value) => Interpreter.callAnonymousFunction(fun, [value, acc]),
+      (acc, elem) => Interpreter.callAnonymousFunction(fun, [elem, acc]),
       initialAcc,
     );
   },
@@ -84,6 +84,25 @@ const Erlang_Lists = {
     return Type.boolean(false);
   },
   // end keyfind/3
+  // deps: []
+
+  // start map/2
+  "map/2": (fun, list) => {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
+      Interpreter.raiseFunctionClauseError(
+        "no function clause matching in :lists.map/2",
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseCaseClauseError(list);
+    }
+
+    return Type.list(
+      list.data.map((elem) => Interpreter.callAnonymousFunction(fun, [elem])),
+    );
+  },
+  // end map/2
   // deps: []
 
   // start reverse/1
