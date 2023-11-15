@@ -1175,6 +1175,32 @@ describe("from()", () => {
   });
 });
 
+describe("isText()", () => {
+  it("empty text", () => {
+    assert.isTrue(Bitstring.isText(Type.bitstring("")));
+  });
+
+  it("ASCII text", () => {
+    assert.isTrue(Bitstring.isText(Type.bitstring("abc")));
+  });
+
+  it("Unicode text", () => {
+    assert.isTrue(Bitstring.isText(Type.bitstring("全息图")));
+  });
+
+  it("non-binary", () => {
+    assert.isFalse(Bitstring.isText(Type.bitstring([1, 0, 1])));
+  });
+
+  it("invalid code point", () => {
+    const bitstring = Type.bitstring([
+      Type.bitstringSegment(Type.integer(255), {type: "integer"}),
+    ]);
+
+    assert.isFalse(Bitstring.isText(bitstring));
+  });
+});
+
 describe("merge()", () => {
   it("no bitstrings", () => {
     assert.deepStrictEqual(Bitstring.merge([]), Type.bitstring([]));

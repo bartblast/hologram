@@ -136,6 +136,33 @@ export default class Bitstring {
     return {type: "bitstring", bits: Utils.concatUint8Arrays(bitArrays)};
   }
 
+  static isText(bitstring) {
+    if (!Type.isBinary(bitstring)) {
+      return false;
+    }
+
+    let offset = 0;
+
+    while (offset < bitstring.bits.length) {
+      const codePointInfo = Bitstring.fetchNextCodePointFromUtf8BitstringChunk(
+        bitstring.bits,
+        offset,
+      );
+
+      if (!codePointInfo) {
+        return false;
+      }
+
+      if (!Bitstring.validateCodePoint(codePointInfo[0].value)) {
+        return false;
+      }
+
+      offset += codePointInfo[1];
+    }
+
+    return true;
+  }
+
   // Using set() is much more performant than using spread operator,
   // see: https://jsben.ch/jze3P
   static merge(bitstrings) {
