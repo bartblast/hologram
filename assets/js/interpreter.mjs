@@ -258,6 +258,9 @@ export default class Interpreter {
       case "list":
         return Interpreter.#inspectList(term, opts);
 
+      case "map":
+        return Interpreter.#inspectMap(term, opts);
+
       case "string":
         return `"${term.value}"`;
 
@@ -598,6 +601,7 @@ export default class Interpreter {
     return term.value.toString();
   }
 
+  // TODO: support keyword lists
   static #inspectList(term, opts) {
     if (term.isProper) {
       return (
@@ -617,6 +621,34 @@ export default class Interpreter {
       Interpreter.inspect(term.data.slice(-1)[0]) +
       "]"
     );
+  }
+
+  static #inspectMap(term, opts) {
+    const isAtomKeyMap = Object.values(term.data).every(([key, _value]) =>
+      Type.isAtom(key),
+    );
+
+    let itemsStr = "";
+
+    if (isAtomKeyMap) {
+      itemsStr = Object.values(term.data)
+        .map(
+          ([key, value]) => `${key.value}: ${Interpreter.inspect(value, opts)}`,
+        )
+        .join(", ");
+    } else {
+      itemsStr = Object.values(term.data)
+        .map(
+          ([key, value]) =>
+            `${Interpreter.inspect(key, opts)} => ${Interpreter.inspect(
+              value,
+              opts,
+            )}`,
+        )
+        .join(", ");
+    }
+
+    return "%{" + itemsStr + "}";
   }
 
   static #inspectTuple(term, opts) {

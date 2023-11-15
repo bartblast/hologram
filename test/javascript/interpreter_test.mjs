@@ -1772,6 +1772,35 @@ describe("inspect()", () => {
       });
     });
 
+    describe("map", () => {
+      it("empty", () => {
+        const result = Interpreter.inspect(Type.map([]), {});
+        assert.equal(result, "%{}");
+      });
+
+      it("non-empty, with atom keys", () => {
+        const map = Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.atom("b"), Type.bitstring("xyz")],
+        ]);
+
+        const result = Interpreter.inspect(map, {});
+
+        assert.equal(result, '%{a: 1, b: "xyz"}');
+      });
+
+      it("non-empty, with non-atom keys", () => {
+        const map = Type.map([
+          [Type.integer(9), Type.bitstring("xyz")],
+          [Type.bitstring("abc"), Type.float(2.3)],
+        ]);
+
+        const result = Interpreter.inspect(map, {});
+
+        assert.equal(result, '%{9 => "xyz", "abc" => 2.3}');
+      });
+    });
+
     describe("string", () => {
       it("empty text", () => {
         const result = Interpreter.inspect(Type.string(""), {});

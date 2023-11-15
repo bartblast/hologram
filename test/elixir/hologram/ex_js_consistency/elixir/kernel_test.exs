@@ -67,6 +67,18 @@ defmodule Hologram.ExJsConsistency.Elixir.KernelTest do
       assert Kernel.inspect([1, 2 | 3], []) == "[1, 2 | 3]"
     end
 
+    test "map, empty" do
+      assert Kernel.inspect(%{}, []) == "%{}"
+    end
+
+    test "map, non-empty, with atom keys" do
+      assert Kernel.inspect(%{a: 1, b: "xyz"}, []) == ~s'%{a: 1, b: "xyz"}'
+    end
+
+    test "map, non-empty, with non-atom keys" do
+      assert Kernel.inspect(%{9 => "xyz", "abc" => 2.3}, []) == ~s'%{9 => "xyz", "abc" => 2.3}'
+    end
+
     # Same as "bitstring".
     # test "string"
 
