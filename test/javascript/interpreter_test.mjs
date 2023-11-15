@@ -1826,7 +1826,7 @@ describe("isEqual()", () => {
   // non-number != non-number
   it("returns false for a boxed non-number not equal to another boxed non-number", () => {
     const left = Type.boolean(true);
-    const right = Type.string("abc");
+    const right = Type.bitstring("abc");
     const result = Interpreter.isEqual(left, right);
 
     assert.isFalse(result);
@@ -1871,7 +1871,7 @@ describe("isEqual()", () => {
   // integer != non-number
   it("returns false when a boxed integer is compared to a boxed value of non-number type", () => {
     const left = Type.integer(1);
-    const right = Type.string("1");
+    const right = Type.bitstring("1");
     const result = Interpreter.isEqual(left, right);
 
     assert.isFalse(result);
@@ -1916,7 +1916,7 @@ describe("isEqual()", () => {
   // float != non-number
   it("returns false when a boxed float is compared to a boxed value of non-number type", () => {
     const left = Type.float(1.0);
-    const right = Type.string("1.0");
+    const right = Type.bitstring("1.0");
     const result = Interpreter.isEqual(left, right);
 
     assert.isFalse(result);

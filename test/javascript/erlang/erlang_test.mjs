@@ -176,7 +176,7 @@ describe("/=/2", () => {
   // non-number != non-number
   it("returns boxed true for a boxed non-number not equal to another boxed non-number", () => {
     const left = Type.boolean(true);
-    const right = Type.string("abc");
+    const right = Type.bitstring("abc");
     const result = Erlang["/=/2"](left, right);
 
     assertBoxedTrue(result);
@@ -221,7 +221,7 @@ describe("/=/2", () => {
   // integer != non-number
   it("returns boxed true when a boxed integer is compared to a boxed value of non-number type", () => {
     const left = Type.integer(1);
-    const right = Type.string("1");
+    const right = Type.bitstring("1");
     const result = Erlang["/=/2"](left, right);
 
     assertBoxedTrue(result);
@@ -266,7 +266,7 @@ describe("/=/2", () => {
   // float != non-number
   it("returns boxed true when a boxed float is compared to a boxed value of non-number type", () => {
     const left = Type.float(1.0);
-    const right = Type.string("1.0");
+    const right = Type.bitstring("1.0");
     const result = Erlang["/=/2"](left, right);
 
     assertBoxedTrue(result);
@@ -371,7 +371,7 @@ describe("</2", () => {
   });
 
   it("throws a not yet implemented error for non-integer and non-float left argument", () => {
-    const left = Type.string("abc");
+    const left = Type.bitstring("abc");
     const right = Type.integer(2);
 
     const expectedMessage =
@@ -386,7 +386,7 @@ describe("</2", () => {
 
   it("throws a not yet implemented error for non-integer and non-float right argument", () => {
     const left = Type.integer(2);
-    const right = Type.string("abc");
+    const right = Type.bitstring("abc");
 
     const expectedMessage =
       ':erlang.</2 currently supports only floats and integers, left = 2, right = "abc"';
@@ -508,7 +508,7 @@ describe("=</2", () => {
   });
 
   it("throws a not yet implemented error for non-integer and non-float left argument", () => {
-    const left = Type.string("abc");
+    const left = Type.bitstring("abc");
     const right = Type.integer(2);
 
     const expectedMessage =
@@ -523,7 +523,7 @@ describe("=</2", () => {
 
   it("throws a not yet implemented error for non-integer and non-float right argument", () => {
     const left = Type.integer(2);
-    const right = Type.string("abc");
+    const right = Type.bitstring("abc");
 
     const expectedMessage =
       ':erlang.=</2 currently supports only floats and integers, left = 2, right = "abc"';
@@ -549,7 +549,7 @@ describe("==/2", () => {
   // non-number != non-number
   it("returns boxed false for a boxed non-number not equal to another boxed non-number", () => {
     const left = Type.boolean(true);
-    const right = Type.string("abc");
+    const right = Type.bitstring("abc");
     const result = Erlang["==/2"](left, right);
 
     assertBoxedFalse(result);
@@ -594,7 +594,7 @@ describe("==/2", () => {
   // integer != non-number
   it("returns boxed false when a boxed integer is compared to a boxed value of non-number type", () => {
     const left = Type.integer(1);
-    const right = Type.string("1");
+    const right = Type.bitstring("1");
     const result = Erlang["==/2"](left, right);
 
     assertBoxedFalse(result);
@@ -639,7 +639,7 @@ describe("==/2", () => {
   // float != non-number
   it("returns boxed false when a boxed float is compared to a boxed value of non-number type", () => {
     const left = Type.float(1.0);
-    const right = Type.string("1.0");
+    const right = Type.bitstring("1.0");
     const result = Erlang["==/2"](left, right);
 
     assertBoxedFalse(result);
@@ -744,7 +744,7 @@ describe(">/2", () => {
   });
 
   it("throws a not yet implemented error for non-integer and non-float left argument", () => {
-    const left = Type.string("abc");
+    const left = Type.bitstring("abc");
     const right = Type.integer(2);
 
     const expectedMessage =
@@ -759,7 +759,7 @@ describe(">/2", () => {
 
   it("throws a not yet implemented error for non-integer and non-float right argument", () => {
     const left = Type.integer(2);
-    const right = Type.string("abc");
+    const right = Type.bitstring("abc");
 
     const expectedMessage =
       ':erlang.>/2 currently supports only floats and integers, left = 2, right = "abc"';
@@ -870,7 +870,7 @@ describe(">=/2", () => {
   });
 
   it("throws a not yet implemented error for non-integer and non-float left argument", () => {
-    const left = Type.string("abc");
+    const left = Type.bitstring("abc");
     const right = Type.integer(2);
 
     const expectedMessage =
@@ -885,7 +885,7 @@ describe(">=/2", () => {
 
   it("throws a not yet implemented error for non-integer and non-float right argument", () => {
     const left = Type.integer(2);
-    const right = Type.string("abc");
+    const right = Type.bitstring("abc");
 
     const expectedMessage =
       ':erlang.>=/2 currently supports only floats and integers, left = 2, right = "abc"';

@@ -457,7 +457,7 @@ describe("isBoolean()", () => {
   });
 
   it("returns false for values which are not boxed booleans", () => {
-    const arg = Type.string("true");
+    const arg = Type.bitstring("true");
     const result = Type.isBoolean(arg);
 
     assert.isFalse(result);
@@ -605,7 +605,7 @@ describe("isNil()", () => {
   });
 
   it("returns false for values of type other than boxed atom", () => {
-    const arg = Type.string("nil");
+    const arg = Type.bitstring("nil");
     const result = Type.isNil(arg);
 
     assert.isFalse(result);
