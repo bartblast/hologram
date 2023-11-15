@@ -11,8 +11,7 @@ const Elixir_Kernel = {
 
   // TODO: support opts param
   "inspect/2": (term, _opts) => {
-    const text = Bitstring.toText(Interpreter.inspect(term, {}));
-    return Type.bitstring(text);
+    return Type.bitstring(Interpreter.inspect(term, {}));
   },
 };
 
