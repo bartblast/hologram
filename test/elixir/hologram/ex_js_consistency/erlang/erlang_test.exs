@@ -153,7 +153,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "Unicode atom" do
-      assert :erlang.atom_to_list(:全息图) == [20840, 24687, 22270]
+      assert :erlang.atom_to_list(:全息图) == [20_840, 24_687, 22_270]
     end
 
     test "not an atom" do
