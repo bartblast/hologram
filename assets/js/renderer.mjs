@@ -12,6 +12,7 @@ export default class Renderer {
 
     const pageClient = Renderer.#mapFetch(clientsData, Type.bitstring("page"));
     const pageState = Renderer.#mapFetch(pageClient, Type.atom("state"));
+    const pageContext = Renderer.#mapFetch(pageClient, Type.atom("context"));
 
     const layoutPropsDOM = Renderer.#buildLayoutPropsDOM(
       pageModule,
@@ -32,7 +33,36 @@ export default class Renderer {
       pageDOM,
     ]);
 
-    console.inspect(layoutNode);
+    const html = Renderer.#renderDOM(layoutNode, pageContext, Type.list([]));
+
+    console.inspect(html);
+  }
+
+  // Based on: render_dom/3
+  static #renderDOM(dom, _context, _slots) {
+    if (Type.isList(dom)) {
+      return "(todo: node list)";
+    } else {
+      const nodeType = dom.data[0].value;
+
+      switch (nodeType) {
+        case "component":
+          return "(todo: component)";
+
+        case "element":
+          const tagName = dom.data[0].value;
+          if (tagName === "slot") {
+            return "(todo: slot)";
+          }
+          return "(todo: element)";
+
+        case "expression":
+          return "(todo: expression)";
+
+        case "text":
+          return "(todo: text)";
+      }
+    }
   }
 
   static #aggregateVars(props, state) {
