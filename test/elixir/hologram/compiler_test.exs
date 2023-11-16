@@ -350,9 +350,11 @@ defmodule Hologram.CompilerTest do
       assert sorted_mfas == [
                {Module5, :__layout_module__, 0},
                {Module5, :__layout_props__, 0},
+               {Module5, :__props__, 0},
                {Module5, :__route__, 0},
                {Module5, :action, 3},
                {Module5, :template, 0},
+               {Module6, :__props__, 0},
                {Module6, :action, 3},
                {Module6, :template, 0},
                {Module7, :my_fun_7a, 2}

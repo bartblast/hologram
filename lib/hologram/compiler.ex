@@ -256,8 +256,10 @@ defmodule Hologram.Compiler do
     call_graph_clone
     |> CallGraph.add_edge(page_module, {page_module, :__layout_module__, 0})
     |> CallGraph.add_edge(page_module, {page_module, :__layout_props__, 0})
+    |> CallGraph.add_edge(page_module, {page_module, :__props__, 0})
     |> CallGraph.add_edge(page_module, {page_module, :action, 3})
     |> CallGraph.add_edge(page_module, {page_module, :template, 0})
+    |> CallGraph.add_edge(page_module, {layout_module, :__props__, 0})
     |> CallGraph.add_edge(page_module, {layout_module, :action, 3})
     |> CallGraph.add_edge(page_module, {layout_module, :template, 0})
     |> remove_call_graph_vertices_of_manually_transpiled_elixir_functions()
