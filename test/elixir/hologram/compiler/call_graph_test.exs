@@ -624,14 +624,14 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       from_vertex = {String.Chars, :to_string, 1}
 
-      assert has_edge?(call_graph, from_vertex, {String.Chars.Atom, :__impl__, 0})
+      assert has_edge?(call_graph, from_vertex, {String.Chars.Atom, :__impl__, 1})
 
       assert has_edge?(call_graph, from_vertex, {String.Chars.Atom, :to_string, 1})
 
       assert has_edge?(
                call_graph,
                from_vertex,
-               {String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, :__impl__, 0}
+               {String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, :__impl__, 1}
              )
 
       assert has_edge?(
