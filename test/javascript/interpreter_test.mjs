@@ -1492,6 +1492,14 @@ describe("defineElixirFunction()", () => {
       "my message",
     );
   });
+
+  it("raises HologramInterpreterError when undefined function is being accessed", () => {
+    assert.throw(
+      () => Elixir_Aaa_Bbb["my_fun_x/5"],
+      HologramInterpreterError,
+      "Function Aaa.Bbb.my_fun_x/5 is not available on the client. See what to do here: https://www.hologram.page/TODO",
+    );
+  });
 });
 
 describe("defineErlangFunction()", () => {

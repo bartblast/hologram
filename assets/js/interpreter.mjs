@@ -134,7 +134,20 @@ export default class Interpreter {
     clauses,
   ) {
     if (!globalThis[moduleName]) {
-      globalThis[moduleName] = {};
+      globalThis[moduleName] = new Proxy(
+        {},
+        {
+          get(module, fun) {
+            if (fun in module) return module[fun];
+
+            const message = `Function ${Interpreter.inspectModuleName(
+              moduleName,
+            )}.${fun} is not available on the client. See what to do here: https://www.hologram.page/TODO`;
+
+            throw new HologramInterpreterError(message);
+          },
+        },
+      );
     }
 
     globalThis[moduleName][`${functionName}/${functionArity}`] = function () {
