@@ -49,12 +49,13 @@ export default class Renderer {
         case "component":
           return Renderer.#renderComponentDOM(dom, context, slots);
 
-        case "element":
+        case "element": {
           const tagName = dom.data[0].value;
           if (tagName === "slot") {
             return "(todo: slot)";
           }
           return "(todo: element)";
+        }
 
         case "expression":
           return "(todo: expression)";
