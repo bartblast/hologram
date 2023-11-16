@@ -367,12 +367,18 @@ defmodule Hologram.Compiler.CallGraph do
     Agent.get(pid, &Graph.vertices/1)
   end
 
+  # A component module can be passed as a prop to another component, allowing dynamic usage.
+  # In such cases, when this scenario is identified, it becomes necessary
+  # to include the entire component on the client side.
+  # This is because we lack precise information about which specific component functions will be used.
   defp add_component_call_graph_edges(call_graph, module) do
     add_edge(call_graph, module, {module, :action, 3})
     add_edge(call_graph, module, {module, :init, 1})
     add_edge(call_graph, module, {module, :template, 0})
   end
 
+  # A page module can be passed as a prop to a component, enabling the component to use its __route__/0.
+  # This can be particularly useful, for example, in constructing the page's URL.
   defp add_page_call_graph_edges(call_graph, module) do
     add_edge(call_graph, module, {module, :__route__, 0})
   end
