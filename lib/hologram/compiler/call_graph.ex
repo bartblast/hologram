@@ -390,6 +390,7 @@ defmodule Hologram.Compiler.CallGraph do
 
     Enum.each(impls, fn impl ->
       Enum.each(funs, fn {name, arity} ->
+        add_edge(call_graph, {module, name, arity}, {impl, :__impl__, 0})
         add_edge(call_graph, {module, name, arity}, {impl, name, arity})
       end)
     end)
