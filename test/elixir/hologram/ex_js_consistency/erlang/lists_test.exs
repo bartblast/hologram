@@ -125,6 +125,28 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "member/2" do
+    test "is a member" do
+      assert :lists.member(2, [1, 2, 3]) == true
+    end
+
+    test "is not a member" do
+      assert :lists.member(4, [1, 2, 3]) == false
+    end
+
+    test "uses strict equality" do
+      assert :lists.member(2, [1, 2.0, 3]) == false
+    end
+
+    test "raises ArgumentError if the second argument is not a list" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 2nd argument: not a list\n",
+                   fn ->
+                     :lists.member(2, :abc)
+                   end
+    end
+  end
+
   describe "reverse/1" do
     test "returns a list with the elements in the argument in reverse order" do
       assert :lists.reverse([1, 2, 3]) == [3, 2, 1]

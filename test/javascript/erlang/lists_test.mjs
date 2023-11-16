@@ -4,6 +4,7 @@ import {
   assert,
   assertBoxedError,
   assertBoxedFalse,
+  assertBoxedTrue,
   linkModules,
   unlinkModules,
 } from "../../../assets/js/test_support.mjs";
@@ -287,6 +288,37 @@ describe("map/2", () => {
       () => Erlang_Lists["map/2"](fun, Type.atom("abc")),
       "CaseClauseError",
       "no case clause matching: :abc",
+    );
+  });
+});
+
+describe("member/2", () => {
+  it("is a member", () => {
+    const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+    const result = Erlang_Lists["member/2"](Type.integer(2), list);
+
+    assertBoxedTrue(result);
+  });
+
+  it("is not a member", () => {
+    const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+    const result = Erlang_Lists["member/2"](Type.integer(4), list);
+
+    assertBoxedFalse(result);
+  });
+
+  it("uses strict equality", () => {
+    const list = Type.list([Type.integer(1), Type.float(2.0), Type.integer(3)]);
+    const result = Erlang_Lists["member/2"](Type.integer(2), list);
+
+    assertBoxedFalse(result);
+  });
+
+  it("raises ArgumentError if the second argument is not a list", () => {
+    assertBoxedError(
+      () => Erlang_Lists["member/2"](Type.integer(2), Type.atom("abc")),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n  * 2nd argument: not a list\n",
     );
   });
 });

@@ -105,6 +105,25 @@ const Erlang_Lists = {
   // end map/2
   // deps: []
 
+  // start member/2
+  "member/2": (elem, list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n  * 2nd argument: not a list\n",
+      );
+    }
+
+    for (const listElem of list.data) {
+      if (Interpreter.isStrictlyEqual(listElem, elem)) {
+        return Type.boolean(true);
+      }
+    }
+
+    return Type.boolean(false);
+  },
+  // end member/2
+  // deps: []
+
   // start reverse/1
   "reverse/1": (list) => {
     if (!Type.isList(list)) {
