@@ -259,23 +259,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "integer_to_binary/1" do
-    test "positive integer" do
-      assert :erlang.integer_to_binary(123_123) == "123123"
-    end
-
-    test "negative integer" do
-      assert :erlang.integer_to_binary(-123_123) == "-123123"
-    end
-
-    test "not an integer" do
-      assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not an integer\n",
-                   fn ->
-                     :abc
-                     |> build_value()
-                     |> :erlang.integer_to_binary()
-                   end
-    end
+    assert :erlang.integer_to_binary(123_123) == :erlang.integer_to_binary(123_123, 10)
   end
 
   describe "integer_to_binary/2" do

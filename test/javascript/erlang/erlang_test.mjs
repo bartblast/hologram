@@ -1158,26 +1158,12 @@ describe("hd/1", () => {
 });
 
 describe("integer_to_binary/1", () => {
-  it("positive integer", () => {
-    const result = Erlang["integer_to_binary/1"](Type.integer(123123));
-    const expected = Type.bitstring("123123");
+  it("delegates to integer_to_binary/2", () => {
+    const integer = Type.integer(123123);
+    const result = Erlang["integer_to_binary/1"](integer);
+    const expected = Erlang["integer_to_binary/2"](integer, Type.integer(10));
 
     assert.deepStrictEqual(result, expected);
-  });
-
-  it("negative integer", () => {
-    const result = Erlang["integer_to_binary/1"](Type.integer(-123123));
-    const expected = Type.bitstring("-123123");
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("not an integer", () => {
-    assertBoxedError(
-      () => Erlang["integer_to_binary/1"](Type.atom("abc")),
-      "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: not an integer\n",
-    );
   });
 });
 
