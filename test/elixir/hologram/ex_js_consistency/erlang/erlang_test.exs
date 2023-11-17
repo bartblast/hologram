@@ -167,6 +167,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  test "binary_to_atom/1" do
+    assert :erlang.binary_to_atom("全息图") == :erlang.binary_to_atom("全息图", :utf8)
+  end
+
   describe "binary_to_atom/2" do
     test "converts a binary bitstring to an already existing atom" do
       assert :erlang.binary_to_atom("Elixir.Kernel", :utf8) == Kernel

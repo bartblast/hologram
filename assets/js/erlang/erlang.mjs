@@ -239,6 +239,13 @@ const Erlang = {
   // end atom_to_list/1
   // deps: []
 
+  // start binary_to_atom/1
+  "binary_to_atom/1": (binary) => {
+    return Erlang["binary_to_atom/2"](binary, Type.atom("utf8"));
+  },
+  // end binary_to_atom/1
+  // deps: [:erlang.binary_to_atom/2]
+
   // start binary_to_atom/2
   "binary_to_atom/2": (binary, encoding) => {
     if (!Type.isBinary(binary)) {

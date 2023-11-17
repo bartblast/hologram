@@ -1004,6 +1004,16 @@ describe("atom_to_binary/1", () => {
   });
 });
 
+describe("binary_to_atom/1", () => {
+  it("delegates to binary_to_atom/2", () => {
+    const binary = Type.bitstring("全息图");
+    const result = Erlang["binary_to_atom/1"](binary);
+    const expected = Erlang["binary_to_atom/2"](binary, Type.atom("utf8"));
+
+    assert.deepStrictEqual(result, expected);
+  });
+});
+
 describe("binary_to_atom/2", () => {
   const encoding = Type.atom("utf8");
 
