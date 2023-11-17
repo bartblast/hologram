@@ -20,29 +20,19 @@ after(() => unlinkModules());
 // Always update both together.
 
 describe("characters_to_binary/1", () => {
-  let prevCharactersToBinaryFun;
-
-  beforeEach(() => {
-    prevCharactersToBinaryFun =
-      globalThis.Erlang_Unicode["characters_to_binary/3"];
-  });
-
-  afterEach(() => {
-    globalThis.Erlang_Unicode["characters_to_binary/3"] =
-      prevCharactersToBinaryFun;
-  });
-
   it("delegates to :unicode.characters_to_binary/3", () => {
-    const stub = sinon
-      .stub(Erlang_Unicode, "characters_to_binary/3")
-      .callsFake((_input, _inputEncoding, _outputEncoding) => "dummy");
+    const input = Type.bitstring("全息图");
+    const encoding = Type.atom("utf8");
 
-    const input = Type.bitstring("abc");
-    const encodingOpt = Type.atom("utf8");
+    const result = Erlang_Unicode["characters_to_binary/1"](input);
 
-    Erlang_Unicode["characters_to_binary/1"](input);
+    const expected = Erlang_Unicode["characters_to_binary/3"](
+      input,
+      encoding,
+      encoding,
+    );
 
-    sinon.assert.calledWith(stub, input, encodingOpt, encodingOpt);
+    assert.deepStrictEqual(result, expected);
   });
 });
 
