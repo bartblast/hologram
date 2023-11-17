@@ -1493,7 +1493,7 @@ describe("defineElixirFunction()", () => {
     );
   });
 
-  it("raises HologramInterpreterError when undefined function is being accessed", () => {
+  it("raises HologramInterpreterError when undefined Elixir/Erlang function is being called", () => {
     assert.throw(
       () => globalThis.Elixir_Aaa_Bbb["my_fun_x/5"],
       HologramInterpreterError,
