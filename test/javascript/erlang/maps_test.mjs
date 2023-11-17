@@ -239,3 +239,42 @@ describe("merge/2", () => {
     );
   });
 });
+
+describe("puts/3", () => {
+  it("when the map doesn't have the given key", () => {
+    const map = Type.map([[Type.atom("a"), Type.integer(1)]]);
+    const result = Erlang_Maps["put/3"](Type.atom("b"), Type.integer(2), map);
+
+    const expected = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+    ]);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("when the map already has the given key", () => {
+    const map = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+    ]);
+
+    const result = Erlang_Maps["put/3"](Type.atom("b"), Type.integer(3), map);
+
+    const expected = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(3)],
+    ]);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("raises BadMapError if the third argument is not a map", () => {
+    assertBoxedError(
+      () =>
+        Erlang_Maps["put/3"](Type.atom("a"), Type.integer(1), Type.atom("abc")),
+      "BadMapError",
+      "expected a map, got: :abc",
+    );
+  });
+});

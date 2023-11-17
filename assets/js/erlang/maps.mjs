@@ -77,6 +77,20 @@ const Erlang_Maps = {
   },
   // end merge/2
   // deps: []
+
+  // start put/3
+  "put/3": (key, value, map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    const newMap = Interpreter.cloneVars(map);
+    newMap.data[Type.encodeMapKey(key)] = [key, value];
+
+    return newMap;
+  },
+  // end put/3
+  // deps: []
 };
 
 export default Erlang_Maps;
