@@ -160,7 +160,7 @@ describe("get/2", () => {
   });
 
   it("raises KeyError if the map doesn't contain the given key", () => {
-    const expectedMessage = 'key :a not found in {"type":"map","data":{}}';
+    const expectedMessage = "key :a not found in %{}";
 
     assertBoxedError(
       () => Erlang_Maps["get/2"](Type.atom("a"), Type.map([])),
