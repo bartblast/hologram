@@ -268,6 +268,15 @@ const Erlang = {
   // end binary_to_atom/2
   // deps: []
 
+  // Note: due to practical reasons the behaviour of the client version is inconsistent with the server version.
+  // The client version works exactly the same as binary_to_atom/2.
+  // start binary_to_existing_atom/2
+  "binary_to_existing_atom/2": (binary, encoding) => {
+    return Erlang["binary_to_atom/2"](binary, encoding);
+  },
+  // end binary_to_existing_atom/2
+  // deps: [:erlang.binary_to_atom/2]
+
   // start bit_size/1
   "bit_size/1": (term) => {
     if (!Type.isBitstring(term)) {
