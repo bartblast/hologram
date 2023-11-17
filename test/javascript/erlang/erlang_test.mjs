@@ -1049,6 +1049,18 @@ describe("binary_to_atom/2", () => {
   });
 });
 
+describe("binary_to_existing_atom/1", () => {
+  it("delegates to binary_to_atom/1", () => {
+    const randomStr = `${Math.random()}`;
+    const binary = Type.bitstring(randomStr);
+
+    const result = Erlang["binary_to_existing_atom/1"](binary);
+    const expected = Erlang["binary_to_atom/1"](binary);
+
+    assert.deepStrictEqual(result, expected);
+  });
+});
+
 describe("binary_to_existing_atom/2", () => {
   it("delegates to binary_to_atom/2", () => {
     const randomStr = `${Math.random()}`;

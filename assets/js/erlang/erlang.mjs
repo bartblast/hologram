@@ -269,6 +269,15 @@ const Erlang = {
   // deps: []
 
   // Note: due to practical reasons the behaviour of the client version is inconsistent with the server version.
+  // The client version works exactly the same as binary_to_atom/1.
+  // start binary_to_existing_atom/1
+  "binary_to_existing_atom/1": (binary) => {
+    return Erlang["binary_to_atom/1"](binary);
+  },
+  // end binary_to_existing_atom/1
+  // deps: [:erlang.binary_to_atom/1]
+
+  // Note: due to practical reasons the behaviour of the client version is inconsistent with the server version.
   // The client version works exactly the same as binary_to_atom/2.
   // start binary_to_existing_atom/2
   "binary_to_existing_atom/2": (binary, encoding) => {
