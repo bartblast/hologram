@@ -6,6 +6,7 @@ import isEqual from "lodash/isEqual.js";
 import uniqWith from "lodash/uniqWith.js";
 
 import Bitstring from "./bitstring.mjs";
+import Console from "./console.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramMatchError from "./errors/match_error.mjs";
 import Type from "./type.mjs";
@@ -666,25 +667,21 @@ export default class Interpreter {
   }
 
   static #logFunctionCall(mfa, args) {
-    console.group(mfa);
+    Console.startGroup(mfa);
 
     if (args.length > 0) {
-      console.log("%cargs", "background: white; color: blue");
+      Console.printHeader("args");
 
       for (let i = 0; i < args.length; ++i) {
-        console.log(
-          `%c${i + 1}: %c${Interpreter.inspect(args[i])}`,
-          "color: purple; font-weight: bold",
-          "color: black",
-        );
+        Console.printDataItem(i + 1, args[i]);
       }
     }
   }
 
   static #logFunctionResult(mfa, result) {
-    console.log("%cresult", "background: white; color: blue");
-    console.log(Interpreter.inspect(result));
-    console.groupEnd(mfa);
+    Console.printHeader("result");
+    Console.printData(result);
+    Console.endGroup(mfa);
   }
 
   static #matchBitstringPattern(right, left, vars) {
