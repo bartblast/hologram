@@ -168,16 +168,20 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   test "binary_to_atom/1" do
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     assert :erlang.binary_to_atom("全息图") == :erlang.binary_to_atom("全息图", :utf8)
   end
 
   describe "binary_to_atom/2" do
     test "converts a binary bitstring to an already existing atom" do
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
       assert :erlang.binary_to_atom("Elixir.Kernel", :utf8) == Kernel
     end
 
     test "converts a binary bitstring to a not existing yet atom" do
       random_str = inspect(make_ref())
+
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
       result = :erlang.binary_to_atom(random_str, :utf8)
 
       assert to_string(result) == random_str
@@ -189,6 +193,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    fn ->
                      <<1::1, 0::1, 1::1>>
                      |> build_value()
+                     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
                      |> :erlang.binary_to_atom(:utf8)
                    end
     end
@@ -199,6 +204,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    fn ->
                      :abc
                      |> build_value()
+                     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
                      |> :erlang.binary_to_atom(:utf8)
                    end
     end
