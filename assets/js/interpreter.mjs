@@ -669,7 +669,7 @@ export default class Interpreter {
     console.group(mfa);
 
     if (args.length > 0) {
-      console.log("%args", "color: blue");
+      console.log("%cargs", "color: blue");
 
       for (let i = 0; i < args.length; ++i) {
         console.log(
@@ -682,7 +682,7 @@ export default class Interpreter {
   }
 
   static #logFunctionResult(mfa, result) {
-    console.log("%result", "color: blue");
+    console.log("%cresult", "color: blue");
     console.log(Interpreter.inspect(result));
     console.groupEnd(mfa);
   }
