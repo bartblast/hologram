@@ -377,7 +377,7 @@ describe("from()", () => {
         type: "binary",
       });
 
-      const expectedMessage = `construction of binary failed: segment 1 of type 'binary': the size of the value {"type":"bitstring","bits":{"0":1,"1":0,"2":1}} is not a multiple of the unit for the segment`;
+      const expectedMessage = `construction of binary failed: segment 1 of type 'binary': the size of the value bitstring(3) is not a multiple of the unit for the segment`;
 
       assertBoxedError(
         () => Bitstring.from([segment]),
@@ -510,7 +510,7 @@ describe("from()", () => {
         type: "float",
       });
 
-      const expectedMessage = `construction of binary failed: segment 1 of type 'float': expected a float or an integer but got: {"type":"bitstring","bits":{"0":1,"1":0,"2":1}}`;
+      const expectedMessage = `construction of binary failed: segment 1 of type 'float': expected a float or an integer but got: bitstring(3)`;
 
       assertBoxedError(
         () => Bitstring.from([segment]),
@@ -585,7 +585,7 @@ describe("from()", () => {
         type: "integer",
       });
 
-      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: {"type":"bitstring","bits":{"0":1,"1":0,"2":1}}`;
+      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: bitstring(3)`;
 
       assertBoxedError(
         () => Bitstring.from([segment]),
@@ -648,7 +648,7 @@ describe("from()", () => {
         signedness: "signed",
       });
 
-      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: {"type":"bitstring","bits":{"0":1,"1":0,"2":1,"3":0}}`;
+      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: bitstring(4)`;
 
       assertBoxedError(
         () => Bitstring.from([segment]),
@@ -710,7 +710,7 @@ describe("from()", () => {
         size: Type.integer(3),
       });
 
-      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: {"type":"bitstring","bits":{"0":1,"1":0,"2":1,"3":0}}`;
+      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: bitstring(4)`;
 
       assertBoxedError(
         () => Bitstring.from([segment]),
@@ -793,7 +793,7 @@ describe("from()", () => {
         },
       );
 
-      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: {"type":"bitstring","bits":{"0":1,"1":0,"2":1,"3":0,"4":1,"5":0,"6":1,"7":0}}`;
+      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: bitstring(8)`;
 
       assertBoxedError(
         () => Bitstring.from([segment]),
@@ -876,7 +876,7 @@ describe("from()", () => {
         signedness: "unsigned",
       });
 
-      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: {"type":"bitstring","bits":{"0":1,"1":0,"2":1,"3":0}}`;
+      const expectedMessage = `construction of binary failed: segment 1 of type 'integer': expected an integer but got: bitstring(4)`;
 
       assertBoxedError(
         () => Bitstring.from([segment]),

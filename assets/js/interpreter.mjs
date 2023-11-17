@@ -595,7 +595,8 @@ export default class Interpreter {
       return '"' + Bitstring.toText(term) + '"';
     }
 
-    return Interpreter.serialize(term);
+    // TODO: this is temporary
+    return `bitstring(${term.bits.length})`;
   }
 
   static #inspectFloat(term, _opts) {

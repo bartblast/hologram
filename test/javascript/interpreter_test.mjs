@@ -1730,7 +1730,7 @@ describe("inspect()", () => {
       // TODO: remove when all types are supported
       it("not text", () => {
         const result = Interpreter.inspect(Type.bitstring([1, 0, 1]), {});
-        assert.equal(result, '{"type":"bitstring","bits":{"0":1,"1":0,"2":1}}');
+        assert.equal(result, "bitstring(3)");
       });
     });
 
