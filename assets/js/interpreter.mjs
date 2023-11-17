@@ -151,16 +151,14 @@ export default class Interpreter {
     }
 
     globalThis[moduleName][`${functionName}/${functionArity}`] = function () {
+      const mfa = `${Interpreter.inspectModuleName(
+        moduleName,
+      )}.${functionName}/${functionArity}`;
+
       // TODO: remove on release
-      console.log(
-        `CALL: ${Interpreter.inspectModuleName(
-          moduleName,
-        )}.${functionName}/${functionArity}`,
-      );
-      console.dir(arguments);
+      Interpreter.#logFunctionCall(mfa, arguments);
 
       const args = Type.list([...arguments]);
-      const arity = arguments.length;
 
       for (const clause of clauses) {
         const vars = {};
@@ -173,20 +171,14 @@ export default class Interpreter {
             const result = clause.body(vars);
 
             // TODO: remove on release
-            console.log(
-              `RETURN: ${Interpreter.inspectModuleName(
-                moduleName,
-              )}.${functionName}/${functionArity}`,
-            );
-            console.dir(result);
+            Interpreter.#logFunctionResult(mfa, result);
 
             return result;
           }
         }
       }
 
-      const inspectedModuleName = Interpreter.inspectModuleName(moduleName);
-      const message = `no function clause matching in ${inspectedModuleName}.${functionName}/${arity}`;
+      const message = `no function clause matching in ${mfa}`;
       Interpreter.raiseFunctionClauseError(message);
     };
   }
@@ -670,6 +662,20 @@ export default class Interpreter {
       term.data.map((elem) => Interpreter.inspect(elem, opts)).join(", ") +
       "}"
     );
+  }
+
+  static #logFunctionCall(mfa, args) {
+    console.group(mfa);
+    console.log("ARGS:");
+
+    for (let i = 0; i < args.length; ++i) {
+      console.log(`${i + 1}: ${Interpreter.inspect(args[i])}`);
+    }
+  }
+
+  static #logFunctionResult(mfa, result) {
+    console.log("RESULT: " + Interpreter.inspect(result));
+    console.endGroup(mfa);
   }
 
   static #matchBitstringPattern(right, left, vars) {
