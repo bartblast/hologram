@@ -100,9 +100,9 @@ export default class Renderer {
   static #renderComponentDOM(dom, context, slots) {
     const module = dom.data[1];
     const propsDOM = dom.data[2];
-    let children = dom.data[3];
+    let _children = dom.data[3];
 
-    children = Renderer.#expandSlots(children, slots);
+    _children = Renderer.#expandSlots(_children, slots);
 
     const props = Renderer.#injectContextProps(
       Renderer.#castProps(propsDOM, module),
