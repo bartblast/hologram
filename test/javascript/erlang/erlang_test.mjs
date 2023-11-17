@@ -1004,6 +1004,41 @@ describe("atom_to_binary/1", () => {
   });
 });
 
+describe("binary_to_atom/2", () => {
+  const encoding = Type.atom("utf8");
+
+  it("converts a binary bitstring to an already existing atom", () => {
+    const binary = Type.bitstring("Elixir.Kernel");
+    const result = Erlang["binary_to_atom/2"](binary, encoding);
+
+    assert.deepStrictEqual(result, Type.alias("Kernel"));
+  });
+
+  it("converts a binary bitstring to a not existing yet atom", () => {
+    const randomStr = `${Math.random()}`;
+    const binary = Type.bitstring(randomStr);
+    const result = Erlang["binary_to_atom/2"](binary, encoding);
+
+    assert.deepStrictEqual(result, Type.atom(randomStr));
+  });
+
+  it("raises ArgumentError if the first argument is a non-binary bitstring", () => {
+    assertBoxedError(
+      () => Erlang["binary_to_atom/2"](Type.bitstring([1, 0, 1]), encoding),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n  * 1st argument: not a binary\n",
+    );
+  });
+
+  it("raises ArgumentErorr if the first argument is not a bitstring", () => {
+    assertBoxedError(
+      () => Erlang["binary_to_atom/2"](Type.atom("abc"), encoding),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n  * 1st argument: not a binary\n",
+    );
+  });
+});
+
 describe("bit_size/1", () => {
   it("bitstring", () => {
     const myBitstring = Type.bitstring([

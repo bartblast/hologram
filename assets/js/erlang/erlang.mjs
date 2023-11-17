@@ -1,5 +1,6 @@
 "use strict";
 
+import Bitstring from "../bitstring.mjs";
 import HologramBoxedError from "../errors/boxed_error.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
@@ -236,6 +237,28 @@ const Erlang = {
     return Type.list(codePoints);
   },
   // end atom_to_list/1
+  // deps: []
+
+  // start binary_to_atom/2
+  "binary_to_atom/2": (binary, encoding) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n  * 1st argument: not a binary\n",
+      );
+    }
+
+    // TODO: implement encoding argument validation
+
+    // TODO: implement other encodings for encoding param
+    if (!Interpreter.isStrictlyEqual(encoding, Type.atom("utf8"))) {
+      throw new HologramInterpreterError(
+        "encodings other than utf8 are not yet implemented in Hologram",
+      );
+    }
+
+    return Type.atom(Bitstring.toText(binary));
+  },
+  // end binary_to_atom/2
   // deps: []
 
   // start bit_size/1

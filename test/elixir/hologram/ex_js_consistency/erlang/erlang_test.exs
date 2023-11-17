@@ -167,6 +167,39 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "binary_to_atom/2" do
+    test "converts a binary bitstring to an already existing atom" do
+      assert :erlang.binary_to_atom("Elixir.Kernel", :utf8) == Kernel
+    end
+
+    test "converts a binary bitstring to a not existing yet atom" do
+      random_str = inspect(make_ref())
+      result = :erlang.binary_to_atom(random_str, :utf8)
+
+      assert to_string(result) == random_str
+    end
+
+    test "raises ArgumentError if the first argument is a non-binary bitstring" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not a binary\n",
+                   fn ->
+                     <<1::1, 0::1, 1::1>>
+                     |> build_value()
+                     |> :erlang.binary_to_atom(:utf8)
+                   end
+    end
+
+    test "raises ArgumentErorr if the first argument is not a bitstring" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not a binary\n",
+                   fn ->
+                     :abc
+                     |> build_value()
+                     |> :erlang.binary_to_atom(:utf8)
+                   end
+    end
+  end
+
   describe "bit_size/1" do
     test "bitstring" do
       assert bit_size(<<2::7>>) == 7
