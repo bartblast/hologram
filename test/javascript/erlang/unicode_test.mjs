@@ -4,7 +4,6 @@ import {
   assert,
   assertBoxedError,
   linkModules,
-  sinon,
   unlinkModules,
 } from "../../../assets/js/test_support.mjs";
 
