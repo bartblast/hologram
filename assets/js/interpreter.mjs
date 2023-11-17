@@ -666,10 +666,13 @@ export default class Interpreter {
 
   static #logFunctionCall(mfa, args) {
     console.group(mfa);
-    console.log("ARGS:");
 
-    for (let i = 0; i < args.length; ++i) {
-      console.log(`${i + 1}: ${Interpreter.inspect(args[i])}`);
+    if (args.length > 0) {
+      console.log("ARGS:");
+
+      for (let i = 0; i < args.length; ++i) {
+        console.log(`${i + 1}: ${Interpreter.inspect(args[i])}`);
+      }
     }
   }
 
