@@ -672,7 +672,11 @@ export default class Interpreter {
       console.log("ARGS:");
 
       for (let i = 0; i < args.length; ++i) {
-        console.log(`${i + 1}: ${Interpreter.inspect(args[i])}`);
+        console.log(
+          `%c${i + 1}: %c${Interpreter.inspect(args[i])}`,
+          "color: purple; font-weight: bold",
+          "color: black",
+        );
       }
     }
   }
