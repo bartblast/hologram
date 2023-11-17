@@ -674,8 +674,9 @@ export default class Interpreter {
   }
 
   static #logFunctionResult(mfa, result) {
-    console.log("RESULT: " + Interpreter.inspect(result));
-    console.endGroup(mfa);
+    console.log("RESULT:");
+    console.log(Interpreter.inspect(result));
+    console.groupEnd(mfa);
   }
 
   static #matchBitstringPattern(right, left, vars) {
