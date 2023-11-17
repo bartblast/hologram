@@ -5,7 +5,7 @@ defmodule Hologram.MixProject do
   defp aliases do
     [
       eslint:
-        "cmd assets/node_modules/.bin/eslint --config assets/.eslintrc.js --ext .mjs assets/js/** test/javascript/**",
+        "cmd assets/node_modules/.bin/eslint --color --config assets/.eslintrc.js --ext .mjs assets/js/** test/javascript/**",
       f: ["format", "format.js", "cmd cd test/features && mix format"],
       "format.js":
         "cmd assets/node_modules/.bin/prettier 'assets/*.js' 'assets/*.json' 'assets/js/*.mjs' 'assets/js/**/*.mjs' 'test/javascript/*.mjs' 'test/javascript/**/*.mjs' --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern --write",
