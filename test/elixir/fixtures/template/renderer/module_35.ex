@@ -3,7 +3,6 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module35 do
 
   prop :a, :string
 
-  @impl Component
   def init(props, client, _server) do
     client
     |> put_state(props)

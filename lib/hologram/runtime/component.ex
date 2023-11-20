@@ -1,5 +1,5 @@
 defmodule Hologram.Component do
-  use Hologram.Runtime.Templatable, initiable_on_client?: true
+  use Hologram.Runtime.Templatable, include_init_callback?: false
   alias Hologram.Component
 
   defmacro __using__(_opts) do
@@ -30,14 +30,6 @@ defmodule Hologram.Component do
         """
         @spec __is_hologram_component__() :: boolean
         def __is_hologram_component__, do: true
-
-        @impl Component
-        def init(_props, client), do: client
-
-        @impl Component
-        def init(_props, client, server), do: {client, server}
-
-        defoverridable init: 2, init: 3
       end,
       Templatable.maybe_define_template_fun(template_path, __MODULE__),
       Templatable.register_props_accumulator()

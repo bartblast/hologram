@@ -17,11 +17,11 @@ defmodule Hologram.Runtime.ComponentTest do
   end
 
   describe "init/1" do
-    test "default" do
-      assert Module1.init(:props_dummy, :client_dummy) == :client_dummy
+    test "no default" do
+      refute function_exported?(Module1, :init, 2)
     end
 
-    test "overridden" do
+    test "implementation" do
       assert Module2.init(:props_dummy, build_component_client()) == %Component.Client{
                state: %{overriden: true}
              }
@@ -29,12 +29,11 @@ defmodule Hologram.Runtime.ComponentTest do
   end
 
   describe "init/3" do
-    test "default" do
-      assert Module1.init(:props_dummy, :client_dummy, :server_dummy) ==
-               {:client_dummy, :server_dummy}
+    test "no default" do
+      refute function_exported?(Module1, :init, 3)
     end
 
-    test "overridden" do
+    test "implementation" do
       assert Module2.init(:props_dummy, build_component_client(), build_component_server()) ==
                {%Component.Client{state: %{overriden: true}}, %Component.Server{}}
     end

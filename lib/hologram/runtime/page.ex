@@ -1,5 +1,5 @@
 defmodule Hologram.Page do
-  use Hologram.Runtime.Templatable
+  use Hologram.Runtime.Templatable, include_init_callback?: true
   alias Hologram.Page
 
   defmacro __using__(_opts) do

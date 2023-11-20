@@ -4,29 +4,24 @@ defmodule Hologram.Runtime.Templatable do
 
   defmacro __using__(opts \\ []) do
     [
-      if opts[:initiable_on_client?] do
-        quote do
-          @doc """
-          Initializes component client data (when run on the client).
-          """
-          @callback init(%{atom => any}, Component.Client.t()) :: Component.Client.t()
-        end
-      end,
       quote do
         alias Hologram.Runtime.Templatable
-
-        @doc """
-        Initializes component client and server data (when run on the server).
-        """
-        @callback init(%{atom => any}, Component.Client.t(), Component.Server.t()) ::
-                    {Component.Client.t(), Component.Server.t()}
-                    | Component.Client.t()
-                    | Component.Server.t()
 
         @doc """
         Returns a template in the form of an anonymous function that given variable bindings returns a DOM.
         """
         @callback template() :: (map -> list)
+      end,
+      if opts[:include_init_callback?] do
+        quote do
+          @doc """
+          Initializes component client and server data (when run on the server).
+          """
+          @callback init(%{atom => any}, Component.Client.t(), Component.Server.t()) ::
+                      {Component.Client.t(), Component.Server.t()}
+                      | Component.Client.t()
+                      | Component.Server.t()
+        end
       end
     ]
   end

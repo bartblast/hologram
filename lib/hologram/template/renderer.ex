@@ -198,7 +198,12 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp init_component(module, props) do
-    init_result = module.init(props, %Component.Client{}, %Component.Server{})
+    init_result =
+      if function_exported?(module, :init, 3) do
+        module.init(props, %Component.Client{}, %Component.Server{})
+      else
+        {%Component.Client{}, %Component.Server{}}
+      end
 
     case init_result do
       {client, server} ->
