@@ -279,17 +279,7 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp render_stateless_component(module, props, children, context) do
-    # We need to run the default init/3 to determine
-    # if it's actually a stateful component that is missing the `id` prop.
-    {client, server} = init_component(module, props)
-
-    if client != %Component.Client{} || server != %Component.Server{} do
-      raise Hologram.TemplateSyntaxError,
-        message: "Stateful component #{module} is missing the 'id' property."
-    end
-
     vars = aggregate_vars(props, %{})
-
     render_template(module, vars, children, context)
   end
 
