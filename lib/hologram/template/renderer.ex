@@ -14,7 +14,7 @@ defmodule Hologram.Template.Renderer do
 
   ## Examples
 
-      iex> dom = {:component, Module3, [{"id", [text: "my_component"]}], []}
+      iex> dom = {:component, Module3, [{"cid", [text: "my_component"]}], []}
       iex> render_dom(dom, %{}, [])
       {
         "<div>state_a = 1, state_b = 2</div>",
@@ -43,7 +43,7 @@ defmodule Hologram.Template.Renderer do
       |> cast_props(module)
       |> inject_context_props(module, context)
 
-    if has_id_prop?(props) do
+    if has_cid_prop?(props) do
       render_stateful_component(module, props, children, context)
     else
       render_stateless_component(module, props, children, context)
@@ -138,7 +138,7 @@ defmodule Hologram.Template.Renderer do
   # Used both on the client and the server.
   defp build_layout_props_dom(page_module, page_client) do
     page_module.__layout_props__()
-    |> Enum.into(%{id: "layout"})
+    |> Enum.into(%{cid: "layout"})
     |> aggregate_vars(page_client.state)
     |> Enum.map(fn {name, value} -> {to_string(name), [expression: {value}]} end)
   end
@@ -188,13 +188,13 @@ defmodule Hologram.Template.Renderer do
       |> Enum.reject(fn {_name, _type, opts} -> opts[:from_context] end)
       |> Enum.map(fn {name, _type, _opts} -> to_string(name) end)
 
-    allowed_props = ["id" | registered_prop_names]
+    allowed_props = ["cid" | registered_prop_names]
 
     Enum.filter(props_dom, fn {name, _value_parts} -> name in allowed_props end)
   end
 
-  defp has_id_prop?(props) do
-    Enum.any?(props, fn {name, _value} -> name == :id end)
+  defp has_cid_prop?(props) do
+    Enum.any?(props, fn {name, _value} -> name == :cid end)
   end
 
   defp init_component(module, props) do
@@ -273,7 +273,7 @@ defmodule Hologram.Template.Renderer do
     context = Map.merge(context, client.context)
 
     {html, children_clients} = render_template(module, vars, children, context)
-    clients = Map.put(children_clients, vars.id, client)
+    clients = Map.put(children_clients, vars.cid, client)
 
     {html, clients}
   end

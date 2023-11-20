@@ -380,7 +380,7 @@ defmodule Hologram.Compiler do
         {Renderer, :build_layout_props_dom, 2},
         {Renderer, :cast_props, 2},
         {Renderer, :expand_slots, 2},
-        {Renderer, :has_id_prop?, 1},
+        {Renderer, :has_cid_prop?, 1},
         {Renderer, :inject_context_props, 3}
       ]
   end

@@ -10,7 +10,6 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Runtime.AssetPathRegistry
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
   alias Hologram.Test.Fixtures.Template.Renderer.Module10
-  alias Hologram.Test.Fixtures.Template.Renderer.Module13
   alias Hologram.Test.Fixtures.Template.Renderer.Module14
   alias Hologram.Test.Fixtures.Template.Renderer.Module16
   alias Hologram.Test.Fixtures.Template.Renderer.Module17
@@ -49,9 +48,9 @@ defmodule Hologram.Template.RendererTest do
   test "multiple nodes" do
     nodes = [
       {:text, "abc"},
-      {:component, Module3, [{"id", [text: "component_3"]}], []},
+      {:component, Module3, [{"cid", [text: "component_3"]}], []},
       {:text, "xyz"},
-      {:component, Module7, [{"id", [text: "component_7"]}], []}
+      {:component, Module7, [{"cid", [text: "component_7"]}], []}
     ]
 
     assert render_dom(nodes, %{}, []) ==
@@ -75,7 +74,7 @@ defmodule Hologram.Template.RendererTest do
 
   describe "stateful component" do
     test "without props or state" do
-      node = {:component, Module1, [{"id", [text: "my_component"]}], []}
+      node = {:component, Module1, [{"cid", [text: "my_component"]}], []}
 
       assert render_dom(node, %{}, []) ==
                {"<div>abc</div>", %{"my_component" => %Component.Client{state: %{}}}}
@@ -85,7 +84,7 @@ defmodule Hologram.Template.RendererTest do
       node =
         {:component, Module2,
          [
-           {"id", [text: "my_component"]},
+           {"cid", [text: "my_component"]},
            {"a", [text: "ddd"]},
            {"b", [expression: {222}]},
            {"c", [text: "fff", expression: {333}, text: "hhh"]}
@@ -97,7 +96,7 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "with state / only client struct returned from init/3" do
-      node = {:component, Module3, [{"id", [text: "my_component"]}], []}
+      node = {:component, Module3, [{"cid", [text: "my_component"]}], []}
 
       assert render_dom(node, %{}, []) ==
                {"<div>state_a = 1, state_b = 2</div>",
@@ -108,7 +107,7 @@ defmodule Hologram.Template.RendererTest do
       node =
         {:component, Module4,
          [
-           {"id", [text: "my_component"]},
+           {"cid", [text: "my_component"]},
            {"b", [text: "prop_b"]},
            {"c", [text: "prop_c"]}
          ], []}
@@ -122,7 +121,7 @@ defmodule Hologram.Template.RendererTest do
       node =
         {:component, Module5,
          [
-           {"id", [text: "my_component"]},
+           {"cid", [text: "my_component"]},
            {"a", [text: "aaa"]},
            {"b", [text: "bbb"]}
          ], []}
@@ -133,7 +132,7 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "with client and server structs returned from init/3" do
-      node = {:component, Module6, [{"id", [text: "my_component"]}], []}
+      node = {:component, Module6, [{"cid", [text: "my_component"]}], []}
 
       assert render_dom(node, %{}, []) ==
                {"<div>state_a = 1, state_b = 2</div>",
@@ -144,7 +143,7 @@ defmodule Hologram.Template.RendererTest do
       node =
         {:component, Module16,
          [
-           {"id", [text: "my_component"]},
+           {"cid", [text: "my_component"]},
            {"prop_1", [text: "value_1"]},
            {"prop_2", [expression: {2}]},
            {"prop_3", [text: "aaa", expression: {2}, text: "bbb"]},
@@ -156,7 +155,7 @@ defmodule Hologram.Template.RendererTest do
                 %{
                   "my_component" => %Component.Client{
                     state: %{
-                      id: "my_component",
+                      cid: "my_component",
                       prop_1: "value_1",
                       prop_2: 2,
                       prop_3: "aaa2bbb"
@@ -168,10 +167,10 @@ defmodule Hologram.Template.RendererTest do
     test "with unregistered var used" do
       node =
         {:component, Module18,
-         [{"id", [text: "component_18"]}, {"a", [text: "111"]}, {"c", [text: "333"]}], []}
+         [{"cid", [text: "component_18"]}, {"a", [text: "111"]}, {"c", [text: "333"]}], []}
 
       assert_raise KeyError,
-                   ~s(key :c not found in: %{id: "component_18", a: "111", b: 222}),
+                   ~s(key :c not found in: %{a: "111", b: 222, cid: "component_18"}),
                    fn ->
                      render_dom(node, %{}, [])
                    end
@@ -259,8 +258,8 @@ defmodule Hologram.Template.RendererTest do
       node =
         {:element, "div", [{"attr", [text: "value"]}],
          [
-           {:component, Module3, [{"id", [text: "component_3"]}], []},
-           {:component, Module7, [{"id", [text: "component_7"]}], []}
+           {:component, Module3, [{"cid", [text: "component_3"]}], []},
+           {:component, Module7, [{"cid", [text: "component_7"]}], []}
          ]}
 
       assert render_dom(node, %{}, []) ==
@@ -303,7 +302,7 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "nested components with slots, no slot tag in the top component template, using vars" do
-      node = {:component, Module10, [{"id", [text: "component_10"]}], []}
+      node = {:component, Module10, [{"cid", [text: "component_10"]}], []}
 
       assert render_dom(node, %{}, []) ==
                {"10,11,10,12,10",
@@ -322,7 +321,7 @@ defmodule Hologram.Template.RendererTest do
 
     test "nested components with slots, slot tag in the top component template, using vars" do
       node =
-        {:component, Module34, [{"id", [text: "component_34"]}, {"a", [text: "34a_prop"]}],
+        {:component, Module34, [{"cid", [text: "component_34"]}, {"a", [text: "34a_prop"]}],
          [text: "abc"]}
 
       assert render_dom(node, %{}, []) ==
@@ -330,7 +329,7 @@ defmodule Hologram.Template.RendererTest do
                 %{
                   "component_34" => %Component.Client{
                     state: %{
-                      id: "component_34",
+                      cid: "component_34",
                       c: "34c_state",
                       a: "34a_prop",
                       y: "34y_state",
@@ -340,10 +339,10 @@ defmodule Hologram.Template.RendererTest do
                     }
                   },
                   "component_35" => %Component.Client{
-                    state: %{id: "component_35", a: "35a_prop", z: "35z_state"}
+                    state: %{cid: "component_35", a: "35a_prop", z: "35z_state"}
                   },
                   "component_36" => %Component.Client{
-                    state: %{id: "component_36", a: "36a_prop", z: "36z_state"}
+                    state: %{cid: "component_36", a: "36a_prop", z: "36z_state"}
                   }
                 }}
     end
@@ -456,7 +455,7 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "set in component, accessed in component" do
-      node = {:component, Module37, [{"id", [text: "component_37"]}], []}
+      node = {:component, Module37, [{"cid", [text: "component_37"]}], []}
 
       assert render_dom(node, %{}, []) ==
                {"prop_aaa = 123",
@@ -530,7 +529,7 @@ defmodule Hologram.Template.RendererTest do
                {"",
                 %{
                   "layout" => %Component.Client{
-                    state: %{id: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}
+                    state: %{cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}
                   },
                   "page" => %Component.Client{
                     context: %{
@@ -548,7 +547,7 @@ defmodule Hologram.Template.RendererTest do
                {"",
                 %{
                   "layout" => %Component.Client{
-                    state: %{id: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}
+                    state: %{cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}
                   },
                   "page" => %Component.Client{
                     context: %{

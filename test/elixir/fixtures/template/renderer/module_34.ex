@@ -15,7 +15,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module34 do
   @impl Component
   def template do
     ~H"""
-    {@a},<Module35 id="component_35" a="35a_prop">{@b},<Module36 id="component_36" a="36a_prop">{@c},<slot />,{@x},</Module36>{@y},</Module35>{@z}
+    {@a},<Module35 cid="component_35" a="35a_prop">{@b},<Module36 cid="component_36" a="36a_prop">{@c},<slot />,{@x},</Module36>{@y},</Module35>{@z}
     """
   end
 end

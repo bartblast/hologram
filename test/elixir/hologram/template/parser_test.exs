@@ -271,8 +271,8 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "with component having a property value with expression in double quotes" do
-      assert parse_markup("{%raw}<Aaa.Bbb id=\"aaa{@test}bbb\"></Aaa.Bbb>{/raw}") == [
-               start_tag: {"Aaa.Bbb", [{"id", [text: "aaa{@test}bbb"]}]},
+      assert parse_markup("{%raw}<Aaa.Bbb cid=\"aaa{@test}bbb\"></Aaa.Bbb>{/raw}") == [
+               start_tag: {"Aaa.Bbb", [{"cid", [text: "aaa{@test}bbb"]}]},
                end_tag: "Aaa.Bbb"
              ]
     end
@@ -1301,11 +1301,11 @@ defmodule Hologram.Template.ParserTest do
       Hint:
       Either wrap the property value with double quotes or remove the parent raw block".
 
-      {%raw}<Aa.Bb id={@abc}></Aa.Bb>{/raw}
-                      ^
+      {%raw}<Aa.Bb cid={@abc}></Aa.Bb>{/raw}
+                       ^
       """
 
-      test_syntax_error_msg("{%raw}<Aa.Bb id={@abc}></Aa.Bb>{/raw}", msg)
+      test_syntax_error_msg("{%raw}<Aa.Bb cid={@abc}></Aa.Bb>{/raw}", msg)
     end
 
     test "unclosed start tag" do
