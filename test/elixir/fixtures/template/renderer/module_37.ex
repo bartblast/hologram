@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module37 do
   use Hologram.Component
   alias Hologram.Test.Fixtures.Template.Renderer.Module38
