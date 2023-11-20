@@ -6,6 +6,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
+  alias Hologram.Template.Renderer
 
   @doc """
   Extracts JavaScript source code for the given ported Erlang function and generates interpreter function definition JavaScript statetement.
@@ -276,40 +277,10 @@ defmodule Hologram.Compiler do
   def list_runtime_mfas(call_graph) do
     call_graph_clone = CallGraph.clone(call_graph)
 
-    # These Elixir functions are used directly by the JS runtime:
-    entry_mfas = [
-      # Interpreter.comprehension()
-      {Enum, :into, 2},
-
-      # Interpreter.comprehension()
-      {Enum, :to_list, 1},
-
-      # Functions used both on the client and the server.
-      {Hologram.Template.Renderer, :aggregate_vars, 2},
-      {Hologram.Template.Renderer, :build_layout_props_dom, 2},
-      {Hologram.Template.Renderer, :cast_props, 2},
-      {Hologram.Template.Renderer, :expand_slots, 2},
-      {Hologram.Template.Renderer, :has_id_prop?, 1},
-      {Hologram.Template.Renderer, :inject_context_props, 3},
-
-      # Interpreter.inspect()
-      {Kernel, :inspect, 1},
-
-      # Renderer.renderPage()
-      {Map, :fetch!, 2},
-
-      # Interpreter.raiseError()
-      {:erlang, :error, 1},
-
-      # Interpreter.#matchConsPattern()
-      {:erlang, :hd, 1},
-
-      # Interpreter.#matchConsPattern()
-      {:erlang, :tl, 1},
-
-      # Interpreter.dotOperator()
-      {:maps, :get, 2}
-    ]
+    entry_mfas =
+      []
+      |> include_mfas_used_by_interpreter()
+      |> include_mfas_used_by_renderer()
 
     call_graph_clone
     |> add_call_graph_edges_for_erlang_functions()
@@ -386,6 +357,32 @@ defmodule Hologram.Compiler do
       {:unicode, :characters_to_binary, 3}
     )
     |> CallGraph.add_edge({:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1})
+  end
+
+  defp include_mfas_used_by_interpreter(mfas) do
+    mfas ++
+      [
+        {Enum, :into, 2},
+        {Enum, :to_list, 1},
+        {Kernel, :inspect, 1},
+        {:erlang, :error, 1},
+        {:erlang, :hd, 1},
+        {:erlang, :tl, 1},
+        {:maps, :get, 2}
+      ]
+  end
+
+  defp include_mfas_used_by_renderer(mfas) do
+    mfas ++
+      [
+        {Map, :fetch!, 2},
+        {Renderer, :aggregate_vars, 2},
+        {Renderer, :build_layout_props_dom, 2},
+        {Renderer, :cast_props, 2},
+        {Renderer, :expand_slots, 2},
+        {Renderer, :has_id_prop?, 1},
+        {Renderer, :inject_context_props, 3}
+      ]
   end
 
   defp extract_erlang_function_source_code(file_path, function, arity) do
