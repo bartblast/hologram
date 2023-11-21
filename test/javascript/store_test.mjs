@@ -20,14 +20,40 @@ afterEach(() => {
   Store.data = Type.map([]);
 });
 
-describe("getComponentData()", () => {
+describe("getComponentContext()", () => {
   it("component data exists", () => {
+    const cid = Type.bitstring("my_component_2");
+
     Store.data = Type.map([
-      [Type.bitstring("my_component_1"), "dummy_1"],
-      [Type.bitstring("my_component_2"), "dummy_2"],
+      [
+        Type.bitstring("my_component_1"),
+        Type.map([[Type.atom("context"), "dummy_1"]]),
+      ],
+      [cid, Type.map([[Type.atom("context"), "dummy_2"]])],
     ]);
 
+    const result = Store.getComponentContext(cid);
+
+    assert.equal(result, "dummy_2");
+  });
+
+  it("component data doesn't exist", () => {
+    const cid = Type.bitstring("my_component");
+    const result = Store.getComponentContext(cid);
+
+    assert.isNull(result);
+  });
+});
+
+describe("getComponentData()", () => {
+  it("component data exists", () => {
     const cid = Type.bitstring("my_component_2");
+
+    Store.data = Type.map([
+      [Type.bitstring("my_component_1"), "dummy_1"],
+      [cid, "dummy_2"],
+    ]);
+
     const result = Store.getComponentData(cid);
 
     assert.equal(result, "dummy_2");
