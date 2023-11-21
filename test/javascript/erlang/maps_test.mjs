@@ -149,7 +149,7 @@ describe("get/2", () => {
     assert.deepStrictEqual(result, value);
   });
 
-  it("raises BadMapError if the map param is not a boxed map", () => {
+  it("raises BadMapError if the second argument is not a map", () => {
     const expectedMessage = "expected a map, got: 1";
 
     assertBoxedError(
@@ -167,6 +167,43 @@ describe("get/2", () => {
       "KeyError",
       expectedMessage,
     );
+  });
+});
+
+describe("get/3", () => {
+  const defaultValue = Type.atom("default_value");
+
+  it("returns the value assiociated with the given key if map contains the key", () => {
+    const key = Type.atom("b");
+    const value = Type.integer(2);
+
+    const map = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [key, value],
+    ]);
+
+    const result = Erlang_Maps["get/3"](key, map, defaultValue);
+
+    assert.deepStrictEqual(result, value);
+  });
+
+  it("raises BadMapError if the second argument is not a map", () => {
+    const expectedMessage = "expected a map, got: 1";
+
+    assertBoxedError(
+      () => Erlang_Maps["get/3"](Type.atom("a"), Type.integer(1), defaultValue),
+      "BadMapError",
+      expectedMessage,
+    );
+  });
+
+  it("returns the default value if the map doesn't contain the given key", () => {
+    const result = Erlang_Maps["get/3"](
+      Type.atom("a"),
+      Type.map([]),
+      defaultValue,
+    );
+    assert.deepStrictEqual(result, defaultValue);
   });
 });
 

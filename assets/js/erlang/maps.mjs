@@ -44,6 +44,23 @@ const Erlang_Maps = {
 
   // start get/2
   "get/2": (key, map) => {
+    const value = Erlang_Maps["get/3"](key, map, null);
+
+    if (value !== null) {
+      return value;
+    }
+
+    Interpreter.raiseKeyError(
+      `key ${Interpreter.inspect(key)} not found in ${Interpreter.inspect(
+        map,
+      )}`,
+    );
+  },
+  // end get/2
+  // deps: [:maps.get/3]
+
+  // start get/3
+  "get/3": (key, map, defaultValue) => {
     if (!Type.isMap(map)) {
       Interpreter.raiseBadMapError(map);
     }
@@ -54,13 +71,9 @@ const Erlang_Maps = {
       return map.data[encodedKey][1];
     }
 
-    Interpreter.raiseKeyError(
-      `key ${Interpreter.inspect(key)} not found in ${Interpreter.inspect(
-        map,
-      )}`,
-    );
+    return defaultValue;
   },
-  // end get/2
+  // end get/3
   // deps: []
 
   // start merge/2
