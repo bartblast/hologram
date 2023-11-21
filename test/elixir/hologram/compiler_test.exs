@@ -59,14 +59,10 @@ defmodule Hologram.CompilerTest do
 
       assert output == """
              Interpreter.defineErlangFunction("Erlang_Maps", "get", 2, (key, map) => {
-                 if (!Type.isMap(map)) {
-                   Interpreter.raiseBadMapError(map);
-                 }
+                 const value = Erlang_Maps["get/3"](key, map, null);
 
-                 const encodedKey = Type.encodeMapKey(key);
-
-                 if (map.data[encodedKey]) {
-                   return map.data[encodedKey][1];
+                 if (value !== null) {
+                   return value;
                  }
 
                  Interpreter.raiseKeyError(
