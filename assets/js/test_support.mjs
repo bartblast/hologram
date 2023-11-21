@@ -87,6 +87,21 @@ export function assertMatchError(callable, value) {
   }
 }
 
+// Based on deepFreeze() from: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/freeze
+export function freeze(obj) {
+  const props = Object.getOwnPropertyNames(obj);
+
+  for (const prop of props) {
+    const val = obj[prop];
+
+    if (val && typeof val === "object") {
+      freeze(val);
+    }
+  }
+
+  return Object.freeze(obj);
+}
+
 export function linkModules() {
   globalThis.Erlang = Erlang;
   globalThis.Erlang_Lists = Erlang_Lists;
