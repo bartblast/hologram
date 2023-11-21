@@ -20,6 +20,27 @@ afterEach(() => {
   Store.data = Type.map([]);
 });
 
+describe("getComponentData()", () => {
+  it("component data exists", () => {
+    Store.data = Type.map([
+      [Type.bitstring("my_component_1"), "dummy_1"],
+      [Type.bitstring("my_component_2"), "dummy_2"],
+    ]);
+
+    const cid = Type.bitstring("my_component_2");
+    const result = Store.getComponentData(cid);
+
+    assert.equal(result, "dummy_2");
+  });
+
+  it("component data doesn't exist", () => {
+    const cid = Type.bitstring("my_component");
+    const result = Store.getComponentData(cid);
+
+    assert.isNull(result);
+  });
+});
+
 it("hydrate()", () => {
   Store.data = Type.map([
     [Type.atom("a"), Type.integer(1)],
