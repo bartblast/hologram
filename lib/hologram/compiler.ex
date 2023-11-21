@@ -281,6 +281,7 @@ defmodule Hologram.Compiler do
       []
       |> include_mfas_used_by_interpreter()
       |> include_mfas_used_by_renderer()
+      |> include_mfas_used_by_store()
 
     call_graph_clone
     |> add_call_graph_edges_for_erlang_functions()
@@ -383,6 +384,13 @@ defmodule Hologram.Compiler do
         {Renderer, :expand_slots, 2},
         {Renderer, :has_cid_prop?, 1},
         {Renderer, :inject_context_props, 3}
+      ]
+  end
+
+  defp include_mfas_used_by_store(mfas) do
+    mfas ++
+      [
+        {:maps, :merge, 2}
       ]
   end
 

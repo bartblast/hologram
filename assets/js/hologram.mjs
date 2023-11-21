@@ -7,6 +7,7 @@ import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import MemoryStorage from "./memory_storage.mjs";
 import Renderer from "./renderer.mjs";
+import Store from "./store.mjs";
 import Type from "./type.mjs";
 
 export default class Hologram {
@@ -35,7 +36,7 @@ export default class Hologram {
     window.__hologramPageReachableFunctionDefs__(Hologram.deps);
 
     const mountData = window.__hologramPageMountData__(Hologram.deps);
-    Hologram.clientsData = mountData.clientsData;
+    Store.hydrate(mountData.clientsData);
     Hologram.pageModule = mountData.pageModule;
     Hologram.pageParams = mountData.pageParams;
 
