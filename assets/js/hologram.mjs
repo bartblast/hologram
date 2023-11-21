@@ -10,6 +10,7 @@ import Renderer from "./renderer.mjs";
 import Store from "./store.mjs";
 import Type from "./type.mjs";
 
+// TODO: test
 export default class Hologram {
   static deps = {
     Bitstring: Bitstring,
@@ -40,11 +41,7 @@ export default class Hologram {
     Hologram.pageModule = mountData.pageModule;
     Hologram.pageParams = mountData.pageParams;
 
-    Renderer.renderPage(
-      mountData.pageModule,
-      mountData.pageParams,
-      mountData.clientsData,
-    );
+    Renderer.renderPage(mountData.pageModule, mountData.pageParams);
   }
 
   static onReady(callback) {

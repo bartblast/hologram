@@ -1,18 +1,20 @@
 "use strict";
 
 import Interpreter from "./interpreter.mjs";
+import Store from "./store.mjs";
 import Type from "./type.mjs";
 
 // Based on Hologram.Template.Renderer
 export default class Renderer {
   // Based on: render_page/2
-  static renderPage(pageModule, pageParams, clientsData) {
+  static renderPage(pageModule, pageParams) {
     const pageModuleRef = Interpreter.module(pageModule);
     const layoutModule = pageModuleRef["__layout_module__/0"]();
 
-    const pageClient = Renderer.#mapFetch(clientsData, Type.bitstring("page"));
-    const pageState = Renderer.#mapFetch(pageClient, Type.atom("state"));
-    const pageContext = Renderer.#mapFetch(pageClient, Type.atom("context"));
+    const cid = Type.bitstring("page");
+    const pageClient = Store.getComponentData(cid);
+    const pageState = Store.getComponentState(cid);
+    const pageContext = Store.getComponentContext(cid);
 
     const layoutPropsDOM = Renderer.#buildLayoutPropsDOM(
       pageModule,
