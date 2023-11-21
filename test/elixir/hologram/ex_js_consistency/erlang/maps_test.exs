@@ -7,6 +7,26 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
 
   use Hologram.Test.BasicCase, async: true
 
+  describe "get/2" do
+    test "returns the value assiociated with the given key if map contains the key" do
+      assert :maps.get(:b, %{a: 1, b: 2}) == 2
+    end
+
+    test "raises BadMapError if the second argument is not a map" do
+      assert_raise BadMapError, "expected a map, got: 1", fn ->
+        :maps.get(:a, build_value(1))
+      end
+    end
+
+    test "raises KeyError if the map doesn't contain the given key" do
+      assert_raise KeyError, "key :a not found in: %{}", fn ->
+        :a
+        |> build_value()
+        |> :maps.get(%{})
+      end
+    end
+  end
+
   describe "get/3" do
     test "returns the value assiociated with the given key if map contains the key" do
       assert :maps.get(:b, %{a: 1, b: 2}, :default_value) == 2
