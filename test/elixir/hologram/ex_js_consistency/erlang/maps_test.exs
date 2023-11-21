@@ -43,6 +43,24 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
   end
 
+  describe "is_key/2" do
+    test "returns true if the given map has the given key" do
+      assert :maps.is_key(:b, %{a: 1, b: 2}) == true
+    end
+
+    test "returns false if the given map has the given key" do
+      assert :maps.is_key(:c, %{a: 1, b: 2}) == false
+    end
+
+    test "raises BadMapError if the second argument is not a map" do
+      assert_raise BadMapError, "expected a map, got: :abc", fn ->
+        :x
+        |> build_value()
+        |> :maps.is_key(:abc)
+      end
+    end
+  end
+
   describe "put/3" do
     test "when the map doesn't have the given key" do
       assert :maps.put(:b, 2, %{a: 1}) == %{a: 1, b: 2}

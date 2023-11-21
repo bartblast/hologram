@@ -76,6 +76,17 @@ const Erlang_Maps = {
   // end get/3
   // deps: []
 
+  // start is_key/2
+  "is_key/2": (key, map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    return Type.boolean(Type.encodeMapKey(key) in map.data);
+  },
+  // end is_key/2
+  // deps: []
+
   // start merge/2
   "merge/2": (map1, map2) => {
     if (!Type.isMap(map1)) {

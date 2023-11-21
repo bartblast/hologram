@@ -3,6 +3,9 @@
 import {
   assert,
   assertBoxedError,
+  assertBoxedFalse,
+  assertBoxedTrue,
+  freeze,
   linkModules,
   unlinkModules,
 } from "../../../assets/js/test_support.mjs";
@@ -150,22 +153,18 @@ describe("get/2", () => {
   });
 
   it("raises BadMapError if the second argument is not a map", () => {
-    const expectedMessage = "expected a map, got: 1";
-
     assertBoxedError(
       () => Erlang_Maps["get/2"](Type.atom("a"), Type.integer(1)),
       "BadMapError",
-      expectedMessage,
+      "expected a map, got: 1",
     );
   });
 
   it("raises KeyError if the map doesn't contain the given key", () => {
-    const expectedMessage = "key :a not found in %{}";
-
     assertBoxedError(
       () => Erlang_Maps["get/2"](Type.atom("a"), Type.map([])),
       "KeyError",
-      expectedMessage,
+      "key :a not found in %{}",
     );
   });
 });
@@ -188,12 +187,10 @@ describe("get/3", () => {
   });
 
   it("raises BadMapError if the second argument is not a map", () => {
-    const expectedMessage = "expected a map, got: 1";
-
     assertBoxedError(
       () => Erlang_Maps["get/3"](Type.atom("a"), Type.integer(1), defaultValue),
       "BadMapError",
-      expectedMessage,
+      "expected a map, got: 1",
     );
   });
 
@@ -204,6 +201,36 @@ describe("get/3", () => {
       defaultValue,
     );
     assert.deepStrictEqual(result, defaultValue);
+  });
+});
+
+describe("is_key/2", () => {
+  const map = Type.map([
+    [Type.atom("a"), Type.integer(1)],
+    [Type.atom("b"), Type.integer(2)],
+  ]);
+
+  it("doesn't mutate its arguments", () => {
+    Erlang_Maps["is_key/2"](
+      freeze(Type.atom("a")),
+      freeze(Type.map([[Type.atom("a"), Type.integer(1)]])),
+    );
+  });
+
+  it("returns true if the given map has the given key", () => {
+    assertBoxedTrue(Erlang_Maps["is_key/2"](Type.atom("b"), map));
+  });
+
+  it("returns false if the given map has the given key", () => {
+    assertBoxedFalse(Erlang_Maps["is_key/2"](Type.atom("c"), map));
+  });
+
+  it("raises BadMapError if the second argument is not a map", () => {
+    assertBoxedError(
+      () => Erlang_Maps["is_key/2"](Type.atom("x"), Type.atom("abc")),
+      "BadMapError",
+      "expected a map, got: :abc",
+    );
   });
 });
 
