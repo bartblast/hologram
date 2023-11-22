@@ -587,6 +587,10 @@ export default class Interpreter {
       return term.value;
     }
 
+    if (Type.isAlias(term)) {
+      return term.value.slice(7);
+    }
+
     return ":" + term.value;
   }
 

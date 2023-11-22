@@ -1706,6 +1706,11 @@ describe("inspect()", () => {
       assert.equal(result, "nil");
     });
 
+    it("module alias", () => {
+      const result = Interpreter.inspect(Type.alias("Aaa.Bbb"), {});
+      assert.equal(result, "Aaa.Bbb");
+    });
+
     it("non-boolean and non-nil", () => {
       const result = Interpreter.inspect(Type.atom("abc"), {});
       assert.equal(result, ":abc");
