@@ -132,7 +132,7 @@ export default class Renderer {
   }
 
   static #renderStatefulComponent(module, props, children, context) {
-    const cid = Erlang_Maps["get/2"](Type.bitstring("cid"), props);
+    const cid = Erlang_Maps["get/2"](Type.atom("cid"), props);
     let componentState = Store.getComponentState(cid);
     let componentContext;
 
