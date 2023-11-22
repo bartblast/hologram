@@ -115,6 +115,20 @@ const Erlang_Maps = {
   },
   // end put/3
   // deps: []
+
+  // TODO: implement iterators
+  // start to_list/1
+  "to_list/1": (mapOrIterator) => {
+    if (!Type.isMap(mapOrIterator)) {
+      Interpreter.raiseBadMapError(mapOrIterator);
+    }
+
+    return Type.list(
+      Object.values(mapOrIterator.data).map((item) => Type.tuple(item)),
+    );
+  },
+  // end to_list/1
+  // deps: []
 };
 
 export default Erlang_Maps;

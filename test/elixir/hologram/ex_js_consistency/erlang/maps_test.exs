@@ -76,4 +76,20 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
       end
     end
   end
+
+  describe "to_list/1" do
+    test "returns an empty list if given an empty map" do
+      assert :maps.to_list(%{}) == []
+    end
+
+    test "returns a list of tuples containing key-value pairs if given a non-empty map" do
+      assert :maps.to_list(%{a: 1, b: 2}) == [{:a, 1}, {:b, 2}]
+    end
+
+    test "raises BadMapError if the argument is not a map" do
+      assert_raise BadMapError, "expected a map, got: :abc", fn ->
+        :maps.to_list(:abc)
+      end
+    end
+  end
 end

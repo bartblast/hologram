@@ -342,3 +342,60 @@ describe("puts/3", () => {
     );
   });
 });
+
+describe("to_list/1", () => {
+  it("doesn't mutate its arguments", () => {
+    Erlang_Maps["to_list/1"](
+      freeze(
+        Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.atom("b"), Type.integer(2)],
+        ]),
+      ),
+    );
+  });
+
+  it("returns an empty list if given an empty map", () => {
+    const result = Erlang_Maps["to_list/1"](Type.map([]));
+    assert.deepStrictEqual(result, Type.list([]));
+  });
+
+  it("returns a list of tuples containing key-value pairs if given a non-empty map", () => {
+    const map = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+    ]);
+
+    const result = Erlang_Maps["to_list/1"](map);
+
+    const expected = Type.list([
+      Type.tuple([Type.atom("a"), Type.integer(1)]),
+      Type.tuple([Type.atom("b"), Type.integer(2)]),
+    ]);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("raises BadMapError if the argument is not a map", () => {
+    assertBoxedError(
+      () => Erlang_Maps["to_list/1"](Type.atom("abc")),
+      "BadMapError",
+      "expected a map, got: :abc",
+    );
+  });
+
+  // TODO: this should fail when iterators get implemented
+  it("raises BadMapError if the argument is an iterator", () => {
+    const iterator = Type.tuple([
+      Type.atom("a"),
+      Type.integer(1),
+      Type.atom("none"),
+    ]);
+
+    assertBoxedError(
+      () => Erlang_Maps["to_list/1"](iterator),
+      "BadMapError",
+      "expected a map, got: {:a, 1, :none}",
+    );
+  });
+});
