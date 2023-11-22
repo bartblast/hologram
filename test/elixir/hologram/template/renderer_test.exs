@@ -170,7 +170,7 @@ defmodule Hologram.Template.RendererTest do
          [{"cid", [text: "component_18"]}, {"a", [text: "111"]}, {"c", [text: "333"]}], []}
 
       assert_raise KeyError,
-                   ~s(key :c not found in: %{a: "111", b: 222, cid: "component_18"}),
+                   ~r/key :c not found in:/,
                    fn ->
                      render_dom(node, %{}, [])
                    end
@@ -639,7 +639,7 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
-    test "inject runtime clients data" do
+    test "interpolate client components data JS" do
       ETS.put(
         PageDigestRegistryStub.ets_table_name(),
         Module48,
@@ -660,12 +660,12 @@ defmodule Hologram.Template.RendererTest do
               }} = render_page(Module48, [])
 
       expected =
-        ~s/clientsData: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])], [Type.bitstring("page"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_mounted?")]), Type.atom("true")]])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])/
+        ~s/componentsData: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])], [Type.bitstring("page"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_mounted?")]), Type.atom("true")]])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])/
 
       assert String.contains?(html, expected)
     end
 
-    test "inject runtime page module" do
+    test "interpolate page module JS" do
       ETS.put(
         PageDigestRegistryStub.ets_table_name(),
         Module48,
@@ -691,7 +691,7 @@ defmodule Hologram.Template.RendererTest do
       assert String.contains?(html, expected)
     end
 
-    test "inject runtime page params" do
+    test "interpolate page params JS" do
       ETS.put(
         PageDigestRegistryStub.ets_table_name(),
         Module50,

@@ -87,8 +87,8 @@ export default class Renderer {
     return Elixir_Hologram_Template_Renderer["expand_slots/2"](dom, slots);
   }
 
-  static #injectContextProps(propsFromTemplate, module, context) {
-    return Elixir_Hologram_Template_Renderer["inject_context_props/3"](
+  static #injectPropsFromContext(propsFromTemplate, module, context) {
+    return Elixir_Hologram_Template_Renderer["inject_props_from_context/3"](
       propsFromTemplate,
       module,
       context,
@@ -106,7 +106,7 @@ export default class Renderer {
 
     _children = Renderer.#expandSlots(_children, slots);
 
-    const props = Renderer.#injectContextProps(
+    const props = Renderer.#injectPropsFromContext(
       Renderer.#castProps(propsDOM, module),
       module,
       context,

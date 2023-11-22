@@ -35,7 +35,7 @@ defmodule Hologram.Runtime.Controller do
         {to_string(name), [text: value]}
       end)
 
-    {html, _clients} = Renderer.render_page(page_module, params_dom)
+    {html, _client_components_data} = Renderer.render_page(page_module, params_dom)
 
     conn
     |> Controller.html(html)

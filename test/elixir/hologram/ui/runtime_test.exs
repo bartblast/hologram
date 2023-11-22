@@ -33,9 +33,9 @@ defmodule Hologram.UI.RuntimeTest do
                    const Type = deps.Type;
                    
                    return {
-                     clientsData: $INJECT_CLIENTS_DATA,
-                     pageModule: $INJECT_PAGE_MODULE,
-                     pageParams: $INJECT_PAGE_PARAMS
+                     componentsData: $COMPONENTS_DATA_JS_PLACEHOLDER,
+                     pageModule: $PAGE_MODULE_JS_PLACEHOLDER,
+                     pageParams: $PAGE_PARAMS_JS_PLACEHOLDER
                    };
                  };
                

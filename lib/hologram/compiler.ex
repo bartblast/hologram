@@ -383,7 +383,7 @@ defmodule Hologram.Compiler do
         {Renderer, :cast_props, 2},
         {Renderer, :expand_slots, 2},
         {Renderer, :has_cid_prop?, 1},
-        {Renderer, :inject_context_props, 3}
+        {Renderer, :inject_props_from_context, 3}
       ]
   end
 

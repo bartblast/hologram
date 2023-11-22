@@ -29,9 +29,9 @@ defmodule Hologram.Template.Renderer do
     nodes
     # There may be nil DOM nodes resulting from if blocks, e.g. {%if false}abc{/if}
     |> Enum.filter(& &1)
-    |> Enum.reduce({"", %{}}, fn node, {acc_html, acc_clients} ->
-      {html, clients} = render_dom(node, context, slots)
-      {acc_html <> html, Map.merge(acc_clients, clients)}
+    |> Enum.reduce({"", %{}}, fn node, {acc_html, acc_client_components_data} ->
+      {html, client_components_data} = render_dom(node, context, slots)
+      {acc_html <> html, Map.merge(acc_client_components_data, client_components_data)}
     end)
   end
 
@@ -41,7 +41,7 @@ defmodule Hologram.Template.Renderer do
     props =
       props_dom
       |> cast_props(module)
-      |> inject_context_props(module, context)
+      |> inject_props_from_context(module, context)
 
     if has_cid_prop?(props) do
       render_stateful_component(module, props, children, context)
@@ -57,7 +57,7 @@ defmodule Hologram.Template.Renderer do
   def render_dom({:element, tag, attrs_dom, children}, context, slots) do
     attrs_html = render_atributes(attrs_dom)
 
-    {children_html, children_clients} = render_dom(children, context, slots)
+    {children_html, client_children_components_data} = render_dom(children, context, slots)
 
     html =
       if tag in @void_elems do
@@ -66,7 +66,7 @@ defmodule Hologram.Template.Renderer do
         "<#{tag}#{attrs_html}>#{children_html}</#{tag}>"
       end
 
-    {html, children_clients}
+    {html, client_children_components_data}
   end
 
   def render_dom({:expression, {value}}, _context, _slots) do
@@ -93,41 +93,50 @@ defmodule Hologram.Template.Renderer do
   @spec render_page(module, DOM.t()) :: {String.t(), %{atom => Component.Client.t()}}
   def render_page(page_module, params_dom) do
     params = cast_props(params_dom, page_module)
-    {initial_page_client, _server} = init_component(page_module, params)
+    {initial_client_page_data, _server} = init_component(page_module, params)
 
     page_digest = PageDigestRegistry.lookup(page_module)
 
     %{context: page_context, state: page_state} =
-      initial_page_client_with_injected_page_digest =
-      Templatable.put_context(initial_page_client, {Hologram.Runtime, :page_digest}, page_digest)
+      client_page_data_with_injected_page_digest =
+      Templatable.put_context(
+        initial_client_page_data,
+        {Hologram.Runtime, :page_digest},
+        page_digest
+      )
 
     layout_module = page_module.__layout_module__()
 
     layout_props_dom =
-      build_layout_props_dom(page_module, initial_page_client_with_injected_page_digest)
+      build_layout_props_dom(page_module, client_page_data_with_injected_page_digest)
 
     vars = aggregate_vars(params, page_state)
     page_dom = page_module.template().(vars)
     layout_node = {:component, layout_module, layout_props_dom, page_dom}
 
-    {initial_html, initial_clients} = render_dom(layout_node, page_context, [])
+    {initial_html, initial_client_components_data} = render_dom(layout_node, page_context, [])
 
-    final_page_client =
+    client_page_data_with_injected_page_mounted_flag =
       Templatable.put_context(
-        initial_page_client_with_injected_page_digest,
+        client_page_data_with_injected_page_digest,
         {Hologram.Runtime, :page_mounted?},
         true
       )
 
-    final_clients = Map.put(initial_clients, "page", final_page_client)
+    final_client_components_data =
+      Map.put(
+        initial_client_components_data,
+        "page",
+        client_page_data_with_injected_page_mounted_flag
+      )
 
     final_html =
       initial_html
-      |> inject_runtime_clients_data(final_clients)
-      |> inject_runtime_page_module(page_module)
-      |> inject_runtime_page_params(params)
+      |> interpolate_client_components_data_js(final_client_components_data)
+      |> interpolate_page_module_js(page_module)
+      |> interpolate_page_params_js(params)
 
-    {final_html, final_clients}
+    {final_html, final_client_components_data}
   end
 
   # Used both on the client and the server.
@@ -136,10 +145,10 @@ defmodule Hologram.Template.Renderer do
   end
 
   # Used both on the client and the server.
-  defp build_layout_props_dom(page_module, page_client) do
+  defp build_layout_props_dom(page_module, client_page_data) do
     page_module.__layout_props__()
     |> Enum.into(%{cid: "layout"})
-    |> aggregate_vars(page_client.state)
+    |> aggregate_vars(client_page_data.state)
     |> Enum.map(fn {name, value} -> {to_string(name), [expression: {value}]} end)
   end
 
@@ -156,7 +165,7 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp evaluate_prop_value({name, value_parts}) do
-    {text, _clients} = render_dom(value_parts, %{}, [])
+    {text, _client} = render_dom(value_parts, %{}, [])
     {name, text}
   end
 
@@ -217,7 +226,7 @@ defmodule Hologram.Template.Renderer do
     end
   end
 
-  defp inject_context_props(props_from_template, module, context) do
+  defp inject_props_from_context(props_from_template, module, context) do
     props_from_context =
       module.__props__()
       |> Enum.filter(fn {_name, _type, opts} -> opts[:from_context] end)
@@ -227,19 +236,19 @@ defmodule Hologram.Template.Renderer do
     Map.merge(props_from_template, props_from_context)
   end
 
-  defp inject_runtime_clients_data(html, clients) do
-    clients_js = Encoder.encode_term(clients)
-    String.replace(html, "$INJECT_CLIENTS_DATA", clients_js)
+  defp interpolate_client_components_data_js(html, client_components_data) do
+    client_components_data_js = Encoder.encode_term(client_components_data)
+    String.replace(html, "$COMPONENTS_DATA_JS_PLACEHOLDER", client_components_data_js)
   end
 
-  defp inject_runtime_page_module(html, page_module) do
+  defp interpolate_page_module_js(html, page_module) do
     page_module_js = Encoder.encode_term(page_module)
-    String.replace(html, "$INJECT_PAGE_MODULE", page_module_js)
+    String.replace(html, "$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
   end
 
-  defp inject_runtime_page_params(html, page_params) do
+  defp interpolate_page_params_js(html, page_params) do
     page_params_js = Encoder.encode_term(page_params)
-    String.replace(html, "$INJECT_PAGE_PARAMS", page_params_js)
+    String.replace(html, "$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
   end
 
   defp normalize_prop_name({name, value}) do
@@ -251,7 +260,7 @@ defmodule Hologram.Template.Renderer do
   defp render_attribute(name, []), do: name
 
   defp render_attribute(name, value_parts) do
-    {html, _clients} = render_dom(value_parts, %{}, [])
+    {html, _client_components_data} = render_dom(value_parts, %{}, [])
     ~s(#{name}="#{html}")
   end
 
@@ -272,10 +281,10 @@ defmodule Hologram.Template.Renderer do
     vars = aggregate_vars(props, client.state)
     context = Map.merge(context, client.context)
 
-    {html, children_clients} = render_template(module, vars, children, context)
-    clients = Map.put(children_clients, vars.cid, client)
+    {html, children_client_components_data} = render_template(module, vars, children, context)
+    client_components_data = Map.put(children_client_components_data, vars.cid, client)
 
-    {html, clients}
+    {html, client_components_data}
   end
 
   defp render_stateless_component(module, props, children, context) do

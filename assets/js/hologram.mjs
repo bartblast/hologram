@@ -21,7 +21,6 @@ export default class Hologram {
     Type: Type,
   };
 
-  static clientsData = null;
   static isInitiated = false;
   static pageModule = null;
   static pageParams = null;
@@ -37,7 +36,7 @@ export default class Hologram {
     window.__hologramPageReachableFunctionDefs__(Hologram.deps);
 
     const mountData = window.__hologramPageMountData__(Hologram.deps);
-    Store.hydrate(mountData.clientsData);
+    Store.hydrate(mountData.componentsData);
     Hologram.pageModule = mountData.pageModule;
     Hologram.pageParams = mountData.pageParams;
 
