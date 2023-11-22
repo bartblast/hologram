@@ -114,7 +114,7 @@ export default class Renderer {
       context,
     );
 
-    if (Type.isTrue(Renderer.#hasCidProp())) {
+    if (Type.isTrue(Renderer.#hasCidProp(props))) {
       return Renderer.#renderStatefulComponent(
         module,
         props,
