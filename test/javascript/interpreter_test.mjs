@@ -4960,8 +4960,8 @@ describe("matchOperator()", () => {
   });
 });
 
-it("module()", () => {
-  assert.equal(Interpreter.module("maps"), Erlang_Maps);
+it("moduleRef()", () => {
+  assert.equal(Interpreter.moduleRef("maps"), Erlang_Maps);
 });
 
 describe("moduleName()", () => {

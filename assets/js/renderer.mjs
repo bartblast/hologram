@@ -10,7 +10,7 @@ import Type from "./type.mjs";
 export default class Renderer {
   // Based on: render_page/2
   static renderPage(pageModule, pageParams) {
-    const pageModuleRef = Interpreter.module(pageModule);
+    const pageModuleRef = Interpreter.moduleRef(pageModule);
     const layoutModule = pageModuleRef["__layout_module__/0"]();
 
     const cid = Type.bitstring("page");
@@ -137,7 +137,7 @@ export default class Renderer {
     let componentState = Store.getComponentState(cid);
     let componentContext;
 
-    const moduleRef = Interpreter.module(module);
+    const moduleRef = Interpreter.moduleRef(module);
 
     if (componentState === null) {
       if ("init/2" in moduleRef) {

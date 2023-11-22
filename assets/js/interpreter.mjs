@@ -35,7 +35,7 @@ export default class Interpreter {
   }
 
   static callNamedFunction(alias, functionArityStr, args) {
-    return Interpreter.module(alias)[functionArityStr](...args);
+    return Interpreter.moduleRef(alias)[functionArityStr](...args);
   }
 
   static case(condition, clauses, vars) {
@@ -228,7 +228,7 @@ export default class Interpreter {
     // if left argument is a boxed atom, treat the operator as a remote function call
     if (Type.isAtom(left)) {
       const functionArityStr = `${right.value}/0`;
-      return Interpreter.module(left)[functionArityStr]();
+      return Interpreter.moduleRef(left)[functionArityStr]();
     }
 
     // otherwise treat the operator as map key access
@@ -376,7 +376,7 @@ export default class Interpreter {
     return right;
   }
 
-  static module(alias) {
+  static moduleRef(alias) {
     return globalThis[Interpreter.moduleName(alias)];
   }
 
