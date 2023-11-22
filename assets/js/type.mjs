@@ -227,6 +227,10 @@ export default class Type {
     return {type: "list", data: data, isProper: true};
   }
 
+  static keywordList(data) {
+    return Type.list(data.map((item) => Type.tuple(item)));
+  }
+
   static map(data) {
     const hashTableWithMetadata = data.reduce((acc, [boxedKey, boxedValue]) => {
       acc[Type.encodeMapKey(boxedKey)] = [boxedKey, boxedValue];

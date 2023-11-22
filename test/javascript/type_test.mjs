@@ -789,7 +789,23 @@ it("list()", () => {
   assert.deepStrictEqual(result, expected);
 });
 
-describe("map", () => {
+it("keywordList()", () => {
+  const data = [
+    [Type.atom("a"), Type.integer(1)],
+    [Type.atom("b"), Type.integer(2)],
+  ];
+
+  const result = Type.keywordList(data);
+
+  const expected = Type.list([
+    Type.tuple([Type.atom("a"), Type.integer(1)]),
+    Type.tuple([Type.atom("b"), Type.integer(2)]),
+  ]);
+
+  assert.deepStrictEqual(result, expected);
+});
+
+describe("map()", () => {
   it("returns empty boxed map value", () => {
     const expected = {type: "map", data: {}};
 
