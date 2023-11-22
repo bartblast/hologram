@@ -365,7 +365,7 @@ describe("integer()", () => {
   });
 });
 
-describe.only("isAlias()", () => {
+describe("isAlias()", () => {
   it("returns true if the term is a module alias", () => {
     const term = Type.alias("Aaa.Bbb");
     assert.isTrue(Type.isAlias(term));

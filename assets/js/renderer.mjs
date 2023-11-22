@@ -1,5 +1,7 @@
 "use strict";
 
+import Erlang_Maps from "./erlang/maps.mjs";
+import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Store from "./store.mjs";
 import Type from "./type.mjs";
@@ -87,6 +89,10 @@ export default class Renderer {
     return Elixir_Hologram_Template_Renderer["expand_slots/2"](dom, slots);
   }
 
+  static #hasCidProp(props) {
+    return Elixir_Hologram_Template_Renderer["has_cid_prop/1"](props);
+  }
+
   static #injectPropsFromContext(propsFromTemplate, module, context) {
     return Elixir_Hologram_Template_Renderer["inject_props_from_context/3"](
       propsFromTemplate,
@@ -95,16 +101,12 @@ export default class Renderer {
     );
   }
 
-  static #mapFetch(map, key) {
-    return Elixir_Map["fetch!/2"](map, key);
-  }
-
   static #renderComponentDOM(dom, context, slots) {
     const module = dom.data[1];
     const propsDOM = dom.data[2];
-    let _children = dom.data[3];
+    let children = dom.data[3];
 
-    _children = Renderer.#expandSlots(_children, slots);
+    children = Renderer.#expandSlots(_children, slots);
 
     const props = Renderer.#injectPropsFromContext(
       Renderer.#castProps(propsDOM, module),
@@ -112,8 +114,62 @@ export default class Renderer {
       context,
     );
 
-    console.inspect(props);
+    if (Type.isTrue(Renderer.#hasCidProp())) {
+      return Renderer.#renderStatefulComponent(
+        module,
+        props,
+        children,
+        context,
+      );
+    } else {
+      return Renderer.#renderStatelessComponent(
+        module,
+        props,
+        children,
+        context,
+      );
+    }
+  }
 
-    return "(todo: component)";
+  static #renderStatefulComponent(module, props, children, context) {
+    const cid = Erlang_Maps["get/2"](Type.bitstring("cid"), props);
+    let componentState = Store.getComponentState(cid);
+    let componentContext;
+
+    if (componentState === null) {
+      moduleRef = Interpreter.module(module);
+
+      if ("init/2" in moduleRef) {
+        const emptyClientStruct =
+          Elixir_Hologram_Component_Client["__struct__/0"]();
+
+        const clientStruct = moduleRef["init/2"](props, emptyClientStruct);
+
+        clientState = Erlang_Maps["get/2"](Type.atom("state"), clientStruct);
+
+        clientContext = Erlang_Maps["get/2"](
+          Type.atom("context"),
+          clientStruct,
+        );
+      } else {
+        const message = `component ${Interpreter.inspect(
+          module,
+        )} is initialized on the client, but doesn't have init/2 implemented`;
+
+        throw new HologramInterpreterError(message);
+      }
+    } else {
+      clientContext = Store.getComponentContext(cid);
+    }
+
+    const _vars = Renderer.#aggregateVars(props, clientState);
+    const _mergedContext = Erlang_Maps["merge/2"](context, clientContext);
+
+    return "(todo: component, in progress)";
+  }
+
+  // TODO: implement
+  static #renderStatelessComponent() {
+    console.log("#renderStatelessComponent()");
   }
 }

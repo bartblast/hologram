@@ -281,14 +281,14 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp render_stateful_component(module, props, children, context) do
-    {client, _server} = init_component(module, props)
-    vars = aggregate_vars(props, client.state)
-    context = Map.merge(context, client.context)
+    {client_struct, _server_struct} = init_component(module, props)
+    vars = aggregate_vars(props, client_struct.state)
+    merged_context = Map.merge(context, client_struct.context)
 
-    {html, children_client_components_data} = render_template(module, vars, children, context)
-    client_components_data = Map.put(children_client_components_data, vars.cid, client)
+    {html, children_client_structs} = render_template(module, vars, children, merged_context)
+    acc_client_structs = Map.put(children_client_structs, vars.cid, client_struct)
 
-    {html, client_components_data}
+    {html, acc_client_structs}
   end
 
   defp render_stateless_component(module, props, children, context) do

@@ -377,7 +377,7 @@ defmodule Hologram.Compiler do
   defp include_mfas_used_by_renderer(mfas) do
     mfas ++
       [
-        {Map, :fetch!, 2},
+        {Hologram.Component.Client, :__struct__, 0},
         {Renderer, :aggregate_vars, 2},
         {Renderer, :build_layout_props_dom, 2},
         {Renderer, :cast_props, 2},
