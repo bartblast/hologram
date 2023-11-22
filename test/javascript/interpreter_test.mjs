@@ -1715,131 +1715,127 @@ describe("inspect()", () => {
       const result = Interpreter.inspect(Type.atom("abc"), {});
       assert.equal(result, ":abc");
     });
+  });
 
-    describe("bitstring", () => {
-      it("empty text", () => {
-        const result = Interpreter.inspect(Type.bitstring(""), {});
-        assert.equal(result, '""');
-      });
-
-      it("ASCII text", () => {
-        const result = Interpreter.inspect(Type.bitstring("abc"), {});
-        assert.equal(result, '"abc"');
-      });
-
-      it("Unicode text", () => {
-        const result = Interpreter.inspect(Type.bitstring("全息图"), {});
-        assert.equal(result, '"全息图"');
-      });
-
-      // TODO: remove when all types are supported
-      it("not text", () => {
-        const result = Interpreter.inspect(Type.bitstring([1, 0, 1]), {});
-        assert.equal(result, "bitstring(3)");
-      });
+  describe("bitstring", () => {
+    it("empty text", () => {
+      const result = Interpreter.inspect(Type.bitstring(""), {});
+      assert.equal(result, '""');
     });
 
-    describe("float", () => {
-      it("integer-representable", () => {
-        const result = Interpreter.inspect(Type.float(123.0), {});
-        assert.equal(result, "123.0");
-      });
-
-      it("not integer-representable", () => {
-        const result = Interpreter.inspect(Type.float(123.45), {});
-        assert.equal(result, "123.45");
-      });
+    it("ASCII text", () => {
+      const result = Interpreter.inspect(Type.bitstring("abc"), {});
+      assert.equal(result, '"abc"');
     });
 
-    it("integer", () => {
-      const result = Interpreter.inspect(Type.integer(123), {});
-      assert.equal(result, "123");
+    it("Unicode text", () => {
+      const result = Interpreter.inspect(Type.bitstring("全息图"), {});
+      assert.equal(result, '"全息图"');
     });
 
-    describe("list", () => {
-      it("empty", () => {
-        const result = Interpreter.inspect(Type.list([]), {});
-        assert.equal(result, "[]");
-      });
+    // TODO: remove when all types are supported
+    it("not text", () => {
+      const result = Interpreter.inspect(Type.bitstring([1, 0, 1]), {});
+      assert.equal(result, "bitstring(3)");
+    });
+  });
 
-      it("non-empty, proper", () => {
-        const result = Interpreter.inspect(
-          Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
-          {},
-        );
-
-        assert.equal(result, "[1, 2, 3]");
-      });
-
-      it("non-empty, improper", () => {
-        const result = Interpreter.inspect(
-          Type.improperList([
-            Type.integer(1),
-            Type.integer(2),
-            Type.integer(3),
-          ]),
-          {},
-        );
-
-        assert.equal(result, "[1, 2 | 3]");
-      });
+  describe("float", () => {
+    it("integer-representable", () => {
+      const result = Interpreter.inspect(Type.float(123.0), {});
+      assert.equal(result, "123.0");
     });
 
-    describe("map", () => {
-      it("empty", () => {
-        const result = Interpreter.inspect(Type.map([]), {});
-        assert.equal(result, "%{}");
-      });
+    it("not integer-representable", () => {
+      const result = Interpreter.inspect(Type.float(123.45), {});
+      assert.equal(result, "123.45");
+    });
+  });
 
-      it("non-empty, with atom keys", () => {
-        const map = Type.map([
-          [Type.atom("a"), Type.integer(1)],
-          [Type.atom("b"), Type.bitstring("xyz")],
-        ]);
+  it("integer", () => {
+    const result = Interpreter.inspect(Type.integer(123), {});
+    assert.equal(result, "123");
+  });
 
-        const result = Interpreter.inspect(map, {});
-
-        assert.equal(result, '%{a: 1, b: "xyz"}');
-      });
-
-      it("non-empty, with non-atom keys", () => {
-        const map = Type.map([
-          [Type.integer(9), Type.bitstring("xyz")],
-          [Type.bitstring("abc"), Type.float(2.3)],
-        ]);
-
-        const result = Interpreter.inspect(map, {});
-
-        assert.equal(result, '%{9 => "xyz", "abc" => 2.3}');
-      });
+  describe("list", () => {
+    it("empty", () => {
+      const result = Interpreter.inspect(Type.list([]), {});
+      assert.equal(result, "[]");
     });
 
-    describe("string", () => {
-      it("empty text", () => {
-        const result = Interpreter.inspect(Type.string(""), {});
-        assert.equal(result, '""');
-      });
+    it("non-empty, proper", () => {
+      const result = Interpreter.inspect(
+        Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+        {},
+      );
 
-      it("ASCII text", () => {
-        const result = Interpreter.inspect(Type.string("abc"), {});
-        assert.equal(result, '"abc"');
-      });
+      assert.equal(result, "[1, 2, 3]");
     });
 
-    describe("tuple", () => {
-      it("empty", () => {
-        const result = Interpreter.inspect(Type.tuple([]), {});
-        assert.equal(result, "{}");
-      });
+    it("non-empty, improper", () => {
+      const result = Interpreter.inspect(
+        Type.improperList([Type.integer(1), Type.integer(2), Type.integer(3)]),
+        {},
+      );
 
-      it("non-empty", () => {
-        const result = Interpreter.inspect(
-          Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
-          {},
-        );
+      assert.equal(result, "[1, 2 | 3]");
+    });
+  });
 
-        assert.equal(result, "{1, 2, 3}");
-      });
+  describe("map", () => {
+    it("empty", () => {
+      const result = Interpreter.inspect(Type.map([]), {});
+      assert.equal(result, "%{}");
+    });
+
+    it("non-empty, with atom keys", () => {
+      const map = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.bitstring("xyz")],
+      ]);
+
+      const result = Interpreter.inspect(map, {});
+
+      assert.equal(result, '%{a: 1, b: "xyz"}');
+    });
+
+    it("non-empty, with non-atom keys", () => {
+      const map = Type.map([
+        [Type.integer(9), Type.bitstring("xyz")],
+        [Type.bitstring("abc"), Type.float(2.3)],
+      ]);
+
+      const result = Interpreter.inspect(map, {});
+
+      assert.equal(result, '%{9 => "xyz", "abc" => 2.3}');
+    });
+  });
+
+  describe("string", () => {
+    it("empty text", () => {
+      const result = Interpreter.inspect(Type.string(""), {});
+      assert.equal(result, '""');
+    });
+
+    it("ASCII text", () => {
+      const result = Interpreter.inspect(Type.string("abc"), {});
+      assert.equal(result, '"abc"');
+    });
+  });
+
+  describe("tuple", () => {
+    it("empty", () => {
+      const result = Interpreter.inspect(Type.tuple([]), {});
+      assert.equal(result, "{}");
+    });
+
+    it("non-empty", () => {
+      const result = Interpreter.inspect(
+        Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+        {},
+      );
+
+      assert.equal(result, "{1, 2, 3}");
     });
   });
 
