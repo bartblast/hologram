@@ -90,7 +90,7 @@ export default class Renderer {
   }
 
   static #hasCidProp(props) {
-    return Elixir_Hologram_Template_Renderer["has_cid_prop/1"](props);
+    return Elixir_Hologram_Template_Renderer["has_cid_prop?/1"](props);
   }
 
   static #injectPropsFromContext(propsFromTemplate, module, context) {
