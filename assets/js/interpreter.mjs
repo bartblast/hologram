@@ -376,10 +376,6 @@ export default class Interpreter {
     return right;
   }
 
-  static moduleRef(alias) {
-    return globalThis[Interpreter.moduleName(alias)];
-  }
-
   // Based on: Hologram.Compiler.Encoder.encode_as_class_name/1
   static moduleName(alias) {
     const aliasStr = Type.isAtom(alias) ? alias.value : alias;
@@ -395,6 +391,10 @@ export default class Interpreter {
     }
 
     return segments.map((segment) => Utils.capitalize(segment)).join("_");
+  }
+
+  static moduleRef(alias) {
+    return globalThis[Interpreter.moduleName(alias)];
   }
 
   static raiseArgumentError(message) {
