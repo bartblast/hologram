@@ -365,6 +365,23 @@ describe("integer()", () => {
   });
 });
 
+describe.only("isAlias()", () => {
+  it("returns true if the term is a module alias", () => {
+    const term = Type.alias("Aaa.Bbb");
+    assert.isTrue(Type.isAlias(term));
+  });
+
+  it("returns false if the term is an atom, but not a module alias", () => {
+    const term = Type.atom("Aaa.Bbb");
+    assert.isFalse(Type.isAlias(term));
+  });
+
+  it("returns false if the term is not an atom", () => {
+    const term = Type.bitstring("Aaa.Bbb");
+    assert.isFalse(Type.isAlias(term));
+  });
+});
+
 describe("isAnonymousFunction()", () => {
   it("returns true if the term is an anonymous function", () => {
     const term = Type.anonymousFunction(3, ["dummy_clause"], {});

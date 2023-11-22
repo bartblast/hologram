@@ -10,6 +10,10 @@ export default class Type {
     return Type.atom(`Elixir.${aliasStr}`);
   }
 
+  static isAlias(term) {
+    return Type.isAtom(term) && term.value.startsWith("Elixir.");
+  }
+
   static anonymousFunction(arity, clauses, vars) {
     return {
       type: "anonymous_function",
