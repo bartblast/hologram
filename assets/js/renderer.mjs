@@ -24,11 +24,7 @@ export default class Renderer {
     );
 
     const vars = Renderer.#aggregateVars(pageParams, pageState);
-
-    const pageDOM = Interpreter.callAnonymousFunction(
-      pageModuleRef["template/0"](),
-      [vars],
-    );
+    const pageDOM = Renderer.#evaluateTemplate(pageModuleRef, vars);
 
     const layoutNode = Type.tuple([
       Type.atom("component"),
@@ -39,6 +35,7 @@ export default class Renderer {
 
     const html = Renderer.#renderDOM(layoutNode, pageContext, Type.list([]));
 
+    // TODO: remove
     console.inspect(html);
   }
 
@@ -83,6 +80,10 @@ export default class Renderer {
 
   static #castProps(propsDOM, module) {
     return Elixir_Hologram_Template_Renderer["cast_props/2"](propsDOM, module);
+  }
+
+  static #evaluateTemplate(moduleRef, vars) {
+    return Interpreter.callAnonymousFunction(moduleRef["template/0"](), [vars]);
   }
 
   static #expandSlots(dom, slots) {
@@ -136,9 +137,9 @@ export default class Renderer {
     let componentState = Store.getComponentState(cid);
     let componentContext;
 
-    if (componentState === null) {
-      const moduleRef = Interpreter.module(module);
+    const moduleRef = Interpreter.module(module);
 
+    if (componentState === null) {
       if ("init/2" in moduleRef) {
         const emptyClientStruct =
           Elixir_Hologram_Component_Client["__struct__/0"]();
@@ -162,8 +163,18 @@ export default class Renderer {
       componentContext = Store.getComponentContext(cid);
     }
 
-    const _vars = Renderer.#aggregateVars(props, componentState);
-    const _mergedContext = Erlang_Maps["merge/2"](context, componentContext);
+    const vars = Renderer.#aggregateVars(props, componentState);
+    const mergedContext = Erlang_Maps["merge/2"](context, componentContext);
+
+    const template = Renderer.#renderTemplate(
+      moduleRef,
+      vars,
+      children,
+      mergedContext,
+    );
+
+    // TODO: remove
+    console.inspect(template);
 
     return "(todo: component, in progress)";
   }
@@ -171,5 +182,12 @@ export default class Renderer {
   // TODO: implement
   static #renderStatelessComponent() {
     console.log("#renderStatelessComponent()");
+  }
+
+  static #renderTemplate(moduleRef, vars, children, context) {
+    const dom = Renderer.#evaluateTemplate(moduleRef, vars);
+    const slots = Type.keywordList([[Type.atom("default"), children]]);
+
+    return Renderer.#renderDOM(dom, context, slots);
   }
 }
