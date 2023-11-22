@@ -106,7 +106,7 @@ export default class Renderer {
     const propsDOM = dom.data[2];
     let children = dom.data[3];
 
-    children = Renderer.#expandSlots(_children, slots);
+    const expandedChildren = Renderer.#expandSlots(children, slots);
 
     const props = Renderer.#injectPropsFromContext(
       Renderer.#castProps(propsDOM, module),
@@ -118,14 +118,14 @@ export default class Renderer {
       return Renderer.#renderStatefulComponent(
         module,
         props,
-        children,
+        expandedChildren,
         context,
       );
     } else {
       return Renderer.#renderStatelessComponent(
         module,
         props,
-        children,
+        expandedChildren,
         context,
       );
     }
@@ -137,7 +137,7 @@ export default class Renderer {
     let componentContext;
 
     if (componentState === null) {
-      moduleRef = Interpreter.module(module);
+      const moduleRef = Interpreter.module(module);
 
       if ("init/2" in moduleRef) {
         const emptyClientStruct =
@@ -145,9 +145,9 @@ export default class Renderer {
 
         const clientStruct = moduleRef["init/2"](props, emptyClientStruct);
 
-        clientState = Erlang_Maps["get/2"](Type.atom("state"), clientStruct);
+        componentState = Erlang_Maps["get/2"](Type.atom("state"), clientStruct);
 
-        clientContext = Erlang_Maps["get/2"](
+        componentContext = Erlang_Maps["get/2"](
           Type.atom("context"),
           clientStruct,
         );
@@ -159,11 +159,11 @@ export default class Renderer {
         throw new HologramInterpreterError(message);
       }
     } else {
-      clientContext = Store.getComponentContext(cid);
+      componentContext = Store.getComponentContext(cid);
     }
 
-    const _vars = Renderer.#aggregateVars(props, clientState);
-    const _mergedContext = Erlang_Maps["merge/2"](context, clientContext);
+    const _vars = Renderer.#aggregateVars(props, componentState);
+    const _mergedContext = Erlang_Maps["merge/2"](context, componentContext);
 
     return "(todo: component, in progress)";
   }

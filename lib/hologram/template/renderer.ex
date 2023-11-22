@@ -36,7 +36,7 @@ defmodule Hologram.Template.Renderer do
   end
 
   def render_dom({:component, module, props_dom, children}, context, slots) do
-    children = expand_slots(children, slots)
+    expanded_children = expand_slots(children, slots)
 
     props =
       props_dom
@@ -44,9 +44,9 @@ defmodule Hologram.Template.Renderer do
       |> inject_props_from_context(module, context)
 
     if has_cid_prop?(props) do
-      render_stateful_component(module, props, children, context)
+      render_stateful_component(module, props, expanded_children, context)
     else
-      render_stateless_component(module, props, children, context)
+      render_stateless_component(module, props, expanded_children, context)
     end
   end
 
