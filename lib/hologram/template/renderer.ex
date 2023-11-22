@@ -165,7 +165,7 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp evaluate_prop_value({name, value_parts}) do
-    {text, _client} = render_dom(value_parts, %{}, [])
+    {text, _client_components_data} = render_dom(value_parts, %{}, [])
     {name, text}
   end
 
