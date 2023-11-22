@@ -152,6 +152,7 @@ defmodule Hologram.Template.Renderer do
     |> Enum.map(fn {name, value} -> {to_string(name), [expression: {value}]} end)
   end
 
+  # Used both on the client and the server.
   defp cast_props(props_dom, module) do
     props_dom
     |> filter_allowed_props(module)
@@ -169,6 +170,7 @@ defmodule Hologram.Template.Renderer do
     {name, text}
   end
 
+  # Used both on the client and the server.
   defp expand_slots(dom, slots)
 
   defp expand_slots(nodes, slots) when is_list(nodes) do
@@ -202,6 +204,7 @@ defmodule Hologram.Template.Renderer do
     Enum.filter(props_dom, fn {name, _value_parts} -> name in allowed_props end)
   end
 
+  # Used both on the client and the server.
   defp has_cid_prop?(props) do
     Enum.any?(props, fn {name, _value} -> name == :cid end)
   end
@@ -226,6 +229,7 @@ defmodule Hologram.Template.Renderer do
     end
   end
 
+  # Used both on the client and the server.
   defp inject_props_from_context(props_from_template, module, context) do
     props_from_context =
       module.__props__()
