@@ -60,18 +60,12 @@ export default class Renderer {
     }, {});
   }
 
-  // Based on render_dom/3 (element/slot case)
+  // Based on render_dom/3 (element & slot case)
   static #renderElementDOM(dom, context, slots) {
     const tagName = Bitstring.toText(dom.data[1].value);
 
     if (tagName === "slot") {
-      const slotDOM = Erlang_Lists["keyfind/3"](
-        Type.atom("default"),
-        Type.integer(1),
-        slots,
-      ).data[1];
-
-      return Renderer.renderDOM(slotDOM, context, Type.keywordList([]));
+      return Renderer.#renderSlotElement(slots, context);
     }
 
     // TODO: implement non-slot elements renderer
@@ -85,6 +79,17 @@ export default class Renderer {
         .filter((node) => !Type.isNil(node))
         .map((node) => Renderer.renderDOM(node, context, slots))
     );
+  }
+
+  // Based on render_dom/3 (slot case)
+  static #renderSlotElement(slots, context) {
+    const slotDOM = Erlang_Lists["keyfind/3"](
+      Type.atom("default"),
+      Type.integer(1),
+      slots,
+    ).data[1];
+
+    return Renderer.renderDOM(slotDOM, context, Type.keywordList([]));
   }
 }
 
