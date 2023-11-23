@@ -15,6 +15,16 @@ defmodule Hologram.Template.Renderer do
           {String.t(), %{atom => Component.Client.t()}}
   def render_dom(dom, context, slots)
 
+  def render_dom(nodes, context, slots) when is_list(nodes) do
+    nodes
+    # There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if}
+    |> Enum.filter(& &1)
+    |> Enum.reduce({"", %{}}, fn node, {acc_html, acc_client_structs} ->
+      {html, client_struct} = render_dom(node, context, slots)
+      {acc_html <> html, Map.merge(acc_client_structs, client_struct)}
+    end)
+  end
+
   def render_dom({:text, text}, _context, _slots) do
     {text, %{}}
   end
@@ -32,16 +42,6 @@ defmodule Hologram.Template.Renderer do
 
   #   # https://html.spec.whatwg.org/multipage/syntax.html#void-elements
   #   @void_elems ~w(area base br col embed hr img input link meta param source track wbr)
-
-  #   def render_dom(nodes, context, slots) when is_list(nodes) do
-  #     nodes
-  #     # There may be nil DOM nodes resulting from if blocks, e.g. {%if false}abc{/if}
-  #     |> Enum.filter(& &1)
-  #     |> Enum.reduce({"", %{}}, fn node, {acc_html, acc_client_components_data} ->
-  #       {html, client_components_data} = render_dom(node, context, slots)
-  #       {acc_html <> html, Map.merge(acc_client_components_data, client_components_data)}
-  #     end)
-  #   end
 
   #   def render_dom({:component, module, props_dom, children}, context, slots) do
   #     expanded_children = expand_slots(children, slots)

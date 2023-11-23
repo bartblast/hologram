@@ -14,6 +14,30 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  describe "node list" do
+    test "text and expression nodes" do
+      nodes = [
+        {:text, "aaa"},
+        {:expression, {111}},
+        {:text, "bbb"},
+        {:expression, {222}}
+      ]
+
+      assert render_dom(nodes, %{}, []) == {"aaa111bbb222", %{}}
+    end
+
+    test "nil nodes" do
+      nodes = [
+        {:text, "abc"},
+        nil,
+        {:text, "xyz"},
+        nil
+      ]
+
+      assert render_dom(nodes, %{}, []) == {"abcxyz", %{}}
+    end
+  end
+
   #   import Hologram.Test.Stubs
   #   import Mox
 
@@ -91,17 +115,6 @@ defmodule Hologram.Template.RendererTest do
   #                   "component_52" => %Component.Client{state: %{c: 3, d: 4}}
   #                 }}
   #     end
-  #   end
-
-  #   test "nil nodes" do
-  #     nodes = [
-  #       {:text, "abc"},
-  #       nil,
-  #       {:text, "xyz"},
-  #       nil
-  #     ]
-
-  #     assert render_dom(nodes, %{}, []) == {"abcxyz", %{}}
   #   end
 
   #   describe "stateful component" do
