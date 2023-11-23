@@ -2,13 +2,16 @@
 
 import Bitstring from "./bitstring.mjs";
 
-// // Based on Hologram.Template.Renderer
+// Based on Hologram.Template.Renderer
 export default class Renderer {
   // Based on: render_dom/3
   static renderDOM(dom, _context, _slots) {
     const nodeType = dom.data[0].value;
 
     switch (nodeType) {
+      case "expression":
+        return Bitstring.toText(Elixir_Kernel["to_string/1"](dom.data[1]));
+
       case "text":
         return Bitstring.toText(dom.data[1]);
     }
