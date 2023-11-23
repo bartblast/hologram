@@ -1,4 +1,6 @@
 defmodule Hologram.Template.Renderer do
+  alias Hologram.Commons.StringUtils
+
   @doc """
   Renders the given DOM.
 
@@ -33,16 +35,27 @@ defmodule Hologram.Template.Renderer do
     {to_string(value), %{}}
   end
 
-  defp render_attribute(name, value_parts)
+  defp render_attribute(name, value_dom)
 
   defp render_attribute(name, []), do: name
 
-  defp render_attribute(name, value_parts) do
-    {html, _client_structs} = render_dom(value_parts, %{}, [])
+  defp render_attribute(name, value_dom) do
+    {html, _client_structs} = render_dom(value_dom, %{}, [])
     ~s(#{name}="#{html}")
   end
 
-  #   alias Hologram.Commons.StringUtils
+  defp render_attributes(attrs_dom)
+
+  defp render_attributes([]), do: ""
+
+  defp render_attributes(attrs_dom) do
+    attrs_dom
+    |> Enum.map_join(" ", fn {name, value_dom} ->
+      render_attribute(name, value_dom)
+    end)
+    |> StringUtils.prepend(" ")
+  end
+
   #   alias Hologram.Compiler.Encoder
   #   alias Hologram.Component
   #   alias Hologram.Runtime.PageDigestRegistry
@@ -256,18 +269,6 @@ defmodule Hologram.Template.Renderer do
 
   #   defp normalize_prop_name({name, value}) do
   #     {String.to_existing_atom(name), value}
-  #   end
-
-  #   defp render_atributes(attrs_dom)
-
-  #   defp render_atributes([]), do: ""
-
-  #   defp render_atributes(attrs_dom) do
-  #     attrs_dom
-  #     |> Enum.map_join(" ", fn {name, value_parts} ->
-  #       render_attribute(name, value_parts)
-  #     end)
-  #     |> StringUtils.prepend(" ")
   #   end
 
   #   defp render_stateful_component(module, props, children, context) do

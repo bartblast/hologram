@@ -5,7 +5,7 @@ import Type from "./type.mjs";
 
 // Based on Hologram.Template.Renderer
 export default class Renderer {
-  // Based on: render_dom/3
+  // Based on render_dom/3
   static renderDOM(dom, context, slots) {
     if (Type.isList(dom)) {
       return Renderer.#renderNodeListDOM(dom, context, slots);
@@ -22,22 +22,37 @@ export default class Renderer {
     }
   }
 
-  // Based on: render_attribute/2
-  static #renderAttribute(name, valueParts) {
-    if (valueParts.data.length === 0) {
-      return [name, true];
+  // Based on render_attribute/2
+  static #renderAttribute(name, valueDOM) {
+    const nameStr = Bitstring.toText(name);
+
+    if (valueDOM.data.length === 0) {
+      return [nameStr, true];
     }
 
-    const value = Renderer.renderDOM(
-      valueParts,
+    const valueStr = Renderer.renderDOM(
+      valueDOM,
       Type.map([]),
       Type.keywordList([]),
     ).join("");
 
-    return [name, value];
+    return [nameStr, valueStr];
   }
 
-  // Based on: render_dom/3 (list case)
+  // Based on render_attributes/1
+  static #renderAttributes(attrsDOM) {
+    if (attrsDOM.data.length === 0) {
+      return {};
+    }
+
+    return Object.values(attrsDOM.data).reduce((acc, [name, valueDOM]) => {
+      const [nameStr, valueStr] = Renderer.#renderAttribute(name, valueDOM);
+      acc[nameStr] = valueStr;
+      return acc;
+    }, {});
+  }
+
+  // Based on render_dom/3 (list case)
   static #renderNodeListDOM(nodes, context, slots) {
     return (
       nodes.data
