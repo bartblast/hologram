@@ -35,6 +35,10 @@ defmodule Hologram.Template.Renderer do
     {to_string(value), %{}}
   end
 
+  def render_dom({:element, "slot", _attrs, []}, context, slots) do
+    render_dom(slots[:default], context, [])
+  end
+
   defp render_attribute(name, value_dom)
 
   defp render_attribute(name, []), do: name
@@ -44,12 +48,12 @@ defmodule Hologram.Template.Renderer do
     ~s(#{name}="#{html}")
   end
 
-  defp render_attributes(attrs_dom)
+  defp render_attributes(attrs)
 
   defp render_attributes([]), do: ""
 
-  defp render_attributes(attrs_dom) do
-    attrs_dom
+  defp render_attributes(attrs) do
+    attrs
     |> Enum.map_join(" ", fn {name, value_dom} ->
       render_attribute(name, value_dom)
     end)
@@ -78,10 +82,6 @@ defmodule Hologram.Template.Renderer do
   #     else
   #       render_template(module, props, expanded_children, context)
   #     end
-  #   end
-
-  #   def render_dom({:element, "slot", _attrs, []}, context, slots) do
-  #     render_dom(slots[:default], context, [])
   #   end
 
   #   def render_dom({:element, tag, attrs_dom, children}, context, slots) do
