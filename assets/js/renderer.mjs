@@ -16,16 +16,16 @@ export default class Renderer {
     const layoutModule = pageModuleRef["__layout_module__/0"]();
 
     const cid = Type.bitstring("page");
-    const pageClient = Store.getComponentData(cid);
+    const pageClientStruct = Store.getComponentData(cid);
     const pageState = Store.getComponentState(cid);
     const pageContext = Store.getComponentContext(cid);
 
     const layoutPropsDOM = Renderer.#buildLayoutPropsDOM(
-      pageModule,
-      pageClient,
+      pageModuleRef,
+      pageClientStruct,
     );
 
-    const vars = Renderer.#aggregateVars(pageParams, pageState);
+    const vars = Renderer.#buildVars(pageParams, pageState);
     const pageDOM = Renderer.#evaluateTemplate(pageModuleRef, vars);
 
     const layoutNode = Type.tuple([
@@ -79,14 +79,14 @@ export default class Renderer {
     }
   }
 
-  static #aggregateVars(props, state) {
+  static #buildVars(props, state) {
     return Erlang_Maps["merge/2"](props, state);
   }
 
-  static #buildLayoutPropsDOM(pageModule, pageClient) {
-    return Elixir_Hologram_Template_Renderer["build_layout_props_dom/2"](
-      pageModule,
-      pageClient,
+  // TODO: finish
+  static #buildLayoutPropsDOM(pageModuleRef, pageClientStruct) {
+    pageModuleRef["__layout_props__/0"]().data.concat(
+      Type.tuple([Type.atom("cid", Type.bitstring("layout"))]),
     );
   }
 
@@ -175,7 +175,7 @@ export default class Renderer {
       componentContext = Store.getComponentContext(cid);
     }
 
-    const vars = Renderer.#aggregateVars(props, componentState);
+    const vars = Renderer.#buildVars(props, componentState);
     const mergedContext = Erlang_Maps["merge/2"](context, componentContext);
 
     const template = Renderer.#renderTemplate(

@@ -106,14 +106,10 @@ defmodule Hologram.Template.Renderer do
       )
 
     layout_module = page_module.__layout_module__()
-
-    layout_props_dom =
-      build_layout_props_dom(page_module, client_page_data_with_injected_page_digest)
-
+    layout_props_dom = build_layout_props_dom(page_module, page_state)
     vars = Map.merge(params, page_state)
     page_dom = page_module.template().(vars)
     layout_node = {:component, layout_module, layout_props_dom, page_dom}
-
     {initial_html, initial_client_components_data} = render_dom(layout_node, page_context, [])
 
     client_page_data_with_injected_page_mounted_flag =
@@ -139,10 +135,10 @@ defmodule Hologram.Template.Renderer do
     {final_html, final_client_components_data}
   end
 
-  defp build_layout_props_dom(page_module, page_client_struct) do
+  defp build_layout_props_dom(page_module, page_state) do
     page_module.__layout_props__()
     |> Enum.into(%{cid: "layout"})
-    |> Map.merge(page_client_struct.state)
+    |> Map.merge(page_state)
     |> Enum.map(fn {name, value} -> {to_string(name), [expression: {value}]} end)
   end
 

@@ -379,8 +379,6 @@ defmodule Hologram.Compiler do
     mfas ++
       [
         {Hologram.Component.Client, :__struct__, 0},
-        {Renderer, :aggregate_vars, 2},
-        {Renderer, :build_layout_props_dom, 2},
         {Renderer, :cast_props, 2},
         {Renderer, :expand_slots, 2},
         {Renderer, :has_cid_prop?, 1},
