@@ -35,6 +35,8 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module48
   alias Hologram.Test.Fixtures.Template.Renderer.Module5
   alias Hologram.Test.Fixtures.Template.Renderer.Module50
+  alias Hologram.Test.Fixtures.Template.Renderer.Module51
+  alias Hologram.Test.Fixtures.Template.Renderer.Module52
   alias Hologram.Test.Fixtures.Template.Renderer.Module6
   alias Hologram.Test.Fixtures.Template.Renderer.Module7
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
@@ -45,20 +47,38 @@ defmodule Hologram.Template.RendererTest do
 
   setup :set_mox_global
 
-  test "multiple nodes" do
-    nodes = [
-      {:text, "abc"},
-      {:component, Module3, [{"cid", [text: "component_3"]}], []},
-      {:text, "xyz"},
-      {:component, Module7, [{"cid", [text: "component_7"]}], []}
-    ]
+  describe "multiple nodes" do
+    test "with components having a root node" do
+      nodes = [
+        {:text, "abc"},
+        {:component, Module3, [{"cid", [text: "component_3"]}], []},
+        {:text, "xyz"},
+        {:component, Module7, [{"cid", [text: "component_7"]}], []}
+      ]
 
-    assert render_dom(nodes, %{}, []) ==
-             {"abc<div>state_a = 1, state_b = 2</div>xyz<div>state_c = 3, state_d = 4</div>",
-              %{
-                "component_3" => %Component.Client{state: %{a: 1, b: 2}},
-                "component_7" => %Component.Client{state: %{c: 3, d: 4}}
-              }}
+      assert render_dom(nodes, %{}, []) ==
+               {"abc<div>state_a = 1, state_b = 2</div>xyz<div>state_c = 3, state_d = 4</div>",
+                %{
+                  "component_3" => %Component.Client{state: %{a: 1, b: 2}},
+                  "component_7" => %Component.Client{state: %{c: 3, d: 4}}
+                }}
+    end
+
+    test "with components not having a root node" do
+      nodes = [
+        {:text, "abc"},
+        {:component, Module51, [{"cid", [text: "component_51"]}], []},
+        {:text, "xyz"},
+        {:component, Module52, [{"cid", [text: "component_52"]}], []}
+      ]
+
+      assert render_dom(nodes, %{}, []) ==
+               {"abc<div>state_a = 1</div><div>state_b = 2</div>xyz<div>state_c = 3</div><div>state_d = 4</div>",
+                %{
+                  "component_51" => %Component.Client{state: %{a: 1, b: 2}},
+                  "component_52" => %Component.Client{state: %{c: 3, d: 4}}
+                }}
+    end
   end
 
   test "nil nodes" do
