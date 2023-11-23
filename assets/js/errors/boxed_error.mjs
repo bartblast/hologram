@@ -1,3 +1,5 @@
+"use strict";
+
 import Interpreter from "../interpreter.mjs";
 
 export default class HologramBoxedError extends Error {
