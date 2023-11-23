@@ -22,6 +22,21 @@ export default class Renderer {
     }
   }
 
+  // Based on: render_attribute/2
+  static #renderAttribute(name, valueParts) {
+    if (valueParts.data.length === 0) {
+      return [name, true];
+    }
+
+    const value = Renderer.renderDOM(
+      valueParts,
+      Type.map([]),
+      Type.keywordList([]),
+    ).join("");
+
+    return [name, value];
+  }
+
   // Based on: render_dom/3 (list case)
   static #renderNodeListDOM(nodes, context, slots) {
     return (
