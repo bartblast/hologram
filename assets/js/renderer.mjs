@@ -6,6 +6,8 @@ import Interpreter from "./interpreter.mjs";
 import Store from "./store.mjs";
 import Type from "./type.mjs";
 
+import {h} from "snabbdom";
+
 // Based on Hologram.Template.Renderer
 export default class Renderer {
   // Based on: render_page/2
@@ -39,10 +41,20 @@ export default class Renderer {
     console.inspect(html);
   }
 
+  // Based on: render_dom/3 (list case)
+  static #renderNodeListDOM(nodes, context, slots) {
+    return (
+      nodes.data
+        // There may be nil DOM nodes resulting from if blocks, e.g. {%if false}abc{/if}
+        .filter((node) => !Type.isNil(node))
+        .map((node) => Renderer.#renderDOM(node, context, slots))
+    );
+  }
+
   // Based on: render_dom/3
   static #renderDOM(dom, context, slots) {
     if (Type.isList(dom)) {
-      return "(todo: node list)";
+      return Renderer.#renderNodeListDOM(dom, context, slots);
     } else {
       const nodeType = dom.data[0].value;
 
