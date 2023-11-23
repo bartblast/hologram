@@ -110,7 +110,7 @@ defmodule Hologram.Template.Renderer do
     layout_props_dom =
       build_layout_props_dom(page_module, client_page_data_with_injected_page_digest)
 
-    vars = aggregate_vars(params, page_state)
+    vars = build_vars(params, page_state)
     page_dom = page_module.template().(vars)
     layout_node = {:component, layout_module, layout_props_dom, page_dom}
 
@@ -139,15 +139,14 @@ defmodule Hologram.Template.Renderer do
     {final_html, final_client_components_data}
   end
 
-  defp aggregate_vars(props, state) do
-    Map.merge(props, state)
+  defp build_vars(acc, new_vars) do
+    Map.merge(acc, new_vars)
   end
 
-  # Used both on the client and the server.
-  defp build_layout_props_dom(page_module, client_page_data) do
+  defp build_layout_props_dom(page_module, page_client_struct) do
     page_module.__layout_props__()
     |> Enum.into(%{cid: "layout"})
-    |> aggregate_vars(client_page_data.state)
+    |> build_vars(page_client_struct.state)
     |> Enum.map(fn {name, value} -> {to_string(name), [expression: {value}]} end)
   end
 
@@ -281,7 +280,7 @@ defmodule Hologram.Template.Renderer do
 
   defp render_stateful_component(module, props, children, context) do
     {client_struct, _server_struct} = init_component(module, props)
-    vars = aggregate_vars(props, client_struct.state)
+    vars = build_vars(props, client_struct.state)
     merged_context = Map.merge(context, client_struct.context)
 
     {html, children_client_structs} = render_template(module, vars, children, merged_context)
@@ -291,7 +290,7 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp render_stateless_component(module, props, children, context) do
-    vars = aggregate_vars(props, %{})
+    vars = build_vars(props, %{})
     render_template(module, vars, children, context)
   end
 
