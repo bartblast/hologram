@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
+import Erlang_Lists from "./erlang/lists.mjs";
 import Type from "./type.mjs";
 
 // Based on Hologram.Template.Renderer
@@ -14,6 +15,9 @@ export default class Renderer {
     const nodeType = dom.data[0].value;
 
     switch (nodeType) {
+      case "element":
+        return Renderer.#renderElementDOM(dom, context, slots);
+
       case "expression":
         return Bitstring.toText(Elixir_Kernel["to_string/1"](dom.data[1]));
 
@@ -40,16 +44,33 @@ export default class Renderer {
   }
 
   // Based on render_attributes/1
-  static #renderAttributes(attrsDOM) {
-    if (attrsDOM.data.length === 0) {
+  static #renderAttributes(attrs) {
+    if (attrs.data.length === 0) {
       return {};
     }
 
-    return Object.values(attrsDOM.data).reduce((acc, [name, valueDOM]) => {
+    return Object.values(attrs.data).reduce((acc, [name, valueDOM]) => {
       const [nameStr, valueStr] = Renderer.#renderAttribute(name, valueDOM);
       acc[nameStr] = valueStr;
       return acc;
     }, {});
+  }
+
+  // Based on render_dom/3 (element/slot case)
+  static #renderElementDOM(dom, context, slots) {
+    const tagName = Bitstring.toText(dom.data[1].value);
+
+    if (tagName === "slot") {
+      const slotDOM = Erlang_Lists["keyfind/3"](
+        Type.atom("default"),
+        Type.integer(1),
+        slots,
+      ).data[1];
+
+      return Renderer.renderDOM(slotDOM, context, Type.keywordList([]));
+    }
+
+    // TODO: implement non-slot elements renderer
   }
 
   // Based on render_dom/3 (list case)
