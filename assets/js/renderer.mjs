@@ -80,7 +80,7 @@ export default class Renderer {
   }
 
   static #aggregateVars(props, state) {
-    return Elixir_Hologram_Template_Renderer["aggregate_vars/2"](props, state);
+    return Erlang_Maps["merge/2"](props, state);
   }
 
   static #buildLayoutPropsDOM(pageModule, pageClient) {

@@ -139,7 +139,6 @@ defmodule Hologram.Template.Renderer do
     {final_html, final_client_components_data}
   end
 
-  # Used both on the client and the server.
   defp aggregate_vars(props, state) do
     Map.merge(props, state)
   end
