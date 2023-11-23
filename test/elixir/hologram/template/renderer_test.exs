@@ -2,9 +2,11 @@ defmodule Hologram.Template.RendererTest do
   use Hologram.Test.BasicCase, async: false
   import Hologram.Template.Renderer
 
-  test "text node" do
-    node = {:text, "abc"}
-    assert render_dom(node, %{}, []) == {"abc", %{}}
+  describe "render_dom/3" do
+    test "text node" do
+      node = {:text, "abc"}
+      assert render_dom(node, %{}, []) == {"abc", %{}}
+    end
   end
 
   #   import Hologram.Test.Stubs

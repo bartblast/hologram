@@ -1,4 +1,19 @@
-// "use strict";
+"use strict";
+
+import Bitstring from "./bitstring.mjs";
+
+// // Based on Hologram.Template.Renderer
+export default class Renderer {
+  // Based on: render_dom/3
+  static renderDOM(dom, _context, _slots) {
+    const nodeType = dom.data[0].value;
+
+    switch (nodeType) {
+      case "text":
+        return Bitstring.toText(dom.data[1]);
+    }
+  }
+}
 
 // import Erlang_Maps from "./erlang/maps.mjs";
 // import HologramInterpreterError from "./errors/interpreter_error.mjs";
@@ -8,8 +23,6 @@
 
 // import {h} from "snabbdom";
 
-// // Based on Hologram.Template.Renderer
-// export default class Renderer {
 //   // Based on: render_page/2
 //   static renderPage(pageModule, pageParams) {
 //     const pageModuleRef = Interpreter.moduleRef(pageModule);
@@ -202,4 +215,3 @@
 
 //     return Renderer.#renderDOM(dom, context, slots);
 //   }
-// }
