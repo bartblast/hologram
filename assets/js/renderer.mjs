@@ -43,14 +43,19 @@ export default class Renderer {
   }
 
   // Based on render_attributes/1
-  static #renderAttributes(attrs) {
+  static #renderAttributes(attrsDOM) {
     if (attrs.data.length === 0) {
       return {};
     }
 
-    return Object.values(attrs.data).reduce((acc, [name, valueDOM]) => {
-      const [nameStr, valueStr] = Renderer.#renderAttribute(name, valueDOM);
+    return attrs.data.reduce((acc, attrDOM) => {
+      const [nameStr, valueStr] = Renderer.#renderAttribute(
+        attrDOM.data[0],
+        attrDOM.data[1],
+      );
+
       acc[nameStr] = valueStr;
+
       return acc;
     }, {});
   }
