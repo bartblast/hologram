@@ -8,6 +8,7 @@ import Erlang_Maps from "./erlang/maps.mjs";
 import Erlang_Persistent_Term from "./erlang/persistent_term.mjs";
 import Erlang_Unicode from "./erlang/unicode.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
+import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramMatchError from "./errors/match_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import sinonESM from "../node_modules/sinon/pkg/sinon-esm.js";
@@ -87,6 +88,18 @@ export function assertMatchError(callable, value) {
   }
 }
 
+export function elixirKernelToString1(term) {
+  switch (term.type) {
+    case "integer":
+      return Type.bitstring(term.value.toString());
+
+    default:
+      const inspectedTerm = Interpreter.inspect(term);
+      const msg = `elixirKernelToString1() doesn't know how to handle: ${inspectedTerm}`;
+      throw new HologramInterpreterError(msg);
+  }
+}
+
 // Based on deepFreeze() from: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/freeze
 export function freeze(obj) {
   const props = Object.getOwnPropertyNames(obj);
@@ -110,6 +123,8 @@ export function linkModules() {
   globalThis.Erlang_Unicode = Erlang_Unicode;
   globalThis.Elixir_Enum = {};
   globalThis.Elixir_Kernel = Elixir_Kernel;
+
+  globalThis.Elixir_Kernel["to_string/1"] = elixirKernelToString1;
 }
 
 export function unlinkModules() {
