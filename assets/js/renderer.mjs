@@ -44,11 +44,11 @@ export default class Renderer {
 
   // Based on render_attributes/1
   static #renderAttributes(attrsDOM) {
-    if (attrs.data.length === 0) {
+    if (attrsDOM.data.length === 0) {
       return {};
     }
 
-    return attrs.data.reduce((acc, attrDOM) => {
+    return attrsDOM.data.reduce((acc, attrDOM) => {
       const [nameStr, valueStr] = Renderer.#renderAttribute(
         attrDOM.data[0],
         attrDOM.data[1],
