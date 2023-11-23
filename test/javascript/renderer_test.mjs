@@ -15,20 +15,18 @@ after(() => unlinkModules());
 const context = Type.map([]);
 const slots = Type.keywordList([]);
 
-describe("renderDOM()", () => {
-  it("text node", () => {
-    const node = Type.tuple([Type.atom("text"), Type.bitstring("abc")]);
-    const result = Renderer.renderDOM(node, context, slots);
+it("text node", () => {
+  const node = Type.tuple([Type.atom("text"), Type.bitstring("abc")]);
+  const result = Renderer.renderDOM(node, context, slots);
 
-    assert.equal(result, "abc");
-  });
+  assert.equal(result, "abc");
+});
 
-  it("expression node", () => {
-    const node = Type.tuple([Type.atom("expression"), Type.integer(123)]);
-    const result = Renderer.renderDOM(node, context, slots);
+it("expression node", () => {
+  const node = Type.tuple([Type.atom("expression"), Type.integer(123)]);
+  const result = Renderer.renderDOM(node, context, slots);
 
-    assert.equal(result, "123");
-  });
+  assert.equal(result, "123");
 });
 
 describe("node list", () => {
