@@ -8,14 +8,14 @@ export default class Renderer {
   // Based on render_dom/3
   static renderDOM(dom, context, slots) {
     if (Type.isList(dom)) {
-      return Renderer.#renderNodeListDOM(dom, context, slots);
+      return Renderer.#renderNodes(dom, context, slots);
     }
 
     const nodeType = dom.data[0].value;
 
     switch (nodeType) {
       case "element":
-        return Renderer.#renderElementDOM(dom, context, slots);
+        return Renderer.#renderElement(dom, context, slots);
 
       case "expression":
         return Bitstring.toText(Elixir_Kernel["to_string/1"](dom.data[1]));
@@ -61,7 +61,7 @@ export default class Renderer {
   }
 
   // Based on render_dom/3 (element & slot case)
-  static #renderElementDOM(dom, context, slots) {
+  static #renderElement(dom, context, slots) {
     const tagName = Bitstring.toText(dom.data[1].value);
 
     if (tagName === "slot") {
@@ -72,7 +72,7 @@ export default class Renderer {
   }
 
   // Based on render_dom/3 (list case)
-  static #renderNodeListDOM(nodes, context, slots) {
+  static #renderNodes(nodes, context, slots) {
     return (
       nodes.data
         // There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if}
