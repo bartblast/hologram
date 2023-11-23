@@ -46,7 +46,7 @@ defmodule Hologram.Template.Renderer do
     if has_cid_prop?(props) do
       render_stateful_component(module, props, expanded_children, context)
     else
-      render_stateless_component(module, props, expanded_children, context)
+      render_template(module, props, expanded_children, context)
     end
   end
 
@@ -110,7 +110,7 @@ defmodule Hologram.Template.Renderer do
     layout_props_dom =
       build_layout_props_dom(page_module, client_page_data_with_injected_page_digest)
 
-    vars = build_vars(params, page_state)
+    vars = Map.merge(params, page_state)
     page_dom = page_module.template().(vars)
     layout_node = {:component, layout_module, layout_props_dom, page_dom}
 
@@ -139,14 +139,10 @@ defmodule Hologram.Template.Renderer do
     {final_html, final_client_components_data}
   end
 
-  defp build_vars(acc, new_vars) do
-    Map.merge(acc, new_vars)
-  end
-
   defp build_layout_props_dom(page_module, page_client_struct) do
     page_module.__layout_props__()
     |> Enum.into(%{cid: "layout"})
-    |> build_vars(page_client_struct.state)
+    |> Map.merge(page_client_struct.state)
     |> Enum.map(fn {name, value} -> {to_string(name), [expression: {value}]} end)
   end
 
@@ -280,18 +276,13 @@ defmodule Hologram.Template.Renderer do
 
   defp render_stateful_component(module, props, children, context) do
     {client_struct, _server_struct} = init_component(module, props)
-    vars = build_vars(props, client_struct.state)
+    vars = Map.merge(props, client_struct.state)
     merged_context = Map.merge(context, client_struct.context)
 
     {html, children_client_structs} = render_template(module, vars, children, merged_context)
     acc_client_structs = Map.put(children_client_structs, vars.cid, client_struct)
 
     {html, acc_client_structs}
-  end
-
-  defp render_stateless_component(module, props, children, context) do
-    vars = build_vars(props, %{})
-    render_template(module, vars, children, context)
   end
 
   defp render_template(module, vars, children, context) do
