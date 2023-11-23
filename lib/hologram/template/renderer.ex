@@ -33,6 +33,15 @@ defmodule Hologram.Template.Renderer do
     {to_string(value), %{}}
   end
 
+  defp render_attribute(name, value_parts)
+
+  defp render_attribute(name, []), do: name
+
+  defp render_attribute(name, value_parts) do
+    {html, _client_structs} = render_dom(value_parts, %{}, [])
+    ~s(#{name}="#{html}")
+  end
+
   #   alias Hologram.Commons.StringUtils
   #   alias Hologram.Compiler.Encoder
   #   alias Hologram.Component
@@ -247,15 +256,6 @@ defmodule Hologram.Template.Renderer do
 
   #   defp normalize_prop_name({name, value}) do
   #     {String.to_existing_atom(name), value}
-  #   end
-
-  #   defp render_attribute(name, value_parts)
-
-  #   defp render_attribute(name, []), do: name
-
-  #   defp render_attribute(name, value_parts) do
-  #     {html, _client_components_data} = render_dom(value_parts, %{}, [])
-  #     ~s(#{name}="#{html}")
   #   end
 
   #   defp render_atributes(attrs_dom)
