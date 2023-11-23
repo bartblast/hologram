@@ -1,7 +1,6 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
-import Erlang_Lists from "./erlang/lists.mjs";
 import Type from "./type.mjs";
 
 // Based on Hologram.Template.Renderer
