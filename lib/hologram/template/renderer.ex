@@ -1,6 +1,9 @@
 defmodule Hologram.Template.Renderer do
   alias Hologram.Commons.StringUtils
 
+  # https://html.spec.whatwg.org/multipage/syntax.html#void-elements
+  @void_elems ~w(area base br col embed hr img input link meta param source track wbr)
+
   @doc """
   Renders the given DOM.
 
@@ -39,6 +42,21 @@ defmodule Hologram.Template.Renderer do
     render_dom(slots[:default], context, [])
   end
 
+  def render_dom({:element, tag_name, attrs_dom, children}, context, slots) do
+    attrs_html = render_attributes(attrs_dom)
+
+    {children_html, client_structs} = render_dom(children, context, slots)
+
+    html =
+      if tag_name in @void_elems do
+        "<#{tag_name}#{attrs_html} />"
+      else
+        "<#{tag_name}#{attrs_html}>#{children_html}</#{tag}>"
+      end
+
+    {html, client_structs}
+  end
+
   defp render_attribute(name, value_dom)
 
   defp render_attribute(name, []), do: name
@@ -48,12 +66,12 @@ defmodule Hologram.Template.Renderer do
     ~s(#{name}="#{html}")
   end
 
-  defp render_attributes(attrs)
+  defp render_attributes(attrs_dom)
 
   defp render_attributes([]), do: ""
 
-  defp render_attributes(attrs) do
-    attrs
+  defp render_attributes(attrs_dom) do
+    attrs_dom
     |> Enum.map_join(" ", fn {name, value_dom} ->
       render_attribute(name, value_dom)
     end)
@@ -65,9 +83,6 @@ defmodule Hologram.Template.Renderer do
   #   alias Hologram.Runtime.PageDigestRegistry
   #   alias Hologram.Runtime.Templatable
   #   alias Hologram.Template.DOM
-
-  #   # https://html.spec.whatwg.org/multipage/syntax.html#void-elements
-  #   @void_elems ~w(area base br col embed hr img input link meta param source track wbr)
 
   #   def render_dom({:component, module, props_dom, children}, context, slots) do
   #     expanded_children = expand_slots(children, slots)
@@ -82,21 +97,6 @@ defmodule Hologram.Template.Renderer do
   #     else
   #       render_template(module, props, expanded_children, context)
   #     end
-  #   end
-
-  #   def render_dom({:element, tag, attrs_dom, children}, context, slots) do
-  #     attrs_html = render_atributes(attrs_dom)
-
-  #     {children_html, client_children_components_data} = render_dom(children, context, slots)
-
-  #     html =
-  #       if tag in @void_elems do
-  #         "<#{tag}#{attrs_html} />"
-  #       else
-  #         "<#{tag}#{attrs_html}>#{children_html}</#{tag}>"
-  #       end
-
-  #     {html, client_children_components_data}
   #   end
 
   #   # TODO: Refactor once there is something akin to {...@var} syntax
