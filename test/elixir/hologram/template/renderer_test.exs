@@ -7,6 +7,11 @@ defmodule Hologram.Template.RendererTest do
       node = {:text, "abc"}
       assert render_dom(node, %{}, []) == {"abc", %{}}
     end
+
+    test "expression node" do
+      node = {:expression, {123}}
+      assert render_dom(node, %{}, []) == {"123", %{}}
+    end
   end
 
   #   import Hologram.Test.Stubs
@@ -300,11 +305,6 @@ defmodule Hologram.Template.RendererTest do
   #                   }
   #                 }}
   #     end
-  #   end
-
-  #   test "expression" do
-  #     node = {:expression, {123}}
-  #     assert render_dom(node, %{}, []) == {"123", %{}}
   #   end
 
   #   describe "default slot" do

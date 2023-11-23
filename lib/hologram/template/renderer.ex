@@ -19,6 +19,10 @@ defmodule Hologram.Template.Renderer do
     {text, %{}}
   end
 
+  def render_dom({:expression, {value}}, _context, _slots) do
+    {to_string(value), %{}}
+  end
+
   #   alias Hologram.Commons.StringUtils
   #   alias Hologram.Compiler.Encoder
   #   alias Hologram.Component
@@ -71,10 +75,6 @@ defmodule Hologram.Template.Renderer do
   #       end
 
   #     {html, client_children_components_data}
-  #   end
-
-  #   def render_dom({:expression, {value}}, _context, _slots) do
-  #     {to_string(value), %{}}
   #   end
 
   #   # TODO: Refactor once there is something akin to {...@var} syntax
