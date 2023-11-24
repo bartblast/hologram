@@ -20,7 +20,9 @@ export default class Renderer {
         return Renderer.#renderElement(dom, context, slots);
 
       case "expression":
-        return Bitstring.toText(Elixir_Kernel["to_string/1"](dom.data[1]));
+        return Bitstring.toText(
+          Elixir_Kernel["to_string/1"](dom.data[1].data[0]),
+        );
 
       case "text":
         return Bitstring.toText(dom.data[1]);

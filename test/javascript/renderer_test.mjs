@@ -24,7 +24,11 @@ it("text node", () => {
 });
 
 it("expression node", () => {
-  const node = Type.tuple([Type.atom("expression"), Type.integer(123)]);
+  const node = Type.tuple([
+    Type.atom("expression"),
+    Type.tuple([Type.integer(123)]),
+  ]);
+
   const result = Renderer.renderDom(node, context, slots);
 
   assert.equal(result, "123");
