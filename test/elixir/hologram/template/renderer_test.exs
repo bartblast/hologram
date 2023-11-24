@@ -12,6 +12,13 @@ defmodule Hologram.Template.RendererTest do
     assert render_dom(node, %{}, []) == {"123", %{}}
   end
 
+  describe "element node" do
+    test "non-void element, without attributes or children" do
+      node = {:element, "div", [], []}
+      assert render_dom(node, %{}, []) == {"<div></div>", %{}}
+    end
+  end
+
   describe "node list" do
     test "text and expression nodes" do
       nodes = [
@@ -249,10 +256,6 @@ defmodule Hologram.Template.RendererTest do
   #   end
 
   #   describe "element" do
-  #     test "non-void element, without attributes or children" do
-  #       node = {:element, "div", [], []}
-  #       assert render_dom(node, %{}, []) == {"<div></div>", %{}}
-  #     end
 
   #     test "non-void element, with attributes" do
   #       node =
