@@ -6,7 +6,6 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
-  alias Hologram.Template.Renderer
 
   @doc """
   Extracts JavaScript source code for the given ported Erlang function and generates interpreter function definition JavaScript statetement.
