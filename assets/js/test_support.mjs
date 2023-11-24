@@ -13,11 +13,9 @@ import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 
 import {assert} from "chai";
-import sinonESM from "../node_modules/sinon/pkg/sinon-esm.js";
 
 export {assert} from "chai";
-export const sinon = sinonESM;
-
+export * as sinon from "../node_modules/sinon/pkg/sinon-esm.js";
 export {h as vnode} from "snabbdom";
 
 export function assertBoxedError(
