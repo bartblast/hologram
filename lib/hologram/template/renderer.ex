@@ -38,14 +38,14 @@ defmodule Hologram.Template.Renderer do
     {to_string(value), %{}}
   end
 
-  def render_dom({:element, "slot", _attrs, []}, context, slots) do
+  def render_dom({:element, "slot", _attrs_dom, []}, context, slots) do
     render_dom(slots[:default], context, [])
   end
 
-  def render_dom({:element, tag_name, attrs_dom, children}, context, slots) do
+  def render_dom({:element, tag_name, attrs_dom, children_dom}, context, slots) do
     attrs_html = render_attributes(attrs_dom)
 
-    {children_html, client_structs} = render_dom(children, context, slots)
+    {children_html, client_structs} = render_dom(children_dom, context, slots)
 
     html =
       if tag_name in @void_elems do
@@ -57,13 +57,96 @@ defmodule Hologram.Template.Renderer do
     {html, client_structs}
   end
 
+  def render_dom({:component, module, props_dom, children_dom}, context, slots) do
+    expanded_children_dom = expand_slots(children_dom, slots)
+
+    props =
+      props_dom
+      |> cast_props(module)
+      |> inject_props_from_context(module, context)
+
+    if has_cid_prop?(props) do
+      render_stateful_component(module, props, expanded_children_dom, context)
+    else
+      render_template(module, props, expanded_children_dom, context)
+    end
+  end
+
+  defp cast_props(props_dom, module) do
+    props_dom
+    |> filter_allowed_props(module)
+    |> Stream.map(&evaluate_prop_value/1)
+    |> Stream.map(&normalize_prop_name/1)
+    |> Enum.into(%{})
+  end
+
+  defp evaluate_prop_value({name, [expression: {value}]}) do
+    {name, value}
+  end
+
+  defp evaluate_prop_value({name, value_dom}) do
+    {value_str, %{}} = render_dom(value_dom, %{}, [])
+    {name, value_str}
+  end
+
+  defp expand_slots(dom, slots)
+
+  defp expand_slots(nodes, slots) when is_list(nodes) do
+    nodes
+    |> Enum.map(&expand_slots(&1, slots))
+    |> List.flatten()
+  end
+
+  defp expand_slots({:component, module, props_dom, children_dom}, slots) do
+    {:component, module, props_dom, expand_slots(children_dom, slots)}
+  end
+
+  defp expand_slots({:element, "slot", _attrs_dom, []}, slots) do
+    slots[:default]
+  end
+
+  defp expand_slots({:element, tag_name, attrs_dom, children_dom}, slots) do
+    {:element, tag_name, attrs_dom, expand_slots(children_dom, slots)}
+  end
+
+  defp expand_slots(node, _slots), do: node
+
+  defp filter_allowed_props(props_dom, module) do
+    registered_prop_names =
+      module.__props__()
+      |> Enum.reject(fn {_name, _type, opts} -> opts[:from_context] end)
+      |> Enum.map(fn {name, _type, _opts} -> to_string(name) end)
+
+    allowed_prop_names = ["cid" | registered_prop_names]
+
+    Enum.filter(props_dom, fn {name, _value_dom} -> name in allowed_prop_names end)
+  end
+
+  defp has_cid_prop?(props) do
+    Enum.any?(props, fn {name, _value} -> name == :cid end)
+  end
+
+  defp inject_props_from_context(props_from_template, module, context) do
+    props_from_context =
+      module.__props__()
+      |> Enum.filter(fn {_name, _type, opts} -> opts[:from_context] end)
+      |> Enum.map(fn {name, _type, opts} -> {name, context[opts[:from_context]]} end)
+      |> Enum.into(%{})
+
+    Map.merge(props_from_template, props_from_context)
+  end
+
+  defp normalize_prop_name({name, value}) do
+    {String.to_existing_atom(name), value}
+  end
+
   defp render_attribute(name, value_dom)
 
   defp render_attribute(name, []), do: name
 
   defp render_attribute(name, value_dom) do
-    {html, _client_structs} = render_dom(value_dom, %{}, [])
-    ~s(#{name}="#{html}")
+    {value_str, %{}} = render_dom(value_dom, %{}, [])
+    ~s(#{name}="#{value_str}")
   end
 
   defp render_attributes(attrs_dom)
@@ -78,26 +161,17 @@ defmodule Hologram.Template.Renderer do
     |> StringUtils.prepend(" ")
   end
 
+  defp render_template(module, vars, children_dom, context) do
+    vars
+    |> module.template().()
+    |> render_dom(context, default: children_dom)
+  end
+
   #   alias Hologram.Compiler.Encoder
   #   alias Hologram.Component
   #   alias Hologram.Runtime.PageDigestRegistry
   #   alias Hologram.Runtime.Templatable
   #   alias Hologram.Template.DOM
-
-  #   def render_dom({:component, module, props_dom, children}, context, slots) do
-  #     expanded_children = expand_slots(children, slots)
-
-  #     props =
-  #       props_dom
-  #       |> cast_props(module)
-  #       |> inject_props_from_context(module, context)
-
-  #     if has_cid_prop?(props) do
-  #       render_stateful_component(module, props, expanded_children, context)
-  #     else
-  #       render_template(module, props, expanded_children, context)
-  #     end
-  #   end
 
   #   # TODO: Refactor once there is something akin to {...@var} syntax
   #   # (it would be possible to pass page state as layout props this way).
@@ -164,63 +238,6 @@ defmodule Hologram.Template.Renderer do
   #     |> Enum.map(fn {name, value} -> {to_string(name), [expression: {value}]} end)
   #   end
 
-  #   # Used both on the client and the server.
-  #   defp cast_props(props_dom, module) do
-  #     props_dom
-  #     |> filter_allowed_props(module)
-  #     |> Stream.map(&evaluate_prop_value/1)
-  #     |> Stream.map(&normalize_prop_name/1)
-  #     |> Enum.into(%{})
-  #   end
-
-  #   defp evaluate_prop_value({name, [expression: {value}]}) do
-  #     {name, value}
-  #   end
-
-  #   defp evaluate_prop_value({name, value_parts}) do
-  #     {text, _client_components_data} = render_dom(value_parts, %{}, [])
-  #     {name, text}
-  #   end
-
-  #   # Used both on the client and the server.
-  #   defp expand_slots(dom, slots)
-
-  #   defp expand_slots(nodes, slots) when is_list(nodes) do
-  #     nodes
-  #     |> Enum.map(&expand_slots(&1, slots))
-  #     |> List.flatten()
-  #   end
-
-  #   defp expand_slots({:component, module, props, children}, slots) do
-  #     {:component, module, props, expand_slots(children, slots)}
-  #   end
-
-  #   defp expand_slots({:element, "slot", _attrs, []}, slots) do
-  #     slots[:default]
-  #   end
-
-  #   defp expand_slots({:element, tag, attrs, children}, slots) do
-  #     {:element, tag, attrs, expand_slots(children, slots)}
-  #   end
-
-  #   defp expand_slots(node, _slots), do: node
-
-  #   defp filter_allowed_props(props_dom, module) do
-  #     registered_prop_names =
-  #       module.__props__()
-  #       |> Enum.reject(fn {_name, _type, opts} -> opts[:from_context] end)
-  #       |> Enum.map(fn {name, _type, _opts} -> to_string(name) end)
-
-  #     allowed_props = ["cid" | registered_prop_names]
-
-  #     Enum.filter(props_dom, fn {name, _value_parts} -> name in allowed_props end)
-  #   end
-
-  #   # Used both on the client and the server.
-  #   defp has_cid_prop?(props) do
-  #     Enum.any?(props, fn {name, _value} -> name == :cid end)
-  #   end
-
   #   defp init_component(module, props) do
   #     init_result =
   #       if function_exported?(module, :init, 3) do
@@ -241,17 +258,6 @@ defmodule Hologram.Template.Renderer do
   #     end
   #   end
 
-  #   # Used both on the client and the server.
-  #   defp inject_props_from_context(props_from_template, module, context) do
-  #     props_from_context =
-  #       module.__props__()
-  #       |> Enum.filter(fn {_name, _type, opts} -> opts[:from_context] end)
-  #       |> Enum.map(fn {name, _type, opts} -> {name, context[opts[:from_context]]} end)
-  #       |> Enum.into(%{})
-
-  #     Map.merge(props_from_template, props_from_context)
-  #   end
-
   #   defp interpolate_client_components_data_js(html, client_components_data) do
   #     client_components_data_js = Encoder.encode_term(client_components_data)
   #     String.replace(html, "$COMPONENTS_DATA_JS_PLACEHOLDER", client_components_data_js)
@@ -267,10 +273,6 @@ defmodule Hologram.Template.Renderer do
   #     String.replace(html, "$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
   #   end
 
-  #   defp normalize_prop_name({name, value}) do
-  #     {String.to_existing_atom(name), value}
-  #   end
-
   #   defp render_stateful_component(module, props, children, context) do
   #     {client_struct, _server_struct} = init_component(module, props)
   #     vars = Map.merge(props, client_struct.state)
@@ -282,12 +284,9 @@ defmodule Hologram.Template.Renderer do
   #     {html, acc_client_structs}
   #   end
 
-  #   defp render_template(module, vars, children, context) do
-  #     vars
-  #     |> module.template().()
-  #     |> render_dom(context, default: children)
-  #   end
-
   # TODO: remove
   def render_page(_param1, _param_2), do: {1, 2}
+
+  # TODO: remove
+  defp render_stateful_component(_param_1, _param_2, _param_3, _param_4), do: {1, 2}
 end
