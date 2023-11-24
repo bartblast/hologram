@@ -378,6 +378,7 @@ defmodule Hologram.Compiler do
     mfas ++
       [
         {Hologram.Component.Client, :__struct__, 0},
+        {Kernel, :to_string, 1},
         {:maps, :get, 2},
         {:maps, :merge, 2}
       ]
