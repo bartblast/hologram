@@ -92,9 +92,9 @@ describe("node list", () => {
   it("text and expression nodes", () => {
     const nodes = Type.list([
       Type.tuple([Type.atom("text"), Type.bitstring("aaa")]),
-      Type.tuple([Type.atom("expression"), Type.integer(111)]),
+      Type.tuple([Type.atom("expression"), Type.tuple([Type.integer(111)])]),
       Type.tuple([Type.atom("text"), Type.bitstring("bbb")]),
-      Type.tuple([Type.atom("expression"), Type.integer(222)]),
+      Type.tuple([Type.atom("expression"), Type.tuple([Type.integer(222)])]),
     ]);
 
     const result = Renderer.renderDom(nodes, context, slots);
