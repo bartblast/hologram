@@ -1,6 +1,5 @@
 "use strict";
 
-import {assert} from "chai";
 import Elixir_Kernel from "./elixir/kernel.mjs";
 import Erlang from "./erlang/erlang.mjs";
 import Erlang_Lists from "./erlang/lists.mjs";
@@ -11,11 +10,15 @@ import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramMatchError from "./errors/match_error.mjs";
 import Interpreter from "./interpreter.mjs";
-import sinonESM from "../node_modules/sinon/pkg/sinon-esm.js";
 import Type from "./type.mjs";
+
+import {assert} from "chai";
+import sinonESM from "../node_modules/sinon/pkg/sinon-esm.js";
 
 export {assert} from "chai";
 export const sinon = sinonESM;
+
+export {h as vnode} from "snabbdom";
 
 export function assertBoxedError(
   callable,

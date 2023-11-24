@@ -4,6 +4,7 @@ import {
   assert,
   linkModules,
   unlinkModules,
+  vnode,
 } from "../../assets/js/test_support.mjs";
 
 import Renderer from "../../assets/js/renderer.mjs";
@@ -27,6 +28,22 @@ it("expression node", () => {
   const result = Renderer.renderDOM(node, context, slots);
 
   assert.equal(result, "123");
+});
+
+describe("element node", () => {
+  it("non-void element, without attributes or children", () => {
+    const node = Type.tuple([
+      Type.atom("element"),
+      Type.bitstring("div"),
+      Type.list([]),
+      Type.list([]),
+    ]);
+
+    const result = Renderer.renderDOM(node, context, slots);
+    const expected = vnode("div", {attrs: {}}, []);
+
+    assert.deepStrictEqual(result, expected);
+  });
 });
 
 describe("node list", () => {

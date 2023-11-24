@@ -51,7 +51,7 @@ defmodule Hologram.Template.Renderer do
       if tag_name in @void_elems do
         "<#{tag_name}#{attrs_html} />"
       else
-        "<#{tag_name}#{attrs_html}>#{children_html}</#{tag}>"
+        "<#{tag_name}#{attrs_html}>#{children_html}</#{tag_name}>"
       end
 
     {html, client_structs}
