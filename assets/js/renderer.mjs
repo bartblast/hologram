@@ -3,6 +3,8 @@
 import Bitstring from "./bitstring.mjs";
 import Type from "./type.mjs";
 
+import {h as vnode} from "snabbdom";
+
 // Based on Hologram.Template.Renderer
 export default class Renderer {
   // Based on render_dom/3
@@ -62,13 +64,19 @@ export default class Renderer {
 
   // Based on render_dom/3 (element & slot case)
   static #renderElement(dom, context, slots) {
-    const tagName = Bitstring.toText(dom.data[1].value);
+    const tagName = Bitstring.toText(dom.data[1]);
 
     if (tagName === "slot") {
       return Renderer.#renderSlotElement(slots, context);
     }
 
-    // TODO: implement non-slot elements renderer
+    const attrsDom = dom.data[2];
+    const childrenDom = dom.data[3];
+
+    const attrsVdom = Renderer.#renderAttributes(attrsDom);
+    const childrenVdom = Renderer.renderDOM(childrenDom, context, slots);
+
+    return vnode(tagName, {attrs: attrsVdom}, childrenVdom);
   }
 
   // Based on render_dom/3 (list case)
@@ -97,8 +105,6 @@ export default class Renderer {
 // import HologramInterpreterError from "./errors/interpreter_error.mjs";
 // import Interpreter from "./interpreter.mjs";
 // import Store from "./store.mjs";
-
-// import {h} from "snabbdom";
 
 //   // Based on: render_page/2
 //   static renderPage(pageModule, pageParams) {
