@@ -17,6 +17,47 @@ defmodule Hologram.Template.RendererTest do
       node = {:element, "div", [], []}
       assert render_dom(node, %{}, []) == {"<div></div>", %{}}
     end
+
+    test "non-void element, with attributes" do
+      node =
+        {:element, "div",
+         [
+           {"attr_1", [text: "aaa"]},
+           {"attr_2", [expression: {123}]},
+           {"attr_3", [text: "ccc", expression: {987}, text: "eee"]}
+         ], []}
+
+      assert render_dom(node, %{}, []) ==
+               {~s(<div attr_1="aaa" attr_2="123" attr_3="ccc987eee"></div>), %{}}
+    end
+
+    test "non-void element, with children" do
+      node = {:element, "div", [], [{:element, "span", [], [text: "abc"]}, {:text, "xyz"}]}
+      assert render_dom(node, %{}, []) == {"<div><span>abc</span>xyz</div>", %{}}
+    end
+
+    test "void element, without attributes" do
+      node = {:element, "img", [], []}
+      assert render_dom(node, %{}, []) == {"<img />", %{}}
+    end
+
+    test "void element, with attributes" do
+      node =
+        {:element, "img",
+         [
+           {"attr_1", [text: "aaa"]},
+           {"attr_2", [expression: {123}]},
+           {"attr_3", [text: "ccc", expression: {987}, text: "eee"]}
+         ], []}
+
+      assert render_dom(node, %{}, []) ==
+               {~s(<img attr_1="aaa" attr_2="123" attr_3="ccc987eee" />), %{}}
+    end
+
+    test "boolean attributes" do
+      node = {:element, "img", [{"attr_1", []}, {"attr_2", []}], []}
+      assert render_dom(node, %{}, []) == {~s(<img attr_1 attr_2 />), %{}}
+    end
   end
 
   describe "node list" do
@@ -256,49 +297,6 @@ defmodule Hologram.Template.RendererTest do
   #   end
 
   #   describe "element" do
-
-  #     test "non-void element, with attributes" do
-  #       node =
-  #         {:element, "div",
-  #          [
-  #            {"attr_1", [text: "aaa"]},
-  #            {"attr_2", [expression: {123}]},
-  #            {"attr_3", [text: "ccc", expression: {987}, text: "eee"]}
-  #          ], []}
-
-  #       assert render_dom(node, %{}, []) ==
-  #                {~s(<div attr_1="aaa" attr_2="123" attr_3="ccc987eee"></div>), %{}}
-  #     end
-
-  #     test "non-void element, with children" do
-  #       node = {:element, "div", [], [{:element, "span", [], [text: "abc"]}, {:text, "xyz"}]}
-
-  #       assert render_dom(node, %{}, []) == {"<div><span>abc</span>xyz</div>", %{}}
-  #     end
-
-  #     test "void element, without attributes" do
-  #       node = {:element, "img", [], []}
-  #       assert render_dom(node, %{}, []) == {"<img />", %{}}
-  #     end
-
-  #     test "void element, with attributes" do
-  #       node =
-  #         {:element, "img",
-  #          [
-  #            {"attr_1", [text: "aaa"]},
-  #            {"attr_2", [expression: {123}]},
-  #            {"attr_3", [text: "ccc", expression: {987}, text: "eee"]}
-  #          ], []}
-
-  #       assert render_dom(node, %{}, []) ==
-  #                {~s(<img attr_1="aaa" attr_2="123" attr_3="ccc987eee" />), %{}}
-  #     end
-
-  #     test "boolean attributes" do
-  #       node = {:element, "img", [{"attr_1", []}, {"attr_2", []}], []}
-
-  #       assert render_dom(node, %{}, []) == {~s(<img attr_1 attr_2 />), %{}}
-  #     end
 
   #     test "with nested stateful components" do
   #       node =
