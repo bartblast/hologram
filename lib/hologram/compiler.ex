@@ -369,6 +369,7 @@ defmodule Hologram.Compiler do
         {:erlang, :error, 1},
         {:erlang, :hd, 1},
         {:erlang, :tl, 1},
+        {:lists, :keyfind, 3},
         {:maps, :get, 2}
       ]
   end

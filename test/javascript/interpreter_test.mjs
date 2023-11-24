@@ -20,7 +20,7 @@ const clone = Interpreter.cloneVars;
 before(() => linkModules());
 after(() => unlinkModules());
 
-describe.only("accessKeywordListElement()", () => {
+describe("accessKeywordListElement()", () => {
   const keywordList = Type.keywordList([
     [Type.atom("a"), Type.integer(1)],
     [Type.atom("b"), Type.integer(2)],

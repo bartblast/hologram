@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
+import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 
 import {h as vnode} from "snabbdom";
@@ -93,12 +94,10 @@ export default class Renderer {
 
   // Based on render_dom/3 (slot case)
   static #renderSlotElement(slots, context) {
-    const slotDom = Erlang_Lists["keyfind/3"](
-      Type.atom("default"),
-      Type.integer(1),
+    const slotDom = Interpreter.accessKeywordListElement(
       slots,
-    ).data[1];
-
+      Type.atom("default"),
+    );
     return Renderer.renderDom(slotDom, context, Type.keywordList([]));
   }
 }
