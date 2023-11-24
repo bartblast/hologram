@@ -86,6 +86,31 @@ describe("element node", () => {
 
     assert.deepStrictEqual(result, expected);
   });
+
+  it("non-void element, with children", () => {
+    const node = Type.tuple([
+      Type.atom("element"),
+      Type.bitstring("div"),
+      Type.list([]),
+      Type.list([
+        Type.tuple([
+          Type.atom("element"),
+          Type.bitstring("span"),
+          Type.list([]),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("abc")]]),
+        ]),
+        Type.tuple([Type.atom("text"), Type.bitstring("xyz")]),
+      ]),
+    ]);
+
+    const result = Renderer.renderDom(node, context, slots);
+    const expected = vnode("div", {attrs: {}}, [
+      vnode("span", {attrs: {}}, ["abc"]),
+      "xyz",
+    ]);
+
+    assert.deepStrictEqual(result, expected);
+  });
 });
 
 describe("node list", () => {
