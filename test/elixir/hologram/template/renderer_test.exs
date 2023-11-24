@@ -2,6 +2,10 @@ defmodule Hologram.Template.RendererTest do
   use Hologram.Test.BasicCase, async: false
   import Hologram.Template.Renderer
 
+  alias Hologram.Test.Fixtures.Template.Renderer.Module1
+  alias Hologram.Test.Fixtures.Template.Renderer.Module17
+  alias Hologram.Test.Fixtures.Template.Renderer.Module2
+
   test "text node" do
     node = {:text, "abc"}
     assert render_dom(node, %{}, []) == {"abc", %{}}
@@ -84,20 +88,45 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  describe "stateless component" do
+    test "without props" do
+      node = {:component, Module1, [], []}
+      assert render_dom(node, %{}, []) == {"<div>abc</div>", %{}}
+    end
+
+    test "with props" do
+      node =
+        {:component, Module2,
+         [
+           {"a", [text: "ddd"]},
+           {"b", [expression: {222}]},
+           {"c", [text: "fff", expression: {333}, text: "hhh"]}
+         ], []}
+
+      assert render_dom(node, %{}, []) ==
+               {"<div>prop_a = ddd, prop_b = 222, prop_c = fff333hhh</div>", %{}}
+    end
+
+    test "with unregistered var used" do
+      node = {:component, Module17, [{"a", [text: "111"]}, {"b", [text: "222"]}], []}
+
+      assert_raise KeyError, "key :b not found in: %{a: \"111\"}", fn ->
+        render_dom(node, %{}, [])
+      end
+    end
+  end
+
   #   import Hologram.Test.Stubs
   #   import Mox
 
   #   alias Hologram.Commons.ETS
   #   alias Hologram.Component
   #   alias Hologram.Runtime.AssetPathRegistry
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module1
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module10
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module14
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module16
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module17
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module18
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module19
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module2
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module21
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module24
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module25
@@ -265,34 +294,6 @@ defmodule Hologram.Template.RendererTest do
   #                    fn ->
   #                      render_dom(node, %{}, [])
   #                    end
-  #     end
-  #   end
-
-  #   describe "stateless component" do
-  #     test "without props" do
-  #       node = {:component, Module1, [], []}
-  #       assert render_dom(node, %{}, []) == {"<div>abc</div>", %{}}
-  #     end
-
-  #     test "with props" do
-  #       node =
-  #         {:component, Module2,
-  #          [
-  #            {"a", [text: "ddd"]},
-  #            {"b", [expression: {222}]},
-  #            {"c", [text: "fff", expression: {333}, text: "hhh"]}
-  #          ], []}
-
-  #       assert render_dom(node, %{}, []) ==
-  #                {"<div>prop_a = ddd, prop_b = 222, prop_c = fff333hhh</div>", %{}}
-  #     end
-
-  #     test "with unregistered var used" do
-  #       node = {:component, Module17, [{"a", [text: "111"]}, {"b", [text: "222"]}], []}
-
-  #       assert_raise KeyError, "key :b not found in: %{a: \"111\"}", fn ->
-  #         render_dom(node, %{}, [])
-  #       end
   #     end
   #   end
 
