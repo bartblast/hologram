@@ -367,7 +367,6 @@ defmodule Hologram.Compiler do
       [
         {Enum, :into, 2},
         {Enum, :to_list, 1},
-        {Kernel, :inspect, 1},
         {:erlang, :error, 1},
         {:erlang, :hd, 1},
         {:erlang, :tl, 1},
@@ -379,10 +378,6 @@ defmodule Hologram.Compiler do
     mfas ++
       [
         {Hologram.Component.Client, :__struct__, 0},
-        {Renderer, :cast_props, 2},
-        {Renderer, :expand_slots, 2},
-        {Renderer, :has_cid_prop?, 1},
-        {Renderer, :inject_props_from_context, 3},
         {:maps, :get, 2},
         {:maps, :merge, 2}
       ]
