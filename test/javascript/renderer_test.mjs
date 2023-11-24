@@ -18,14 +18,14 @@ const slots = Type.keywordList([]);
 
 it("text node", () => {
   const node = Type.tuple([Type.atom("text"), Type.bitstring("abc")]);
-  const result = Renderer.renderDOM(node, context, slots);
+  const result = Renderer.renderDom(node, context, slots);
 
   assert.equal(result, "abc");
 });
 
 it("expression node", () => {
   const node = Type.tuple([Type.atom("expression"), Type.integer(123)]);
-  const result = Renderer.renderDOM(node, context, slots);
+  const result = Renderer.renderDom(node, context, slots);
 
   assert.equal(result, "123");
 });
@@ -39,7 +39,7 @@ describe("element node", () => {
       Type.list([]),
     ]);
 
-    const result = Renderer.renderDOM(node, context, slots);
+    const result = Renderer.renderDom(node, context, slots);
     const expected = vnode("div", {attrs: {}}, []);
 
     assert.deepStrictEqual(result, expected);
@@ -55,7 +55,7 @@ describe("node list", () => {
       Type.tuple([Type.atom("expression"), Type.integer(222)]),
     ]);
 
-    const result = Renderer.renderDOM(nodes, context, slots);
+    const result = Renderer.renderDom(nodes, context, slots);
 
     assert.deepStrictEqual(result, ["aaa", "111", "bbb", "222"]);
   });
@@ -68,7 +68,7 @@ describe("node list", () => {
       Type.nil(),
     ]);
 
-    const result = Renderer.renderDOM(nodes, context, slots);
+    const result = Renderer.renderDom(nodes, context, slots);
 
     assert.deepStrictEqual(result, ["aaa", "bbb"]);
   });

@@ -8,7 +8,7 @@ import {h as vnode} from "snabbdom";
 // Based on Hologram.Template.Renderer
 export default class Renderer {
   // Based on render_dom/3
-  static renderDOM(dom, context, slots) {
+  static renderDom(dom, context, slots) {
     if (Type.isList(dom)) {
       return Renderer.#renderNodes(dom, context, slots);
     }
@@ -28,15 +28,15 @@ export default class Renderer {
   }
 
   // Based on render_attribute/2
-  static #renderAttribute(name, valueDOM) {
+  static #renderAttribute(name, valueDom) {
     const nameStr = Bitstring.toText(name);
 
-    if (valueDOM.data.length === 0) {
+    if (valueDom.data.length === 0) {
       return [nameStr, true];
     }
 
-    const valueStr = Renderer.renderDOM(
-      valueDOM,
+    const valueStr = Renderer.renderDom(
+      valueDom,
       Type.map([]),
       Type.keywordList([]),
     ).join("");
@@ -45,15 +45,15 @@ export default class Renderer {
   }
 
   // Based on render_attributes/1
-  static #renderAttributes(attrsDOM) {
-    if (attrsDOM.data.length === 0) {
+  static #renderAttributes(attrsDom) {
+    if (attrsDom.data.length === 0) {
       return {};
     }
 
-    return attrsDOM.data.reduce((acc, attrDOM) => {
+    return attrsDom.data.reduce((acc, attrDom) => {
       const [nameStr, valueStr] = Renderer.#renderAttribute(
-        attrDOM.data[0],
-        attrDOM.data[1],
+        attrDom.data[0],
+        attrDom.data[1],
       );
 
       acc[nameStr] = valueStr;
@@ -74,7 +74,7 @@ export default class Renderer {
     const childrenDom = dom.data[3];
 
     const attrsVdom = Renderer.#renderAttributes(attrsDom);
-    const childrenVdom = Renderer.renderDOM(childrenDom, context, slots);
+    const childrenVdom = Renderer.renderDom(childrenDom, context, slots);
 
     return vnode(tagName, {attrs: attrsVdom}, childrenVdom);
   }
@@ -85,19 +85,19 @@ export default class Renderer {
       nodes.data
         // There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if}
         .filter((node) => !Type.isNil(node))
-        .map((node) => Renderer.renderDOM(node, context, slots))
+        .map((node) => Renderer.renderDom(node, context, slots))
     );
   }
 
   // Based on render_dom/3 (slot case)
   static #renderSlotElement(slots, context) {
-    const slotDOM = Erlang_Lists["keyfind/3"](
+    const slotDom = Erlang_Lists["keyfind/3"](
       Type.atom("default"),
       Type.integer(1),
       slots,
     ).data[1];
 
-    return Renderer.renderDOM(slotDOM, context, Type.keywordList([]));
+    return Renderer.renderDom(slotDom, context, Type.keywordList([]));
   }
 }
 
@@ -131,13 +131,13 @@ export default class Renderer {
 //       pageDOM,
 //     ]);
 
-//     const html = Renderer.#renderDOM(layoutNode, pageContext, Type.list([]));
+//     const html = Renderer.#renderDom(layoutNode, pageContext, Type.list([]));
 
 //     // TODO: remove
 //     console.inspect(html);
 //   }
 
-//   static #renderDOM(dom, context, slots) {
+//   static #renderDom(dom, context, slots) {
 //       switch (nodeType) {
 //         case "component":
 //           return Renderer.#renderComponentDOM(dom, context, slots);
@@ -274,5 +274,5 @@ export default class Renderer {
 //     const dom = Renderer.#evaluateTemplate(moduleRef, vars);
 //     const slots = Type.keywordList([[Type.atom("default"), children]]);
 
-//     return Renderer.#renderDOM(dom, context, slots);
+//     return Renderer.#renderDom(dom, context, slots);
 //   }
