@@ -3,6 +3,7 @@
 import {
   assert,
   assertBoxedError,
+  assertBoxedFalse,
   assertMatchError,
   linkModules,
   sinon,
@@ -18,6 +19,32 @@ const clone = Interpreter.cloneVars;
 
 before(() => linkModules());
 after(() => unlinkModules());
+
+describe.only("accessKeywordListElement()", () => {
+  const keywordList = Type.keywordList([
+    [Type.atom("a"), Type.integer(1)],
+    [Type.atom("b"), Type.integer(2)],
+    [Type.atom("c"), Type.integer(3)],
+  ]);
+
+  it("keyword list has the given key", () => {
+    const result = Interpreter.accessKeywordListElement(
+      keywordList,
+      Type.atom("b"),
+    );
+
+    assert.deepStrictEqual(result, Type.integer(2));
+  });
+
+  it("keyword list doesn't have the given key", () => {
+    const result = Interpreter.accessKeywordListElement(
+      keywordList,
+      Type.atom("d"),
+    );
+
+    assert.isNull(result);
+  });
+});
 
 describe("callAnonymousFunction()", () => {
   let vars, anonFun;

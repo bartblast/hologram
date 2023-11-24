@@ -13,6 +13,16 @@ import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
 export default class Interpreter {
+  static accessKeywordListElement(keywordList, key) {
+    const keyfindRes = Erlang_Lists["keyfind/3"](
+      key,
+      Type.integer(1),
+      keywordList,
+    );
+
+    return Type.isTuple(keyfindRes) ? keyfindRes.data[1] : null;
+  }
+
   static callAnonymousFunction(fun, argsArray) {
     const args = Type.list(argsArray);
 
