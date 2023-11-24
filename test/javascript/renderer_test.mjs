@@ -104,10 +104,25 @@ describe("element node", () => {
     ]);
 
     const result = Renderer.renderDom(node, context, slots);
+
     const expected = vnode("div", {attrs: {}}, [
       vnode("span", {attrs: {}}, ["abc"]),
       "xyz",
     ]);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("void element, without attributes", () => {
+    const node = Type.tuple([
+      Type.atom("element"),
+      Type.bitstring("img"),
+      Type.list([]),
+      Type.list([]),
+    ]);
+
+    const result = Renderer.renderDom(node, context, slots);
+    const expected = vnode("img", {attrs: {}}, []);
 
     assert.deepStrictEqual(result, expected);
   });
