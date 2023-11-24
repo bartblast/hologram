@@ -30,6 +30,29 @@ export default class Renderer {
     }
   }
 
+  // Based on filter_allowed_props/2
+  static #filterAllowedProps(propsDom, moduleRef) {
+    const registeredPropNames = moduleRef["__props__/0"].data
+      .filter(
+        (prop) =>
+          Interpreter.accessKeywordListElement(
+            prop.data[2],
+            Type.atom("from_context"),
+          ) === null,
+      )
+      .map((prop) => Elixir_Kernel["to_string/1"](prop.data[0]));
+
+    const allowedPropNames = registeredPropNames.concat(Type.bitstring("cid"));
+
+    return Type.list([
+      propsDom.data.filter((propDom) =>
+        allowedPropNames.some((name) =>
+          Interpreter.isStrictlyEqual(name, propDom.data[0]),
+        ),
+      ),
+    ]);
+  }
+
   // Based on render_attribute/2
   static #renderAttribute(name, valueDom) {
     const nameStr = Bitstring.toText(name);
