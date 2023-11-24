@@ -164,6 +164,23 @@ describe("element node", () => {
 
     assert.deepStrictEqual(result, expected);
   });
+
+  it("boolean attributes", () => {
+    const node = Type.tuple([
+      Type.atom("element"),
+      Type.bitstring("img"),
+      Type.list([
+        Type.tuple([Type.bitstring("attr_1"), Type.keywordList([])]),
+        Type.tuple([Type.bitstring("attr_2"), Type.keywordList([])]),
+      ]),
+      Type.list([]),
+    ]);
+
+    const result = Renderer.renderDom(node, context, slots);
+    const expected = vnode("img", {attrs: {attr_1: true, attr_2: true}}, []);
+
+    assert.deepStrictEqual(result, expected);
+  });
 });
 
 describe("node list", () => {
