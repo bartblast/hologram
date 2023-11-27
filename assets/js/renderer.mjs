@@ -30,6 +30,25 @@ export default class Renderer {
     }
   }
 
+  // Based on evaluate_prop_value/2
+  static #evalutatePropValue(name, valueDom) {
+    let propValue;
+
+    if (
+      valueDom.data.length === 1 &&
+      Interpreter.isStrictlyEqual(
+        valueDom.data[0].data[0],
+        Type.atom("expression"),
+      )
+    ) {
+      propValue = valueDom.data[0].data[1].data[0];
+    } else {
+      propValue = Renderer.#valueDomToString(valueDom);
+    }
+
+    return Type.tuple([name, propValue]);
+  }
+
   // Based on filter_allowed_props/2
   static #filterAllowedProps(propsDom, moduleRef) {
     const registeredPropNames = moduleRef["__props__/0"].data
@@ -61,11 +80,7 @@ export default class Renderer {
       return [nameStr, true];
     }
 
-    const valueStr = Renderer.renderDom(
-      valueDom,
-      Type.map([]),
-      Type.keywordList([]),
-    ).join("");
+    const valueStr = Renderer.#valueDomToString(valueDom);
 
     return [nameStr, valueStr];
   }
@@ -122,6 +137,14 @@ export default class Renderer {
       Type.atom("default"),
     );
     return Renderer.renderDom(slotDom, context, Type.keywordList([]));
+  }
+
+  static #valueDomToString(valueDom) {
+    return Renderer.#renderNodes(
+      valueDom,
+      Type.map([]),
+      Type.keywordList([]),
+    ).join("");
   }
 }
 
