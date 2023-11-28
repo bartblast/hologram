@@ -30,9 +30,20 @@ export default class Renderer {
     }
   }
 
+  // Based on cast_props/2
+  static #castProps(propsDom, moduleRef) {
+    const propsMapData = Renderer.#filterAllowedProps(propsDom, moduleRef)
+      .data.map((propDom) => Renderer.#evalutatePropValue(propDom))
+      .map((propDom) => Renderer.#normalizePropName(propDom))
+      .map((propDom) => [propDom.data[0], propDom.data[1]]);
+
+    return Type.map(propsMapData);
+  }
+
   // Based on evaluate_prop_value/2
-  static #evalutatePropValue(name, valueDom) {
-    let propValue;
+  static #evalutatePropValue(propDom) {
+    const [name, valueDom] = propDom.data;
+    let evaluatedValue;
 
     if (
       valueDom.data.length === 1 &&
@@ -41,12 +52,12 @@ export default class Renderer {
         Type.atom("expression"),
       )
     ) {
-      propValue = valueDom.data[0].data[1].data[0];
+      evaluatedValue = valueDom.data[0].data[1].data[0];
     } else {
-      propValue = Renderer.#valueDomToString(valueDom);
+      evaluatedValue = Renderer.#valueDomToString(valueDom);
     }
 
-    return Type.tuple([name, propValue]);
+    return Type.tuple([name, evaluatedValue]);
   }
 
   // Based on filter_allowed_props/2
@@ -73,8 +84,11 @@ export default class Renderer {
   }
 
   // Based on normalize_prop_name/1
-  static #normalizePropName(prop) {
-    return Type.tuple([Erlang["binary_to_atom/1"](prop.data[0]), prop.data[1]]);
+  static #normalizePropName(propDom) {
+    return Type.tuple([
+      Erlang["binary_to_atom/1"](propDom.data[0]),
+      propDom.data[1],
+    ]);
   }
 
   // Based on render_attribute/2
@@ -214,10 +228,6 @@ export default class Renderer {
 //     pageModuleRef["__layout_props__/0"]().data.concat(
 //       Type.tuple([Type.atom("cid", Type.bitstring("layout"))]),
 //     );
-//   }
-
-//   static #castProps(propsDOM, module) {
-//     return Elixir_Hologram_Template_Renderer["cast_props/2"](propsDOM, module);
 //   }
 
 //   static #evaluateTemplate(moduleRef, vars) {
