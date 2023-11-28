@@ -72,6 +72,11 @@ export default class Renderer {
     ]);
   }
 
+  // Based on normalize_prop_name/1
+  static #normalizePropName(prop) {
+    return Type.tuple([Erlang["binary_to_atom/1"](prop.data[0]), prop.data[1]]);
+  }
+
   // Based on render_attribute/2
   static #renderAttribute(name, valueDom) {
     const nameStr = Bitstring.toText(name);
