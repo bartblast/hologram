@@ -32,12 +32,11 @@ export default class Renderer {
 
   // Based on cast_props/2
   static #castProps(propsDom, moduleRef) {
-    const propsMapData = Renderer.#filterAllowedProps(propsDom, moduleRef)
+    const propsTuples = Renderer.#filterAllowedProps(propsDom, moduleRef)
       .data.map((propDom) => Renderer.#evalutatePropValue(propDom))
-      .map((propDom) => Renderer.#normalizePropName(propDom))
-      .map((propDom) => [propDom.data[0], propDom.data[1]]);
+      .map((propDom) => Renderer.#normalizePropName(propDom));
 
-    return Type.map(propsMapData);
+    return Erlang_Maps["from_list/1"](propsTuples);
   }
 
   static #contextKey(opts) {
