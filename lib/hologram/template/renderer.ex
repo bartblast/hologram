@@ -20,22 +20,19 @@ defmodule Hologram.Template.Renderer do
           {String.t(), %{atom => Component.Client.t()}}
   def render_dom(dom, context, slots)
 
-  def render_dom(nodes, context, slots) when is_list(nodes) do
-    nodes
-    # There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if}
-    |> Enum.filter(& &1)
-    |> Enum.reduce({"", %{}}, fn node, {acc_html, acc_client_structs} ->
-      {html, client_struct} = render_dom(node, context, slots)
-      {acc_html <> html, Map.merge(acc_client_structs, client_struct)}
-    end)
-  end
+  def render_dom({:component, module, props_dom, children_dom}, context, slots) do
+    expanded_children_dom = expand_slots(children_dom, slots)
 
-  def render_dom({:text, text}, _context, _slots) do
-    {text, %{}}
-  end
+    props =
+      props_dom
+      |> cast_props(module)
+      |> inject_props_from_context(module, context)
 
-  def render_dom({:expression, {value}}, _context, _slots) do
-    {to_string(value), %{}}
+    if has_cid_prop?(props) do
+      render_stateful_component(module, props, expanded_children_dom, context)
+    else
+      render_template(module, props, expanded_children_dom, context)
+    end
   end
 
   def render_dom({:element, "slot", _attrs_dom, []}, context, slots) do
@@ -57,19 +54,22 @@ defmodule Hologram.Template.Renderer do
     {html, client_structs}
   end
 
-  def render_dom({:component, module, props_dom, children_dom}, context, slots) do
-    expanded_children_dom = expand_slots(children_dom, slots)
+  def render_dom({:expression, {value}}, _context, _slots) do
+    {to_string(value), %{}}
+  end
 
-    props =
-      props_dom
-      |> cast_props(module)
-      |> inject_props_from_context(module, context)
+  def render_dom({:text, text}, _context, _slots) do
+    {text, %{}}
+  end
 
-    if has_cid_prop?(props) do
-      render_stateful_component(module, props, expanded_children_dom, context)
-    else
-      render_template(module, props, expanded_children_dom, context)
-    end
+  def render_dom(nodes, context, slots) when is_list(nodes) do
+    nodes
+    # There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if}
+    |> Enum.filter(& &1)
+    |> Enum.reduce({"", %{}}, fn node, {acc_html, acc_client_structs} ->
+      {html, client_struct} = render_dom(node, context, slots)
+      {acc_html <> html, Map.merge(acc_client_structs, client_struct)}
+    end)
   end
 
   defp cast_props(props_dom, module) do
