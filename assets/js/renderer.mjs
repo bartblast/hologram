@@ -89,9 +89,11 @@ export default class Renderer {
     const propsFromContextTuples = moduleRef["__props__/0"].data
       .filter((prop) => Renderer.#contextKey(prop.data[2]) !== null)
       .map((prop) => {
+        const contextKey = Renderer.#contextKey(prop.data[2]);
+
         return Type.tuple([
           prop.data[0],
-          Erlang_Maps["get/2"](Renderer.#contextKey(prop.data[2]), context),
+          Erlang_Maps["get/2"](contextKey, context),
         ]);
       });
 
