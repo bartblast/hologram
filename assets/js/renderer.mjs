@@ -40,6 +40,13 @@ export default class Renderer {
     return Type.map(propsMapData);
   }
 
+  static #contextKey(opts) {
+    return Interpreter.accessKeywordListElement(
+      opts,
+      Type.atom("from_context"),
+    );
+  }
+
   // Based on evaluate_prop_value/2
   static #evalutatePropValue(propDom) {
     const [name, valueDom] = propDom.data;
@@ -63,13 +70,7 @@ export default class Renderer {
   // Based on filter_allowed_props/2
   static #filterAllowedProps(propsDom, moduleRef) {
     const registeredPropNames = moduleRef["__props__/0"].data
-      .filter(
-        (prop) =>
-          Interpreter.accessKeywordListElement(
-            prop.data[2],
-            Type.atom("from_context"),
-          ) === null,
-      )
+      .filter((prop) => Renderer.#contextKey(prop.data[2]) === null)
       .map((prop) => Elixir_Kernel["to_string/1"](prop.data[0]));
 
     const allowedPropNames = registeredPropNames.concat(Type.bitstring("cid"));
@@ -81,6 +82,22 @@ export default class Renderer {
         ),
       ),
     ]);
+  }
+
+  // Based on inject_props_from_context/3
+  static #injectPropsFromContext(propsFromTemplate, moduleRef, context) {
+    const propsFromContextTuples = moduleRef["__props__/0"].data
+      .filter((prop) => Renderer.#contextKey(prop.data[2]) !== null)
+      .map((prop) => {
+        return Type.tuple([
+          prop.data[0],
+          Erlang_Maps["get/2"](Renderer.#contextKey(prop.data[2]), context),
+        ]);
+      });
+
+    const propsFromContext = Erlang_Maps["from_list/1"](propsFromContextTuples);
+
+    return Erlang_Maps["merge/2"](propsFromTemplate, propsFromContext);
   }
 
   // Based on normalize_prop_name/1
@@ -240,14 +257,6 @@ export default class Renderer {
 
 //   static #hasCidProp(props) {
 //     return Elixir_Hologram_Template_Renderer["has_cid_prop?/1"](props);
-//   }
-
-//   static #injectPropsFromContext(propsFromTemplate, module, context) {
-//     return Elixir_Hologram_Template_Renderer["inject_props_from_context/3"](
-//       propsFromTemplate,
-//       module,
-//       context,
-//     );
 //   }
 
 //   static #renderComponentDOM(dom, context, slots) {
