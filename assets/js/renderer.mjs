@@ -46,6 +46,22 @@ export default class Renderer {
     );
   }
 
+  // Based on expand_slots/2
+  static #expandSlots(dom, slots) {
+    if (Type.isList(dom)) {
+      return Renderer.#expandSlotsInNodes(dom, slots);
+    }
+
+    // TODO: implement other cases
+  }
+
+  // Based on expand_slots/3 (list case)
+  static #expandSlotsInNodes(nodes, slots) {
+    return Erlang_Lists["flatten/1"](
+      Type.list(nodes.data.map((node) => Renderer.#expandSlots(node, slots))),
+    );
+  }
+
   // Based on evaluate_prop_value/2
   static #evalutatePropValue(propDom) {
     const [name, valueDom] = propDom.data;
@@ -267,10 +283,6 @@ export default class Renderer {
 //     pageModuleRef["__layout_props__/0"]().data.concat(
 //       Type.tuple([Type.atom("cid", Type.bitstring("layout"))]),
 //     );
-//   }
-
-//   static #expandSlots(dom, slots) {
-//     return Elixir_Hologram_Template_Renderer["expand_slots/2"](dom, slots);
 //   }
 
 //   static #renderComponentDOM(dom, context, slots) {

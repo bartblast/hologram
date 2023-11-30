@@ -380,6 +380,7 @@ defmodule Hologram.Compiler do
         {Hologram.Component.Client, :__struct__, 0},
         {Kernel, :to_string, 1},
         {:erlang, :binary_to_atom, 1},
+        {:lists, :flatten, 1},
         {:maps, :from_list, 1},
         {:maps, :get, 2},
         {:maps, :merge, 2}
