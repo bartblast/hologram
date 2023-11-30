@@ -189,6 +189,14 @@ export default class Renderer {
     return Renderer.renderDom(slotDom, context, Type.keywordList([]));
   }
 
+  // Based on render_template/4
+  static #renderTemplate(moduleRef, vars, childrenDom, context) {
+    const dom = Renderer.#evaluateTemplate(moduleRef, vars);
+    const slots = Type.keywordList([[Type.atom("default"), childrenDom]]);
+
+    return Renderer.renderDom(dom, context, slots);
+  }
+
   static #valueDomToString(valueDom) {
     return Renderer.#renderNodes(
       valueDom,
@@ -345,11 +353,4 @@ export default class Renderer {
 //   // TODO: implement
 //   static #renderStatelessComponent() {
 //     console.log("#renderStatelessComponent()");
-//   }
-
-//   static #renderTemplate(moduleRef, vars, children, context) {
-//     const dom = Renderer.#evaluateTemplate(moduleRef, vars);
-//     const slots = Type.keywordList([[Type.atom("default"), children]]);
-
-//     return Renderer.#renderDom(dom, context, slots);
 //   }
