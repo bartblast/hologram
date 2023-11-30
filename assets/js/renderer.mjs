@@ -66,6 +66,10 @@ export default class Renderer {
     return Type.tuple([name, evaluatedValue]);
   }
 
+  static #evaluateTemplate(moduleRef, vars) {
+    return Interpreter.callAnonymousFunction(moduleRef["template/0"](), [vars]);
+  }
+
   // Based on filter_allowed_props/2
   static #filterAllowedProps(propsDom, moduleRef) {
     const registeredPropNames = moduleRef["__props__/0"].data
@@ -255,10 +259,6 @@ export default class Renderer {
 //     pageModuleRef["__layout_props__/0"]().data.concat(
 //       Type.tuple([Type.atom("cid", Type.bitstring("layout"))]),
 //     );
-//   }
-
-//   static #evaluateTemplate(moduleRef, vars) {
-//     return Interpreter.callAnonymousFunction(moduleRef["template/0"](), [vars]);
 //   }
 
 //   static #expandSlots(dom, slots) {
