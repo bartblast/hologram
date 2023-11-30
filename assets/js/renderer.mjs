@@ -83,6 +83,15 @@ export default class Renderer {
     ]);
   }
 
+  // Based on has_cid_prop?/1
+  static #hasCidProp(propsTuples) {
+    return Type.boolean(
+      propsTuples.data.some((propTuple) =>
+        Interpreter.isStrictlyEqual(propTuple.data[0], Type.atom("cid")),
+      ),
+    );
+  }
+
   // Based on inject_props_from_context/3
   static #injectPropsFromContext(propsFromTemplate, moduleRef, context) {
     const propsFromContextTuples = moduleRef["__props__/0"].data
@@ -254,10 +263,6 @@ export default class Renderer {
 
 //   static #expandSlots(dom, slots) {
 //     return Elixir_Hologram_Template_Renderer["expand_slots/2"](dom, slots);
-//   }
-
-//   static #hasCidProp(props) {
-//     return Elixir_Hologram_Template_Renderer["has_cid_prop?/1"](props);
 //   }
 
 //   static #renderComponentDOM(dom, context, slots) {
