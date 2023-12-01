@@ -1875,8 +1875,8 @@ describe("inspect()", () => {
 
 describe("inspectModuleName()", () => {
   it("inspects Elixir module name", () => {
-    const result = Interpreter.inspectModuleName("Elixir_Aaa_Bbb");
-    assert.deepStrictEqual(result, "Aaa.Bbb");
+    const result = Interpreter.inspectModuleName("Elixir_Aaa_Bbb_Ccc");
+    assert.deepStrictEqual(result, "Aaa.Bbb.Ccc");
   });
 
   it("inspects 'Erlang' module name", () => {

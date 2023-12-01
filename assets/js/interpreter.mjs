@@ -291,7 +291,7 @@ export default class Interpreter {
 
   static inspectModuleName(moduleName) {
     if (moduleName.startsWith("Elixir_")) {
-      return moduleName.slice(7).replace("_", ".");
+      return moduleName.slice(7).replaceAll("_", ".");
     }
 
     if (moduleName === "Erlang") {
