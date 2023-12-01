@@ -17,6 +17,9 @@ export default class Renderer {
     const nodeType = dom.data[0].value;
 
     switch (nodeType) {
+      case "component":
+        return Renderer.#renderComponent(dom, context, slots);
+
       case "element":
         return Renderer.#renderElement(dom, context, slots);
 
@@ -105,10 +108,8 @@ export default class Renderer {
 
   // Based on has_cid_prop?/1
   static #hasCidProp(propsTuples) {
-    return Type.boolean(
-      propsTuples.data.some((propTuple) =>
-        Interpreter.isStrictlyEqual(propTuple.data[0], Type.atom("cid")),
-      ),
+    return propsTuples.data.some((propTuple) =>
+      Interpreter.isStrictlyEqual(propTuple.data[0], Type.atom("cid")),
     );
   }
 
@@ -167,6 +168,38 @@ export default class Renderer {
 
       return acc;
     }, {});
+  }
+
+  // Based on render_dom/3 (component case)
+  static #renderComponent(dom, context, slots) {
+    const moduleRef = Interpreter.moduleRef(dom.data[1]);
+    const propsDom = dom.data[2];
+    let childrenDom = dom.data[3];
+
+    const expandedChildrenDom = Renderer.#expandSlots(childrenDom, slots);
+
+    const props = Renderer.#injectPropsFromContext(
+      Renderer.#castProps(propsDom, moduleRef),
+      moduleRef,
+      context,
+    );
+
+    if (Renderer.#hasCidProp(props)) {
+      // TODO: render stateful component
+      // return Renderer.#renderStatefulComponent(
+      //   module,
+      //   props,
+      //   expandedChildren,
+      //   context,
+      // );
+    } else {
+      return Renderer.#renderTemplate(
+        moduleRef,
+        props,
+        expandedChildrenDom,
+        context,
+      );
+    }
   }
 
   // Based on render_dom/3 (element & slot case)
@@ -258,22 +291,6 @@ export default class Renderer {
 //     console.inspect(html);
 //   }
 
-//   static #renderDom(dom, context, slots) {
-//       switch (nodeType) {
-//         case "component":
-//           return Renderer.#renderComponentDOM(dom, context, slots);
-
-//         case "element": {
-//           const tagName = dom.data[0].value;
-//           if (tagName === "slot") {
-//             return "(todo: slot)";
-//           }
-//           return "(todo: element)";
-//         }
-//       }
-//     }
-//   }
-
 //   static #buildVars(props, state) {
 //     return Erlang_Maps["merge/2"](props, state);
 //   }
@@ -283,36 +300,6 @@ export default class Renderer {
 //     pageModuleRef["__layout_props__/0"]().data.concat(
 //       Type.tuple([Type.atom("cid", Type.bitstring("layout"))]),
 //     );
-//   }
-
-//   static #renderComponentDOM(dom, context, slots) {
-//     const module = dom.data[1];
-//     const propsDOM = dom.data[2];
-//     let children = dom.data[3];
-
-//     const expandedChildren = Renderer.#expandSlots(children, slots);
-
-//     const props = Renderer.#injectPropsFromContext(
-//       Renderer.#castProps(propsDOM, module),
-//       module,
-//       context,
-//     );
-
-//     if (Type.isTrue(Renderer.#hasCidProp(props))) {
-//       return Renderer.#renderStatefulComponent(
-//         module,
-//         props,
-//         expandedChildren,
-//         context,
-//       );
-//     } else {
-//       return Renderer.#renderStatelessComponent(
-//         module,
-//         props,
-//         expandedChildren,
-//         context,
-//       );
-//     }
 //   }
 
 //   static #renderStatefulComponent(module, props, children, context) {
@@ -360,9 +347,4 @@ export default class Renderer {
 //     console.inspect(template);
 
 //     return "(todo: component, in progress)";
-//   }
-
-//   // TODO: implement
-//   static #renderStatelessComponent() {
-//     console.log("#renderStatelessComponent()");
 //   }
