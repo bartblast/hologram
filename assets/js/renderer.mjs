@@ -36,10 +36,10 @@ export default class Renderer {
   // Based on cast_props/2
   static #castProps(propsDom, moduleRef) {
     const propsTuples = Renderer.#filterAllowedProps(propsDom, moduleRef)
-      .data.map((propDom) => Renderer.#evalutatePropValue(propDom))
+      .map((propDom) => Renderer.#evalutatePropValue(propDom))
       .map((propDom) => Renderer.#normalizePropName(propDom));
 
-    return Erlang_Maps["from_list/1"](propsTuples);
+    return Erlang_Maps["from_list/1"](Type.list(propsTuples));
   }
 
   static #contextKey(opts) {
@@ -91,32 +91,28 @@ export default class Renderer {
 
   // Based on filter_allowed_props/2
   static #filterAllowedProps(propsDom, moduleRef) {
-    const registeredPropNames = moduleRef["__props__/0"].data
-      .filter((prop) => Renderer.#contextKey(prop.data[2]) === null)
+    const registeredPropNames = moduleRef["__props__/0"]()
+      .data.filter((prop) => Renderer.#contextKey(prop.data[2]) === null)
       .map((prop) => Elixir_Kernel["to_string/1"](prop.data[0]));
 
     const allowedPropNames = registeredPropNames.concat(Type.bitstring("cid"));
 
-    return Type.list([
-      propsDom.data.filter((propDom) =>
-        allowedPropNames.some((name) =>
-          Interpreter.isStrictlyEqual(name, propDom.data[0]),
-        ),
+    return propsDom.data.filter((propDom) =>
+      allowedPropNames.some((name) =>
+        Interpreter.isStrictlyEqual(name, propDom.data[0]),
       ),
-    ]);
+    );
   }
 
   // Based on has_cid_prop?/1
   static #hasCidProp(propsTuples) {
-    return propsTuples.data.some((propTuple) =>
-      Interpreter.isStrictlyEqual(propTuple.data[0], Type.atom("cid")),
-    );
+    return propsTuples.hasOwnProperty("atom(cid)");
   }
 
   // Based on inject_props_from_context/3
   static #injectPropsFromContext(propsFromTemplate, moduleRef, context) {
-    const propsFromContextTuples = moduleRef["__props__/0"].data
-      .filter((prop) => Renderer.#contextKey(prop.data[2]) !== null)
+    const propsFromContextTuples = moduleRef["__props__/0"]()
+      .data.filter((prop) => Renderer.#contextKey(prop.data[2]) !== null)
       .map((prop) => {
         const contextKey = Renderer.#contextKey(prop.data[2]);
 
@@ -126,7 +122,9 @@ export default class Renderer {
         ]);
       });
 
-    const propsFromContext = Erlang_Maps["from_list/1"](propsFromContextTuples);
+    const propsFromContext = Erlang_Maps["from_list/1"](
+      Type.list(propsFromContextTuples),
+    );
 
     return Erlang_Maps["merge/2"](propsFromTemplate, propsFromContext);
   }
