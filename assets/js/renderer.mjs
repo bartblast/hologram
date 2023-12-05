@@ -79,7 +79,7 @@ export default class Renderer {
     ) {
       evaluatedValue = valueDom.data[0].data[1].data[0];
     } else {
-      evaluatedValue = Renderer.#valueDomToString(valueDom);
+      evaluatedValue = Renderer.#valueDomToBitstring(valueDom);
     }
 
     return Type.tuple([name, evaluatedValue]);
@@ -139,15 +139,15 @@ export default class Renderer {
 
   // Based on render_attribute/2
   static #renderAttribute(name, valueDom) {
-    const nameStr = Bitstring.toText(name);
+    const nameText = Bitstring.toText(name);
 
     if (valueDom.data.length === 0) {
-      return [nameStr, true];
+      return [nameText, true];
     }
 
-    const valueStr = Renderer.#valueDomToString(valueDom);
+    const valueText = Renderer.#valueDomToText(valueDom);
 
-    return [nameStr, valueStr];
+    return [nameText, valueText];
   }
 
   // Based on render_attributes/1
@@ -244,12 +244,22 @@ export default class Renderer {
     return Renderer.renderDom(dom, context, slots);
   }
 
-  static #valueDomToString(valueDom) {
-    return Renderer.#renderNodes(
-      valueDom,
-      Type.map([]),
-      Type.keywordList([]),
-    ).join("");
+  static #valueDomToBitstring(valueDom) {
+    const bitstringChunks = valueDom.data.map((node) => {
+      const nodeType = node.data[0].value;
+
+      if (nodeType === "text") {
+        return node.data[1];
+      } else {
+        return Elixir_Kernel["to_string/1"](node.data[1].data[0]);
+      }
+    });
+
+    return Bitstring.merge(bitstringChunks);
+  }
+
+  static #valueDomToText(valueDom) {
+    return Bitstring.toText(Renderer.#valueDomToBitstring(valueDom));
   }
 }
 
