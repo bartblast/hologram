@@ -360,7 +360,7 @@ defmodule Hologram.Template.RendererTest do
   #          [text: "abc"]}
 
   #       assert render_dom(node, %{}, []) ==
-  #                {"34a_prop,35a_prop,34b_state,36a_prop,34c_state,abc,34x_state,36z_state,34y_state,35z_state,34z_state",
+  #             {"34a_prop,35a_prop,34b_state,36a_prop,34c_state,abc,34x_state,36z_state,34y_state,35z_state,34z_state",
   #                 %{
   #                   "component_34" => %Component.Client{
   #                     state: %{

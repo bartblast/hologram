@@ -285,6 +285,7 @@ defmodule Hologram.Template.Renderer do
   #   end
 
   # TODO: remove
+  @spec render_page(any, any) :: any
   def render_page(_param1, _param_2), do: {1, 2}
 
   # TODO: remove
