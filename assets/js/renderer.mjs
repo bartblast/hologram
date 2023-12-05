@@ -157,12 +157,12 @@ export default class Renderer {
     }
 
     return attrsDom.data.reduce((acc, attrDom) => {
-      const [nameStr, valueStr] = Renderer.#renderAttribute(
+      const [nameText, valueText] = Renderer.#renderAttribute(
         attrDom.data[0],
         attrDom.data[1],
       );
 
-      acc[nameStr] = valueStr;
+      acc[nameText] = valueText;
 
       return acc;
     }, {});
