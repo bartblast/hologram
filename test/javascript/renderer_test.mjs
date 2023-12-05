@@ -2,15 +2,23 @@
 
 import {
   assert,
+  assertBoxedError,
   linkModules,
   unlinkModules,
   vnode,
 } from "../../assets/js/test_support.mjs";
 
+import {defineRendererFixtureModules} from "../../assets/js/test_fixtures.mjs";
+
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
+import Utils from "../../assets/js/utils.mjs";
 
-before(() => linkModules());
+before(() => {
+  linkModules();
+  defineRendererFixtureModules();
+});
+
 after(() => unlinkModules());
 
 const context = Type.map([]);
@@ -184,7 +192,25 @@ describe("element node", () => {
 });
 
 describe("node list", () => {
-  it("text and expression nodes", () => {
+  it("multiple nodes without merging", () => {
+    const nodes = Type.list([
+      Type.tuple([Type.atom("text"), Type.bitstring("aaa")]),
+      Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([]),
+        Type.list([]),
+      ]),
+      Type.tuple([Type.atom("text"), Type.bitstring("bbb")]),
+    ]);
+
+    const result = Renderer.renderDom(nodes, context, slots);
+    const expected = ["aaa", vnode("div", {attrs: {}}, []), "bbb"];
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("multiple nodes with merging", () => {
     const nodes = Type.list([
       Type.tuple([Type.atom("text"), Type.bitstring("aaa")]),
       Type.tuple([Type.atom("expression"), Type.tuple([Type.integer(111)])]),
@@ -194,7 +220,7 @@ describe("node list", () => {
 
     const result = Renderer.renderDom(nodes, context, slots);
 
-    assert.deepStrictEqual(result, ["aaa", "111", "bbb", "222"]);
+    assert.deepStrictEqual(result, ["aaa111bbb222"]);
   });
 
   it("nil nodes", () => {
@@ -207,6 +233,84 @@ describe("node list", () => {
 
     const result = Renderer.renderDom(nodes, context, slots);
 
-    assert.deepStrictEqual(result, ["aaa", "bbb"]);
+    assert.deepStrictEqual(result, ["aaabbb"]);
+  });
+});
+
+describe("stateless component", () => {
+  it("without props", () => {
+    const node = Type.tuple([
+      Type.atom("component"),
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module1"),
+      Type.list([]),
+      Type.list([]),
+    ]);
+
+    const result = Renderer.renderDom(node, context, slots);
+    const expected = [vnode("div", {attrs: {}}, ["abc"])];
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("with props", () => {
+    const node = Type.tuple([
+      Type.atom("component"),
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module2"),
+      Type.list([
+        Type.tuple([
+          Type.bitstring("a"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("ddd")]]),
+        ]),
+        Type.tuple([
+          Type.bitstring("b"),
+          Type.keywordList([
+            [Type.atom("expression"), Type.tuple([Type.integer(222)])],
+          ]),
+        ]),
+        Type.tuple([
+          Type.bitstring("c"),
+          Type.keywordList([
+            [Type.atom("text"), Type.bitstring("fff")],
+            [Type.atom("expression"), Type.tuple([Type.integer(333)])],
+            [Type.atom("text"), Type.bitstring("hhh")],
+          ]),
+        ]),
+      ]),
+      Type.list([]),
+    ]);
+
+    const result = Renderer.renderDom(node, context, slots);
+
+    const expected = [
+      vnode("div", {attrs: {}}, [
+        "prop_a = ddd, prop_b = 222, prop_c = fff333hhh",
+      ]),
+    ];
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("with unregistered var used", () => {
+    const node = Type.tuple([
+      Type.atom("component"),
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module17"),
+      Type.list([
+        Type.tuple([
+          Type.bitstring("a"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("111")]]),
+        ]),
+        Type.tuple([
+          Type.bitstring("b"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("222")]]),
+        ]),
+      ]),
+      Type.list([]),
+    ]);
+
+    assertBoxedError(
+      () => Renderer.renderDom(node, context, slots),
+      "KeyError",
+      'key :b not found in: %{a: "111"}',
+    );
   });
 });
