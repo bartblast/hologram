@@ -129,6 +129,22 @@ export default class Renderer {
     return Erlang_Maps["merge/2"](propsFromTemplate, propsFromContext);
   }
 
+  static #mergeNeighbouringTextNodes(nodes) {
+    return nodes.reduce((acc, node) => {
+      if (
+        typeof node === "string" &&
+        acc.length > 0 &&
+        typeof acc[acc.length - 1] === "string"
+      ) {
+        acc[acc.length - 1] = acc[acc.length - 1] + node;
+      } else {
+        acc.push(node);
+      }
+
+      return acc;
+    }, []);
+  }
+
   // Based on normalize_prop_name/1
   static #normalizePropName(propDom) {
     return Type.tuple([
@@ -219,11 +235,11 @@ export default class Renderer {
 
   // Based on render_dom/3 (list case)
   static #renderNodes(nodes, context, slots) {
-    return (
+    return Renderer.#mergeNeighbouringTextNodes(
       nodes.data
         // There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if}
         .filter((node) => !Type.isNil(node))
-        .map((node) => Renderer.renderDom(node, context, slots))
+        .map((node) => Renderer.renderDom(node, context, slots)),
     );
   }
 
