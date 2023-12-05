@@ -91,12 +91,18 @@ export function assertMatchError(callable, value) {
 
 export function elixirKernelToString1(term) {
   switch (term.type) {
+    case "atom":
+      return Type.bitstring(term.value);
+
+    case "bitstring":
+      return term;
+
     case "integer":
       return Type.bitstring(term.value.toString());
 
     default:
       const inspectedTerm = Interpreter.inspect(term);
-      const msg = `elixirKernelToString1() doesn't know how to handle: ${inspectedTerm}`;
+      const msg = `elixirKernelToString1() doesn't know how to handle: ${inspectedTerm} of type "${term.type}"`;
       throw new HologramInterpreterError(msg);
   }
 }
