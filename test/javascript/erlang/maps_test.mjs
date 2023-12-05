@@ -164,7 +164,7 @@ describe("get/2", () => {
     assertBoxedError(
       () => Erlang_Maps["get/2"](Type.atom("a"), Type.map([])),
       "KeyError",
-      "key :a not found in %{}",
+      "key :a not found in: %{}",
     );
   });
 });

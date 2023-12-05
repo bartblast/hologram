@@ -51,7 +51,7 @@ const Erlang_Maps = {
     }
 
     Interpreter.raiseKeyError(
-      `key ${Interpreter.inspect(key)} not found in ${Interpreter.inspect(
+      `key ${Interpreter.inspect(key)} not found in: ${Interpreter.inspect(
         map,
       )}`,
     );
