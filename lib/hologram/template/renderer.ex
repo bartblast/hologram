@@ -1,5 +1,7 @@
 defmodule Hologram.Template.Renderer do
   alias Hologram.Commons.StringUtils
+  alias Hologram.Component.Client
+  alias Hologram.Component.Server
 
   # https://html.spec.whatwg.org/multipage/syntax.html#void-elements
   @void_elems ~w(area base br col embed hr img input link meta param source track wbr)
@@ -126,6 +128,26 @@ defmodule Hologram.Template.Renderer do
     Enum.any?(props, fn {name, _value} -> name == :cid end)
   end
 
+  defp init_component(module, props) do
+    init_result =
+      if function_exported?(module, :init, 3) do
+        module.init(props, %Client{}, %Server{})
+      else
+        {%Client{}, %Server{}}
+      end
+
+    case init_result do
+      {client, server} ->
+        {client, server}
+
+      %Client{} = client ->
+        {client, %Server{}}
+
+      %Server{} = server ->
+        {%Client{}, server}
+    end
+  end
+
   defp inject_props_from_context(props_from_template, module, context) do
     props_from_context =
       module.__props__()
@@ -161,6 +183,17 @@ defmodule Hologram.Template.Renderer do
     |> StringUtils.prepend(" ")
   end
 
+  defp render_stateful_component(module, props, children_dom, context) do
+    {client_struct, _server_struct} = init_component(module, props)
+    vars = Map.merge(props, client_struct.state)
+    merged_context = Map.merge(context, client_struct.context)
+
+    {html, children_client_structs} = render_template(module, vars, children_dom, merged_context)
+    client_structs = Map.put(children_client_structs, vars.cid, client_struct)
+
+    {html, client_structs}
+  end
+
   defp render_template(module, vars, children_dom, context) do
     vars
     |> module.template().()
@@ -168,7 +201,6 @@ defmodule Hologram.Template.Renderer do
   end
 
   #   alias Hologram.Compiler.Encoder
-  #   alias Hologram.Component
   #   alias Hologram.Runtime.PageDigestRegistry
   #   alias Hologram.Runtime.Templatable
   #   alias Hologram.Template.DOM
@@ -238,26 +270,6 @@ defmodule Hologram.Template.Renderer do
   #     |> Enum.map(fn {name, value} -> {to_string(name), [expression: {value}]} end)
   #   end
 
-  #   defp init_component(module, props) do
-  #     init_result =
-  #       if function_exported?(module, :init, 3) do
-  #         module.init(props, %Component.Client{}, %Component.Server{})
-  #       else
-  #         {%Component.Client{}, %Component.Server{}}
-  #       end
-
-  #     case init_result do
-  #       {client, server} ->
-  #         {client, server}
-
-  #       %Component.Client{} = client ->
-  #         {client, %Component.Server{}}
-
-  #       %Component.Server{} = server ->
-  #         {%Component.Client{}, server}
-  #     end
-  #   end
-
   #   defp interpolate_client_components_data_js(html, client_components_data) do
   #     client_components_data_js = Encoder.encode_term(client_components_data)
   #     String.replace(html, "$COMPONENTS_DATA_JS_PLACEHOLDER", client_components_data_js)
@@ -273,22 +285,8 @@ defmodule Hologram.Template.Renderer do
   #     String.replace(html, "$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
   #   end
 
-  #   defp render_stateful_component(module, props, children, context) do
-  #     {client_struct, _server_struct} = init_component(module, props)
-  #     vars = Map.merge(props, client_struct.state)
-  #     merged_context = Map.merge(context, client_struct.context)
-
-  #     {html, children_client_structs} = render_template(module, vars, children, merged_context)
-  #     acc_client_structs = Map.put(children_client_structs, vars.cid, client_struct)
-
-  #     {html, acc_client_structs}
-  #   end
-
   # TODO: remove
   @doc false
   @spec render_page(any, any) :: any
   def render_page(_param1, _param_2), do: {1, 2}
-
-  # TODO: remove
-  defp render_stateful_component(_param_1, _param_2, _param_3, _param_4), do: {1, 2}
 end

@@ -2,9 +2,16 @@ defmodule Hologram.Template.RendererTest do
   use Hologram.Test.BasicCase, async: false
   import Hologram.Template.Renderer
 
+  alias Hologram.Component.Client
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
+  alias Hologram.Test.Fixtures.Template.Renderer.Module16
   alias Hologram.Test.Fixtures.Template.Renderer.Module17
+  alias Hologram.Test.Fixtures.Template.Renderer.Module18
   alias Hologram.Test.Fixtures.Template.Renderer.Module2
+  alias Hologram.Test.Fixtures.Template.Renderer.Module3
+  alias Hologram.Test.Fixtures.Template.Renderer.Module4
+  alias Hologram.Test.Fixtures.Template.Renderer.Module5
+  alias Hologram.Test.Fixtures.Template.Renderer.Module6
 
   test "text node" do
     node = {:text, "abc"}
@@ -116,16 +123,117 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  describe "stateful component" do
+    test "without props or state" do
+      node = {:component, Module1, [{"cid", [text: "my_component"]}], []}
+
+      assert render_dom(node, %{}, []) ==
+               {"<div>abc</div>", %{"my_component" => %Client{state: %{}}}}
+    end
+
+    test "with props" do
+      node =
+        {:component, Module2,
+         [
+           {"cid", [text: "my_component"]},
+           {"a", [text: "ddd"]},
+           {"b", [expression: {222}]},
+           {"c", [text: "fff", expression: {333}, text: "hhh"]}
+         ], []}
+
+      assert render_dom(node, %{}, []) ==
+               {"<div>prop_a = ddd, prop_b = 222, prop_c = fff333hhh</div>",
+                %{"my_component" => %Client{state: %{}}}}
+    end
+
+    test "with state / only client struct returned from init/3" do
+      node = {:component, Module3, [{"cid", [text: "my_component"]}], []}
+
+      assert render_dom(node, %{}, []) ==
+               {"<div>state_a = 1, state_b = 2</div>",
+                %{"my_component" => %Client{state: %{a: 1, b: 2}}}}
+    end
+
+    test "with props and state, give state priority over prop if there are name collisions" do
+      node =
+        {:component, Module4,
+         [
+           {"cid", [text: "my_component"]},
+           {"b", [text: "prop_b"]},
+           {"c", [text: "prop_c"]}
+         ], []}
+
+      assert render_dom(node, %{}, []) ==
+               {"<div>var_a = state_a, var_b = state_b, var_c = prop_c</div>",
+                %{"my_component" => %Client{state: %{a: "state_a", b: "state_b"}}}}
+    end
+
+    test "with only server struct returned from init/3" do
+      node =
+        {:component, Module5,
+         [
+           {"cid", [text: "my_component"]},
+           {"a", [text: "aaa"]},
+           {"b", [text: "bbb"]}
+         ], []}
+
+      assert render_dom(node, %{}, []) ==
+               {"<div>prop_a = aaa, prop_b = bbb</div>", %{"my_component" => %Client{state: %{}}}}
+    end
+
+    test "with client and server structs returned from init/3" do
+      node = {:component, Module6, [{"cid", [text: "my_component"]}], []}
+
+      assert render_dom(node, %{}, []) ==
+               {"<div>state_a = 1, state_b = 2</div>",
+                %{"my_component" => %Client{state: %{a: 1, b: 2}}}}
+    end
+
+    test "cast props" do
+      node =
+        {:component, Module16,
+         [
+           {"cid", [text: "my_component"]},
+           {"prop_1", [text: "value_1"]},
+           {"prop_2", [expression: {2}]},
+           {"prop_3", [text: "aaa", expression: {2}, text: "bbb"]},
+           {"prop_4", [text: "value_4"]}
+         ], []}
+
+      assert render_dom(node, %{}, []) ==
+               {"",
+                %{
+                  "my_component" => %Client{
+                    state: %{
+                      cid: "my_component",
+                      prop_1: "value_1",
+                      prop_2: 2,
+                      prop_3: "aaa2bbb"
+                    }
+                  }
+                }}
+    end
+
+    test "with unregistered var used" do
+      node =
+        {:component, Module18,
+         [{"cid", [text: "component_18"]}, {"a", [text: "111"]}, {"c", [text: "333"]}], []}
+
+      assert_raise KeyError,
+                   ~r/key :c not found in:/,
+                   fn ->
+                     render_dom(node, %{}, [])
+                   end
+    end
+  end
+
   #   import Hologram.Test.Stubs
   #   import Mox
 
   #   alias Hologram.Commons.ETS
-  #   alias Hologram.Component
   #   alias Hologram.Runtime.AssetPathRegistry
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module10
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module14
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module16
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module18
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module19
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module21
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module24
@@ -133,22 +241,18 @@ defmodule Hologram.Template.RendererTest do
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module27
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module28
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module29
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module3
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module31
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module34
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module37
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module39
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module4
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module40
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module43
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module45
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module46
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module48
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module5
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module50
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module51
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module52
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module6
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module7
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module9
@@ -189,111 +293,6 @@ defmodule Hologram.Template.RendererTest do
   #                   "component_51" => %Component.Client{state: %{a: 1, b: 2}},
   #                   "component_52" => %Component.Client{state: %{c: 3, d: 4}}
   #                 }}
-  #     end
-  #   end
-
-  #   describe "stateful component" do
-  #     test "without props or state" do
-  #       node = {:component, Module1, [{"cid", [text: "my_component"]}], []}
-
-  #       assert render_dom(node, %{}, []) ==
-  #                {"<div>abc</div>", %{"my_component" => %Component.Client{state: %{}}}}
-  #     end
-
-  #     test "with props" do
-  #       node =
-  #         {:component, Module2,
-  #          [
-  #            {"cid", [text: "my_component"]},
-  #            {"a", [text: "ddd"]},
-  #            {"b", [expression: {222}]},
-  #            {"c", [text: "fff", expression: {333}, text: "hhh"]}
-  #          ], []}
-
-  #       assert render_dom(node, %{}, []) ==
-  #                {"<div>prop_a = ddd, prop_b = 222, prop_c = fff333hhh</div>",
-  #                 %{"my_component" => %Component.Client{state: %{}}}}
-  #     end
-
-  #     test "with state / only client struct returned from init/3" do
-  #       node = {:component, Module3, [{"cid", [text: "my_component"]}], []}
-
-  #       assert render_dom(node, %{}, []) ==
-  #                {"<div>state_a = 1, state_b = 2</div>",
-  #                 %{"my_component" => %Component.Client{state: %{a: 1, b: 2}}}}
-  #     end
-
-  #     test "with props and state, give state priority over prop if there are name conflicts" do
-  #       node =
-  #         {:component, Module4,
-  #          [
-  #            {"cid", [text: "my_component"]},
-  #            {"b", [text: "prop_b"]},
-  #            {"c", [text: "prop_c"]}
-  #          ], []}
-
-  #       assert render_dom(node, %{}, []) ==
-  #                {"<div>var_a = state_a, var_b = state_b, var_c = prop_c</div>",
-  #                 %{"my_component" => %Component.Client{state: %{a: "state_a", b: "state_b"}}}}
-  #     end
-
-  #     test "with only server struct returned from init/3" do
-  #       node =
-  #         {:component, Module5,
-  #          [
-  #            {"cid", [text: "my_component"]},
-  #            {"a", [text: "aaa"]},
-  #            {"b", [text: "bbb"]}
-  #          ], []}
-
-  #       assert render_dom(node, %{}, []) ==
-  #                {"<div>prop_a = aaa, prop_b = bbb</div>",
-  #                 %{"my_component" => %Component.Client{state: %{}}}}
-  #     end
-
-  #     test "with client and server structs returned from init/3" do
-  #       node = {:component, Module6, [{"cid", [text: "my_component"]}], []}
-
-  #       assert render_dom(node, %{}, []) ==
-  #                {"<div>state_a = 1, state_b = 2</div>",
-  #                 %{"my_component" => %Component.Client{state: %{a: 1, b: 2}}}}
-  #     end
-
-  #     test "cast props" do
-  #       node =
-  #         {:component, Module16,
-  #          [
-  #            {"cid", [text: "my_component"]},
-  #            {"prop_1", [text: "value_1"]},
-  #            {"prop_2", [expression: {2}]},
-  #            {"prop_3", [text: "aaa", expression: {2}, text: "bbb"]},
-  #            {"prop_4", [text: "value_4"]}
-  #          ], []}
-
-  #       assert render_dom(node, %{}, []) ==
-  #                {"",
-  #                 %{
-  #                   "my_component" => %Component.Client{
-  #                     state: %{
-  #                       cid: "my_component",
-  #                       prop_1: "value_1",
-  #                       prop_2: 2,
-  #                       prop_3: "aaa2bbb"
-  #                     }
-  #                   }
-  #                 }}
-  #     end
-
-  #     test "with unregistered var used" do
-  #       node =
-  #         {:component, Module18,
-  #          [{"cid", [text: "component_18"]}, {"a", [text: "111"]}, {"c", [text: "333"]}], []}
-
-  #       assert_raise KeyError,
-  #                    ~r/key :c not found in:/,
-  #                    fn ->
-  #                      render_dom(node, %{}, [])
-  #                    end
   #     end
   #   end
 
