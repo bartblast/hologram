@@ -114,3 +114,44 @@ it("hydrate()", () => {
     ]),
   );
 });
+
+it("putComponentData()", () => {
+  Store.data = Type.map([
+    [
+      Type.bitstring("my_component_1"),
+      Type.map([
+        [Type.atom("context"), "dummy_context_1"],
+        [Type.atom("state"), "dummy_state_1"],
+      ]),
+    ],
+  ]);
+
+  const cid = Type.bitstring("my_component_2");
+
+  const componentData = Type.map([
+    [Type.atom("context"), "dummy_context_2"],
+    [Type.atom("state"), "dummy_state_2"],
+  ]);
+
+  Store.putComponentData(cid, componentData);
+
+  assert.deepStrictEqual(
+    Store.data,
+    Type.map([
+      [
+        Type.bitstring("my_component_1"),
+        Type.map([
+          [Type.atom("context"), "dummy_context_1"],
+          [Type.atom("state"), "dummy_state_1"],
+        ]),
+      ],
+      [
+        Type.bitstring("my_component_2"),
+        Type.map([
+          [Type.atom("context"), "dummy_context_2"],
+          [Type.atom("state"), "dummy_state_2"],
+        ]),
+      ],
+    ]),
+  );
+});

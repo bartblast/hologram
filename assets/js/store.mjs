@@ -31,4 +31,8 @@ export default class Store {
   static hydrate(data) {
     Store.data = Erlang_Maps["merge/2"](Store.data, data);
   }
+
+  static putComponentData(cid, componentData) {
+    Store.data = Erlang_Maps["put/3"](cid, componentData, Store.data);
+  }
 }
