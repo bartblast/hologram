@@ -1,7 +1,9 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
+import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
+import Store from "./store.mjs";
 import Type from "./type.mjs";
 
 import {h as vnode} from "snabbdom";
@@ -109,6 +111,45 @@ export default class Renderer {
     return propsTuples.hasOwnProperty("atom(cid)");
   }
 
+  static #initComponent(cid, moduleRef, props) {
+    let componentState = Store.getComponentState(cid);
+    let componentContext;
+
+    if (componentState === null) {
+      if ("init/2" in moduleRef) {
+        const emptyClientStruct =
+          Elixir_Hologram_Component_Client["__struct__/0"]();
+
+        const clientStruct = moduleRef["init/2"](props, emptyClientStruct);
+
+        componentState = Erlang_Maps["get/2"](Type.atom("state"), clientStruct);
+
+        componentContext = Erlang_Maps["get/2"](
+          Type.atom("context"),
+          clientStruct,
+        );
+
+        Store.putComponentData(
+          cid,
+          Type.map([
+            [Type.atom("context"), componentContext],
+            [Type.atom("state"), componentState],
+          ]),
+        );
+      } else {
+        const message = `component ${Interpreter.inspectModuleName(
+          moduleRef,
+        )} is initialized on the client, but doesn't have init/2 implemented`;
+
+        throw new HologramInterpreterError(message);
+      }
+    } else {
+      componentContext = Store.getComponentContext(cid);
+    }
+
+    return [componentState, componentContext];
+  }
+
   // Based on inject_props_from_context/3
   static #injectPropsFromContext(propsFromTemplate, moduleRef, context) {
     const propsFromContextTuples = moduleRef["__props__/0"]()
@@ -199,13 +240,12 @@ export default class Renderer {
     );
 
     if (Renderer.#hasCidProp(props)) {
-      // TODO: render stateful component
-      // return Renderer.#renderStatefulComponent(
-      //   module,
-      //   props,
-      //   expandedChildren,
-      //   context,
-      // );
+      return Renderer.#renderStatefulComponent(
+        moduleRef,
+        props,
+        expandedChildrenDom,
+        context,
+      );
     } else {
       return Renderer.#renderTemplate(
         moduleRef,
@@ -252,6 +292,27 @@ export default class Renderer {
     return Renderer.renderDom(slotDom, context, Type.keywordList([]));
   }
 
+  // Based on render_stateful_component/4
+  static #renderStatefulComponent(moduleRef, props, childrenDom, context) {
+    const cid = Erlang_Maps["get/2"](Type.atom("cid"), props);
+
+    const [componentState, componentContext] = Renderer.#initComponent(
+      cid,
+      moduleRef,
+      props,
+    );
+
+    const vars = Erlang_Maps["merge/2"](props, componentState);
+    const mergedContext = Erlang_Maps["merge/2"](context, componentContext);
+
+    return Renderer.#renderTemplate(
+      moduleRef,
+      vars,
+      childrenDom,
+      mergedContext,
+    );
+  }
+
   // Based on render_template/4
   static #renderTemplate(moduleRef, vars, childrenDom, context) {
     const dom = Renderer.#evaluateTemplate(moduleRef, vars);
@@ -280,9 +341,6 @@ export default class Renderer {
 }
 
 // import Erlang_Maps from "./erlang/maps.mjs";
-// import HologramInterpreterError from "./errors/interpreter_error.mjs";
-// import Interpreter from "./interpreter.mjs";
-// import Store from "./store.mjs";
 
 //   // Based on: render_page/2
 //   static renderPage(pageModule, pageParams) {
@@ -315,60 +373,9 @@ export default class Renderer {
 //     console.inspect(html);
 //   }
 
-//   static #buildVars(props, state) {
-//     return Erlang_Maps["merge/2"](props, state);
-//   }
-
 //   // TODO: finish
 //   static #buildLayoutPropsDOM(pageModuleRef, pageClientStruct) {
 //     pageModuleRef["__layout_props__/0"]().data.concat(
 //       Type.tuple([Type.atom("cid", Type.bitstring("layout"))]),
 //     );
-//   }
-
-//   static #renderStatefulComponent(module, props, children, context) {
-//     const cid = Erlang_Maps["get/2"](Type.atom("cid"), props);
-//     let componentState = Store.getComponentState(cid);
-//     let componentContext;
-
-//     const moduleRef = Interpreter.moduleRef(module);
-
-//     if (componentState === null) {
-//       if ("init/2" in moduleRef) {
-//         const emptyClientStruct =
-//           Elixir_Hologram_Component_Client["__struct__/0"]();
-
-//         const clientStruct = moduleRef["init/2"](props, emptyClientStruct);
-
-//         componentState = Erlang_Maps["get/2"](Type.atom("state"), clientStruct);
-
-//         componentContext = Erlang_Maps["get/2"](
-//           Type.atom("context"),
-//           clientStruct,
-//         );
-//       } else {
-//         const message = `component ${Interpreter.inspect(
-//           module,
-//         )} is initialized on the client, but doesn't have init/2 implemented`;
-
-//         throw new HologramInterpreterError(message);
-//       }
-//     } else {
-//       componentContext = Store.getComponentContext(cid);
-//     }
-
-//     const vars = Renderer.#buildVars(props, componentState);
-//     const mergedContext = Erlang_Maps["merge/2"](context, componentContext);
-
-//     const template = Renderer.#renderTemplate(
-//       moduleRef,
-//       vars,
-//       children,
-//       mergedContext,
-//     );
-
-//     // TODO: remove
-//     console.inspect(template);
-
-//     return "(todo: component, in progress)";
 //   }
