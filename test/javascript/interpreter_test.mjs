@@ -1333,7 +1333,7 @@ describe("defineElixirFunction()", () => {
     assert.isDefined(globalThis.Elixir_Ddd);
     assert.isDefined(globalThis.Elixir_Ddd["my_fun_d/4"]);
 
-    assert.equal(globalThis.Elixir_Ddd.__hologramModuleName__, "Elixir_Ddd");
+    assert.equal(globalThis.Elixir_Ddd.__hologramJsModuleName__, "Elixir_Ddd");
 
     // cleanup
     delete globalThis.Elixir_Ddd;
