@@ -159,6 +159,8 @@ export default class Interpreter {
           },
         },
       );
+
+      globalThis[moduleName].__hologramModuleName__ = moduleName;
     }
 
     globalThis[moduleName][`${functionName}/${functionArity}`] = function () {
