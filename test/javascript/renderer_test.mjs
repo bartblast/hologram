@@ -343,4 +343,54 @@ describe("stateful component", () => {
 
     assert.deepStrictEqual(Store.data, expectedStoreData);
   });
+
+  it("with props", () => {
+    const node = Type.tuple([
+      Type.atom("component"),
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module2"),
+      Type.list([
+        Type.tuple([
+          Type.bitstring("cid"),
+          Type.keywordList([
+            [Type.atom("text"), Type.bitstring("my_component")],
+          ]),
+        ]),
+        Type.tuple([
+          Type.bitstring("a"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("ddd")]]),
+        ]),
+        Type.tuple([
+          Type.bitstring("b"),
+          Type.keywordList([
+            [Type.atom("expression"), Type.tuple([Type.integer(222)])],
+          ]),
+        ]),
+        Type.tuple([
+          Type.bitstring("c"),
+          Type.keywordList([
+            [Type.atom("text"), Type.bitstring("fff")],
+            [Type.atom("expression"), Type.tuple([Type.integer(333)])],
+            [Type.atom("text"), Type.bitstring("hhh")],
+          ]),
+        ]),
+      ]),
+      Type.list([]),
+    ]);
+
+    const resultVDom = Renderer.renderDom(node, context, slots);
+
+    const expectedVdom = [
+      vnode("div", {attrs: {}}, [
+        "prop_a = ddd, prop_b = 222, prop_c = fff333hhh",
+      ]),
+    ];
+
+    assert.deepStrictEqual(resultVDom, expectedVdom);
+
+    const expectedStoreData = Type.map([
+      [Type.bitstring("my_component"), elixirHologramComponentClientStruct0()],
+    ]);
+
+    assert.deepStrictEqual(Store.data, expectedStoreData);
+  });
 });
