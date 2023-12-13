@@ -89,7 +89,16 @@ export function assertMatchError(callable, value) {
   }
 }
 
-export function elixirKernelToString1(term) {
+function elixirHologramComponentClientStruct0() {
+  return Type.map([
+    [Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")],
+    [Type.atom("context"), Type.map([])],
+    [Type.atom("next_command"), Type.atom("nil")],
+    [Type.atom("state"), Type.map([])],
+  ]);
+}
+
+function elixirKernelToString1(term) {
   switch (term.type) {
     case "atom":
       return Type.bitstring(term.value);
@@ -129,7 +138,11 @@ export function linkModules() {
   globalThis.Erlang_Persistent_Term = Erlang_Persistent_Term;
   globalThis.Erlang_Unicode = Erlang_Unicode;
   globalThis.Elixir_Enum = {};
+  globalThis.Elixir_Hologram_Component_Client = {};
   globalThis.Elixir_Kernel = Elixir_Kernel;
+
+  globalThis.Elixir_Hologram_Component_Client["__struct__/0"] =
+    elixirHologramComponentClientStruct0;
 
   globalThis.Elixir_Kernel["to_string/1"] = elixirKernelToString1;
 }
@@ -141,5 +154,6 @@ export function unlinkModules() {
   delete globalThis.Erlang_Persistent_Term;
   delete globalThis.Erlang_Unicode;
   delete globalThis.Elixir_Enum;
+  delete globalThis.Elixir_Hologram_Component_Client;
   delete globalThis.Elixir_Kernel;
 }
