@@ -107,8 +107,8 @@ export default class Renderer {
   }
 
   // Based on has_cid_prop?/1
-  static #hasCidProp(propsTuples) {
-    return propsTuples.hasOwnProperty("atom(cid)");
+  static #hasCidProp(props) {
+    return props.data.hasOwnProperty("atom(cid)");
   }
 
   static #initComponent(cid, moduleRef, props) {
@@ -121,6 +121,7 @@ export default class Renderer {
           Elixir_Hologram_Component_Client["__struct__/0"]();
 
         const clientStruct = moduleRef["init/2"](props, emptyClientStruct);
+        Store.putComponentData(cid, clientStruct);
 
         componentState = Erlang_Maps["get/2"](Type.atom("state"), clientStruct);
 
@@ -128,17 +129,9 @@ export default class Renderer {
           Type.atom("context"),
           clientStruct,
         );
-
-        Store.putComponentData(
-          cid,
-          Type.map([
-            [Type.atom("context"), componentContext],
-            [Type.atom("state"), componentState],
-          ]),
-        );
       } else {
         const message = `component ${Interpreter.inspectModuleName(
-          moduleRef,
+          moduleRef.__hologramJsModuleName__,
         )} is initialized on the client, but doesn't have init/2 implemented`;
 
         throw new HologramInterpreterError(message);
