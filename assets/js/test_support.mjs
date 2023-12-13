@@ -89,7 +89,7 @@ export function assertMatchError(callable, value) {
   }
 }
 
-function elixirHologramComponentClientStruct0() {
+export function elixirHologramComponentClientStruct0() {
   return Type.map([
     [Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")],
     [Type.atom("context"), Type.map([])],

@@ -3,6 +3,7 @@
 import {
   assert,
   assertBoxedError,
+  elixirHologramComponentClientStruct0,
   linkModules,
   unlinkModules,
   vnode,
@@ -11,6 +12,7 @@ import {
 import {defineRendererFixtureModules} from "../../assets/js/test_fixtures.mjs";
 
 import Renderer from "../../assets/js/renderer.mjs";
+import Store from "../../assets/js/store.mjs";
 import Type from "../../assets/js/type.mjs";
 import Utils from "../../assets/js/utils.mjs";
 
@@ -312,5 +314,33 @@ describe("stateless component", () => {
       "KeyError",
       'key :b not found in: %{a: "111"}',
     );
+  });
+});
+
+describe("stateful component", () => {
+  it("without props or state", () => {
+    const node = Type.tuple([
+      Type.atom("component"),
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module1"),
+      Type.list([
+        Type.tuple([
+          Type.bitstring("cid"),
+          Type.keywordList([
+            [Type.atom("text"), Type.bitstring("my_component")],
+          ]),
+        ]),
+      ]),
+      Type.list([]),
+    ]);
+
+    const resultVDom = Renderer.renderDom(node, context, slots);
+    const expectedVdom = [vnode("div", {attrs: {}}, ["abc"])];
+    assert.deepStrictEqual(resultVDom, expectedVdom);
+
+    const expectedStoreData = Type.map([
+      [Type.bitstring("my_component"), elixirHologramComponentClientStruct0()],
+    ]);
+
+    assert.deepStrictEqual(Store.data, expectedStoreData);
   });
 });
