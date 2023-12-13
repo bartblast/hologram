@@ -169,7 +169,7 @@ export default class Interpreter {
       )}.${functionName}/${functionArity}`;
 
       // TODO: remove on release
-      Interpreter.#logFunctionCall(mfa, arguments);
+      // Interpreter.#logFunctionCall(mfa, arguments);
 
       const args = Type.list([...arguments]);
 
@@ -184,7 +184,7 @@ export default class Interpreter {
             const result = clause.body(vars);
 
             // TODO: remove on release
-            Interpreter.#logFunctionResult(mfa, result);
+            // Interpreter.#logFunctionResult(mfa, result);
 
             return result;
           }
