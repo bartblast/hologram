@@ -111,7 +111,7 @@ export default class Renderer {
     return props.data.hasOwnProperty("atom(cid)");
   }
 
-  static #initComponent(cid, moduleRef, props) {
+  static #maybeInitComponent(cid, moduleRef, props) {
     let componentState = Store.getComponentState(cid);
     let componentContext;
 
@@ -289,7 +289,7 @@ export default class Renderer {
   static #renderStatefulComponent(moduleRef, props, childrenDom, context) {
     const cid = Erlang_Maps["get/2"](Type.atom("cid"), props);
 
-    const [componentState, componentContext] = Renderer.#initComponent(
+    const [componentState, componentContext] = Renderer.#maybeInitComponent(
       cid,
       moduleRef,
       props,
