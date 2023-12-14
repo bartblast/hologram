@@ -32,7 +32,23 @@ export default class Store {
     Store.data = Erlang_Maps["merge/2"](Store.data, data);
   }
 
-  static putComponentData(cid, componentData) {
-    Store.data = Erlang_Maps["put/3"](cid, componentData, Store.data);
+  static putComponentData(cid, data) {
+    Store.data = Erlang_Maps["put/3"](cid, data, Store.data);
+  }
+
+  static putComponentState(cid, state) {
+    let componentData = Store.getComponentData(cid);
+
+    if (componentData === null) {
+      componentData = Elixir_Hologram_Component_Client["__struct__/0"]();
+    }
+
+    const newComponentData = Erlang_Maps["put/3"](
+      Type.atom("state"),
+      state,
+      componentData,
+    );
+
+    Store.putComponentData(cid, newComponentData);
   }
 }
