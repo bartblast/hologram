@@ -390,9 +390,11 @@ defmodule Hologram.Compiler do
   defp include_mfas_used_by_store(mfas) do
     mfas ++
       [
+        {Hologram.Component.Client, :__struct__, 0},
         {:maps, :get, 2},
         {:maps, :get, 3},
-        {:maps, :merge, 2}
+        {:maps, :merge, 2},
+        {:maps, :put, 3}
       ]
   end
 
