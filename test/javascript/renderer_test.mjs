@@ -14,7 +14,6 @@ import {defineRendererFixtureModules} from "../../assets/js/test_fixtures.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Store from "../../assets/js/store.mjs";
 import Type from "../../assets/js/type.mjs";
-import Utils from "../../assets/js/utils.mjs";
 
 before(() => {
   linkModules();
@@ -392,5 +391,60 @@ describe("stateful component", () => {
     ]);
 
     assert.deepStrictEqual(Store.data, expectedStoreData);
+  });
+
+  it("with state, component has already been initialized", () => {
+    const node = Type.tuple([
+      Type.atom("component"),
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module3"),
+      Type.list([
+        Type.tuple([
+          Type.bitstring("cid"),
+          Type.keywordList([
+            [Type.atom("text"), Type.bitstring("my_component")],
+          ]),
+        ]),
+      ]),
+      Type.list([]),
+    ]);
+
+    const cid = Type.bitstring("my_component");
+
+    Store.putComponentState(
+      cid,
+      Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]),
+    );
+
+    const resultVDom = Renderer.renderDom(node, context, slots);
+
+    const expectedVdom = [
+      vnode("div", {attrs: {}}, ["state_a = 1, state_b = 2"]),
+    ];
+
+    assert.deepStrictEqual(resultVDom, expectedVdom);
+
+    assert.deepStrictEqual(
+      Store.data,
+      Type.map([
+        [
+          cid,
+          Type.map([
+            [Type.atom("__struct__"), Type.alias("Hologram.Component.Client")],
+            [Type.atom("context"), Type.map([])],
+            [Type.atom("next_command"), Type.nil()],
+            [
+              Type.atom("state"),
+              Type.map([
+                [Type.atom("a"), Type.integer(1)],
+                [Type.atom("b"), Type.integer(2)],
+              ]),
+            ],
+          ]),
+        ],
+      ]),
+    );
   });
 });
