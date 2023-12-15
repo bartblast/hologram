@@ -89,6 +89,38 @@ export function assertMatchError(callable, value) {
   }
 }
 
+export function buildClientStruct(data) {
+  let clientStruct = elixirHologramComponentClientStruct0();
+
+  const {context, nextCommand, state} = data;
+
+  if (typeof context !== "undefined") {
+    clientStruct = Erlang_Maps["put/3"](
+      Type.atom("context"),
+      context,
+      clientStruct,
+    );
+  }
+
+  if (typeof nextCommand !== "undefined") {
+    clientStruct = Erlang_Maps["put/3"](
+      Type.atom("next_command"),
+      nextCommand,
+      clientStruct,
+    );
+  }
+
+  if (typeof state !== "undefined") {
+    clientStruct = Erlang_Maps["put/3"](
+      Type.atom("state"),
+      state,
+      clientStruct,
+    );
+  }
+
+  return clientStruct;
+}
+
 export function elixirHologramComponentClientStruct0() {
   return Type.map([
     [Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")],

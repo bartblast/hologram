@@ -3,6 +3,7 @@
 import {
   assert,
   assertBoxedError,
+  buildClientStruct,
   elixirHologramComponentClientStruct0,
   linkModules,
   unlinkModules,
@@ -410,13 +411,12 @@ describe("stateful component", () => {
 
     const cid = Type.bitstring("my_component");
 
-    Store.putComponentState(
-      cid,
-      Type.map([
-        [Type.atom("a"), Type.integer(1)],
-        [Type.atom("b"), Type.integer(2)],
-      ]),
-    );
+    const state = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+    ]);
+
+    Store.putComponentState(cid, state);
 
     const resultVDom = Renderer.renderDom(node, context, slots);
 
@@ -428,23 +428,7 @@ describe("stateful component", () => {
 
     assert.deepStrictEqual(
       Store.data,
-      Type.map([
-        [
-          cid,
-          Type.map([
-            [Type.atom("__struct__"), Type.alias("Hologram.Component.Client")],
-            [Type.atom("context"), Type.map([])],
-            [Type.atom("next_command"), Type.nil()],
-            [
-              Type.atom("state"),
-              Type.map([
-                [Type.atom("a"), Type.integer(1)],
-                [Type.atom("b"), Type.integer(2)],
-              ]),
-            ],
-          ]),
-        ],
-      ]),
+      Type.map([[cid, buildClientStruct({state: state})]]),
     );
   });
 });

@@ -2,6 +2,7 @@
 
 import {
   assert,
+  buildClientStruct,
   linkModules,
   unlinkModules,
 } from "../../assets/js/test_support.mjs";
@@ -191,17 +192,7 @@ describe("putComponentState()", () => {
 
     assert.deepStrictEqual(
       Store.data,
-      Type.map([
-        [
-          cid,
-          Type.map([
-            [Type.atom("__struct__"), Type.alias("Hologram.Component.Client")],
-            [Type.atom("context"), Type.map([])],
-            [Type.atom("next_command"), Type.nil()],
-            [Type.atom("state"), "dummy_state"],
-          ]),
-        ],
-      ]),
+      Type.map([[cid, buildClientStruct({state: "dummy_state"})]]),
     );
   });
 });
