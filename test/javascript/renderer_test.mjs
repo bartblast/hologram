@@ -431,4 +431,43 @@ describe("stateful component", () => {
       Type.map([[cid, buildClientStruct({state: state})]]),
     );
   });
+
+  it("with state, component hasn't been initialized yet", () => {
+    const node = Type.tuple([
+      Type.atom("component"),
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module3"),
+      Type.list([
+        Type.tuple([
+          Type.bitstring("cid"),
+          Type.keywordList([
+            [Type.atom("text"), Type.bitstring("my_component")],
+          ]),
+        ]),
+      ]),
+      Type.list([]),
+    ]);
+
+    const resultVDom = Renderer.renderDom(node, context, slots);
+
+    const expectedVdom = [
+      vnode("div", {attrs: {}}, ["state_a = 11, state_b = 22"]),
+    ];
+
+    assert.deepStrictEqual(resultVDom, expectedVdom);
+
+    assert.deepStrictEqual(
+      Store.data,
+      Type.map([
+        [
+          Type.bitstring("my_component"),
+          buildClientStruct({
+            state: Type.map([
+              [Type.atom("a"), Type.integer(11)],
+              [Type.atom("b"), Type.integer(22)],
+            ]),
+          }),
+        ],
+      ]),
+    );
+  });
 });

@@ -1,5 +1,7 @@
 "use strict";
 
+import {buildClientStruct} from "./test_support.mjs";
+
 import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 
@@ -271,6 +273,30 @@ export function defineRendererFixtureModules() {
         guards: [],
         body: (_vars) => {
           return Type.list([]);
+        },
+      },
+    ],
+  );
+
+  // hardcoded
+  Interpreter.defineElixirFunction(
+    "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module3",
+    "init",
+    2,
+    [
+      {
+        params: (_vars) => [
+          Type.matchPlaceholder(),
+          Type.variablePattern("client"),
+        ],
+        guards: [],
+        body: (_vars) => {
+          return buildClientStruct({
+            state: Type.map([
+              [Type.atom("a"), Type.integer(11)],
+              [Type.atom("b"), Type.integer(22)],
+            ]),
+          });
         },
       },
     ],
