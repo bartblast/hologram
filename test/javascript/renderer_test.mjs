@@ -33,6 +33,7 @@ before(() => {
 
 after(() => unlinkModules());
 
+const cid = Type.bitstring("my_component");
 const context = Type.map([]);
 const slots = Type.keywordList([]);
 
@@ -335,9 +336,7 @@ describe("stateful component", () => {
       Type.list([
         Type.tuple([
           Type.bitstring("cid"),
-          Type.keywordList([
-            [Type.atom("text"), Type.bitstring("my_component")],
-          ]),
+          Type.keywordList([[Type.atom("text"), cid]]),
         ]),
       ]),
       Type.list([]),
@@ -348,7 +347,7 @@ describe("stateful component", () => {
     assert.deepStrictEqual(resultVDom, expectedVdom);
 
     const expectedStoreData = Type.map([
-      [Type.bitstring("my_component"), elixirHologramComponentClientStruct0()],
+      [cid, elixirHologramComponentClientStruct0()],
     ]);
 
     assert.deepStrictEqual(Store.data, expectedStoreData);
@@ -361,9 +360,7 @@ describe("stateful component", () => {
       Type.list([
         Type.tuple([
           Type.bitstring("cid"),
-          Type.keywordList([
-            [Type.atom("text"), Type.bitstring("my_component")],
-          ]),
+          Type.keywordList([[Type.atom("text"), cid]]),
         ]),
         Type.tuple([
           Type.bitstring("a"),
@@ -398,7 +395,7 @@ describe("stateful component", () => {
     assert.deepStrictEqual(resultVDom, expectedVdom);
 
     const expectedStoreData = Type.map([
-      [Type.bitstring("my_component"), elixirHologramComponentClientStruct0()],
+      [cid, elixirHologramComponentClientStruct0()],
     ]);
 
     assert.deepStrictEqual(Store.data, expectedStoreData);
@@ -411,15 +408,11 @@ describe("stateful component", () => {
       Type.list([
         Type.tuple([
           Type.bitstring("cid"),
-          Type.keywordList([
-            [Type.atom("text"), Type.bitstring("my_component")],
-          ]),
+          Type.keywordList([[Type.atom("text"), cid]]),
         ]),
       ]),
       Type.list([]),
     ]);
-
-    const cid = Type.bitstring("my_component");
 
     const state = Type.map([
       [Type.atom("a"), Type.integer(1)],
@@ -449,9 +442,7 @@ describe("stateful component", () => {
       Type.list([
         Type.tuple([
           Type.bitstring("cid"),
-          Type.keywordList([
-            [Type.atom("text"), Type.bitstring("my_component")],
-          ]),
+          Type.keywordList([[Type.atom("text"), cid]]),
         ]),
       ]),
       Type.list([]),
@@ -469,7 +460,7 @@ describe("stateful component", () => {
       Store.data,
       Type.map([
         [
-          Type.bitstring("my_component"),
+          cid,
           buildClientStruct({
             state: Type.map([
               [Type.atom("a"), Type.integer(11)],
@@ -482,8 +473,6 @@ describe("stateful component", () => {
   });
 
   it("with props and state, give state priority over prop if there are name collisions", () => {
-    const cid = Type.bitstring("my_component");
-
     const node = Type.tuple([
       Type.atom("component"),
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module4"),
@@ -528,17 +517,13 @@ describe("stateful component", () => {
   });
 
   it("cast props", () => {
-    const cid = Type.bitstring("my_component");
-
     const node = Type.tuple([
       Type.atom("component"),
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module16"),
       Type.list([
         Type.tuple([
           Type.bitstring("cid"),
-          Type.keywordList([
-            [Type.atom("text"), Type.bitstring("my_component")],
-          ]),
+          Type.keywordList([[Type.atom("text"), cid]]),
         ]),
         Type.tuple([
           Type.bitstring("prop_1"),
