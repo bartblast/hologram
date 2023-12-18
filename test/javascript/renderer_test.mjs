@@ -11,6 +11,7 @@ import {
 } from "../../assets/js/test_support.mjs";
 
 import {defineRendererFixtureModules} from "../../assets/js/test_fixtures.mjs";
+import {defineHologramTestFixturesTemplateRendererModule3} from "./fixtures/template/renderer/module_3.mjs";
 
 import Renderer from "../../assets/js/renderer.mjs";
 import Store from "../../assets/js/store.mjs";
@@ -19,6 +20,7 @@ import Type from "../../assets/js/type.mjs";
 before(() => {
   linkModules();
   defineRendererFixtureModules();
+  defineHologramTestFixturesTemplateRendererModule3();
 });
 
 after(() => unlinkModules());
