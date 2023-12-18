@@ -1,9 +1,9 @@
 "use strict";
 
-import Interpreter from "./interpreter.mjs";
-import Type from "./type.mjs";
+import Interpreter from "../../../../../assets/js/interpreter.mjs";
+import Type from "../../../../../assets/js/type.mjs";
 
-export function defineRendererFixtureModules() {
+export function defineHologramTestFixturesTemplateRendererModule17() {
   Interpreter.defineElixirFunction(
     "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module17",
     "__props__",

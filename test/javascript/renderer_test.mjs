@@ -10,8 +10,8 @@ import {
   vnode,
 } from "../../assets/js/test_support.mjs";
 
-import {defineRendererFixtureModules} from "../../assets/js/test_fixtures.mjs";
 import {defineHologramTestFixturesTemplateRendererModule1} from "./fixtures/template/renderer/module_1.mjs";
+import {defineHologramTestFixturesTemplateRendererModule17} from "./fixtures/template/renderer/module_17.mjs";
 import {defineHologramTestFixturesTemplateRendererModule2} from "./fixtures/template/renderer/module_2.mjs";
 import {defineHologramTestFixturesTemplateRendererModule3} from "./fixtures/template/renderer/module_3.mjs";
 
@@ -21,8 +21,8 @@ import Type from "../../assets/js/type.mjs";
 
 before(() => {
   linkModules();
-  defineRendererFixtureModules();
   defineHologramTestFixturesTemplateRendererModule1();
+  defineHologramTestFixturesTemplateRendererModule17();
   defineHologramTestFixturesTemplateRendererModule2();
   defineHologramTestFixturesTemplateRendererModule3();
 });
