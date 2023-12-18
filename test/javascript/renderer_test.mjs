@@ -14,6 +14,7 @@ import {defineHologramTestFixturesTemplateRendererModule1} from "./fixtures/temp
 import {defineHologramTestFixturesTemplateRendererModule17} from "./fixtures/template/renderer/module_17.mjs";
 import {defineHologramTestFixturesTemplateRendererModule2} from "./fixtures/template/renderer/module_2.mjs";
 import {defineHologramTestFixturesTemplateRendererModule3} from "./fixtures/template/renderer/module_3.mjs";
+import {defineHologramTestFixturesTemplateRendererModule4} from "./fixtures/template/renderer/module_4.mjs";
 
 import Renderer from "../../assets/js/renderer.mjs";
 import Store from "../../assets/js/store.mjs";
@@ -25,6 +26,7 @@ before(() => {
   defineHologramTestFixturesTemplateRendererModule17();
   defineHologramTestFixturesTemplateRendererModule2();
   defineHologramTestFixturesTemplateRendererModule3();
+  defineHologramTestFixturesTemplateRendererModule4();
 });
 
 after(() => unlinkModules());
@@ -474,6 +476,52 @@ describe("stateful component", () => {
           }),
         ],
       ]),
+    );
+  });
+
+  it("with props and state, give state priority over prop if there are name collisions", () => {
+    const cid = Type.bitstring("my_component");
+
+    const node = Type.tuple([
+      Type.atom("component"),
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module4"),
+      Type.list([
+        Type.tuple([
+          Type.bitstring("cid"),
+          Type.keywordList([[Type.atom("text"), cid]]),
+        ]),
+        Type.tuple([
+          Type.bitstring("b"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("prop_b")]]),
+        ]),
+        Type.tuple([
+          Type.bitstring("c"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("prop_c")]]),
+        ]),
+      ]),
+      Type.list([]),
+    ]);
+
+    const state = Type.map([
+      [Type.atom("a"), Type.bitstring("state_a")],
+      [Type.atom("b"), Type.bitstring("state_b")],
+    ]);
+
+    Store.putComponentState(cid, state);
+
+    const resultVDom = Renderer.renderDom(node, context, slots);
+
+    const expectedVdom = [
+      vnode("div", {attrs: {}}, [
+        "var_a = state_a, var_b = state_b, var_c = prop_c",
+      ]),
+    ];
+
+    assert.deepStrictEqual(resultVDom, expectedVdom);
+
+    assert.deepStrictEqual(
+      Store.data,
+      Type.map([[cid, buildClientStruct({state: state})]]),
     );
   });
 });
