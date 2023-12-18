@@ -11,6 +11,7 @@ import {
 } from "../../assets/js/test_support.mjs";
 
 import {defineHologramTestFixturesTemplateRendererModule1} from "./fixtures/template/renderer/module_1.mjs";
+import {defineHologramTestFixturesTemplateRendererModule16} from "./fixtures/template/renderer/module_16.mjs";
 import {defineHologramTestFixturesTemplateRendererModule17} from "./fixtures/template/renderer/module_17.mjs";
 import {defineHologramTestFixturesTemplateRendererModule2} from "./fixtures/template/renderer/module_2.mjs";
 import {defineHologramTestFixturesTemplateRendererModule3} from "./fixtures/template/renderer/module_3.mjs";
@@ -23,6 +24,7 @@ import Type from "../../assets/js/type.mjs";
 before(() => {
   linkModules();
   defineHologramTestFixturesTemplateRendererModule1();
+  defineHologramTestFixturesTemplateRendererModule16();
   defineHologramTestFixturesTemplateRendererModule17();
   defineHologramTestFixturesTemplateRendererModule2();
   defineHologramTestFixturesTemplateRendererModule3();
@@ -522,6 +524,65 @@ describe("stateful component", () => {
     assert.deepStrictEqual(
       Store.data,
       Type.map([[cid, buildClientStruct({state: state})]]),
+    );
+  });
+
+  it("cast props", () => {
+    const cid = Type.bitstring("my_component");
+
+    const node = Type.tuple([
+      Type.atom("component"),
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module16"),
+      Type.list([
+        Type.tuple([
+          Type.bitstring("cid"),
+          Type.keywordList([
+            [Type.atom("text"), Type.bitstring("my_component")],
+          ]),
+        ]),
+        Type.tuple([
+          Type.bitstring("prop_1"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("value_1")]]),
+        ]),
+        Type.tuple([
+          Type.bitstring("prop_2"),
+          Type.keywordList([
+            [Type.atom("expression"), Type.tuple([Type.integer(2)])],
+          ]),
+        ]),
+        Type.tuple([
+          Type.bitstring("prop_3"),
+          Type.keywordList([
+            [Type.atom("text"), Type.bitstring("aaa")],
+            [Type.atom("expression"), Type.tuple([Type.integer(2)])],
+            [Type.atom("text"), Type.bitstring("bbb")],
+          ]),
+        ]),
+        Type.tuple([
+          Type.bitstring("prop_4"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("value_4")]]),
+        ]),
+      ]),
+      Type.list([]),
+    ]);
+
+    Renderer.renderDom(node, context, slots);
+
+    assert.deepStrictEqual(
+      Store.data,
+      Type.map([
+        [
+          cid,
+          buildClientStruct({
+            state: Type.map([
+              [Type.atom("cid"), cid],
+              [Type.atom("prop_1"), Type.bitstring("value_1")],
+              [Type.atom("prop_2"), Type.integer(2)],
+              [Type.atom("prop_3"), Type.bitstring("aaa2bbb")],
+            ]),
+          }),
+        ],
+      ]),
     );
   });
 });
