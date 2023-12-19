@@ -217,7 +217,7 @@ defmodule Hologram.Template.RendererTest do
     test "with unregistered var used" do
       node =
         {:component, Module18,
-         [{"cid", [text: "component_18"]}, {"a", [text: "111"]}, {"c", [text: "333"]}], []}
+         [{"cid", [text: "my_component"]}, {"a", [text: "111"]}, {"c", [text: "333"]}], []}
 
       assert_raise KeyError,
                    ~r/key :c not found in:/,

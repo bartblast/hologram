@@ -13,6 +13,7 @@ import {
 import {defineHologramTestFixturesTemplateRendererModule1} from "./fixtures/template/renderer/module_1.mjs";
 import {defineHologramTestFixturesTemplateRendererModule16} from "./fixtures/template/renderer/module_16.mjs";
 import {defineHologramTestFixturesTemplateRendererModule17} from "./fixtures/template/renderer/module_17.mjs";
+import {defineHologramTestFixturesTemplateRendererModule18} from "./fixtures/template/renderer/module_18.mjs";
 import {defineHologramTestFixturesTemplateRendererModule2} from "./fixtures/template/renderer/module_2.mjs";
 import {defineHologramTestFixturesTemplateRendererModule3} from "./fixtures/template/renderer/module_3.mjs";
 import {defineHologramTestFixturesTemplateRendererModule4} from "./fixtures/template/renderer/module_4.mjs";
@@ -26,6 +27,7 @@ before(() => {
   defineHologramTestFixturesTemplateRendererModule1();
   defineHologramTestFixturesTemplateRendererModule16();
   defineHologramTestFixturesTemplateRendererModule17();
+  defineHologramTestFixturesTemplateRendererModule18();
   defineHologramTestFixturesTemplateRendererModule2();
   defineHologramTestFixturesTemplateRendererModule3();
   defineHologramTestFixturesTemplateRendererModule4();
@@ -568,6 +570,39 @@ describe("stateful component", () => {
           }),
         ],
       ]),
+    );
+  });
+
+  it("with unregistered var used", () => {
+    const node = Type.tuple([
+      Type.atom("component"),
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module18"),
+      Type.list([
+        Type.tuple([
+          Type.bitstring("cid"),
+          Type.keywordList([[Type.atom("text"), cid]]),
+        ]),
+        Type.tuple([
+          Type.bitstring("a"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("111")]]),
+        ]),
+        Type.tuple([
+          Type.bitstring("c"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("333")]]),
+        ]),
+      ]),
+      Type.list([]),
+    ]);
+
+    Store.putComponentState(
+      cid,
+      Type.map([[Type.atom("b"), Type.integer(222)]]),
+    );
+
+    assertBoxedError(
+      () => Renderer.renderDom(node, context, slots),
+      "KeyError",
+      'key :c not found in: %{cid: "my_component", a: "111", b: 222}',
     );
   });
 });
