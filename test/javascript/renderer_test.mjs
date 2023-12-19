@@ -210,6 +210,96 @@ describe("element node", () => {
 
     assert.deepStrictEqual(result, expected);
   });
+
+  it("with nested stateful components", () => {
+    const cid3 = Type.bitstring("component_3");
+    const cid7 = Type.bitstring("component_7");
+
+    const node = Type.tuple([
+      Type.atom("element"),
+      Type.bitstring("div"),
+      Type.list([
+        Type.tuple([
+          Type.bitstring("attr"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("value")]]),
+        ]),
+      ]),
+      Type.list([
+        Type.tuple([
+          Type.atom("component"),
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module3"),
+          Type.list([
+            Type.tuple([
+              Type.bitstring("cid"),
+              Type.keywordList([[Type.atom("text"), cid3]]),
+            ]),
+          ]),
+          Type.list([]),
+        ]),
+        Type.tuple([
+          Type.atom("component"),
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module7"),
+          Type.list([
+            Type.tuple([
+              Type.bitstring("cid"),
+              Type.keywordList([[Type.atom("text"), cid7]]),
+            ]),
+          ]),
+          Type.list([]),
+        ]),
+      ]),
+    ]);
+
+    Store.putComponentState(
+      cid3,
+      Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]),
+    );
+
+    Store.putComponentState(
+      cid7,
+      Type.map([
+        [Type.atom("c"), Type.integer(3)],
+        [Type.atom("d"), Type.integer(4)],
+      ]),
+    );
+
+    const result = Renderer.renderDom(node, context, slots);
+
+    assert.deepStrictEqual(
+      result,
+      vnode("div", {attrs: {attr: "value"}}, [
+        vnode("div", {attrs: {}}, ["state_a = 1, state_b = 2"]),
+        vnode("div", {attrs: {}}, ["state_c = 3, state_d = 4"]),
+      ]),
+    );
+
+    assert.deepStrictEqual(
+      Store.data,
+      Type.map([
+        [
+          cid3,
+          buildClientStruct({
+            state: Type.map([
+              [Type.atom("a"), Type.integer(1)],
+              [Type.atom("b"), Type.integer(2)],
+            ]),
+          }),
+        ],
+        [
+          cid7,
+          buildClientStruct({
+            state: Type.map([
+              [Type.atom("c"), Type.integer(3)],
+              [Type.atom("d"), Type.integer(4)],
+            ]),
+          }),
+        ],
+      ]),
+    );
+  });
 });
 
 describe("node list", () => {
