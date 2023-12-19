@@ -272,7 +272,8 @@ export default class Renderer {
       nodes.data
         // There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if}
         .filter((node) => !Type.isNil(node))
-        .map((node) => Renderer.renderDom(node, context, slots)),
+        .map((node) => Renderer.renderDom(node, context, slots))
+        .flat(),
     );
   }
 
