@@ -17,6 +17,8 @@ import {defineHologramTestFixturesTemplateRendererModule18} from "./fixtures/tem
 import {defineHologramTestFixturesTemplateRendererModule2} from "./fixtures/template/renderer/module_2.mjs";
 import {defineHologramTestFixturesTemplateRendererModule3} from "./fixtures/template/renderer/module_3.mjs";
 import {defineHologramTestFixturesTemplateRendererModule4} from "./fixtures/template/renderer/module_4.mjs";
+import {defineHologramTestFixturesTemplateRendererModule51} from "./fixtures/template/renderer/module_51.mjs";
+import {defineHologramTestFixturesTemplateRendererModule52} from "./fixtures/template/renderer/module_52.mjs";
 import {defineHologramTestFixturesTemplateRendererModule7} from "./fixtures/template/renderer/module_7.mjs";
 
 import Renderer from "../../assets/js/renderer.mjs";
@@ -32,6 +34,8 @@ before(() => {
   defineHologramTestFixturesTemplateRendererModule2();
   defineHologramTestFixturesTemplateRendererModule3();
   defineHologramTestFixturesTemplateRendererModule4();
+  defineHologramTestFixturesTemplateRendererModule51();
+  defineHologramTestFixturesTemplateRendererModule52();
   defineHologramTestFixturesTemplateRendererModule7();
 });
 
@@ -334,21 +338,88 @@ describe("node list", () => {
     );
   });
 
-  // test "with components having a root node" do
-  //   nodes = [
-  //     {:text, "abc"},
-  //     {:component, Module3, [{"cid", [text: "component_3"]}], []},
-  //     {:text, "xyz"},
-  //     {:component, Module7, [{"cid", [text: "component_7"]}], []}
-  //   ]
+  it("with components not having a root node", () => {
+    const cid51 = Type.bitstring("component_51");
+    const cid52 = Type.bitstring("component_52");
 
-  //   assert render_dom(nodes, %{}, []) ==
-  //           {"abc<div>state_a = 1, state_b = 2</div>xyz<div>state_c = 3, state_d = 4</div>",
-  //             %{
-  //               "component_3" => %Client{state: %{a: 1, b: 2}},
-  //               "component_7" => %Client{state: %{c: 3, d: 4}}
-  //             }}
-  // end
+    const nodes = Type.list([
+      Type.tuple([Type.atom("text"), Type.bitstring("abc")]),
+      Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module51"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid51]]),
+          ]),
+        ]),
+        Type.list([]),
+      ]),
+      Type.tuple([Type.atom("text"), Type.bitstring("xyz")]),
+      Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module52"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid52]]),
+          ]),
+        ]),
+        Type.list([]),
+      ]),
+    ]);
+
+    Store.putComponentState(
+      cid51,
+      Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]),
+    );
+
+    Store.putComponentState(
+      cid52,
+      Type.map([
+        [Type.atom("c"), Type.integer(3)],
+        [Type.atom("d"), Type.integer(4)],
+      ]),
+    );
+
+    const result = Renderer.renderDom(nodes, context, slots);
+
+    assert.deepStrictEqual(result, [
+      "abc",
+      vnode("div", {attrs: {}}, ["state_a = 1"]),
+      vnode("div", {attrs: {}}, ["state_b = 2"]),
+      "xyz",
+      vnode("div", {attrs: {}}, ["state_c = 3"]),
+      vnode("div", {attrs: {}}, ["state_d = 4"]),
+    ]);
+
+    assert.deepStrictEqual(
+      Store.data,
+      Type.map([
+        [
+          cid51,
+          buildClientStruct({
+            state: Type.map([
+              [Type.atom("a"), Type.integer(1)],
+              [Type.atom("b"), Type.integer(2)],
+            ]),
+          }),
+        ],
+        [
+          cid52,
+          buildClientStruct({
+            state: Type.map([
+              [Type.atom("c"), Type.integer(3)],
+              [Type.atom("d"), Type.integer(4)],
+            ]),
+          }),
+        ],
+      ]),
+    );
+  });
 });
 
 describe("stateless component", () => {
