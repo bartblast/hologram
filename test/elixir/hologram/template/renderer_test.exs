@@ -110,6 +110,22 @@ defmodule Hologram.Template.RendererTest do
                   "component_7" => %Client{state: %{c: 3, d: 4}}
                 }}
     end
+
+    test "with components not having a root node" do
+      nodes = [
+        {:text, "abc"},
+        {:component, Module51, [{"cid", [text: "component_51"]}], []},
+        {:text, "xyz"},
+        {:component, Module52, [{"cid", [text: "component_52"]}], []}
+      ]
+
+      assert render_dom(nodes, %{}, []) ==
+               {"abc<div>state_a = 1</div><div>state_b = 2</div>xyz<div>state_c = 3</div><div>state_d = 4</div>",
+                %{
+                  "component_51" => %Component.Client{state: %{a: 1, b: 2}},
+                  "component_52" => %Component.Client{state: %{c: 3, d: 4}}
+                }}
+    end
   end
 
   describe "stateless component" do
@@ -277,24 +293,6 @@ defmodule Hologram.Template.RendererTest do
   #   use_module_stub :page_digest_registry
 
   #   setup :set_mox_global
-
-  #   describe "multiple nodes" do
-  #     test "with components not having a root node" do
-  #       nodes = [
-  #         {:text, "abc"},
-  #         {:component, Module51, [{"cid", [text: "component_51"]}], []},
-  #         {:text, "xyz"},
-  #         {:component, Module52, [{"cid", [text: "component_52"]}], []}
-  #       ]
-
-  #       assert render_dom(nodes, %{}, []) ==
-  #                {"abc<div>state_a = 1</div><div>state_b = 2</div>xyz<div>state_c = 3</div><div>state_d = 4</div>",
-  #                 %{
-  #                   "component_51" => %Component.Client{state: %{a: 1, b: 2}},
-  #                   "component_52" => %Component.Client{state: %{c: 3, d: 4}}
-  #                 }}
-  #     end
-  #   end
 
   #   describe "element" do
 
