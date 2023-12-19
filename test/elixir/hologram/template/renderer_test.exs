@@ -12,6 +12,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module4
   alias Hologram.Test.Fixtures.Template.Renderer.Module5
   alias Hologram.Test.Fixtures.Template.Renderer.Module6
+  alias Hologram.Test.Fixtures.Template.Renderer.Module7
 
   test "text node" do
     node = {:text, "abc"}
@@ -92,6 +93,22 @@ defmodule Hologram.Template.RendererTest do
       ]
 
       assert render_dom(nodes, %{}, []) == {"abcxyz", %{}}
+    end
+
+    test "with components having a root node" do
+      nodes = [
+        {:text, "abc"},
+        {:component, Module3, [{"cid", [text: "component_3"]}], []},
+        {:text, "xyz"},
+        {:component, Module7, [{"cid", [text: "component_7"]}], []}
+      ]
+
+      assert render_dom(nodes, %{}, []) ==
+               {"abc<div>state_a = 1, state_b = 2</div>xyz<div>state_c = 3, state_d = 4</div>",
+                %{
+                  "component_3" => %Client{state: %{a: 1, b: 2}},
+                  "component_7" => %Client{state: %{c: 3, d: 4}}
+                }}
     end
   end
 
@@ -253,7 +270,6 @@ defmodule Hologram.Template.RendererTest do
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module50
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module51
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module52
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module7
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module9
 
@@ -263,22 +279,6 @@ defmodule Hologram.Template.RendererTest do
   #   setup :set_mox_global
 
   #   describe "multiple nodes" do
-  #     test "with components having a root node" do
-  #       nodes = [
-  #         {:text, "abc"},
-  #         {:component, Module3, [{"cid", [text: "component_3"]}], []},
-  #         {:text, "xyz"},
-  #         {:component, Module7, [{"cid", [text: "component_7"]}], []}
-  #       ]
-
-  #       assert render_dom(nodes, %{}, []) ==
-  #                {"abc<div>state_a = 1, state_b = 2</div>xyz<div>state_c = 3, state_d = 4</div>",
-  #                 %{
-  #                   "component_3" => %Component.Client{state: %{a: 1, b: 2}},
-  #                   "component_7" => %Component.Client{state: %{c: 3, d: 4}}
-  #                 }}
-  #     end
-
   #     test "with components not having a root node" do
   #       nodes = [
   #         {:text, "abc"},

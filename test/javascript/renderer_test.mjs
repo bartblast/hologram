@@ -17,6 +17,7 @@ import {defineHologramTestFixturesTemplateRendererModule18} from "./fixtures/tem
 import {defineHologramTestFixturesTemplateRendererModule2} from "./fixtures/template/renderer/module_2.mjs";
 import {defineHologramTestFixturesTemplateRendererModule3} from "./fixtures/template/renderer/module_3.mjs";
 import {defineHologramTestFixturesTemplateRendererModule4} from "./fixtures/template/renderer/module_4.mjs";
+import {defineHologramTestFixturesTemplateRendererModule7} from "./fixtures/template/renderer/module_7.mjs";
 
 import Renderer from "../../assets/js/renderer.mjs";
 import Store from "../../assets/js/store.mjs";
@@ -31,6 +32,7 @@ before(() => {
   defineHologramTestFixturesTemplateRendererModule2();
   defineHologramTestFixturesTemplateRendererModule3();
   defineHologramTestFixturesTemplateRendererModule4();
+  defineHologramTestFixturesTemplateRendererModule7();
 });
 
 after(() => unlinkModules());
@@ -250,6 +252,103 @@ describe("node list", () => {
 
     assert.deepStrictEqual(result, ["aaabbb"]);
   });
+
+  it("with components having a root node", () => {
+    const cid3 = Type.bitstring("component_3");
+    const cid7 = Type.bitstring("component_7");
+
+    const nodes = Type.list([
+      Type.tuple([Type.atom("text"), Type.bitstring("abc")]),
+      Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module3"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid3]]),
+          ]),
+        ]),
+        Type.list([]),
+      ]),
+      Type.tuple([Type.atom("text"), Type.bitstring("xyz")]),
+      Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module7"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid7]]),
+          ]),
+        ]),
+        Type.list([]),
+      ]),
+    ]);
+
+    Store.putComponentState(
+      cid3,
+      Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]),
+    );
+
+    Store.putComponentState(
+      cid7,
+      Type.map([
+        [Type.atom("c"), Type.integer(3)],
+        [Type.atom("d"), Type.integer(4)],
+      ]),
+    );
+
+    const result = Renderer.renderDom(nodes, context, slots);
+
+    assert.deepStrictEqual(result, [
+      "abc",
+      vnode("div", {attrs: {}}, ["state_a = 1, state_b = 2"]),
+      "xyz",
+      vnode("div", {attrs: {}}, ["state_c = 3, state_d = 4"]),
+    ]);
+
+    assert.deepStrictEqual(
+      Store.data,
+      Type.map([
+        [
+          cid3,
+          buildClientStruct({
+            state: Type.map([
+              [Type.atom("a"), Type.integer(1)],
+              [Type.atom("b"), Type.integer(2)],
+            ]),
+          }),
+        ],
+        [
+          cid7,
+          buildClientStruct({
+            state: Type.map([
+              [Type.atom("c"), Type.integer(3)],
+              [Type.atom("d"), Type.integer(4)],
+            ]),
+          }),
+        ],
+      ]),
+    );
+  });
+
+  // test "with components having a root node" do
+  //   nodes = [
+  //     {:text, "abc"},
+  //     {:component, Module3, [{"cid", [text: "component_3"]}], []},
+  //     {:text, "xyz"},
+  //     {:component, Module7, [{"cid", [text: "component_7"]}], []}
+  //   ]
+
+  //   assert render_dom(nodes, %{}, []) ==
+  //           {"abc<div>state_a = 1, state_b = 2</div>xyz<div>state_c = 3, state_d = 4</div>",
+  //             %{
+  //               "component_3" => %Client{state: %{a: 1, b: 2}},
+  //               "component_7" => %Client{state: %{c: 3, d: 4}}
+  //             }}
+  // end
 });
 
 describe("stateless component", () => {
