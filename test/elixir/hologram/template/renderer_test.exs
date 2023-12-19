@@ -70,6 +70,26 @@ defmodule Hologram.Template.RendererTest do
       node = {:element, "img", [{"attr_1", []}, {"attr_2", []}], []}
       assert render_dom(node, %{}, []) == {~s(<img attr_1 attr_2 />), %{}}
     end
+
+    test "with nested stateful components" do
+      node =
+        {:element, "div", [{"attr", [text: "value"]}],
+         [
+           {:component, Module3, [{"cid", [text: "component_3"]}], []},
+           {:component, Module7, [{"cid", [text: "component_7"]}], []}
+         ]}
+
+      assert render_dom(node, %{}, []) ==
+               {~s(<div attr="value"><div>state_a = 1, state_b = 2</div><div>state_c = 3, state_d = 4</div></div>),
+                %{
+                  "component_3" => %Client{
+                    state: %{a: 1, b: 2}
+                  },
+                  "component_7" => %Client{
+                    state: %{c: 3, d: 4}
+                  }
+                }}
+    end
   end
 
   describe "node list" do
@@ -293,29 +313,6 @@ defmodule Hologram.Template.RendererTest do
   #   use_module_stub :page_digest_registry
 
   #   setup :set_mox_global
-
-  #   describe "element" do
-
-  #     test "with nested stateful components" do
-  #       node =
-  #         {:element, "div", [{"attr", [text: "value"]}],
-  #          [
-  #            {:component, Module3, [{"cid", [text: "component_3"]}], []},
-  #            {:component, Module7, [{"cid", [text: "component_7"]}], []}
-  #          ]}
-
-  #       assert render_dom(node, %{}, []) ==
-  #                {~s(<div attr="value"><div>state_a = 1, state_b = 2</div><div>state_c = 3, state_d = 4</div></div>),
-  #                 %{
-  #                   "component_3" => %Component.Client{
-  #                     state: %{a: 1, b: 2}
-  #                   },
-  #                   "component_7" => %Component.Client{
-  #                     state: %{c: 3, d: 4}
-  #                   }
-  #                 }}
-  #     end
-  #   end
 
   #   describe "default slot" do
   #     test "with single node" do
