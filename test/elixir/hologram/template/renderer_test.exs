@@ -11,6 +11,8 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module3
   alias Hologram.Test.Fixtures.Template.Renderer.Module4
   alias Hologram.Test.Fixtures.Template.Renderer.Module5
+  alias Hologram.Test.Fixtures.Template.Renderer.Module51
+  alias Hologram.Test.Fixtures.Template.Renderer.Module52
   alias Hologram.Test.Fixtures.Template.Renderer.Module6
   alias Hologram.Test.Fixtures.Template.Renderer.Module7
 
@@ -142,8 +144,8 @@ defmodule Hologram.Template.RendererTest do
       assert render_dom(nodes, %{}, []) ==
                {"abc<div>state_a = 1</div><div>state_b = 2</div>xyz<div>state_c = 3</div><div>state_d = 4</div>",
                 %{
-                  "component_51" => %Component.Client{state: %{a: 1, b: 2}},
-                  "component_52" => %Component.Client{state: %{c: 3, d: 4}}
+                  "component_51" => %Client{state: %{a: 1, b: 2}},
+                  "component_52" => %Client{state: %{c: 3, d: 4}}
                 }}
     end
   end
@@ -304,8 +306,6 @@ defmodule Hologram.Template.RendererTest do
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module46
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module48
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module50
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module51
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module52
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module9
 
