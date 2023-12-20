@@ -57,7 +57,24 @@ export default class Renderer {
       return Renderer.#expandSlotsInNodes(dom, slots);
     }
 
+    if (dom.data[0].value === "component") {
+      return Renderer.#expandSlotsInComponent(dom, slots);
+    }
+
     // TODO: implement other cases
+    throw new Error("Implement other cases of #expandSlots");
+  }
+
+  // Based on expand_slots/3 (component case)
+  static #expandSlotsInComponent(dom, slots) {
+    const [nodeType, moduleAlias, propsDom, childrenDom] = dom.data;
+
+    return Type.tuple([
+      nodeType,
+      moduleAlias,
+      propsDom,
+      Renderer.#expandSlots(childrenDom, slots),
+    ]);
   }
 
   // Based on expand_slots/3 (list case)
