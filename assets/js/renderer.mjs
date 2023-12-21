@@ -58,7 +58,11 @@ export default class Renderer {
     }
 
     if (dom.data[0].value === "component") {
-      return Renderer.#expandSlotsInComponent(dom, slots);
+      return Renderer.#expandSlotsInComponentNode(dom, slots);
+    }
+
+    if (dom.data[0].value === "element") {
+      return Renderer.#expandSlotsInElementNode(dom, slots);
     }
 
     // TODO: implement other cases
@@ -66,13 +70,33 @@ export default class Renderer {
   }
 
   // Based on expand_slots/3 (component case)
-  static #expandSlotsInComponent(dom, slots) {
+  static #expandSlotsInComponentNode(dom, slots) {
     const [nodeType, moduleAlias, propsDom, childrenDom] = dom.data;
 
     return Type.tuple([
       nodeType,
       moduleAlias,
       propsDom,
+      Renderer.#expandSlots(childrenDom, slots),
+    ]);
+  }
+
+  // Based on expand_slots/3 (element cases)
+  static #expandSlotsInElementNode(dom, slots) {
+    const [nodeType, tagName, attrsDom, childrenDom] = dom.data;
+
+    if (Interpreter.isStrictlyEqual(tagName, Type.bitstring("slot"))) {
+      const slotDom = Interpreter.accessKeywordListElement(
+        slots,
+        Type.atom("default"),
+      );
+      return slotDom ? slotDom : Type.nil();
+    }
+
+    return Type.tuple([
+      nodeType,
+      tagName,
+      attrsDom,
       Renderer.#expandSlots(childrenDom, slots),
     ]);
   }
