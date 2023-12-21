@@ -15,6 +15,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module52
   alias Hologram.Test.Fixtures.Template.Renderer.Module6
   alias Hologram.Test.Fixtures.Template.Renderer.Module7
+  alias Hologram.Test.Fixtures.Template.Renderer.Module8
 
   test "text node" do
     node = {:text, "abc"}
@@ -282,6 +283,13 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  describe "default slot" do
+    test "with single node" do
+      node = {:component, Module8, [], [text: "123"]}
+      assert render_dom(node, %{}, []) == {"abc123xyz", %{}}
+    end
+  end
+
   #   import Hologram.Test.Stubs
   #   import Mox
 
@@ -306,7 +314,6 @@ defmodule Hologram.Template.RendererTest do
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module46
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module48
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module50
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module9
 
   #   use_module_stub :asset_path_registry
@@ -315,11 +322,6 @@ defmodule Hologram.Template.RendererTest do
   #   setup :set_mox_global
 
   #   describe "default slot" do
-  #     test "with single node" do
-  #       node = {:component, Module8, [], [text: "123"]}
-  #       assert render_dom(node, %{}, []) == {"abc123xyz", %{}}
-  #     end
-
   #     test "with multiple nodes" do
   #       node = {:component, Module8, [], [text: "123", expression: {456}]}
   #       assert render_dom(node, %{}, []) == {"abc123456xyz", %{}}

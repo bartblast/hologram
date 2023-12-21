@@ -20,6 +20,7 @@ import {defineHologramTestFixturesTemplateRendererModule4} from "./fixtures/temp
 import {defineHologramTestFixturesTemplateRendererModule51} from "./fixtures/template/renderer/module_51.mjs";
 import {defineHologramTestFixturesTemplateRendererModule52} from "./fixtures/template/renderer/module_52.mjs";
 import {defineHologramTestFixturesTemplateRendererModule7} from "./fixtures/template/renderer/module_7.mjs";
+import {defineHologramTestFixturesTemplateRendererModule8} from "./fixtures/template/renderer/module_8.mjs";
 
 import Renderer from "../../assets/js/renderer.mjs";
 import Store from "../../assets/js/store.mjs";
@@ -37,6 +38,7 @@ before(() => {
   defineHologramTestFixturesTemplateRendererModule51();
   defineHologramTestFixturesTemplateRendererModule52();
   defineHologramTestFixturesTemplateRendererModule7();
+  defineHologramTestFixturesTemplateRendererModule8();
 });
 
 after(() => unlinkModules());
@@ -864,5 +866,20 @@ describe("stateful component", () => {
       "KeyError",
       'key :c not found in: %{cid: "my_component", a: "111", b: 222}',
     );
+  });
+});
+
+describe("default slot", () => {
+  it("with single node", () => {
+    const node = Type.tuple([
+      Type.atom("component"),
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module8"),
+      Type.list([]),
+      Type.keywordList([[Type.atom("text"), Type.bitstring("123")]]),
+    ]);
+
+    const result = Renderer.renderDom(node, context, slots);
+
+    assert.deepStrictEqual(result, ["abc123xyz"]);
   });
 });
