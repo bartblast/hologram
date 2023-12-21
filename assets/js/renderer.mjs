@@ -51,7 +51,7 @@ export default class Renderer {
     );
   }
 
-  // Based on expand_slots/2
+  // Based on expand_slots/2 (including fallback case)
   static #expandSlots(dom, slots) {
     if (Type.isList(dom)) {
       return Renderer.#expandSlotsInNodes(dom, slots);
@@ -65,8 +65,7 @@ export default class Renderer {
       return Renderer.#expandSlotsInElementNode(dom, slots);
     }
 
-    // TODO: implement other cases
-    throw new Error("Implement other cases of #expandSlots");
+    return dom;
   }
 
   // Based on expand_slots/3 (component case)
@@ -90,6 +89,7 @@ export default class Renderer {
         slots,
         Type.atom("default"),
       );
+
       return slotDom ? slotDom : Type.nil();
     }
 
