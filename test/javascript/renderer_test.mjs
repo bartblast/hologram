@@ -11,6 +11,9 @@ import {
 } from "../../assets/js/test_support.mjs";
 
 import {defineHologramTestFixturesTemplateRendererModule1} from "./fixtures/template/renderer/module_1.mjs";
+import {defineHologramTestFixturesTemplateRendererModule10} from "./fixtures/template/renderer/module_10.mjs";
+import {defineHologramTestFixturesTemplateRendererModule11} from "./fixtures/template/renderer/module_11.mjs";
+import {defineHologramTestFixturesTemplateRendererModule12} from "./fixtures/template/renderer/module_12.mjs";
 import {defineHologramTestFixturesTemplateRendererModule16} from "./fixtures/template/renderer/module_16.mjs";
 import {defineHologramTestFixturesTemplateRendererModule17} from "./fixtures/template/renderer/module_17.mjs";
 import {defineHologramTestFixturesTemplateRendererModule18} from "./fixtures/template/renderer/module_18.mjs";
@@ -30,6 +33,9 @@ import Type from "../../assets/js/type.mjs";
 before(() => {
   linkModules();
   defineHologramTestFixturesTemplateRendererModule1();
+  defineHologramTestFixturesTemplateRendererModule10();
+  defineHologramTestFixturesTemplateRendererModule11();
+  defineHologramTestFixturesTemplateRendererModule12();
   defineHologramTestFixturesTemplateRendererModule16();
   defineHologramTestFixturesTemplateRendererModule17();
   defineHologramTestFixturesTemplateRendererModule18();
@@ -920,4 +926,76 @@ describe("default slot", () => {
 
     assert.deepStrictEqual(result, ["abcdef789uvwxyz"]);
   });
+
+  it("nested components with slots, no slot tag in the top component template, using vars", () => {
+    const cid10 = Type.bitstring("component_10");
+    const cid11 = Type.bitstring("component_11");
+    const cid12 = Type.bitstring("component_12");
+
+    const node = Type.tuple([
+      Type.atom("component"),
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module10"),
+      Type.list([
+        Type.tuple([
+          Type.bitstring("cid"),
+          Type.keywordList([[Type.atom("text"), cid10]]),
+        ]),
+      ]),
+      Type.list([]),
+    ]);
+
+    Store.putComponentState(
+      cid10,
+      Type.map([[Type.atom("a"), Type.integer(10)]]),
+    );
+
+    Store.putComponentState(
+      cid11,
+      Type.map([[Type.atom("a"), Type.integer(11)]]),
+    );
+
+    Store.putComponentState(
+      cid12,
+      Type.map([[Type.atom("a"), Type.integer(12)]]),
+    );
+
+    const result = Renderer.renderDom(node, context, slots);
+    assert.deepStrictEqual(result, ["10,11,10,12,10"]);
+
+    assert.deepStrictEqual(
+      Store.data,
+      Type.map([
+        [
+          cid10,
+          buildClientStruct({
+            state: Type.map([[Type.atom("a"), Type.integer(10)]]),
+          }),
+        ],
+        [
+          cid11,
+          buildClientStruct({
+            state: Type.map([[Type.atom("a"), Type.integer(11)]]),
+          }),
+        ],
+        [
+          cid12,
+          buildClientStruct({
+            state: Type.map([[Type.atom("a"), Type.integer(12)]]),
+          }),
+        ],
+      ]),
+    );
+  });
+
+  // test "nested components with slots, no slot tag in the top component template, using vars" do
+  //   node = {:component, Module10, [{"cid", [text: "component_10"]}], []}
+
+  //   assert render_dom(node, %{}, []) ==
+  //           {"10,11,10,12,10",
+  //             %{
+  //               "component_10" => %Client{state: %{a: 10}},
+  //               "component_11" => %Client{state: %{a: 11}},
+  //               "component_12" => %Client{state: %{a: 12}}
+  //             }}
+  // end
 });

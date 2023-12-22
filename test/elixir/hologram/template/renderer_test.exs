@@ -4,6 +4,7 @@ defmodule Hologram.Template.RendererTest do
 
   alias Hologram.Component.Client
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
+  alias Hologram.Test.Fixtures.Template.Renderer.Module10
   alias Hologram.Test.Fixtures.Template.Renderer.Module16
   alias Hologram.Test.Fixtures.Template.Renderer.Module17
   alias Hologram.Test.Fixtures.Template.Renderer.Module18
@@ -299,6 +300,18 @@ defmodule Hologram.Template.RendererTest do
       node = {:component, Module8, [], [{:component, Module9, [], [text: "789"]}]}
       assert render_dom(node, %{}, []) == {"abcdef789uvwxyz", %{}}
     end
+
+    test "nested components with slots, no slot tag in the top component template, using vars" do
+      node = {:component, Module10, [{"cid", [text: "component_10"]}], []}
+
+      assert render_dom(node, %{}, []) ==
+               {"10,11,10,12,10",
+                %{
+                  "component_10" => %Client{state: %{a: 10}},
+                  "component_11" => %Client{state: %{a: 11}},
+                  "component_12" => %Client{state: %{a: 12}}
+                }}
+    end
   end
 
   #   import Hologram.Test.Stubs
@@ -306,7 +319,6 @@ defmodule Hologram.Template.RendererTest do
 
   #   alias Hologram.Commons.ETS
   #   alias Hologram.Runtime.AssetPathRegistry
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module10
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module14
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module19
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module21
@@ -332,18 +344,6 @@ defmodule Hologram.Template.RendererTest do
   #   setup :set_mox_global
 
   #   describe "default slot" do
-  #     test "nested components with slots, no slot tag in the top component template, using vars" do
-  #       node = {:component, Module10, [{"cid", [text: "component_10"]}], []}
-
-  #       assert render_dom(node, %{}, []) ==
-  #                {"10,11,10,12,10",
-  #                 %{
-  #                   "component_10" => %Component.Client{state: %{a: 10}},
-  #                   "component_11" => %Component.Client{state: %{a: 11}},
-  #                   "component_12" => %Component.Client{state: %{a: 12}}
-  #                 }}
-  #     end
-
   #     test "nested components with slots, slot tag in the top component template, not using vars" do
   #       node = {:component, Module31, [], [text: "abc"]}
 
