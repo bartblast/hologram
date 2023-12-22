@@ -882,4 +882,20 @@ describe("default slot", () => {
 
     assert.deepStrictEqual(result, ["abc123xyz"]);
   });
+
+  it("with multiple nodes", () => {
+    const node = Type.tuple([
+      Type.atom("component"),
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module8"),
+      Type.list([]),
+      Type.keywordList([
+        [Type.atom("text"), Type.bitstring("123")],
+        [Type.atom("expression"), Type.tuple([Type.integer(456)])],
+      ]),
+    ]);
+
+    const result = Renderer.renderDom(node, context, slots);
+
+    assert.deepStrictEqual(result, ["abc123456xyz"]);
+  });
 });

@@ -288,6 +288,11 @@ defmodule Hologram.Template.RendererTest do
       node = {:component, Module8, [], [text: "123"]}
       assert render_dom(node, %{}, []) == {"abc123xyz", %{}}
     end
+
+    test "with multiple nodes" do
+      node = {:component, Module8, [], [text: "123", expression: {456}]}
+      assert render_dom(node, %{}, []) == {"abc123456xyz", %{}}
+    end
   end
 
   #   import Hologram.Test.Stubs
@@ -322,11 +327,6 @@ defmodule Hologram.Template.RendererTest do
   #   setup :set_mox_global
 
   #   describe "default slot" do
-  #     test "with multiple nodes" do
-  #       node = {:component, Module8, [], [text: "123", expression: {456}]}
-  #       assert render_dom(node, %{}, []) == {"abc123456xyz", %{}}
-  #     end
-
   #     test "nested components with slots, no slot tag in the top component template, not using vars" do
   #       node = {:component, Module8, [], [{:component, Module9, [], [text: "789"]}]}
   #       assert render_dom(node, %{}, []) == {"abcdef789uvwxyz", %{}}
