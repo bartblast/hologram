@@ -21,6 +21,7 @@ import {defineHologramTestFixturesTemplateRendererModule51} from "./fixtures/tem
 import {defineHologramTestFixturesTemplateRendererModule52} from "./fixtures/template/renderer/module_52.mjs";
 import {defineHologramTestFixturesTemplateRendererModule7} from "./fixtures/template/renderer/module_7.mjs";
 import {defineHologramTestFixturesTemplateRendererModule8} from "./fixtures/template/renderer/module_8.mjs";
+import {defineHologramTestFixturesTemplateRendererModule9} from "./fixtures/template/renderer/module_9.mjs";
 
 import Renderer from "../../assets/js/renderer.mjs";
 import Store from "../../assets/js/store.mjs";
@@ -39,6 +40,7 @@ before(() => {
   defineHologramTestFixturesTemplateRendererModule52();
   defineHologramTestFixturesTemplateRendererModule7();
   defineHologramTestFixturesTemplateRendererModule8();
+  defineHologramTestFixturesTemplateRendererModule9();
 });
 
 after(() => unlinkModules());
@@ -897,5 +899,25 @@ describe("default slot", () => {
     const result = Renderer.renderDom(node, context, slots);
 
     assert.deepStrictEqual(result, ["abc123456xyz"]);
+  });
+
+  it("nested components with slots, no slot tag in the top component template, not using vars", () => {
+    const node = Type.tuple([
+      Type.atom("component"),
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module8"),
+      Type.list([]),
+      Type.list([
+        Type.tuple([
+          Type.atom("component"),
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module9"),
+          Type.list([]),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("789")]]),
+        ]),
+      ]),
+    ]);
+
+    const result = Renderer.renderDom(node, context, slots);
+
+    assert.deepStrictEqual(result, ["abcdef789uvwxyz"]);
   });
 });

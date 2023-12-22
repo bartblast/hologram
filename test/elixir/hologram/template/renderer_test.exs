@@ -16,6 +16,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module6
   alias Hologram.Test.Fixtures.Template.Renderer.Module7
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
+  alias Hologram.Test.Fixtures.Template.Renderer.Module9
 
   test "text node" do
     node = {:text, "abc"}
@@ -293,6 +294,11 @@ defmodule Hologram.Template.RendererTest do
       node = {:component, Module8, [], [text: "123", expression: {456}]}
       assert render_dom(node, %{}, []) == {"abc123456xyz", %{}}
     end
+
+    test "nested components with slots, no slot tag in the top component template, not using vars" do
+      node = {:component, Module8, [], [{:component, Module9, [], [text: "789"]}]}
+      assert render_dom(node, %{}, []) == {"abcdef789uvwxyz", %{}}
+    end
   end
 
   #   import Hologram.Test.Stubs
@@ -319,7 +325,6 @@ defmodule Hologram.Template.RendererTest do
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module46
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module48
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module50
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module9
 
   #   use_module_stub :asset_path_registry
   #   use_module_stub :page_digest_registry
@@ -327,11 +332,6 @@ defmodule Hologram.Template.RendererTest do
   #   setup :set_mox_global
 
   #   describe "default slot" do
-  #     test "nested components with slots, no slot tag in the top component template, not using vars" do
-  #       node = {:component, Module8, [], [{:component, Module9, [], [text: "789"]}]}
-  #       assert render_dom(node, %{}, []) == {"abcdef789uvwxyz", %{}}
-  #     end
-
   #     test "nested components with slots, no slot tag in the top component template, using vars" do
   #       node = {:component, Module10, [{"cid", [text: "component_10"]}], []}
 
