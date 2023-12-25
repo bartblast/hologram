@@ -11,6 +11,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module2
   alias Hologram.Test.Fixtures.Template.Renderer.Module3
   alias Hologram.Test.Fixtures.Template.Renderer.Module31
+  alias Hologram.Test.Fixtures.Template.Renderer.Module34
   alias Hologram.Test.Fixtures.Template.Renderer.Module4
   alias Hologram.Test.Fixtures.Template.Renderer.Module5
   alias Hologram.Test.Fixtures.Template.Renderer.Module51
@@ -319,6 +320,34 @@ defmodule Hologram.Template.RendererTest do
 
       assert render_dom(node, %{}, []) == {"31a,32a,31b,33a,31c,abc,31x,33z,31y,32z,31z", %{}}
     end
+
+    test "nested components with slots, slot tag in the top component template, using vars" do
+      node =
+        {:component, Module34, [{"cid", [text: "component_34"]}, {"a", [text: "34a_prop"]}],
+         [text: "abc"]}
+
+      assert render_dom(node, %{}, []) ==
+               {"34a_prop,35a_prop,34b_state,36a_prop,34c_state,abc,34x_state,36z_state,34y_state,35z_state,34z_state",
+                %{
+                  "component_34" => %Client{
+                    state: %{
+                      cid: "component_34",
+                      a: "34a_prop",
+                      b: "34b_state",
+                      c: "34c_state",
+                      x: "34x_state",
+                      y: "34y_state",
+                      z: "34z_state"
+                    }
+                  },
+                  "component_35" => %Client{
+                    state: %{cid: "component_35", a: "35a_prop", z: "35z_state"}
+                  },
+                  "component_36" => %Client{
+                    state: %{cid: "component_36", a: "36a_prop", z: "36z_state"}
+                  }
+                }}
+    end
   end
 
   #   import Hologram.Test.Stubs
@@ -334,7 +363,6 @@ defmodule Hologram.Template.RendererTest do
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module27
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module28
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module29
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module34
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module37
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module39
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module40
@@ -348,36 +376,6 @@ defmodule Hologram.Template.RendererTest do
   #   use_module_stub :page_digest_registry
 
   #   setup :set_mox_global
-
-  #   describe "default slot" do
-  #     test "nested components with slots, slot tag in the top component template, using vars" do
-  #       node =
-  #         {:component, Module34, [{"cid", [text: "component_34"]}, {"a", [text: "34a_prop"]}],
-  #          [text: "abc"]}
-
-  #       assert render_dom(node, %{}, []) ==
-  #             {"34a_prop,35a_prop,34b_state,36a_prop,34c_state,abc,34x_state,36z_state,34y_state,35z_state,34z_state",
-  #                 %{
-  #                   "component_34" => %Component.Client{
-  #                     state: %{
-  #                       cid: "component_34",
-  #                       c: "34c_state",
-  #                       a: "34a_prop",
-  #                       y: "34y_state",
-  #                       x: "34x_state",
-  #                       z: "34z_state",
-  #                       b: "34b_state"
-  #                     }
-  #                   },
-  #                   "component_35" => %Component.Client{
-  #                     state: %{cid: "component_35", a: "35a_prop", z: "35z_state"}
-  #                   },
-  #                   "component_36" => %Component.Client{
-  #                     state: %{cid: "component_36", a: "36a_prop", z: "36z_state"}
-  #                   }
-  #                 }}
-  #     end
-  #   end
 
   #   describe "context" do
   #     setup do

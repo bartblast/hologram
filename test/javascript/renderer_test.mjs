@@ -22,6 +22,9 @@ import {defineHologramTestFixturesTemplateRendererModule3} from "./fixtures/temp
 import {defineHologramTestFixturesTemplateRendererModule31} from "./fixtures/template/renderer/module_31.mjs";
 import {defineHologramTestFixturesTemplateRendererModule32} from "./fixtures/template/renderer/module_32.mjs";
 import {defineHologramTestFixturesTemplateRendererModule33} from "./fixtures/template/renderer/module_33.mjs";
+import {defineHologramTestFixturesTemplateRendererModule34} from "./fixtures/template/renderer/module_34.mjs";
+import {defineHologramTestFixturesTemplateRendererModule35} from "./fixtures/template/renderer/module_35.mjs";
+import {defineHologramTestFixturesTemplateRendererModule36} from "./fixtures/template/renderer/module_36.mjs";
 import {defineHologramTestFixturesTemplateRendererModule4} from "./fixtures/template/renderer/module_4.mjs";
 import {defineHologramTestFixturesTemplateRendererModule51} from "./fixtures/template/renderer/module_51.mjs";
 import {defineHologramTestFixturesTemplateRendererModule52} from "./fixtures/template/renderer/module_52.mjs";
@@ -47,6 +50,9 @@ before(() => {
   defineHologramTestFixturesTemplateRendererModule31();
   defineHologramTestFixturesTemplateRendererModule32();
   defineHologramTestFixturesTemplateRendererModule33();
+  defineHologramTestFixturesTemplateRendererModule34();
+  defineHologramTestFixturesTemplateRendererModule35();
+  defineHologramTestFixturesTemplateRendererModule36();
   defineHologramTestFixturesTemplateRendererModule4();
   defineHologramTestFixturesTemplateRendererModule51();
   defineHologramTestFixturesTemplateRendererModule52();
@@ -541,6 +547,8 @@ describe("stateless component", () => {
     const expected = [vnode("div", {attrs: {}}, ["abc"])];
 
     assert.deepStrictEqual(result, expected);
+
+    assert.deepStrictEqual(Store.data, Type.map([]));
   });
 
   it("with props", () => {
@@ -579,6 +587,8 @@ describe("stateless component", () => {
     ];
 
     assert.deepStrictEqual(result, expected);
+
+    assert.deepStrictEqual(Store.data, Type.map([]));
   });
 
   it("with unregistered var used", () => {
@@ -1006,5 +1016,104 @@ describe("default slot", () => {
     assert.deepStrictEqual(result, [
       "31a,32a,31b,33a,31c,abc,31x,33z,31y,32z,31z",
     ]);
+  });
+
+  it("nested components with slots, slot tag in the top component template, using vars", () => {
+    const cid34 = Type.bitstring("component_34");
+    const cid35 = Type.bitstring("component_35");
+    const cid36 = Type.bitstring("component_36");
+
+    const node = Type.tuple([
+      Type.atom("component"),
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module34"),
+      Type.list([
+        Type.tuple([
+          Type.bitstring("cid"),
+          Type.keywordList([[Type.atom("text"), cid34]]),
+        ]),
+        Type.tuple([
+          Type.bitstring("a"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("34a_prop")]]),
+        ]),
+      ]),
+      Type.keywordList([[Type.atom("text"), Type.bitstring("abc")]]),
+    ]);
+
+    Store.putComponentState(
+      cid34,
+      Type.map([
+        [Type.atom("cid"), cid34],
+        [Type.atom("a"), Type.bitstring("34a_prop")],
+        [Type.atom("b"), Type.bitstring("34b_state")],
+        [Type.atom("c"), Type.bitstring("34c_state")],
+        [Type.atom("x"), Type.bitstring("34x_state")],
+        [Type.atom("y"), Type.bitstring("34y_state")],
+        [Type.atom("z"), Type.bitstring("34z_state")],
+      ]),
+    );
+
+    Store.putComponentState(
+      cid35,
+      Type.map([
+        [Type.atom("cid"), cid35],
+        [Type.atom("a"), Type.bitstring("35a_prop")],
+        [Type.atom("z"), Type.bitstring("35z_state")],
+      ]),
+    );
+
+    Store.putComponentState(
+      cid36,
+      Type.map([
+        [Type.atom("cid"), cid36],
+        [Type.atom("a"), Type.bitstring("36a_prop")],
+        [Type.atom("z"), Type.bitstring("36z_state")],
+      ]),
+    );
+
+    const result = Renderer.renderDom(node, context, slots);
+
+    assert.deepStrictEqual(result, [
+      "34a_prop,35a_prop,34b_state,36a_prop,34c_state,abc,34x_state,36z_state,34y_state,35z_state,34z_state",
+    ]);
+
+    assert.deepStrictEqual(
+      Store.data,
+      Type.map([
+        [
+          cid34,
+          buildClientStruct({
+            state: Type.map([
+              [Type.atom("cid"), Type.bitstring("component_34")],
+              [Type.atom("a"), Type.bitstring("34a_prop")],
+              [Type.atom("b"), Type.bitstring("34b_state")],
+              [Type.atom("c"), Type.bitstring("34c_state")],
+              [Type.atom("x"), Type.bitstring("34x_state")],
+              [Type.atom("y"), Type.bitstring("34y_state")],
+              [Type.atom("z"), Type.bitstring("34z_state")],
+            ]),
+          }),
+        ],
+        [
+          cid35,
+          buildClientStruct({
+            state: Type.map([
+              [Type.atom("cid"), Type.bitstring("component_35")],
+              [Type.atom("a"), Type.bitstring("35a_prop")],
+              [Type.atom("z"), Type.bitstring("35z_state")],
+            ]),
+          }),
+        ],
+        [
+          cid36,
+          buildClientStruct({
+            state: Type.map([
+              [Type.atom("cid"), Type.bitstring("component_36")],
+              [Type.atom("a"), Type.bitstring("36a_prop")],
+              [Type.atom("z"), Type.bitstring("36z_state")],
+            ]),
+          }),
+        ],
+      ]),
+    );
   });
 });
