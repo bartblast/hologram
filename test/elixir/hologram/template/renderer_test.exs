@@ -10,6 +10,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module18
   alias Hologram.Test.Fixtures.Template.Renderer.Module2
   alias Hologram.Test.Fixtures.Template.Renderer.Module3
+  alias Hologram.Test.Fixtures.Template.Renderer.Module31
   alias Hologram.Test.Fixtures.Template.Renderer.Module4
   alias Hologram.Test.Fixtures.Template.Renderer.Module5
   alias Hologram.Test.Fixtures.Template.Renderer.Module51
@@ -312,6 +313,12 @@ defmodule Hologram.Template.RendererTest do
                   "component_12" => %Client{state: %{a: 12}}
                 }}
     end
+
+    test "nested components with slots, slot tag in the top component template, not using vars" do
+      node = {:component, Module31, [], [text: "abc"]}
+
+      assert render_dom(node, %{}, []) == {"31a,32a,31b,33a,31c,abc,31x,33z,31y,32z,31z", %{}}
+    end
   end
 
   #   import Hologram.Test.Stubs
@@ -327,7 +334,6 @@ defmodule Hologram.Template.RendererTest do
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module27
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module28
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module29
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module31
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module34
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module37
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module39
@@ -344,12 +350,6 @@ defmodule Hologram.Template.RendererTest do
   #   setup :set_mox_global
 
   #   describe "default slot" do
-  #     test "nested components with slots, slot tag in the top component template, not using vars" do
-  #       node = {:component, Module31, [], [text: "abc"]}
-
-  #       assert render_dom(node, %{}, []) == {"31a,32a,31b,33a,31c,abc,31x,33z,31y,32z,31z", %{}}
-  #     end
-
   #     test "nested components with slots, slot tag in the top component template, using vars" do
   #       node =
   #         {:component, Module34, [{"cid", [text: "component_34"]}, {"a", [text: "34a_prop"]}],

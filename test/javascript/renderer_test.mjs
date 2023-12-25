@@ -19,6 +19,9 @@ import {defineHologramTestFixturesTemplateRendererModule17} from "./fixtures/tem
 import {defineHologramTestFixturesTemplateRendererModule18} from "./fixtures/template/renderer/module_18.mjs";
 import {defineHologramTestFixturesTemplateRendererModule2} from "./fixtures/template/renderer/module_2.mjs";
 import {defineHologramTestFixturesTemplateRendererModule3} from "./fixtures/template/renderer/module_3.mjs";
+import {defineHologramTestFixturesTemplateRendererModule31} from "./fixtures/template/renderer/module_31.mjs";
+import {defineHologramTestFixturesTemplateRendererModule32} from "./fixtures/template/renderer/module_32.mjs";
+import {defineHologramTestFixturesTemplateRendererModule33} from "./fixtures/template/renderer/module_33.mjs";
 import {defineHologramTestFixturesTemplateRendererModule4} from "./fixtures/template/renderer/module_4.mjs";
 import {defineHologramTestFixturesTemplateRendererModule51} from "./fixtures/template/renderer/module_51.mjs";
 import {defineHologramTestFixturesTemplateRendererModule52} from "./fixtures/template/renderer/module_52.mjs";
@@ -41,6 +44,9 @@ before(() => {
   defineHologramTestFixturesTemplateRendererModule18();
   defineHologramTestFixturesTemplateRendererModule2();
   defineHologramTestFixturesTemplateRendererModule3();
+  defineHologramTestFixturesTemplateRendererModule31();
+  defineHologramTestFixturesTemplateRendererModule32();
+  defineHologramTestFixturesTemplateRendererModule33();
   defineHologramTestFixturesTemplateRendererModule4();
   defineHologramTestFixturesTemplateRendererModule51();
   defineHologramTestFixturesTemplateRendererModule52();
@@ -987,15 +993,18 @@ describe("default slot", () => {
     );
   });
 
-  // test "nested components with slots, no slot tag in the top component template, using vars" do
-  //   node = {:component, Module10, [{"cid", [text: "component_10"]}], []}
+  it("nested components with slots, slot tag in the top component template, not using vars", () => {
+    const node = Type.tuple([
+      Type.atom("component"),
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module31"),
+      Type.list([]),
+      Type.keywordList([[Type.atom("text"), Type.bitstring("abc")]]),
+    ]);
 
-  //   assert render_dom(node, %{}, []) ==
-  //           {"10,11,10,12,10",
-  //             %{
-  //               "component_10" => %Client{state: %{a: 10}},
-  //               "component_11" => %Client{state: %{a: 11}},
-  //               "component_12" => %Client{state: %{a: 12}}
-  //             }}
-  // end
+    const result = Renderer.renderDom(node, context, slots);
+
+    assert.deepStrictEqual(result, [
+      "31a,32a,31b,33a,31c,abc,31x,33z,31y,32z,31z",
+    ]);
+  });
 });
