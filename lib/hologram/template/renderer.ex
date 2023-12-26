@@ -1,7 +1,11 @@
 defmodule Hologram.Template.Renderer do
+  alias Hologram.Compiler.Encoder
   alias Hologram.Commons.StringUtils
   alias Hologram.Component.Client
   alias Hologram.Component.Server
+  alias Hologram.Runtime.PageDigestRegistry
+  alias Hologram.Runtime.Templatable
+  alias Hologram.Template.DOM
 
   # https://html.spec.whatwg.org/multipage/syntax.html#void-elements
   @void_elems ~w(area base br col embed hr img input link meta param source track wbr)
@@ -72,6 +76,66 @@ defmodule Hologram.Template.Renderer do
       {html, client_struct} = render_dom(node, context, slots)
       {acc_html <> html, Map.merge(acc_client_structs, client_struct)}
     end)
+  end
+
+  # TODO: Refactor once there is something akin to {...@vars} syntax
+  # (it would be possible to pass page state as layout props this way).
+  @doc """
+  Renders the given page.
+
+  ## Examples
+
+      iex> render_page(MyPage, [{"param", [text: "value"]}])
+      {
+        "<div>full page content including layout</div>",
+        %{"page" => %Client{state: %{a: 1, b: 2}}}
+      }
+  """
+  @spec render_page(module, DOM.t()) :: {String.t(), %{atom => Client.t()}}
+  def render_page(page_module, params_dom) do
+    params = cast_props(params_dom, page_module)
+    {initial_page_client_struct, _server_struct} = init_component(page_module, params)
+
+    page_digest = PageDigestRegistry.lookup(page_module)
+
+    page_client_struct_with_injected_page_digest =
+      Templatable.put_context(
+        initial_page_client_struct,
+        {Hologram.Runtime, :page_digest},
+        page_digest
+      )
+
+    {initial_html, initial_client_structs} =
+      render_page_inside_layout(page_module, params, page_client_struct_with_injected_page_digest)
+
+    page_client_struct_with_injected_page_mounted_flag =
+      Templatable.put_context(
+        page_client_struct_with_injected_page_digest,
+        {Hologram.Runtime, :page_mounted?},
+        true
+      )
+
+    client_structs_with_page_struct =
+      Map.put(
+        initial_client_structs,
+        "page",
+        page_client_struct_with_injected_page_mounted_flag
+      )
+
+    html_with_interpolated_js =
+      initial_html
+      |> interpolate_client_structs_js(client_structs_with_page_struct)
+      |> interpolate_page_module_js(page_module)
+      |> interpolate_page_params_js(params)
+
+    {html_with_interpolated_js, client_structs_with_page_struct}
+  end
+
+  defp build_layout_props_dom(page_module, page_state) do
+    page_module.__layout_props__()
+    |> Enum.into(%{cid: "layout"})
+    |> Map.merge(page_state)
+    |> Enum.map(fn {name, value} -> {to_string(name), [expression: {value}]} end)
   end
 
   defp cast_props(props_dom, module) do
@@ -158,6 +222,21 @@ defmodule Hologram.Template.Renderer do
     Map.merge(props_from_template, props_from_context)
   end
 
+  defp interpolate_client_structs_js(html, client_structs) do
+    client_structs_js = Encoder.encode_term(client_structs)
+    String.replace(html, "$CLIENT_STRUCTS_JS_PLACEHOLDER", client_structs_js)
+  end
+
+  defp interpolate_page_module_js(html, page_module) do
+    page_module_js = Encoder.encode_term(page_module)
+    String.replace(html, "$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
+  end
+
+  defp interpolate_page_params_js(html, page_params) do
+    page_params_js = Encoder.encode_term(page_params)
+    String.replace(html, "$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
+  end
+
   defp normalize_prop_name({name, value}) do
     {String.to_existing_atom(name), value}
   end
@@ -183,6 +262,17 @@ defmodule Hologram.Template.Renderer do
     |> StringUtils.prepend(" ")
   end
 
+  defp render_page_inside_layout(page_module, params, %{context: page_context, state: page_state}) do
+    layout_module = page_module.__layout_module__()
+    layout_props_dom = build_layout_props_dom(page_module, page_state)
+
+    vars = Map.merge(params, page_state)
+    page_dom = page_module.template().(vars)
+    layout_node = {:component, layout_module, layout_props_dom, page_dom}
+
+    render_dom(layout_node, page_context, [])
+  end
+
   defp render_stateful_component(module, props, children_dom, context) do
     {client_struct, _server_struct} = init_component(module, props)
     vars = Map.merge(props, client_struct.state)
@@ -199,94 +289,4 @@ defmodule Hologram.Template.Renderer do
     |> module.template().()
     |> render_dom(context, default: children_dom)
   end
-
-  #   alias Hologram.Compiler.Encoder
-  #   alias Hologram.Runtime.PageDigestRegistry
-  #   alias Hologram.Runtime.Templatable
-  #   alias Hologram.Template.DOM
-
-  #   # TODO: Refactor once there is something akin to {...@var} syntax
-  #   # (it would be possible to pass page state as layout props this way).
-  #   @doc """
-  #   Renders the given page.
-
-  #   ## Examples
-
-  #       iex> render_page(MyPage, [{"param", [text: "value"]}], :my_persistent_term_key)
-  #       {
-  #         "<div>full page content including layout</div>",
-  #         %{"page" => %Component.Client{state: %{a: 1, b: 2}}}
-  #       }
-  #   """
-  #   @spec render_page(module, DOM.t()) :: {String.t(), %{atom => Component.Client.t()}}
-  #   def render_page(page_module, params_dom) do
-  #     params = cast_props(params_dom, page_module)
-  #     {initial_client_page_data, _server} = init_component(page_module, params)
-
-  #     page_digest = PageDigestRegistry.lookup(page_module)
-
-  #     %{context: page_context, state: page_state} =
-  #       client_page_data_with_injected_page_digest =
-  #       Templatable.put_context(
-  #         initial_client_page_data,
-  #         {Hologram.Runtime, :page_digest},
-  #         page_digest
-  #       )
-
-  #     layout_module = page_module.__layout_module__()
-  #     layout_props_dom = build_layout_props_dom(page_module, page_state)
-  #     vars = Map.merge(params, page_state)
-  #     page_dom = page_module.template().(vars)
-  #     layout_node = {:component, layout_module, layout_props_dom, page_dom}
-  #     {initial_html, initial_client_components_data} = render_dom(layout_node, page_context, [])
-
-  #     client_page_data_with_injected_page_mounted_flag =
-  #       Templatable.put_context(
-  #         client_page_data_with_injected_page_digest,
-  #         {Hologram.Runtime, :page_mounted?},
-  #         true
-  #       )
-
-  #     final_client_components_data =
-  #       Map.put(
-  #         initial_client_components_data,
-  #         "page",
-  #         client_page_data_with_injected_page_mounted_flag
-  #       )
-
-  #     final_html =
-  #       initial_html
-  #       |> interpolate_client_components_data_js(final_client_components_data)
-  #       |> interpolate_page_module_js(page_module)
-  #       |> interpolate_page_params_js(params)
-
-  #     {final_html, final_client_components_data}
-  #   end
-
-  #   defp build_layout_props_dom(page_module, page_state) do
-  #     page_module.__layout_props__()
-  #     |> Enum.into(%{cid: "layout"})
-  #     |> Map.merge(page_state)
-  #     |> Enum.map(fn {name, value} -> {to_string(name), [expression: {value}]} end)
-  #   end
-
-  #   defp interpolate_client_components_data_js(html, client_components_data) do
-  #     client_components_data_js = Encoder.encode_term(client_components_data)
-  #     String.replace(html, "$COMPONENTS_DATA_JS_PLACEHOLDER", client_components_data_js)
-  #   end
-
-  #   defp interpolate_page_module_js(html, page_module) do
-  #     page_module_js = Encoder.encode_term(page_module)
-  #     String.replace(html, "$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
-  #   end
-
-  #   defp interpolate_page_params_js(html, page_params) do
-  #     page_params_js = Encoder.encode_term(page_params)
-  #     String.replace(html, "$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
-  #   end
-
-  # TODO: remove
-  @doc false
-  @spec render_page(any, any) :: any
-  def render_page(_param1, _param_2), do: {1, 2}
 end
