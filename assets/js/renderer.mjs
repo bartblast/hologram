@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
+import Erlang_Maps from "./erlang/maps.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Store from "./store.mjs";
@@ -33,6 +34,27 @@ export default class Renderer {
       case "text":
         return Bitstring.toText(dom.data[1]);
     }
+  }
+
+  // Based on build_layout_props_dom/2
+  static #buildLayoutPropsDom(pageModuleRef, pageState) {
+    const propsFromPage = Erlang_Maps["from_list/1"](
+      pageModuleRef["__layout_props__/0"](),
+    );
+
+    const propsWithCid = Erlang_Maps["merge/2"](
+      propsFromPage,
+      Type.map([[Type.atom("cid"), Type.bitstring("layout")]]),
+    );
+
+    const propsWithPageState = Erlang_Maps["merge/2"](propsWithCid, pageState);
+
+    return Type.map([
+      Object.values(propsWithPageState.data).map(([name, value]) => [
+        Type.bitstring(name.value),
+        Type.keywordList([[Type.atom("expression"), Type.tuple([value])]]),
+      ]),
+    ]);
   }
 
   // Based on cast_props/2
@@ -406,11 +428,4 @@ export default class Renderer {
 
 //     // TODO: remove
 //     console.inspect(html);
-//   }
-
-//   // TODO: finish
-//   static #buildLayoutPropsDOM(pageModuleRef, pageClientStruct) {
-//     pageModuleRef["__layout_props__/0"]().data.concat(
-//       Type.tuple([Type.atom("cid", Type.bitstring("layout"))]),
-//     );
 //   }
