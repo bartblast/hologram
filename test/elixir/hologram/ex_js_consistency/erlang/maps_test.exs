@@ -61,6 +61,42 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
   end
 
+  describe "map/2" do
+    setup do
+      [fun: fn _key, value -> value * 10 end]
+    end
+
+    test "maps empty map", %{fun: fun} do
+      assert :maps.map(fun, %{}) == %{}
+    end
+
+    test "maps non-empty map", %{fun: fun} do
+      assert :maps.map(fun, %{a: 1, b: 2, c: 3}) == %{a: 10, b: 20, c: 30}
+    end
+
+    test "raises ArgumentError if the first argument is not an anonymous function" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes two arguments\n",
+                   fn ->
+                     :maps.map(:abc, %{})
+                   end
+    end
+
+    test "raises ArgumentError if the first argument is an anonymous function with arity different than 2" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes two arguments\n",
+                   fn ->
+                     :maps.map(fn x -> x end, %{})
+                   end
+    end
+
+    test "raises BadMapError if the second argument is not a map", %{fun: fun} do
+      assert_raise BadMapError, "expected a map, got: :abc", fn ->
+        :maps.map(fun, :abc)
+      end
+    end
+  end
+
   describe "put/3" do
     test "when the map doesn't have the given key" do
       assert :maps.put(:b, 2, %{a: 1}) == %{a: 1, b: 2}
