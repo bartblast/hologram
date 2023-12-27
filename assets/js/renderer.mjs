@@ -1,7 +1,6 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
-import Erlang_Maps from "./erlang/maps.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Store from "./store.mjs";
