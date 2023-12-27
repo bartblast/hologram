@@ -87,6 +87,29 @@ const Erlang_Maps = {
   // end is_key/2
   // deps: []
 
+  // TODO: implement iterators
+  // start map/2
+  "map/2": (fun, mapOrIterator) => {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
+      Interpreter.raiseArgumentError(
+        "errors were found at the given arguments:\n\n* 1st argument: not a fun that takes two arguments",
+      );
+    }
+
+    if (!Type.isMap(mapOrIterator)) {
+      Interpreter.raiseBadMapError(mapOrIterator);
+    }
+
+    return Type.map(
+      Object.values(mapOrIterator.data).map(([key, value]) => [
+        key,
+        Interpreter.callAnonymousFunction(fun, [key, value]),
+      ]),
+    );
+  },
+  // end map/2
+  // deps: []
+
   // start merge/2
   "merge/2": (map1, map2) => {
     if (!Type.isMap(map1)) {

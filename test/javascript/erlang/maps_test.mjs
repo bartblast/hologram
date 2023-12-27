@@ -234,6 +234,88 @@ describe("is_key/2", () => {
   });
 });
 
+describe("map/2", () => {
+  const fun = Type.anonymousFunction(
+    2,
+    [
+      {
+        params: (_vars) => [
+          Type.matchPlaceholder(),
+          Type.variablePattern("value"),
+        ],
+        guards: [],
+        body: (vars) => {
+          return Erlang["*/2"](vars.value, Type.integer(10));
+        },
+      },
+    ],
+    {},
+  );
+
+  it("maps empty map", () => {
+    const result = Erlang_Maps["map/2"](fun, Type.map([]));
+    assert.deepStrictEqual(result, Type.map([]));
+  });
+
+  it("maps non-empty map", () => {
+    const result = Erlang_Maps["map/2"](
+      fun,
+      Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+        [Type.atom("c"), Type.integer(3)],
+      ]),
+    );
+
+    assert.deepStrictEqual(
+      result,
+      Type.map([
+        [Type.atom("a"), Type.integer(10)],
+        [Type.atom("b"), Type.integer(20)],
+        [Type.atom("c"), Type.integer(30)],
+      ]),
+    );
+  });
+
+  it("raises ArgumentError if the first argument is not an anonymous function", () => {
+    assertBoxedError(
+      () => Erlang_Maps["map/2"](Type.atom("abc"), Type.map([])),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n* 1st argument: not a fun that takes two arguments",
+    );
+  });
+
+  it("raises ArgumentError if the first argument is an anonymous function with arity different than 2", () => {
+    const fun = Type.anonymousFunction(
+      1,
+      [
+        {
+          params: (_vars) => [Type.variablePattern("x")],
+          guards: [],
+          body: (vars) => {
+            return vars.x;
+          },
+        },
+      ],
+      {},
+    );
+
+    assertBoxedError(
+      () => Erlang_Maps["map/2"](fun, Type.map([])),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n* 1st argument: not a fun that takes two arguments",
+    );
+  });
+
+  it("raises BadMapError if the second argument is not a map", () => {
+    assertBoxedError(
+      () => Erlang_Maps["map/2"](fun, Type.atom("abc")),
+      "BadMapError",
+      "expected a map, got: :abc",
+    );
+  });
+});
+
 describe("merge/2", () => {
   it("merges two maps", () => {
     const map1 = Type.map([
