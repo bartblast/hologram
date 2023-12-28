@@ -372,6 +372,7 @@ export default class Renderer {
     );
   }
 
+  // Based on render_page_inside_layout/3
   static #renderPageInsideLayout(pageModuleRef, pageParams, pageClientStruct) {
     const pageContext = Erlang_Maps["get/2"](
       Type.atom("context"),
