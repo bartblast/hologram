@@ -35,6 +35,42 @@ export default class Renderer {
     }
   }
 
+  // Based on: render_page/2
+  static renderPage(pageModule, pageParamsDom) {
+    const pageModuleRef = Interpreter.moduleRef(pageModule);
+    const pageParams = Renderer.#castProps(pageParamsDom, pageModuleRef);
+  }
+
+  //   static renderPage(pageModule, pageParams) {
+  //
+  //     const layoutModule = pageModuleRef["__layout_module__/0"]();
+
+  //     const cid = Type.bitstring("page");
+  //     const pageClientStruct = Store.getComponentData(cid);
+  //     const pageState = Store.getComponentState(cid);
+  //     const pageContext = Store.getComponentContext(cid);
+
+  //     const layoutPropsDOM = Renderer.#buildLayoutPropsDOM(
+  //       pageModuleRef,
+  //       pageClientStruct,
+  //     );
+
+  //     const vars = Renderer.#buildVars(pageParams, pageState);
+  //     const pageDOM = Renderer.#evaluateTemplate(pageModuleRef, vars);
+
+  //     const layoutNode = Type.tuple([
+  //       Type.atom("component"),
+  //       layoutModule,
+  //       layoutPropsDOM,
+  //       pageDOM,
+  //     ]);
+
+  //     const html = Renderer.#renderDom(layoutNode, pageContext, Type.list([]));
+
+  //     // TODO: remove
+  //     console.inspect(html);
+  //   }
+
   // Based on build_layout_props_dom/2
   static #buildLayoutPropsDom(pageModuleRef, pageState) {
     const propsFromPage = Erlang_Maps["from_list/1"](
@@ -395,36 +431,3 @@ export default class Renderer {
     return Bitstring.toText(Renderer.#valueDomToBitstring(valueDom));
   }
 }
-
-// import Erlang_Maps from "./erlang/maps.mjs";
-
-//   // Based on: render_page/2
-//   static renderPage(pageModule, pageParams) {
-//     const pageModuleRef = Interpreter.moduleRef(pageModule);
-//     const layoutModule = pageModuleRef["__layout_module__/0"]();
-
-//     const cid = Type.bitstring("page");
-//     const pageClientStruct = Store.getComponentData(cid);
-//     const pageState = Store.getComponentState(cid);
-//     const pageContext = Store.getComponentContext(cid);
-
-//     const layoutPropsDOM = Renderer.#buildLayoutPropsDOM(
-//       pageModuleRef,
-//       pageClientStruct,
-//     );
-
-//     const vars = Renderer.#buildVars(pageParams, pageState);
-//     const pageDOM = Renderer.#evaluateTemplate(pageModuleRef, vars);
-
-//     const layoutNode = Type.tuple([
-//       Type.atom("component"),
-//       layoutModule,
-//       layoutPropsDOM,
-//       pageDOM,
-//     ]);
-
-//     const html = Renderer.#renderDom(layoutNode, pageContext, Type.list([]));
-
-//     // TODO: remove
-//     console.inspect(html);
-//   }
