@@ -39,34 +39,16 @@ export default class Renderer {
   static renderPage(pageModule, pageParamsDom) {
     const pageModuleRef = Interpreter.moduleRef(pageModule);
     const pageParams = Renderer.#castProps(pageParamsDom, pageModuleRef);
+
+    const cid = Type.bitstring("page");
+    const pageClientStruct = Store.getComponentData(cid);
+
+    return Renderer.#renderPageInsideLayout(
+      pageModuleRef,
+      pageParams,
+      pageClientStruct,
+    );
   }
-
-  //   static renderPage(pageModule, pageParams) {
-  //     const cid = Type.bitstring("page");
-  //     const pageClientStruct = Store.getComponentData(cid);
-  //     const pageState = Store.getComponentState(cid);
-  //     const pageContext = Store.getComponentContext(cid);
-
-  //     const layoutPropsDOM = Renderer.#buildLayoutPropsDOM(
-  //       pageModuleRef,
-  //       pageClientStruct,
-  //     );
-
-  //     const vars = Renderer.#buildVars(pageParams, pageState);
-  //     const pageDOM = Renderer.#evaluateTemplate(pageModuleRef, vars);
-
-  //     const layoutNode = Type.tuple([
-  //       Type.atom("component"),
-  //       layoutModule,
-  //       layoutPropsDOM,
-  //       pageDOM,
-  //     ]);
-
-  //     const html = Renderer.#renderDom(layoutNode, pageContext, Type.list([]));
-
-  //     // TODO: remove
-  //     console.inspect(html);
-  //   }
 
   // Based on build_layout_props_dom/2
   static #buildLayoutPropsDom(pageModuleRef, pageState) {
