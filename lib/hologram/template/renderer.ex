@@ -263,11 +263,11 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp render_page_inside_layout(page_module, params, %{context: page_context, state: page_state}) do
-    layout_module = page_module.__layout_module__()
-    layout_props_dom = build_layout_props_dom(page_module, page_state)
-
     vars = Map.merge(params, page_state)
     page_dom = page_module.template().(vars)
+
+    layout_module = page_module.__layout_module__()
+    layout_props_dom = build_layout_props_dom(page_module, page_state)
     layout_node = {:component, layout_module, layout_props_dom, page_dom}
 
     render_dom(layout_node, page_context, [])

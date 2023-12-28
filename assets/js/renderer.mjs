@@ -42,9 +42,6 @@ export default class Renderer {
   }
 
   //   static renderPage(pageModule, pageParams) {
-  //
-  //     const layoutModule = pageModuleRef["__layout_module__/0"]();
-
   //     const cid = Type.bitstring("page");
   //     const pageClientStruct = Store.getComponentData(cid);
   //     const pageState = Store.getComponentState(cid);
@@ -375,12 +372,44 @@ export default class Renderer {
     );
   }
 
+  static #renderPageInsideLayout(pageModuleRef, pageParams, pageClientStruct) {
+    const pageContext = Erlang_Maps["get/2"](
+      Type.atom("context"),
+      pageClientStruct,
+    );
+
+    const pageState = Erlang_Maps["get/2"](
+      Type.atom("state"),
+      pageClientStruct,
+    );
+
+    const vars = Erlang_Maps["merge/2"](pageParams, pageState);
+    const pageDom = Renderer.#evaluateTemplate(pageModuleRef, vars);
+
+    const layoutModule = pageModuleRef["__layout_module__/0"]();
+
+    const layoutPropsDom = Renderer.#buildLayoutPropsDom(
+      pageModuleRef,
+      pageState,
+    );
+
+    const layoutNode = Type.tuple([
+      Type.atom("component"),
+      layoutModule,
+      layoutPropsDom,
+      pageDom,
+    ]);
+
+    return Renderer.renderDom(layoutNode, pageContext, Type.keywordList([]));
+  }
+
   // Based on render_dom/3 (slot case)
   static #renderSlotElement(slots, context) {
     const slotDom = Interpreter.accessKeywordListElement(
       slots,
       Type.atom("default"),
     );
+
     return Renderer.renderDom(slotDom, context, Type.keywordList([]));
   }
 
