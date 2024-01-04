@@ -5,6 +5,7 @@ import {
   assertBoxedError,
   buildClientStruct,
   elixirHologramComponentClientStruct0,
+  initStoreComponentData,
   linkModules,
   unlinkModules,
   vnode,
@@ -25,12 +26,15 @@ import {defineHologramTestFixturesTemplateRendererModule33} from "./fixtures/tem
 import {defineHologramTestFixturesTemplateRendererModule34} from "./fixtures/template/renderer/module_34.mjs";
 import {defineHologramTestFixturesTemplateRendererModule35} from "./fixtures/template/renderer/module_35.mjs";
 import {defineHologramTestFixturesTemplateRendererModule36} from "./fixtures/template/renderer/module_36.mjs";
+import {defineHologramTestFixturesTemplateRendererModule38} from "./fixtures/template/renderer/module_38.mjs";
+import {defineHologramTestFixturesTemplateRendererModule39} from "./fixtures/template/renderer/module_39.mjs";
 import {defineHologramTestFixturesTemplateRendererModule4} from "./fixtures/template/renderer/module_4.mjs";
 import {defineHologramTestFixturesTemplateRendererModule51} from "./fixtures/template/renderer/module_51.mjs";
 import {defineHologramTestFixturesTemplateRendererModule52} from "./fixtures/template/renderer/module_52.mjs";
 import {defineHologramTestFixturesTemplateRendererModule7} from "./fixtures/template/renderer/module_7.mjs";
 import {defineHologramTestFixturesTemplateRendererModule8} from "./fixtures/template/renderer/module_8.mjs";
 import {defineHologramTestFixturesTemplateRendererModule9} from "./fixtures/template/renderer/module_9.mjs";
+import {defineLayoutFixture} from "./fixtures/layout_fixture.mjs";
 
 import Renderer from "../../assets/js/renderer.mjs";
 import Store from "../../assets/js/store.mjs";
@@ -53,12 +57,15 @@ before(() => {
   defineHologramTestFixturesTemplateRendererModule34();
   defineHologramTestFixturesTemplateRendererModule35();
   defineHologramTestFixturesTemplateRendererModule36();
+  defineHologramTestFixturesTemplateRendererModule38();
+  defineHologramTestFixturesTemplateRendererModule39();
   defineHologramTestFixturesTemplateRendererModule4();
   defineHologramTestFixturesTemplateRendererModule51();
   defineHologramTestFixturesTemplateRendererModule52();
   defineHologramTestFixturesTemplateRendererModule7();
   defineHologramTestFixturesTemplateRendererModule8();
   defineHologramTestFixturesTemplateRendererModule9();
+  defineLayoutFixture();
 });
 
 after(() => unlinkModules());
@@ -1115,5 +1122,28 @@ describe("default slot", () => {
         ],
       ]),
     );
+  });
+});
+
+describe("context", () => {
+  it("emitted in page, accessed in component nested in page", () => {
+    initStoreComponentData(Type.bitstring("layout"));
+
+    Store.putComponentContext(
+      Type.bitstring("page"),
+      Type.map([
+        [
+          Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
+          Type.integer(123),
+        ],
+      ]),
+    );
+
+    const result = Renderer.renderPage(
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module39"),
+      Type.list([]),
+    );
+
+    assert.deepStrictEqual(result, ["prop_aaa = 123"]);
   });
 });

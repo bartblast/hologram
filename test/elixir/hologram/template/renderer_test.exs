@@ -1,8 +1,13 @@
 defmodule Hologram.Template.RendererTest do
   use Hologram.Test.BasicCase, async: false
-  import Hologram.Template.Renderer
 
+  import Hologram.Template.Renderer
+  import Hologram.Test.Stubs
+  import Mox
+
+  alias Hologram.Commons.ETS
   alias Hologram.Component.Client
+  alias Hologram.Runtime.AssetPathRegistry
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
   alias Hologram.Test.Fixtures.Template.Renderer.Module10
   alias Hologram.Test.Fixtures.Template.Renderer.Module16
@@ -12,6 +17,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module3
   alias Hologram.Test.Fixtures.Template.Renderer.Module31
   alias Hologram.Test.Fixtures.Template.Renderer.Module34
+  alias Hologram.Test.Fixtures.Template.Renderer.Module39
   alias Hologram.Test.Fixtures.Template.Renderer.Module4
   alias Hologram.Test.Fixtures.Template.Renderer.Module5
   alias Hologram.Test.Fixtures.Template.Renderer.Module51
@@ -20,6 +26,11 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module7
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
+
+  use_module_stub :asset_path_registry
+  use_module_stub :page_digest_registry
+
+  setup :set_mox_global
 
   test "text node" do
     node = {:text, "abc"}
@@ -350,11 +361,39 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
-  #   import Hologram.Test.Stubs
-  #   import Mox
+  describe "context" do
+    setup do
+      stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
+      stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
 
-  #   alias Hologram.Commons.ETS
-  #   alias Hologram.Runtime.AssetPathRegistry
+      setup_asset_fixtures(AssetPathRegistryStub.static_dir_path())
+      AssetPathRegistry.start_link([])
+
+      setup_page_digest_registry(PageDigestRegistryStub)
+
+      :ok
+    end
+
+    test "emitted in page, accessed in component nested in page" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module39, :dummy_module_39_digest)
+
+      assert render_page(Module39, []) ==
+               {"prop_aaa = 123",
+                %{
+                  "layout" => %Client{
+                    context: %{}
+                  },
+                  "page" => %Client{
+                    context: %{
+                      {Hologram.Runtime, :page_digest} => :dummy_module_39_digest,
+                      {Hologram.Runtime, :page_mounted?} => true,
+                      {:my_scope, :my_key} => 123
+                    }
+                  }
+                }}
+    end
+  end
+
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module14
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module19
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module21
@@ -364,7 +403,6 @@ defmodule Hologram.Template.RendererTest do
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module28
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module29
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module37
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module39
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module40
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module43
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module45
@@ -372,43 +410,7 @@ defmodule Hologram.Template.RendererTest do
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module48
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module50
 
-  #   use_module_stub :asset_path_registry
-  #   use_module_stub :page_digest_registry
-
-  #   setup :set_mox_global
-
   #   describe "context" do
-  #     setup do
-  #       stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
-  #       stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
-
-  #       setup_asset_fixtures(AssetPathRegistryStub.static_dir_path())
-  #       AssetPathRegistry.start_link([])
-
-  #       setup_page_digest_registry(PageDigestRegistryStub)
-
-  #       :ok
-  #     end
-
-  #     test "set in page, accessed in component nested in page" do
-  #       ETS.put(PageDigestRegistryStub.ets_table_name(), Module39, :dummy_module_39_digest)
-
-  #       assert render_page(Module39, []) ==
-  #                {"prop_aaa = 123",
-  #                 %{
-  #                   "layout" => %Component.Client{
-  #                     context: %{}
-  #                   },
-  #                   "page" => %Component.Client{
-  #                     context: %{
-  #                       {Hologram.Runtime, :page_digest} => :dummy_module_39_digest,
-  #                       {Hologram.Runtime, :page_mounted?} => true,
-  #                       {:my_scope, :my_key} => 123
-  #                     }
-  #                   }
-  #                 }}
-  #     end
-
   #     test "set in page, accessed in component nested in layout" do
   #       ETS.put(PageDigestRegistryStub.ets_table_name(), Module46, :dummy_module_46_digest)
 
@@ -689,7 +691,7 @@ defmodule Hologram.Template.RendererTest do
   #               }} = render_page(Module48, [])
 
   #       expected =
-  #         ~s/componentsData: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])], [Type.bitstring("page"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_mounted?")]), Type.atom("true")]])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])/
+  #         ~s/clientStructs: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])], [Type.bitstring("page"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_mounted?")]), Type.atom("true")]])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])/
 
   #       assert String.contains?(html, expected)
   #     end

@@ -10,6 +10,7 @@ import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramMatchError from "./errors/match_error.mjs";
 import Interpreter from "./interpreter.mjs";
+import Store from "./store.mjs";
 import Type from "./type.mjs";
 
 import {assert} from "chai";
@@ -161,6 +162,12 @@ export function freeze(obj) {
   }
 
   return Object.freeze(obj);
+}
+
+export function initStoreComponentData(cid) {
+  const emptyClientStruct =
+    globalThis.Elixir_Hologram_Component_Client["__struct__/0"]();
+  Store.putComponentData(cid, emptyClientStruct);
 }
 
 export function linkModules() {
