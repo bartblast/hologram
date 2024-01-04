@@ -167,6 +167,7 @@ export function freeze(obj) {
 export function initStoreComponentData(cid) {
   const emptyClientStruct =
     globalThis.Elixir_Hologram_Component_Client["__struct__/0"]();
+
   Store.putComponentData(cid, emptyClientStruct);
 }
 
