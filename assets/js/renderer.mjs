@@ -63,12 +63,12 @@ export default class Renderer {
 
     const propsWithPageState = Erlang_Maps["merge/2"](propsWithCid, pageState);
 
-    return Type.map([
+    return Type.list(
       Object.values(propsWithPageState.data).map(([name, value]) => [
         Type.bitstring(name.value),
         Type.keywordList([[Type.atom("expression"), Type.tuple([value])]]),
       ]),
-    ]);
+    );
   }
 
   // Based on cast_props/2
@@ -146,7 +146,7 @@ export default class Renderer {
 
   // Based on evaluate_prop_value/2
   static #evalutatePropValue(propDom) {
-    const [name, valueDom] = propDom.data;
+    const [name, valueDom] = propDom;
     let evaluatedValue;
 
     if (
@@ -178,7 +178,7 @@ export default class Renderer {
 
     return propsDom.data.filter((propDom) =>
       allowedPropNames.some((name) =>
-        Interpreter.isStrictlyEqual(name, propDom.data[0]),
+        Interpreter.isStrictlyEqual(name, propDom[0]),
       ),
     );
   }
