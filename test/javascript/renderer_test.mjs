@@ -1221,22 +1221,4 @@ describe("context", () => {
 
     assert.deepStrictEqual(result, ["prop_aaa = 123"]);
   });
-
-  //   test "emmited in layout, accessed in component nested in page" do
-  //   ETS.put(PageDigestRegistryStub.ets_table_name(), Module43, :dummy_module_43_digest)
-
-  //   assert render_page(Module43, []) ==
-  //            {"prop_aaa = 123",
-  //             %{
-  //               "layout" => %Client{
-  //                 context: %{{:my_scope, :my_key} => 123}
-  //               },
-  //               "page" => %Client{
-  //                 context: %{
-  //                   {Hologram.Runtime, :page_digest} => :dummy_module_43_digest,
-  //                   {Hologram.Runtime, :page_mounted?} => true
-  //                 }
-  //               }
-  //             }}
-  // end
 });
