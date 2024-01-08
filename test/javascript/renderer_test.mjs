@@ -36,6 +36,8 @@ import {defineHologramTestFixturesTemplateRendererModule8} from "./fixtures/temp
 import {defineHologramTestFixturesTemplateRendererModule9} from "./fixtures/template/renderer/module_9.mjs";
 import {defineLayoutFixture} from "./fixtures/layout_fixture.mjs";
 import {defineModule40Fixture} from "./fixtures/template/renderer/module_40.mjs";
+import {defineModule42Fixture} from "./fixtures/template/renderer/module_42.mjs";
+import {defineModule43Fixture} from "./fixtures/template/renderer/module_43.mjs";
 import {defineModule41Fixture} from "./fixtures/template/renderer/module_41.mjs";
 import {defineModule46Fixture} from "./fixtures/template/renderer/module_46.mjs";
 import {defineModule47Fixture} from "./fixtures/template/renderer/module_47.mjs";
@@ -72,6 +74,8 @@ before(() => {
   defineLayoutFixture();
   defineModule40Fixture();
   defineModule41Fixture();
+  defineModule42Fixture();
+  defineModule43Fixture();
   defineModule46Fixture();
   defineModule47Fixture();
 });
@@ -1196,4 +1200,43 @@ describe("context", () => {
 
     assert.deepStrictEqual(result, ["prop_aaa = 123"]);
   });
+
+  it("emmited in layout, accessed in component nested in page", () => {
+    initStoreComponentData(Type.bitstring("page"));
+
+    Store.putComponentContext(
+      Type.bitstring("layout"),
+      Type.map([
+        [
+          Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
+          Type.integer(123),
+        ],
+      ]),
+    );
+
+    const result = Renderer.renderPage(
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module43"),
+      Type.list([]),
+    );
+
+    assert.deepStrictEqual(result, ["prop_aaa = 123"]);
+  });
+
+  //   test "emmited in layout, accessed in component nested in page" do
+  //   ETS.put(PageDigestRegistryStub.ets_table_name(), Module43, :dummy_module_43_digest)
+
+  //   assert render_page(Module43, []) ==
+  //            {"prop_aaa = 123",
+  //             %{
+  //               "layout" => %Client{
+  //                 context: %{{:my_scope, :my_key} => 123}
+  //               },
+  //               "page" => %Client{
+  //                 context: %{
+  //                   {Hologram.Runtime, :page_digest} => :dummy_module_43_digest,
+  //                   {Hologram.Runtime, :page_mounted?} => true
+  //                 }
+  //               }
+  //             }}
+  // end
 });
