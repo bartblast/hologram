@@ -35,6 +35,8 @@ import {defineHologramTestFixturesTemplateRendererModule7} from "./fixtures/temp
 import {defineHologramTestFixturesTemplateRendererModule8} from "./fixtures/template/renderer/module_8.mjs";
 import {defineHologramTestFixturesTemplateRendererModule9} from "./fixtures/template/renderer/module_9.mjs";
 import {defineLayoutFixture} from "./fixtures/layout_fixture.mjs";
+import {defineModule40Fixture} from "./fixtures/template/renderer/module_40.mjs";
+import {defineModule41Fixture} from "./fixtures/template/renderer/module_41.mjs";
 import {defineModule46Fixture} from "./fixtures/template/renderer/module_46.mjs";
 import {defineModule47Fixture} from "./fixtures/template/renderer/module_47.mjs";
 
@@ -68,6 +70,8 @@ before(() => {
   defineHologramTestFixturesTemplateRendererModule8();
   defineHologramTestFixturesTemplateRendererModule9();
   defineLayoutFixture();
+  defineModule40Fixture();
+  defineModule41Fixture();
   defineModule46Fixture();
   defineModule47Fixture();
 });
@@ -1166,6 +1170,27 @@ describe("context", () => {
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module46"),
+      Type.list([]),
+    );
+
+    assert.deepStrictEqual(result, ["prop_aaa = 123"]);
+  });
+
+  it("emitted in page, accessed in layout", () => {
+    initStoreComponentData(Type.bitstring("layout"));
+
+    Store.putComponentContext(
+      Type.bitstring("page"),
+      Type.map([
+        [
+          Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
+          Type.integer(123),
+        ],
+      ]),
+    );
+
+    const result = Renderer.renderPage(
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module40"),
       Type.list([]),
     );
 

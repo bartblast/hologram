@@ -19,6 +19,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module34
   alias Hologram.Test.Fixtures.Template.Renderer.Module39
   alias Hologram.Test.Fixtures.Template.Renderer.Module4
+  alias Hologram.Test.Fixtures.Template.Renderer.Module40
   alias Hologram.Test.Fixtures.Template.Renderer.Module46
   alias Hologram.Test.Fixtures.Template.Renderer.Module5
   alias Hologram.Test.Fixtures.Template.Renderer.Module51
@@ -412,6 +413,25 @@ defmodule Hologram.Template.RendererTest do
                   }
                 }}
     end
+
+    test "emitted in page, accessed in layout" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module40, :dummy_module_40_digest)
+
+      assert render_page(Module40, []) ==
+               {"prop_aaa = 123",
+                %{
+                  "layout" => %Client{
+                    context: %{}
+                  },
+                  "page" => %Client{
+                    context: %{
+                      {Hologram.Runtime, :page_digest} => :dummy_module_40_digest,
+                      {Hologram.Runtime, :page_mounted?} => true,
+                      {:my_scope, :my_key} => 123
+                    }
+                  }
+                }}
+    end
   end
 
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module14
@@ -423,33 +443,12 @@ defmodule Hologram.Template.RendererTest do
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module28
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module29
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module37
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module40
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module43
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module45
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module48
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module50
 
   #   describe "context" do
-
-  #     test "set in page, accessed in layout" do
-  #       ETS.put(PageDigestRegistryStub.ets_table_name(), Module40, :dummy_module_40_digest)
-
-  #       assert render_page(Module40, []) ==
-  #                {"prop_aaa = 123",
-  #                 %{
-  #                   "layout" => %Component.Client{
-  #                     context: %{}
-  #                   },
-  #                   "page" => %Component.Client{
-  #                     context: %{
-  #                       {Hologram.Runtime, :page_digest} => :dummy_module_40_digest,
-  #                       {Hologram.Runtime, :page_mounted?} => true,
-  #                       {:my_scope, :my_key} => 123
-  #                     }
-  #                   }
-  #                 }}
-  #     end
-
   #     test "set in layout, accessed in component nested in page" do
   #       ETS.put(PageDigestRegistryStub.ets_table_name(), Module43, :dummy_module_43_digest)
 
