@@ -1,8 +1,8 @@
 defmodule Hologram.Template.Renderer do
   alias Hologram.Commons.StringUtils
+  alias Hologram.Compiler.Encoder
   alias Hologram.Component.Client
   alias Hologram.Component.Server
-  alias Hologram.Compiler.Encoder
   alias Hologram.Runtime.PageDigestRegistry
   alias Hologram.Runtime.Templatable
   alias Hologram.Template.DOM
