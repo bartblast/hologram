@@ -23,7 +23,7 @@ defmodule Hologram.Template.Renderer do
       }
   """
   @spec render_dom(DOM.t(), %{(atom | {any, atom}) => any}, keyword(DOM.t())) ::
-          {String.t(), %{atom => Component.Client.t()}}
+          {String.t(), %{atom => Client.t()}}
   def render_dom(dom, context, slots)
 
   def render_dom({:component, module, props_dom, children_dom}, context, slots) do

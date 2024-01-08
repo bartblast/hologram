@@ -1,6 +1,7 @@
 defmodule Hologram.Runtime.Templatable do
   alias Hologram.Compiler.AST
-  alias Hologram.Component
+  alias Hologram.Component.Client
+  alias Hologram.Component.Server
 
   defmacro __using__(opts \\ []) do
     [
@@ -17,10 +18,8 @@ defmodule Hologram.Runtime.Templatable do
           @doc """
           Initializes component client and server data (when run on the server).
           """
-          @callback init(%{atom => any}, Component.Client.t(), Component.Server.t()) ::
-                      {Component.Client.t(), Component.Server.t()}
-                      | Component.Client.t()
-                      | Component.Server.t()
+          @callback init(%{atom => any}, Client.t(), Server.t()) ::
+                      {Client.t(), Server.t()} | Client.t() | Server.t()
         end
       end
     ]
@@ -75,7 +74,7 @@ defmodule Hologram.Runtime.Templatable do
   @doc """
   Puts the given key-value pair to the context.
   """
-  @spec put_context(Component.Client.t(), any, any) :: Component.Client.t()
+  @spec put_context(Client.t(), any, any) :: Client.t()
   def put_context(%{context: context} = client, key, value) do
     %{client | context: Map.put(context, key, value)}
   end
@@ -83,7 +82,7 @@ defmodule Hologram.Runtime.Templatable do
   @doc """
   Puts the given key-value entries to the component client state.
   """
-  @spec put_state(Component.Client.t(), keyword | map) :: Component.Client.t()
+  @spec put_state(Client.t(), keyword | map) :: Client.t()
   def put_state(client, entries)
 
   def put_state(client, entries) when is_list(entries) do
@@ -97,7 +96,7 @@ defmodule Hologram.Runtime.Templatable do
   @doc """
   Puts the given key-value pair to the component client state.
   """
-  @spec put_state(Component.Client.t(), atom, any) :: Component.Client.t()
+  @spec put_state(Client.t(), atom, any) :: Client.t()
   def put_state(%{state: state} = client, key, value) do
     %{client | state: Map.put(state, key, value)}
   end

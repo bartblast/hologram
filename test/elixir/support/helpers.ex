@@ -8,7 +8,8 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
-  alias Hologram.Component
+  alias Hologram.Component.Client
+  alias Hologram.Component.Server
   alias Hologram.Runtime.PageDigestRegistry
   alias Hologram.Template.Parser
   alias Hologram.Template.Renderer
@@ -34,17 +35,17 @@ defmodule Hologram.Test.Helpers do
   @doc """
   Builds empty Component.Client struct.
   """
-  @spec build_component_client() :: Component.Client.t()
+  @spec build_component_client() :: Client.t()
   def build_component_client do
-    %Component.Client{}
+    %Client{}
   end
 
   @doc """
   Builds empty Component.Server struct.
   """
-  @spec build_component_server() :: Component.Server.t()
+  @spec build_component_server() :: Server.t()
   def build_component_server do
-    %Component.Server{}
+    %Server{}
   end
 
   @doc """
