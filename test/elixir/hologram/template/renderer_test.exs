@@ -21,6 +21,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module4
   alias Hologram.Test.Fixtures.Template.Renderer.Module40
   alias Hologram.Test.Fixtures.Template.Renderer.Module43
+  alias Hologram.Test.Fixtures.Template.Renderer.Module45
   alias Hologram.Test.Fixtures.Template.Renderer.Module46
   alias Hologram.Test.Fixtures.Template.Renderer.Module5
   alias Hologram.Test.Fixtures.Template.Renderer.Module51
@@ -451,6 +452,24 @@ defmodule Hologram.Template.RendererTest do
                   }
                 }}
     end
+
+    test "emitted in layout, accessed in component nested in layout" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module45, :dummy_module_45_digest)
+
+      assert render_page(Module45, []) ==
+               {"prop_aaa = 123",
+                %{
+                  "layout" => %Client{
+                    context: %{{:my_scope, :my_key} => 123}
+                  },
+                  "page" => %Client{
+                    context: %{
+                      {Hologram.Runtime, :page_digest} => :dummy_module_45_digest,
+                      {Hologram.Runtime, :page_mounted?} => true
+                    }
+                  }
+                }}
+    end
   end
 
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module14
@@ -462,29 +481,10 @@ defmodule Hologram.Template.RendererTest do
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module28
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module29
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module37
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module45
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module48
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module50
 
   #   describe "context" do
-  #     test "set in layout, accessed in component nested in layout" do
-  #       ETS.put(PageDigestRegistryStub.ets_table_name(), Module45, :dummy_module_45_digest)
-
-  #       assert render_page(Module45, []) ==
-  #                {"prop_aaa = 123",
-  #                 %{
-  #                   "layout" => %Component.Client{
-  #                     context: %{{:my_scope, :my_key} => 123}
-  #                   },
-  #                   "page" => %Component.Client{
-  #                     context: %{
-  #                       {Hologram.Runtime, :page_digest} => :dummy_module_45_digest,
-  #                       {Hologram.Runtime, :page_mounted?} => true
-  #                     }
-  #                   }
-  #                 }}
-  #     end
-
   #     test "set in component, accessed in component" do
   #       node = {:component, Module37, [{"cid", [text: "component_37"]}], []}
 
