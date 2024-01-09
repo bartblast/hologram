@@ -10,9 +10,9 @@ export function defineHologramTestFixturesTemplateRendererModule18() {
     0,
     [
       {
-        params: (vars) => [],
+        params: (_vars) => [],
         guards: [],
-        body: (vars) => {
+        body: (_vars) => {
           return Type.list([
             Type.tuple([Type.atom("a"), Type.atom("string"), Type.list([])]),
           ]);

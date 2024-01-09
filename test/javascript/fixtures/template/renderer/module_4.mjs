@@ -1,7 +1,5 @@
 "use strict";
 
-import {buildClientStruct} from "../../../../../assets/js/test_support.mjs";
-
 import Interpreter from "../../../../../assets/js/interpreter.mjs";
 import Type from "../../../../../assets/js/type.mjs";
 
@@ -12,9 +10,9 @@ export function defineHologramTestFixturesTemplateRendererModule4() {
     0,
     [
       {
-        params: (vars) => [],
+        params: (_vars) => [],
         guards: [],
-        body: (vars) => {
+        body: (_vars) => {
           return Type.list([
             Type.tuple([Type.atom("c"), Type.atom("string"), Type.list([])]),
             Type.tuple([Type.atom("b"), Type.atom("string"), Type.list([])]),
@@ -30,14 +28,14 @@ export function defineHologramTestFixturesTemplateRendererModule4() {
     0,
     [
       {
-        params: (vars) => [],
+        params: (_vars) => [],
         guards: [],
         body: (vars) => {
           globalThis.__hologramReturn__ = Type.anonymousFunction(
             1,
             [
               {
-                params: (vars) => [Type.variablePattern("vars")],
+                params: (_vars) => [Type.variablePattern("vars")],
                 guards: [],
                 body: (vars) => {
                   Interpreter.matchOperator(

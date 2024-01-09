@@ -3,7 +3,6 @@
 import {
   assert,
   assertBoxedError,
-  assertBoxedFalse,
   assertMatchError,
   linkModules,
   sinon,

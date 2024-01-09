@@ -34,7 +34,7 @@ export function defineHologramTestFixturesTemplateRendererModule36() {
             1,
             [
               {
-                params: (vars) => [Type.variablePattern("vars")],
+                params: (_vars) => [Type.variablePattern("vars")],
                 guards: [],
                 body: (vars) => {
                   Interpreter.matchOperator(

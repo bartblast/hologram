@@ -187,7 +187,7 @@ export default class Renderer {
 
   // Based on has_cid_prop?/1
   static #hasCidProp(props) {
-    return props.data.hasOwnProperty("atom(cid)");
+    return "atom(cid)" in props.data;
   }
 
   static #maybeInitComponent(cid, moduleRef, props) {

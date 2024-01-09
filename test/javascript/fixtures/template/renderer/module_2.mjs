@@ -10,9 +10,9 @@ export function defineHologramTestFixturesTemplateRendererModule2() {
     0,
     [
       {
-        params: (vars) => [],
+        params: (_vars) => [],
         guards: [],
-        body: (vars) => {
+        body: (_vars) => {
           return Type.list([
             Type.tuple([Type.atom("c"), Type.atom("string"), Type.list([])]),
             Type.tuple([Type.atom("b"), Type.atom("integer"), Type.list([])]),
@@ -29,7 +29,7 @@ export function defineHologramTestFixturesTemplateRendererModule2() {
     2,
     [
       {
-        params: (vars) => [
+        params: (_vars) => [
           Type.matchPlaceholder(),
           Type.variablePattern("client"),
         ],
@@ -47,14 +47,14 @@ export function defineHologramTestFixturesTemplateRendererModule2() {
     0,
     [
       {
-        params: (vars) => [],
+        params: (_vars) => [],
         guards: [],
         body: (vars) => {
           globalThis.__hologramReturn__ = Type.anonymousFunction(
             1,
             [
               {
-                params: (vars) => [Type.variablePattern("vars")],
+                params: (_vars) => [Type.variablePattern("vars")],
                 guards: [],
                 body: (vars) => {
                   Interpreter.matchOperator(
