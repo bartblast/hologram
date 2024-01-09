@@ -35,6 +35,7 @@ import {defineHologramTestFixturesTemplateRendererModule7} from "./fixtures/temp
 import {defineHologramTestFixturesTemplateRendererModule8} from "./fixtures/template/renderer/module_8.mjs";
 import {defineHologramTestFixturesTemplateRendererModule9} from "./fixtures/template/renderer/module_9.mjs";
 import {defineLayoutFixture} from "./fixtures/layout_fixture.mjs";
+import {defineModule37Fixture} from "./fixtures/template/renderer/module_37.mjs";
 import {defineModule40Fixture} from "./fixtures/template/renderer/module_40.mjs";
 import {defineModule42Fixture} from "./fixtures/template/renderer/module_42.mjs";
 import {defineModule43Fixture} from "./fixtures/template/renderer/module_43.mjs";
@@ -74,6 +75,7 @@ before(() => {
   defineHologramTestFixturesTemplateRendererModule8();
   defineHologramTestFixturesTemplateRendererModule9();
   defineLayoutFixture();
+  defineModule37Fixture();
   defineModule40Fixture();
   defineModule41Fixture();
   defineModule42Fixture();
@@ -1243,6 +1245,36 @@ describe("context", () => {
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module45"),
       Type.list([]),
     );
+
+    assert.deepStrictEqual(result, ["prop_aaa = 123"]);
+  });
+
+  it("emitted in component, accessed in component", () => {
+    const cid = Type.bitstring("component_37");
+
+    Store.putComponentContext(
+      cid,
+      Type.map([
+        [
+          Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
+          Type.integer(123),
+        ],
+      ]),
+    );
+
+    const node = Type.tuple([
+      Type.atom("component"),
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module37"),
+      Type.list([
+        Type.tuple([
+          Type.bitstring("cid"),
+          Type.keywordList([[Type.atom("text"), cid]]),
+        ]),
+      ]),
+      Type.list([]),
+    ]);
+
+    const result = Renderer.renderDom(node, context, slots);
 
     assert.deepStrictEqual(result, ["prop_aaa = 123"]);
   });

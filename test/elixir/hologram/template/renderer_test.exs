@@ -17,6 +17,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module3
   alias Hologram.Test.Fixtures.Template.Renderer.Module31
   alias Hologram.Test.Fixtures.Template.Renderer.Module34
+  alias Hologram.Test.Fixtures.Template.Renderer.Module37
   alias Hologram.Test.Fixtures.Template.Renderer.Module39
   alias Hologram.Test.Fixtures.Template.Renderer.Module4
   alias Hologram.Test.Fixtures.Template.Renderer.Module40
@@ -470,6 +471,20 @@ defmodule Hologram.Template.RendererTest do
                   }
                 }}
     end
+
+    test "emitted in component, accessed in component" do
+      node = {:component, Module37, [{"cid", [text: "component_37"]}], []}
+
+      assert render_dom(node, %{}, []) ==
+               {"prop_aaa = 123",
+                %{
+                  "component_37" => %Client{
+                    context: %{
+                      {:my_scope, :my_key} => 123
+                    }
+                  }
+                }}
+    end
   end
 
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module14
@@ -480,25 +495,8 @@ defmodule Hologram.Template.RendererTest do
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module27
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module28
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module29
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module37
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module48
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module50
-
-  #   describe "context" do
-  #     test "set in component, accessed in component" do
-  #       node = {:component, Module37, [{"cid", [text: "component_37"]}], []}
-
-  #       assert render_dom(node, %{}, []) ==
-  #                {"prop_aaa = 123",
-  #                 %{
-  #                   "component_37" => %Component.Client{
-  #                     context: %{
-  #                       {:my_scope, :my_key} => 123
-  #                     }
-  #                   }
-  #                 }}
-  #     end
-  #   end
 
   #   describe "page" do
   #     setup do
