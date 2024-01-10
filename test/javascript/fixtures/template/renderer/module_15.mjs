@@ -1,6 +1,5 @@
 "use strict";
 
-import {globalAgent} from "http";
 import Interpreter from "../../../../../assets/js/interpreter.mjs";
 import Type from "../../../../../assets/js/type.mjs";
 
