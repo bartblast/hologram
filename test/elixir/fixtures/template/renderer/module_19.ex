@@ -6,7 +6,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module19 do
   param :param_1
   param :param_3
 
-  layout Hologram.Test.Fixtures.Template.Renderer.Module20
+  layout Hologram.Test.Fixtures.LayoutFixture
 
   @impl Page
   def init(params, client, _server) do
