@@ -188,6 +188,13 @@ export function linkModules() {
   globalThis.Elixir_Kernel["to_string/1"] = elixirKernelToString1;
 }
 
+export function putClientState(client, state) {
+  const oldState = Erlang_Maps["get/2"](Type.atom("state"), client);
+  const newState = Erlang_Maps["merge/2"](oldState, state);
+
+  return Erlang_Maps["put/3"](Type.atom("state"), newState, client);
+}
+
 export function unlinkModules() {
   delete globalThis.Erlang;
   delete globalThis.Erlang_Lists;
