@@ -1163,7 +1163,7 @@ describe("context", () => {
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module39"),
-      Type.list([]),
+      Type.map([]),
     );
 
     assert.deepStrictEqual(result, ["prop_aaa = 123"]);
@@ -1184,7 +1184,7 @@ describe("context", () => {
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module46"),
-      Type.list([]),
+      Type.map([]),
     );
 
     assert.deepStrictEqual(result, ["prop_aaa = 123"]);
@@ -1205,7 +1205,7 @@ describe("context", () => {
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module40"),
-      Type.list([]),
+      Type.map([]),
     );
 
     assert.deepStrictEqual(result, ["prop_aaa = 123"]);
@@ -1226,7 +1226,7 @@ describe("context", () => {
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module43"),
-      Type.list([]),
+      Type.map([]),
     );
 
     assert.deepStrictEqual(result, ["prop_aaa = 123"]);
@@ -1247,7 +1247,7 @@ describe("context", () => {
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module45"),
-      Type.list([]),
+      Type.map([]),
     );
 
     assert.deepStrictEqual(result, ["prop_aaa = 123"]);
@@ -1291,11 +1291,14 @@ describe("page", () => {
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module14"),
-      Type.list([]),
+      Type.map([]),
     );
 
     assert.deepStrictEqual(result, [
       "layout template start, page template, layout template end",
     ]);
   });
+
+  // This test case doesn't apply to the client renderer, because the client renderer receives already casted page params.
+  // it("cast page params")
 });

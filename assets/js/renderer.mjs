@@ -36,9 +36,8 @@ export default class Renderer {
   }
 
   // Based on: render_page/2
-  static renderPage(pageModule, pageParamsDom) {
+  static renderPage(pageModule, pageParams) {
     const pageModuleRef = Interpreter.moduleRef(pageModule);
-    const pageParams = Renderer.#castProps(pageParamsDom, pageModuleRef);
 
     const cid = Type.bitstring("page");
     const pageClientStruct = Store.getComponentData(cid);
