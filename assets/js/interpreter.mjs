@@ -26,17 +26,11 @@ export default class Interpreter {
   // TODO: Remove when structural comparison is fully implemented.
   // See: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
   // and :erlang.</2, :erlang.>/2 and similar
-  static assertSupportedTypesForStructuralComparison(fun, left, right) {
-    if (
-      (!Type.isFloat(left) && !Type.isInteger(left)) ||
-      (!Type.isFloat(right) && !Type.isInteger(right))
-    ) {
-      const message =
-        `:erlang.${fun} currently supports only floats and integers` +
-        ", left = " +
-        Interpreter.inspect(left) +
-        ", right = " +
-        Interpreter.inspect(right);
+  static assertStructuralComparisonSupportedType(term) {
+    if (!Type.isFloat(term) && !Type.isInteger(term)) {
+      const message = `Structural comparison currently supports only floats and integers, got: ${Interpreter.inspect(
+        term,
+      )}`;
 
       throw new HologramInterpreterError(message);
     }

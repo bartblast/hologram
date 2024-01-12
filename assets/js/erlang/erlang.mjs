@@ -89,7 +89,8 @@ const Erlang = {
   // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
   // start </2
   "</2": (left, right) => {
-    Interpreter.assertSupportedTypesForStructuralComparison("</2", left, right);
+    Interpreter.assertStructuralComparisonSupportedType(left);
+    Interpreter.assertStructuralComparisonSupportedType(right);
 
     return Type.boolean(left.value < right.value);
   },
@@ -105,11 +106,8 @@ const Erlang = {
 
   // start =</2
   "=</2": (left, right) => {
-    Interpreter.assertSupportedTypesForStructuralComparison(
-      "=</2",
-      left,
-      right,
-    );
+    Interpreter.assertStructuralComparisonSupportedType(left);
+    Interpreter.assertStructuralComparisonSupportedType(right);
 
     const result =
       Type.isTrue(Erlang["==/2"](left, right)) ||
@@ -130,7 +128,8 @@ const Erlang = {
   // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
   // start >/2
   ">/2": (left, right) => {
-    Interpreter.assertSupportedTypesForStructuralComparison(">/2", left, right);
+    Interpreter.assertStructuralComparisonSupportedType(left);
+    Interpreter.assertStructuralComparisonSupportedType(right);
 
     return Type.boolean(left.value > right.value);
   },
@@ -139,11 +138,8 @@ const Erlang = {
 
   // start >=/2
   ">=/2": (left, right) => {
-    Interpreter.assertSupportedTypesForStructuralComparison(
-      ">=/2",
-      left,
-      right,
-    );
+    Interpreter.assertStructuralComparisonSupportedType(left);
+    Interpreter.assertStructuralComparisonSupportedType(right);
 
     const result =
       Type.isTrue(Erlang["==/2"](left, right)) ||

@@ -375,7 +375,7 @@ describe("</2", () => {
     const right = Type.integer(2);
 
     const expectedMessage =
-      ':erlang.</2 currently supports only floats and integers, left = "abc", right = 2';
+      'Structural comparison currently supports only floats and integers, got: "abc"';
 
     assert.throw(
       () => Erlang["</2"](left, right),
@@ -389,7 +389,7 @@ describe("</2", () => {
     const right = Type.bitstring("abc");
 
     const expectedMessage =
-      ':erlang.</2 currently supports only floats and integers, left = 2, right = "abc"';
+      'Structural comparison currently supports only floats and integers, got: "abc"';
 
     assert.throw(
       () => Erlang["</2"](left, right),
@@ -512,7 +512,7 @@ describe("=</2", () => {
     const right = Type.integer(2);
 
     const expectedMessage =
-      ':erlang.=</2 currently supports only floats and integers, left = "abc", right = 2';
+      'Structural comparison currently supports only floats and integers, got: "abc"';
 
     assert.throw(
       () => Erlang["=</2"](left, right),
@@ -526,7 +526,7 @@ describe("=</2", () => {
     const right = Type.bitstring("abc");
 
     const expectedMessage =
-      ':erlang.=</2 currently supports only floats and integers, left = 2, right = "abc"';
+      'Structural comparison currently supports only floats and integers, got: "abc"';
 
     assert.throw(
       () => Erlang["=</2"](left, right),
@@ -748,7 +748,7 @@ describe(">/2", () => {
     const right = Type.integer(2);
 
     const expectedMessage =
-      ':erlang.>/2 currently supports only floats and integers, left = "abc", right = 2';
+      'Structural comparison currently supports only floats and integers, got: "abc"';
 
     assert.throw(
       () => Erlang[">/2"](left, right),
@@ -762,7 +762,7 @@ describe(">/2", () => {
     const right = Type.bitstring("abc");
 
     const expectedMessage =
-      ':erlang.>/2 currently supports only floats and integers, left = 2, right = "abc"';
+      'Structural comparison currently supports only floats and integers, got: "abc"';
 
     assert.throw(
       () => Erlang[">/2"](left, right),
@@ -874,7 +874,7 @@ describe(">=/2", () => {
     const right = Type.integer(2);
 
     const expectedMessage =
-      ':erlang.>=/2 currently supports only floats and integers, left = "abc", right = 2';
+      'Structural comparison currently supports only floats and integers, got: "abc"';
 
     assert.throw(
       () => Erlang[">=/2"](left, right),
@@ -888,7 +888,7 @@ describe(">=/2", () => {
     const right = Type.bitstring("abc");
 
     const expectedMessage =
-      ':erlang.>=/2 currently supports only floats and integers, left = 2, right = "abc"';
+      'Structural comparison currently supports only floats and integers, got: "abc"';
 
     assert.throw(
       () => Erlang[">=/2"](left, right),
