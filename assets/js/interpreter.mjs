@@ -23,6 +23,25 @@ export default class Interpreter {
     return Type.isTuple(keyfindRes) ? keyfindRes.data[1] : null;
   }
 
+  // TODO: Remove when structural comparison is fully implemented.
+  // See: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
+  // and :erlang.</2, :erlang.>/2 and similar
+  static assertSupportedTypesForStructuralComparison(fun, left, right) {
+    if (
+      (!Type.isFloat(left) && !Type.isInteger(left)) ||
+      (!Type.isFloat(right) && !Type.isInteger(right))
+    ) {
+      const message =
+        `:erlang.${fun} currently supports only floats and integers` +
+        ", left = " +
+        Interpreter.inspect(left) +
+        ", right = " +
+        Interpreter.inspect(right);
+
+      throw new HologramInterpreterError(message);
+    }
+  }
+
   static callAnonymousFunction(fun, argsArray) {
     const args = Type.list(argsArray);
 

@@ -89,19 +89,7 @@ const Erlang = {
   // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
   // start </2
   "</2": (left, right) => {
-    if (
-      (!Type.isFloat(left) && !Type.isInteger(left)) ||
-      (!Type.isFloat(right) && !Type.isInteger(right))
-    ) {
-      const message =
-        ":erlang.</2 currently supports only floats and integers" +
-        ", left = " +
-        Interpreter.inspect(left) +
-        ", right = " +
-        Interpreter.inspect(right);
-
-      throw new HologramInterpreterError(message);
-    }
+    Interpreter.assertSupportedTypesForStructuralComparison("</2", left, right);
 
     return Type.boolean(left.value < right.value);
   },
@@ -117,19 +105,11 @@ const Erlang = {
 
   // start =</2
   "=</2": (left, right) => {
-    if (
-      (!Type.isFloat(left) && !Type.isInteger(left)) ||
-      (!Type.isFloat(right) && !Type.isInteger(right))
-    ) {
-      const message =
-        ":erlang.=</2 currently supports only floats and integers" +
-        ", left = " +
-        Interpreter.inspect(left) +
-        ", right = " +
-        Interpreter.inspect(right);
-
-      throw new HologramInterpreterError(message);
-    }
+    Interpreter.assertSupportedTypesForStructuralComparison(
+      "=</2",
+      left,
+      right,
+    );
 
     const result =
       Type.isTrue(Erlang["==/2"](left, right)) ||
@@ -150,19 +130,7 @@ const Erlang = {
   // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
   // start >/2
   ">/2": (left, right) => {
-    if (
-      (!Type.isFloat(left) && !Type.isInteger(left)) ||
-      (!Type.isFloat(right) && !Type.isInteger(right))
-    ) {
-      const message =
-        ":erlang.>/2 currently supports only floats and integers" +
-        ", left = " +
-        Interpreter.inspect(left) +
-        ", right = " +
-        Interpreter.inspect(right);
-
-      throw new HologramInterpreterError(message);
-    }
+    Interpreter.assertSupportedTypesForStructuralComparison(">/2", left, right);
 
     return Type.boolean(left.value > right.value);
   },
@@ -171,19 +139,11 @@ const Erlang = {
 
   // start >=/2
   ">=/2": (left, right) => {
-    if (
-      (!Type.isFloat(left) && !Type.isInteger(left)) ||
-      (!Type.isFloat(right) && !Type.isInteger(right))
-    ) {
-      const message =
-        ":erlang.>=/2 currently supports only floats and integers" +
-        ", left = " +
-        Interpreter.inspect(left) +
-        ", right = " +
-        Interpreter.inspect(right);
-
-      throw new HologramInterpreterError(message);
-    }
+    Interpreter.assertSupportedTypesForStructuralComparison(
+      ">=/2",
+      left,
+      right,
+    );
 
     const result =
       Type.isTrue(Erlang["==/2"](left, right)) ||
