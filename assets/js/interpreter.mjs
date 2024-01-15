@@ -27,8 +27,8 @@ export default class Interpreter {
   // See: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
   // and :erlang.</2, :erlang.>/2 and similar
   static assertStructuralComparisonSupportedType(term) {
-    if (!Type.isFloat(term) && !Type.isInteger(term)) {
-      const message = `Structural comparison currently supports only floats and integers, got: ${Interpreter.inspect(
+    if (!Type.isAtom(term) && !Type.isFloat(term) && !Type.isInteger(term)) {
+      const message = `Structural comparison currently supports only atoms, floats and integers, got: ${Interpreter.inspect(
         term,
       )}`;
 
@@ -88,6 +88,18 @@ export default class Interpreter {
 
   static cloneVars(vars) {
     return cloneDeep(vars);
+  }
+
+  static compareTerms(term1, term2) {
+    Interpreter.assertStructuralComparisonSupportedType(term1);
+    Interpreter.assertStructuralComparisonSupportedType(term2);
+
+    const term1TypeOrder = Interpreter.getStructuralComparisonTypeOrder(term1);
+    const term2TypeOrder = Interpreter.getStructuralComparisonTypeOrder(term2);
+
+    if (term1TypeOrder !== term2TypeOrder) {
+      return term1TypeOrder < term2TypeOrder ? -1 : 1;
+    }
   }
 
   static comprehension(generators, filters, collectable, unique, mapper, vars) {
