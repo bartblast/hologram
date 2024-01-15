@@ -605,22 +605,24 @@ describe("cloneVars()", () => {
 });
 
 describe("compareTerms()", () => {
-  it("terms of different type, the first term is smaller", () => {
-    const result = Interpreter.compareTerms(
-      Type.integer(123),
-      Type.atom("abc"),
-    );
+  describe("different types", () => {
+    it("first term smaller than second term", () => {
+      const result = Interpreter.compareTerms(
+        Type.integer(123),
+        Type.atom("abc"),
+      );
 
-    assert.equal(result, -1);
-  });
+      assert.equal(result, -1);
+    });
 
-  it("terms of different type, the first term is bigger", () => {
-    const result = Interpreter.compareTerms(
-      Type.atom("abc"),
-      Type.integer(123),
-    );
+    it("first term bigger than second term", () => {
+      const result = Interpreter.compareTerms(
+        Type.atom("abc"),
+        Type.integer(123),
+      );
 
-    assert.equal(result, 1);
+      assert.equal(result, 1);
+    });
   });
 
   describe("atom type", () => {
