@@ -622,6 +622,44 @@ describe("compareTerms()", () => {
 
     assert.equal(result, 1);
   });
+
+  describe("atom type", () => {
+    it("equal terms", () => {
+      const result = Interpreter.compareTerms(
+        Type.atom("abc"),
+        Type.atom("abc"),
+      );
+
+      assert.equal(result, 0);
+    });
+
+    it("first term smaller than second term", () => {
+      const result = Interpreter.compareTerms(
+        Type.atom("aaa"),
+        Type.atom("bbb"),
+      );
+
+      assert.equal(result, -1);
+    });
+
+    it("first term bigger than second term", () => {
+      const result = Interpreter.compareTerms(
+        Type.atom("bbb"),
+        Type.atom("aaa"),
+      );
+
+      assert.equal(result, 1);
+    });
+
+    it("unicode chars", () => {
+      const result = Interpreter.compareTerms(
+        Type.atom("álien"),
+        Type.atom("office"),
+      );
+
+      assert.equal(result, 1);
+    });
+  });
 });
 
 describe("comprehension()", () => {

@@ -100,6 +100,15 @@ export default class Interpreter {
     if (term1TypeOrder !== term2TypeOrder) {
       return term1TypeOrder < term2TypeOrder ? -1 : 1;
     }
+
+    switch (term1.type) {
+      case "atom":
+        return term1.value === term2.value
+          ? 0
+          : term1.value < term2.value
+            ? -1
+            : 1;
+    }
   }
 
   static comprehension(generators, filters, collectable, unique, mapper, vars) {
