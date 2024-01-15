@@ -270,6 +270,42 @@ export default class Interpreter {
     return jsError.struct.data["atom(__struct__)"][1].value.substring(7);
   }
 
+  // See type ordering spec: https://hexdocs.pm/elixir/main/Kernel.html#module-term-ordering
+  static getStructuralComparisonTypeOrder(term) {
+    switch (term.type) {
+      case "anonymous_function":
+        return 4;
+
+      case "atom":
+        return 2;
+
+      case "bitstring":
+        return 10;
+
+      case "float":
+      case "integer":
+        return 1;
+
+      case "list":
+        return 9;
+
+      case "map":
+        return 8;
+
+      case "pid":
+        return 6;
+
+      case "port":
+        return 5;
+
+      case "reference":
+        return 3;
+
+      case "tuple":
+        return 7;
+    }
+  }
+
   // Important: keep Kernel.inspect/2 consistency tests in sync.
   // TODO: finish (e.g. implement text detection in binaries and other types such as pid, etc.)
   static inspect(term, opts = {}) {

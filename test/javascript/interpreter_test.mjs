@@ -1716,6 +1716,32 @@ it("fetchErrorType()", () => {
   assert.equal(result, "MyError");
 });
 
+describe("getStructuralComparisonTypeOrder()", () => {
+  it("float", () => {
+    const result = Interpreter.getStructuralComparisonTypeOrder(
+      Type.float(123.0),
+    );
+
+    assert.equal(result, 1);
+  });
+
+  it("integer", () => {
+    const result = Interpreter.getStructuralComparisonTypeOrder(
+      Type.integer(123),
+    );
+
+    assert.equal(result, 1);
+  });
+
+  it("non-number", () => {
+    const result = Interpreter.getStructuralComparisonTypeOrder(
+      Type.atom("abc"),
+    );
+
+    assert.equal(result, 2);
+  });
+});
+
 // Important: keep Kernel.inspect/2 consistency tests in sync.
 describe("inspect()", () => {
   describe("atom", () => {
