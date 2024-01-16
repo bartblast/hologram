@@ -86,13 +86,9 @@ const Erlang = {
   // end /=/2
   // deps: [:erlang.==/2]
 
-  // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
   // start </2
   "</2": (left, right) => {
-    Interpreter.assertStructuralComparisonSupportedType(left);
-    Interpreter.assertStructuralComparisonSupportedType(right);
-
-    return Type.boolean(left.value < right.value);
+    return Type.boolean(Interpreter.compareTerms(left, right) === -1);
   },
   // end </2
   // deps: []

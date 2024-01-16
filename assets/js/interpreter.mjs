@@ -90,6 +90,7 @@ export default class Interpreter {
     return cloneDeep(vars);
   }
 
+  // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
   static compareTerms(term1, term2) {
     Interpreter.assertStructuralComparisonSupportedType(term1);
     Interpreter.assertStructuralComparisonSupportedType(term2);
