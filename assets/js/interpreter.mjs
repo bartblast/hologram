@@ -103,7 +103,9 @@ export default class Interpreter {
 
     switch (term1.type) {
       case "atom":
-        return term1.value === term2.value
+      case "float":
+      case "integer":
+        return term1.value == term2.value
           ? 0
           : term1.value < term2.value
             ? -1

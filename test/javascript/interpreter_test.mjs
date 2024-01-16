@@ -662,6 +662,110 @@ describe("compareTerms()", () => {
       assert.equal(result, 1);
     });
   });
+
+  describe("number types (float or integer)", () => {
+    it("float == float", () => {
+      const result = Interpreter.compareTerms(
+        Type.float(1.23),
+        Type.float(1.23),
+      );
+
+      assert.equal(result, 0);
+    });
+
+    it("integer == integer", () => {
+      const result = Interpreter.compareTerms(
+        Type.integer(123),
+        Type.integer(123),
+      );
+
+      assert.equal(result, 0);
+    });
+
+    it("float == integer", () => {
+      const result = Interpreter.compareTerms(
+        Type.float(123.0),
+        Type.integer(123),
+      );
+
+      assert.equal(result, 0);
+    });
+
+    it("integer == float", () => {
+      const result = Interpreter.compareTerms(
+        Type.integer(123),
+        Type.float(123.0),
+      );
+
+      assert.equal(result, 0);
+    });
+
+    it("float < float", () => {
+      const result = Interpreter.compareTerms(
+        Type.float(1.23),
+        Type.float(2.34),
+      );
+
+      assert.equal(result, -1);
+    });
+
+    it("float < integer", () => {
+      const result = Interpreter.compareTerms(
+        Type.float(1.23),
+        Type.integer(2),
+      );
+
+      assert.equal(result, -1);
+    });
+
+    it("float > float", () => {
+      const result = Interpreter.compareTerms(
+        Type.float(2.34),
+        Type.float(1.23),
+      );
+
+      assert.equal(result, 1);
+    });
+
+    it("float > integer", () => {
+      const result = Interpreter.compareTerms(
+        Type.float(2.34),
+        Type.integer(1),
+      );
+
+      assert.equal(result, 1);
+    });
+
+    it("integer < integer", () => {
+      const result = Interpreter.compareTerms(Type.integer(1), Type.integer(2));
+
+      assert.equal(result, -1);
+    });
+
+    it("integer < float", () => {
+      const result = Interpreter.compareTerms(
+        Type.integer(1),
+        Type.float(2.34),
+      );
+
+      assert.equal(result, -1);
+    });
+
+    it("integer > integer", () => {
+      const result = Interpreter.compareTerms(Type.integer(2), Type.integer(1));
+
+      assert.equal(result, 1);
+    });
+
+    it("integer > float", () => {
+      const result = Interpreter.compareTerms(
+        Type.integer(2),
+        Type.float(1.23),
+      );
+
+      assert.equal(result, 1);
+    });
+  });
 });
 
 describe("comprehension()", () => {
