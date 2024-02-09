@@ -119,6 +119,22 @@ describe("+/2", () => {
 
     assert.deepStrictEqual(result, expected);
   });
+
+  it("raises ArithmeticError if the first argument is not a number", () => {
+    assertBoxedError(
+      () => Erlang["+/2"](Type.atom("abc"), Type.integer(123)),
+      "ArithmeticError",
+      "bad argument in arithmetic expression",
+    );
+  });
+
+  it("raises ArithmeticError if the second argument is not a number", () => {
+    assertBoxedError(
+      () => Erlang["+/2"](Type.integer(123), Type.atom("abc")),
+      "ArithmeticError",
+      "bad argument in arithmetic expression",
+    );
+  });
 });
 
 describe("-/2", () => {

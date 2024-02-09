@@ -37,6 +37,36 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "+/2" do
+    test "adds integer and integer" do
+      assert 1 + 2 === 3
+    end
+
+    test "adds integer and float" do
+      assert 1 + 2.0 === 3.0
+    end
+
+    test "adds float and integer" do
+      assert 1.0 + 2 === 3.0
+    end
+
+    test "adds float and float" do
+      assert 1.0 + 2.0 === 3.0
+    end
+
+    test "raises ArithmeticError if the first argument is not a number" do
+      assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
+        build_value(:abc) + 123
+      end
+    end
+
+    test "raises ArithmeticError if the second argument is not a number" do
+      assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
+        123 + build_value(:abc)
+      end
+    end
+  end
+
   describe "=</2" do
     test "returns true when left float argument is smaller than right float argument" do
       assert :erlang."=<"(3.2, 5.6) == true
