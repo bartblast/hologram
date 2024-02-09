@@ -486,6 +486,13 @@ export default class Interpreter {
     return Interpreter.raiseError("ArgumentError", message);
   }
 
+  static raiseArithmeticError() {
+    return Interpreter.raiseError(
+      "ArithmeticError",
+      "bad argument in arithmetic expression",
+    );
+  }
+
   static raiseBadMapError(arg) {
     const message = "expected a map, got: " + Interpreter.inspect(arg);
 

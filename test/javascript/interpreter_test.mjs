@@ -5256,6 +5256,14 @@ it("raiseArgumentError()", () => {
   );
 });
 
+it("raiseArithmeticError()", () => {
+  assertBoxedError(
+    () => Interpreter.raiseArithmeticError(),
+    "ArithmeticError",
+    "bad argument in arithmetic expression",
+  );
+});
+
 it("raiseBadMapError()", () => {
   assertBoxedError(
     () => Interpreter.raiseBadMapError(Type.atom("abc")),
