@@ -31,11 +31,7 @@ const Erlang = {
   // start */2
   "*/2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right)) {
-      Interpreter.raiseArgumentError(
-        `bad argument in arithmetic expression: ${Interpreter.inspect(
-          left,
-        )} * ${Interpreter.inspect(right)}`,
-      );
+      Interpreter.raiseArithmeticError();
     }
 
     const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(

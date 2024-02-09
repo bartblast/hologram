@@ -62,19 +62,19 @@ describe("*/2", () => {
     assert.deepStrictEqual(result, expected);
   });
 
-  it("raises ArgumentError if the first argument is not a number", () => {
+  it("raises ArithmeticError if the first argument is not a number", () => {
     assertBoxedError(
       () => Erlang["*/2"](Type.atom("abc"), Type.integer(123)),
-      "ArgumentError",
-      "bad argument in arithmetic expression: :abc * 123",
+      "ArithmeticError",
+      "bad argument in arithmetic expression",
     );
   });
 
-  it("raises ArgumentError if the second argument is not a number", () => {
+  it("raises ArithmeticError if the second argument is not a number", () => {
     assertBoxedError(
       () => Erlang["*/2"](Type.integer(123), Type.atom("abc")),
-      "ArgumentError",
-      "bad argument in arithmetic expression: 123 * :abc",
+      "ArithmeticError",
+      "bad argument in arithmetic expression",
     );
   });
 });
