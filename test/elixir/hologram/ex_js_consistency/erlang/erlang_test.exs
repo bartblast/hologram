@@ -7,6 +7,36 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   use Hologram.Test.BasicCase, async: true
 
+  describe "*/2" do
+    test "multiplies integer by integer" do
+      assert 2 * 3 === 6
+    end
+
+    test "multiplies integer by float" do
+      assert 2 * 3.0 === 6.0
+    end
+
+    test "multiplies float by integer" do
+      assert 2.0 * 3 === 6.0
+    end
+
+    test "miltiplies float by float" do
+      assert 2.0 * 3.0 === 6.0
+    end
+
+    test "raises ArithmeticError if the first argument is not a number" do
+      assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
+        build_value(:abc) * 123
+      end
+    end
+
+    test "raises ArithmeticError if the second argument is not a number" do
+      assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
+        123 * build_value(:abc)
+      end
+    end
+  end
+
   describe "=</2" do
     test "returns true when left float argument is smaller than right float argument" do
       assert :erlang."=<"(3.2, 5.6) == true
