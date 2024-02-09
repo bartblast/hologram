@@ -66,6 +66,10 @@ const Erlang = {
 
   // start -/2
   "-/2": (left, right) => {
+    if (!Type.isNumber(left) || !Type.isNumber(right)) {
+      Interpreter.raiseArithmeticError();
+    }
+
     const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
       left,
       right,
