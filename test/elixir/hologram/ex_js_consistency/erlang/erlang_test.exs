@@ -97,6 +97,56 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "/=/2" do
+    test "non-number == non-number" do
+      assert :erlang."/="(:abc, :abc) == false
+    end
+
+    test "non-number != non-number" do
+      assert :erlang."/="(:abc, :xyz) == true
+    end
+
+    test "integer == integer" do
+      assert :erlang."/="(1, 1) == false
+    end
+
+    test "integer != integer" do
+      assert :erlang."/="(1, 2) == true
+    end
+
+    test "integer == float" do
+      assert :erlang."/="(1, 1.0) == false
+    end
+
+    test "integer != float" do
+      assert :erlang."/="(1, 2.0) == true
+    end
+
+    test "integer != non-number" do
+      assert :erlang."/="(1, :abc) == true
+    end
+
+    test "float == float" do
+      assert :erlang."/="(1.0, 1.0) == false
+    end
+
+    test "float != float" do
+      assert :erlang."/="(1.0, 2.0) == true
+    end
+
+    test "float == integer" do
+      assert :erlang."/="(1, 1.0) == false
+    end
+
+    test "float != integer" do
+      assert :erlang."/="(1.0, 2) == true
+    end
+
+    test "float != non-number" do
+      assert :erlang."/="(1.0, :abc) == true
+    end
+  end
+
   describe "=</2" do
     test "returns true when left float argument is smaller than right float argument" do
       assert :erlang."=<"(3.2, 5.6) == true
