@@ -9,90 +9,90 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   describe "*/2" do
     test "multiplies integer by integer" do
-      assert 2 * 3 === 6
+      assert :erlang.*(2, 3) === 6
     end
 
     test "multiplies integer by float" do
-      assert 2 * 3.0 === 6.0
+      assert :erlang.*(2, 3.0) === 6.0
     end
 
     test "multiplies float by integer" do
-      assert 2.0 * 3 === 6.0
+      assert :erlang.*(2.0, 3) === 6.0
     end
 
     test "miltiplies float by float" do
-      assert 2.0 * 3.0 === 6.0
+      assert :erlang.*(2.0, 3.0) === 6.0
     end
 
     test "raises ArithmeticError if the first argument is not a number" do
       assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
-        build_value(:abc) * 123
+        :erlang.*(build_value(:abc), 123)
       end
     end
 
     test "raises ArithmeticError if the second argument is not a number" do
       assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
-        123 * build_value(:abc)
+        :erlang.*(123, build_value(:abc))
       end
     end
   end
 
   describe "+/2" do
     test "adds integer and integer" do
-      assert 1 + 2 === 3
+      assert :erlang.+(1, 2) === 3
     end
 
     test "adds integer and float" do
-      assert 1 + 2.0 === 3.0
+      assert :erlang.+(1, 2.0) === 3.0
     end
 
     test "adds float and integer" do
-      assert 1.0 + 2 === 3.0
+      assert :erlang.+(1.0, 2) === 3.0
     end
 
     test "adds float and float" do
-      assert 1.0 + 2.0 === 3.0
+      assert :erlang.+(1.0, 2.0) === 3.0
     end
 
     test "raises ArithmeticError if the first argument is not a number" do
       assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
-        build_value(:abc) + 123
+        :erlang.+(build_value(:abc), 123)
       end
     end
 
     test "raises ArithmeticError if the second argument is not a number" do
       assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
-        123 + build_value(:abc)
+        :erlang.+(123, build_value(:abc))
       end
     end
   end
 
   describe "-/2" do
     test "subtracts integer and integer" do
-      assert 3 - 1 === 2
+      assert :erlang.-(3, 1) === 2
     end
 
     test "subtracts integer and float" do
-      assert 3 - 1.0 === 2.0
+      assert :erlang.-(3, 1.0) === 2.0
     end
 
     test "subtracts float and integer" do
-      assert 3.0 - 1 === 2.0
+      assert :erlang.-(3.0, 1) === 2.0
     end
 
     test "subtracts float and float" do
-      assert 3.0 - 1.0 === 2.0
+      assert :erlang.-(3.0, 1.0) === 2.0
     end
 
     test "raises ArithmeticError if the first argument is not a number" do
       assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
-        build_value(:abc) - 123
+        :erlang.-(build_value(:abc), 123)
       end
     end
 
     test "raises ArithmeticError if the second argument is not a number" do
       assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
-        123 - build_value(:abc)
+        :erlang.-(123, build_value(:abc))
       end
     end
   end
