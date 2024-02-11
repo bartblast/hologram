@@ -147,6 +147,20 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "</2" do
+    test "left == right" do
+      assert :erlang.<(1, 1) == false
+    end
+
+    test "left < right" do
+      assert :erlang.<(1, 2) == true
+    end
+
+    test "left > right" do
+      assert :erlang.<(2, 1) == false
+    end
+  end
+
   describe "=</2" do
     test "returns true when left float argument is smaller than right float argument" do
       assert :erlang."=<"(3.2, 5.6) == true
