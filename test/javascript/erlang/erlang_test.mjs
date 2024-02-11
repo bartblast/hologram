@@ -311,13 +311,100 @@ describe("</2", () => {
 });
 
 describe("=:=/2", () => {
-  it("proxies to Interpreter.isStrictlyEqual/2 and casts the result to boxed boolean", () => {
+  it("non-number == non-number", () => {
+    const left = Type.atom("abc");
+    const right = Type.atom("abc");
+    const result = Erlang["=:=/2"](left, right);
+
+    assertBoxedTrue(result);
+  });
+
+  it("non-number != non-number", () => {
+    const left = Type.atom("abc");
+    const right = Type.atom("xyz");
+    const result = Erlang["=:=/2"](left, right);
+
+    assertBoxedFalse(result);
+  });
+
+  it("integer == integer", () => {
     const left = Type.integer(1);
     const right = Type.integer(1);
     const result = Erlang["=:=/2"](left, right);
-    const expected = Type.boolean(Interpreter.isStrictlyEqual(left, right));
 
-    assert.deepStrictEqual(result, expected);
+    assertBoxedTrue(result);
+  });
+
+  it("integer != integer", () => {
+    const left = Type.integer(1);
+    const right = Type.integer(2);
+    const result = Erlang["=:=/2"](left, right);
+
+    assertBoxedFalse(result);
+  });
+
+  it("integer == float", () => {
+    const left = Type.integer(1);
+    const right = Type.float(1.0);
+    const result = Erlang["=:=/2"](left, right);
+
+    assertBoxedFalse(result);
+  });
+
+  it("integer != float", () => {
+    const left = Type.integer(1);
+    const right = Type.float(2.0);
+    const result = Erlang["=:=/2"](left, right);
+
+    assertBoxedFalse(result);
+  });
+
+  it("integer != non-number", () => {
+    const left = Type.integer(1);
+    const right = Type.atom("abc");
+    const result = Erlang["=:=/2"](left, right);
+
+    assertBoxedFalse(result);
+  });
+
+  it("float == float", () => {
+    const left = Type.float(1.0);
+    const right = Type.float(1.0);
+    const result = Erlang["=:=/2"](left, right);
+
+    assertBoxedTrue(result);
+  });
+
+  it("float != float", () => {
+    const left = Type.float(1.0);
+    const right = Type.float(2.0);
+    const result = Erlang["=:=/2"](left, right);
+
+    assertBoxedFalse(result);
+  });
+
+  it("float == integer", () => {
+    const left = Type.float(1.0);
+    const right = Type.integer(1);
+    const result = Erlang["=:=/2"](left, right);
+
+    assertBoxedFalse(result);
+  });
+
+  it("float != integer", () => {
+    const left = Type.float(1.0);
+    const right = Type.integer(2);
+    const result = Erlang["=:=/2"](left, right);
+
+    assertBoxedFalse(result);
+  });
+
+  it("float != non-number", () => {
+    const left = Type.float(1.0);
+    const right = Type.atom("abc");
+    const result = Erlang["=:=/2"](left, right);
+
+    assertBoxedFalse(result);
   });
 });
 
