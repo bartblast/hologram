@@ -409,129 +409,106 @@ describe("=:=/2", () => {
 });
 
 describe("=</2", () => {
-  it("returns true when left float argument is smaller than right float argument", () => {
-    const left = Type.float(3.2);
-    const right = Type.float(5.6);
-    const result = Erlang["=</2"](left, right);
+  const fun = Erlang["=</2"];
 
-    assertBoxedTrue(result);
+  const atomA = Type.atom("a");
+  const atomB = Type.atom("b");
+  const float1 = Type.float(1.0);
+  const float2 = Type.float(2.0);
+  const integer1 = Type.integer(1);
+  const integer2 = Type.integer(2);
+
+  it("atom == atom", () => {
+    assertBoxedTrue(fun(atomA, atomA));
   });
 
-  it("returns true when left float argument is smaller than right integer argument", () => {
-    const left = Type.float(3.2);
-    const right = Type.integer(5);
-    const result = Erlang["=</2"](left, right);
-
-    assertBoxedTrue(result);
+  it("float == float", () => {
+    assertBoxedTrue(fun(float1, float1));
   });
 
-  it("returns true when left integer argument is smaller than right float argument", () => {
-    const left = Type.integer(3);
-    const right = Type.float(5.6);
-    const result = Erlang["=</2"](left, right);
-
-    assertBoxedTrue(result);
+  it("float == integer", () => {
+    assertBoxedTrue(fun(float1, integer1));
   });
 
-  it("returns true when left integer argument is smaller than right integer argument", () => {
-    const left = Type.integer(3);
-    const right = Type.integer(5);
-    const result = Erlang["=</2"](left, right);
-
-    assertBoxedTrue(result);
+  it("integer == float", () => {
+    assertBoxedTrue(fun(integer1, float1));
   });
 
-  it("returns true when left float argument is equal to right float argument", () => {
-    const left = Type.float(3.0);
-    const right = Type.float(3.0);
-    const result = Erlang["=</2"](left, right);
-
-    assertBoxedTrue(result);
+  it("integer == integer", () => {
+    assertBoxedTrue(fun(integer1, integer1));
   });
 
-  it("returns true when left float argument is equal to right integer argument", () => {
-    const left = Type.float(3.0);
-    const right = Type.integer(3);
-    const result = Erlang["=</2"](left, right);
-
-    assertBoxedTrue(result);
+  it("atom < atom", () => {
+    assertBoxedTrue(fun(atomA, atomB));
   });
 
-  it("returns true when left integer argument is equal to right float argument", () => {
-    const left = Type.integer(3);
-    const right = Type.float(3.0);
-    const result = Erlang["=</2"](left, right);
-
-    assertBoxedTrue(result);
+  it("float < atom (always)", () => {
+    assertBoxedTrue(fun(float1, atomA));
   });
 
-  it("returns true when left integer argument is equal to right integer argument", () => {
-    const left = Type.integer(3);
-    const right = Type.integer(3);
-    const result = Erlang["=</2"](left, right);
-
-    assertBoxedTrue(result);
+  it("float < float", () => {
+    assertBoxedTrue(fun(float1, float2));
   });
 
-  it("returns false when left float argument is greater than right float argument", () => {
-    const left = Type.float(5.6);
-    const right = Type.float(3.2);
-    const result = Erlang["=</2"](left, right);
-
-    assertBoxedFalse(result);
+  it("float < integer", () => {
+    assertBoxedTrue(fun(float1, integer2));
   });
 
-  it("returns false when left float argument is greater than right integer argument", () => {
-    const left = Type.float(5.6);
-    const right = Type.integer(3);
-    const result = Erlang["=</2"](left, right);
-
-    assertBoxedFalse(result);
+  it("integer < atom (always)", () => {
+    assertBoxedTrue(fun(integer1, atomA));
   });
 
-  it("returns false when left integer argument is greater than right float argument", () => {
-    const left = Type.integer(5);
-    const right = Type.float(3.2);
-    const result = Erlang["=</2"](left, right);
-
-    assertBoxedFalse(result);
+  it("integer < float", () => {
+    assertBoxedTrue(fun(integer1, float2));
   });
 
-  it("returns false when left integer argument is greater than right integer argument", () => {
-    const left = Type.integer(5);
-    const right = Type.integer(3);
-    const result = Erlang["=</2"](left, right);
-
-    assertBoxedFalse(result);
+  it("integer < integer", () => {
+    assertBoxedTrue(fun(integer1, integer2));
   });
 
-  it("throws a not yet implemented error for non-integer and non-float left argument", () => {
-    const left = Type.bitstring("abc");
-    const right = Type.integer(2);
+  it("atom > atom", () => {
+    assertBoxedFalse(fun(atomB, atomA));
+  });
 
+  it("float > float", () => {
+    assertBoxedFalse(fun(float2, float1));
+  });
+
+  it("float > integer", () => {
+    assertBoxedFalse(fun(float2, integer1));
+  });
+
+  it("integer > float", () => {
+    assertBoxedFalse(fun(integer2, float1));
+  });
+
+  it("integer > integer", () => {
+    assertBoxedFalse(fun(integer2, integer1));
+  });
+
+  it("throws a not yet implemented error when the left argument type is not yet supported", () => {
     const expectedMessage =
-      'Structural comparison currently supports only floats and integers, got: "abc"';
+      'Structural comparison currently supports only atoms, floats and integers, got: "abc"';
 
     assert.throw(
-      () => Erlang["=</2"](left, right),
+      () => fun(Type.bitstring("abc"), integer1),
       HologramInterpreterError,
       expectedMessage,
     );
   });
 
-  it("throws a not yet implemented error for non-integer and non-float right argument", () => {
-    const left = Type.integer(2);
-    const right = Type.bitstring("abc");
-
+  it("throws a not yet implemented error when the right argument type is not yet supported", () => {
     const expectedMessage =
-      'Structural comparison currently supports only floats and integers, got: "abc"';
+      'Structural comparison currently supports only atoms, floats and integers, got: "abc"';
 
     assert.throw(
-      () => Erlang["=</2"](left, right),
+      () => fun(integer1, Type.bitstring("abc")),
       HologramInterpreterError,
       expectedMessage,
     );
   });
+
+  // TODO: reference, function, port, pid, tuple, map, list, bitstring
 });
 
 describe("==/2", () => {
