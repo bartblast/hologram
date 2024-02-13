@@ -372,6 +372,80 @@ describe("</2", () => {
   // TODO: reference, function, port, pid, tuple, map, list, bitstring
 });
 
+describe("=/=/2", () => {
+  const fun = Erlang["=/=/2"];
+
+  it("atom == atom", () => {
+    assertBoxedFalse(fun(atomA, atomA));
+  });
+
+  it("float == float", () => {
+    assertBoxedFalse(fun(float1, float1));
+  });
+
+  it("float == integer", () => {
+    assertBoxedTrue(fun(float1, integer1));
+  });
+
+  it("integer == float", () => {
+    assertBoxedTrue(fun(integer1, float1));
+  });
+
+  it("integer == integer", () => {
+    assertBoxedFalse(fun(integer1, integer1));
+  });
+
+  it("atom < atom", () => {
+    assertBoxedTrue(fun(atomA, atomB));
+  });
+
+  it("float < atom (always)", () => {
+    assertBoxedTrue(fun(float1, atomA));
+  });
+
+  it("float < float", () => {
+    assertBoxedTrue(fun(float1, float2));
+  });
+
+  it("float < integer", () => {
+    assertBoxedTrue(fun(float1, integer2));
+  });
+
+  it("integer < atom (always)", () => {
+    assertBoxedTrue(fun(integer1, atomA));
+  });
+
+  it("integer < float", () => {
+    assertBoxedTrue(fun(integer1, float2));
+  });
+
+  it("integer < integer", () => {
+    assertBoxedTrue(fun(integer1, integer2));
+  });
+
+  it("atom > atom", () => {
+    assertBoxedTrue(fun(atomB, atomA));
+  });
+
+  it("float > float", () => {
+    assertBoxedTrue(fun(float2, float1));
+  });
+
+  it("float > integer", () => {
+    assertBoxedTrue(fun(float2, integer1));
+  });
+
+  it("integer > float", () => {
+    assertBoxedTrue(fun(integer2, float1));
+  });
+
+  it("integer > integer", () => {
+    assertBoxedTrue(fun(integer2, integer1));
+  });
+
+  // TODO: reference, function, port, pid, tuple, map, list, bitstring
+});
+
 describe("=:=/2", () => {
   const fun = Erlang["=:=/2"];
 

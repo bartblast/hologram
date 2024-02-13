@@ -18,6 +18,7 @@ MFAs for sorting:
   {:erlang, :-, 2},
   {:erlang, :"/=", 2},
   {:erlang, :<, 2},
+  {:erlang, :"=/=", 2},
   {:erlang, :"=:=", 2},
   {:erlang, :"=<", 2},
   {:erlang, :==, 2},
@@ -95,6 +96,13 @@ const Erlang = {
     return Type.boolean(Interpreter.compareTerms(left, right) === -1);
   },
   // end </2
+  // deps: []
+
+  // start =/=/2
+  "=/=/2": (left, right) => {
+    return Type.boolean(!Interpreter.isStrictlyEqual(left, right));
+  },
+  // end =/=/2
   // deps: []
 
   // start =:=/2
