@@ -242,53 +242,75 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "=:=/2" do
-    test "non-number == non-number" do
-      assert :erlang."=:="(:abc, :abc) == true
-    end
-
-    test "non-number != non-number" do
-      assert :erlang."=:="(:abc, :xyz) == false
-    end
-
-    test "integer == integer" do
-      assert :erlang."=:="(1, 1) == true
-    end
-
-    test "integer != integer" do
-      assert :erlang."=:="(1, 2) == false
-    end
-
-    test "integer == float" do
-      assert :erlang."=:="(1, 1.0) == false
-    end
-
-    test "integer != float" do
-      assert :erlang."=:="(1, 2.0) == false
-    end
-
-    test "integer != non-number" do
-      assert :erlang."=:="(1, :abc) == false
+    test "atom == atom" do
+      assert :erlang."=:="(:a, :a) == true
     end
 
     test "float == float" do
       assert :erlang."=:="(1.0, 1.0) == true
     end
 
-    test "float != float" do
-      assert :erlang."=:="(1.0, 2.0) == false
+    test "float == integer" do
+      assert :erlang."=:="(1.0, 1) == false
     end
 
-    test "float == integer" do
+    test "integer == float" do
       assert :erlang."=:="(1, 1.0) == false
     end
 
-    test "float != integer" do
+    test "integer == integer" do
+      assert :erlang."=:="(1, 1) == true
+    end
+
+    test "atom < atom" do
+      assert :erlang."=:="(:a, :b) == false
+    end
+
+    test "float < atom (always)" do
+      assert :erlang."=:="(1.0, :a) == false
+    end
+
+    test "float < float" do
+      assert :erlang."=:="(1.0, 2.0) == false
+    end
+
+    test "float < integer" do
       assert :erlang."=:="(1.0, 2) == false
     end
 
-    test "float != non-number" do
-      assert :erlang."=:="(1.0, :abc) == false
+    test "integer < atom (always)" do
+      assert :erlang."=:="(1, :a) == false
     end
+
+    test "integer < float" do
+      assert :erlang."=:="(1, 2.0) == false
+    end
+
+    test "integer < integer" do
+      assert :erlang."=:="(1, 2) == false
+    end
+
+    test "atom > atom" do
+      assert :erlang."=:="(:b, :a) == false
+    end
+
+    test "float > float" do
+      assert :erlang."=:="(2.0, 1.0) == false
+    end
+
+    test "float > integer" do
+      assert :erlang."=:="(2.0, 1) == false
+    end
+
+    test "integer > float" do
+      assert :erlang."=:="(2, 1.0) == false
+    end
+
+    test "integer > integer" do
+      assert :erlang."=:="(2, 1) == false
+    end
+
+    # // TODO: reference, function, port, pid, tuple, map, list, bitstring
   end
 
   describe "=</2" do
