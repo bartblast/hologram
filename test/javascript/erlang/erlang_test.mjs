@@ -567,113 +567,77 @@ describe("=</2", () => {
 });
 
 describe("==/2", () => {
-  // non-number == non-number
-  it("returns boxed true for a boxed non-number equal to another boxed non-number", () => {
-    const left = Type.boolean(true);
-    const right = Type.boolean(true);
-    const result = Erlang["==/2"](left, right);
+  const fun = Erlang["==/2"];
 
-    assertBoxedTrue(result);
+  it("atom == atom", () => {
+    assertBoxedTrue(fun(atomA, atomA));
   });
 
-  // non-number != non-number
-  it("returns boxed false for a boxed non-number not equal to another boxed non-number", () => {
-    const left = Type.boolean(true);
-    const right = Type.bitstring("abc");
-    const result = Erlang["==/2"](left, right);
-
-    assertBoxedFalse(result);
+  it("float == float", () => {
+    assertBoxedTrue(fun(float1, float1));
   });
 
-  // integer == integer
-  it("returns boxed true for a boxed integer equal to another boxed integer", () => {
-    const left = Type.integer(1);
-    const right = Type.integer(1);
-    const result = Erlang["==/2"](left, right);
-
-    assertBoxedTrue(result);
+  it("float == integer", () => {
+    assertBoxedTrue(fun(float1, integer1));
   });
 
-  // integer != integer
-  it("returns boxed false for a boxed integer not equal to another boxed integer", () => {
-    const left = Type.integer(1);
-    const right = Type.integer(2);
-    const result = Erlang["==/2"](left, right);
-
-    assertBoxedFalse(result);
+  it("integer == float", () => {
+    assertBoxedTrue(fun(integer1, float1));
   });
 
-  // integer == float
-  it("returns boxed true for a boxed integer equal to a boxed float", () => {
-    const left = Type.integer(1);
-    const right = Type.float(1.0);
-    const result = Erlang["==/2"](left, right);
-
-    assertBoxedTrue(result);
+  it("integer == integer", () => {
+    assertBoxedTrue(fun(integer1, integer1));
   });
 
-  // integer != float
-  it("returns boxed false for a boxed integer not equal to a boxed float", () => {
-    const left = Type.integer(1);
-    const right = Type.float(2.0);
-    const result = Erlang["==/2"](left, right);
-
-    assertBoxedFalse(result);
+  it("atom < atom", () => {
+    assertBoxedFalse(fun(atomA, atomB));
   });
 
-  // integer != non-number
-  it("returns boxed false when a boxed integer is compared to a boxed value of non-number type", () => {
-    const left = Type.integer(1);
-    const right = Type.bitstring("1");
-    const result = Erlang["==/2"](left, right);
-
-    assertBoxedFalse(result);
+  it("float < atom (always)", () => {
+    assertBoxedFalse(fun(float1, atomA));
   });
 
-  // float == float
-  it("returns boxed true for a boxed float equal to another boxed float", () => {
-    const left = Type.float(1.0);
-    const right = Type.float(1.0);
-    const result = Erlang["==/2"](left, right);
-
-    assertBoxedTrue(result);
+  it("float < float", () => {
+    assertBoxedFalse(fun(float1, float2));
   });
 
-  // float != float
-  it("returns boxed false for a boxed float not equal to another boxed float", () => {
-    const left = Type.float(1.0);
-    const right = Type.float(2.0);
-    const result = Erlang["==/2"](left, right);
-
-    assertBoxedFalse(result);
+  it("float < integer", () => {
+    assertBoxedFalse(fun(float1, integer2));
   });
 
-  // float == integer
-  it("returns boxed true for a boxed float equal to a boxed integer", () => {
-    const left = Type.float(1.0);
-    const right = Type.integer(1);
-    const result = Erlang["==/2"](left, right);
-
-    assertBoxedTrue(result);
+  it("integer < atom (always)", () => {
+    assertBoxedFalse(fun(integer1, atomA));
   });
 
-  // float != integer
-  it("returns boxed false for a boxed float not equal to a boxed integer", () => {
-    const left = Type.float(1.0);
-    const right = Type.integer(2);
-    const result = Erlang["==/2"](left, right);
-
-    assertBoxedFalse(result);
+  it("integer < float", () => {
+    assertBoxedFalse(fun(integer1, float2));
   });
 
-  // float != non-number
-  it("returns boxed false when a boxed float is compared to a boxed value of non-number type", () => {
-    const left = Type.float(1.0);
-    const right = Type.bitstring("1.0");
-    const result = Erlang["==/2"](left, right);
-
-    assertBoxedFalse(result);
+  it("integer < integer", () => {
+    assertBoxedFalse(fun(integer1, integer2));
   });
+
+  it("atom > atom", () => {
+    assertBoxedFalse(fun(atomB, atomA));
+  });
+
+  it("float > float", () => {
+    assertBoxedFalse(fun(float2, float1));
+  });
+
+  it("float > integer", () => {
+    assertBoxedFalse(fun(float2, integer1));
+  });
+
+  it("integer > float", () => {
+    assertBoxedFalse(fun(integer2, float1));
+  });
+
+  it("integer > integer", () => {
+    assertBoxedFalse(fun(integer2, integer1));
+  });
+
+  // TODO: reference, function, port, pid, tuple, map, list, bitstring
 });
 
 describe(">/2", () => {
