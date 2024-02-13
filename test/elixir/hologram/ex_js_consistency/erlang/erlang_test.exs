@@ -284,53 +284,75 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe ">=/2" do
-    test "returns true when left float argument is greater than right float argument" do
-      assert :erlang.>=(5.6, 3.2) == true
+    test "atom == atom" do
+      assert :erlang.>=(:a, :a) == true
     end
 
-    test "returns true when left float argument is greater than right integer argument" do
-      assert :erlang.>=(5.6, 3) == true
+    test "float == float" do
+      assert :erlang.>=(1.0, 1.0) == true
     end
 
-    test "returns true when left integer argument is greater than right float argument" do
-      assert :erlang.>=(5, 3.2) == true
+    test "float == integer" do
+      assert :erlang.>=(1.0, 1) == true
     end
 
-    test "returns true when left integer argument is greater than right integer argument" do
-      assert :erlang.>=(5, 3) == true
+    test "integer == float" do
+      assert :erlang.>=(1, 1.0) == true
     end
 
-    test "returns true when left float argument is equal to right float argument" do
-      assert :erlang.>=(3.0, 3.0) == true
+    test "integer == integer" do
+      assert :erlang.>=(1, 1) == true
     end
 
-    test "returns true when left float argument is equal to right integer argument" do
-      assert :erlang.>=(3.0, 3) == true
+    test "atom < atom" do
+      assert :erlang.>=(:a, :b) == false
     end
 
-    test "returns true when left integer argument is equal to right float argument" do
-      assert :erlang.>=(3, 3.0) == true
+    test "float < atom (always)" do
+      assert :erlang.>=(1.0, :a) == false
     end
 
-    test "returns true when left integer argument is equal to right integer argument" do
-      assert :erlang.>=(3, 3) == true
+    test "float < float" do
+      assert :erlang.>=(1.0, 2.0) == false
     end
 
-    test "returns false when left float argument is smaller than right float argument" do
-      assert :erlang.>=(3.2, 5.6) == false
+    test "float < integer" do
+      assert :erlang.>=(1.0, 2) == false
     end
 
-    test "returns false when left float argument is smaller than right integer argument" do
-      assert :erlang.>=(3.2, 5) == false
+    test "integer < atom (always)" do
+      assert :erlang.>=(1, :a) == false
     end
 
-    test "returns false when left integer argument is smaller than right float argument" do
-      assert :erlang.>=(3, 5.6) == false
+    test "integer < float" do
+      assert :erlang.>=(1, 2.0) == false
     end
 
-    test "returns false when left integer argument is smaller than right integer argument" do
-      assert :erlang.>=(3, 5) == false
+    test "integer < integer" do
+      assert :erlang.>=(1, 2) == false
     end
+
+    test "atom > atom" do
+      assert :erlang.>=(:b, :a) == true
+    end
+
+    test "float > float" do
+      assert :erlang.>=(2.0, 1.0) == true
+    end
+
+    test "float > integer" do
+      assert :erlang.>=(2.0, 1) == true
+    end
+
+    test "integer > float" do
+      assert :erlang.>=(2, 1.0) == true
+    end
+
+    test "integer > integer" do
+      assert :erlang.>=(2, 1) == true
+    end
+
+    # // TODO: reference, function, port, pid, tuple, map, list, bitstring
   end
 
   describe "andalso/2" do
