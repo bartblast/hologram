@@ -343,7 +343,6 @@ defmodule Hologram.Compiler do
   # credo:disable-for-next-line Credo.Check.Refactor.ABCSize
   defp add_call_graph_edges_for_erlang_functions(call_graph) do
     call_graph
-    |> CallGraph.add_edge({:erlang, :"/=", 2}, {:erlang, :==, 2})
     |> CallGraph.add_edge({:erlang, :"=<", 2}, {:erlang, :<, 2})
     |> CallGraph.add_edge({:erlang, :"=<", 2}, {:erlang, :==, 2})
     |> CallGraph.add_edge({:erlang, :>=, 2}, {:erlang, :==, 2})

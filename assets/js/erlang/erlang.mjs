@@ -85,11 +85,10 @@ const Erlang = {
 
   // start /=/2
   "/=/2": (left, right) => {
-    const isEqual = Erlang["==/2"](left, right);
-    return Type.boolean(Type.isFalse(isEqual));
+    return Type.boolean(!Interpreter.isEqual(left, right));
   },
   // end /=/2
-  // deps: [:erlang.==/2]
+  // deps: []
 
   // start </2
   "</2": (left, right) => {
