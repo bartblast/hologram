@@ -622,20 +622,99 @@ describe("==/2", () => {
 });
 
 describe(">/2", () => {
-  it("left == right", () => {
-    const result = Erlang[">/2"](Type.integer(1), Type.integer(1));
-    assertBoxedFalse(result);
+  const fun = Erlang[">/2"];
+
+  it("atom == atom", () => {
+    assertBoxedFalse(fun(atomA, atomA));
   });
 
-  it("left < right", () => {
-    const result = Erlang[">/2"](Type.integer(1), Type.integer(2));
-    assertBoxedFalse(result);
+  it("float == float", () => {
+    assertBoxedFalse(fun(float1, float1));
   });
 
-  it("left > right", () => {
-    const result = Erlang[">/2"](Type.integer(2), Type.integer(1));
-    assertBoxedTrue(result);
+  it("float == integer", () => {
+    assertBoxedFalse(fun(float1, integer1));
   });
+
+  it("integer == float", () => {
+    assertBoxedFalse(fun(integer1, float1));
+  });
+
+  it("integer == integer", () => {
+    assertBoxedFalse(fun(integer1, integer1));
+  });
+
+  it("atom < atom", () => {
+    assertBoxedFalse(fun(atomA, atomB));
+  });
+
+  it("float < atom (always)", () => {
+    assertBoxedFalse(fun(float1, atomA));
+  });
+
+  it("float < float", () => {
+    assertBoxedFalse(fun(float1, float2));
+  });
+
+  it("float < integer", () => {
+    assertBoxedFalse(fun(float1, integer2));
+  });
+
+  it("integer < atom (always)", () => {
+    assertBoxedFalse(fun(integer1, atomA));
+  });
+
+  it("integer < float", () => {
+    assertBoxedFalse(fun(integer1, float2));
+  });
+
+  it("integer < integer", () => {
+    assertBoxedFalse(fun(integer1, integer2));
+  });
+
+  it("atom > atom", () => {
+    assertBoxedTrue(fun(atomB, atomA));
+  });
+
+  it("float > float", () => {
+    assertBoxedTrue(fun(float2, float1));
+  });
+
+  it("float > integer", () => {
+    assertBoxedTrue(fun(float2, integer1));
+  });
+
+  it("integer > float", () => {
+    assertBoxedTrue(fun(integer2, float1));
+  });
+
+  it("integer > integer", () => {
+    assertBoxedTrue(fun(integer2, integer1));
+  });
+
+  it("throws a not yet implemented error when the left argument type is not yet supported", () => {
+    const expectedMessage =
+      'Structural comparison currently supports only atoms, floats and integers, got: "abc"';
+
+    assert.throw(
+      () => fun(Type.bitstring("abc"), integer1),
+      HologramInterpreterError,
+      expectedMessage,
+    );
+  });
+
+  it("throws a not yet implemented error when the right argument type is not yet supported", () => {
+    const expectedMessage =
+      'Structural comparison currently supports only atoms, floats and integers, got: "abc"';
+
+    assert.throw(
+      () => fun(integer1, Type.bitstring("abc")),
+      HologramInterpreterError,
+      expectedMessage,
+    );
+  });
+
+  // TODO: reference, function, port, pid, tuple, map, list, bitstring
 });
 
 describe(">=/2", () => {

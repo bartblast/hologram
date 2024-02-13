@@ -283,6 +283,78 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     # // TODO: reference, function, port, pid, tuple, map, list, bitstring
   end
 
+  describe ">/2" do
+    test "atom == atom" do
+      assert :erlang.>(:a, :a) == false
+    end
+
+    test "float == float" do
+      assert :erlang.>(1.0, 1.0) == false
+    end
+
+    test "float == integer" do
+      assert :erlang.>(1.0, 1) == false
+    end
+
+    test "integer == float" do
+      assert :erlang.>(1, 1.0) == false
+    end
+
+    test "integer == integer" do
+      assert :erlang.>(1, 1) == false
+    end
+
+    test "atom < atom" do
+      assert :erlang.>(:a, :b) == false
+    end
+
+    test "float < atom (always)" do
+      assert :erlang.>(1.0, :a) == false
+    end
+
+    test "float < float" do
+      assert :erlang.>(1.0, 2.0) == false
+    end
+
+    test "float < integer" do
+      assert :erlang.>(1.0, 2) == false
+    end
+
+    test "integer < atom (always)" do
+      assert :erlang.>(1, :a) == false
+    end
+
+    test "integer < float" do
+      assert :erlang.>(1, 2.0) == false
+    end
+
+    test "integer < integer" do
+      assert :erlang.>(1, 2) == false
+    end
+
+    test "atom > atom" do
+      assert :erlang.>(:b, :a) == true
+    end
+
+    test "float > float" do
+      assert :erlang.>(2.0, 1.0) == true
+    end
+
+    test "float > integer" do
+      assert :erlang.>(2.0, 1) == true
+    end
+
+    test "integer > float" do
+      assert :erlang.>(2, 1.0) == true
+    end
+
+    test "integer > integer" do
+      assert :erlang.>(2, 1) == true
+    end
+
+    # // TODO: reference, function, port, pid, tuple, map, list, bitstring
+  end
+
   describe ">=/2" do
     test "atom == atom" do
       assert :erlang.>=(:a, :a) == true
