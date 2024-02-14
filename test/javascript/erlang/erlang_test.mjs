@@ -1198,12 +1198,14 @@ describe("integer_to_binary/2", () => {
 });
 
 describe("is_atom/1", () => {
-  it("proxies to Type.isAtom() and casts the result to boxed boolean", () => {
-    const term = Type.atom("abc");
-    const result = Erlang["is_atom/1"](term);
-    const expected = Type.boolean(Type.isAtom(term));
+  const fun = Erlang["is_atom/1"];
 
-    assert.deepStrictEqual(result, expected);
+  it("atom", () => {
+    assertBoxedTrue(fun(Type.atom("abc")));
+  });
+
+  it("non-atom", () => {
+    assertBoxedFalse(fun(Type.integer(123)));
   });
 });
 

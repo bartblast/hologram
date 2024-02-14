@@ -914,6 +914,16 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "is_atom/1" do
+    test "atom" do
+      assert :erlang.is_atom(:abc) == true
+    end
+
+    test "non-atom" do
+      assert :erlang.is_atom(123) == false
+    end
+  end
+
   describe "is_binary/1" do
     test "returns true if the term is a binary bitsting" do
       assert :erlang.is_binary("abc") == true
