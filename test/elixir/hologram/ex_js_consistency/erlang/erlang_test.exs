@@ -8,31 +8,31 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   use Hologram.Test.BasicCase, async: true
 
   describe "*/2" do
-    test "multiplies integer by integer" do
+    test "integer * integer" do
       assert :erlang.*(2, 3) === 6
     end
 
-    test "multiplies integer by float" do
+    test "integer * float" do
       assert :erlang.*(2, 3.0) === 6.0
     end
 
-    test "multiplies float by integer" do
-      assert :erlang.*(2.0, 3) === 6.0
+    test "float * integer" do
+      assert :erlang.*(3.0, 2) === 6.0
     end
 
-    test "miltiplies float by float" do
+    test "float * float" do
       assert :erlang.*(2.0, 3.0) === 6.0
     end
 
     test "raises ArithmeticError if the first argument is not a number" do
       assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
-        :erlang.*(build_value(:abc), 123)
+        :erlang.*(build_value(:a), 1)
       end
     end
 
     test "raises ArithmeticError if the second argument is not a number" do
       assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
-        :erlang.*(123, build_value(:abc))
+        :erlang.*(1, build_value(:a))
       end
     end
   end

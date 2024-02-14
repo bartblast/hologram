@@ -21,57 +21,39 @@ const atomA = Type.atom("a");
 const atomB = Type.atom("b");
 const float1 = Type.float(1.0);
 const float2 = Type.float(2.0);
+const float3 = Type.float(3.0);
+const float6 = Type.float(6.0);
 const integer1 = Type.integer(1);
 const integer2 = Type.integer(2);
+const integer3 = Type.integer(3);
+const integer6 = Type.integer(6);
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/erlang_test.exs
 // Always update both together.
 
-describe("*/2", () => {
-  it("multiplies integer by integer", () => {
-    const left = Type.integer(2);
-    const right = Type.integer(3);
+describe.only("*/2", () => {
+  const fun = Erlang["*/2"];
 
-    const result = Erlang["*/2"](left, right);
-    const expected = Type.integer(6);
-
-    assert.deepStrictEqual(result, expected);
+  it("integer * integer", () => {
+    assert.deepStrictEqual(fun(integer2, integer3), integer6);
   });
 
-  it("multiplies integer by float", () => {
-    const left = Type.integer(2);
-    const right = Type.float(3.0);
-
-    const result = Erlang["*/2"](left, right);
-    const expected = Type.float(6.0);
-
-    assert.deepStrictEqual(result, expected);
+  it("integer * float", () => {
+    assert.deepStrictEqual(fun(integer2, float3), float6);
   });
 
-  it("multiplies float by integer", () => {
-    const left = Type.float(2.0);
-    const right = Type.integer(3);
-
-    const result = Erlang["*/2"](left, right);
-    const expected = Type.float(6.0);
-
-    assert.deepStrictEqual(result, expected);
+  it("float * integer", () => {
+    assert.deepStrictEqual(fun(float3, integer2), float6);
   });
 
-  it("miltiplies float by float", () => {
-    const left = Type.float(2.0);
-    const right = Type.float(3.0);
-
-    const result = Erlang["*/2"](left, right);
-    const expected = Type.float(6.0);
-
-    assert.deepStrictEqual(result, expected);
+  it("float * float", () => {
+    assert.deepStrictEqual(fun(float2, float3), float6);
   });
 
   it("raises ArithmeticError if the first argument is not a number", () => {
     assertBoxedError(
-      () => Erlang["*/2"](Type.atom("abc"), Type.integer(123)),
+      () => fun(atomA, integer1),
       "ArithmeticError",
       "bad argument in arithmetic expression",
     );
@@ -79,7 +61,7 @@ describe("*/2", () => {
 
   it("raises ArithmeticError if the second argument is not a number", () => {
     assertBoxedError(
-      () => Erlang["*/2"](Type.integer(123), Type.atom("abc")),
+      () => fun(integer1, atomA),
       "ArithmeticError",
       "bad argument in arithmetic expression",
     );
