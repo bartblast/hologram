@@ -304,7 +304,7 @@ const Erlang = {
   "hd/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
       Interpreter.raiseArgumentError(
-        "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list",
+        "errors were found at the given arguments:\n\n  * 1st argument: not a nonempty list\n",
       );
     }
 

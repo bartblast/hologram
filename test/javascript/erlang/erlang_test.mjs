@@ -1080,26 +1080,26 @@ it("error/2", () => {
 });
 
 describe("hd/1", () => {
-  it("returns the first item in a boxed list", () => {
+  it("returns the first item in the list", () => {
     const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
     const result = Erlang["hd/1"](list);
 
     assert.deepStrictEqual(result, Type.integer(1));
   });
 
-  it("raises ArgumentError if the argument is an empty boxed list", () => {
+  it("raises ArgumentError if the argument is an empty list", () => {
     assertBoxedError(
       () => Erlang["hd/1"](Type.list([])),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list",
+      "errors were found at the given arguments:\n\n  * 1st argument: not a nonempty list\n",
     );
   });
 
-  it("raises ArgumentError if the argument is not a boxed list", () => {
+  it("raises ArgumentError if the argument is not a list", () => {
     assertBoxedError(
       () => Erlang["hd/1"](Type.integer(123)),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list",
+      "errors were found at the given arguments:\n\n  * 1st argument: not a nonempty list\n",
     );
   });
 });

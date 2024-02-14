@@ -838,6 +838,28 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "hd/1" do
+    test "returns the first item in the list" do
+      assert :erlang.hd([1, 2, 3]) === 1
+    end
+
+    test "raises ArgumentError if the argument is an empty list" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not a nonempty list\n",
+                   fn ->
+                     :erlang.hd(build_value([]))
+                   end
+    end
+
+    test "raises ArgumentError if the argument is not a list" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not a nonempty list\n",
+                   fn ->
+                     :erlang.hd(build_value(123))
+                   end
+    end
+  end
+
   describe "integer_to_binary/1" do
     assert :erlang.integer_to_binary(123_123) == :erlang.integer_to_binary(123_123, 10)
   end
