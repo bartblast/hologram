@@ -776,6 +776,14 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  # Note: due to practical reasons the behaviour of the client version is inconsistent with the server version.
+  # The client version works exactly the same as binary_to_atom/1.
+  # test "binary_to_existing_atoms/1"
+
+  # Note: due to practical reasons the behaviour of the client version is inconsistent with the server version.
+  # The client version works exactly the same as binary_to_atom/2.
+  # test "binary_to_existing_atom/2"
+
   describe "bit_size/1" do
     test "bitstring" do
       assert bit_size(<<2::7>>) == 7
