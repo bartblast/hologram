@@ -925,15 +925,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "is_binary/1" do
-    test "returns true if the term is a binary bitsting" do
+    test "binary bitsting" do
       assert :erlang.is_binary("abc") == true
     end
 
-    test "returns false if the term is a non-binary bitstring" do
-      assert :erlang.is_binary(<<2::size(7)>>) == false
+    test "non-binary bitstring" do
+      assert :erlang.is_binary(<<2::size(3)>>) == false
     end
 
-    test "returns false if the term is not a bitstring" do
+    test "non-bitstring" do
       assert :erlang.is_binary(:abc) == false
     end
   end
