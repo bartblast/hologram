@@ -38,31 +38,31 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "+/2" do
-    test "adds integer and integer" do
-      assert :erlang.+(1, 2) === 3
+    test "float + float" do
+      assert :erlang.+(1.0, 2.0) === 3.0
     end
 
-    test "adds integer and float" do
-      assert :erlang.+(1, 2.0) === 3.0
-    end
-
-    test "adds float and integer" do
+    test "float + integer" do
       assert :erlang.+(1.0, 2) === 3.0
     end
 
-    test "adds float and float" do
-      assert :erlang.+(1.0, 2.0) === 3.0
+    test "integer + float" do
+      assert :erlang.+(1, 2.0) === 3.0
+    end
+
+    test "integer + integer" do
+      assert :erlang.+(1, 2) === 3
     end
 
     test "raises ArithmeticError if the first argument is not a number" do
       assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
-        :erlang.+(build_value(:abc), 123)
+        :erlang.+(build_value(:a), 1)
       end
     end
 
     test "raises ArithmeticError if the second argument is not a number" do
       assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
-        :erlang.+(123, build_value(:abc))
+        :erlang.+(1, build_value(:a))
       end
     end
   end

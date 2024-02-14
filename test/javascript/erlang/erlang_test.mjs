@@ -32,7 +32,7 @@ const integer6 = Type.integer(6);
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/erlang_test.exs
 // Always update both together.
 
-describe.only("*/2", () => {
+describe("*/2", () => {
   const fun = Erlang["*/2"];
 
   it("integer * integer", () => {
@@ -68,50 +68,28 @@ describe.only("*/2", () => {
   });
 });
 
-describe("+/2", () => {
-  it("adds integer and integer", () => {
-    const left = Type.integer(1);
-    const right = Type.integer(2);
+describe.only("+/2", () => {
+  const fun = Erlang["+/2"];
 
-    const result = Erlang["+/2"](left, right);
-    const expected = Type.integer(3);
-
-    assert.deepStrictEqual(result, expected);
+  it("float + float", () => {
+    assert.deepStrictEqual(fun(float1, float2), float3);
   });
 
-  it("adds integer and float", () => {
-    const left = Type.integer(1);
-    const right = Type.float(2.0);
-
-    const result = Erlang["+/2"](left, right);
-    const expected = Type.float(3.0);
-
-    assert.deepStrictEqual(result, expected);
+  it("float + integer", () => {
+    assert.deepStrictEqual(fun(float1, integer2), float3);
   });
 
-  it("adds float and integer", () => {
-    const left = Type.float(1.0);
-    const right = Type.integer(2);
-
-    const result = Erlang["+/2"](left, right);
-    const expected = Type.float(3.0);
-
-    assert.deepStrictEqual(result, expected);
+  it("integer + float", () => {
+    assert.deepStrictEqual(fun(integer1, float2), float3);
   });
 
-  it("adds float and float", () => {
-    const left = Type.float(1.0);
-    const right = Type.float(2.0);
-
-    const result = Erlang["+/2"](left, right);
-    const expected = Type.float(3.0);
-
-    assert.deepStrictEqual(result, expected);
+  it("integer + integer", () => {
+    assert.deepStrictEqual(fun(integer1, integer2), integer3);
   });
 
   it("raises ArithmeticError if the first argument is not a number", () => {
     assertBoxedError(
-      () => Erlang["+/2"](Type.atom("abc"), Type.integer(123)),
+      () => fun(atomA, integer1),
       "ArithmeticError",
       "bad argument in arithmetic expression",
     );
@@ -119,7 +97,7 @@ describe("+/2", () => {
 
   it("raises ArithmeticError if the second argument is not a number", () => {
     assertBoxedError(
-      () => Erlang["+/2"](Type.integer(123), Type.atom("abc")),
+      () => fun(integer1, atomA),
       "ArithmeticError",
       "bad argument in arithmetic expression",
     );
