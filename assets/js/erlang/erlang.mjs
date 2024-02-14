@@ -283,7 +283,7 @@ const Erlang = {
   // end element/2
   // deps: []
 
-  // TODO: review this function after error reporting is implemented
+  // TODO: review this function after error reporting is implemented (and implement Elixir & JS consistency tests).
   // start error/1
   "error/1": (reason) => {
     Erlang["error/2"](reason, Type.atom("none"));
@@ -291,7 +291,7 @@ const Erlang = {
   // end error/1
   // deps: [:erlang.error/2]
 
-  // TODO: review this function after error reporting is implemented
+  // TODO: review this function after error reporting is implemented (and implement Elixir & JS consistency tests).
   // TODO: maybe use args param
   // start error/2
   "error/2": (reason, _args) => {
