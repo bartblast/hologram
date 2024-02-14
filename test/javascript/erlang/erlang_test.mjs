@@ -35,20 +35,20 @@ const integer6 = Type.integer(6);
 describe("*/2", () => {
   const fun = Erlang["*/2"];
 
-  it("integer * integer", () => {
-    assert.deepStrictEqual(fun(integer2, integer3), integer6);
-  });
-
-  it("integer * float", () => {
-    assert.deepStrictEqual(fun(integer2, float3), float6);
+  it("float * float", () => {
+    assert.deepStrictEqual(fun(float2, float3), float6);
   });
 
   it("float * integer", () => {
     assert.deepStrictEqual(fun(float3, integer2), float6);
   });
 
-  it("float * float", () => {
-    assert.deepStrictEqual(fun(float2, float3), float6);
+  it("integer * float", () => {
+    assert.deepStrictEqual(fun(integer2, float3), float6);
+  });
+
+  it("integer * integer", () => {
+    assert.deepStrictEqual(fun(integer2, integer3), integer6);
   });
 
   it("raises ArithmeticError if the first argument is not a number", () => {
@@ -68,7 +68,7 @@ describe("*/2", () => {
   });
 });
 
-describe.only("+/2", () => {
+describe("+/2", () => {
   const fun = Erlang["+/2"];
 
   it("float + float", () => {

@@ -8,20 +8,20 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   use Hologram.Test.BasicCase, async: true
 
   describe "*/2" do
-    test "integer * integer" do
-      assert :erlang.*(2, 3) === 6
-    end
-
-    test "integer * float" do
-      assert :erlang.*(2, 3.0) === 6.0
+    test "float * float" do
+      assert :erlang.*(2.0, 3.0) === 6.0
     end
 
     test "float * integer" do
       assert :erlang.*(3.0, 2) === 6.0
     end
 
-    test "float * float" do
-      assert :erlang.*(2.0, 3.0) === 6.0
+    test "integer * float" do
+      assert :erlang.*(2, 3.0) === 6.0
+    end
+
+    test "integer * integer" do
+      assert :erlang.*(2, 3) === 6
     end
 
     test "raises ArithmeticError if the first argument is not a number" do
