@@ -105,49 +105,27 @@ describe("+/2", () => {
 });
 
 describe("-/2", () => {
-  it("subtracts integer and integer", () => {
-    const left = Type.integer(3);
-    const right = Type.integer(1);
+  const fun = Erlang["-/2"];
 
-    const result = Erlang["-/2"](left, right);
-    const expected = Type.integer(2);
-
-    assert.deepStrictEqual(result, expected);
+  it("float - float", () => {
+    assert.deepStrictEqual(fun(float3, float2), float1);
   });
 
-  it("subtracts integer and float", () => {
-    const left = Type.integer(3);
-    const right = Type.float(1.0);
-
-    const result = Erlang["-/2"](left, right);
-    const expected = Type.float(2.0);
-
-    assert.deepStrictEqual(result, expected);
+  it("float - integer", () => {
+    assert.deepStrictEqual(fun(float3, integer2), float1);
   });
 
-  it("subtracts float and integer", () => {
-    const left = Type.float(3.0);
-    const right = Type.integer(1);
-
-    const result = Erlang["-/2"](left, right);
-    const expected = Type.float(2.0);
-
-    assert.deepStrictEqual(result, expected);
+  it("integer - float", () => {
+    assert.deepStrictEqual(fun(integer3, float2), float1);
   });
 
-  it("subtracts float and float", () => {
-    const left = Type.float(3.0);
-    const right = Type.float(1.0);
-
-    const result = Erlang["-/2"](left, right);
-    const expected = Type.float(2.0);
-
-    assert.deepStrictEqual(result, expected);
+  it("integer - integer", () => {
+    assert.deepStrictEqual(fun(integer3, integer2), integer1);
   });
 
   it("raises ArithmeticError if the first argument is not a number", () => {
     assertBoxedError(
-      () => Erlang["-/2"](Type.atom("abc"), Type.integer(123)),
+      () => fun(atomA, integer1),
       "ArithmeticError",
       "bad argument in arithmetic expression",
     );
@@ -155,7 +133,7 @@ describe("-/2", () => {
 
   it("raises ArithmeticError if the second argument is not a number", () => {
     assertBoxedError(
-      () => Erlang["-/2"](Type.integer(123), Type.atom("abc")),
+      () => fun(integer1, atomA),
       "ArithmeticError",
       "bad argument in arithmetic expression",
     );
