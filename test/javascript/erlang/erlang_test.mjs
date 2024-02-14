@@ -873,6 +873,22 @@ describe("andalso/2", () => {
   });
 });
 
+describe("atom_to_binary/1", () => {
+  it("converts atom to (binary) bitstring", () => {
+    const result = Erlang["atom_to_binary/1"](Type.atom("abc"));
+
+    assert.deepStrictEqual(result, Type.bitstring("abc"));
+  });
+
+  it("raises ArgumentError if the argument is not an atom", () => {
+    assertBoxedError(
+      () => Erlang["atom_to_binary/1"](Type.integer(123)),
+      "ArgumentError",
+      "errors were found at the given arguments:\n\n  * 1st argument: not an atom\n",
+    );
+  });
+});
+
 describe("atom_to_list/1", () => {
   it("empty atom", () => {
     const result = Erlang["atom_to_list/1"](Type.atom(""));
@@ -904,22 +920,6 @@ describe("atom_to_list/1", () => {
   it("not an atom", () => {
     assertBoxedError(
       () => Erlang["atom_to_list/1"](Type.integer(123)),
-      "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: not an atom\n",
-    );
-  });
-});
-
-describe("atom_to_binary/1", () => {
-  it("converts atom to (binary) bitstring", () => {
-    const result = Erlang["atom_to_binary/1"](Type.atom("abc"));
-
-    assert.deepStrictEqual(result, Type.bitstring("abc"));
-  });
-
-  it("raises ArgumentError if the argument is not an atom", () => {
-    assertBoxedError(
-      () => Erlang["atom_to_binary/1"](Type.integer(123)),
       "ArgumentError",
       "errors were found at the given arguments:\n\n  * 1st argument: not an atom\n",
     );
