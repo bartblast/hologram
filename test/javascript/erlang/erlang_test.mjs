@@ -1226,14 +1226,14 @@ describe("is_binary/1", () => {
 });
 
 describe("is_bitstring/1", () => {
-  it("returns true if the term is a bitstring", () => {
-    const term = Type.bitstring("abc");
-    assertBoxedTrue(Erlang["is_bitstring/1"](term));
+  const fun = Erlang["is_bitstring/1"];
+
+  it("bitstring", () => {
+    assertBoxedTrue(fun(Type.bitstring([0, 1, 0])));
   });
 
-  it("returns false if the term is not a bitstring", () => {
-    const term = Type.atom("abc");
-    assertBoxedFalse(Erlang["is_bitstring/1"](term));
+  it("non-bitstring", () => {
+    assertBoxedFalse(fun(Type.atom("abc")));
   });
 });
 
