@@ -948,6 +948,16 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "is_float/1" do
+    test "float" do
+      assert :erlang.is_float(1.0) == true
+    end
+
+    test "non-float" do
+      assert :erlang.is_float(:abc) == false
+    end
+  end
+
   describe "is_function/1" do
     test "returns true if the term is an anonymous function" do
       assert :erlang.is_function(fn x -> x end) == true

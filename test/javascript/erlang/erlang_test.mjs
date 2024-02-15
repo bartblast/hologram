@@ -1238,12 +1238,14 @@ describe("is_bitstring/1", () => {
 });
 
 describe("is_float/1", () => {
-  it("proxies to Type.isFloat() and casts the result to boxed boolean", () => {
-    const term = Type.float(1.23);
-    const result = Erlang["is_float/1"](term);
-    const expected = Type.boolean(Type.isFloat(term));
+  const fun = Erlang["is_float/1"];
 
-    assert.deepStrictEqual(result, expected);
+  it("float", () => {
+    assertBoxedTrue(fun(Type.float(1.0)));
+  });
+
+  it("non-float", () => {
+    assertBoxedFalse(fun(Type.atom("abc")));
   });
 });
 
