@@ -984,6 +984,16 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "is_integer/1" do
+    test "integer" do
+      assert :erlang.is_integer(1) == true
+    end
+
+    test "non-integer" do
+      assert :erlang.is_integer(:abc) == false
+    end
+  end
+
   describe "is_map/1" do
     test "returns true if the term is a map" do
       assert :erlang.is_map(%{a: 1, b: 2}) == true

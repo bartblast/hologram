@@ -1281,12 +1281,14 @@ describe("is_function/2", () => {
 });
 
 describe("is_integer/1", () => {
-  it("proxies to Type.isInteger() and casts the result to boxed boolean", () => {
-    const term = Type.integer(123);
-    const result = Erlang["is_integer/1"](term);
-    const expected = Type.boolean(Type.isInteger(term));
+  const fun = Erlang["is_integer/1"];
 
-    assert.deepStrictEqual(result, expected);
+  it("integer", () => {
+    assertBoxedTrue(fun(Type.integer(1)));
+  });
+
+  it("non-integer", () => {
+    assertBoxedFalse(fun(Type.atom("abc")));
   });
 });
 
