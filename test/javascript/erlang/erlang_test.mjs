@@ -1293,12 +1293,15 @@ describe("is_integer/1", () => {
 });
 
 describe("is_list/1", () => {
-  it("proxies to Type.isList() and casts the result to boxed boolean", () => {
-    const term = Type.list([Type.integer(1), Type.integer(2)]);
-    const result = Erlang["is_list/1"](term);
-    const expected = Type.boolean(Type.isList(term));
+  const fun = Erlang["is_list/1"];
 
-    assert.deepStrictEqual(result, expected);
+  it("list", () => {
+    const term = Type.list([Type.integer(1), Type.integer(2)]);
+    assertBoxedTrue(fun(term));
+  });
+
+  it("non-list", () => {
+    assertBoxedFalse(fun(Type.atom("abc")));
   });
 });
 

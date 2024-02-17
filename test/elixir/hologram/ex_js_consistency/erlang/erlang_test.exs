@@ -994,6 +994,16 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "is_list/1" do
+    test "list" do
+      assert :erlang.is_list([1, 2]) == true
+    end
+
+    test "non-list" do
+      assert :erlang.is_list(:abc) == false
+    end
+  end
+
   describe "is_map/1" do
     test "returns true if the term is a map" do
       assert :erlang.is_map(%{a: 1, b: 2}) == true
