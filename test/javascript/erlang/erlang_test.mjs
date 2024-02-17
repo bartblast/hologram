@@ -1263,19 +1263,20 @@ describe("is_function/1", () => {
 });
 
 describe("is_function/2", () => {
-  it("returns true if the term is an anonymous function with the given arity", () => {
+  const fun = Erlang["is_function/2"];
+
+  it("function with the given arity", () => {
     const term = Type.anonymousFunction(3, ["dummy_clause"], {});
-    assertBoxedTrue(Erlang["is_function/2"](term, Type.integer(3)));
+    assertBoxedTrue(fun(term, Type.integer(3)));
   });
 
-  it("returns false if the term is an anonymous function with a different arity", () => {
+  it("function with a different arity", () => {
     const term = Type.anonymousFunction(3, ["dummy_clause"], {});
-    assertBoxedFalse(Erlang["is_function/2"](term, Type.integer(4)));
+    assertBoxedFalse(fun(term, Type.integer(4)));
   });
 
-  it("returns false if the term is not an anonymous function", () => {
-    const term = Type.atom("abc");
-    assertBoxedFalse(Erlang["is_function/2"](term, Type.integer(3)));
+  it("non-function", () => {
+    assertBoxedFalse(fun(Type.atom("abc")));
   });
 });
 
