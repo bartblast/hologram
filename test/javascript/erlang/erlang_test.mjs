@@ -1339,14 +1339,14 @@ describe("is_number/1", () => {
 });
 
 describe("is_pid/1", () => {
-  it("returns true if the term is a pid", () => {
-    const term = Type.pid("0.11.222");
-    assertBoxedTrue(Erlang["is_pid/1"](term));
+  const fun = Erlang["is_pid/1"];
+
+  it("pid", () => {
+    assertBoxedTrue(fun(Type.pid("0.11.222")));
   });
 
-  it("returns false if the term is not a pid", () => {
-    const term = Type.atom("abc");
-    assertBoxedFalse(Erlang["is_pid/1"](term));
+  it("non-pid", () => {
+    assertBoxedFalse(fun(Type.atom("abc")));
   });
 });
 
