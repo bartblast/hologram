@@ -1306,18 +1306,19 @@ describe("is_list/1", () => {
 });
 
 describe("is_map/1", () => {
-  it("returns true if the term is a map", () => {
+  const fun = Erlang["is_map/1"];
+
+  it("map", () => {
     const term = Type.map([
       [Type.atom("a"), Type.integer(1)],
       [Type.atom("b"), Type.integer(2)],
     ]);
 
-    assertBoxedTrue(Erlang["is_map/1"](term));
+    assertBoxedTrue(fun(term));
   });
 
-  it("returns false if the term is not a map", () => {
-    const term = Type.atom("abc");
-    assertBoxedFalse(Erlang["is_map/1"](term));
+  it("non-map", () => {
+    assertBoxedFalse(fun(Type.atom("abc")));
   });
 });
 
