@@ -1351,14 +1351,14 @@ describe("is_pid/1", () => {
 });
 
 describe("is_port/1", () => {
-  it("returns true if the term is a port", () => {
-    const term = Type.port("0.11");
-    assertBoxedTrue(Erlang["is_port/1"](term));
+  const fun = Erlang["is_port/1"];
+
+  it("port", () => {
+    assertBoxedTrue(fun(Type.port("0.11")));
   });
 
-  it("returns false if the term is not a port", () => {
-    const term = Type.atom("abc");
-    assertBoxedFalse(Erlang["is_port/1"](term));
+  it("non-port", () => {
+    assertBoxedFalse(fun(Type.atom("abc")));
   });
 });
 

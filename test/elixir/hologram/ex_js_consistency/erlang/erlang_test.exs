@@ -1039,11 +1039,11 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "is_port/1" do
-    test "returns true if the term is a port" do
+    test "port" do
       assert :erlang.is_port(port("0.11")) == true
     end
 
-    test "returns false if the term is not a port" do
+    test "non-port" do
       assert :erlang.is_port(:abc) == false
     end
   end
