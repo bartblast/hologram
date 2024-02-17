@@ -1049,11 +1049,11 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "is_reference/1" do
-    test "returns true if the term is a reference" do
+    test "reference" do
       assert :erlang.is_reference(make_ref()) == true
     end
 
-    test "returns false if the term is not a reference" do
+    test "non-reference" do
       assert :erlang.is_reference(:abc) == false
     end
   end

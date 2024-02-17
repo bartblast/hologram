@@ -1363,14 +1363,14 @@ describe("is_port/1", () => {
 });
 
 describe("is_reference/1", () => {
-  it("returns true if the term is a reference", () => {
-    const term = Type.reference("0.1.2.3");
-    assertBoxedTrue(Erlang["is_reference/1"](term));
+  const fun = Erlang["is_reference/1"];
+
+  it("reference", () => {
+    assertBoxedTrue(fun(Type.reference("0.1.2.3")));
   });
 
-  it("returns false if the term is not a reference", () => {
-    const term = Type.atom("abc");
-    assertBoxedFalse(Erlang["is_reference/1"](term));
+  it("non-reference", () => {
+    assertBoxedFalse(fun(Type.atom("abc")));
   });
 });
 
