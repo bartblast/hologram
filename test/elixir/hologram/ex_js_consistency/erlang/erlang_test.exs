@@ -1014,6 +1014,20 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "is_number/1" do
+    test "float" do
+      assert :erlang.is_number(1.0) == true
+    end
+
+    test "integer" do
+      assert :erlang.is_number(1) == true
+    end
+
+    test "non-number" do
+      assert :erlang.is_number(:abc) == false
+    end
+  end
+
   describe "is_pid/1" do
     test "returns true if the term is a pid" do
       assert :erlang.is_pid(self()) == true

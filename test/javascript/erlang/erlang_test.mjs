@@ -1323,12 +1323,18 @@ describe("is_map/1", () => {
 });
 
 describe("is_number/1", () => {
-  it("proxies to Type.isNumber() and casts the result to boxed boolean", () => {
-    const term = Type.integer(123);
-    const result = Erlang["is_number/1"](term);
-    const expected = Type.boolean(Type.isNumber(term));
+  const fun = Erlang["is_number/1"];
 
-    assert.deepStrictEqual(result, expected);
+  it("float", () => {
+    assertBoxedTrue(fun(Type.float(1.0)));
+  });
+
+  it("integer", () => {
+    assertBoxedTrue(fun(Type.integer(1)));
+  });
+
+  it("non-number", () => {
+    assertBoxedFalse(fun(Type.atom("abc")));
   });
 });
 
