@@ -445,7 +445,7 @@ const Erlang = {
   "length/1": (list) => {
     if (!Type.isList(list)) {
       Interpreter.raiseArgumentError(
-        "errors were found at the given arguments:\n\n* 1st argument: not a list",
+        "errors were found at the given arguments:\n\n  * 1st argument: not a list\n",
       );
     }
 

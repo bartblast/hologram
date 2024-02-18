@@ -1060,13 +1060,36 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   describe "is_tuple/1" do
     test "tuple" do
-      assert :erlang.is_tuple([1, 2]) == true
+      assert :erlang.is_tuple({1, 2}) == true
     end
 
     test "non-tuple" do
       assert :erlang.is_tuple(:abc) == false
     end
   end
+
+  describe "length/1" do
+    test "returns the number of items in the list" do
+      assert :erlang.length([1, 2]) == 2
+    end
+
+    test "raises ArgumentError if the argument is not a list" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not a list\n",
+                   fn ->
+                     :erlang.length(build_value(:abc))
+                   end
+    end
+  end
+
+  #   it(, () => {
+  #     assertBoxedError(
+  #       () => Erlang["length/1"](Type.integer(123)),
+  #       "ArgumentError",
+  #       "errors were found at the given arguments:\n\n* 1st argument: not a list",
+  #     );
+  #   });
+  # });
 
   describe "orelse/2" do
     test "returns true if the first argument is true" do

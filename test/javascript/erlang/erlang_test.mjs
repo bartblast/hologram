@@ -1388,18 +1388,18 @@ describe("is_tuple/1", () => {
 });
 
 describe("length/1", () => {
-  it("returns the number of items in a boxed list", () => {
+  it("returns the number of items in the list", () => {
     const list = Type.list([Type.integer(1), Type.integer(2)]);
     const result = Erlang["length/1"](list);
 
     assert.deepStrictEqual(result, Type.integer(2));
   });
 
-  it("raises ArgumentError if the argument is not a boxed list", () => {
+  it("raises ArgumentError if the argument is not a list", () => {
     assertBoxedError(
-      () => Erlang["length/1"](Type.integer(123)),
+      () => Erlang["length/1"](Type.atom("abc")),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n* 1st argument: not a list",
+      "errors were found at the given arguments:\n\n  * 1st argument: not a list\n",
     );
   });
 });
