@@ -1388,16 +1388,16 @@ describe("is_tuple/1", () => {
 });
 
 describe("length/1", () => {
-  it("returns the number of items in the list", () => {
-    const list = Type.list([Type.integer(1), Type.integer(2)]);
-    const result = Erlang["length/1"](list);
+  const fun = Erlang["length/1"];
 
-    assert.deepStrictEqual(result, Type.integer(2));
+  it("returns the number of items in the list", () => {
+    const term = Type.list([Type.integer(1), Type.integer(2)]);
+    assert.deepStrictEqual(fun(term), Type.integer(2));
   });
 
   it("raises ArgumentError if the argument is not a list", () => {
     assertBoxedError(
-      () => Erlang["length/1"](Type.atom("abc")),
+      () => fun(Type.atom("abc")),
       "ArgumentError",
       "errors were found at the given arguments:\n\n  * 1st argument: not a list\n",
     );
