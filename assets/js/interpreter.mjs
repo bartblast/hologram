@@ -36,6 +36,15 @@ export default class Interpreter {
     }
   }
 
+  static buildErrorsFoundMsg(argumentIndex, message) {
+    // Based on: https://stackoverflow.com/a/39466341/13040586
+    const suffix =
+      ["st", "nd", "rd"][((((argumentIndex + 90) % 100) - 10) % 10) - 1] ||
+      "th";
+
+    return `errors were found at the given arguments:\n\n  * ${argumentIndex}${suffix} argument: ${message}\n`;
+  }
+
   static callAnonymousFunction(fun, argsArray) {
     const args = Type.list(argsArray);
 
