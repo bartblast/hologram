@@ -1082,6 +1082,20 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "map_size/1" do
+    test "returns the number of items in the map" do
+      assert :erlang.map_size(%{a: 1, b: 2}) == 2
+    end
+
+    test "raises BadMapError if the argument is not a map" do
+      assert_raise BadMapError,
+                   "expected a map, got: :abc",
+                   fn ->
+                     :erlang.map_size(:abc)
+                   end
+    end
+  end
+
   describe "orelse/2" do
     test "returns true if the first argument is true" do
       assert :erlang.orelse(true, :abc) == true

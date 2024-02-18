@@ -1405,20 +1405,20 @@ describe("length/1", () => {
 });
 
 describe("map_size/1", () => {
-  it("returns the number of items in a boxed map", () => {
-    const map = Type.map([
+  const fun = Erlang["map_size/1"];
+
+  it("returns the number of items in the map", () => {
+    const term = Type.map([
       [Type.atom("a"), Type.integer(1)],
       [Type.atom("b"), Type.integer(2)],
     ]);
 
-    const result = Erlang["map_size/1"](map);
-
-    assert.deepStrictEqual(result, Type.integer(2));
+    assert.deepStrictEqual(fun(term), Type.integer(2));
   });
 
-  it("raises BadMapError if the argument is not a boxed map", () => {
+  it("raises BadMapError if the argument is not a map", () => {
     assertBoxedError(
-      () => Erlang["map_size/1"](Type.atom("abc")),
+      () => fun(Type.atom("abc")),
       "BadMapError",
       "expected a map, got: :abc",
     );
