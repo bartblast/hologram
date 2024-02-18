@@ -1116,6 +1116,28 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "tl/1" do
+    test "proper list, 1 item" do
+      assert :erlang.tl([1]) == []
+    end
+
+    test "proper list, 2 items" do
+      assert :erlang.tl([1, 2]) == [2]
+    end
+
+    test "proper list, 3 items" do
+      assert :erlang.tl([1, 2, 3]) == [2, 3]
+    end
+
+    test "improper list, 2 items" do
+      assert :erlang.tl([1 | 2]) == 2
+    end
+
+    test "improper list, 3 items" do
+      assert :erlang.tl([1, 2 | 3]) == [2 | 3]
+    end
+  end
+
   describe "tuple_to_list/1" do
     test "returns a list corresponding to the given tuple" do
       assert :erlang.tuple_to_list({1, 2, 3}) == [1, 2, 3]
