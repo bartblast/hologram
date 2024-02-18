@@ -54,19 +54,19 @@ const Erlang_Lists = {
   "keyfind/3": (value, index, tuples) => {
     if (!Type.isInteger(index)) {
       Interpreter.raiseArgumentError(
-        "errors were found at the given arguments:\n\n  * 2nd argument: not an integer\n",
+        Interpreter.buildErrorsFoundMsg(2, "not an integer"),
       );
     }
 
     if (index.value < 1) {
       Interpreter.raiseArgumentError(
-        "errors were found at the given arguments:\n\n  * 2nd argument: out of range\n",
+        Interpreter.buildErrorsFoundMsg(2, "out of range"),
       );
     }
 
     if (!Type.isList(tuples)) {
       Interpreter.raiseArgumentError(
-        "errors were found at the given arguments:\n\n  * 3rd argument: not a list\n",
+        Interpreter.buildErrorsFoundMsg(3, "not a list"),
       );
     }
 
@@ -109,7 +109,7 @@ const Erlang_Lists = {
   "member/2": (elem, list) => {
     if (!Type.isList(list)) {
       Interpreter.raiseArgumentError(
-        "errors were found at the given arguments:\n\n  * 2nd argument: not a list\n",
+        Interpreter.buildErrorsFoundMsg(2, "not a list"),
       );
     }
 

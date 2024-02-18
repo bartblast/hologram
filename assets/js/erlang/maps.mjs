@@ -12,7 +12,10 @@ const Erlang_Maps = {
   "fold/3": (fun, initialAcc, map) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 3) {
       Interpreter.raiseArgumentError(
-        "errors were found at the given arguments:\n\n* 1st argument: not a fun that takes three arguments",
+        Interpreter.buildErrorsFoundMsg(
+          1,
+          "not a fun that takes three arguments",
+        ),
       );
     }
 
@@ -33,7 +36,7 @@ const Erlang_Maps = {
   "from_list/1": (list) => {
     if (!Type.isList(list)) {
       Interpreter.raiseArgumentError(
-        "errors were found at the given arguments:\n\n* 1st argument: not a list",
+        Interpreter.buildErrorsFoundMsg(1, "not a list"),
       );
     }
 
@@ -92,7 +95,10 @@ const Erlang_Maps = {
   "map/2": (fun, mapOrIterator) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
       Interpreter.raiseArgumentError(
-        "errors were found at the given arguments:\n\n* 1st argument: not a fun that takes two arguments",
+        Interpreter.buildErrorsFoundMsg(
+          1,
+          "not a fun that takes two arguments",
+        ),
       );
     }
 
