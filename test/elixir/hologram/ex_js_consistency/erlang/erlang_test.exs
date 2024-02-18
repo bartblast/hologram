@@ -1082,15 +1082,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
-  #   it(, () => {
-  #     assertBoxedError(
-  #       () => Erlang["length/1"](Type.integer(123)),
-  #       "ArgumentError",
-  #       "errors were found at the given arguments:\n\n* 1st argument: not a list",
-  #     );
-  #   });
-  # });
-
   describe "orelse/2" do
     test "returns true if the first argument is true" do
       assert :erlang.orelse(true, :abc) == true
