@@ -1375,14 +1375,15 @@ describe("is_reference/1", () => {
 });
 
 describe("is_tuple/1", () => {
-  it("returns true if the term is a tuple", () => {
+  const fun = Erlang["is_tuple/1"];
+
+  it("tuple", () => {
     const term = Type.tuple([Type.integer(1), Type.integer(2)]);
-    assertBoxedTrue(Erlang["is_tuple/1"](term));
+    assertBoxedTrue(fun(term));
   });
 
-  it("returns false if the term is not a tuple", () => {
-    const term = Type.atom("abc");
-    assertBoxedFalse(Erlang["is_tuple/1"](term));
+  it("non-tuple", () => {
+    assertBoxedFalse(fun(Type.atom("abc")));
   });
 });
 

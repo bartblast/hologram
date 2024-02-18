@@ -1059,11 +1059,11 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "is_tuple/1" do
-    test "returns true if the term is a tuple" do
-      assert :erlang.is_tuple({1, 2}) == true
+    test "tuple" do
+      assert :erlang.is_tuple([1, 2]) == true
     end
 
-    test "returns false if the term is not a tuple" do
+    test "non-tuple" do
       assert :erlang.is_tuple(:abc) == false
     end
   end
