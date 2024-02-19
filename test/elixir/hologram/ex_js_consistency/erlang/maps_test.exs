@@ -113,7 +113,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
       assert :maps.is_key(:b, %{a: 1, b: 2}) == true
     end
 
-    test "returns false if the given map has the given key" do
+    test "returns false if the given map doesn't have the given key" do
       assert :maps.is_key(:c, %{a: 1, b: 2}) == false
     end
 

@@ -220,7 +220,7 @@ describe("is_key/2", () => {
     assertBoxedTrue(Erlang_Maps["is_key/2"](Type.atom("b"), map));
   });
 
-  it("returns false if the given map has the given key", () => {
+  it("returns false if the given map doesn't have the given key", () => {
     assertBoxedFalse(Erlang_Maps["is_key/2"](Type.atom("c"), map));
   });
 
