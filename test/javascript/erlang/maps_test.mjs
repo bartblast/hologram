@@ -63,7 +63,7 @@ describe("fold/3", () => {
       () =>
         Erlang_Maps["fold/3"](Type.atom("abc"), Type.integer(10), Type.map([])),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n* 1st argument: not a fun that takes three arguments",
+      "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes three arguments\n",
     );
   });
 
@@ -75,10 +75,9 @@ describe("fold/3", () => {
     );
 
     assertBoxedError(
-      () =>
-        Erlang_Maps["fold/3"](Type.atom("abc"), Type.integer(10), Type.map([])),
+      () => Erlang_Maps["fold/3"](fun, Type.integer(10), Type.map([])),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n* 1st argument: not a fun that takes three arguments",
+      "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes three arguments\n",
     );
   });
 

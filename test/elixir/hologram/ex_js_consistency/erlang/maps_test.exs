@@ -7,6 +7,44 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
 
   use Hologram.Test.BasicCase, async: true
 
+  describe "fold/3" do
+    @map %{1 => 1, 10 => 2, 100 => 3}
+
+    setup do
+      [fun: fn key, value, acc -> acc + key * value end]
+    end
+
+    test "reduces empty map", %{fun: fun} do
+      assert :maps.fold(fun, 10, %{}) == 10
+    end
+
+    test "reduces non-empty map", %{fun: fun} do
+      assert :maps.fold(fun, 10, @map) == 331
+    end
+
+    test "raises ArgumentError if the first argument is not an anonymous function" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes three arguments\n",
+                   fn ->
+                     :maps.fold(:abc, 10, %{})
+                   end
+    end
+
+    test "raises ArgumentError if the first argument is an anonymous function with arity different than 3" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes three arguments\n",
+                   fn ->
+                     :maps.fold(fn -> :abc end, 10, %{})
+                   end
+    end
+
+    test "raises BadMapError if the third argument is not a map", %{fun: fun} do
+      assert_raise BadMapError, "expected a map, got: :abc", fn ->
+        :maps.fold(fun, 10, :abc)
+      end
+    end
+  end
+
   describe "get/2" do
     test "returns the value assiociated with the given key if map contains the key" do
       assert :maps.get(:b, %{a: 1, b: 2}) == 2
