@@ -45,6 +45,33 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
   end
 
+  describe "from_list/1" do
+    test "builds a map from the given list of key-value tuples" do
+      assert :maps.from_list([{:a, 2}, {3, 4.0}]) == %{:a => 2, 3 => 4.0}
+    end
+
+    test "if the same key appears more than once, the latter (right-most) value is used and the previous values are ignored" do
+      list = [
+        {:a, 1},
+        {:b, 2},
+        {:a, 3},
+        {:b, 4},
+        {:a, 5},
+        {:b, 6}
+      ]
+
+      assert :maps.from_list(list) == %{a: 5, b: 6}
+    end
+
+    test "raises ArgumentError if the argument is not a list" do
+      assert_raise ArgumentError,
+                   "errors were found at the given arguments:\n\n  * 1st argument: not a list\n",
+                   fn ->
+                     :maps.from_list(123)
+                   end
+    end
+  end
+
   describe "get/2" do
     test "returns the value assiociated with the given key if map contains the key" do
       assert :maps.get(:b, %{a: 1, b: 2}) == 2
