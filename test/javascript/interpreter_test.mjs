@@ -2086,6 +2086,11 @@ describe("inspect()", () => {
       const result = Interpreter.inspect(Type.string("abc"), {});
       assert.equal(result, '"abc"');
     });
+
+    it("Unicode text", () => {
+      const result = Interpreter.inspect(Type.string("全息图"), {});
+      assert.equal(result, '"全息图"');
+    });
   });
 
   describe("tuple", () => {

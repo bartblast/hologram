@@ -27,6 +27,10 @@ defmodule Hologram.ExJsConsistency.Elixir.KernelTest do
       assert Kernel.inspect(nil, []) == "nil"
     end
 
+    test "atom, module alias" do
+      assert Kernel.inspect(Aaa.Bbb, []) == "Aaa.Bbb"
+    end
+
     test "atom, non-boolean and non-nil" do
       assert Kernel.inspect(:abc, []) == ":abc"
     end
