@@ -162,6 +162,34 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
   end
 
+  describe "merge/2" do
+    test "merges two maps" do
+      map_1 = %{a: 1, b: 2}
+      map_2 = %{c: 3, d: 4}
+
+      assert :maps.merge(map_1, map_2) == %{a: 1, b: 2, c: 3, d: 4}
+    end
+
+    test "if two keys exist in both maps, the value in the first map is superseded by the value in the second map" do
+      map_1 = %{a: 1, b: 2, c: 3}
+      map_2 = %{c: 4, d: 5, a: 6}
+
+      assert :maps.merge(map_1, map_2) == %{a: 6, b: 2, c: 4, d: 5}
+    end
+
+    test "raises BadMapError if the first argument is not a map" do
+      assert_raise BadMapError, "expected a map, got: 123", fn ->
+        :maps.merge(build_value(123), %{a: 1})
+      end
+    end
+
+    test "raises BadMapError if the second argument is not a map" do
+      assert_raise BadMapError, "expected a map, got: 123", fn ->
+        :maps.merge(%{a: 1}, 123)
+      end
+    end
+  end
+
   describe "put/3" do
     test "when the map doesn't have the given key" do
       assert :maps.put(:b, 2, %{a: 1}) == %{a: 1, b: 2}
