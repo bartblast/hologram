@@ -385,7 +385,7 @@ describe("merge/2", () => {
   });
 });
 
-describe("puts/3", () => {
+describe("put/3", () => {
   it("when the map doesn't have the given key", () => {
     const map = Type.map([[Type.atom("a"), Type.integer(1)]]);
     const result = Erlang_Maps["put/3"](Type.atom("b"), Type.integer(2), map);
