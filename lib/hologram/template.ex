@@ -34,7 +34,9 @@ defmodule Hologram.Template do
   defp build_h_sigil_ast(markup) do
     quote do
       fn var!(vars) ->
-        _fix_unused_var_warning = var!(vars)
+        # Fix unused var warning
+        # credo:disable-for-next-line Credo.Check.Consistency.UnusedVariableNames
+        _ = var!(vars)
         unquote(dom_ast(markup))
       end
     end
