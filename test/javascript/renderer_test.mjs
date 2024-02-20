@@ -37,6 +37,8 @@ import {defineHologramTestFixturesTemplateRendererModule9} from "./fixtures/temp
 import {defineLayoutFixture} from "./fixtures/layout_fixture.mjs";
 import {defineModule14Fixture} from "./fixtures/template/renderer/module_14.mjs";
 import {defineModule15Fixture} from "./fixtures/template/renderer/module_15.mjs";
+import {defineModule25Fixture} from "./fixtures/template/renderer/module_25.mjs";
+import {defineModule26Fixture} from "./fixtures/template/renderer/module_26.mjs";
 import {defineModule37Fixture} from "./fixtures/template/renderer/module_37.mjs";
 import {defineModule40Fixture} from "./fixtures/template/renderer/module_40.mjs";
 import {defineModule42Fixture} from "./fixtures/template/renderer/module_42.mjs";
@@ -50,6 +52,7 @@ import {defineModule47Fixture} from "./fixtures/template/renderer/module_47.mjs"
 import Renderer from "../../assets/js/renderer.mjs";
 import Store from "../../assets/js/store.mjs";
 import Type from "../../assets/js/type.mjs";
+import Interpreter from "../../assets/js/interpreter.mjs";
 
 before(() => {
   linkModules();
@@ -79,6 +82,8 @@ before(() => {
   defineLayoutFixture();
   defineModule14Fixture();
   defineModule15Fixture();
+  defineModule25Fixture();
+  defineModule26Fixture();
   defineModule37Fixture();
   defineModule40Fixture();
   defineModule41Fixture();
@@ -1301,4 +1306,26 @@ describe("page", () => {
 
   // This test case doesn't apply to the client renderer, because the client renderer receives already casted page params.
   // it("cast page params")
+
+  it("cast layout explicit static props", () => {
+    initStoreComponentData(Type.bitstring("page"));
+
+    Renderer.renderPage(
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module25"),
+      Type.map([]),
+    );
+
+    const layoutCid = Type.bitstring("layout");
+
+    const expectedLayoutState = Type.map([
+      [Type.atom("cid"), layoutCid],
+      [Type.atom("prop_1"), Type.bitstring("prop_value_1")],
+      [Type.atom("prop_3"), Type.bitstring("prop_value_3")],
+    ]);
+
+    assert.deepStrictEqual(
+      Store.getComponentState(layoutCid),
+      expectedLayoutState,
+    );
+  });
 });

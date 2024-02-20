@@ -16,6 +16,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module18
   alias Hologram.Test.Fixtures.Template.Renderer.Module19
   alias Hologram.Test.Fixtures.Template.Renderer.Module2
+  alias Hologram.Test.Fixtures.Template.Renderer.Module25
   alias Hologram.Test.Fixtures.Template.Renderer.Module3
   alias Hologram.Test.Fixtures.Template.Renderer.Module31
   alias Hologram.Test.Fixtures.Template.Renderer.Module34
@@ -541,11 +542,32 @@ defmodule Hologram.Template.RendererTest do
                   }
                 }}
     end
+
+    test "cast layout explicit static props" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module25, :dummy_module_25_digest)
+
+      assert render_page(Module25, []) ==
+               {"",
+                %{
+                  "layout" => %Client{
+                    context: %{},
+                    next_command: nil,
+                    state: %{cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}
+                  },
+                  "page" => %Client{
+                    context: %{
+                      {Hologram.Runtime, :page_digest} => :dummy_module_25_digest,
+                      {Hologram.Runtime, :page_mounted?} => true
+                    },
+                    next_command: nil,
+                    state: %{}
+                  }
+                }}
+    end
   end
 
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module21
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module24
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module25
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module27
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module28
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module29
@@ -553,24 +575,6 @@ defmodule Hologram.Template.RendererTest do
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module50
 
   #   describe "page" do
-  #     test "cast layout explicit static props" do
-  #       ETS.put(PageDigestRegistryStub.ets_table_name(), Module25, :dummy_module_25_digest)
-
-  #       assert render_page(Module25, []) ==
-  #                {"",
-  #                 %{
-  #                   "layout" => %Component.Client{
-  #                     state: %{cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}
-  #                   },
-  #                   "page" => %Component.Client{
-  #                     context: %{
-  #                       {Hologram.Runtime, :page_digest} => :dummy_module_25_digest,
-  #                       {Hologram.Runtime, :page_mounted?} => true
-  #                     }
-  #                   }
-  #                 }}
-  #     end
-
   #     test "cast layout props passed implicitely from page state" do
   #       ETS.put(PageDigestRegistryStub.ets_table_name(), Module27, :dummy_module_27_digest)
 
