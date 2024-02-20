@@ -5,7 +5,7 @@ import {buildClientStruct} from "../../../../../assets/js/test_support.mjs";
 import Interpreter from "../../../../../assets/js/interpreter.mjs";
 import Type from "../../../../../assets/js/type.mjs";
 
-export function defineHologramTestFixturesTemplateRendererModule3() {
+export function defineModule3Fixture() {
   Interpreter.defineElixirFunction(
     "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module3",
     "__props__",

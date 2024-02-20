@@ -3,7 +3,7 @@
 import Interpreter from "../../../../../assets/js/interpreter.mjs";
 import Type from "../../../../../assets/js/type.mjs";
 
-export function defineHologramTestFixturesTemplateRendererModule39() {
+export function defineModule39Fixture() {
   Interpreter.defineElixirFunction(
     "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module39",
     "__layout_module__",
