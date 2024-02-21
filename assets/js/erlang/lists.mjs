@@ -136,6 +136,19 @@ const Erlang_Lists = {
   },
   // end reverse/1
   // deps: []
+
+  // start sort/1
+  "sort/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        "no function clause matching in :lists.sort/1",
+      );
+    }
+
+    return Type.list(list.data.sort(Interpreter.compareTerms));
+  },
+  // end sort/1
+  // deps: []
 };
 
 export default Erlang_Lists;

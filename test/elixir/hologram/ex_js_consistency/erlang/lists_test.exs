@@ -158,4 +158,16 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       end
     end
   end
+
+  describe "sort/1" do
+    test "sorts items in the list" do
+      assert :lists.sort([:a, 4, 3.0, :b, 1, 2.0]) == [1, 2.0, 3.0, 4, :a, :b]
+    end
+
+    test "raises FunctionClauseError if the argument is not a list" do
+      assert_raise FunctionClauseError, "no function clause matching in :lists.sort/1", fn ->
+        :lists.sort(:abc)
+      end
+    end
+  end
 end

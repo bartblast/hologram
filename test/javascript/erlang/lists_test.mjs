@@ -345,3 +345,38 @@ describe("reverse/1", () => {
     );
   });
 });
+
+describe("sort/1", () => {
+  const fun = Erlang_Lists["sort/1"];
+
+  it("sorts items in the list", () => {
+    const list = Type.list([
+      Type.atom("a"),
+      Type.integer(4),
+      Type.float(3.0),
+      Type.atom("b"),
+      Type.integer(1),
+      Type.float(2.0),
+    ]);
+
+    assert.deepStrictEqual(
+      fun(list),
+      Type.list([
+        Type.integer(1),
+        Type.float(2.0),
+        Type.float(3.0),
+        Type.integer(4),
+        Type.atom("a"),
+        Type.atom("b"),
+      ]),
+    );
+  });
+
+  it("raises FunctionClauseError if the argument is not a list", () => {
+    assertBoxedError(
+      () => fun(Type.atom("abc")),
+      "FunctionClauseError",
+      "no function clause matching in :lists.sort/1",
+    );
+  });
+});
