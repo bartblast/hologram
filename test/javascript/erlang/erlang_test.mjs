@@ -27,6 +27,8 @@ const integer1 = Type.integer(1);
 const integer2 = Type.integer(2);
 const integer3 = Type.integer(3);
 const integer6 = Type.integer(6);
+const tuple2 = Type.tuple([Type.integer(1), Type.integer(2)]);
+const tuple3 = Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/erlang_test.exs
@@ -140,7 +142,7 @@ describe("-/2", () => {
   });
 });
 
-describe("/=/2", () => {
+describe.only("/=/2", () => {
   const fun = Erlang["/=/2"];
 
   it("atom == atom", () => {
@@ -161,6 +163,10 @@ describe("/=/2", () => {
 
   it("integer == integer", () => {
     assertBoxedFalse(fun(integer1, integer1));
+  });
+
+  it("tuple == tuple", () => {
+    assertBoxedFalse(fun(tuple3, tuple3));
   });
 
   it("atom < atom", () => {
@@ -191,6 +197,10 @@ describe("/=/2", () => {
     assertBoxedTrue(fun(integer1, integer2));
   });
 
+  it("tuple < tuple", () => {
+    assertBoxedTrue(fun(tuple2, tuple3));
+  });
+
   it("atom > atom", () => {
     assertBoxedTrue(fun(atomB, atomA));
   });
@@ -211,7 +221,11 @@ describe("/=/2", () => {
     assertBoxedTrue(fun(integer2, integer1));
   });
 
-  // TODO: reference, function, port, pid, tuple, map, list, bitstring
+  it("tuple > tuple", () => {
+    assertBoxedTrue(fun(tuple3, tuple2));
+  });
+
+  // TODO: reference, function, port, pid, map, list, bitstring
 });
 
 describe("</2", () => {
