@@ -11,7 +11,6 @@ import {
 
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 before(() => linkModules());
@@ -27,6 +26,7 @@ const integer1 = Type.integer(1);
 const integer2 = Type.integer(2);
 const integer3 = Type.integer(3);
 const integer6 = Type.integer(6);
+const pid1 = Type.pid("0.11.111");
 const tuple2 = Type.tuple([Type.integer(1), Type.integer(2)]);
 const tuple3 = Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
@@ -142,7 +142,7 @@ describe("-/2", () => {
   });
 });
 
-describe.only("/=/2", () => {
+describe("/=/2", () => {
   const fun = Erlang["/=/2"];
 
   it("atom == atom", () => {
@@ -195,6 +195,10 @@ describe.only("/=/2", () => {
 
   it("integer < integer", () => {
     assertBoxedTrue(fun(integer1, integer2));
+  });
+
+  it("pid < tuple (always)", () => {
+    assertBoxedTrue(fun(pid1, tuple2));
   });
 
   it("tuple < tuple", () => {
@@ -251,6 +255,10 @@ describe("</2", () => {
     assertBoxedFalse(fun(integer1, integer1));
   });
 
+  it("tuple == tuple", () => {
+    assertBoxedTrue(fun(tuple3, tuple3));
+  });
+
   it("atom < atom", () => {
     assertBoxedTrue(fun(atomA, atomB));
   });
@@ -279,6 +287,14 @@ describe("</2", () => {
     assertBoxedTrue(fun(integer1, integer2));
   });
 
+  it("pid < tuple (always)", () => {
+    assertBoxedTrue(fun(pid1, tuple1));
+  });
+
+  it("tuple < tuple", () => {
+    assertBoxedTrue(fun(tuple2, tuple3));
+  });
+
   it("atom > atom", () => {
     assertBoxedFalse(fun(atomB, atomA));
   });
@@ -297,6 +313,10 @@ describe("</2", () => {
 
   it("integer > integer", () => {
     assertBoxedFalse(fun(integer2, integer1));
+  });
+
+  it("tuple > tuple", () => {
+    assertBoxedFalse(fun(tuple3, tuple2));
   });
 
   it("throws a not yet implemented error when the left argument type is not yet supported", () => {
@@ -321,7 +341,7 @@ describe("</2", () => {
     );
   });
 
-  // TODO: reference, function, port, pid, tuple, map, list, bitstring
+  // TODO: reference, function, port, pid, map, list, bitstring
 });
 
 describe("=/=/2", () => {
@@ -347,6 +367,10 @@ describe("=/=/2", () => {
     assertBoxedFalse(fun(integer1, integer1));
   });
 
+  it("tuple == tuple", () => {
+    assertBoxedFalse(fun(tuple3, tuple3));
+  });
+
   it("atom < atom", () => {
     assertBoxedTrue(fun(atomA, atomB));
   });
@@ -375,6 +399,14 @@ describe("=/=/2", () => {
     assertBoxedTrue(fun(integer1, integer2));
   });
 
+  it("pid < tuple (always)", () => {
+    assertBoxedTrue(fun(pid1, tuple1));
+  });
+
+  it("tuple < tuple", () => {
+    assertBoxedTrue(fun(tuple2, tuple3));
+  });
+
   it("atom > atom", () => {
     assertBoxedTrue(fun(atomB, atomA));
   });
@@ -395,7 +427,11 @@ describe("=/=/2", () => {
     assertBoxedTrue(fun(integer2, integer1));
   });
 
-  // TODO: reference, function, port, pid, tuple, map, list, bitstring
+  it("tuple > tuple", () => {
+    assertBoxedTrue(fun(tuple3, tuple2));
+  });
+
+  // TODO: reference, function, port, pid, map, list, bitstring
 });
 
 describe("=:=/2", () => {
@@ -421,6 +457,10 @@ describe("=:=/2", () => {
     assertBoxedTrue(fun(integer1, integer1));
   });
 
+  it("tuple == tuple", () => {
+    assertBoxedTrue(fun(tuple3, tuple3));
+  });
+
   it("atom < atom", () => {
     assertBoxedFalse(fun(atomA, atomB));
   });
@@ -449,6 +489,14 @@ describe("=:=/2", () => {
     assertBoxedFalse(fun(integer1, integer2));
   });
 
+  it("pid < tuple (always)", () => {
+    assertBoxedFalse(fun(pid1, tuple1));
+  });
+
+  it("tuple < tuple", () => {
+    assertBoxedFalse(fun(tuple2, tuple3));
+  });
+
   it("atom > atom", () => {
     assertBoxedFalse(fun(atomB, atomA));
   });
@@ -469,7 +517,11 @@ describe("=:=/2", () => {
     assertBoxedFalse(fun(integer2, integer1));
   });
 
-  // TODO: reference, function, port, pid, tuple, map, list, bitstring
+  it("tuple > tuple", () => {
+    assertBoxedFalse(fun(tuple3, tuple2));
+  });
+
+  // TODO: reference, function, port, pid, map, list, bitstring
 });
 
 describe("=</2", () => {
@@ -493,6 +545,10 @@ describe("=</2", () => {
 
   it("integer == integer", () => {
     assertBoxedTrue(fun(integer1, integer1));
+  });
+
+  it("tuple == tuple", () => {
+    assertBoxedTrue(fun(tuple3, tuple3));
   });
 
   it("atom < atom", () => {
@@ -523,6 +579,14 @@ describe("=</2", () => {
     assertBoxedTrue(fun(integer1, integer2));
   });
 
+  it("pid < tuple (always)", () => {
+    assertBoxedTrue(fun(pid1, tuple1));
+  });
+
+  it("tuple < tuple", () => {
+    assertBoxedTrue(fun(tuple2, tuple3));
+  });
+
   it("atom > atom", () => {
     assertBoxedFalse(fun(atomB, atomA));
   });
@@ -541,6 +605,10 @@ describe("=</2", () => {
 
   it("integer > integer", () => {
     assertBoxedFalse(fun(integer2, integer1));
+  });
+
+  it("tuple > tuple", () => {
+    assertBoxedTrue(fun(tuple3, tuple2));
   });
 
   it("throws a not yet implemented error when the left argument type is not yet supported", () => {
@@ -565,7 +633,7 @@ describe("=</2", () => {
     );
   });
 
-  // TODO: reference, function, port, pid, tuple, map, list, bitstring
+  // TODO: reference, function, port, pid, map, list, bitstring
 });
 
 describe("==/2", () => {
@@ -591,6 +659,10 @@ describe("==/2", () => {
     assertBoxedTrue(fun(integer1, integer1));
   });
 
+  it("tuple == tuple", () => {
+    assertBoxedTrue(fun(tuple3, tuple3));
+  });
+
   it("atom < atom", () => {
     assertBoxedFalse(fun(atomA, atomB));
   });
@@ -619,6 +691,14 @@ describe("==/2", () => {
     assertBoxedFalse(fun(integer1, integer2));
   });
 
+  it("pid < tuple (always)", () => {
+    assertBoxedFalse(fun(pid1, tuple1));
+  });
+
+  it("tuple < tuple", () => {
+    assertBoxedFalse(fun(tuple2, tuple3));
+  });
+
   it("atom > atom", () => {
     assertBoxedFalse(fun(atomB, atomA));
   });
@@ -639,7 +719,11 @@ describe("==/2", () => {
     assertBoxedFalse(fun(integer2, integer1));
   });
 
-  // TODO: reference, function, port, pid, tuple, map, list, bitstring
+  it("tuple > tuple", () => {
+    assertBoxedFalse(fun(tuple3, tuple2));
+  });
+
+  // TODO: reference, function, port, pid, map, list, bitstring
 });
 
 describe(">/2", () => {
@@ -665,6 +749,10 @@ describe(">/2", () => {
     assertBoxedFalse(fun(integer1, integer1));
   });
 
+  it("tuple == tuple", () => {
+    assertBoxedFalse(fun(tuple3, tuple3));
+  });
+
   it("atom < atom", () => {
     assertBoxedFalse(fun(atomA, atomB));
   });
@@ -693,6 +781,14 @@ describe(">/2", () => {
     assertBoxedFalse(fun(integer1, integer2));
   });
 
+  it("pid < tuple (always)", () => {
+    assertBoxedFalse(fun(pid1, tuple1));
+  });
+
+  it("tuple < tuple", () => {
+    assertBoxedFalse(fun(tuple2, tuple3));
+  });
+
   it("atom > atom", () => {
     assertBoxedTrue(fun(atomB, atomA));
   });
@@ -711,6 +807,10 @@ describe(">/2", () => {
 
   it("integer > integer", () => {
     assertBoxedTrue(fun(integer2, integer1));
+  });
+
+  it("tuple > tuple", () => {
+    assertBoxedTrue(fun(tuple3, tuple2));
   });
 
   it("throws a not yet implemented error when the left argument type is not yet supported", () => {
@@ -735,7 +835,7 @@ describe(">/2", () => {
     );
   });
 
-  // TODO: reference, function, port, pid, tuple, map, list, bitstring
+  // TODO: reference, function, port, pid, map, list, bitstring
 });
 
 describe(">=/2", () => {
@@ -761,6 +861,10 @@ describe(">=/2", () => {
     assertBoxedTrue(fun(integer1, integer1));
   });
 
+  it("tuple == tuple", () => {
+    assertBoxedTrue(fun(tuple3, tuple3));
+  });
+
   it("atom < atom", () => {
     assertBoxedFalse(fun(atomA, atomB));
   });
@@ -789,6 +893,14 @@ describe(">=/2", () => {
     assertBoxedFalse(fun(integer1, integer2));
   });
 
+  it("pid < tuple (always)", () => {
+    assertBoxedFalse(fun(pid1, tuple1));
+  });
+
+  it("tuple < tuple", () => {
+    assertBoxedFalse(fun(tuple2, tuple3));
+  });
+
   it("atom > atom", () => {
     assertBoxedTrue(fun(atomB, atomA));
   });
@@ -807,6 +919,10 @@ describe(">=/2", () => {
 
   it("integer > integer", () => {
     assertBoxedTrue(fun(integer2, integer1));
+  });
+
+  it("tuple > tuple", () => {
+    assertBoxedTrue(fun(tuple3, tuple2));
   });
 
   it("throws a not yet implemented error when the left argument type is not yet supported", () => {
@@ -831,7 +947,7 @@ describe(">=/2", () => {
     );
   });
 
-  // TODO: reference, function, port, pid, tuple, map, list, bitstring
+  // TODO: reference, function, port, pid, map, list, bitstring
 });
 
 describe("andalso/2", () => {
