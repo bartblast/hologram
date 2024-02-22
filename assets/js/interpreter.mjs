@@ -27,8 +27,13 @@ export default class Interpreter {
   // See: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
   // and :erlang.</2, :erlang.>/2 and similar
   static assertStructuralComparisonSupportedType(term) {
-    if (!Type.isAtom(term) && !Type.isFloat(term) && !Type.isInteger(term)) {
-      const message = `Structural comparison currently supports only atoms, floats and integers, got: ${Interpreter.inspect(
+    if (
+      !Type.isAtom(term) &&
+      !Type.isFloat(term) &&
+      !Type.isInteger(term) &&
+      !Type.isTuple(term)
+    ) {
+      const message = `Structural comparison currently supports only atoms, floats, integers and tuples, got: ${Interpreter.inspect(
         term,
       )}`;
 
@@ -120,6 +125,9 @@ export default class Interpreter {
           : term1.value < term2.value
             ? -1
             : 1;
+
+      case "tuple":
+        return Interpreter.#compareTuples(term1, term2);
     }
   }
 
@@ -590,6 +598,25 @@ export default class Interpreter {
   // TODO: finish implementing
   static with() {
     throw new Error('"with" expression is not yet implemented in Hologram');
+  }
+
+  static #compareTuples(tuple1, tuple2) {
+    if (tuple1.data.length !== tuple2.data.length) {
+      return tuple1.data.length < tuple2.data.length ? -1 : 1;
+    }
+
+    for (let i = 0; i < tuple1.data.length; ++i) {
+      const itemOrder = Interpreter.compareTerms(
+        tuple1.data[i],
+        tuple2.data[i],
+      );
+
+      if (itemOrder !== 0) {
+        return itemOrder;
+      }
+    }
+
+    return 0;
   }
 
   static #evaluateCatchClauses(clauses, error, vars) {

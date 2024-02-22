@@ -813,6 +813,77 @@ describe("compareTerms()", () => {
       assert.equal(result, 1);
     });
   });
+
+  describe("tuple type", () => {
+    it("empty tuple == empty tuple", () => {
+      const result = Interpreter.compareTerms(Type.tuple([]), Type.tuple([]));
+
+      assert.equal(result, 0);
+    });
+
+    it("empty tuple < non-empty tuple", () => {
+      const result = Interpreter.compareTerms(
+        Type.tuple([]),
+        Type.tuple([Type.integer(1), Type.integer(2)]),
+      );
+
+      assert.equal(result, -1);
+    });
+
+    it("non-empty tuple > empty tuple", () => {
+      const result = Interpreter.compareTerms(
+        Type.tuple([Type.integer(1), Type.integer(2)]),
+        Type.tuple([]),
+      );
+
+      assert.equal(result, 1);
+    });
+
+    it("non-empty tuple == non-empty tuple", () => {
+      const result = Interpreter.compareTerms(
+        Type.tuple([Type.integer(1), Type.integer(2)]),
+        Type.tuple([Type.integer(1), Type.integer(2)]),
+      );
+
+      assert.equal(result, 0);
+    });
+
+    it("non-empty tuple < non-empty tuple, diffent item count", () => {
+      const result = Interpreter.compareTerms(
+        Type.tuple([Type.integer(1), Type.integer(1)]),
+        Type.tuple([Type.integer(1), Type.integer(1), Type.integer(1)]),
+      );
+
+      assert.equal(result, -1);
+    });
+
+    it("non-empty tuple < non-empty tuple, diffent items", () => {
+      const result = Interpreter.compareTerms(
+        Type.tuple([Type.integer(1), Type.integer(2)]),
+        Type.tuple([Type.integer(1), Type.integer(3)]),
+      );
+
+      assert.equal(result, -1);
+    });
+
+    it("non-empty tuple > non-empty tuple, diffent item count", () => {
+      const result = Interpreter.compareTerms(
+        Type.tuple([Type.integer(1), Type.integer(1), Type.integer(1)]),
+        Type.tuple([Type.integer(1), Type.integer(1)]),
+      );
+
+      assert.equal(result, 1);
+    });
+
+    it("non-empty tuple > non-empty tuple, diffent items", () => {
+      const result = Interpreter.compareTerms(
+        Type.tuple([Type.integer(1), Type.integer(3)]),
+        Type.tuple([Type.integer(1), Type.integer(2)]),
+      );
+
+      assert.equal(result, 1);
+    });
+  });
 });
 
 describe("comprehension()", () => {
