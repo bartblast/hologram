@@ -1,7 +1,5 @@
 "use strict";
 
-import {buildClientStruct} from "../../../../../assets/js/test_support.mjs";
-
 import Interpreter from "../../../../../assets/js/interpreter.mjs";
 import Type from "../../../../../assets/js/type.mjs";
 
@@ -39,26 +37,6 @@ export function defineModule16Fixture() {
 
   Interpreter.defineElixirFunction(
     "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module16",
-    "init",
-    2,
-    [
-      {
-        params: (_vars) => [
-          Type.variablePattern("props"),
-          Type.variablePattern("client"),
-        ],
-        guards: [],
-        body: (vars) => {
-          return buildClientStruct({
-            state: vars.props,
-          });
-        },
-      },
-    ],
-  );
-
-  Interpreter.defineElixirFunction(
-    "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module16",
     "template",
     0,
     [
@@ -79,7 +57,22 @@ export function defineModule16Fixture() {
                     vars,
                   );
                   Interpreter.updateVarsToMatchedValues(vars);
-                  return Type.list([]);
+                  return Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("component vars = "),
+                    ]),
+                    Type.tuple([
+                      Type.atom("expression"),
+                      Type.tuple([
+                        Elixir_Kernel["inspect/1"](
+                          Erlang_Lists["sort/1"](
+                            Erlang_Maps["to_list/1"](vars.vars),
+                          ),
+                        ),
+                      ]),
+                    ]),
+                  ]);
                 },
               },
             ],

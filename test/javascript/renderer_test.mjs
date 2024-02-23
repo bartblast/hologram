@@ -360,6 +360,7 @@ describe("element node", () => {
   });
 });
 
+// Some client tests are different than server tests.
 describe("node list", () => {
   it("multiple nodes without merging", () => {
     const nodes = Type.list([
@@ -652,6 +653,7 @@ describe("stateless component", () => {
   });
 });
 
+// Some client tests are different than server tests.
 describe("stateful component", () => {
   it("without props or state", () => {
     const node = Type.tuple([
@@ -875,23 +877,13 @@ describe("stateful component", () => {
       Type.list([]),
     ]);
 
-    Renderer.renderDom(node, context, slots);
+    initStoreComponentData(cid);
 
-    assert.deepStrictEqual(
-      Store.data,
-      Type.map([
-        [
-          cid,
-          buildClientStruct({
-            state: Type.map([
-              [Type.atom("cid"), cid],
-              [Type.atom("prop_1"), Type.bitstring("value_1")],
-              [Type.atom("prop_2"), Type.integer(2)],
-              [Type.atom("prop_3"), Type.bitstring("aaa2bbb")],
-            ]),
-          }),
-        ],
-      ]),
+    const result = Renderer.renderDom(node, context, slots);
+
+    assert.equal(
+      result,
+      'component vars = [{:cid, "my_component"}, {:prop_1, "value_1"}, {:prop_2, 2}, {:prop_3, "aaa2bbb"}]',
     );
   });
 

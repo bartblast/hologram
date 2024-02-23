@@ -119,6 +119,7 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  # Some client tests are different than server tests.
   describe "node list" do
     test "text and expression nodes" do
       nodes = [
@@ -203,6 +204,7 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  # Some client tests are different than server tests.
   describe "stateful component" do
     test "without props or state" do
       node = {:component, Module1, [{"cid", [text: "my_component"]}], []}
@@ -280,18 +282,8 @@ defmodule Hologram.Template.RendererTest do
            {"prop_4", [text: "value_4"]}
          ], []}
 
-      assert render_dom(node, %{}, []) ==
-               {"",
-                %{
-                  "my_component" => %Client{
-                    state: %{
-                      cid: "my_component",
-                      prop_1: "value_1",
-                      prop_2: 2,
-                      prop_3: "aaa2bbb"
-                    }
-                  }
-                }}
+      assert {~s'component vars = [cid: "my_component", prop_1: "value_1", prop_2: 2, prop_3: "aaa2bbb"]',
+              _} = render_dom(node, %{}, [])
     end
 
     test "with unregistered var used" do
