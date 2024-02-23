@@ -5,12 +5,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module26 do
   prop :prop_3, :string
 
   @impl Layout
-  def init(props, client, _server) do
-    put_state(client, props)
-  end
-
-  @impl Layout
   def template do
-    ~H""
+    ~H"layout vars = {vars |> :maps.to_list() |> :lists.sort() |> inspect()}"
   end
 end

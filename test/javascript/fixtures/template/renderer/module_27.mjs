@@ -3,9 +3,41 @@
 import Interpreter from "../../../../../assets/js/interpreter.mjs";
 import Type from "../../../../../assets/js/type.mjs";
 
-export function defineModule26Fixture() {
+export function defineModule27Fixture() {
   Interpreter.defineElixirFunction(
-    "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module26",
+    "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module27",
+    "__layout_module__",
+    0,
+    [
+      {
+        params: (_vars) => [],
+        guards: [],
+        body: (_vars) => {
+          return Type.atom(
+            "Elixir.Hologram.Test.Fixtures.Template.Renderer.Module26",
+          );
+        },
+      },
+    ],
+  );
+
+  Interpreter.defineElixirFunction(
+    "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module27",
+    "__layout_props__",
+    0,
+    [
+      {
+        params: (_vars) => [],
+        guards: [],
+        body: (_vars) => {
+          return Type.list([]);
+        },
+      },
+    ],
+  );
+
+  Interpreter.defineElixirFunction(
+    "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module27",
     "__props__",
     0,
     [
@@ -13,25 +45,14 @@ export function defineModule26Fixture() {
         params: (_vars) => [],
         guards: [],
         body: (_vars) => {
-          return Type.list([
-            Type.tuple([
-              Type.atom("prop_3"),
-              Type.atom("string"),
-              Type.list([]),
-            ]),
-            Type.tuple([
-              Type.atom("prop_1"),
-              Type.atom("string"),
-              Type.list([]),
-            ]),
-          ]);
+          return Type.list([]);
         },
       },
     ],
   );
 
   Interpreter.defineElixirFunction(
-    "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module26",
+    "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module27",
     "template",
     0,
     [
@@ -52,22 +73,7 @@ export function defineModule26Fixture() {
                     vars,
                   );
                   Interpreter.updateVarsToMatchedValues(vars);
-                  return Type.list([
-                    Type.tuple([
-                      Type.atom("text"),
-                      Type.bitstring("layout vars = "),
-                    ]),
-                    Type.tuple([
-                      Type.atom("expression"),
-                      Type.tuple([
-                        Elixir_Kernel["inspect/1"](
-                          Erlang_Lists["sort/1"](
-                            Erlang_Maps["to_list/1"](vars.vars),
-                          ),
-                        ),
-                      ]),
-                    ]),
-                  ]);
+                  return Type.list([]);
                 },
               },
             ],

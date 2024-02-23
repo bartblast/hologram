@@ -24,6 +24,7 @@ import {defineModule18Fixture} from "./fixtures/template/renderer/module_18.mjs"
 import {defineModule2Fixture} from "./fixtures/template/renderer/module_2.mjs";
 import {defineModule25Fixture} from "./fixtures/template/renderer/module_25.mjs";
 import {defineModule26Fixture} from "./fixtures/template/renderer/module_26.mjs";
+import {defineModule27Fixture} from "./fixtures/template/renderer/module_27.mjs";
 import {defineModule3Fixture} from "./fixtures/template/renderer/module_3.mjs";
 import {defineModule31Fixture} from "./fixtures/template/renderer/module_31.mjs";
 import {defineModule32Fixture} from "./fixtures/template/renderer/module_32.mjs";
@@ -69,6 +70,7 @@ before(() => {
   defineModule2Fixture();
   defineModule25Fixture();
   defineModule26Fixture();
+  defineModule27Fixture();
   defineModule3Fixture();
   defineModule31Fixture();
   defineModule32Fixture();
@@ -1327,5 +1329,27 @@ describe("page", () => {
       Store.getComponentState(layoutCid),
       expectedLayoutState,
     );
+  });
+
+  it("cast layout props passed implicitely from page state", () => {
+    Store.putComponentState(
+      Type.bitstring("page"),
+      Type.map([
+        [Type.atom("prop_1"), Type.bitstring("prop_value_1")],
+        [Type.atom("prop_2"), Type.bitstring("prop_value_2")],
+        [Type.atom("prop_3"), Type.bitstring("prop_value_3")],
+      ]),
+    );
+
+    initStoreComponentData(Type.bitstring("layout"));
+
+    const result = Renderer.renderPage(
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module27"),
+      Type.map([]),
+    );
+
+    assert.equal(result, [
+      'layout vars = [{:cid, "layout"}, {:prop_1, "prop_value_1"}, {:prop_3, "prop_value_3"}]',
+    ]);
   });
 });

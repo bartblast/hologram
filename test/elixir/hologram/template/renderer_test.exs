@@ -17,6 +17,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module19
   alias Hologram.Test.Fixtures.Template.Renderer.Module2
   alias Hologram.Test.Fixtures.Template.Renderer.Module25
+  alias Hologram.Test.Fixtures.Template.Renderer.Module27
   alias Hologram.Test.Fixtures.Template.Renderer.Module3
   alias Hologram.Test.Fixtures.Template.Renderer.Module31
   alias Hologram.Test.Fixtures.Template.Renderer.Module34
@@ -564,40 +565,24 @@ defmodule Hologram.Template.RendererTest do
                   }
                 }}
     end
+
+    test "cast layout props passed implicitely from page state" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module27, :dummy_module_27_digest)
+
+      assert {~s'layout vars = [cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"]',
+              _} =
+               render_page(Module27, [])
+    end
   end
 
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module21
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module24
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module27
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module28
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module29
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module48
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module50
 
   #   describe "page" do
-  #     test "cast layout props passed implicitely from page state" do
-  #       ETS.put(PageDigestRegistryStub.ets_table_name(), Module27, :dummy_module_27_digest)
-
-  #       assert render_page(Module27, []) ==
-  #                {"",
-  #                 %{
-  #                   "layout" => %Component.Client{
-  #                     state: %{cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}
-  #                   },
-  #                   "page" => %Component.Client{
-  #                     context: %{
-  #                       {Hologram.Runtime, :page_digest} => :dummy_module_27_digest,
-  #                       {Hologram.Runtime, :page_mounted?} => true
-  #                     },
-  #                     state: %{
-  #                       prop_1: "prop_value_1",
-  #                       prop_2: "prop_value_2",
-  #                       prop_3: "prop_value_3"
-  #                     }
-  #                   }
-  #                 }}
-  #     end
-
   #     test "aggregate page vars, giving state priority over param when there are name conflicts" do
   #       ETS.put(PageDigestRegistryStub.ets_table_name(), Module21, :dummy_module_21_digest)
 
