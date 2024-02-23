@@ -547,23 +547,9 @@ defmodule Hologram.Template.RendererTest do
     test "cast layout explicit static props" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module25, :dummy_module_25_digest)
 
-      assert render_page(Module25, []) ==
-               {"",
-                %{
-                  "layout" => %Client{
-                    context: %{},
-                    next_command: nil,
-                    state: %{cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}
-                  },
-                  "page" => %Client{
-                    context: %{
-                      {Hologram.Runtime, :page_digest} => :dummy_module_25_digest,
-                      {Hologram.Runtime, :page_mounted?} => true
-                    },
-                    next_command: nil,
-                    state: %{}
-                  }
-                }}
+      assert {~s'layout vars = [cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"]',
+              _} =
+               render_page(Module25, [])
     end
 
     test "cast layout props passed implicitely from page state" do
