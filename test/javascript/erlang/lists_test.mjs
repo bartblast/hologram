@@ -10,6 +10,7 @@ import {
 } from "../../../assets/js/test_support.mjs";
 
 import Erlang_Lists from "../../../assets/js/erlang/lists.mjs";
+import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 before(() => linkModules());
@@ -184,7 +185,7 @@ describe("keyfind/3", () => {
           Type.list([]),
         ),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 2nd argument: not an integer\n",
+      Interpreter.buildErrorsFoundMsg(2, "not an integer"),
     );
   });
 
@@ -197,7 +198,7 @@ describe("keyfind/3", () => {
           Type.list([]),
         ),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 2nd argument: out of range\n",
+      Interpreter.buildErrorsFoundMsg(2, "out of range"),
     );
   });
 
@@ -210,7 +211,7 @@ describe("keyfind/3", () => {
           Type.atom("xyz"),
         ),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 3rd argument: not a list\n",
+      Interpreter.buildErrorsFoundMsg(3, "not a list"),
     );
   });
 });
@@ -318,7 +319,7 @@ describe("member/2", () => {
     assertBoxedError(
       () => Erlang_Lists["member/2"](Type.integer(2), Type.atom("abc")),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 2nd argument: not a list\n",
+      Interpreter.buildErrorsFoundMsg(2, "not a list"),
     );
   });
 });

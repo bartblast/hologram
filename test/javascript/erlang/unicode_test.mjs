@@ -9,6 +9,7 @@ import {
 
 import Erlang_Unicode from "../../../assets/js/erlang/unicode.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
+import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 before(() => linkModules());
@@ -127,7 +128,10 @@ describe("characters_to_binary/3", () => {
           utf8Atom,
         ),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: not valid character data (an iodata term)\n",
+      Interpreter.buildErrorsFoundMsg(
+        1,
+        "not valid character data (an iodata term)",
+      ),
     );
   });
 
@@ -159,7 +163,10 @@ describe("characters_to_binary/3", () => {
     assertBoxedError(
       () => Erlang_Unicode["characters_to_binary/3"](input, utf8Atom, utf8Atom),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: not valid character data (an iodata term)\n",
+      Interpreter.buildErrorsFoundMsg(
+        1,
+        "not valid character data (an iodata term)",
+      ),
     );
   });
 
@@ -189,7 +196,10 @@ describe("characters_to_binary/3", () => {
     assertBoxedError(
       () => Erlang_Unicode["characters_to_binary/3"](input, utf8Atom, utf8Atom),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: not valid character data (an iodata term)\n",
+      Interpreter.buildErrorsFoundMsg(
+        1,
+        "not valid character data (an iodata term)",
+      ),
     );
   });
 
@@ -202,7 +212,10 @@ describe("characters_to_binary/3", () => {
           utf8Atom,
         ),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: not valid character data (an iodata term)\n",
+      Interpreter.buildErrorsFoundMsg(
+        1,
+        "not valid character data (an iodata term)",
+      ),
     );
   });
 

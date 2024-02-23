@@ -11,6 +11,7 @@ import {
 } from "../../../assets/js/test_support.mjs";
 
 import Erlang_Maps from "../../../assets/js/erlang/maps.mjs";
+import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 before(() => linkModules());
@@ -63,7 +64,10 @@ describe("fold/3", () => {
       () =>
         Erlang_Maps["fold/3"](Type.atom("abc"), Type.integer(10), Type.map([])),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes three arguments\n",
+      Interpreter.buildErrorsFoundMsg(
+        1,
+        "not a fun that takes three arguments",
+      ),
     );
   });
 
@@ -77,7 +81,10 @@ describe("fold/3", () => {
     assertBoxedError(
       () => Erlang_Maps["fold/3"](fun, Type.integer(10), Type.map([])),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes three arguments\n",
+      Interpreter.buildErrorsFoundMsg(
+        1,
+        "not a fun that takes three arguments",
+      ),
     );
   });
 
@@ -131,7 +138,7 @@ describe("from_list/1", () => {
     assertBoxedError(
       () => Erlang_Maps["from_list/1"](Type.integer(123)),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: not a list\n",
+      Interpreter.buildErrorsFoundMsg(1, "not a list"),
     );
   });
 });
@@ -280,7 +287,7 @@ describe("map/2", () => {
     assertBoxedError(
       () => Erlang_Maps["map/2"](Type.atom("abc"), Type.map([])),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n* 1st argument: not a fun that takes two arguments",
+      Interpreter.buildErrorsFoundMsg(1, "not a fun that takes two arguments"),
     );
   });
 
@@ -302,7 +309,7 @@ describe("map/2", () => {
     assertBoxedError(
       () => Erlang_Maps["map/2"](fun, Type.map([])),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n* 1st argument: not a fun that takes two arguments",
+      Interpreter.buildErrorsFoundMsg(1, "not a fun that takes two arguments"),
     );
   });
 

@@ -11,6 +11,7 @@ import {
 
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
+import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 before(() => linkModules());
@@ -1014,7 +1015,7 @@ describe("atom_to_binary/1", () => {
     assertBoxedError(
       () => Erlang["atom_to_binary/1"](Type.integer(123)),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: not an atom\n",
+      Interpreter.buildErrorsFoundMsg(1, "not an atom"),
     );
   });
 });
@@ -1051,7 +1052,7 @@ describe("atom_to_list/1", () => {
     assertBoxedError(
       () => Erlang["atom_to_list/1"](Type.integer(123)),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: not an atom\n",
+      Interpreter.buildErrorsFoundMsg(1, "not an atom"),
     );
   });
 });
@@ -1088,7 +1089,7 @@ describe("binary_to_atom/2", () => {
     assertBoxedError(
       () => Erlang["binary_to_atom/2"](Type.bitstring([1, 0, 1]), encoding),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: not a binary\n",
+      Interpreter.buildErrorsFoundMsg(1, "not a binary"),
     );
   });
 
@@ -1096,7 +1097,7 @@ describe("binary_to_atom/2", () => {
     assertBoxedError(
       () => Erlang["binary_to_atom/2"](Type.atom("abc"), encoding),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: not a binary\n",
+      Interpreter.buildErrorsFoundMsg(1, "not a binary"),
     );
   });
 });
@@ -1146,7 +1147,7 @@ describe("bit_size/1", () => {
     assertBoxedError(
       () => Erlang["bit_size/1"](myAtom),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: not a bitstring\n",
+      Interpreter.buildErrorsFoundMsg(1, "not a bitstring"),
     );
   });
 });
@@ -1163,7 +1164,7 @@ describe("element/2", () => {
     assertBoxedError(
       () => Erlang["element/2"](Type.atom("abc"), tuple),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: not an integer\n",
+      Interpreter.buildErrorsFoundMsg(1, "not an integer"),
     );
   });
 
@@ -1171,7 +1172,7 @@ describe("element/2", () => {
     assertBoxedError(
       () => Erlang["element/2"](Type.integer(1), Type.atom("abc")),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 2nd argument: not a tuple\n",
+      Interpreter.buildErrorsFoundMsg(2, "not a tuple"),
     );
   });
 
@@ -1179,7 +1180,7 @@ describe("element/2", () => {
     assertBoxedError(
       () => Erlang["element/2"](Type.integer(10), tuple),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: out of range\n",
+      Interpreter.buildErrorsFoundMsg(1, "out of range"),
     );
   });
 
@@ -1187,7 +1188,7 @@ describe("element/2", () => {
     assertBoxedError(
       () => Erlang["element/2"](Type.integer(0), tuple),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: out of range\n",
+      Interpreter.buildErrorsFoundMsg(1, "out of range"),
     );
   });
 });
@@ -1221,7 +1222,7 @@ describe("hd/1", () => {
     assertBoxedError(
       () => Erlang["hd/1"](Type.list([])),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: not a nonempty list\n",
+      Interpreter.buildErrorsFoundMsg(1, "not a nonempty list"),
     );
   });
 
@@ -1229,7 +1230,7 @@ describe("hd/1", () => {
     assertBoxedError(
       () => Erlang["hd/1"](Type.integer(123)),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: not a nonempty list\n",
+      Interpreter.buildErrorsFoundMsg(1, "not a nonempty list"),
     );
   });
 });
@@ -1251,7 +1252,10 @@ describe("integer_to_binary/2", () => {
         () =>
           Erlang["integer_to_binary/2"](Type.integer(123123), Type.integer(1)),
         "ArgumentError",
-        "errors were found at the given arguments:\n\n  * 2nd argument: not an integer in the range 2 through 36\n",
+        Interpreter.buildErrorsFoundMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
       );
     });
 
@@ -1293,7 +1297,10 @@ describe("integer_to_binary/2", () => {
         () =>
           Erlang["integer_to_binary/2"](Type.integer(123123), Type.integer(37)),
         "ArgumentError",
-        "errors were found at the given arguments:\n\n  * 2nd argument: not an integer in the range 2 through 36\n",
+        Interpreter.buildErrorsFoundMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
       );
     });
   });
@@ -1313,7 +1320,7 @@ describe("integer_to_binary/2", () => {
     assertBoxedError(
       () => Erlang["integer_to_binary/2"](Type.atom("abc"), Type.integer(16)),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: not an integer\n",
+      Interpreter.buildErrorsFoundMsg(1, "not an integer"),
     );
   });
 
@@ -1322,7 +1329,10 @@ describe("integer_to_binary/2", () => {
       () =>
         Erlang["integer_to_binary/2"](Type.integer(123123), Type.atom("abc")),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 2nd argument: not an integer in the range 2 through 36\n",
+      Interpreter.buildErrorsFoundMsg(
+        1,
+        "not an integer in the range 2 through 36",
+      ),
     );
   });
 });
@@ -1529,7 +1539,7 @@ describe("length/1", () => {
     assertBoxedError(
       () => fun(Type.atom("abc")),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: not a list\n",
+      Interpreter.buildErrorsFoundMsg(1, "not a list"),
     );
   });
 });
@@ -1668,7 +1678,7 @@ describe("tl/1", () => {
       assertBoxedError(
         () => Erlang["tl/1"](Type.list([])),
         "ArgumentError",
-        "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list",
+        Interpreter.buildErrorsFoundMsg(1, "not a nonempty list"),
       );
     });
 
@@ -1676,7 +1686,7 @@ describe("tl/1", () => {
       assertBoxedError(
         () => Erlang["tl/1"](Type.integer(123)),
         "ArgumentError",
-        "errors were found at the given arguments:\n\n* 1st argument: not a nonempty list",
+        Interpreter.buildErrorsFoundMsg(1, "not a nonempty list"),
       );
     });
   });
@@ -1697,7 +1707,7 @@ describe("tuple_to_list/1", () => {
     assertBoxedError(
       () => Erlang["tuple_to_list/1"](Type.atom("abc")),
       "ArgumentError",
-      "errors were found at the given arguments:\n\n  * 1st argument: not a tuple\n",
+      Interpreter.buildErrorsFoundMsg(1, "not a tuple"),
     );
   });
 });
