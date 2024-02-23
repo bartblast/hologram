@@ -49,6 +49,18 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Builds an error message for ArgumentError.
+  """
+  @spec build_errors_found_msg(integer(), String.t()) :: String.t()
+  def build_errors_found_msg(arg_idx, msg) do
+    # Based on: https://stackoverflow.com/a/39466341/13040586
+    suffix_idx = rem(rem(arg_idx + 90, 100) - 10, 10) - 1
+    suffix = Enum.at(["st", "nd", "rd"], suffix_idx, "th")
+
+    "errors were found at the given arguments:\n\n  * #{arg_idx}#{suffix} argument: #{msg}\n"
+  end
+
+  @doc """
   Returns the given argument.
   It prevents compiler warnings in tests when the given value is not permitted is specific situation.
   """
