@@ -1303,24 +1303,16 @@ describe("page", () => {
 
   it("cast layout explicit static props", () => {
     initStoreComponentData(Type.bitstring("page"));
+    initStoreComponentData(Type.bitstring("layout"));
 
-    Renderer.renderPage(
+    const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module25"),
       Type.map([]),
     );
 
-    const layoutCid = Type.bitstring("layout");
-
-    const expectedLayoutState = Type.map([
-      [Type.atom("cid"), layoutCid],
-      [Type.atom("prop_1"), Type.bitstring("prop_value_1")],
-      [Type.atom("prop_3"), Type.bitstring("prop_value_3")],
+    assert.deepStrictEqual(result, [
+      'layout vars = [{:cid, "layout"}, {:prop_1, "prop_value_1"}, {:prop_3, "prop_value_3"}]',
     ]);
-
-    assert.deepStrictEqual(
-      Store.getComponentState(layoutCid),
-      expectedLayoutState,
-    );
   });
 
   it("cast layout props passed implicitely from page state", () => {
@@ -1340,7 +1332,7 @@ describe("page", () => {
       Type.map([]),
     );
 
-    assert.equal(result, [
+    assert.deepStrictEqual(result, [
       'layout vars = [{:cid, "layout"}, {:prop_1, "prop_value_1"}, {:prop_3, "prop_value_3"}]',
     ]);
   });
