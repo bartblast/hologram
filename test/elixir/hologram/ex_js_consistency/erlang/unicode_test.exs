@@ -71,7 +71,7 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       input = <<1::1, 0::1, 1::1>>
 
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not valid character data (an iodata term)\n",
+                   build_errors_found_msg(1, "not valid character data (an iodata term)"),
                    fn ->
                      :unicode.characters_to_binary(input, :utf8, :utf8)
                    end
@@ -90,7 +90,7 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       ]
 
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not valid character data (an iodata term)\n",
+                   build_errors_found_msg(1, "not valid character data (an iodata term)"),
                    fn ->
                      :unicode.characters_to_binary(input, :utf8, :utf8)
                    end
@@ -112,7 +112,7 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       input = [123.45, :abc]
 
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not valid character data (an iodata term)\n",
+                   build_errors_found_msg(1, "not valid character data (an iodata term)"),
                    fn ->
                      :unicode.characters_to_binary(input, :utf8, :utf8)
                    end
@@ -120,7 +120,7 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
     test "input is not a list or a bitstring" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not valid character data (an iodata term)\n",
+                   build_errors_found_msg(1, "not valid character data (an iodata term)"),
                    fn ->
                      :unicode.characters_to_binary(:abc, :utf8, :utf8)
                    end

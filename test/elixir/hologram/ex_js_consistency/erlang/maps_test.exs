@@ -24,7 +24,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
 
     test "raises ArgumentError if the first argument is not an anonymous function" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes three arguments\n",
+                   build_errors_found_msg(1, "not a fun that takes three arguments"),
                    fn ->
                      :maps.fold(:abc, 10, %{})
                    end
@@ -32,7 +32,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
 
     test "raises ArgumentError if the first argument is an anonymous function with arity different than 3" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes three arguments\n",
+                   build_errors_found_msg(1, "not a fun that takes three arguments"),
                    fn ->
                      :maps.fold(fn -> :abc end, 10, %{})
                    end
@@ -65,7 +65,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
 
     test "raises ArgumentError if the argument is not a list" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not a list\n",
+                   build_errors_found_msg(1, "not a list"),
                    fn ->
                      :maps.from_list(123)
                    end
@@ -141,7 +141,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
 
     test "raises ArgumentError if the first argument is not an anonymous function" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes two arguments\n",
+                   build_errors_found_msg(1, "not a fun that takes two arguments"),
                    fn ->
                      :maps.map(:abc, %{})
                    end
@@ -149,7 +149,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
 
     test "raises ArgumentError if the first argument is an anonymous function with arity different than 2" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not a fun that takes two arguments\n",
+                   build_errors_found_msg(1, "not a fun that takes two arguments"),
                    fn ->
                      :maps.map(fn x -> x end, %{})
                    end

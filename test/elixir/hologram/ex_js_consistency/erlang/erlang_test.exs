@@ -828,7 +828,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the argument is not an atom" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not an atom\n",
+                   build_errors_found_msg(1, "not an atom"),
                    fn ->
                      # wrap the code with anonymous function to avoid compiler warnings
                      fun = fn x -> :erlang.atom_to_binary(x) end
@@ -852,7 +852,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "not an atom" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not an atom\n",
+                   build_errors_found_msg(1, "not an atom"),
                    fn ->
                      123
                      |> build_value()
@@ -883,7 +883,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the first argument is a non-binary bitstring" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not a binary\n",
+                   build_errors_found_msg(1, "not a binary"),
                    fn ->
                      <<1::1, 0::1, 1::1>>
                      |> build_value()
@@ -894,7 +894,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentErorr if the first argument is not a bitstring" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not a binary\n",
+                   build_errors_found_msg(1, "not a binary"),
                    fn ->
                      :abc
                      |> build_value()
@@ -919,7 +919,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "not bitstring" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not a bitstring\n",
+                   build_errors_found_msg(1, "not a bitstring"),
                    fn ->
                      :abc
                      |> build_value()
@@ -935,7 +935,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the first argument is not an integer" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not an integer\n",
+                   build_errors_found_msg(1, "not an integer"),
                    fn ->
                      :erlang.element(build_value(:abc), {5, 6, 7})
                    end
@@ -943,7 +943,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the second argument is not a tuple" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 2nd argument: not a tuple\n",
+                   build_errors_found_msg(2, "not a tuple"),
                    fn ->
                      :erlang.element(1, build_value(:abc))
                    end
@@ -951,7 +951,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the given index is greater than the number of elements in the tuple" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: out of range\n",
+                   build_errors_found_msg(1, "out of range"),
                    fn ->
                      :erlang.element(build_value(10), {5, 6, 7})
                    end
@@ -959,7 +959,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the given index is smaller than 1" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: out of range\n",
+                   build_errors_found_msg(1, "out of range"),
                    fn ->
                      :erlang.element(build_value(0), {5, 6, 7})
                    end
@@ -973,7 +973,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the argument is an empty list" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not a nonempty list\n",
+                   build_errors_found_msg(1, "not a nonempty list"),
                    fn ->
                      :erlang.hd(build_value([]))
                    end
@@ -981,7 +981,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the argument is not a list" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not a nonempty list\n",
+                   build_errors_found_msg(1, "not a nonempty list"),
                    fn ->
                      :erlang.hd(build_value(123))
                    end
@@ -995,7 +995,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   describe "integer_to_binary/2" do
     test "positive integer, base = 1" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 2nd argument: not an integer in the range 2 through 36\n",
+                   build_errors_found_msg(2, "not an integer in the range 2 through 36"),
                    fn ->
                      :erlang.integer_to_binary(123_123, 1)
                    end
@@ -1015,7 +1015,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "positive integer, base = 37" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 2nd argument: not an integer in the range 2 through 36\n",
+                   build_errors_found_msg(2, "not an integer in the range 2 through 36"),
                    fn ->
                      :erlang.integer_to_binary(123_123, 37)
                    end
@@ -1027,7 +1027,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "1st argument (integer) is not an integer" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not an integer\n",
+                   build_errors_found_msg(1, "not an integer"),
                    fn ->
                      :erlang.integer_to_binary(:abc, 16)
                    end
@@ -1035,7 +1035,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "2nd argument (base) is not an integer" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 2nd argument: not an integer in the range 2 through 36\n",
+                   build_errors_found_msg(2, "not an integer in the range 2 through 36"),
                    fn ->
                      :erlang.integer_to_binary(123_123, :abc)
                    end
@@ -1203,7 +1203,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the argument is not a list" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not a list\n",
+                   build_errors_found_msg(1, "not a list"),
                    fn ->
                      :erlang.length(build_value(:abc))
                    end
@@ -1273,7 +1273,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the argument is not a tuple" do
       assert_raise ArgumentError,
-                   "errors were found at the given arguments:\n\n  * 1st argument: not a tuple\n",
+                   build_errors_found_msg(1, "not a tuple"),
                    fn ->
                      :erlang.tuple_to_list(build_value(:abc))
                    end
