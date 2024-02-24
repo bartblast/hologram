@@ -673,7 +673,7 @@ describe("compareTerms()", () => {
   });
 
   describe("atom type", () => {
-    it("equal terms", () => {
+    it("atom == atom", () => {
       const result = Interpreter.compareTerms(
         Type.atom("abc"),
         Type.atom("abc"),
@@ -682,7 +682,7 @@ describe("compareTerms()", () => {
       assert.equal(result, 0);
     });
 
-    it("first term smaller than second term", () => {
+    it("atom < atom", () => {
       const result = Interpreter.compareTerms(
         Type.atom("aaa"),
         Type.atom("bbb"),
@@ -691,7 +691,7 @@ describe("compareTerms()", () => {
       assert.equal(result, -1);
     });
 
-    it("first term bigger than second term", () => {
+    it("atom > atom", () => {
       const result = Interpreter.compareTerms(
         Type.atom("bbb"),
         Type.atom("aaa"),
