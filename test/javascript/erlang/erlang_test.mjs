@@ -1330,7 +1330,7 @@ describe("integer_to_binary/2", () => {
         Erlang["integer_to_binary/2"](Type.integer(123123), Type.atom("abc")),
       "ArgumentError",
       Interpreter.buildErrorsFoundMsg(
-        1,
+        2,
         "not an integer in the range 2 through 36",
       ),
     );
