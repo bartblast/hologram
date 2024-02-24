@@ -56,8 +56,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
     PLT.load(module_digest_plt, module_digest_plt_dump_path)
 
     assert PLT.get!(module_digest_plt, Module2) ==
-             <<68, 47, 107, 27, 82, 179, 102, 244, 205, 170, 230, 49, 132, 230, 207, 186, 68, 47,
-               215, 188, 88, 83, 60, 253, 196, 216, 241, 248, 96, 232, 90, 137>>
+             <<212, 112, 201, 248, 119, 172, 9, 87, 73, 29, 212, 28, 212, 188, 64, 189, 108, 69,
+               65, 44, 51, 133, 220, 170, 10, 112, 197, 123, 22, 226, 196, 124>>
   end
 
   defp test_page_bundles do
