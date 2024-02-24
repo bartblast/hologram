@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.Encoder do
       }
   end
 
+  alias Hologram.Commons.IntegerUtils
   alias Hologram.Commons.StringUtils
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
@@ -238,8 +239,19 @@ defmodule Hologram.Compiler.Encoder do
     |> Enum.join("\n\n")
   end
 
-  def encode(%IR.PIDType{value: value}, _context) do
-    encode_primitive_type(:pid, value, true)
+  def encode(%IR.PIDType{value: pid}, context) do
+    segments =
+      pid
+      |> :erlang.pid_to_list()
+      |> List.delete_at(0)
+      |> List.delete_at(-1)
+      |> to_string()
+      |> String.split(".")
+      |> Enum.map(&IntegerUtils.parse!/1)
+
+    integer_encoder = fn integer, _context -> to_string(integer) end
+
+    "Type.pid(#{encode_as_array(segments, context, integer_encoder)})"
   end
 
   def encode(%IR.PinOperator{name: name}, _context) do

@@ -1254,7 +1254,7 @@ defmodule Hologram.Compiler.EncoderTest do
     # #PID<0.11.222>
     ir = %IR.PIDType{value: pid("0.11.222")}
 
-    assert encode(ir, %Context{}) == ~s/Type.pid("0.11.222")/
+    assert encode(ir, %Context{}) == ~s/Type.pid([0, 11, 222])/
   end
 
   test "pin operator" do
