@@ -2147,6 +2147,13 @@ describe("inspect()", () => {
     });
   });
 
+  it("pid", () => {
+    const term = Type.pid("0.11.222", "client");
+    const result = Interpreter.inspect(term);
+
+    assert.equal(result, "#PID<0.11.222>");
+  });
+
   describe("string", () => {
     it("empty text", () => {
       const result = Interpreter.inspect(Type.string(""), {});

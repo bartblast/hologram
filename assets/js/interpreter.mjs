@@ -348,7 +348,7 @@ export default class Interpreter {
   }
 
   // Important: keep Kernel.inspect/2 consistency tests in sync.
-  // TODO: finish (e.g. implement text detection in binaries and other types such as pid, etc.)
+  // TODO: implement all types
   static inspect(term, opts = {}) {
     switch (term.type) {
       case "atom":
@@ -368,6 +368,9 @@ export default class Interpreter {
 
       case "map":
         return Interpreter.#inspectMap(term, opts);
+
+      case "pid":
+        return `#PID<${term.value}>`;
 
       case "string":
         return `"${term.value}"`;
