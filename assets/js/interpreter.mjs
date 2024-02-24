@@ -370,7 +370,7 @@ export default class Interpreter {
         return Interpreter.#inspectMap(term, opts);
 
       case "pid":
-        return `#PID<${term.value}>`;
+        return `#PID<${term.segments.join(".")}>`;
 
       case "string":
         return `"${term.value}"`;

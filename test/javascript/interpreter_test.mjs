@@ -2148,7 +2148,7 @@ describe("inspect()", () => {
   });
 
   it("pid", () => {
-    const term = Type.pid("0.11.222", "client");
+    const term = Type.pid([0, 11, 222], "client");
     const result = Interpreter.inspect(term);
 
     assert.equal(result, "#PID<0.11.222>");
