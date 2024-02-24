@@ -814,7 +814,7 @@ describe("compareTerms()", () => {
     });
   });
 
-  describe.only("pid type", () => {
+  describe("pid type", () => {
     it("pid == pid", () => {
       const result = Interpreter.compareTerms(
         Type.pid([1, 11, 111]),
