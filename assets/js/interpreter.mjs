@@ -31,9 +31,10 @@ export default class Interpreter {
       !Type.isAtom(term) &&
       !Type.isFloat(term) &&
       !Type.isInteger(term) &&
+      !Type.isPid(term) &&
       !Type.isTuple(term)
     ) {
-      const message = `Structural comparison currently supports only atoms, floats, integers and tuples, got: ${Interpreter.inspect(
+      const message = `Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: ${Interpreter.inspect(
         term,
       )}`;
 
@@ -125,6 +126,9 @@ export default class Interpreter {
           : term1.value < term2.value
             ? -1
             : 1;
+
+      case "pid":
+        return Interpreter.#comparePids(term1, term2);
 
       case "tuple":
         return Interpreter.#compareTuples(term1, term2);
@@ -601,6 +605,18 @@ export default class Interpreter {
   // TODO: finish implementing
   static with() {
     throw new Error('"with" expression is not yet implemented in Hologram');
+  }
+
+  static #comparePids(pid1, pid2) {
+    for (let i = 2; i >= 0; --i) {
+      if (pid1.segments[i] === pid2.segments[i]) {
+        continue;
+      }
+
+      return pid1.segments[i] < pid2.segments[i] ? -1 : 1;
+    }
+
+    return 0;
   }
 
   static #compareTuples(tuple1, tuple2) {

@@ -814,6 +814,98 @@ describe("compareTerms()", () => {
     });
   });
 
+  describe.only("pid type", () => {
+    it("pid == pid", () => {
+      const result = Interpreter.compareTerms(
+        Type.pid([1, 11, 111]),
+        Type.pid([1, 11, 111]),
+      );
+
+      assert.equal(result, 0);
+    });
+
+    it("pid < pid, difference in first segment", () => {
+      const result = Interpreter.compareTerms(
+        Type.pid([0, 11, 111]),
+        Type.pid([1, 11, 111]),
+      );
+
+      assert.equal(result, -1);
+    });
+
+    it("pid < pid, difference in second segment", () => {
+      const result = Interpreter.compareTerms(
+        Type.pid([1, 10, 111]),
+        Type.pid([1, 11, 111]),
+      );
+
+      assert.equal(result, -1);
+    });
+
+    it("pid < pid, difference in third segment", () => {
+      const result = Interpreter.compareTerms(
+        Type.pid([1, 11, 110]),
+        Type.pid([1, 11, 111]),
+      );
+
+      assert.equal(result, -1);
+    });
+
+    it("pid > pid, difference in first segment", () => {
+      const result = Interpreter.compareTerms(
+        Type.pid([1, 11, 111]),
+        Type.pid([0, 11, 111]),
+      );
+
+      assert.equal(result, 1);
+    });
+
+    it("pid > pid, difference in second segment", () => {
+      const result = Interpreter.compareTerms(
+        Type.pid([1, 11, 111]),
+        Type.pid([1, 10, 111]),
+      );
+
+      assert.equal(result, 1);
+    });
+
+    it("pid > pid, difference in third segment", () => {
+      const result = Interpreter.compareTerms(
+        Type.pid([1, 11, 111]),
+        Type.pid([1, 11, 110]),
+      );
+
+      assert.equal(result, 1);
+    });
+
+    it("the third segment is compared first in turn", () => {
+      const result = Interpreter.compareTerms(
+        Type.pid([1, 11, 110]),
+        Type.pid([0, 10, 111]),
+      );
+
+      assert.equal(result, -1);
+    });
+
+    it("the second segment is compared second in turn", () => {
+      const result = Interpreter.compareTerms(
+        Type.pid([1, 10, 111]),
+        Type.pid([0, 11, 111]),
+      );
+
+      assert.equal(result, -1);
+    });
+
+    it("the first segment is compared third in turn", () => {
+      const result = Interpreter.compareTerms(
+        Type.pid([0, 11, 111]),
+        Type.pid([1, 11, 111]),
+      );
+
+      assert.equal(result, -1);
+    });
+  });
+
   describe("tuple type", () => {
     it("empty tuple == empty tuple", () => {
       const result = Interpreter.compareTerms(Type.tuple([]), Type.tuple([]));
