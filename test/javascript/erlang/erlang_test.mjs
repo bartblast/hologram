@@ -289,7 +289,7 @@ describe("</2", () => {
   });
 
   it("pid < tuple (always)", () => {
-    assertBoxedTrue(fun(pid1, tuple1));
+    assertBoxedTrue(fun(pid1, tuple3));
   });
 
   it("tuple < tuple", () => {
@@ -401,7 +401,7 @@ describe("=/=/2", () => {
   });
 
   it("pid < tuple (always)", () => {
-    assertBoxedTrue(fun(pid1, tuple1));
+    assertBoxedTrue(fun(pid1, tuple3));
   });
 
   it("tuple < tuple", () => {
@@ -491,7 +491,7 @@ describe("=:=/2", () => {
   });
 
   it("pid < tuple (always)", () => {
-    assertBoxedFalse(fun(pid1, tuple1));
+    assertBoxedFalse(fun(pid1, tuple3));
   });
 
   it("tuple < tuple", () => {
@@ -581,7 +581,7 @@ describe("=</2", () => {
   });
 
   it("pid < tuple (always)", () => {
-    assertBoxedTrue(fun(pid1, tuple1));
+    assertBoxedTrue(fun(pid1, tuple3));
   });
 
   it("tuple < tuple", () => {
@@ -693,7 +693,7 @@ describe("==/2", () => {
   });
 
   it("pid < tuple (always)", () => {
-    assertBoxedFalse(fun(pid1, tuple1));
+    assertBoxedFalse(fun(pid1, tuple3));
   });
 
   it("tuple < tuple", () => {
@@ -783,7 +783,7 @@ describe(">/2", () => {
   });
 
   it("pid < tuple (always)", () => {
-    assertBoxedFalse(fun(pid1, tuple1));
+    assertBoxedFalse(fun(pid1, tuple3));
   });
 
   it("tuple < tuple", () => {
@@ -895,7 +895,7 @@ describe(">=/2", () => {
   });
 
   it("pid < tuple (always)", () => {
-    assertBoxedFalse(fun(pid1, tuple1));
+    assertBoxedFalse(fun(pid1, tuple3));
   });
 
   it("tuple < tuple", () => {
