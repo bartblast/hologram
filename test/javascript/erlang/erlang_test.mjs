@@ -27,7 +27,7 @@ const integer1 = Type.integer(1);
 const integer2 = Type.integer(2);
 const integer3 = Type.integer(3);
 const integer6 = Type.integer(6);
-const pid1 = Type.pid("0.11.111");
+const pid1 = Type.pid([0, 11, 111]);
 const tuple2 = Type.tuple([Type.integer(1), Type.integer(2)]);
 const tuple3 = Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
@@ -1482,7 +1482,7 @@ describe("is_pid/1", () => {
   const fun = Erlang["is_pid/1"];
 
   it("pid", () => {
-    assertBoxedTrue(fun(Type.pid("0.11.222")));
+    assertBoxedTrue(fun(Type.pid([0, 11, 222])));
   });
 
   it("non-pid", () => {

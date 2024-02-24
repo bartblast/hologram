@@ -654,7 +654,7 @@ describe("isNumber()", () => {
 
 describe("isPid()", () => {
   it("returns true if the term is a pid", () => {
-    const term = Type.pid("0.11.222");
+    const term = Type.pid([0, 11, 222]);
     assert.isTrue(Type.isPid(term));
   });
 
