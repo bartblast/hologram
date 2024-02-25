@@ -22,7 +22,7 @@ defmodule Hologram.Commons.IntegerUtilsTest do
     end
 
     test "base 36" do
-      assert parse!("abc", 36) == 13368
+      assert parse!("abc", 36) == 13_368
     end
 
     test "base 37" do

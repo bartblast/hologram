@@ -27,6 +27,7 @@ defmodule Hologram.Commons.IntegerUtils do
   or if the base is less than 2 or more than 36,
   or if only part of the text representation can be parsed.
   """
+  @spec parse!(String.t(), integer) :: integer
   def parse!(binary, base \\ 10) do
     case Integer.parse(binary, base) do
       {integer, ""} ->
