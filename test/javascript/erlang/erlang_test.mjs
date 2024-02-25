@@ -669,7 +669,7 @@ describe("=</2", () => {
     assertBoxedFalse(fun(pid2, pid1));
   });
 
-  it("tupl e > tuple", () => {
+  it("tuple > tuple", () => {
     assertBoxedFalse(fun(tuple3, tuple2));
   });
 
