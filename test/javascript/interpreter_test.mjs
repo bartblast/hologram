@@ -817,8 +817,8 @@ describe("compareTerms()", () => {
   describe("pid type", () => {
     it("pid == pid", () => {
       const result = Interpreter.compareTerms(
-        Type.pid([1, 11, 111]),
-        Type.pid([1, 11, 111]),
+        Type.pid("my_node@my_host", [1, 11, 111]),
+        Type.pid("my_node@my_host", [1, 11, 111]),
       );
 
       assert.equal(result, 0);
@@ -826,8 +826,8 @@ describe("compareTerms()", () => {
 
     it("pid < pid, difference in first segment", () => {
       const result = Interpreter.compareTerms(
-        Type.pid([0, 11, 111]),
-        Type.pid([1, 11, 111]),
+        Type.pid("my_node@my_host", [0, 11, 111]),
+        Type.pid("my_node@my_host", [1, 11, 111]),
       );
 
       assert.equal(result, -1);
@@ -835,8 +835,8 @@ describe("compareTerms()", () => {
 
     it("pid < pid, difference in second segment", () => {
       const result = Interpreter.compareTerms(
-        Type.pid([1, 10, 111]),
-        Type.pid([1, 11, 111]),
+        Type.pid("my_node@my_host", [1, 10, 111]),
+        Type.pid("my_node@my_host", [1, 11, 111]),
       );
 
       assert.equal(result, -1);
@@ -844,8 +844,8 @@ describe("compareTerms()", () => {
 
     it("pid < pid, difference in third segment", () => {
       const result = Interpreter.compareTerms(
-        Type.pid([1, 11, 110]),
-        Type.pid([1, 11, 111]),
+        Type.pid("my_node@my_host", [1, 11, 110]),
+        Type.pid("my_node@my_host", [1, 11, 111]),
       );
 
       assert.equal(result, -1);
@@ -853,8 +853,8 @@ describe("compareTerms()", () => {
 
     it("pid > pid, difference in first segment", () => {
       const result = Interpreter.compareTerms(
-        Type.pid([1, 11, 111]),
-        Type.pid([0, 11, 111]),
+        Type.pid("my_node@my_host", [1, 11, 111]),
+        Type.pid("my_node@my_host", [0, 11, 111]),
       );
 
       assert.equal(result, 1);
@@ -862,8 +862,8 @@ describe("compareTerms()", () => {
 
     it("pid > pid, difference in second segment", () => {
       const result = Interpreter.compareTerms(
-        Type.pid([1, 11, 111]),
-        Type.pid([1, 10, 111]),
+        Type.pid("my_node@my_host", [1, 11, 111]),
+        Type.pid("my_node@my_host", [1, 10, 111]),
       );
 
       assert.equal(result, 1);
@@ -871,8 +871,8 @@ describe("compareTerms()", () => {
 
     it("pid > pid, difference in third segment", () => {
       const result = Interpreter.compareTerms(
-        Type.pid([1, 11, 111]),
-        Type.pid([1, 11, 110]),
+        Type.pid("my_node@my_host", [1, 11, 111]),
+        Type.pid("my_node@my_host", [1, 11, 110]),
       );
 
       assert.equal(result, 1);
@@ -880,8 +880,8 @@ describe("compareTerms()", () => {
 
     it("the third segment is compared first in turn", () => {
       const result = Interpreter.compareTerms(
-        Type.pid([1, 11, 110]),
-        Type.pid([0, 10, 111]),
+        Type.pid("my_node@my_host", [1, 11, 110]),
+        Type.pid("my_node@my_host", [0, 10, 111]),
       );
 
       assert.equal(result, -1);
@@ -889,8 +889,8 @@ describe("compareTerms()", () => {
 
     it("the second segment is compared second in turn", () => {
       const result = Interpreter.compareTerms(
-        Type.pid([1, 10, 111]),
-        Type.pid([0, 11, 111]),
+        Type.pid("my_node@my_host", [1, 10, 111]),
+        Type.pid("my_node@my_host", [0, 11, 111]),
       );
 
       assert.equal(result, -1);
@@ -898,8 +898,8 @@ describe("compareTerms()", () => {
 
     it("the first segment is compared third in turn", () => {
       const result = Interpreter.compareTerms(
-        Type.pid([0, 11, 111]),
-        Type.pid([1, 11, 111]),
+        Type.pid("my_node@my_host", [0, 11, 111]),
+        Type.pid("my_node@my_host", [1, 11, 111]),
       );
 
       assert.equal(result, -1);
@@ -2240,7 +2240,7 @@ describe("inspect()", () => {
   });
 
   it("pid", () => {
-    const term = Type.pid([0, 11, 222], "client");
+    const term = Type.pid("my_node@my_host", [0, 11, 222], "client");
     const result = Interpreter.inspect(term);
 
     assert.equal(result, "#PID<0.11.222>");
