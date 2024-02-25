@@ -249,9 +249,12 @@ defmodule Hologram.Compiler.Encoder do
       |> String.split(".")
       |> Enum.map(&IntegerUtils.parse!/1)
 
-    integer_encoder = fn integer, _context -> to_string(integer) end
+    encoded_node = encode_as_string(node(pid), true)
 
-    "Type.pid(#{encode_as_array(segments, context, integer_encoder)})"
+    integer_encoder = fn integer, _context -> to_string(integer) end
+    encoded_segments = encode_as_array(segments, context, integer_encoder)
+
+    "Type.pid(#{encoded_node}, #{encoded_segments})"
   end
 
   def encode(%IR.PinOperator{name: name}, _context) do
@@ -417,14 +420,6 @@ defmodule Hologram.Compiler.Encoder do
 
   defp encode_as_string(nil, false) do
     "nil"
-  end
-
-  defp encode_as_string(value, false) when is_pid(value) do
-    value
-    |> :erlang.pid_to_list()
-    |> List.delete_at(0)
-    |> List.delete_at(-1)
-    |> to_string()
   end
 
   defp encode_as_string(value, false) when is_port(value) do
