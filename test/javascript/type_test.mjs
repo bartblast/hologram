@@ -898,8 +898,14 @@ describe("maybeNormalizeNumberTerms()", () => {
 });
 
 it("pid()", () => {
-  const result = Type.pid([0, 11, 222], "client");
-  const expected = {type: "pid", origin: "client", segments: [0, 11, 222]};
+  const result = Type.pid("my_node@my_host", [0, 11, 222], "client");
+
+  const expected = {
+    type: "pid",
+    node: "my_node@my_host",
+    origin: "client",
+    segments: [0, 11, 222],
+  };
 
   assert.deepStrictEqual(result, expected);
 });

@@ -269,8 +269,8 @@ export default class Type {
     return [type, value1, value2];
   }
 
-  static pid(segments, origin = "server") {
-    return {type: "pid", origin: origin, segments: segments};
+  static pid(node, segments, origin = "server") {
+    return {type: "pid", node: node, origin: origin, segments: segments};
   }
 
   static port(value, origin = "server") {
