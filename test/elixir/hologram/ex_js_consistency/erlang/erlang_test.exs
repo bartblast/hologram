@@ -118,6 +118,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang."/="(1, 1) == false
     end
 
+    test "pid == pid" do
+      assert :erlang."/="(pid("0.11.222"), pid("0.11.222")) == false
+    end
+
     test "tuple == tuple" do
       assert :erlang."/="({1, 2, 3}, {1, 2, 3}) == false
     end
@@ -150,6 +154,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang."/="(1, 2) == true
     end
 
+    test "pid < pid" do
+      assert :erlang."/="(pid("0.11.111"), pid("0.11.112")) == true
+    end
+
     test "pid < tuple (always)" do
       assert :erlang."/="(pid("0.11.111"), {1, 2}) == true
     end
@@ -178,11 +186,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang."/="(2, 1) == true
     end
 
+    test "pid > pid" do
+      assert :erlang."/="(pid("0.11.112"), pid("0.11.111")) == true
+    end
+
     test "tuple > tuple" do
       assert :erlang."/="({1, 2, 3}, {1, 2}) == true
     end
 
-    # // TODO: reference, function, port, pid, map, list, bitstring
+    # // TODO: reference, function, port, map, list, bitstring
   end
 
   describe "</2" do
@@ -204,6 +216,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "integer == integer" do
       assert :erlang.<(1, 1) == false
+    end
+
+    test "pid == pid" do
+      assert :erlang.<(pid("0.11.222"), pid("0.11.222")) == false
     end
 
     test "tuple == tuple" do
@@ -238,6 +254,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.<(1, 2) == true
     end
 
+    test "pid < pid" do
+      assert :erlang.<(pid("0.11.111"), pid("0.11.112")) == true
+    end
+
     test "pid < tuple (always)" do
       assert :erlang.<(pid("0.11.111"), {1, 2}) == true
     end
@@ -266,11 +286,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.<(2, 1) == false
     end
 
+    test "pid > pid" do
+      assert :erlang.<(pid("0.11.112"), pid("0.11.111")) == false
+    end
+
     test "tuple > tuple" do
       assert :erlang.<({1, 2, 3}, {1, 2}) == false
     end
 
-    # // TODO: reference, function, port, pid, map, list, bitstring
+    # // TODO: reference, function, port, map, list, bitstring
   end
 
   describe "=/=/2" do
@@ -292,6 +316,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "integer == integer" do
       assert :erlang."=/="(1, 1) == false
+    end
+
+    test "pid == pid" do
+      assert :erlang."=/="(pid("0.11.222"), pid("0.11.222")) == false
     end
 
     test "tuple == tuple" do
@@ -326,6 +354,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang."=/="(1, 2) == true
     end
 
+    test "pid < pid" do
+      assert :erlang."=/="(pid("0.11.111"), pid("0.11.112")) == true
+    end
+
     test "pid < tuple (always)" do
       assert :erlang."=/="(pid("0.11.111"), {1, 2}) == true
     end
@@ -354,11 +386,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang."=/="(2, 1) == true
     end
 
+    test "pid > pid" do
+      assert :erlang."=/="(pid("0.11.112"), pid("0.11.111")) == true
+    end
+
     test "tuple > tuple" do
       assert :erlang."=/="({1, 2, 3}, {1, 2}) == true
     end
 
-    # // TODO: reference, function, port, pid, map, list, bitstring
+    # // TODO: reference, function, port, map, list, bitstring
   end
 
   describe "=:=/2" do
@@ -380,6 +416,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "integer == integer" do
       assert :erlang."=:="(1, 1) == true
+    end
+
+    test "pid == pid" do
+      assert :erlang."=:="(pid("0.11.222"), pid("0.11.222")) == true
     end
 
     test "tuple == tuple" do
@@ -414,6 +454,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang."=:="(1, 2) == false
     end
 
+    test "pid < pid" do
+      assert :erlang."=:="(pid("0.11.111"), pid("0.11.112")) == false
+    end
+
     test "pid < tuple (always)" do
       assert :erlang."=:="(pid("0.11.111"), {1, 2}) == false
     end
@@ -442,11 +486,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang."=:="(2, 1) == false
     end
 
+    test "pid > pid" do
+      assert :erlang."=:="(pid("0.11.112"), pid("0.11.111")) == false
+    end
+
     test "tuple > tuple" do
       assert :erlang."=:="({1, 2, 3}, {1, 2}) == false
     end
 
-    # // TODO: reference, function, port, pid, map, list, bitstring
+    # // TODO: reference, function, port, map, list, bitstring
   end
 
   describe "=</2" do
@@ -468,6 +516,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "integer == integer" do
       assert :erlang."=<"(1, 1) == true
+    end
+
+    test "pid == pid" do
+      assert :erlang."=<"(pid("0.11.222"), pid("0.11.222")) == true
     end
 
     test "tuple == tuple" do
@@ -502,6 +554,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang."=<"(1, 2) == true
     end
 
+    test "pid < pid" do
+      assert :erlang."=<"(pid("0.11.111"), pid("0.11.112")) == true
+    end
+
     test "pid < tuple (always)" do
       assert :erlang."=<"(pid("0.11.111"), {1, 2}) == true
     end
@@ -530,11 +586,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang."=<"(2, 1) == false
     end
 
+    test "pid > pid" do
+      assert :erlang."=<"(pid("0.11.112"), pid("0.11.111")) == false
+    end
+
     test "tuple > tuple" do
       assert :erlang."=<"({1, 2, 3}, {1, 2}) == false
     end
 
-    # // TODO: reference, function, port, pid, map, list, bitstring
+    # // TODO: reference, function, port, map, list, bitstring
   end
 
   describe "==/2" do
@@ -556,6 +616,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "integer == integer" do
       assert :erlang.==(1, 1) == true
+    end
+
+    test "pid == pid" do
+      assert :erlang.==(pid("0.11.222"), pid("0.11.222")) == true
     end
 
     test "tuple == tuple" do
@@ -590,6 +654,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.==(1, 2) == false
     end
 
+    test "pid < pid" do
+      assert :erlang.==(pid("0.11.111"), pid("0.11.112")) == false
+    end
+
     test "pid < tuple (always)" do
       assert :erlang.==(pid("0.11.111"), {1, 2}) == false
     end
@@ -618,11 +686,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.==(2, 1) == false
     end
 
+    test "pid > pid" do
+      assert :erlang.==(pid("0.11.112"), pid("0.11.111")) == false
+    end
+
     test "tuple > tuple" do
       assert :erlang.==({1, 2, 3}, {1, 2}) == false
     end
 
-    # // TODO: reference, function, port, pid, map, list, bitstring
+    # // TODO: reference, function, port, map, list, bitstring
   end
 
   describe ">/2" do
@@ -644,6 +716,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "integer == integer" do
       assert :erlang.>(1, 1) == false
+    end
+
+    test "pid == pid" do
+      assert :erlang.>(pid("0.11.222"), pid("0.11.222")) == false
     end
 
     test "tuple == tuple" do
@@ -678,6 +754,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.>(1, 2) == false
     end
 
+    test "pid < pid" do
+      assert :erlang.>(pid("0.11.111"), pid("0.11.112")) == false
+    end
+
     test "pid < tuple (always)" do
       assert :erlang.>(pid("0.11.111"), {1, 2}) == false
     end
@@ -706,11 +786,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.>(2, 1) == true
     end
 
+    test "pid > pid" do
+      assert :erlang.>(pid("0.11.112"), pid("0.11.111")) == true
+    end
+
     test "tuple > tuple" do
       assert :erlang.>({1, 2, 3}, {1, 2}) == true
     end
 
-    # // TODO: reference, function, port, pid, map, list, bitstring
+    # // TODO: reference, function, port, map, list, bitstring
   end
 
   describe ">=/2" do
@@ -732,6 +816,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "integer == integer" do
       assert :erlang.>=(1, 1) == true
+    end
+
+    test "pid == pid" do
+      assert :erlang.>=(pid("0.11.222"), pid("0.11.222")) == true
     end
 
     test "tuple == tuple" do
@@ -766,6 +854,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.>=(1, 2) == false
     end
 
+    test "pid < pid" do
+      assert :erlang.>=(pid("0.11.111"), pid("0.11.112")) == false
+    end
+
     test "pid < tuple (always)" do
       assert :erlang.>=(pid("0.11.111"), {1, 2}) == false
     end
@@ -794,11 +886,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.>=(2, 1) == true
     end
 
+    test "pid > pid" do
+      assert :erlang.>=(pid("0.11.112"), pid("0.11.111")) == true
+    end
+
     test "tuple > tuple" do
       assert :erlang.>=({1, 2, 3}, {1, 2}) == true
     end
 
-    # // TODO: reference, function, port, pid, map, list, bitstring
+    # // TODO: reference, function, port, map, list, bitstring
   end
 
   describe "andalso/2" do

@@ -13,6 +13,7 @@ import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
+import {pid} from "process";
 
 before(() => linkModules());
 after(() => unlinkModules());
@@ -28,6 +29,7 @@ const integer2 = Type.integer(2);
 const integer3 = Type.integer(3);
 const integer6 = Type.integer(6);
 const pid1 = Type.pid([0, 11, 111]);
+const pid2 = Type.pid([0, 11, 112]);
 const tuple2 = Type.tuple([Type.integer(1), Type.integer(2)]);
 const tuple3 = Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
@@ -166,6 +168,10 @@ describe("/=/2", () => {
     assertBoxedFalse(fun(integer1, integer1));
   });
 
+  it("pid == pid", () => {
+    assertBoxedFalse(fun(pid1, pid1));
+  });
+
   it("tuple == tuple", () => {
     assertBoxedFalse(fun(tuple3, tuple3));
   });
@@ -196,6 +202,10 @@ describe("/=/2", () => {
 
   it("integer < integer", () => {
     assertBoxedTrue(fun(integer1, integer2));
+  });
+
+  it("pid < pid", () => {
+    assertBoxedTrue(fun(pid1, pid2));
   });
 
   it("pid < tuple (always)", () => {
@@ -226,11 +236,15 @@ describe("/=/2", () => {
     assertBoxedTrue(fun(integer2, integer1));
   });
 
+  it("pid > pid", () => {
+    assertBoxedTrue(fun(pid2, pid1));
+  });
+
   it("tuple > tuple", () => {
     assertBoxedTrue(fun(tuple3, tuple2));
   });
 
-  // TODO: reference, function, port, pid, map, list, bitstring
+  // TODO: reference, function, port, map, list, bitstring
 });
 
 describe("</2", () => {
@@ -256,6 +270,10 @@ describe("</2", () => {
     assertBoxedFalse(fun(integer1, integer1));
   });
 
+  it("pid == pid", () => {
+    assertBoxedFalse(fun(pid1, pid1));
+  });
+
   it("tuple == tuple", () => {
     assertBoxedTrue(fun(tuple3, tuple3));
   });
@@ -288,6 +306,10 @@ describe("</2", () => {
     assertBoxedTrue(fun(integer1, integer2));
   });
 
+  it("pid < pid", () => {
+    assertBoxedTrue(fun(pid1, pid2));
+  });
+
   it("pid < tuple (always)", () => {
     assertBoxedTrue(fun(pid1, tuple3));
   });
@@ -316,6 +338,10 @@ describe("</2", () => {
     assertBoxedFalse(fun(integer2, integer1));
   });
 
+  it("pid > pid", () => {
+    assertBoxedFalse(fun(pid2, pid1));
+  });
+
   it("tuple > tuple", () => {
     assertBoxedFalse(fun(tuple3, tuple2));
   });
@@ -342,7 +368,7 @@ describe("</2", () => {
     );
   });
 
-  // TODO: reference, function, port, pid, map, list, bitstring
+  // TODO: reference, function, port, map, list, bitstring
 });
 
 describe("=/=/2", () => {
@@ -368,6 +394,10 @@ describe("=/=/2", () => {
     assertBoxedFalse(fun(integer1, integer1));
   });
 
+  it("pid == pid", () => {
+    assertBoxedFalse(fun(pid1, pid1));
+  });
+
   it("tuple == tuple", () => {
     assertBoxedFalse(fun(tuple3, tuple3));
   });
@@ -400,6 +430,10 @@ describe("=/=/2", () => {
     assertBoxedTrue(fun(integer1, integer2));
   });
 
+  it("pid < pid", () => {
+    assertBoxedTrue(fun(pid1, pid2));
+  });
+
   it("pid < tuple (always)", () => {
     assertBoxedTrue(fun(pid1, tuple3));
   });
@@ -428,11 +462,15 @@ describe("=/=/2", () => {
     assertBoxedTrue(fun(integer2, integer1));
   });
 
+  it("pid > pid", () => {
+    assertBoxedTrue(fun(pid2, pid1));
+  });
+
   it("tuple > tuple", () => {
     assertBoxedTrue(fun(tuple3, tuple2));
   });
 
-  // TODO: reference, function, port, pid, map, list, bitstring
+  // TODO: reference, function, port, map, list, bitstring
 });
 
 describe("=:=/2", () => {
@@ -458,6 +496,10 @@ describe("=:=/2", () => {
     assertBoxedTrue(fun(integer1, integer1));
   });
 
+  it("pid == pid", () => {
+    assertBoxedTrue(fun(pid1, pid1));
+  });
+
   it("tuple == tuple", () => {
     assertBoxedTrue(fun(tuple3, tuple3));
   });
@@ -490,6 +532,10 @@ describe("=:=/2", () => {
     assertBoxedFalse(fun(integer1, integer2));
   });
 
+  it("pid < pid", () => {
+    assertBoxedFalse(fun(pid1, pid2));
+  });
+
   it("pid < tuple (always)", () => {
     assertBoxedFalse(fun(pid1, tuple3));
   });
@@ -518,11 +564,15 @@ describe("=:=/2", () => {
     assertBoxedFalse(fun(integer2, integer1));
   });
 
+  it("pid > pid", () => {
+    assertBoxedFalse(fun(pid2, pid1));
+  });
+
   it("tuple > tuple", () => {
     assertBoxedFalse(fun(tuple3, tuple2));
   });
 
-  // TODO: reference, function, port, pid, map, list, bitstring
+  // TODO: reference, function, port, map, list, bitstring
 });
 
 describe("=</2", () => {
@@ -546,6 +596,10 @@ describe("=</2", () => {
 
   it("integer == integer", () => {
     assertBoxedTrue(fun(integer1, integer1));
+  });
+
+  it("pid == pid", () => {
+    assertBoxedTrue(fun(pid1, pid1));
   });
 
   it("tuple == tuple", () => {
@@ -580,6 +634,10 @@ describe("=</2", () => {
     assertBoxedTrue(fun(integer1, integer2));
   });
 
+  it("pid < pid", () => {
+    assertBoxedTrue(fun(pid1, pid2));
+  });
+
   it("pid < tuple (always)", () => {
     assertBoxedTrue(fun(pid1, tuple3));
   });
@@ -608,6 +666,10 @@ describe("=</2", () => {
     assertBoxedFalse(fun(integer2, integer1));
   });
 
+  it("pid > pid", () => {
+    assertBoxedFalse(fun(pid2, pid1));
+  });
+
   it("tuple > tuple", () => {
     assertBoxedTrue(fun(tuple3, tuple2));
   });
@@ -634,7 +696,7 @@ describe("=</2", () => {
     );
   });
 
-  // TODO: reference, function, port, pid, map, list, bitstring
+  // TODO: reference, function, port, map, list, bitstring
 });
 
 describe("==/2", () => {
@@ -658,6 +720,10 @@ describe("==/2", () => {
 
   it("integer == integer", () => {
     assertBoxedTrue(fun(integer1, integer1));
+  });
+
+  it("pid == pid", () => {
+    assertBoxedTrue(fun(pid1, pid1));
   });
 
   it("tuple == tuple", () => {
@@ -692,6 +758,10 @@ describe("==/2", () => {
     assertBoxedFalse(fun(integer1, integer2));
   });
 
+  it("pid < pid", () => {
+    assertBoxedFalse(fun(pid1, pid2));
+  });
+
   it("pid < tuple (always)", () => {
     assertBoxedFalse(fun(pid1, tuple3));
   });
@@ -720,11 +790,15 @@ describe("==/2", () => {
     assertBoxedFalse(fun(integer2, integer1));
   });
 
+  it("pid > pid", () => {
+    assertBoxedFalse(fun(pid2, pid1));
+  });
+
   it("tuple > tuple", () => {
     assertBoxedFalse(fun(tuple3, tuple2));
   });
 
-  // TODO: reference, function, port, pid, map, list, bitstring
+  // TODO: reference, function, port, map, list, bitstring
 });
 
 describe(">/2", () => {
@@ -748,6 +822,10 @@ describe(">/2", () => {
 
   it("integer == integer", () => {
     assertBoxedFalse(fun(integer1, integer1));
+  });
+
+  it("pid == pid", () => {
+    assertBoxedFalse(fun(pid1, pid1));
   });
 
   it("tuple == tuple", () => {
@@ -782,6 +860,10 @@ describe(">/2", () => {
     assertBoxedFalse(fun(integer1, integer2));
   });
 
+  it("pid < pid", () => {
+    assertBoxedFalse(fun(pid1, pid2));
+  });
+
   it("pid < tuple (always)", () => {
     assertBoxedFalse(fun(pid1, tuple3));
   });
@@ -810,6 +892,10 @@ describe(">/2", () => {
     assertBoxedTrue(fun(integer2, integer1));
   });
 
+  it("pid > pid", () => {
+    assertBoxedTrue(fun(pid2, pid1));
+  });
+
   it("tuple > tuple", () => {
     assertBoxedTrue(fun(tuple3, tuple2));
   });
@@ -836,7 +922,7 @@ describe(">/2", () => {
     );
   });
 
-  // TODO: reference, function, port, pid, map, list, bitstring
+  // TODO: reference, function, port, map, list, bitstring
 });
 
 describe(">=/2", () => {
@@ -860,6 +946,10 @@ describe(">=/2", () => {
 
   it("integer == integer", () => {
     assertBoxedTrue(fun(integer1, integer1));
+  });
+
+  it("pid == pid", () => {
+    assertBoxedTrue(fun(pid1, pid1));
   });
 
   it("tuple == tuple", () => {
@@ -894,6 +984,10 @@ describe(">=/2", () => {
     assertBoxedFalse(fun(integer1, integer2));
   });
 
+  it("pid < pid", () => {
+    assertBoxedFalse(fun(pid1, pid2));
+  });
+
   it("pid < tuple (always)", () => {
     assertBoxedFalse(fun(pid1, tuple3));
   });
@@ -922,6 +1016,10 @@ describe(">=/2", () => {
     assertBoxedTrue(fun(integer2, integer1));
   });
 
+  it("pid > pid", () => {
+    assertBoxedTrue(fun(pid2, pid1));
+  });
+
   it("tuple > tuple", () => {
     assertBoxedTrue(fun(tuple3, tuple2));
   });
@@ -948,7 +1046,7 @@ describe(">=/2", () => {
     );
   });
 
-  // TODO: reference, function, port, pid, map, list, bitstring
+  // TODO: reference, function, port, map, list, bitstring
 });
 
 describe("andalso/2", () => {
