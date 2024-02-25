@@ -22,6 +22,7 @@ import {defineModule16Fixture} from "./fixtures/template/renderer/module_16.mjs"
 import {defineModule17Fixture} from "./fixtures/template/renderer/module_17.mjs";
 import {defineModule18Fixture} from "./fixtures/template/renderer/module_18.mjs";
 import {defineModule2Fixture} from "./fixtures/template/renderer/module_2.mjs";
+import {defineModule21Fixture} from "./fixtures/template/renderer/module_21.mjs";
 import {defineModule25Fixture} from "./fixtures/template/renderer/module_25.mjs";
 import {defineModule26Fixture} from "./fixtures/template/renderer/module_26.mjs";
 import {defineModule27Fixture} from "./fixtures/template/renderer/module_27.mjs";
@@ -68,6 +69,7 @@ before(() => {
   defineModule17Fixture();
   defineModule18Fixture();
   defineModule2Fixture();
+  defineModule21Fixture();
   defineModule25Fixture();
   defineModule26Fixture();
   defineModule27Fixture();
@@ -1334,6 +1336,30 @@ describe("page", () => {
 
     assert.deepStrictEqual(result, [
       'layout vars = [{:cid, "layout"}, {:prop_1, "prop_value_1"}, {:prop_3, "prop_value_3"}]',
+    ]);
+  });
+
+  it("aggregate page vars, giving state vars priority over param vars when there are name conflicts", () => {
+    Store.putComponentState(
+      Type.bitstring("page"),
+      Type.map([
+        [Type.atom("key_2"), Type.bitstring("state_value_2")],
+        [Type.atom("key_3"), Type.bitstring("state_value_3")],
+      ]),
+    );
+
+    initStoreComponentData(Type.bitstring("layout"));
+
+    const result = Renderer.renderPage(
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module21"),
+      Type.map([
+        [Type.atom("key_1"), Type.bitstring("param_value_1")],
+        [Type.atom("key_2"), Type.bitstring("param_value_2")],
+      ]),
+    );
+
+    assert.deepStrictEqual(result, [
+      'page vars = [{:key_1, "param_value_1"}, {:key_2, "state_value_2"}, {:key_3, "state_value_3"}]',
     ]);
   });
 });

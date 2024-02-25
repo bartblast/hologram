@@ -16,6 +16,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module18
   alias Hologram.Test.Fixtures.Template.Renderer.Module19
   alias Hologram.Test.Fixtures.Template.Renderer.Module2
+  alias Hologram.Test.Fixtures.Template.Renderer.Module21
   alias Hologram.Test.Fixtures.Template.Renderer.Module25
   alias Hologram.Test.Fixtures.Template.Renderer.Module27
   alias Hologram.Test.Fixtures.Template.Renderer.Module3
@@ -551,9 +552,22 @@ defmodule Hologram.Template.RendererTest do
               _} =
                render_page(Module27, [])
     end
+
+    test "aggregate page vars, giving state vars priority over param vars when there are name conflicts" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module21, :dummy_module_21_digest)
+
+      params_dom =
+        [
+          {"key_1", [text: "param_value_1"]},
+          {"key_2", [text: "param_value_2"]}
+        ]
+
+      assert {~s'page vars = [key_1: "param_value_1", key_2: "state_value_2", key_3: "state_value_3"]',
+              _} =
+               render_page(Module21, params_dom)
+    end
   end
 
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module21
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module24
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module28
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module29
@@ -561,29 +575,6 @@ defmodule Hologram.Template.RendererTest do
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module50
 
   #   describe "page" do
-  #     test "aggregate page vars, giving state priority over param when there are name conflicts" do
-  #       ETS.put(PageDigestRegistryStub.ets_table_name(), Module21, :dummy_module_21_digest)
-
-  #       params_dom =
-  #         [
-  #           {"key_1", [text: "param_value_1"]},
-  #           {"key_2", [text: "param_value_2"]}
-  #         ]
-
-  #       assert render_page(Module21, params_dom) ==
-  #                {"key_1 = param_value_1, key_2 = state_value_2, key_3 = state_value_3",
-  #                 %{
-  #                   "layout" => %Component.Client{},
-  #                   "page" => %Component.Client{
-  #                     context: %{
-  #                       {Hologram.Runtime, :page_digest} => :dummy_module_21_digest,
-  #                       {Hologram.Runtime, :page_mounted?} => true
-  #                     },
-  #                     state: %{key_2: "state_value_2", key_3: "state_value_3"}
-  #                   }
-  #                 }}
-  #     end
-
   #     test "aggregate layout vars, giving state priority over prop when there are name conflicts" do
   #       ETS.put(PageDigestRegistryStub.ets_table_name(), Module24, :dummy_module_24_digest)
 

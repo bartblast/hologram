@@ -6,7 +6,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module21 do
   param :key_1
   param :key_2
 
-  layout Hologram.Test.Fixtures.Template.Renderer.Module22
+  layout Hologram.Test.Fixtures.LayoutFixture
 
   @impl Page
   def init(_params, client, _server) do
@@ -15,8 +15,6 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module21 do
 
   @impl Page
   def template do
-    ~H"""
-    key_1 = {@key_1}, key_2 = {@key_2}, key_3 = {@key_3}
-    """
+    ~H"page vars = {vars |> :maps.to_list() |> :lists.sort() |> inspect()}"
   end
 end

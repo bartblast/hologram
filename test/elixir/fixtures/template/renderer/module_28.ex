@@ -3,7 +3,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module28 do
 
   route "/hologram-test-fixtures-template-renderer-module28"
 
-  layout Hologram.Test.Fixtures.Template.Renderer.Module22
+  layout Hologram.Test.Fixtures.LayoutFixture
 
   @impl Page
   def init(_params, client, _server) do
