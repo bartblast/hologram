@@ -35,6 +35,10 @@ defmodule Hologram.CompilerTest do
 
       assert output == """
              Interpreter.defineErlangFunction("Erlang", "+", 2, (left, right) => {
+                 if (!Type.isNumber(left) || !Type.isNumber(right)) {
+                   Interpreter.raiseArithmeticError();
+                 }
+
                  const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
                    left,
                    right,
