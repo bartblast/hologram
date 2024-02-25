@@ -274,7 +274,7 @@ describe("</2", () => {
   });
 
   it("tuple == tuple", () => {
-    assertBoxedTrue(fun(tuple3, tuple3));
+    assertBoxedFalse(fun(tuple3, tuple3));
   });
 
   it("atom < atom", () => {
@@ -669,8 +669,8 @@ describe("=</2", () => {
     assertBoxedFalse(fun(pid2, pid1));
   });
 
-  it("tuple > tuple", () => {
-    assertBoxedTrue(fun(tuple3, tuple2));
+  it("tupl e > tuple", () => {
+    assertBoxedFalse(fun(tuple3, tuple2));
   });
 
   it("throws a not yet implemented error when the left argument type is not yet supported", () => {
