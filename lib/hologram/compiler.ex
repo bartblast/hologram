@@ -376,7 +376,7 @@ defmodule Hologram.Compiler do
   defp include_mfas_used_by_renderer(mfas) do
     mfas ++
       [
-        {Hologram.Component.Client, :__struct__, 0},
+        {Hologram.Component, :__struct__, 0},
         {Kernel, :to_string, 1},
         {:erlang, :binary_to_atom, 1},
         {:lists, :flatten, 1},
@@ -389,7 +389,7 @@ defmodule Hologram.Compiler do
   defp include_mfas_used_by_store(mfas) do
     mfas ++
       [
-        {Hologram.Component.Client, :__struct__, 0},
+        {Hologram.Component, :__struct__, 0},
         {:maps, :get, 2},
         {:maps, :get, 3},
         {:maps, :merge, 2},
