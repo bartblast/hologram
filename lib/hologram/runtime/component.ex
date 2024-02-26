@@ -1,6 +1,16 @@
 defmodule Hologram.Component do
   use Hologram.Runtime.Templatable, include_init_callback?: false
+
   alias Hologram.Component
+  alias Hologram.Operation
+
+  defstruct context: %{}, next_command: nil, state: %{}
+
+  @type t :: %__MODULE__{
+          context: %{atom => any} | %{{module, atom} => any},
+          next_command: Operation.t() | nil,
+          state: %{atom => any}
+        }
 
   defmacro __using__(_opts) do
     template_path = Templatable.colocated_template_path(__CALLER__.file)
