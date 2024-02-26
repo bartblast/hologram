@@ -202,6 +202,7 @@ export default class Renderer {
           props,
           emptyComponentStruct,
         );
+
         Store.putComponentData(cid, componentStruct);
 
         componentState = Erlang_Maps["get/2"](
