@@ -40,12 +40,12 @@ export default class Renderer {
     const pageModuleRef = Interpreter.moduleRef(pageModule);
 
     const cid = Type.bitstring("page");
-    const pageClientStruct = Store.getComponentData(cid);
+    const pageComponentStruct = Store.getComponentData(cid);
 
     return Renderer.#renderPageInsideLayout(
       pageModuleRef,
       pageParams,
-      pageClientStruct,
+      pageComponentStruct,
     );
   }
 
@@ -195,17 +195,23 @@ export default class Renderer {
 
     if (componentState === null) {
       if ("init/2" in moduleRef) {
-        const emptyClientStruct =
-          Elixir_Hologram_Component_Client["__struct__/0"]();
+        const emptyComponentStruct =
+          Elixir_Hologram_Component["__struct__/0"]();
 
-        const clientStruct = moduleRef["init/2"](props, emptyClientStruct);
-        Store.putComponentData(cid, clientStruct);
+        const componentStruct = moduleRef["init/2"](
+          props,
+          emptyComponentStruct,
+        );
+        Store.putComponentData(cid, componentStruct);
 
-        componentState = Erlang_Maps["get/2"](Type.atom("state"), clientStruct);
+        componentState = Erlang_Maps["get/2"](
+          Type.atom("state"),
+          componentStruct,
+        );
 
         componentContext = Erlang_Maps["get/2"](
           Type.atom("context"),
-          clientStruct,
+          componentStruct,
         );
       } else {
         const message = `component ${Interpreter.inspectModuleName(
@@ -356,15 +362,19 @@ export default class Renderer {
   }
 
   // Based on render_page_inside_layout/3
-  static #renderPageInsideLayout(pageModuleRef, pageParams, pageClientStruct) {
+  static #renderPageInsideLayout(
+    pageModuleRef,
+    pageParams,
+    pageComponentStruct,
+  ) {
     const pageContext = Erlang_Maps["get/2"](
       Type.atom("context"),
-      pageClientStruct,
+      pageComponentStruct,
     );
 
     const pageState = Erlang_Maps["get/2"](
       Type.atom("state"),
-      pageClientStruct,
+      pageComponentStruct,
     );
 
     const vars = Erlang_Maps["merge/2"](pageParams, pageState);
