@@ -8,7 +8,7 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
-  alias Hologram.Component.Client
+  alias Hologram.Component
   alias Hologram.Component.Server
   alias Hologram.Runtime.PageDigestRegistry
   alias Hologram.Template.Parser
@@ -33,11 +33,11 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
-  Builds empty Component.Client struct.
+  Builds empty Component struct.
   """
-  @spec build_component_client() :: Client.t()
-  def build_component_client do
-    %Client{}
+  @spec build_component_struct() :: Component.t()
+  def build_component_struct do
+    %Component{}
   end
 
   @doc """
@@ -167,7 +167,7 @@ defmodule Hologram.Test.Helpers do
       Enum.map(props, fn {name, value} -> {to_string(name), [expression: {value}]} end)
 
     node = {:component, module, props_dom, []}
-    {html, _client_components_data} = Renderer.render_dom(node, context, [])
+    {html, _component_structs} = Renderer.render_dom(node, context, [])
 
     html
   end
