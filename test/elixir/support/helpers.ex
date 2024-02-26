@@ -33,7 +33,7 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
-  Builds empty Component struct.
+  Builds empty component struct.
   """
   @spec build_component_struct() :: Component.t()
   def build_component_struct do
@@ -41,7 +41,7 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
-  Builds empty Component.Server struct.
+  Builds empty server struct.
   """
   @spec build_component_server() :: Server.t()
   def build_component_server do
