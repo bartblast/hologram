@@ -90,7 +90,7 @@ export function assertMatchError(callable, value) {
   }
 }
 
-export function buildClientStruct(data) {
+export function buildComponentStruct(data) {
   let componentStruct = elixirHologramComponentStruct0();
 
   const {context, nextCommand, state} = data;

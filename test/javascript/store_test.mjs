@@ -2,7 +2,7 @@
 
 import {
   assert,
-  buildClientStruct,
+  buildComponentStruct,
   linkModules,
   unlinkModules,
 } from "../../assets/js/test_support.mjs";
@@ -192,7 +192,7 @@ describe("putComponentState()", () => {
 
     assert.deepStrictEqual(
       Store.data,
-      Type.map([[cid, buildClientStruct({state: "dummy_state"})]]),
+      Type.map([[cid, buildComponentStruct({state: "dummy_state"})]]),
     );
   });
 });

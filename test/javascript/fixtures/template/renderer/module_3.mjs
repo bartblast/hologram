@@ -1,6 +1,6 @@
 "use strict";
 
-import {buildClientStruct} from "../../../../../assets/js/test_support.mjs";
+import {buildComponentStruct} from "../../../../../assets/js/test_support.mjs";
 
 import Interpreter from "../../../../../assets/js/interpreter.mjs";
 import Type from "../../../../../assets/js/type.mjs";
@@ -33,7 +33,7 @@ export function defineModule3Fixture() {
         ],
         guards: [],
         body: (_vars) => {
-          return buildClientStruct({
+          return buildComponentStruct({
             state: Type.map([
               [Type.atom("a"), Type.integer(11)],
               [Type.atom("b"), Type.integer(22)],
