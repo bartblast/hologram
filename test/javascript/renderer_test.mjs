@@ -72,7 +72,6 @@ before(() => {
   defineModule18Fixture();
   defineModule2Fixture();
   defineModule21Fixture();
-  defineModule21Fixture();
   defineModule23Fixture();
   defineModule24Fixture();
   defineModule25Fixture();
