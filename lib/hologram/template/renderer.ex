@@ -1,7 +1,7 @@
 defmodule Hologram.Template.Renderer do
   alias Hologram.Commons.StringUtils
   alias Hologram.Compiler.Encoder
-  alias Hologram.Component.Client
+  alias Hologram.Component
   alias Hologram.Component.Server
   alias Hologram.Runtime.PageDigestRegistry
   alias Hologram.Runtime.Templatable
@@ -19,11 +19,11 @@ defmodule Hologram.Template.Renderer do
       iex> render_dom(dom, %{}, [])
       {
         "<div>state_a = 1, state_b = 2</div>",
-        %{"my_component" => %Component.Client{state: %{a: 1, b: 2}}}
+        %{"my_component" => %Component{state: %{a: 1, b: 2}}}
       }
   """
   @spec render_dom(DOM.t(), %{(atom | {any, atom}) => any}, keyword(DOM.t())) ::
-          {String.t(), %{atom => Client.t()}}
+          {String.t(), %{atom => Component.t()}}
   def render_dom(dom, context, slots)
 
   def render_dom({:component, module, props_dom, children_dom}, context, slots) do
@@ -48,7 +48,7 @@ defmodule Hologram.Template.Renderer do
   def render_dom({:element, tag_name, attrs_dom, children_dom}, context, slots) do
     attrs_html = render_attributes(attrs_dom)
 
-    {children_html, client_structs} = render_dom(children_dom, context, slots)
+    {children_html, component_structs} = render_dom(children_dom, context, slots)
 
     html =
       if tag_name in @void_elems do
@@ -57,7 +57,7 @@ defmodule Hologram.Template.Renderer do
         "<#{tag_name}#{attrs_html}>#{children_html}</#{tag_name}>"
       end
 
-    {html, client_structs}
+    {html, component_structs}
   end
 
   def render_dom({:expression, {value}}, _context, _slots) do
@@ -72,9 +72,9 @@ defmodule Hologram.Template.Renderer do
     nodes
     # There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if}
     |> Enum.filter(& &1)
-    |> Enum.reduce({"", %{}}, fn node, {acc_html, acc_client_structs} ->
-      {html, client_struct} = render_dom(node, context, slots)
-      {acc_html <> html, Map.merge(acc_client_structs, client_struct)}
+    |> Enum.reduce({"", %{}}, fn node, {acc_html, acc_component_structs} ->
+      {html, component_struct} = render_dom(node, context, slots)
+      {acc_html <> html, Map.merge(acc_component_structs, component_struct)}
     end)
   end
 
@@ -88,47 +88,51 @@ defmodule Hologram.Template.Renderer do
       iex> render_page(MyPage, [{"param", [text: "value"]}])
       {
         "<div>full page content including layout</div>",
-        %{"page" => %Client{state: %{a: 1, b: 2}}}
+        %{"page" => %Component{state: %{a: 1, b: 2}}}
       }
   """
-  @spec render_page(module, DOM.t()) :: {String.t(), %{atom => Client.t()}}
+  @spec render_page(module, DOM.t()) :: {String.t(), %{atom => Component.t()}}
   def render_page(page_module, params_dom) do
     params = cast_props(params_dom, page_module)
-    {initial_page_client_struct, _server_struct} = init_component(page_module, params)
+    {initial_page_component_struct, _server_struct} = init_component(page_module, params)
 
     page_digest = PageDigestRegistry.lookup(page_module)
 
-    page_client_struct_with_injected_page_digest =
+    page_component_struct_with_injected_page_digest =
       Templatable.put_context(
-        initial_page_client_struct,
+        initial_page_component_struct,
         {Hologram.Runtime, :page_digest},
         page_digest
       )
 
-    {initial_html, initial_client_structs} =
-      render_page_inside_layout(page_module, params, page_client_struct_with_injected_page_digest)
+    {initial_html, initial_component_structs} =
+      render_page_inside_layout(
+        page_module,
+        params,
+        page_component_struct_with_injected_page_digest
+      )
 
-    page_client_struct_with_injected_page_mounted_flag =
+    page_component_struct_with_injected_page_mounted_flag =
       Templatable.put_context(
-        page_client_struct_with_injected_page_digest,
+        page_component_struct_with_injected_page_digest,
         {Hologram.Runtime, :page_mounted?},
         true
       )
 
-    client_structs_with_page_struct =
+    component_structs_with_page_struct =
       Map.put(
-        initial_client_structs,
+        initial_component_structs,
         "page",
-        page_client_struct_with_injected_page_mounted_flag
+        page_component_struct_with_injected_page_mounted_flag
       )
 
     html_with_interpolated_js =
       initial_html
-      |> interpolate_client_structs_js(client_structs_with_page_struct)
+      |> interpolate_component_structs_js(component_structs_with_page_struct)
       |> interpolate_page_module_js(page_module)
       |> interpolate_page_params_js(params)
 
-    {html_with_interpolated_js, client_structs_with_page_struct}
+    {html_with_interpolated_js, component_structs_with_page_struct}
   end
 
   defp build_layout_props_dom(page_module, page_state) do
@@ -195,20 +199,20 @@ defmodule Hologram.Template.Renderer do
   defp init_component(module, props) do
     init_result =
       if function_exported?(module, :init, 3) do
-        module.init(props, %Client{}, %Server{})
+        module.init(props, %Component{}, %Server{})
       else
-        {%Client{}, %Server{}}
+        {%Component{}, %Server{}}
       end
 
     case init_result do
-      {client, server} ->
-        {client, server}
+      {component, server} ->
+        {component, server}
 
-      %Client{} = client ->
-        {client, %Server{}}
+      %Component{} = component ->
+        {component, %Server{}}
 
       %Server{} = server ->
-        {%Client{}, server}
+        {%Component{}, server}
     end
   end
 
@@ -222,9 +226,9 @@ defmodule Hologram.Template.Renderer do
     Map.merge(props_from_template, props_from_context)
   end
 
-  defp interpolate_client_structs_js(html, client_structs) do
-    client_structs_js = Encoder.encode_term(client_structs)
-    String.replace(html, "$CLIENT_STRUCTS_JS_PLACEHOLDER", client_structs_js)
+  defp interpolate_component_structs_js(html, component_structs) do
+    component_structs_js = Encoder.encode_term(component_structs)
+    String.replace(html, "$COMPONENT_STRUCTS_JS_PLACEHOLDER", component_structs_js)
   end
 
   defp interpolate_page_module_js(html, page_module) do
@@ -274,14 +278,16 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp render_stateful_component(module, props, children_dom, context) do
-    {client_struct, _server_struct} = init_component(module, props)
-    vars = Map.merge(props, client_struct.state)
-    merged_context = Map.merge(context, client_struct.context)
+    {component_struct, _server_struct} = init_component(module, props)
+    vars = Map.merge(props, component_struct.state)
+    merged_context = Map.merge(context, component_struct.context)
 
-    {html, children_client_structs} = render_template(module, vars, children_dom, merged_context)
-    client_structs = Map.put(children_client_structs, vars.cid, client_struct)
+    {html, children_component_structs} =
+      render_template(module, vars, children_dom, merged_context)
 
-    {html, client_structs}
+    component_structs = Map.put(children_component_structs, vars.cid, component_struct)
+
+    {html, component_structs}
   end
 
   defp render_template(module, vars, children_dom, context) do

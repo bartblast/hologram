@@ -6,7 +6,7 @@ defmodule Hologram.Template.RendererTest do
   import Mox
 
   alias Hologram.Commons.ETS
-  alias Hologram.Component.Client
+  alias Hologram.Component
   alias Hologram.Runtime.AssetPathRegistry
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
   alias Hologram.Test.Fixtures.Template.Renderer.Module10
@@ -115,10 +115,10 @@ defmodule Hologram.Template.RendererTest do
       assert render_dom(node, %{}, []) ==
                {~s(<div attr="value"><div>state_a = 1, state_b = 2</div><div>state_c = 3, state_d = 4</div></div>),
                 %{
-                  "component_3" => %Client{
+                  "component_3" => %Component{
                     state: %{a: 1, b: 2}
                   },
-                  "component_7" => %Client{
+                  "component_7" => %Component{
                     state: %{c: 3, d: 4}
                   }
                 }}
@@ -160,8 +160,8 @@ defmodule Hologram.Template.RendererTest do
       assert render_dom(nodes, %{}, []) ==
                {"abc<div>state_a = 1, state_b = 2</div>xyz<div>state_c = 3, state_d = 4</div>",
                 %{
-                  "component_3" => %Client{state: %{a: 1, b: 2}},
-                  "component_7" => %Client{state: %{c: 3, d: 4}}
+                  "component_3" => %Component{state: %{a: 1, b: 2}},
+                  "component_7" => %Component{state: %{c: 3, d: 4}}
                 }}
     end
 
@@ -176,8 +176,8 @@ defmodule Hologram.Template.RendererTest do
       assert render_dom(nodes, %{}, []) ==
                {"abc<div>state_a = 1</div><div>state_b = 2</div>xyz<div>state_c = 3</div><div>state_d = 4</div>",
                 %{
-                  "component_51" => %Client{state: %{a: 1, b: 2}},
-                  "component_52" => %Client{state: %{c: 3, d: 4}}
+                  "component_51" => %Component{state: %{a: 1, b: 2}},
+                  "component_52" => %Component{state: %{c: 3, d: 4}}
                 }}
     end
   end
@@ -216,7 +216,7 @@ defmodule Hologram.Template.RendererTest do
       node = {:component, Module1, [{"cid", [text: "my_component"]}], []}
 
       assert render_dom(node, %{}, []) ==
-               {"<div>abc</div>", %{"my_component" => %Client{state: %{}}}}
+               {"<div>abc</div>", %{"my_component" => %Component{state: %{}}}}
     end
 
     test "with props" do
@@ -231,15 +231,15 @@ defmodule Hologram.Template.RendererTest do
 
       assert render_dom(node, %{}, []) ==
                {"<div>prop_a = ddd, prop_b = 222, prop_c = fff333hhh</div>",
-                %{"my_component" => %Client{state: %{}}}}
+                %{"my_component" => %Component{state: %{}}}}
     end
 
-    test "with state / only client struct returned from init/3" do
+    test "with state / only component struct returned from init/3" do
       node = {:component, Module3, [{"cid", [text: "my_component"]}], []}
 
       assert render_dom(node, %{}, []) ==
                {"<div>state_a = 1, state_b = 2</div>",
-                %{"my_component" => %Client{state: %{a: 1, b: 2}}}}
+                %{"my_component" => %Component{state: %{a: 1, b: 2}}}}
     end
 
     test "with props and state, give state priority over prop if there are name collisions" do
@@ -253,7 +253,7 @@ defmodule Hologram.Template.RendererTest do
 
       assert render_dom(node, %{}, []) ==
                {"<div>var_a = state_a, var_b = state_b, var_c = prop_c</div>",
-                %{"my_component" => %Client{state: %{a: "state_a", b: "state_b"}}}}
+                %{"my_component" => %Component{state: %{a: "state_a", b: "state_b"}}}}
     end
 
     test "with only server struct returned from init/3" do
@@ -266,15 +266,16 @@ defmodule Hologram.Template.RendererTest do
          ], []}
 
       assert render_dom(node, %{}, []) ==
-               {"<div>prop_a = aaa, prop_b = bbb</div>", %{"my_component" => %Client{state: %{}}}}
+               {"<div>prop_a = aaa, prop_b = bbb</div>",
+                %{"my_component" => %Component{state: %{}}}}
     end
 
-    test "with client and server structs returned from init/3" do
+    test "with component and server structs returned from init/3" do
       node = {:component, Module6, [{"cid", [text: "my_component"]}], []}
 
       assert render_dom(node, %{}, []) ==
                {"<div>state_a = 1, state_b = 2</div>",
-                %{"my_component" => %Client{state: %{a: 1, b: 2}}}}
+                %{"my_component" => %Component{state: %{a: 1, b: 2}}}}
     end
 
     test "cast props" do
@@ -327,9 +328,9 @@ defmodule Hologram.Template.RendererTest do
       assert render_dom(node, %{}, []) ==
                {"10,11,10,12,10",
                 %{
-                  "component_10" => %Client{state: %{a: 10}},
-                  "component_11" => %Client{state: %{a: 11}},
-                  "component_12" => %Client{state: %{a: 12}}
+                  "component_10" => %Component{state: %{a: 10}},
+                  "component_11" => %Component{state: %{a: 11}},
+                  "component_12" => %Component{state: %{a: 12}}
                 }}
     end
 
@@ -347,7 +348,7 @@ defmodule Hologram.Template.RendererTest do
       assert render_dom(node, %{}, []) ==
                {"34a_prop,35a_prop,34b_state,36a_prop,34c_state,abc,34x_state,36z_state,34y_state,35z_state,34z_state",
                 %{
-                  "component_34" => %Client{
+                  "component_34" => %Component{
                     state: %{
                       cid: "component_34",
                       a: "34a_prop",
@@ -358,10 +359,10 @@ defmodule Hologram.Template.RendererTest do
                       z: "34z_state"
                     }
                   },
-                  "component_35" => %Client{
+                  "component_35" => %Component{
                     state: %{cid: "component_35", a: "35a_prop", z: "35z_state"}
                   },
-                  "component_36" => %Client{
+                  "component_36" => %Component{
                     state: %{cid: "component_36", a: "36a_prop", z: "36z_state"}
                   }
                 }}
@@ -387,10 +388,10 @@ defmodule Hologram.Template.RendererTest do
       assert render_page(Module39, []) ==
                {"prop_aaa = 123",
                 %{
-                  "layout" => %Client{
+                  "layout" => %Component{
                     context: %{}
                   },
-                  "page" => %Client{
+                  "page" => %Component{
                     context: %{
                       {Hologram.Runtime, :page_digest} => :dummy_module_39_digest,
                       {Hologram.Runtime, :page_mounted?} => true,
@@ -406,10 +407,10 @@ defmodule Hologram.Template.RendererTest do
       assert render_page(Module46, []) ==
                {"prop_aaa = 123",
                 %{
-                  "layout" => %Client{
+                  "layout" => %Component{
                     context: %{}
                   },
-                  "page" => %Client{
+                  "page" => %Component{
                     context: %{
                       {Hologram.Runtime, :page_digest} => :dummy_module_46_digest,
                       {Hologram.Runtime, :page_mounted?} => true,
@@ -425,10 +426,10 @@ defmodule Hologram.Template.RendererTest do
       assert render_page(Module40, []) ==
                {"prop_aaa = 123",
                 %{
-                  "layout" => %Client{
+                  "layout" => %Component{
                     context: %{}
                   },
-                  "page" => %Client{
+                  "page" => %Component{
                     context: %{
                       {Hologram.Runtime, :page_digest} => :dummy_module_40_digest,
                       {Hologram.Runtime, :page_mounted?} => true,
@@ -444,10 +445,10 @@ defmodule Hologram.Template.RendererTest do
       assert render_page(Module43, []) ==
                {"prop_aaa = 123",
                 %{
-                  "layout" => %Client{
+                  "layout" => %Component{
                     context: %{{:my_scope, :my_key} => 123}
                   },
-                  "page" => %Client{
+                  "page" => %Component{
                     context: %{
                       {Hologram.Runtime, :page_digest} => :dummy_module_43_digest,
                       {Hologram.Runtime, :page_mounted?} => true
@@ -462,10 +463,10 @@ defmodule Hologram.Template.RendererTest do
       assert render_page(Module45, []) ==
                {"prop_aaa = 123",
                 %{
-                  "layout" => %Client{
+                  "layout" => %Component{
                     context: %{{:my_scope, :my_key} => 123}
                   },
-                  "page" => %Client{
+                  "page" => %Component{
                     context: %{
                       {Hologram.Runtime, :page_digest} => :dummy_module_45_digest,
                       {Hologram.Runtime, :page_mounted?} => true
@@ -480,7 +481,7 @@ defmodule Hologram.Template.RendererTest do
       assert render_dom(node, %{}, []) ==
                {"prop_aaa = 123",
                 %{
-                  "component_37" => %Client{
+                  "component_37" => %Component{
                     context: %{
                       {:my_scope, :my_key} => 123
                     }
@@ -508,8 +509,8 @@ defmodule Hologram.Template.RendererTest do
       assert render_page(Module14, []) ==
                {"layout template start, page template, layout template end",
                 %{
-                  "layout" => %Client{},
-                  "page" => %Client{
+                  "layout" => %Component{},
+                  "page" => %Component{
                     context: %{
                       {Hologram.Runtime, :page_digest} => :dummy_module_14_digest,
                       {Hologram.Runtime, :page_mounted?} => true
@@ -531,8 +532,8 @@ defmodule Hologram.Template.RendererTest do
       assert render_page(Module19, params_dom) ==
                {"",
                 %{
-                  "layout" => %Client{},
-                  "page" => %Client{
+                  "layout" => %Component{},
+                  "page" => %Component{
                     context: %{
                       {Hologram.Runtime, :page_digest} => :dummy_module_19_digest,
                       {Hologram.Runtime, :page_mounted?} => true
@@ -579,14 +580,14 @@ defmodule Hologram.Template.RendererTest do
               _} = render_page(Module24, [])
     end
 
-    test "merge the page component client struct into the result" do
+    test "merge the page component struct into the result" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module28, :dummy_module_28_digest)
 
       assert render_page(Module28, []) ==
                {"",
                 %{
-                  "layout" => %Client{},
-                  "page" => %Client{
+                  "layout" => %Component{},
+                  "page" => %Component{
                     context: %{
                       {Hologram.Runtime, :page_digest} => :dummy_module_28_digest,
                       {Hologram.Runtime, :page_mounted?} => true
@@ -596,16 +597,16 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
-    test "merge the layout component client struct into the result" do
+    test "merge the layout component struct into the result" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module29, :dummy_module_29_digest)
 
       assert render_page(Module29, []) ==
                {"",
                 %{
-                  "layout" => %Client{
+                  "layout" => %Component{
                     state: %{state_1: "value_1", state_2: "value_2"}
                   },
-                  "page" => %Client{
+                  "page" => %Component{
                     context: %{
                       {Hologram.Runtime, :page_digest} => :dummy_module_29_digest,
                       {Hologram.Runtime, :page_mounted?} => true
@@ -614,7 +615,7 @@ defmodule Hologram.Template.RendererTest do
                 }}
     end
 
-    test "interpolate client components data JS" do
+    test "interpolate component structs JS" do
       ETS.put(
         PageDigestRegistryStub.ets_table_name(),
         Module48,
@@ -623,10 +624,10 @@ defmodule Hologram.Template.RendererTest do
 
       assert {html,
               %{
-                "layout" => %Client{
+                "layout" => %Component{
                   context: %{}
                 },
-                "page" => %Client{
+                "page" => %Component{
                   context: %{
                     {Hologram.Runtime, :page_digest} => "102790adb6c3b1956db310be523a7693",
                     {Hologram.Runtime, :page_mounted?} => true
@@ -649,10 +650,10 @@ defmodule Hologram.Template.RendererTest do
 
       assert {html,
               %{
-                "layout" => %Client{
+                "layout" => %Component{
                   context: %{}
                 },
-                "page" => %Client{
+                "page" => %Component{
                   context: %{
                     {Hologram.Runtime, :page_digest} => "102790adb6c3b1956db310be523a7693",
                     {Hologram.Runtime, :page_mounted?} => true
@@ -681,10 +682,10 @@ defmodule Hologram.Template.RendererTest do
 
       assert {html,
               %{
-                "layout" => %Client{
+                "layout" => %Component{
                   context: %{}
                 },
-                "page" => %Client{
+                "page" => %Component{
                   context: %{
                     {Hologram.Runtime, :page_digest} => "102790adb6c3b1956db310be523a7693",
                     {Hologram.Runtime, :page_mounted?} => true
