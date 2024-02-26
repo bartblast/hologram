@@ -5,7 +5,7 @@ import {
   assertBoxedError,
   buildClientStruct,
   elixirHologramComponentStruct0,
-  initStoreComponentData,
+  initStoreComponentStruct,
   linkModules,
   unlinkModules,
   vnode,
@@ -883,7 +883,7 @@ describe("stateful component", () => {
       Type.list([]),
     ]);
 
-    initStoreComponentData(cid);
+    initStoreComponentStruct(cid);
 
     const result = Renderer.renderDom(node, context, slots);
 
@@ -1154,7 +1154,7 @@ describe("default slot", () => {
 
 describe("context", () => {
   it("emitted in page, accessed in component nested in page", () => {
-    initStoreComponentData(Type.bitstring("layout"));
+    initStoreComponentStruct(Type.bitstring("layout"));
 
     Store.putComponentContext(
       Type.bitstring("page"),
@@ -1175,7 +1175,7 @@ describe("context", () => {
   });
 
   it("emitted in page, accessed in component nested in layout", () => {
-    initStoreComponentData(Type.bitstring("layout"));
+    initStoreComponentStruct(Type.bitstring("layout"));
 
     Store.putComponentContext(
       Type.bitstring("page"),
@@ -1196,7 +1196,7 @@ describe("context", () => {
   });
 
   it("emitted in page, accessed in layout", () => {
-    initStoreComponentData(Type.bitstring("layout"));
+    initStoreComponentStruct(Type.bitstring("layout"));
 
     Store.putComponentContext(
       Type.bitstring("page"),
@@ -1217,7 +1217,7 @@ describe("context", () => {
   });
 
   it("emmited in layout, accessed in component nested in page", () => {
-    initStoreComponentData(Type.bitstring("page"));
+    initStoreComponentStruct(Type.bitstring("page"));
 
     Store.putComponentContext(
       Type.bitstring("layout"),
@@ -1238,7 +1238,7 @@ describe("context", () => {
   });
 
   it("emitted in layout, accessed in component nested in layout", () => {
-    initStoreComponentData(Type.bitstring("page"));
+    initStoreComponentStruct(Type.bitstring("page"));
 
     Store.putComponentContext(
       Type.bitstring("layout"),
@@ -1291,8 +1291,8 @@ describe("context", () => {
 
 describe("page", () => {
   it("inside layout slot", () => {
-    initStoreComponentData(Type.bitstring("page"));
-    initStoreComponentData(Type.bitstring("layout"));
+    initStoreComponentStruct(Type.bitstring("page"));
+    initStoreComponentStruct(Type.bitstring("layout"));
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module14"),
@@ -1308,8 +1308,8 @@ describe("page", () => {
   // it("cast page params")
 
   it("cast layout explicit static props", () => {
-    initStoreComponentData(Type.bitstring("page"));
-    initStoreComponentData(Type.bitstring("layout"));
+    initStoreComponentStruct(Type.bitstring("page"));
+    initStoreComponentStruct(Type.bitstring("layout"));
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module25"),
@@ -1331,7 +1331,7 @@ describe("page", () => {
       ]),
     );
 
-    initStoreComponentData(Type.bitstring("layout"));
+    initStoreComponentStruct(Type.bitstring("layout"));
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module27"),
@@ -1352,7 +1352,7 @@ describe("page", () => {
       ]),
     );
 
-    initStoreComponentData(Type.bitstring("layout"));
+    initStoreComponentStruct(Type.bitstring("layout"));
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module21"),
@@ -1368,7 +1368,7 @@ describe("page", () => {
   });
 
   it("aggregate layout vars, giving state vars priority over prop vars when there are name conflicts", () => {
-    initStoreComponentData(Type.bitstring("page"));
+    initStoreComponentStruct(Type.bitstring("page"));
 
     Store.putComponentState(
       Type.bitstring("layout"),

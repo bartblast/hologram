@@ -165,11 +165,11 @@ export function freeze(obj) {
   return Object.freeze(obj);
 }
 
-export function initStoreComponentData(cid) {
-  const emptyClientStruct =
+export function initStoreComponentStruct(cid) {
+  const emptyComponentStruct =
     globalThis.Elixir_Hologram_Component["__struct__/0"]();
 
-  Store.putComponentData(cid, emptyClientStruct);
+  Store.putComponentData(cid, emptyComponentStruct);
 }
 
 export function linkModules() {
