@@ -167,7 +167,7 @@ export function freeze(obj) {
 
 export function initStoreComponentData(cid) {
   const emptyClientStruct =
-    globalThis.Elixir_Hologram_Component_Client["__struct__/0"]();
+    globalThis.Elixir_Hologram_Component["__struct__/0"]();
 
   Store.putComponentData(cid, emptyClientStruct);
 }
@@ -179,7 +179,7 @@ export function linkModules() {
   globalThis.Erlang_Persistent_Term = Erlang_Persistent_Term;
   globalThis.Erlang_Unicode = Erlang_Unicode;
   globalThis.Elixir_Enum = {};
-  globalThis.Elixir_Hologram_Component_Client = {};
+  globalThis.Elixir_Hologram_Component = {};
   globalThis.Elixir_Kernel = Elixir_Kernel;
 
   globalThis.Elixir_Hologram_Component["__struct__/0"] =
@@ -202,6 +202,6 @@ export function unlinkModules() {
   delete globalThis.Erlang_Persistent_Term;
   delete globalThis.Erlang_Unicode;
   delete globalThis.Elixir_Enum;
-  delete globalThis.Elixir_Hologram_Component_Client;
+  delete globalThis.Elixir_Hologram_Component;
   delete globalThis.Elixir_Kernel;
 }

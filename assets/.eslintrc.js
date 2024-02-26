@@ -7,7 +7,7 @@ module.exports = {
   extends: "eslint:recommended",
   globals: {
     Elixir_Enum: "readonly",
-    Elixir_Hologram_Component_Client: "readonly",
+    Elixir_Hologram_Component: "readonly",
     Elixir_Hologram_Template_Renderer: "readonly",
     Elixir_Kernel: "readonly",
     Elixir_Map: "readonly",

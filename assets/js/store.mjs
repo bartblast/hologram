@@ -41,7 +41,7 @@ export default class Store {
     let componentData = Store.getComponentData(cid);
 
     if (componentData === null) {
-      componentData = Elixir_Hologram_Component_Client["__struct__/0"]();
+      componentData = Elixir_Hologram_Component["__struct__/0"]();
     }
 
     const newComponentData = Erlang_Maps["put/3"](
@@ -58,7 +58,7 @@ export default class Store {
     let componentData = Store.getComponentData(cid);
 
     if (componentData === null) {
-      componentData = Elixir_Hologram_Component_Client["__struct__/0"]();
+      componentData = Elixir_Hologram_Component["__struct__/0"]();
     }
 
     const newComponentData = Erlang_Maps["put/3"](
