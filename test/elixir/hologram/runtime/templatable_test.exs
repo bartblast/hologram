@@ -33,35 +33,35 @@ defmodule Hologram.Runtime.TemplatableTest do
   end
 
   test "put_context/3" do
-    client = %Component.Client{context: %{a: 1}}
+    component = %Component{context: %{a: 1}}
 
-    assert put_context(client, :b, 2) == %Component.Client{
+    assert put_context(component, :b, 2) == %Component{
              context: %{a: 1, b: 2}
            }
   end
 
   describe "put_state/3" do
     test "keyword" do
-      client = %Component.Client{state: %{a: 1}}
+      component = %Component{state: %{a: 1}}
 
-      assert put_state(client, b: 2, c: 3) == %Component.Client{
+      assert put_state(component, b: 2, c: 3) == %Component{
                state: %{a: 1, b: 2, c: 3}
              }
     end
 
     test "map" do
-      client = %Component.Client{state: %{a: 1}}
+      component = %Component{state: %{a: 1}}
 
-      assert put_state(client, %{b: 2, c: 3}) == %Component.Client{
+      assert put_state(component, %{b: 2, c: 3}) == %Component{
                state: %{a: 1, b: 2, c: 3}
              }
     end
   end
 
   test "put_state/3" do
-    client = %Component.Client{state: %{a: 1}}
+    component = %Component{state: %{a: 1}}
 
-    assert put_state(client, :b, 2) == %Component.Client{
+    assert put_state(component, :b, 2) == %Component{
              state: %{a: 1, b: 2}
            }
   end
