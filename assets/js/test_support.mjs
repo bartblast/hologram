@@ -91,40 +91,40 @@ export function assertMatchError(callable, value) {
 }
 
 export function buildClientStruct(data) {
-  let clientStruct = elixirHologramComponentClientStruct0();
+  let componentStruct = elixirHologramComponentStruct0();
 
   const {context, nextCommand, state} = data;
 
   if (typeof context !== "undefined") {
-    clientStruct = Erlang_Maps["put/3"](
+    componentStruct = Erlang_Maps["put/3"](
       Type.atom("context"),
       context,
-      clientStruct,
+      componentStruct,
     );
   }
 
   if (typeof nextCommand !== "undefined") {
-    clientStruct = Erlang_Maps["put/3"](
+    componentStruct = Erlang_Maps["put/3"](
       Type.atom("next_command"),
       nextCommand,
-      clientStruct,
+      componentStruct,
     );
   }
 
   if (typeof state !== "undefined") {
-    clientStruct = Erlang_Maps["put/3"](
+    componentStruct = Erlang_Maps["put/3"](
       Type.atom("state"),
       state,
-      clientStruct,
+      componentStruct,
     );
   }
 
-  return clientStruct;
+  return componentStruct;
 }
 
-export function elixirHologramComponentClientStruct0() {
+export function elixirHologramComponentStruct0() {
   return Type.map([
-    [Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")],
+    [Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")],
     [Type.atom("context"), Type.map([])],
     [Type.atom("next_command"), Type.atom("nil")],
     [Type.atom("state"), Type.map([])],
@@ -182,8 +182,8 @@ export function linkModules() {
   globalThis.Elixir_Hologram_Component_Client = {};
   globalThis.Elixir_Kernel = Elixir_Kernel;
 
-  globalThis.Elixir_Hologram_Component_Client["__struct__/0"] =
-    elixirHologramComponentClientStruct0;
+  globalThis.Elixir_Hologram_Component["__struct__/0"] =
+    elixirHologramComponentStruct0;
 
   globalThis.Elixir_Kernel["to_string/1"] = elixirKernelToString1;
 }

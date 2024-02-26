@@ -4,7 +4,7 @@ import {
   assert,
   assertBoxedError,
   buildClientStruct,
-  elixirHologramComponentClientStruct0,
+  elixirHologramComponentStruct0,
   initStoreComponentData,
   linkModules,
   unlinkModules,
@@ -679,7 +679,7 @@ describe("stateful component", () => {
     assert.deepStrictEqual(resultVDom, expectedVdom);
 
     const expectedStoreData = Type.map([
-      [cid, elixirHologramComponentClientStruct0()],
+      [cid, elixirHologramComponentStruct0()],
     ]);
 
     assert.deepStrictEqual(Store.data, expectedStoreData);
@@ -727,7 +727,7 @@ describe("stateful component", () => {
     assert.deepStrictEqual(resultVDom, expectedVdom);
 
     const expectedStoreData = Type.map([
-      [cid, elixirHologramComponentClientStruct0()],
+      [cid, elixirHologramComponentStruct0()],
     ]);
 
     assert.deepStrictEqual(Store.data, expectedStoreData);
