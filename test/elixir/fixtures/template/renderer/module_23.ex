@@ -11,8 +11,6 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module23 do
 
   @impl Layout
   def template do
-    ~H"""
-    key_1 = {@key_1}, key_2 = {@key_2}, key_3 = {@key_3}
-    """
+    ~H"layout vars = {vars |> :maps.to_list() |> :lists.sort() |> inspect()}"
   end
 end

@@ -23,6 +23,8 @@ import {defineModule17Fixture} from "./fixtures/template/renderer/module_17.mjs"
 import {defineModule18Fixture} from "./fixtures/template/renderer/module_18.mjs";
 import {defineModule2Fixture} from "./fixtures/template/renderer/module_2.mjs";
 import {defineModule21Fixture} from "./fixtures/template/renderer/module_21.mjs";
+import {defineModule23Fixture} from "./fixtures/template/renderer/module_23.mjs";
+import {defineModule24Fixture} from "./fixtures/template/renderer/module_24.mjs";
 import {defineModule25Fixture} from "./fixtures/template/renderer/module_25.mjs";
 import {defineModule26Fixture} from "./fixtures/template/renderer/module_26.mjs";
 import {defineModule27Fixture} from "./fixtures/template/renderer/module_27.mjs";
@@ -70,6 +72,9 @@ before(() => {
   defineModule18Fixture();
   defineModule2Fixture();
   defineModule21Fixture();
+  defineModule21Fixture();
+  defineModule23Fixture();
+  defineModule24Fixture();
   defineModule25Fixture();
   defineModule26Fixture();
   defineModule27Fixture();
@@ -1360,6 +1365,27 @@ describe("page", () => {
 
     assert.deepStrictEqual(result, [
       'page vars = [{:key_1, "param_value_1"}, {:key_2, "state_value_2"}, {:key_3, "state_value_3"}]',
+    ]);
+  });
+
+  it("aggregate layout vars, giving state vars priority over prop vars when there are name conflicts", () => {
+    initStoreComponentData(Type.bitstring("page"));
+
+    Store.putComponentState(
+      Type.bitstring("layout"),
+      Type.map([
+        [Type.atom("key_2"), Type.bitstring("state_value_2")],
+        [Type.atom("key_3"), Type.bitstring("state_value_3")],
+      ]),
+    );
+
+    const result = Renderer.renderPage(
+      Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module24"),
+      Type.map([]),
+    );
+
+    assert.deepStrictEqual(result, [
+      'layout vars = [{:cid, "layout"}, {:key_1, "prop_value_1"}, {:key_2, "state_value_2"}, {:key_3, "state_value_3"}]',
     ]);
   });
 });

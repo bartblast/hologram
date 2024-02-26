@@ -17,6 +17,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module19
   alias Hologram.Test.Fixtures.Template.Renderer.Module2
   alias Hologram.Test.Fixtures.Template.Renderer.Module21
+  alias Hologram.Test.Fixtures.Template.Renderer.Module24
   alias Hologram.Test.Fixtures.Template.Renderer.Module25
   alias Hologram.Test.Fixtures.Template.Renderer.Module27
   alias Hologram.Test.Fixtures.Template.Renderer.Module3
@@ -566,32 +567,21 @@ defmodule Hologram.Template.RendererTest do
               _} =
                render_page(Module21, params_dom)
     end
+
+    test "aggregate layout vars, giving state vars priority over prop vars when there are name conflicts" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module24, :dummy_module_24_digest)
+
+      assert {~s'layout vars = [cid: "layout", key_1: "prop_value_1", key_2: "state_value_2", key_3: "state_value_3"]',
+              _} = render_page(Module24, [])
+    end
   end
 
-  #   alias Hologram.Test.Fixtures.Template.Renderer.Module24
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module28
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module29
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module48
   #   alias Hologram.Test.Fixtures.Template.Renderer.Module50
 
   #   describe "page" do
-  #     test "aggregate layout vars, giving state priority over prop when there are name conflicts" do
-  #       ETS.put(PageDigestRegistryStub.ets_table_name(), Module24, :dummy_module_24_digest)
-
-  #       assert render_page(Module24, []) ==
-  #                {"key_1 = prop_value_1, key_2 = state_value_2, key_3 = state_value_3",
-  #                 %{
-  #                   "layout" => %Component.Client{
-  #                     state: %{key_2: "state_value_2", key_3: "state_value_3"}
-  #                   },
-  #                   "page" => %Component.Client{
-  #                     context: %{
-  #                       {Hologram.Runtime, :page_digest} => :dummy_module_24_digest,
-  #                       {Hologram.Runtime, :page_mounted?} => true
-  #                     }
-  #                   }
-  #                 }}
-  #     end
 
   #     test "merge the page component client struct into the result" do
   #       ETS.put(PageDigestRegistryStub.ets_table_name(), Module28, :dummy_module_28_digest)
