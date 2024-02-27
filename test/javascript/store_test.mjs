@@ -116,6 +116,46 @@ it("hydrate()", () => {
   );
 });
 
+describe("putComponentState()", () => {
+  const cid = Type.bitstring("my_component");
+
+  it("when component data exists", () => {
+    Store.data = Type.map([
+      [
+        cid,
+        Type.map([
+          [Type.atom("context"), "dummy_context"],
+          [Type.atom("state"), "dummy_state_1"],
+        ]),
+      ],
+    ]);
+
+    Store.putComponentState(cid, "dummy_state_2");
+
+    assert.deepStrictEqual(
+      Store.data,
+      Type.map([
+        [
+          cid,
+          Type.map([
+            [Type.atom("context"), "dummy_context"],
+            [Type.atom("state"), "dummy_state_2"],
+          ]),
+        ],
+      ]),
+    );
+  });
+
+  it("when component data doesn't exist", () => {
+    Store.putComponentState(cid, "dummy_state");
+
+    assert.deepStrictEqual(
+      Store.data,
+      Type.map([[cid, buildComponentStruct({state: "dummy_state"})]]),
+    );
+  });
+});
+
 it("putComponentStruct()", () => {
   Store.data = Type.map([
     [
@@ -155,44 +195,4 @@ it("putComponentStruct()", () => {
       ],
     ]),
   );
-});
-
-describe("putComponentState()", () => {
-  const cid = Type.bitstring("my_component");
-
-  it("when component data exists", () => {
-    Store.data = Type.map([
-      [
-        cid,
-        Type.map([
-          [Type.atom("context"), "dummy_context"],
-          [Type.atom("state"), "dummy_state_1"],
-        ]),
-      ],
-    ]);
-
-    Store.putComponentState(cid, "dummy_state_2");
-
-    assert.deepStrictEqual(
-      Store.data,
-      Type.map([
-        [
-          cid,
-          Type.map([
-            [Type.atom("context"), "dummy_context"],
-            [Type.atom("state"), "dummy_state_2"],
-          ]),
-        ],
-      ]),
-    );
-  });
-
-  it("when component data doesn't exist", () => {
-    Store.putComponentState(cid, "dummy_state");
-
-    assert.deepStrictEqual(
-      Store.data,
-      Type.map([[cid, buildComponentStruct({state: "dummy_state"})]]),
-    );
-  });
 });
