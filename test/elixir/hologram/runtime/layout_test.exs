@@ -24,7 +24,7 @@ defmodule Hologram.Runtime.LayoutTest do
 
     test "overridden" do
       assert Module2.init(:props_dummy, build_component_struct(), build_component_server()) ==
-               {%Component.Client{state: %{overriden: true}}, %Component.Server{}}
+               {%Component{state: %{overriden: true}}, %Component.Server{}}
     end
   end
 
