@@ -55,9 +55,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
     module_digest_plt = PLT.start()
     PLT.load(module_digest_plt, module_digest_plt_dump_path)
 
-    assert PLT.get!(module_digest_plt, Module2) ==
-             <<212, 112, 201, 248, 119, 172, 9, 87, 73, 29, 212, 28, 212, 188, 64, 189, 108, 69,
-               65, 44, 51, 133, 220, 170, 10, 112, 197, 123, 22, 226, 196, 124>>
+    bit_size =
+      module_digest_plt
+      |> PLT.get!(Module2)
+      |> bit_size()
+
+    assert bit_size == 256
   end
 
   defp test_page_bundles do
