@@ -46,7 +46,7 @@ describe("getComponentContext()", () => {
   });
 });
 
-describe("getComponentData()", () => {
+describe("getComponentStruct()", () => {
   it("component data exists", () => {
     const cid = Type.bitstring("my_component_2");
 
@@ -55,14 +55,14 @@ describe("getComponentData()", () => {
       [cid, "dummy_2"],
     ]);
 
-    const result = Store.getComponentData(cid);
+    const result = Store.getComponentStruct(cid);
 
     assert.equal(result, "dummy_2");
   });
 
   it("component data doesn't exist", () => {
     const cid = Type.bitstring("my_component");
-    const result = Store.getComponentData(cid);
+    const result = Store.getComponentStruct(cid);
 
     assert.isNull(result);
   });
@@ -116,7 +116,7 @@ it("hydrate()", () => {
   );
 });
 
-it("putComponentData()", () => {
+it("putComponentStruct()", () => {
   Store.data = Type.map([
     [
       Type.bitstring("my_component_1"),
@@ -134,7 +134,7 @@ it("putComponentData()", () => {
     [Type.atom("state"), "dummy_state_2"],
   ]);
 
-  Store.putComponentData(cid, componentData);
+  Store.putComponentStruct(cid, componentData);
 
   assert.deepStrictEqual(
     Store.data,

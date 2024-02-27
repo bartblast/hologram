@@ -40,7 +40,7 @@ export default class Renderer {
     const pageModuleRef = Interpreter.moduleRef(pageModule);
 
     const cid = Type.bitstring("page");
-    const pageComponentStruct = Store.getComponentData(cid);
+    const pageComponentStruct = Store.getComponentStruct(cid);
 
     return Renderer.#renderPageInsideLayout(
       pageModuleRef,
@@ -203,7 +203,7 @@ export default class Renderer {
           emptyComponentStruct,
         );
 
-        Store.putComponentData(cid, componentStruct);
+        Store.putComponentStruct(cid, componentStruct);
 
         componentState = Erlang_Maps["get/2"](
           Type.atom("state"),

@@ -169,7 +169,7 @@ export function initStoreComponentStruct(cid) {
   const emptyComponentStruct =
     globalThis.Elixir_Hologram_Component["__struct__/0"]();
 
-  Store.putComponentData(cid, emptyComponentStruct);
+  Store.putComponentStruct(cid, emptyComponentStruct);
 }
 
 export function linkModules() {
