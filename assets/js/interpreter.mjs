@@ -759,8 +759,26 @@ export default class Interpreter {
     return term.value.toString();
   }
 
-  // TODO: support keyword lists
+  static #inspectKeywordList(term) {
+    return (
+      "[" +
+      term.data
+        .map(
+          (item) =>
+            Interpreter.inspect(item.data[0]).substring(1) +
+            ": " +
+            Interpreter.inspect(item.data[1]),
+        )
+        .join(", ") +
+      "]"
+    );
+  }
+
   static #inspectList(term, opts) {
+    if (term.data.length !== 0 && Type.isKeywordList(term)) {
+      return Interpreter.#inspectKeywordList(term);
+    }
+
     if (term.isProper) {
       return (
         "[" +

@@ -2185,6 +2185,27 @@ describe("inspect()", () => {
     assert.equal(result, "123");
   });
 
+  describe("keyword list", () => {
+    it("single item", () => {
+      const term = Type.keywordList([[Type.atom("a"), Type.integer(1)]]);
+
+      const result = Interpreter.inspect(term, {});
+
+      assert.equal(result, "[a: 1]");
+    });
+
+    it("multiple items", () => {
+      const term = Type.keywordList([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      const result = Interpreter.inspect(term, {});
+
+      assert.equal(result, "[a: 1, b: 2]");
+    });
+  });
+
   describe("list", () => {
     it("empty", () => {
       const result = Interpreter.inspect(Type.list([]), {});
