@@ -5,7 +5,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module5 do
   prop :a, :string
   prop :b, :string
 
-  def init(_props, _client, server) do
+  def init(_props, _component, server) do
     server
   end
 

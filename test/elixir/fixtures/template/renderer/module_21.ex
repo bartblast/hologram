@@ -9,8 +9,8 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module21 do
   layout Hologram.Test.Fixtures.LayoutFixture
 
   @impl Page
-  def init(_params, client, _server) do
-    put_state(client, key_2: "state_value_2", key_3: "state_value_3")
+  def init(_params, component, _server) do
+    put_state(component, key_2: "state_value_2", key_3: "state_value_3")
   end
 
   @impl Page

@@ -3,8 +3,8 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module37 do
   use Hologram.Component
   alias Hologram.Test.Fixtures.Template.Renderer.Module38
 
-  def init(_props, client, _server) do
-    put_context(client, {:my_scope, :my_key}, 123)
+  def init(_props, component, _server) do
+    put_context(component, {:my_scope, :my_key}, 123)
   end
 
   @impl Component

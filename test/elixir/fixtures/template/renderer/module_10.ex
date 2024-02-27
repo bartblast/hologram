@@ -5,8 +5,8 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module10 do
   alias Hologram.Test.Fixtures.Template.Renderer.Module11
   alias Hologram.Test.Fixtures.Template.Renderer.Module12
 
-  def init(_props, client, _server) do
-    put_state(client, a: 10)
+  def init(_props, component, _server) do
+    put_state(component, a: 10)
   end
 
   @impl Component

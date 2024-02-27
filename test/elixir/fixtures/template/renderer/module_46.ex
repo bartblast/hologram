@@ -6,8 +6,8 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module46 do
   layout Hologram.Test.Fixtures.Template.Renderer.Module47
 
   @impl Page
-  def init(_params, client, _server) do
-    put_context(client, {:my_scope, :my_key}, 123)
+  def init(_params, component, _server) do
+    put_context(component, {:my_scope, :my_key}, 123)
   end
 
   @impl Page

@@ -32,7 +32,7 @@ defmodule Hologram.Layout do
         def __is_hologram_layout__, do: true
 
         @impl Layout
-        def init(_props, client, server), do: {client, server}
+        def init(_props, component, server), do: {component, server}
 
         defoverridable init: 3
       end,

@@ -32,7 +32,7 @@ defmodule Hologram.Page do
         def __is_hologram_page__, do: true
 
         @impl Page
-        def init(_params, client, server), do: {client, server}
+        def init(_params, component, server), do: {component, server}
 
         defoverridable init: 3
       end,
