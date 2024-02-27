@@ -14,7 +14,7 @@ defmodule Hologram.Test.Fixtures.Compiler.Module12 do
   end
 
   def action(:action_12a, params, component) do
-    Module7.my_fun_7a(params, cliencomponentt)
+    Module7.my_fun_7a(params, component)
   end
 
   def action(:action_12b, params, component) do
