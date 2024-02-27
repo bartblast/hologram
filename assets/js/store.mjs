@@ -32,7 +32,6 @@ export default class Store {
     Store.data = Erlang_Maps["merge/2"](Store.data, data);
   }
 
-  // TODO: move to test helpers
   static putComponentContext(cid, context) {
     let componentStruct = Store.getComponentStruct(cid);
 
@@ -49,7 +48,6 @@ export default class Store {
     Store.putComponentStruct(cid, newComponentStruct);
   }
 
-  // TODO: move to test helpers
   static putComponentState(cid, state) {
     let componentStruct = Store.getComponentStruct(cid);
 

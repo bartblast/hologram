@@ -116,6 +116,46 @@ it("hydrate()", () => {
   );
 });
 
+describe("putComponentContext()", () => {
+  const cid = Type.bitstring("my_component");
+
+  it("when component data exists", () => {
+    Store.data = Type.map([
+      [
+        cid,
+        Type.map([
+          [Type.atom("context"), "dummy_context_1"],
+          [Type.atom("state"), "dummy_state"],
+        ]),
+      ],
+    ]);
+
+    Store.putComponentContext(cid, "dummy_context_2");
+
+    assert.deepStrictEqual(
+      Store.data,
+      Type.map([
+        [
+          cid,
+          Type.map([
+            [Type.atom("context"), "dummy_context_2"],
+            [Type.atom("state"), "dummy_state"],
+          ]),
+        ],
+      ]),
+    );
+  });
+
+  it("when component data doesn't exist", () => {
+    Store.putComponentContext(cid, "dummy_context");
+
+    assert.deepStrictEqual(
+      Store.data,
+      Type.map([[cid, buildComponentStruct({context: "dummy_context"})]]),
+    );
+  });
+});
+
 describe("putComponentState()", () => {
   const cid = Type.bitstring("my_component");
 
