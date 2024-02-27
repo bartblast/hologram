@@ -13,12 +13,12 @@ defmodule Hologram.Test.Fixtures.Compiler.Module12 do
     """
   end
 
-  def action(:action_12a, params, client) do
-    Module7.my_fun_7a(params, client)
+  def action(:action_12a, params, component) do
+    Module7.my_fun_7a(params, cliencomponentt)
   end
 
-  def action(:action_12b, params, client) do
+  def action(:action_12b, params, component) do
     # credo:disable-for-next-line Credo.Check.Refactor.Apply
-    apply(ModuleWithoutBEAMFile, :my_fun, [params, client])
+    apply(ModuleWithoutBEAMFile, :my_fun, [params, component])
   end
 end

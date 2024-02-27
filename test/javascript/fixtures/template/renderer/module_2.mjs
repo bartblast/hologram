@@ -31,11 +31,11 @@ export function defineModule2Fixture() {
       {
         params: (_vars) => [
           Type.matchPlaceholder(),
-          Type.variablePattern("client"),
+          Type.variablePattern("component"),
         ],
         guards: [],
         body: (vars) => {
-          return vars.client;
+          return vars.component;
         },
       },
     ],

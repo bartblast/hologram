@@ -32,8 +32,8 @@ defmodule Hologram.Runtime.PageTest do
 
   describe "init/3" do
     test "default" do
-      assert Module1.init(:params_dummy, :client_dummy, :server_dummy) ==
-               {:client_dummy, :server_dummy}
+      assert Module1.init(:params_dummy, :component_dummy, :server_dummy) ==
+               {:component_dummy, :server_dummy}
     end
 
     test "overridden" do

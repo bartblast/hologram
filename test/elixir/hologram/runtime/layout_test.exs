@@ -18,8 +18,8 @@ defmodule Hologram.Runtime.LayoutTest do
 
   describe "init/3" do
     test "default" do
-      assert Module1.init(:props_dummy, :client_dummy, :server_dummy) ==
-               {:client_dummy, :server_dummy}
+      assert Module1.init(:props_dummy, :component_dummy, :server_dummy) ==
+               {:component_dummy, :server_dummy}
     end
 
     test "overridden" do

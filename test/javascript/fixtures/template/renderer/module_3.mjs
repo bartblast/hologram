@@ -29,7 +29,7 @@ export function defineModule3Fixture() {
       {
         params: (_vars) => [
           Type.matchPlaceholder(),
-          Type.variablePattern("client"),
+          Type.variablePattern("component"),
         ],
         guards: [],
         body: (_vars) => {
