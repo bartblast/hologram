@@ -636,7 +636,7 @@ defmodule Hologram.Template.RendererTest do
               }} = render_page(Module48, [])
 
       expected =
-        ~s/clientStructs: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])], [Type.bitstring("page"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_mounted?")]), Type.atom("true")]])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])/
+        ~s/componentStructs: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])], [Type.bitstring("page"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Client")], [Type.atom("context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_mounted?")]), Type.atom("true")]])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])/
 
       assert String.contains?(html, expected)
     end

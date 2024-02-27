@@ -14,7 +14,7 @@ defmodule Hologram.UI.Runtime do
             const Type = deps.Type;
             
             return {
-              clientStructs: $CLIENT_STRUCTS_JS_PLACEHOLDER,
+              componentStructs: $COMPONENT_STRUCTS_JS_PLACEHOLDER,
               pageModule: $PAGE_MODULE_JS_PLACEHOLDER,
               pageParams: $PAGE_PARAMS_JS_PLACEHOLDER
             };
