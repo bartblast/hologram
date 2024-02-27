@@ -239,6 +239,7 @@ defmodule Hologram.Compiler.Encoder do
     |> Enum.join("\n\n")
   end
 
+  # See info about the internal structure of PIDs: https://stackoverflow.com/a/262179/13040586
   def encode(%IR.PIDType{value: pid}, context) do
     segments =
       pid
