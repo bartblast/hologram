@@ -37,7 +37,7 @@ defmodule Hologram.Runtime.PageTest do
     end
 
     test "overridden" do
-      assert Module2.init(:params_dummy, build_component_client(), build_component_server()) ==
+      assert Module2.init(:params_dummy, build_component_struct(), build_component_server()) ==
                {%Component.Client{state: %{overriden: true}}, %Component.Server{}}
     end
   end
