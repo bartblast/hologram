@@ -25,24 +25,6 @@ export function defineModule2Fixture() {
 
   Interpreter.defineElixirFunction(
     "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module2",
-    "init",
-    2,
-    [
-      {
-        params: (_vars) => [
-          Type.matchPlaceholder(),
-          Type.variablePattern("component"),
-        ],
-        guards: [],
-        body: (vars) => {
-          return vars.component;
-        },
-      },
-    ],
-  );
-
-  Interpreter.defineElixirFunction(
-    "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module2",
     "template",
     0,
     [

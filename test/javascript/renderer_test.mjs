@@ -674,6 +674,8 @@ describe("stateful component", () => {
       Type.list([]),
     ]);
 
+    initStoreComponentStruct(cid);
+
     const resultVDom = Renderer.renderDom(node, context, slots);
     const expectedVdom = [vnode("div", {attrs: {}}, ["abc"])];
     assert.deepStrictEqual(resultVDom, expectedVdom);
@@ -715,6 +717,8 @@ describe("stateful component", () => {
       ]),
       Type.list([]),
     ]);
+
+    initStoreComponentStruct(cid);
 
     const resultVDom = Renderer.renderDom(node, context, slots);
 

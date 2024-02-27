@@ -6,10 +6,6 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module2 do
   prop :b, :integer
   prop :c, :string
 
-  def init(_props, component) do
-    component
-  end
-
   @impl Component
   def template do
     ~H"""
