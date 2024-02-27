@@ -566,6 +566,40 @@ describe("isInteger()", () => {
   });
 });
 
+describe("isKeywordList()", () => {
+  it("empty keyword list", () => {
+    const term = Type.keywordList([]);
+    assert.isTrue(Type.isKeywordList(term));
+  });
+
+  it("non-empty keyword list", () => {
+    const term = Type.keywordList([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+    ]);
+
+    assert.isTrue(Type.isKeywordList(term));
+  });
+
+  it("not a keyword list, all items are 2-tuples", () => {
+    const term = Type.keywordList([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.string("b"), Type.integer(2)],
+    ]);
+
+    assert.isFalse(Type.isKeywordList(term));
+  });
+
+  it("not a keyword list, some items are not 2-tuples", () => {
+    const term = Type.keywordList([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2), Type.string("c")],
+    ]);
+
+    assert.isFalse(Type.isKeywordList(term));
+  });
+});
+
 describe("isList()", () => {
   it("returns true for boxed list value", () => {
     const list = Type.list([Type.integer(1), Type.integer(2)]);

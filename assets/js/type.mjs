@@ -171,6 +171,19 @@ export default class Type {
     return boxed.type === "integer";
   }
 
+  static isKeywordList(boxed) {
+    if (!Type.isList(boxed)) {
+      return false;
+    }
+
+    return boxed.data.every(
+      (item) =>
+        Type.isTuple(item) &&
+        item.data.length === 2 &&
+        Type.isAtom(item.data[0]),
+    );
+  }
+
   static isList(boxed) {
     return boxed.type === "list";
   }
