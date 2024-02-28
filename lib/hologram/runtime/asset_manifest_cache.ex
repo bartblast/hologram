@@ -49,9 +49,11 @@ defmodule Hologram.Runtime.AssetManifestCache do
       end)
 
     """
+    {%raw}
     window.__hologramAssetManifest__ = {
     #{entries_js}
-    };\
+    };
+    {/raw}\
     """
   end
 
