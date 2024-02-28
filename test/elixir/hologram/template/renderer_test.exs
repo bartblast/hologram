@@ -7,6 +7,7 @@ defmodule Hologram.Template.RendererTest do
 
   alias Hologram.Commons.ETS
   alias Hologram.Component
+  alias Hologram.Runtime.AssetManifestCache
   alias Hologram.Runtime.AssetPathRegistry
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
   alias Hologram.Test.Fixtures.Template.Renderer.Module10
@@ -37,6 +38,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module50
   alias Hologram.Test.Fixtures.Template.Renderer.Module51
   alias Hologram.Test.Fixtures.Template.Renderer.Module52
+  alias Hologram.Test.Fixtures.Template.Renderer.Module53
   alias Hologram.Test.Fixtures.Template.Renderer.Module6
   alias Hologram.Test.Fixtures.Template.Renderer.Module7
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
@@ -45,6 +47,7 @@ defmodule Hologram.Template.RendererTest do
   @opts [initial_page?: true]
   @params_dom []
 
+  use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
   use_module_stub :page_digest_registry
 
@@ -500,11 +503,14 @@ defmodule Hologram.Template.RendererTest do
 
   describe "page" do
     setup do
+      stub_with(AssetManifestCacheMock, AssetManifestCacheStub)
       stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
       stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
 
       setup_asset_fixtures(AssetPathRegistryStub.static_dir_path())
       AssetPathRegistry.start_link([])
+
+      AssetManifestCache.start_link([])
 
       setup_page_digest_registry(PageDigestRegistryStub)
 
@@ -625,6 +631,22 @@ defmodule Hologram.Template.RendererTest do
                     }
                   }
                 }}
+    end
+
+    test "injects asset manifest when the initial_page? opt is set to true" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module53, :dummy_module_53_digest)
+
+      assert {html, _} = render_page(Module53, @params_dom, initial_page?: true)
+
+      assert String.contains?(html, "window.__hologramAssetManifest__")
+    end
+
+    test "doesn't inject asset manifest when the initial_page? opt is set to false" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module53, :dummy_module_53_digest)
+
+      assert {html, _} = render_page(Module53, @params_dom, initial_page?: false)
+
+      refute String.contains?(html, "window.__hologramAssetManifest__")
     end
 
     test "interpolate component structs JS" do
