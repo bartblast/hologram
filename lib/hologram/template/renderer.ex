@@ -85,7 +85,7 @@ defmodule Hologram.Template.Renderer do
 
   ## Examples
 
-      iex> render_page(MyPage, [{"param", [text: "value"]}, initial_page?: true)
+      iex> render_page(MyPage, [{"param", [text: "value"]}], initial_page?: true)
       {
         "<div>full page content including layout</div>",
         %{"page" => %Component{state: %{a: 1, b: 2}}}
