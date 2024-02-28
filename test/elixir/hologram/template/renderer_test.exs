@@ -42,6 +42,9 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
 
+  @opts [initial_page?: true]
+  @params_dom []
+
   use_module_stub :asset_path_registry
   use_module_stub :page_digest_registry
 
@@ -385,7 +388,7 @@ defmodule Hologram.Template.RendererTest do
     test "emitted in page, accessed in component nested in page" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module39, :dummy_module_39_digest)
 
-      assert render_page(Module39, []) ==
+      assert render_page(Module39, @params_dom, @opts) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component{
@@ -393,6 +396,7 @@ defmodule Hologram.Template.RendererTest do
                   },
                   "page" => %Component{
                     context: %{
+                      {Hologram.Runtime, :initial_page?} => false,
                       {Hologram.Runtime, :page_digest} => :dummy_module_39_digest,
                       {Hologram.Runtime, :page_mounted?} => true,
                       {:my_scope, :my_key} => 123
@@ -404,7 +408,7 @@ defmodule Hologram.Template.RendererTest do
     test "emitted in page, accessed in component nested in layout" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module46, :dummy_module_46_digest)
 
-      assert render_page(Module46, []) ==
+      assert render_page(Module46, @params_dom, @opts) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component{
@@ -412,6 +416,7 @@ defmodule Hologram.Template.RendererTest do
                   },
                   "page" => %Component{
                     context: %{
+                      {Hologram.Runtime, :initial_page?} => false,
                       {Hologram.Runtime, :page_digest} => :dummy_module_46_digest,
                       {Hologram.Runtime, :page_mounted?} => true,
                       {:my_scope, :my_key} => 123
@@ -423,7 +428,7 @@ defmodule Hologram.Template.RendererTest do
     test "emitted in page, accessed in layout" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module40, :dummy_module_40_digest)
 
-      assert render_page(Module40, []) ==
+      assert render_page(Module40, @params_dom, @opts) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component{
@@ -431,6 +436,7 @@ defmodule Hologram.Template.RendererTest do
                   },
                   "page" => %Component{
                     context: %{
+                      {Hologram.Runtime, :initial_page?} => false,
                       {Hologram.Runtime, :page_digest} => :dummy_module_40_digest,
                       {Hologram.Runtime, :page_mounted?} => true,
                       {:my_scope, :my_key} => 123
@@ -442,7 +448,7 @@ defmodule Hologram.Template.RendererTest do
     test "emmited in layout, accessed in component nested in page" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module43, :dummy_module_43_digest)
 
-      assert render_page(Module43, []) ==
+      assert render_page(Module43, @params_dom, @opts) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component{
@@ -450,6 +456,7 @@ defmodule Hologram.Template.RendererTest do
                   },
                   "page" => %Component{
                     context: %{
+                      {Hologram.Runtime, :initial_page?} => false,
                       {Hologram.Runtime, :page_digest} => :dummy_module_43_digest,
                       {Hologram.Runtime, :page_mounted?} => true
                     }
@@ -460,7 +467,7 @@ defmodule Hologram.Template.RendererTest do
     test "emitted in layout, accessed in component nested in layout" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module45, :dummy_module_45_digest)
 
-      assert render_page(Module45, []) ==
+      assert render_page(Module45, @params_dom, @opts) ==
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component{
@@ -468,6 +475,7 @@ defmodule Hologram.Template.RendererTest do
                   },
                   "page" => %Component{
                     context: %{
+                      {Hologram.Runtime, :initial_page?} => false,
                       {Hologram.Runtime, :page_digest} => :dummy_module_45_digest,
                       {Hologram.Runtime, :page_mounted?} => true
                     }
@@ -506,12 +514,13 @@ defmodule Hologram.Template.RendererTest do
     test "inside layout slot" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module14, :dummy_module_14_digest)
 
-      assert render_page(Module14, []) ==
+      assert render_page(Module14, @params_dom, @opts) ==
                {"layout template start, page template, layout template end",
                 %{
                   "layout" => %Component{},
                   "page" => %Component{
                     context: %{
+                      {Hologram.Runtime, :initial_page?} => false,
                       {Hologram.Runtime, :page_digest} => :dummy_module_14_digest,
                       {Hologram.Runtime, :page_mounted?} => true
                     }
@@ -529,12 +538,13 @@ defmodule Hologram.Template.RendererTest do
           {"param_3", [text: "value_3"]}
         ]
 
-      assert render_page(Module19, params_dom) ==
+      assert render_page(Module19, params_dom, @opts) ==
                {"",
                 %{
                   "layout" => %Component{},
                   "page" => %Component{
                     context: %{
+                      {Hologram.Runtime, :initial_page?} => false,
                       {Hologram.Runtime, :page_digest} => :dummy_module_19_digest,
                       {Hologram.Runtime, :page_mounted?} => true
                     },
@@ -548,7 +558,7 @@ defmodule Hologram.Template.RendererTest do
 
       assert {~s'layout vars = [cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"]',
               _} =
-               render_page(Module25, [])
+               render_page(Module25, @params_dom, @opts)
     end
 
     test "cast layout props passed implicitely from page state" do
@@ -556,7 +566,7 @@ defmodule Hologram.Template.RendererTest do
 
       assert {~s'layout vars = [cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"]',
               _} =
-               render_page(Module27, [])
+               render_page(Module27, @params_dom, @opts)
     end
 
     test "aggregate page vars, giving state vars priority over param vars when there are name conflicts" do
@@ -570,25 +580,26 @@ defmodule Hologram.Template.RendererTest do
 
       assert {~s'page vars = [key_1: "param_value_1", key_2: "state_value_2", key_3: "state_value_3"]',
               _} =
-               render_page(Module21, params_dom)
+               render_page(Module21, params_dom, @opts)
     end
 
     test "aggregate layout vars, giving state vars priority over prop vars when there are name conflicts" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module24, :dummy_module_24_digest)
 
       assert {~s'layout vars = [cid: "layout", key_1: "prop_value_1", key_2: "state_value_2", key_3: "state_value_3"]',
-              _} = render_page(Module24, [])
+              _} = render_page(Module24, @params_dom, @opts)
     end
 
     test "merge the page component struct into the result" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module28, :dummy_module_28_digest)
 
-      assert render_page(Module28, []) ==
+      assert render_page(Module28, @params_dom, @opts) ==
                {"",
                 %{
                   "layout" => %Component{},
                   "page" => %Component{
                     context: %{
+                      {Hologram.Runtime, :initial_page?} => false,
                       {Hologram.Runtime, :page_digest} => :dummy_module_28_digest,
                       {Hologram.Runtime, :page_mounted?} => true
                     },
@@ -600,7 +611,7 @@ defmodule Hologram.Template.RendererTest do
     test "merge the layout component struct into the result" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module29, :dummy_module_29_digest)
 
-      assert render_page(Module29, []) ==
+      assert render_page(Module29, @params_dom, @opts) ==
                {"",
                 %{
                   "layout" => %Component{
@@ -608,6 +619,7 @@ defmodule Hologram.Template.RendererTest do
                   },
                   "page" => %Component{
                     context: %{
+                      {Hologram.Runtime, :initial_page?} => false,
                       {Hologram.Runtime, :page_digest} => :dummy_module_29_digest,
                       {Hologram.Runtime, :page_mounted?} => true
                     }
@@ -629,14 +641,15 @@ defmodule Hologram.Template.RendererTest do
                 },
                 "page" => %Component{
                   context: %{
+                    {Hologram.Runtime, :initial_page?} => false,
                     {Hologram.Runtime, :page_digest} => "102790adb6c3b1956db310be523a7693",
                     {Hologram.Runtime, :page_mounted?} => true
                   }
                 }
-              }} = render_page(Module48, [])
+              }} = render_page(Module48, @params_dom, @opts)
 
       expected =
-        ~s/componentStructs: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("context"), Type.map([])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])], [Type.bitstring("page"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_mounted?")]), Type.atom("true")]])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])/
+        ~s/componentStructs: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("context"), Type.map([])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])], [Type.bitstring("page"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("initial_page?")]), Type.atom("false")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_mounted?")]), Type.atom("true")]])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])/
 
       assert String.contains?(html, expected)
     end
@@ -655,11 +668,12 @@ defmodule Hologram.Template.RendererTest do
                 },
                 "page" => %Component{
                   context: %{
+                    {Hologram.Runtime, :initial_page?} => false,
                     {Hologram.Runtime, :page_digest} => "102790adb6c3b1956db310be523a7693",
                     {Hologram.Runtime, :page_mounted?} => true
                   }
                 }
-              }} = render_page(Module48, [])
+              }} = render_page(Module48, @params_dom, @opts)
 
       expected =
         ~s/pageModule: Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")/
@@ -687,11 +701,12 @@ defmodule Hologram.Template.RendererTest do
                 },
                 "page" => %Component{
                   context: %{
+                    {Hologram.Runtime, :initial_page?} => false,
                     {Hologram.Runtime, :page_digest} => "102790adb6c3b1956db310be523a7693",
                     {Hologram.Runtime, :page_mounted?} => true
                   }
                 }
-              }} = render_page(Module50, params_dom)
+              }} = render_page(Module50, params_dom, @opts)
 
       expected =
         ~s/pageParams: Type.map([[Type.atom("key_1"), Type.integer(123n)], [Type.atom("key_2"), Type.bitstring("value_2")]])/

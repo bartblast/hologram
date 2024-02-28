@@ -85,45 +85,43 @@ defmodule Hologram.Template.Renderer do
 
   ## Examples
 
-      iex> render_page(MyPage, [{"param", [text: "value"]}])
+      iex> render_page(MyPage, [{"param", [text: "value"]}, initial_page?: true)
       {
         "<div>full page content including layout</div>",
         %{"page" => %Component{state: %{a: 1, b: 2}}}
       }
   """
-  @spec render_page(module, DOM.t()) :: {String.t(), %{atom => Component.t()}}
-  def render_page(page_module, params_dom) do
+  @spec render_page(module, DOM.t(), keyword()) :: {String.t(), %{atom => Component.t()}}
+  def render_page(page_module, params_dom, opts) do
+    initial_page? = opts[:initial_page?] || false
     params = cast_props(params_dom, page_module)
-    {initial_page_component_struct, _server_struct} = init_component(page_module, params)
+    {page_component_struct, _server_struct} = init_component(page_module, params)
 
     page_digest = PageDigestRegistry.lookup(page_module)
 
-    page_component_struct_with_injected_page_digest =
-      Templatable.put_context(
-        initial_page_component_struct,
-        {Hologram.Runtime, :page_digest},
-        page_digest
-      )
+    page_component_struct_with_emitted_context_before_rendering =
+      page_component_struct
+      |> put_initial_page_flag_context(initial_page?)
+      |> put_page_digest_context(page_digest)
+      |> put_page_mounted_flag_context(false)
 
     {initial_html, initial_component_structs} =
       render_page_inside_layout(
         page_module,
         params,
-        page_component_struct_with_injected_page_digest
+        page_component_struct_with_emitted_context_before_rendering
       )
 
-    page_component_struct_with_injected_page_mounted_flag =
-      Templatable.put_context(
-        page_component_struct_with_injected_page_digest,
-        {Hologram.Runtime, :page_mounted?},
-        true
-      )
+    page_component_struct_with_emitted_context_after_rendering =
+      page_component_struct_with_emitted_context_before_rendering
+      |> put_initial_page_flag_context(false)
+      |> put_page_mounted_flag_context(true)
 
     component_structs_with_page_struct =
       Map.put(
         initial_component_structs,
         "page",
-        page_component_struct_with_injected_page_mounted_flag
+        page_component_struct_with_emitted_context_after_rendering
       )
 
     html_with_interpolated_js =
@@ -243,6 +241,30 @@ defmodule Hologram.Template.Renderer do
 
   defp normalize_prop_name({name, value}) do
     {String.to_existing_atom(name), value}
+  end
+
+  defp put_initial_page_flag_context(page_component_struct, initial_page?) do
+    Templatable.put_context(
+      page_component_struct,
+      {Hologram.Runtime, :initial_page?},
+      initial_page?
+    )
+  end
+
+  defp put_page_digest_context(page_component_struct, page_digest) do
+    Templatable.put_context(
+      page_component_struct,
+      {Hologram.Runtime, :page_digest},
+      page_digest
+    )
+  end
+
+  defp put_page_mounted_flag_context(page_component_struct, page_mounted?) do
+    Templatable.put_context(
+      page_component_struct,
+      {Hologram.Runtime, :page_mounted?},
+      page_mounted?
+    )
   end
 
   defp render_attribute(name, value_dom)
