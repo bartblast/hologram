@@ -1,6 +1,8 @@
 defmodule Hologram.UI.Runtime do
   use Hologram.Component
+  alias Hologram.Runtime.AssetManifestCache
 
+  prop :initial_page?, :boolean, from_context: {Hologram.Runtime, :initial_page?}
   prop :page_digest, :string, from_context: {Hologram.Runtime, :page_digest}
   prop :page_mounted?, :boolean, from_context: {Hologram.Runtime, :page_mounted?}
 
@@ -8,6 +10,9 @@ defmodule Hologram.UI.Runtime do
   def template do
     ~H"""
     <script>
+      {%if @initial_page?}
+        {AssetManifestCache.get_manifest_js()}
+      {/if}
       {%if !@page_mounted?}
         {%raw}
           window.__hologramPageMountData__ = (deps) => {
