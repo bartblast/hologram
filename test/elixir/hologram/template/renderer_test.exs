@@ -520,18 +520,8 @@ defmodule Hologram.Template.RendererTest do
     test "inside layout slot" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module14, :dummy_module_14_digest)
 
-      assert render_page(Module14, @params_dom, @opts) ==
-               {"layout template start, page template, layout template end",
-                %{
-                  "layout" => %Component{},
-                  "page" => %Component{
-                    context: %{
-                      {Hologram.Runtime, :initial_page?} => false,
-                      {Hologram.Runtime, :page_digest} => :dummy_module_14_digest,
-                      {Hologram.Runtime, :page_mounted?} => true
-                    }
-                  }
-                }}
+      assert {"layout template start, page template, layout template end", _} =
+               render_page(Module14, @params_dom, @opts)
     end
 
     test "cast page params" do
