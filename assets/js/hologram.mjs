@@ -21,7 +21,7 @@ export default class Hologram {
     Type: Type,
   };
 
-  static assetManifest = null;
+  static assetPathRegistry = null;
   static isInitiated = false;
   static pageModule = null;
   static pageParams = null;
@@ -76,8 +76,8 @@ export default class Hologram {
   }
 
   static #maybeLoadAssetManifest() {
-    if (Hologram.assetManifest === null) {
-      Hologram.assetManifest = window.__hologramAssetManifest__;
+    if (Hologram.assetPathRegistry === null) {
+      Hologram.assetPathRegistry = window.__hologramAssetManifest__;
     }
   }
 
