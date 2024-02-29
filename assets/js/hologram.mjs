@@ -21,6 +21,7 @@ export default class Hologram {
     Type: Type,
   };
 
+  static assetManifest = null;
   static isInitiated = false;
   static pageModule = null;
   static pageParams = null;
@@ -35,10 +36,8 @@ export default class Hologram {
   static mountPage() {
     window.__hologramPageReachableFunctionDefs__(Hologram.deps);
 
-    const mountData = window.__hologramPageMountData__(Hologram.deps);
-    Store.hydrate(mountData.componentStructs);
-    Hologram.pageModule = mountData.pageModule;
-    Hologram.pageParams = mountData.pageParams;
+    Hologram.#processMountData();
+    Hologram.#maybeLoadAssetManifest();
 
     Renderer.renderPage(mountData.pageModule, mountData.pageParams);
   }
@@ -74,5 +73,18 @@ export default class Hologram {
         throw error;
       }
     });
+  }
+
+  static #maybeLoadAssetManifest() {
+    if (Hologram.assetManifest === null) {
+      Hologram.assetManifest = window.__hologramAssetManifest__;
+    }
+  }
+
+  static #processMountData() {
+    const mountData = window.__hologramPageMountData__(Hologram.deps);
+    Store.hydrate(mountData.componentStructs);
+    Hologram.pageModule = mountData.pageModule;
+    Hologram.pageParams = mountData.pageParams;
   }
 }
