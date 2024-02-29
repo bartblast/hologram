@@ -534,19 +534,8 @@ defmodule Hologram.Template.RendererTest do
           {"param_3", [text: "value_3"]}
         ]
 
-      assert render_page(Module19, params_dom, @opts) ==
-               {"",
-                %{
-                  "layout" => %Component{},
-                  "page" => %Component{
-                    context: %{
-                      {Hologram.Runtime, :initial_page?} => false,
-                      {Hologram.Runtime, :page_digest} => :dummy_module_19_digest,
-                      {Hologram.Runtime, :page_mounted?} => true
-                    },
-                    state: %{param_1: "value_1", param_3: "value_3"}
-                  }
-                }}
+      assert {~s'page vars = [param_1: "value_1", param_3: "value_3"]', _} =
+               render_page(Module19, params_dom, @opts)
     end
 
     test "cast layout explicit static props" do

@@ -15,6 +15,6 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module19 do
 
   @impl Page
   def template do
-    ~H""
+    ~H"page vars = {vars |> :maps.to_list() |> :lists.sort() |> inspect()}"
   end
 end
