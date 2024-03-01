@@ -8,7 +8,6 @@ import {
 
 import AssetPathRegistry from "../../assets/js/asset_path_registry.mjs";
 import Type from "../../assets/js/type.mjs";
-import Utils from "../../assets/js/utils.mjs";
 
 before(() => linkModules());
 after(() => unlinkModules());
