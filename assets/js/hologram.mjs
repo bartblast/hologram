@@ -36,7 +36,8 @@ export default class Hologram {
   static mountPage() {
     window.__hologramPageReachableFunctionDefs__(Hologram.deps);
 
-    Hologram.#processMountData();
+    const mountData = Hologram.#loadMountData();
+
     Hologram.#maybeLoadAssetManifest();
 
     Renderer.renderPage(mountData.pageModule, mountData.pageParams);
@@ -81,10 +82,14 @@ export default class Hologram {
     }
   }
 
-  static #processMountData() {
+  static #loadMountData() {
     const mountData = window.__hologramPageMountData__(Hologram.deps);
+
     Store.hydrate(mountData.componentStructs);
+
     Hologram.pageModule = mountData.pageModule;
     Hologram.pageParams = mountData.pageParams;
+
+    return mountData;
   }
 }
