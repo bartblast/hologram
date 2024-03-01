@@ -278,6 +278,7 @@ defmodule Hologram.Compiler do
 
     entry_mfas =
       []
+      |> include_mfas_used_by_asset_path_registry()
       |> include_mfas_used_by_interpreter()
       |> include_mfas_used_by_renderer()
       |> include_mfas_used_by_store()
@@ -358,6 +359,14 @@ defmodule Hologram.Compiler do
       {:unicode, :characters_to_binary, 3}
     )
     |> CallGraph.add_edge({:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1})
+  end
+
+  defp include_mfas_used_by_asset_path_registry(mfas) do
+    mfas ++
+      [
+        {:maps, :get, 3},
+        {:maps, :put, 3}
+      ]
   end
 
   defp include_mfas_used_by_interpreter(mfas) do
