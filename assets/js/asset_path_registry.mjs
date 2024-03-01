@@ -22,12 +22,10 @@ export default class AssetPathRegistry {
   }
 
   static lookup(staticPath) {
-    const defaultAssetPath = Bitstring.merge([Type.bitstring("/"), staticPath]);
-
     return Erlang_Maps["get/3"](
       staticPath,
       AssetPathRegistry.entries,
-      defaultAssetPath,
+      Type.nil(),
     );
   }
 }

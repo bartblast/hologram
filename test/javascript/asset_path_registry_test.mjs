@@ -47,6 +47,6 @@ describe("lookup", () => {
 
   it("entry for static path doesn't exists", () => {
     const result = AssetPathRegistry.lookup(Type.bitstring("static-path-4"));
-    assert.deepStrictEqual(result, Type.bitstring("/static-path-4"));
+    assert.deepStrictEqual(result, Type.nil());
   });
 });
