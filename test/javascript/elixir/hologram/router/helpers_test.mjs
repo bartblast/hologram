@@ -32,6 +32,7 @@ describe("asset_path/1", () => {
     const result = Elixir_Hologram_Router_Helpers["asset_path/1"](
       Type.bitstring("static-path-2"),
     );
+
     assert.deepStrictEqual(result, Type.bitstring("/asset-path-2"));
   });
 
@@ -39,6 +40,7 @@ describe("asset_path/1", () => {
     const result = Elixir_Hologram_Router_Helpers["asset_path/1"](
       Type.bitstring("static-path-4"),
     );
+
     assert.deepStrictEqual(result, Type.bitstring("/static-path-4"));
   });
 });
