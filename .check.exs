@@ -13,7 +13,7 @@
     {:ex_unit, enabled: true},
     {:formatter, env: %{"MIX_ENV" => "test"}},
     {:formatter_js,
-     "assets/node_modules/.bin/prettier 'assets/*.js' 'assets/*.json' 'assets/js/**'  'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern"},
+     "assets/node_modules/.bin/prettier 'assets/*.js' 'assets/*.json' 'assets/js/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern"},
     {:hex_audit, "mix hex.audit"},
     {:mix_audit, env: %{"MIX_ENV" => "test"}},
     {:sobelow, "mix sobelow --config"},

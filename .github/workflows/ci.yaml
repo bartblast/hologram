@@ -103,7 +103,7 @@ jobs:
 
     # Step: Check that the lib JavaScript & JSON code has already been formatted.
     - name: Check lib JavaScript & JSON code formatted
-      run: assets/node_modules/.bin/prettier 'assets/*.js' 'assets/*.json' 'assets/js/**'  'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern
+      run: assets/node_modules/.bin/prettier 'assets/*.js' 'assets/*.json' 'assets/js/**' '' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern
 
     # Step: Check that lib doc and spec coverage are above thresholds (with Doctor).
     - name: Check lib doc and spec coverage
