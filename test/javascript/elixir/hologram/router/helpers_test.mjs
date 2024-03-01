@@ -27,7 +27,7 @@ afterEach(() => {
   AssetPathRegistry.entries = null;
 });
 
-describe.only("asset_path/1", () => {
+describe("asset_path/1", () => {
   it("entry for static path exists", () => {
     const result = Elixir_Hologram_Router_Helpers["asset_path/1"](
       Type.bitstring("static-path-2"),
