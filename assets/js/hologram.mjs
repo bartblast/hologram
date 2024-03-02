@@ -78,12 +78,6 @@ export default class Hologram {
     });
   }
 
-  static #maybeInitAssetPathRegistry() {
-    if (AssetPathRegistry.entries === null) {
-      AssetPathRegistry.hydrate(window.__hologramAssetManifest__);
-    }
-  }
-
   static #loadMountData() {
     const mountData = window.__hologramPageMountData__(Hologram.deps);
 
@@ -93,5 +87,11 @@ export default class Hologram {
     Hologram.pageParams = mountData.pageParams;
 
     return mountData;
+  }
+
+  static #maybeInitAssetPathRegistry() {
+    if (AssetPathRegistry.entries === null) {
+      AssetPathRegistry.hydrate(window.__hologramAssetManifest__);
+    }
   }
 }
