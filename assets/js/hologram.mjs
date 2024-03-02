@@ -1,5 +1,6 @@
 "use strict";
 
+import AssetPathRegistry from "./asset_path_registry.mjs";
 import Bitstring from "./bitstring.mjs";
 import Elixir_Hologram_Router_Helpers from "./elixir/hologram/router/helpers.mjs";
 import Elixir_Kernel from "./elixir/kernel.mjs";
@@ -22,7 +23,6 @@ export default class Hologram {
     Type: Type,
   };
 
-  static assetPathRegistry = null;
   static isInitiated = false;
   static pageModule = null;
   static pageParams = null;
@@ -40,7 +40,7 @@ export default class Hologram {
 
     const mountData = Hologram.#loadMountData();
 
-    Hologram.#maybeLoadAssetManifest();
+    Hologram.#maybeInitAssetPathRegistry();
 
     Renderer.renderPage(mountData.pageModule, mountData.pageParams);
   }
@@ -78,9 +78,9 @@ export default class Hologram {
     });
   }
 
-  static #maybeLoadAssetManifest() {
-    if (Hologram.assetPathRegistry === null) {
-      Hologram.assetPathRegistry = window.__hologramAssetManifest__;
+  static #maybeInitAssetPathRegistry() {
+    if (AssetPathRegistry.entries === null) {
+      AssetPathRegistry.hydrate(window.__hologramAssetManifest__);
     }
   }
 
