@@ -987,6 +987,10 @@ defmodule Hologram.Compiler.CallGraphTest do
       :ok
     end
 
+    test "debug", %{call_graph: call_graph} do
+      reachable(call_graph, [:dupa]) |> IO.inspect()
+    end
+
     test "single vertex argument", %{call_graph: call_graph} do
       assert reachable(call_graph, :vertex_3) == [
                :vertex_15,
@@ -1012,6 +1016,14 @@ defmodule Hologram.Compiler.CallGraphTest do
                :vertex_6,
                :vertex_3
              ]
+    end
+
+    test "vertex that is not in the call graph", %{call_graph: call_graph} do
+      assert reachable(call_graph, :not_in_call_graph) == []
+    end
+
+    test "vertices that are not in the call graph", %{call_graph: call_graph} do
+      assert reachable(call_graph, [:not_in_call_graph_1, :not_in_call_graph_2]) == []
     end
   end
 

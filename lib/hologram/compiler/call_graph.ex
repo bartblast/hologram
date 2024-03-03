@@ -298,13 +298,15 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Lists vertices that are reachable from the given vertex or vertices.
+  Lists vertices that are reachable from the given call graph vertex or vertices.
   """
   @spec reachable(CallGraph.t(), vertex | list(vertex)) :: list(vertex)
   def reachable(call_graph, vertex_or_vertices)
 
   def reachable(%{pid: pid}, vertices) when is_list(vertices) do
-    Agent.get(pid, &Graph.reachable(&1, vertices))
+    pid
+    |> Agent.get(&Graph.reachable(&1, vertices))
+    |> Enum.reject(&(&1 == nil))
   end
 
   def reachable(call_graph, vertex) do
