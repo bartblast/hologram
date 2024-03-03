@@ -27,7 +27,7 @@ export default class Renderer {
 
       case "expression":
         return Bitstring.toText(
-          Elixir_Kernel["to_string/1"](dom.data[1].data[0]),
+          Elixir_String_Chars["to_string/1"](dom.data[1].data[0]),
         );
 
       case "text":
@@ -173,7 +173,7 @@ export default class Renderer {
   static #filterAllowedProps(propsDom, moduleRef) {
     const registeredPropNames = moduleRef["__props__/0"]()
       .data.filter((prop) => Renderer.#contextKey(prop.data[2]) === null)
-      .map((prop) => Elixir_Kernel["to_string/1"](prop.data[0]));
+      .map((prop) => Elixir_String_Chars["to_string/1"](prop.data[0]));
 
     const allowedPropNames = registeredPropNames.concat(Type.bitstring("cid"));
 
@@ -444,7 +444,7 @@ export default class Renderer {
       if (nodeType === "text") {
         return node.data[1];
       } else {
-        return Elixir_Kernel["to_string/1"](node.data[1].data[0]);
+        return Elixir_String_Chars["to_string/1"](node.data[1].data[0]);
       }
     });
 

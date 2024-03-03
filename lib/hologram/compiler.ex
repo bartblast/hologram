@@ -386,7 +386,7 @@ defmodule Hologram.Compiler do
     mfas ++
       [
         {Hologram.Component, :__struct__, 0},
-        {Kernel, :to_string, 1},
+        {String.Chars, :to_string, 1},
         {:erlang, :binary_to_atom, 1},
         {:lists, :flatten, 1},
         {:maps, :from_list, 1},

@@ -131,7 +131,7 @@ export function elixirHologramComponentStruct0() {
   ]);
 }
 
-function elixirKernelToString1(term) {
+function elixirStringCharsToString1(term) {
   switch (term.type) {
     case "atom":
       return Type.bitstring(term.value);
@@ -144,7 +144,7 @@ function elixirKernelToString1(term) {
 
     default: {
       const inspectedTerm = Interpreter.inspect(term);
-      const msg = `elixirKernelToString1() doesn't know how to handle: ${inspectedTerm} of type "${term.type}"`;
+      const msg = `elixirStringCharsToString1() doesn't know how to handle: ${inspectedTerm} of type "${term.type}"`;
       throw new HologramInterpreterError(msg);
     }
   }
@@ -179,13 +179,14 @@ export function linkModules() {
   globalThis.Erlang_Persistent_Term = Erlang_Persistent_Term;
   globalThis.Erlang_Unicode = Erlang_Unicode;
   globalThis.Elixir_Enum = {};
-  globalThis.Elixir_Hologram_Component = {};
   globalThis.Elixir_Kernel = Elixir_Kernel;
 
+  globalThis.Elixir_Hologram_Component = {};
   globalThis.Elixir_Hologram_Component["__struct__/0"] =
     elixirHologramComponentStruct0;
 
-  globalThis.Elixir_Kernel["to_string/1"] = elixirKernelToString1;
+  globalThis.Elixir_String_Chars = {};
+  globalThis.Elixir_String_Chars["to_string/1"] = elixirStringCharsToString1;
 }
 
 export function putComponentState(component, state) {
@@ -204,4 +205,5 @@ export function unlinkModules() {
   delete globalThis.Elixir_Enum;
   delete globalThis.Elixir_Hologram_Component;
   delete globalThis.Elixir_Kernel;
+  delete globalThis.Elixir_String_Chars;
 }
