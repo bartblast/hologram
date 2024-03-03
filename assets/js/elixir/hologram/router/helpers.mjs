@@ -6,9 +6,6 @@ import Type from "../../../type.mjs";
 
 const Elixir_Hologram_Router_Helpers = {
   "asset_path/1": (staticPath) => {
-    console.log("AssetPathRegistry.entries (#3)");
-    console.dir(AssetPathRegistry.entries);
-
     const assetPath = AssetPathRegistry.lookup(staticPath);
 
     return !Type.isNil(assetPath)

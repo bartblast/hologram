@@ -90,14 +90,8 @@ export default class Hologram {
   }
 
   static #maybeInitAssetPathRegistry() {
-    console.log("AssetPathRegistry.entries (#1)");
-    console.dir(AssetPathRegistry.entries);
-
     if (AssetPathRegistry.entries === null) {
       AssetPathRegistry.hydrate(window.__hologramAssetManifest__);
-
-      console.log("AssetPathRegistry.entries (#2)");
-      console.dir(AssetPathRegistry.entries);
     }
   }
 }
