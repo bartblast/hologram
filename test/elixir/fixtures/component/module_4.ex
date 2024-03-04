@@ -1,5 +1,5 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Runtime.Component.Module4 do
+defmodule Hologram.Test.Fixtures.Component.Module4 do
   use Hologram.Component
 
   prop :a, :string

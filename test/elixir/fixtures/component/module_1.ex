@@ -1,4 +1,4 @@
-defmodule Hologram.Test.Fixtures.Runtime.Component.Module1 do
+defmodule Hologram.Test.Fixtures.Component.Module1 do
   use Hologram.Component
 
   @impl Component

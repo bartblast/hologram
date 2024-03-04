@@ -4,10 +4,10 @@ defmodule Hologram.ComponentTest do
 
   alias Hologram.Component
   alias Hologram.Server
-  alias Hologram.Test.Fixtures.Runtime.Component.Module1
-  alias Hologram.Test.Fixtures.Runtime.Component.Module2
-  alias Hologram.Test.Fixtures.Runtime.Component.Module3
-  alias Hologram.Test.Fixtures.Runtime.Component.Module4
+  alias Hologram.Test.Fixtures.Component.Module1
+  alias Hologram.Test.Fixtures.Component.Module2
+  alias Hologram.Test.Fixtures.Component.Module3
+  alias Hologram.Test.Fixtures.Component.Module4
 
   test "__is_hologram_component__/0" do
     assert Module1.__is_hologram_component__()
