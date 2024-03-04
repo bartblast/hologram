@@ -3,6 +3,7 @@ defmodule Hologram.Runtime.ComponentTest do
   import Hologram.Component
 
   alias Hologram.Component
+  alias Hologram.Server
   alias Hologram.Test.Fixtures.Runtime.Component.Module1
   alias Hologram.Test.Fixtures.Runtime.Component.Module2
   alias Hologram.Test.Fixtures.Runtime.Component.Module3
@@ -35,7 +36,7 @@ defmodule Hologram.Runtime.ComponentTest do
 
     test "implementation" do
       assert Module2.init(:props_dummy, build_component_struct(), build_server_struct()) ==
-               {%Component{state: %{overriden: true}}, %Component.Server{}}
+               {%Component{state: %{overriden: true}}, %Server{}}
     end
   end
 

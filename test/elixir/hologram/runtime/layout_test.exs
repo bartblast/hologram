@@ -3,6 +3,7 @@ defmodule Hologram.Runtime.LayoutTest do
   import Hologram.Layout
 
   alias Hologram.Component
+  alias Hologram.Server
   alias Hologram.Test.Fixtures.Runtime.Layout.Module1
   alias Hologram.Test.Fixtures.Runtime.Layout.Module2
   alias Hologram.Test.Fixtures.Runtime.Layout.Module3
@@ -24,7 +25,7 @@ defmodule Hologram.Runtime.LayoutTest do
 
     test "overridden" do
       assert Module2.init(:props_dummy, build_component_struct(), build_server_struct()) ==
-               {%Component{state: %{overriden: true}}, %Component.Server{}}
+               {%Component{state: %{overriden: true}}, %Server{}}
     end
   end
 
