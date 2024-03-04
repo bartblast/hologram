@@ -1,4 +1,4 @@
-defmodule Hologram.Runtime.Application do
+defmodule Hologram.Application do
   use Application
 
   @impl Application

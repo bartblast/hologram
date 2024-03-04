@@ -1,7 +1,7 @@
-defmodule Hologram.Runtime.ApplicationTest do
+defmodule Hologram.ApplicationTest do
   use Hologram.Test.BasicCase, async: false
 
-  import Hologram.Runtime.Application
+  import Hologram.Application
   import Hologram.Test.Stubs
   import Mox
 
