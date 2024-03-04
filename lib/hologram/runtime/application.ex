@@ -6,7 +6,7 @@ defmodule Hologram.Runtime.Application do
     children = [
       Hologram.Router.PageModuleResolver,
       Hologram.Runtime.AssetPathRegistry,
-      Hologram.Runtime.AssetManifestCache,
+      Hologram.Assets.ManifestCache,
       Hologram.Runtime.PageDigestRegistry
     ]
 

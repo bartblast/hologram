@@ -1,4 +1,4 @@
-defmodule Hologram.Runtime.AssetManifestCache do
+defmodule Hologram.Assets.ManifestCache do
   use GenServer
   alias Hologram.Runtime.AssetPathRegistry
 

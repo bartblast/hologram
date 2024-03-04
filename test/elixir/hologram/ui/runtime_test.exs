@@ -4,7 +4,7 @@ defmodule Hologram.UI.RuntimeTest do
   import Hologram.Test.Stubs
   import Mox
 
-  alias Hologram.Runtime.AssetManifestCache
+  alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Runtime.AssetPathRegistry
   alias Hologram.UI.Runtime
 

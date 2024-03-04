@@ -1,5 +1,5 @@
+alias Hologram.Assets.ManifestCache, as: AssetManifestCache
 alias Hologram.Router.PageModuleResolver
-alias Hologram.Runtime.AssetManifestCache
 alias Hologram.Runtime.AssetPathRegistry
 alias Hologram.Runtime.PageDigestRegistry
 

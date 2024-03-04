@@ -1,11 +1,11 @@
-defmodule Hologram.Runtime.AssetManifestCacheTest do
+defmodule Hologram.Assets.ManifestCacheTest do
   use Hologram.Test.BasicCase, async: false
 
-  import Hologram.Runtime.AssetManifestCache
+  import Hologram.Assets.ManifestCache
   import Hologram.Test.Stubs
   import Mox
 
-  alias Hologram.Runtime.AssetManifestCache
+  alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Runtime.AssetPathRegistry
 
   use_module_stub :asset_manifest_cache

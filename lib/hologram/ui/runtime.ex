@@ -1,6 +1,6 @@
 defmodule Hologram.UI.Runtime do
   use Hologram.Component
-  alias Hologram.Runtime.AssetManifestCache
+  alias Hologram.Assets.ManifestCache, as: AssetManifestCache
 
   prop :initial_page?, :boolean, from_context: {Hologram.Runtime, :initial_page?}
   prop :page_digest, :string, from_context: {Hologram.Runtime, :page_digest}
