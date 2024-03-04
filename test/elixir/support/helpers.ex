@@ -41,14 +41,6 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
-  Builds empty server struct.
-  """
-  @spec build_server_struct() :: Server.t()
-  def build_server_struct do
-    %Server{}
-  end
-
-  @doc """
   Builds an error message for ArgumentError.
   """
   @spec build_errors_found_msg(integer(), String.t()) :: String.t()
@@ -58,6 +50,14 @@ defmodule Hologram.Test.Helpers do
     suffix = Enum.at(["st", "nd", "rd"], suffix_idx, "th")
 
     "errors were found at the given arguments:\n\n  * #{arg_idx}#{suffix} argument: #{msg}\n"
+  end
+
+  @doc """
+  Builds empty server struct.
+  """
+  @spec build_server_struct() :: Server.t()
+  def build_server_struct do
+    %Server{}
   end
 
   @doc """
