@@ -34,7 +34,7 @@ defmodule Hologram.Runtime.ComponentTest do
     end
 
     test "implementation" do
-      assert Module2.init(:props_dummy, build_component_struct(), build_component_server()) ==
+      assert Module2.init(:props_dummy, build_component_struct(), build_server_struct()) ==
                {%Component{state: %{overriden: true}}, %Component.Server{}}
     end
   end

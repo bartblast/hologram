@@ -43,8 +43,8 @@ defmodule Hologram.Test.Helpers do
   @doc """
   Builds empty server struct.
   """
-  @spec build_component_server() :: Server.t()
-  def build_component_server do
+  @spec build_server_struct() :: Server.t()
+  def build_server_struct do
     %Server{}
   end
 
