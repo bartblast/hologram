@@ -1,4 +1,4 @@
-defmodule Hologram.Runtime.AssetPathRegistry do
+defmodule Hologram.Assets.PathRegistry do
   use GenServer
 
   alias Hologram.Commons.ETS

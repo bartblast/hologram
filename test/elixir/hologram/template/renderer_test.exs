@@ -6,9 +6,9 @@ defmodule Hologram.Template.RendererTest do
   import Mox
 
   alias Hologram.Assets.ManifestCache, as: AssetManifestCache
+  alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
   alias Hologram.Component
-  alias Hologram.Runtime.AssetPathRegistry
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
   alias Hologram.Test.Fixtures.Template.Renderer.Module10
   alias Hologram.Test.Fixtures.Template.Renderer.Module14

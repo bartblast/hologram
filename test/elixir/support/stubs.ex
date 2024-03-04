@@ -3,9 +3,9 @@ defmodule Hologram.Test.Stubs do
   import Hologram.Test.Helpers, only: [random_atom: 0, random_module: 0, random_string: 0]
 
   alias Hologram.Assets.ManifestCache, as: AssetManifestCache
+  alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.Reflection
   alias Hologram.Router.PageModuleResolver
-  alias Hologram.Runtime.AssetPathRegistry
   alias Hologram.Runtime.PageDigestRegistry
 
   defmacro use_module_stub(:asset_manifest_cache) do

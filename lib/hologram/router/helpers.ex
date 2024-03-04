@@ -1,5 +1,5 @@
 defmodule Hologram.Router.Helpers do
-  alias Hologram.Runtime.AssetPathRegistry
+  alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
 
   @doc """
   Retrieves the asset path, including the digest, for the specified static file within the static directory.

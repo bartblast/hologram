@@ -1,6 +1,6 @@
 alias Hologram.Assets.ManifestCache, as: AssetManifestCache
+alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
 alias Hologram.Router.PageModuleResolver
-alias Hologram.Runtime.AssetPathRegistry
 alias Hologram.Runtime.PageDigestRegistry
 
 # Create tmp dir if it doesn't exist yet.

@@ -5,7 +5,7 @@ defmodule Hologram.Router.HelpersTest do
   import Hologram.Test.Stubs
   import Mox
 
-  alias Hologram.Runtime.AssetPathRegistry
+  alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
 
   use_module_stub :asset_path_registry
 

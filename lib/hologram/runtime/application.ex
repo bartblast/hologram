@@ -5,7 +5,7 @@ defmodule Hologram.Runtime.Application do
   def start(_type, _args) do
     children = [
       Hologram.Router.PageModuleResolver,
-      Hologram.Runtime.AssetPathRegistry,
+      Hologram.Assets.PathRegistry,
       Hologram.Assets.ManifestCache,
       Hologram.Runtime.PageDigestRegistry
     ]

@@ -1,12 +1,12 @@
-defmodule Hologram.Runtime.AssetPathRegistryTest do
+defmodule Hologram.Assets.PathRegistryTest do
   use Hologram.Test.BasicCase, async: false
 
-  import Hologram.Runtime.AssetPathRegistry
+  import Hologram.Assets.PathRegistry
   import Hologram.Test.Stubs
   import Mox
 
   alias Hologram.Commons.ETS
-  alias Hologram.Runtime.AssetPathRegistry
+  alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
 
   use_module_stub :asset_path_registry
 
