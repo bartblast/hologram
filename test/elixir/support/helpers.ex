@@ -1,6 +1,7 @@
 defmodule Hologram.Test.Helpers do
   import Hologram.Template, only: [sigil_H: 2]
 
+  alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Commons.ETS
   alias Hologram.Commons.PLT
   alias Hologram.Commons.ProcessUtils
@@ -9,7 +10,6 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Component
-  alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Server
   alias Hologram.Template.Parser
   alias Hologram.Template.Renderer

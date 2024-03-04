@@ -5,8 +5,8 @@ defmodule Hologram.Assets.PageDigestRegistryTest do
   import Hologram.Test.Stubs
   import Mox
 
-  alias Hologram.Commons.ETS
   alias Hologram.Assets.PageDigestRegistry
+  alias Hologram.Commons.ETS
 
   use_module_stub :page_digest_registry
 
