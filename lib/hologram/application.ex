@@ -7,7 +7,7 @@ defmodule Hologram.Application do
       Hologram.Router.PageModuleResolver,
       Hologram.Assets.PathRegistry,
       Hologram.Assets.ManifestCache,
-      Hologram.Runtime.PageDigestRegistry
+      Hologram.Assets.PageDigestRegistry
     ]
 
     opts = [strategy: :one_for_one, name: Hologram.Supervisor]

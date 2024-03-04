@@ -9,7 +9,7 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
   alias Hologram.Component
-  alias Hologram.Runtime.PageDigestRegistry
+  alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Server
   alias Hologram.Template.Parser
   alias Hologram.Template.Renderer

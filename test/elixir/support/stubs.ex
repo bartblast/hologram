@@ -6,7 +6,7 @@ defmodule Hologram.Test.Stubs do
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.Reflection
   alias Hologram.Router.PageModuleResolver
-  alias Hologram.Runtime.PageDigestRegistry
+  alias Hologram.Assets.PageDigestRegistry
 
   defmacro use_module_stub(:asset_manifest_cache) do
     random_module = random_module()

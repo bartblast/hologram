@@ -1,12 +1,12 @@
-defmodule Hologram.Runtime.PageDigestRegistryTest do
+defmodule Hologram.Assets.PageDigestRegistryTest do
   use Hologram.Test.BasicCase, async: false
 
-  import Hologram.Runtime.PageDigestRegistry
+  import Hologram.Assets.PageDigestRegistry
   import Hologram.Test.Stubs
   import Mox
 
   alias Hologram.Commons.ETS
-  alias Hologram.Runtime.PageDigestRegistry
+  alias Hologram.Assets.PageDigestRegistry
 
   use_module_stub :page_digest_registry
 
