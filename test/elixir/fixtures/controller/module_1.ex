@@ -1,4 +1,4 @@
-defmodule Hologram.Test.Fixtures.Runtime.Controller.Module1 do
+defmodule Hologram.Test.Fixtures.Controller.Module1 do
   use Hologram.Page
 
   route "/hologram-test-fixtures-runtime-controller-module1/:aaa/ccc/:bbb"

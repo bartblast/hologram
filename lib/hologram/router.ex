@@ -2,7 +2,7 @@ defmodule Hologram.Router do
   @behaviour Plug
 
   alias Hologram.Router.PageModuleResolver
-  alias Hologram.Runtime.Controller
+  alias Hologram.Controller
   alias Plug.Conn
 
   @impl Plug

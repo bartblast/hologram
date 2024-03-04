@@ -1,12 +1,12 @@
-defmodule Hologram.Runtime.ControllerTest do
+defmodule Hologram.ControllerTest do
   use Hologram.Test.BasicCase, async: false
 
-  import Hologram.Runtime.Controller
+  import Hologram.Controller
   import Hologram.Test.Stubs
   import Mox
 
   alias Hologram.Commons.ETS
-  alias Hologram.Test.Fixtures.Runtime.Controller.Module1
+  alias Hologram.Test.Fixtures.Controller.Module1
 
   use_module_stub :page_digest_registry
 
