@@ -3,11 +3,11 @@ defmodule Hologram.PageTest do
 
   alias Hologram.Component
   alias Hologram.Server
-  alias Hologram.Test.Fixtures.Runtime.Page.Module1
-  alias Hologram.Test.Fixtures.Runtime.Page.Module2
-  alias Hologram.Test.Fixtures.Runtime.Page.Module3
-  alias Hologram.Test.Fixtures.Runtime.Page.Module4
-  alias Hologram.Test.Fixtures.Runtime.Page.Module5
+  alias Hologram.Test.Fixtures.Page.Module1
+  alias Hologram.Test.Fixtures.Page.Module2
+  alias Hologram.Test.Fixtures.Page.Module3
+  alias Hologram.Test.Fixtures.Page.Module4
+  alias Hologram.Test.Fixtures.Page.Module5
 
   test "__is_hologram_page__/0" do
     assert Module1.__is_hologram_page__()
