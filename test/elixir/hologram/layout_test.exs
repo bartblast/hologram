@@ -1,4 +1,4 @@
-defmodule Hologram.Runtime.LayoutTest do
+defmodule Hologram.LayoutTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Layout
 

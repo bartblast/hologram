@@ -1,4 +1,4 @@
-defmodule Hologram.Runtime.PageTest do
+defmodule Hologram.PageTest do
   use Hologram.Test.BasicCase, async: true
 
   alias Hologram.Component
