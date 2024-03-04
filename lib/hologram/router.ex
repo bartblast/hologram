@@ -1,8 +1,8 @@
 defmodule Hologram.Router do
   @behaviour Plug
 
-  alias Hologram.Router.PageModuleResolver
   alias Hologram.Controller
+  alias Hologram.Router.PageModuleResolver
   alias Plug.Conn
 
   @impl Plug
