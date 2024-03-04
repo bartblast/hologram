@@ -2,9 +2,9 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Commons.StringUtils
   alias Hologram.Compiler.Encoder
   alias Hologram.Component
-  alias Hologram.Component.Server
   alias Hologram.Runtime.PageDigestRegistry
   alias Hologram.Runtime.Templatable
+  alias Hologram.Server
   alias Hologram.Template.DOM
 
   # https://html.spec.whatwg.org/multipage/syntax.html#void-elements

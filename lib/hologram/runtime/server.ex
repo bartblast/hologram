@@ -1,4 +1,4 @@
-defmodule Hologram.Component.Server do
+defmodule Hologram.Server do
   alias Hologram.Operation
 
   defstruct cookies: %{}, next_action: nil, session: %{}
