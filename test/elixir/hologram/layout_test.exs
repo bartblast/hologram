@@ -4,10 +4,10 @@ defmodule Hologram.LayoutTest do
 
   alias Hologram.Component
   alias Hologram.Server
-  alias Hologram.Test.Fixtures.Runtime.Layout.Module1
-  alias Hologram.Test.Fixtures.Runtime.Layout.Module2
-  alias Hologram.Test.Fixtures.Runtime.Layout.Module3
-  alias Hologram.Test.Fixtures.Runtime.Layout.Module4
+  alias Hologram.Test.Fixtures.Layout.Module1
+  alias Hologram.Test.Fixtures.Layout.Module2
+  alias Hologram.Test.Fixtures.Layout.Module3
+  alias Hologram.Test.Fixtures.Layout.Module4
 
   test "__is_hologram_layout__/0" do
     assert Module1.__is_hologram_layout__()
