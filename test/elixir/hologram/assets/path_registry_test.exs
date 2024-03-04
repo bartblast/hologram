@@ -5,8 +5,8 @@ defmodule Hologram.Assets.PathRegistryTest do
   import Hologram.Test.Stubs
   import Mox
 
-  alias Hologram.Commons.ETS
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
+  alias Hologram.Commons.ETS
 
   use_module_stub :asset_path_registry
 
