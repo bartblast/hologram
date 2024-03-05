@@ -59,14 +59,4 @@ defmodule Hologram.Runtime.Templatable do
   def put_state(%{state: state} = component, key, value) do
     %{component | state: Map.put(state, key, value)}
   end
-
-  @doc """
-  Returns the AST of code that registers __props__ module attribute.
-  """
-  @spec register_props_accumulator() :: AST.t()
-  def register_props_accumulator do
-    quote do
-      Module.register_attribute(__MODULE__, :__props__, accumulate: true)
-    end
-  end
 end

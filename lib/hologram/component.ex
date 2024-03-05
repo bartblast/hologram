@@ -47,7 +47,7 @@ defmodule Hologram.Component do
         defoverridable init: 3
       end,
       maybe_define_template_fun(template_path, __MODULE__),
-      Templatable.register_props_accumulator()
+      register_props_accumulator()
     ]
   end
 
@@ -84,6 +84,16 @@ defmodule Hologram.Component do
           sigil_H(unquote(markup), [])
         end
       end
+    end
+  end
+
+  @doc """
+  Returns the AST of code that registers __props__ module attribute.
+  """
+  @spec register_props_accumulator() :: AST.t()
+  def register_props_accumulator do
+    quote do
+      Module.register_attribute(__MODULE__, :__props__, accumulate: true)
     end
   end
 end
