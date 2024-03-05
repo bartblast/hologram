@@ -13,7 +13,6 @@ defmodule Hologram.Compiler.ReflectionTest do
   @alias_segs_1 [:Hologram, :Test, :Fixtures, :Compiler, :Reflection, :Module1]
   @module_1 Hologram.Test.Fixtures.Compiler.Reflection.Module1
   @module_2 Hologram.Test.Fixtures.Compiler.Reflection.Module2
-  @module_4 Hologram.Test.Fixtures.Compiler.Reflection.Module4
   @module_6 Hologram.Test.Fixtures.Compiler.Reflection.Module6
 
   describe "app_path/1" do
@@ -74,16 +73,6 @@ defmodule Hologram.Compiler.ReflectionTest do
 
     assert {:apply, 2} in result
     refute {:def, 2} in result
-  end
-
-  describe "has_function?/3" do
-    test "returns true if the module has a function with the given name and arity" do
-      assert Reflection.has_function?(@module_4, :test_fun, 2)
-    end
-
-    test "returns false if the module doesn't have a function with the given name and arity" do
-      refute Reflection.has_function?(@module_4, :test_fun, 3)
-    end
   end
 
   describe "has_macro?/3" do

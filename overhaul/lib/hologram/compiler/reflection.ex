@@ -52,14 +52,6 @@ defmodule Hologram.Compiler.Reflection do
     |> File.exists?()
   end
 
-  # Kernel.function_exported?/3 does not load the module in case it is not loaded
-  # (in such cases it would return false even when the module has the given function).
-  def has_function?(module, function, arity) do
-    module.module_info(:exports)
-    |> Keyword.get_values(function)
-    |> Enum.member?(arity)
-  end
-
   # Kernel.macro_exported?/3 does not load the module in case it is not loaded
   # (in such cases it would return false even when the module has the given macro).
   def has_macro?(module, function, arity) do

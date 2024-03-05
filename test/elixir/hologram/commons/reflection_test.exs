@@ -5,6 +5,7 @@ defmodule Hologram.Commons.ReflectionTest do
   alias Hologram.Test.Fixtures.Commons.Reflection.Module1
   alias Hologram.Test.Fixtures.Commons.Reflection.Module2
   alias Hologram.Test.Fixtures.Commons.Reflection.Module3
+  alias Hologram.Test.Fixtures.Commons.Reflection.Module4
 
   describe "alias?/1" do
     test "atom which is an alias" do
@@ -91,6 +92,16 @@ defmodule Hologram.Commons.ReflectionTest do
 
     test "non-atom" do
       refute erlang_module?(123)
+    end
+  end
+
+  describe "has_function?/3" do
+    test "returns true if the module has a function with the given name and arity" do
+      assert has_function?(Module4, :test_fun, 2)
+    end
+
+    test "returns false if the module doesn't have a function with the given name and arity" do
+      refute has_function?(Module4, :test_fun, 3)
     end
   end
 

@@ -135,6 +135,14 @@ defmodule Hologram.Commons.Reflection do
 
   def erlang_module?(_term), do: false
 
+  # Kernel.function_exported?/3 does not load the module in case it is not loaded
+  # (in such cases it would return false even when the module has the given function).
+  def has_function?(module, function, arity) do
+    module.module_info(:exports)
+    |> Keyword.get_values(function)
+    |> Enum.member?(arity)
+  end
+
   @doc """
   Lists all OTP applications, both loaded and not loaded.
   """
