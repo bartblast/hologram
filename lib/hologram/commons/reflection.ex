@@ -143,7 +143,8 @@ defmodule Hologram.Commons.Reflection do
   """
   @spec has_function?(module, atom, integer) :: boolean
   def has_function?(module, function, arity) do
-    module.module_info(:exports)
+    :exports
+    |> module.module_info()
     |> Keyword.get_values(function)
     |> Enum.member?(arity)
   end
