@@ -4,8 +4,7 @@
   ignore_modules: [
     Hologram.Component,
     Hologram.Layout,
-    Hologram.Page,
-    Hologram.Runtime.Templatable
+    Hologram.Page
   ],
   ignore_paths: [~r(^test/*)],
   min_module_doc_coverage: 100,

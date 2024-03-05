@@ -1,13 +1,13 @@
 exported_locals_without_parens = [
+  # Hologram.Component
+  prop: 2,
+  prop: 3,
+
   # Hologram.Page
   layout: 1,
   layout: 2,
   param: 1,
-  route: 1,
-
-  # Hologram.Runtime.Templatable
-  prop: 2,
-  prop: 3
+  route: 1
 ]
 
 test_locals_without_parens = [

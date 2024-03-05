@@ -1,7 +1,17 @@
 defmodule Hologram.Page do
-  use Hologram.Runtime.Templatable
   alias Hologram.Component
   alias Hologram.Page
+
+  @doc """
+  Initializes component and server structs (when run on the server).
+  """
+  @callback init(%{atom => any}, Component.t(), Server.t()) ::
+              {Component.t(), Server.t()} | Component.t() | Server.t()
+
+  @doc """
+  Returns a template in the form of an anonymous function that given variable bindings returns a DOM.
+  """
+  @callback template() :: (map -> list)
 
   defmacro __using__(_opts) do
     template_path = Component.colocated_template_path(__CALLER__.file)
@@ -17,9 +27,9 @@ defmodule Hologram.Page do
 
         @before_compile Component
 
-        @behaviour Page
-
         @external_resource unquote(template_path)
+
+        @behaviour Page
 
         @doc """
         Returns true to indicate that the callee module is a page module (has "use Hologram.Page" directive).
