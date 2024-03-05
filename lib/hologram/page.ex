@@ -1,9 +1,10 @@
 defmodule Hologram.Page do
   use Hologram.Runtime.Templatable
+  alias Hologram.Component
   alias Hologram.Page
 
   defmacro __using__(_opts) do
-    template_path = Templatable.colocated_template_path(__CALLER__.file)
+    template_path = Component.colocated_template_path(__CALLER__.file)
 
     [
       quote do

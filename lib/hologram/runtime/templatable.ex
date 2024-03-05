@@ -31,14 +31,6 @@ defmodule Hologram.Runtime.Templatable do
   end
 
   @doc """
-  Resolves the colocated template path for the given templatable module (page or component) given its file path.
-  """
-  @spec colocated_template_path(String.t()) :: String.t()
-  def colocated_template_path(templatable_file) do
-    Path.rootname(templatable_file) <> ".holo"
-  end
-
-  @doc """
   Returns the AST of template/0 function definition that uses markup fetched from the give template file.
   If the given template file doesn't exist nil is returned.
   """

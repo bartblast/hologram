@@ -5,11 +5,6 @@ defmodule Hologram.Runtime.TemplatableTest do
   alias Hologram.Component
   alias Hologram.Runtime.Templatable
 
-  test "colocated_template_path/1" do
-    assert colocated_template_path("/my_dir_1/my_dir_2/my_dir_3/my_file.ex") ==
-             "/my_dir_1/my_dir_2/my_dir_3/my_file.holo"
-  end
-
   describe "maybe_define_template_fun/1" do
     test "valid template path" do
       template_path = "#{@fixtures_path}/template/template_1.holo"

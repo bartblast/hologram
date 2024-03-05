@@ -17,6 +17,11 @@ defmodule Hologram.ComponentTest do
     assert Module4.__props__() == [{:b, :integer, [opt_1: 111, opt_2: 222]}, {:a, :string, []}]
   end
 
+  test "colocated_template_path/1" do
+    assert colocated_template_path("/my_dir_1/my_dir_2/my_dir_3/my_file.ex") ==
+             "/my_dir_1/my_dir_2/my_dir_3/my_file.holo"
+  end
+
   describe "init/2" do
     test "no default implementation" do
       refute function_exported?(Module1, :init, 2)

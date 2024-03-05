@@ -13,7 +13,7 @@ defmodule Hologram.Component do
         }
 
   defmacro __using__(_opts) do
-    template_path = Templatable.colocated_template_path(__CALLER__.file)
+    template_path = colocated_template_path(__CALLER__.file)
 
     [
       quote do
@@ -49,5 +49,13 @@ defmodule Hologram.Component do
       Templatable.maybe_define_template_fun(template_path, __MODULE__),
       Templatable.register_props_accumulator()
     ]
+  end
+
+  @doc """
+  Resolves the colocated template path for the given component module given its file path.
+  """
+  @spec colocated_template_path(String.t()) :: String.t()
+  def colocated_template_path(templatable_file) do
+    Path.rootname(templatable_file) <> ".holo"
   end
 end
