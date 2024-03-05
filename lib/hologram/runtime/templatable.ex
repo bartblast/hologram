@@ -3,7 +3,7 @@ defmodule Hologram.Runtime.Templatable do
   alias Hologram.Component
   alias Hologram.Server
 
-  defmacro __using__(opts \\ []) do
+  defmacro __using__(_opts \\ []) do
     [
       quote do
         alias Hologram.Runtime.Templatable
@@ -13,7 +13,8 @@ defmodule Hologram.Runtime.Templatable do
         """
         @callback template() :: (map -> list)
       end,
-      if opts[:include_init_callback?] do
+      # if opts[:include_init_callback?] do
+      if true do
         quote do
           @doc """
           Initializes component and server structs (when run on the server).
@@ -36,7 +37,7 @@ defmodule Hologram.Runtime.Templatable do
   end
 
   @doc """
-  Resolves the colocated template path for the given templatable module (page, layout, component) given its file path.
+  Resolves the colocated template path for the given templatable module (page or component) given its file path.
   """
   @spec colocated_template_path(String.t()) :: String.t()
   def colocated_template_path(templatable_file) do

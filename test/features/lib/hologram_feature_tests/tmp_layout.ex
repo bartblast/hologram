@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.TmpLayout do
-  use Hologram.Layout
+  use Hologram.Component
   alias Hologram.UI.Runtime
 
   def template do

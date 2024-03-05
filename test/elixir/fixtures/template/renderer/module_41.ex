@@ -1,9 +1,9 @@
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module41 do
-  use Hologram.Layout
+  use Hologram.Component
 
   prop :aaa, :integer, from_context: {:my_scope, :my_key}
 
-  @impl Layout
+  @impl Component
   def template do
     ~H"""
     prop_aaa = {@aaa}

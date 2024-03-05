@@ -40,6 +40,11 @@ defmodule Hologram.Component do
         """
         @spec __is_hologram_component__() :: boolean
         def __is_hologram_component__, do: true
+
+        @impl Component
+        def init(_props, component, server), do: {component, server}
+
+        defoverridable init: 3
       end,
       Templatable.maybe_define_template_fun(template_path, __MODULE__),
       Templatable.register_props_accumulator()

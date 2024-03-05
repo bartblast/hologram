@@ -1,7 +1,7 @@
 defmodule Hologram.Test.Fixtures.Mix.Tasks.Compile.Module2 do
-  use Hologram.Layout
+  use Hologram.Component
 
-  @impl Layout
+  @impl Component
   def template do
     ~H""
   end

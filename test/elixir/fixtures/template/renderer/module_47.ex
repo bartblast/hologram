@@ -1,8 +1,8 @@
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module47 do
-  use Hologram.Layout
+  use Hologram.Component
   alias Hologram.Test.Fixtures.Template.Renderer.Module38
 
-  @impl Layout
+  @impl Component
   def template do
     ~H"""
     <Module38 />

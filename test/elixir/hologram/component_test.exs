@@ -18,11 +18,11 @@ defmodule Hologram.ComponentTest do
   end
 
   describe "init/1" do
-    test "no default" do
+    test "no default implementation" do
       refute function_exported?(Module1, :init, 2)
     end
 
-    test "implementation" do
+    test "overridden implementation" do
       assert Module2.init(:props_dummy, build_component_struct()) == %Component{
                state: %{overriden: true}
              }
@@ -30,11 +30,11 @@ defmodule Hologram.ComponentTest do
   end
 
   describe "init/3" do
-    test "no default" do
-      refute function_exported?(Module1, :init, 3)
+    test "default implementation" do
+      assert function_exported?(Module1, :init, 3)
     end
 
-    test "implementation" do
+    test "overridden implementation" do
       assert Module2.init(:props_dummy, build_component_struct(), build_server_struct()) ==
                {%Component{state: %{overriden: true}}, %Server{}}
     end

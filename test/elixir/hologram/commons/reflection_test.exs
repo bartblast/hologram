@@ -5,7 +5,6 @@ defmodule Hologram.Commons.ReflectionTest do
   alias Hologram.Test.Fixtures.Commons.Reflection.Module1
   alias Hologram.Test.Fixtures.Commons.Reflection.Module2
   alias Hologram.Test.Fixtures.Commons.Reflection.Module3
-  alias Hologram.Test.Fixtures.Commons.Reflection.Module4
 
   describe "alias?/1" do
     test "atom which is an alias" do
@@ -92,20 +91,6 @@ defmodule Hologram.Commons.ReflectionTest do
 
     test "non-atom" do
       refute erlang_module?(123)
-    end
-  end
-
-  describe "layout?" do
-    test "is a layout module" do
-      assert layout?(Module4)
-    end
-
-    test "is not a module" do
-      refute layout?(123)
-    end
-
-    test "is not a layout module" do
-      refute layout?(__MODULE__)
     end
   end
 

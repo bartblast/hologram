@@ -136,23 +136,6 @@ defmodule Hologram.Commons.Reflection do
   def erlang_module?(_term), do: false
 
   @doc """
-  Returns true if the given term is a layout module (a module that has a "use Hologram.Layout" directive)
-  Otherwise false is returned.
-
-  ## Examples
-
-      iex> layout?(MyLayout)
-      true
-
-      iex> layout?(Hologram.Commons.Reflection)
-      false
-  """
-  @spec layout?(term) :: boolean
-  def layout?(term) do
-    alias?(term) && {:__is_hologram_layout__, 0} in term.__info__(:functions)
-  end
-
-  @doc """
   Lists all OTP applications, both loaded and not loaded.
   """
   @spec list_all_otp_apps() :: list(atom)
