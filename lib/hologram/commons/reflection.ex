@@ -135,8 +135,13 @@ defmodule Hologram.Commons.Reflection do
 
   def erlang_module?(_term), do: false
 
-  # Kernel.function_exported?/3 does not load the module in case it is not loaded
-  # (in such cases it would return false even when the module has the given function).
+  @doc """
+  Returns true if module contains a public function with the given arity, otherwise false.
+
+  Kernel.function_exported?/3 does not load the module in case it is not loaded
+  (in such cases it would return false even when the module has the given function).
+  """
+  @spec has_function?(module, atom, integer) :: boolean
   def has_function?(module, function, arity) do
     module.module_info(:exports)
     |> Keyword.get_values(function)
