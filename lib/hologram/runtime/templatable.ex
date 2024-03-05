@@ -20,16 +20,6 @@ defmodule Hologram.Runtime.Templatable do
     end
   end
 
-  defmacro __before_compile__(_env) do
-    quote do
-      @doc """
-      Returns the list of property definitions for the compiled component.
-      """
-      @spec __props__() :: list({atom, atom, keyword})
-      def __props__, do: @__props__
-    end
-  end
-
   @doc """
   Accumulates the given property definition in __props__ module attribute.
   """

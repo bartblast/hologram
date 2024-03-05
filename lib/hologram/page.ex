@@ -15,7 +15,7 @@ defmodule Hologram.Page do
 
         alias Hologram.Page
 
-        @before_compile Templatable
+        @before_compile Component
 
         @behaviour Page
 

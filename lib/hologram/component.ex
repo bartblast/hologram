@@ -24,7 +24,7 @@ defmodule Hologram.Component do
 
         alias Hologram.Component
 
-        @before_compile Templatable
+        @before_compile Component
 
         @behaviour Component
 
@@ -49,6 +49,16 @@ defmodule Hologram.Component do
       maybe_define_template_fun(template_path, __MODULE__),
       Templatable.register_props_accumulator()
     ]
+  end
+
+  defmacro __before_compile__(_env) do
+    quote do
+      @doc """
+      Returns the list of property definitions for the compiled component.
+      """
+      @spec __props__() :: list({atom, atom, keyword})
+      def __props__, do: @__props__
+    end
   end
 
   @doc """
