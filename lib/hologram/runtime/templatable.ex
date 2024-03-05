@@ -20,16 +20,6 @@ defmodule Hologram.Runtime.Templatable do
   end
 
   @doc """
-  Accumulates the given property definition in __props__ module attribute.
-  """
-  @spec prop(atom, atom, keyword) :: Macro.t()
-  defmacro prop(name, type, opts \\ []) do
-    quote do
-      Module.put_attribute(__MODULE__, :__props__, {unquote(name), unquote(type), unquote(opts)})
-    end
-  end
-
-  @doc """
   Puts the given key-value pair to the context.
   """
   @spec put_context(Component.t(), any, any) :: Component.t()

@@ -20,7 +20,7 @@ defmodule Hologram.Component do
         import Hologram.Component
         import Hologram.Router.Helpers, only: [asset_path: 1]
         import Hologram.Template, only: [sigil_H: 2]
-        import Templatable, only: [prop: 2, prop: 3, put_context: 3, put_state: 2, put_state: 3]
+        import Templatable, only: [put_context: 3, put_state: 2, put_state: 3]
 
         alias Hologram.Component
 
@@ -84,6 +84,16 @@ defmodule Hologram.Component do
           sigil_H(unquote(markup), [])
         end
       end
+    end
+  end
+
+  @doc """
+  Accumulates the given property definition in __props__ module attribute.
+  """
+  @spec prop(atom, atom, keyword) :: Macro.t()
+  defmacro prop(name, type, opts \\ []) do
+    quote do
+      Module.put_attribute(__MODULE__, :__props__, {unquote(name), unquote(type), unquote(opts)})
     end
   end
 
