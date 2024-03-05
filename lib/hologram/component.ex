@@ -1,5 +1,5 @@
 defmodule Hologram.Component do
-  use Hologram.Runtime.Templatable, include_init_callback?: false
+  use Hologram.Runtime.Templatable
 
   alias Hologram.Component
   alias Hologram.Operation
