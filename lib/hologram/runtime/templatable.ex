@@ -1,5 +1,4 @@
 defmodule Hologram.Runtime.Templatable do
-  alias Hologram.Compiler.AST
   alias Hologram.Component
   alias Hologram.Server
 
