@@ -4,7 +4,6 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Commons.StringUtils
   alias Hologram.Compiler.Encoder
   alias Hologram.Component
-  alias Hologram.Runtime.Templatable
   alias Hologram.Server
   alias Hologram.Template.DOM
 
@@ -245,7 +244,7 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp put_initial_page_flag_context(page_component_struct, initial_page?) do
-    Templatable.put_context(
+    Component.put_context(
       page_component_struct,
       {Hologram.Runtime, :initial_page?},
       initial_page?
@@ -253,7 +252,7 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp put_page_digest_context(page_component_struct, page_digest) do
-    Templatable.put_context(
+    Component.put_context(
       page_component_struct,
       {Hologram.Runtime, :page_digest},
       page_digest
@@ -261,7 +260,7 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp put_page_mounted_flag_context(page_component_struct, page_mounted?) do
-    Templatable.put_context(
+    Component.put_context(
       page_component_struct,
       {Hologram.Runtime, :page_mounted?},
       page_mounted?

@@ -20,7 +20,6 @@ defmodule Hologram.Component do
         import Hologram.Component
         import Hologram.Router.Helpers, only: [asset_path: 1]
         import Hologram.Template, only: [sigil_H: 2]
-        import Templatable, only: [put_context: 3, put_state: 2, put_state: 3]
 
         alias Hologram.Component
 
@@ -95,6 +94,36 @@ defmodule Hologram.Component do
     quote do
       Module.put_attribute(__MODULE__, :__props__, {unquote(name), unquote(type), unquote(opts)})
     end
+  end
+
+  @doc """
+  Puts the given key-value pair to the component context.
+  """
+  @spec put_context(Component.t(), any, any) :: Component.t()
+  def put_context(%{context: context} = component, key, value) do
+    %{component | context: Map.put(context, key, value)}
+  end
+
+  @doc """
+  Puts the given key-value entries to the component state.
+  """
+  @spec put_state(Component.t(), keyword | map) :: Component.t()
+  def put_state(component, entries)
+
+  def put_state(component, entries) when is_list(entries) do
+    put_state(component, Enum.into(entries, %{}))
+  end
+
+  def put_state(%{state: state} = component, entries) when is_map(entries) do
+    %{component | state: Map.merge(state, entries)}
+  end
+
+  @doc """
+  Puts the given key-value pair to the component state.
+  """
+  @spec put_state(Component.t(), atom, any) :: Component.t()
+  def put_state(%{state: state} = component, key, value) do
+    %{component | state: Map.put(state, key, value)}
   end
 
   @doc """
