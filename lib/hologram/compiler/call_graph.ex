@@ -376,7 +376,7 @@ defmodule Hologram.Compiler.CallGraph do
   defp add_component_call_graph_edges(call_graph, module) do
     add_edge(call_graph, module, {module, :__props__, 0})
     add_edge(call_graph, module, {module, :action, 3})
-    add_edge(call_graph, module, {module, :init, 1})
+    add_edge(call_graph, module, {module, :init, 2})
     add_edge(call_graph, module, {module, :template, 0})
   end
 

@@ -126,18 +126,17 @@ defmodule Hologram.Compiler.CallGraphTest do
                :vertex_1,
                {Module3, :__props__, 0},
                {Module3, :action, 3},
-               {Module3, :init, 1},
+               {Module3, :init, 2},
                {Module3, :template, 0}
              ]
 
-      assert edges(call_graph) ==
-               [
-                 %Graph.Edge{v1: Module3, v2: {Module3, :template, 0}, weight: 1, label: nil},
-                 %Graph.Edge{v1: Module3, v2: {Module3, :action, 3}, weight: 1, label: nil},
-                 %Graph.Edge{v1: Module3, v2: {Module3, :__props__, 0}, weight: 1, label: nil},
-                 %Graph.Edge{v1: Module3, v2: {Module3, :init, 1}, weight: 1, label: nil},
-                 %Graph.Edge{v1: :vertex_1, v2: Module3, weight: 1, label: nil}
-               ]
+      assert sorted_edges(call_graph) == [
+               %Graph.Edge{v1: Module3, v2: {Module3, :__props__, 0}, weight: 1, label: nil},
+               %Graph.Edge{v1: Module3, v2: {Module3, :action, 3}, weight: 1, label: nil},
+               %Graph.Edge{v1: Module3, v2: {Module3, :init, 2}, weight: 1, label: nil},
+               %Graph.Edge{v1: Module3, v2: {Module3, :template, 0}, weight: 1, label: nil},
+               %Graph.Edge{v1: :vertex_1, v2: Module3, weight: 1, label: nil}
+             ]
     end
 
     test "atom type ir, which is an alias of a component module", %{call_graph: call_graph} do
@@ -149,7 +148,7 @@ defmodule Hologram.Compiler.CallGraphTest do
                :vertex_1,
                {Module4, :__props__, 0},
                {Module4, :action, 3},
-               {Module4, :init, 1},
+               {Module4, :init, 2},
                {Module4, :template, 0}
              ]
 
@@ -168,7 +167,7 @@ defmodule Hologram.Compiler.CallGraphTest do
                },
                %Graph.Edge{
                  v1: Module4,
-                 v2: {Module4, :init, 1},
+                 v2: {Module4, :init, 2},
                  weight: 1,
                  label: nil
                },

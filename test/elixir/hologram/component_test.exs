@@ -17,7 +17,7 @@ defmodule Hologram.ComponentTest do
     assert Module4.__props__() == [{:b, :integer, [opt_1: 111, opt_2: 222]}, {:a, :string, []}]
   end
 
-  describe "init/1" do
+  describe "init/2" do
     test "no default implementation" do
       refute function_exported?(Module1, :init, 2)
     end

@@ -356,7 +356,7 @@ defmodule Hologram.CompilerTest do
                {Module5, :template, 0},
                {Module6, :__props__, 0},
                {Module6, :action, 3},
-               {Module6, :init, 1},
+               {Module6, :init, 2},
                {Module6, :template, 0},
                {Module7, :my_fun_7a, 2}
              ]
