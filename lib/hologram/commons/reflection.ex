@@ -376,7 +376,7 @@ defmodule Hologram.Commons.Reflection do
   """
   @spec protocol?(any) :: boolean
   def protocol?(term) do
-    alias?(term) && function_exported?(term, :__protocol__, 1)
+    alias?(term) && has_function?(term, :__protocol__, 1)
   end
 
   @doc """

@@ -1,5 +1,6 @@
 defmodule Hologram.Template.Renderer do
   alias Hologram.Assets.PageDigestRegistry
+  alias Hologram.Commons.Reflection
   alias Hologram.Commons.StringUtils
   alias Hologram.Compiler.Encoder
   alias Hologram.Component
@@ -196,7 +197,7 @@ defmodule Hologram.Template.Renderer do
 
   defp init_component(module, props) do
     init_result =
-      if function_exported?(module, :init, 3) do
+      if Reflection.has_function?(module, :init, 3) do
         module.init(props, %Component{}, %Server{})
       else
         {%Component{}, %Server{}}

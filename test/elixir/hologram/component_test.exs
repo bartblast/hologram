@@ -2,6 +2,7 @@ defmodule Hologram.ComponentTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Component
 
+  alias Hologram.Commons.Reflection
   alias Hologram.Component
   alias Hologram.Server
   alias Hologram.Test.Fixtures.Component.Module1
@@ -24,7 +25,7 @@ defmodule Hologram.ComponentTest do
 
   describe "init/2" do
     test "no default implementation" do
-      refute function_exported?(Module1, :init, 2)
+      refute Reflection.has_function?(Module1, :init, 2)
     end
 
     test "overridden implementation" do
@@ -36,7 +37,7 @@ defmodule Hologram.ComponentTest do
 
   describe "init/3" do
     test "default implementation" do
-      assert function_exported?(Module1, :init, 3)
+      assert Reflection.has_function?(Module1, :init, 3)
     end
 
     test "overridden implementation" do
