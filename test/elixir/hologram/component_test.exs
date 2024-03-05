@@ -46,6 +46,28 @@ defmodule Hologram.ComponentTest do
     end
   end
 
+  describe "maybe_define_template_fun/1" do
+    test "valid template path" do
+      template_path = "#{@fixtures_path}/template/template_1.holo"
+
+      assert maybe_define_template_fun(template_path, Component) ==
+               {:__block__, [],
+                [
+                  {:@, [context: Component, imports: [{1, Kernel}]],
+                   [{:impl, [context: Component], [Component]}]},
+                  {:def, [context: Component, imports: [{1, Kernel}, {2, Kernel}]],
+                   [
+                     {:template, [context: Component], Component},
+                     [do: {:sigil_H, [], ["My template 1", []]}]
+                   ]}
+                ]}
+    end
+
+    test "invalid template path" do
+      refute maybe_define_template_fun("/my_invalid_template_path.holo", Component)
+    end
+  end
+
   describe "template/0" do
     test "function" do
       assert Module1.template().(%{}) == [text: "Module1 template"]

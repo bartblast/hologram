@@ -46,7 +46,7 @@ defmodule Hologram.Component do
 
         defoverridable init: 3
       end,
-      Templatable.maybe_define_template_fun(template_path, __MODULE__),
+      maybe_define_template_fun(template_path, __MODULE__),
       Templatable.register_props_accumulator()
     ]
   end
@@ -57,5 +57,23 @@ defmodule Hologram.Component do
   @spec colocated_template_path(String.t()) :: String.t()
   def colocated_template_path(templatable_file) do
     Path.rootname(templatable_file) <> ".holo"
+  end
+
+  @doc """
+  Returns the AST of template/0 function definition that uses markup fetched from the give template file.
+  If the given template file doesn't exist nil is returned.
+  """
+  @spec maybe_define_template_fun(String.t(), module) :: AST.t() | nil
+  def maybe_define_template_fun(template_path, behaviour) do
+    if File.exists?(template_path) do
+      markup = File.read!(template_path)
+
+      quote do
+        @impl unquote(behaviour)
+        def template do
+          sigil_H(unquote(markup), [])
+        end
+      end
+    end
   end
 end
