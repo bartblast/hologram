@@ -12,7 +12,7 @@ defmodule Hologram.Router.Helpers do
         asset_path
 
       :error ->
-        raise Hologram.AssetNotFoundError, "there is no such asset: #{static_path}"
+        raise Hologram.AssetNotFoundError, "there is no such asset: \"#{static_path}\""
     end
   end
 end

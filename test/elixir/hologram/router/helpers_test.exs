@@ -28,9 +28,11 @@ defmodule Hologram.Router.HelpersTest do
     end
 
     test "asset doesn't exist" do
-      assert_raise Hologram.AssetNotFoundError, "there is no such asset: invalid_file.css", fn ->
-        asset_path("invalid_file.css")
-      end
+      assert_raise Hologram.AssetNotFoundError,
+                   "there is no such asset: \"invalid_file.css\"",
+                   fn ->
+                     asset_path("invalid_file.css")
+                   end
     end
   end
 end
