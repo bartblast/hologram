@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Compiler.CallGraph.Module13 do
   def fun_b(_a, _b), do: nil
 
