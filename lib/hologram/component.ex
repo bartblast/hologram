@@ -1,4 +1,5 @@
 defmodule Hologram.Component do
+  alias Hologram.Compiler.AST
   alias Hologram.Component
   alias Hologram.Operation
   alias Hologram.Server

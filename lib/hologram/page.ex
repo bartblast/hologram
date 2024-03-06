@@ -1,6 +1,7 @@
 defmodule Hologram.Page do
   alias Hologram.Component
   alias Hologram.Page
+  alias Hologram.Server
 
   @doc """
   Initializes component and server structs (when run on the server).
