@@ -28,7 +28,9 @@ defmodule Hologram.Component do
 
     [
       quote do
-        import Hologram.Component
+        import Hologram.Component,
+          only: [prop: 2, prop: 3, put_context: 3, put_state: 2, put_state: 3]
+
         import Hologram.Router.Helpers, only: [asset_path: 1]
         import Hologram.Template, only: [sigil_H: 2]
 
