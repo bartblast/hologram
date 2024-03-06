@@ -55,6 +55,13 @@ defmodule Hologram.Assets.PathRegistryTest do
     end
   end
 
+  test "register/2" do
+    AssetPathRegistry.start_link([])
+    AssetPathRegistry.register("my_static_path", "/my_asset_path")
+
+    assert lookup("my_static_path") == {:ok, "/my_asset_path"}
+  end
+
   test "start_link/1" do
     assert {:ok, pid} = AssetPathRegistry.start_link([])
     assert is_pid(pid)

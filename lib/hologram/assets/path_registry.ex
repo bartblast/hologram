@@ -84,6 +84,14 @@ defmodule Hologram.Assets.PathRegistry do
   end
 
   @doc """
+  Registers the given asset path under the given static path key in the registry.
+  """
+  @spec register(String.t(), String.t()) :: true
+  def register(static_path, asset_path) do
+    ETS.put(impl().ets_table_name(), static_path, asset_path)
+  end
+
+  @doc """
   Returns the implementation of the asset path registry's static dir path.
   """
   @spec static_dir_path() :: String.t()
