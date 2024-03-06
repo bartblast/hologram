@@ -509,6 +509,7 @@ defmodule Hologram.Template.RendererTest do
 
       setup_asset_fixtures(AssetPathRegistryStub.static_dir_path())
       AssetPathRegistry.start_link([])
+      AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
 
       AssetManifestCache.start_link([])
 
