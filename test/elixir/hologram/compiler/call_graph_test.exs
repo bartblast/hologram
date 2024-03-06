@@ -822,7 +822,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       call_graph
       |> add_vertex({:module_1, :fun_a, 1})
       |> add_vertex({:module_3, :fun_b, 2})
-      |> CallGraph.build(ir)
+      |> build(ir)
       |> add_vertex(:module_4)
 
     assert module_vertices(call_graph, Module13) == [
