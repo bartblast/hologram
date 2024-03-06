@@ -281,6 +281,7 @@ defmodule Hologram.Compiler do
       |> include_mfas_used_by_asset_path_registry()
       |> include_mfas_used_by_interpreter()
       |> include_mfas_used_by_renderer()
+      |> include_mfas_used_by_router_helpers(call_graph)
       |> include_mfas_used_by_store()
       |> Enum.uniq()
 
@@ -393,6 +394,10 @@ defmodule Hologram.Compiler do
         {:maps, :get, 2},
         {:maps, :merge, 2}
       ]
+  end
+
+  defp include_mfas_used_by_router_helpers(mfas, call_graph) do
+    mfas ++ CallGraph.module_vertices(call_graph, Hologram.AssetNotFoundError)
   end
 
   defp include_mfas_used_by_store(mfas) do
