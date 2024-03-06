@@ -187,7 +187,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "function definition ir", %{call_graph: call_graph} do
+    test "function definition ir, with outbound vertices", %{call_graph: call_graph} do
       ir = %IR.FunctionDefinition{
         name: :my_fun,
         arity: 2,
@@ -233,6 +233,29 @@ defmodule Hologram.Compiler.CallGraphTest do
                  label: nil
                }
              ]
+    end
+
+    test "function definition ir, without outbound vertices", %{call_graph: call_graph} do
+      ir = %IR.FunctionDefinition{
+        name: :my_fun,
+        arity: 2,
+        visibility: :public,
+        clause: %IR.FunctionClause{
+          params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}],
+          guards: [],
+          body: %IR.Block{
+            expressions: [
+              %IR.AtomType{value: :ok}
+            ]
+          }
+        }
+      }
+
+      assert build(call_graph, ir, Module1) == call_graph
+
+      assert sorted_vertices(call_graph) == [{Module1, :my_fun, 2}]
+
+      assert sorted_edges(call_graph) == []
     end
 
     test "list", %{call_graph: call_graph} do
