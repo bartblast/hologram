@@ -58,8 +58,11 @@ defmodule Hologram.Compiler.CallGraph do
         %IR.FunctionDefinition{name: name, arity: arity, clause: clause},
         from_vertex
       ) do
-    new_from_vertex = {from_vertex, name, arity}
-    build(call_graph, clause, new_from_vertex)
+    fun_def_vertex = {from_vertex, name, arity}
+
+    call_graph
+    |> add_vertex(fun_def_vertex)
+    |> build(clause, fun_def_vertex)
   end
 
   def build(
