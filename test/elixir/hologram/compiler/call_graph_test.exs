@@ -11,6 +11,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module1
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module10
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module11
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module13
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module2
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module3
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
@@ -792,18 +793,19 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   test "module_vertices/2", %{call_graph: call_graph} do
-    call_graph
-    |> add_vertex({:module_1, :fun_a, :arity_a})
-    |> add_vertex({:module_2, :fun_b, :arity_b})
-    |> add_vertex({:module_3, :fun_c, :arity_c})
-    |> add_vertex({:module_2, :fun_d, :arity_d})
-    |> add_vertex(:module_4)
-    |> add_vertex(:module_2)
+    ir = IR.for_module(Module13)
 
-    assert module_vertices(call_graph, :module_2) == [
-             :module_2,
-             {:module_2, :fun_b, :arity_b},
-             {:module_2, :fun_d, :arity_d}
+    call_graph =
+      call_graph
+      |> add_vertex({:module_1, :fun_a, 1})
+      |> add_vertex({:module_3, :fun_b, 2})
+      |> CallGraph.build(ir)
+      |> add_vertex(:module_4)
+
+    assert module_vertices(call_graph, Module13) == [
+             {Module13, :fun_b, 2},
+             {Module13, :fun_d, 4},
+             {Module13, :fun_e, 2}
            ]
   end
 
