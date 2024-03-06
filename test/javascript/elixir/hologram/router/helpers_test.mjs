@@ -37,6 +37,14 @@ describe("asset_path/1", () => {
   });
 
   it("entry for static path doesn't exists", () => {
+    // assertBoxedError(
+    //   () => Elixir_Hologram_Router_Helpers["asset_path/1"](
+    //     Type.bitstring("static-path-4"),
+    //   )
+    //   "Hologram.AssetNotFound",
+    //   "there is no such asset: ",
+    // );
+
     const result = Elixir_Hologram_Router_Helpers["asset_path/1"](
       Type.bitstring("static-path-4"),
     );
