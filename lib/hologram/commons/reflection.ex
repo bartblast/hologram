@@ -30,7 +30,9 @@ defmodule Hologram.Commons.Reflection do
   """
   @spec build_dir() :: String.t()
   def build_dir do
-    "#{root_path()}/_build/#{Hologram.env()}/lib/hologram/priv"
+    :hologram
+    |> :code.priv_dir()
+    |> to_string()
   end
 
   @doc """
