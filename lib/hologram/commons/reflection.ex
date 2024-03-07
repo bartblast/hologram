@@ -30,7 +30,7 @@ defmodule Hologram.Commons.Reflection do
   """
   @spec build_dir() :: String.t()
   def build_dir do
-    "#{root_path()}/_build/#{env()}/lib/hologram/priv"
+    "#{root_path()}/_build/#{Hologram.env()}/lib/hologram/priv"
   end
 
   @doc """
@@ -85,14 +85,6 @@ defmodule Hologram.Commons.Reflection do
   end
 
   def elixir_module?(_term), do: false
-
-  @doc """
-  Get current environment name.
-  """
-  @spec env() :: atom
-  def env do
-    Application.fetch_env!(:hologram, :env)
-  end
 
   @doc """
   Returns true if the given term is an existing Erlang module, or false otherwise.
@@ -155,7 +147,7 @@ defmodule Hologram.Commons.Reflection do
   @spec list_all_otp_apps() :: list(atom)
   # sobelow_skip ["DOS.StringToAtom"]
   def list_all_otp_apps do
-    "#{root_path()}/_build/#{env()}/**/ebin/*.app"
+    "#{root_path()}/_build/#{Hologram.env()}/**/ebin/*.app"
     |> Path.wildcard()
     |> Stream.map(&Path.basename(&1, ".app"))
     |> Stream.map(&String.to_atom/1)

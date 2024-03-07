@@ -65,10 +65,6 @@ defmodule Hologram.Commons.ReflectionTest do
     end
   end
 
-  test "env/0" do
-    assert env() == :test
-  end
-
   describe "erlang_module?" do
     test "existing Elixir module" do
       refute erlang_module?(Calendar.ISO)
