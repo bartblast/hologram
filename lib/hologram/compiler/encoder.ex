@@ -327,28 +327,6 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   @doc """
-  Prints debug info for intercepted encode/2 calls.
-  """
-  @spec debug(
-          {module, atom, list(IR.t() | Context.t())},
-          String.t() | %{__struct__: FunctionClauseError},
-          integer
-        ) :: :ok
-  def debug({_module, _function, [ir, context] = _args}, result, _start_timestamp) do
-    # credo:disable-for-lines:10 /Credo.Check.Refactor.IoPuts|Credo.Check.Warning.IoInspect/
-    IO.puts("\nENCODE..................................\n")
-    IO.puts("ir")
-    IO.inspect(ir)
-    IO.puts("")
-    IO.puts("context")
-    IO.inspect(context)
-    IO.puts("")
-    IO.puts("result")
-    IO.inspect(result)
-    IO.puts("\n........................................\n")
-  end
-
-  @doc """
   Encodes Elixir or Erlang alias as JavaScript class name.
 
   ## Examples
@@ -391,6 +369,28 @@ defmodule Hologram.Compiler.Encoder do
     term
     |> IR.for_term()
     |> encode(%Context{})
+  end
+
+  @doc """
+  Prints debug info for intercepted encode/2 calls.
+  """
+  @spec debug(
+          {module, atom, list(IR.t() | Context.t())},
+          String.t() | %{__struct__: FunctionClauseError},
+          integer
+        ) :: :ok
+  def debug({_module, _function, [ir, context] = _args}, result, _start_timestamp) do
+    # credo:disable-for-lines:10 /Credo.Check.Refactor.IoPuts|Credo.Check.Warning.IoInspect/
+    IO.puts("\nENCODE..................................\n")
+    IO.puts("ir")
+    IO.inspect(ir)
+    IO.puts("")
+    IO.puts("context")
+    IO.inspect(context)
+    IO.puts("")
+    IO.puts("result")
+    IO.inspect(result)
+    IO.puts("\n........................................\n")
   end
 
   defp aggregate_module_functions(exprs) do
