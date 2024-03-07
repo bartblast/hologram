@@ -24,6 +24,10 @@ defmodule Hologram.ApplicationTest do
     :ok
   end
 
+  test "env/0" do
+    assert env() == :test
+  end
+
   test "start/2" do
     assert {:ok, pid} = start(:my_app, :temporary)
     assert is_pid(pid)

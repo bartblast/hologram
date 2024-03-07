@@ -1,6 +1,10 @@
 defmodule Hologram.Application do
   use Application
 
+  @env Application.compile_env!(:hologram, :env)
+
+  def env, do: @env
+
   @impl Application
   def start(_type, _args) do
     children = [
