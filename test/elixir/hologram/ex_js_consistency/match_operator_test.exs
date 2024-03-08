@@ -5,6 +5,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   Always update both together.
   """
   use Hologram.Test.BasicCase, async: true
+  alias Hologram.Test.Fixtures.ExJsConsistency.MatchOperator.Module1
 
   # The build_match_operator/2 and build_value/1 helpers
   # prevent warnings about incompatible types.
@@ -816,6 +817,24 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
       assert_raise MatchError, "no match of right hand side value: [1, 2]", fn ->
         [x, x] = build_value([1, 2])
       end
+    end
+  end
+
+  describe "named function params" do
+    test "(a = 1)" do
+      assert Module1.test_a(1) == %{a: 1}
+    end
+
+    test "(1 = a)" do
+      assert Module1.test_b(1) == %{a: 1}
+    end
+
+    test "(a = b = 1)" do
+      assert Module1.test_c(1) == %{a: 1, b: 1}
+    end
+
+    test "(a = 1 = b)" do
+      assert Module1.test_d(1) == %{a: 1, b: 1}
     end
   end
 end
