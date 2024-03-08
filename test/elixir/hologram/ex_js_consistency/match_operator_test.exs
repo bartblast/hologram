@@ -837,28 +837,4 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
       assert Module1.test_d(1) == %{a: 1, b: 1}
     end
   end
-
-  test "debug" do
-    code = """
-    defmodule Elixir.Hologram.Test.Fixtures.ExJsConsistency.MatchOperator.Module1 do
-      def test_a(a = 1) do
-        %{a: a}
-      end
-
-      def test_b(1 = a) do
-        %{a: a}
-      end
-
-      def test_c(a = b = 1) do
-        %{a: a, b: b}
-      end
-
-      def test_d(a = 1 = b) do
-        %{a: a, b: b}
-      end
-    end
-    """
-
-    encode_code(code) |> IO.puts()
-  end
 end
