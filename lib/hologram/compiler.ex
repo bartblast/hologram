@@ -245,7 +245,7 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns the list of MFAs that are reachable by the given page.
-  Functions required by the runtime as well as manually transpiled Elixir functions are excluded.
+  Functions required by the runtime as well as manually ported Elixir functions are excluded.
   """
   @spec list_page_mfas(CallGraph.t(), module) :: list(mfa)
   def list_page_mfas(call_graph, page_module) do
@@ -262,7 +262,7 @@ defmodule Hologram.Compiler do
     |> CallGraph.add_edge(page_module, {layout_module, :__props__, 0})
     |> CallGraph.add_edge(page_module, {layout_module, :action, 3})
     |> CallGraph.add_edge(page_module, {layout_module, :template, 0})
-    |> remove_call_graph_vertices_of_manually_transpiled_elixir_functions()
+    |> remove_call_graph_vertices_of_manually_ported_elixir_functions()
     |> CallGraph.reachable(page_module)
     |> Enum.filter(&is_tuple/1)
     |> Kernel.--(runtime_mfas)
@@ -270,7 +270,7 @@ defmodule Hologram.Compiler do
 
   @doc """
   Lists MFAs required by the runtime JS script.
-  Manually transpiled Elixir functions are excluded.
+  Manually ported Elixir functions are excluded.
   """
   @spec list_runtime_mfas(CallGraph.t()) :: list(mfa)
   def list_runtime_mfas(call_graph) do
@@ -280,14 +280,14 @@ defmodule Hologram.Compiler do
       []
       |> include_mfas_used_by_asset_path_registry()
       |> include_mfas_used_by_interpreter()
+      |> include_mfas_used_by_manually_ported_router_helpers(call_graph)
       |> include_mfas_used_by_renderer()
-      |> include_mfas_used_by_router_helpers(call_graph)
       |> include_mfas_used_by_store()
       |> Enum.uniq()
 
     call_graph_clone
     |> add_call_graph_edges_for_erlang_functions()
-    |> remove_call_graph_vertices_of_manually_transpiled_elixir_functions()
+    |> remove_call_graph_vertices_of_manually_ported_elixir_functions()
     |> CallGraph.reachable_mfas(entry_mfas)
     # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
     |> Enum.reject(fn {module, _function, _arity} -> !Reflection.module?(module) end)
@@ -383,6 +383,10 @@ defmodule Hologram.Compiler do
       ]
   end
 
+  defp include_mfas_used_by_manually_ported_router_helpers(mfas, call_graph) do
+    mfas ++ CallGraph.module_vertices(call_graph, Hologram.AssetNotFoundError)
+  end
+
   defp include_mfas_used_by_renderer(mfas) do
     mfas ++
       [
@@ -394,10 +398,6 @@ defmodule Hologram.Compiler do
         {:maps, :get, 2},
         {:maps, :merge, 2}
       ]
-  end
-
-  defp include_mfas_used_by_router_helpers(mfas, call_graph) do
-    mfas ++ CallGraph.module_vertices(call_graph, Hologram.AssetNotFoundError)
   end
 
   defp include_mfas_used_by_store(mfas) do
@@ -471,7 +471,7 @@ defmodule Hologram.Compiler do
     PLT.put(plt, module, digest)
   end
 
-  defp remove_call_graph_vertices_of_manually_transpiled_elixir_functions(call_graph) do
+  defp remove_call_graph_vertices_of_manually_ported_elixir_functions(call_graph) do
     call_graph
     |> CallGraph.remove_vertex({Hologram.Router.Helpers, :asset_path, 1})
     |> CallGraph.remove_vertex({Kernel, :inspect, 1})
