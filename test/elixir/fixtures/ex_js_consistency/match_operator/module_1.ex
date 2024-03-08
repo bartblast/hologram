@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.ExJsConsistency.MatchOperator.Module1 do
   def test_a(a = 1), do: %{a: a}
 
