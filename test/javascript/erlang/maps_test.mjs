@@ -17,6 +17,20 @@ import Type from "../../../assets/js/type.mjs";
 before(() => linkModules());
 after(() => unlinkModules());
 
+const atomA = freeze(Type.atom("a"));
+const atomAbc = freeze(Type.atom("abc"));
+const atomB = freeze(Type.atom("b"));
+const atomC = freeze(Type.atom("c"));
+const integer1 = freeze(Type.integer(1));
+const integer2 = freeze(Type.integer(2));
+
+const mapA1B2 = freeze(
+  Type.map([
+    [atomA, integer1],
+    [atomB, integer2],
+  ]),
+);
+
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/maps_test.exs
 // Always update both together.
@@ -211,29 +225,19 @@ describe("get/3", () => {
 });
 
 describe("is_key/2", () => {
-  const map = Type.map([
-    [Type.atom("a"), Type.integer(1)],
-    [Type.atom("b"), Type.integer(2)],
-  ]);
-
-  it("doesn't mutate its arguments", () => {
-    Erlang_Maps["is_key/2"](
-      freeze(Type.atom("a")),
-      freeze(Type.map([[Type.atom("a"), Type.integer(1)]])),
-    );
-  });
+  const fun = Erlang_Maps["is_key/2"];
 
   it("returns true if the given map has the given key", () => {
-    assertBoxedTrue(Erlang_Maps["is_key/2"](Type.atom("b"), map));
+    assertBoxedTrue(fun(atomB, mapA1B2));
   });
 
   it("returns false if the given map doesn't have the given key", () => {
-    assertBoxedFalse(Erlang_Maps["is_key/2"](Type.atom("c"), map));
+    assertBoxedFalse(fun(atomC, mapA1B2));
   });
 
   it("raises BadMapError if the second argument is not a map", () => {
     assertBoxedError(
-      () => Erlang_Maps["is_key/2"](Type.atom("x"), Type.atom("abc")),
+      () => fun(atomA, atomAbc),
       "BadMapError",
       "expected a map, got: :abc",
     );
