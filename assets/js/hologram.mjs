@@ -14,7 +14,7 @@ import Type from "./type.mjs";
 
 // TODO: test
 export default class Hologram {
-  static deps = {
+  static #deps = {
     Bitstring: Bitstring,
     HologramBoxedError: HologramBoxedError,
     HologramInterpreterError: HologramInterpreterError,
@@ -23,11 +23,11 @@ export default class Hologram {
     Type: Type,
   };
 
-  static isInitiated = false;
-  static pageModule = null;
-  static pageParams = null;
+  static #isInitiated = false;
+  static #pageModule = null;
+  static #pageParams = null;
 
-  static init() {
+  static #init() {
     window.Elixir_Hologram_Router_Helpers = Elixir_Hologram_Router_Helpers;
     window.Elixir_Kernel = Elixir_Kernel;
 
@@ -35,8 +35,8 @@ export default class Hologram {
       console.log("INSPECT: " + Interpreter.inspect(term));
   }
 
-  static mountPage() {
-    window.__hologramPageReachableFunctionDefs__(Hologram.deps);
+  static #mountPage() {
+    window.__hologramPageReachableFunctionDefs__(Hologram.#deps);
 
     const mountData = Hologram.#loadMountData();
 
@@ -45,7 +45,7 @@ export default class Hologram {
     Renderer.renderPage(mountData.pageModule, mountData.pageParams);
   }
 
-  static onReady(callback) {
+  static #onReady(callback) {
     if (
       document.readyState === "interactive" ||
       document.readyState === "complete"
@@ -60,13 +60,13 @@ export default class Hologram {
   }
 
   static run() {
-    Hologram.onReady(() => {
-      if (!Hologram.isInitiated) {
-        Hologram.init();
+    Hologram.#onReady(() => {
+      if (!Hologram.#isInitiated) {
+        Hologram.#init();
       }
 
       try {
-        Hologram.mountPage();
+        Hologram.#mountPage();
       } catch (error) {
         if (error instanceof HologramBoxedError) {
           error.name = Interpreter.getErrorType(error);
@@ -79,12 +79,12 @@ export default class Hologram {
   }
 
   static #loadMountData() {
-    const mountData = window.__hologramPageMountData__(Hologram.deps);
+    const mountData = window.__hologramPageMountData__(Hologram.#deps);
 
     Store.hydrate(mountData.componentStructs);
 
-    Hologram.pageModule = mountData.pageModule;
-    Hologram.pageParams = mountData.pageParams;
+    Hologram.#pageModule = mountData.pageModule;
+    Hologram.#pageParams = mountData.pageParams;
 
     return mountData;
   }
