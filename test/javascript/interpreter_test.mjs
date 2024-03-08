@@ -8,6 +8,9 @@ import {
   sinon,
   unlinkModules,
 } from "../../assets/js/test_support.mjs";
+
+import {defineModule1Fixture} from "./fixtures/ex_js_consistency/match_operator/module_1.mjs";
+
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
@@ -16,7 +19,12 @@ import Type from "../../assets/js/type.mjs";
 
 const clone = Interpreter.cloneVars;
 
-before(() => linkModules());
+before(() => {
+  linkModules();
+
+  defineModule1Fixture();
+});
+
 after(() => unlinkModules());
 
 describe("accessKeywordListElement()", () => {
@@ -5416,6 +5424,70 @@ describe("matchOperator()", () => {
       assertMatchError(
         () => Interpreter.matchOperator(right, left, vars),
         right,
+      );
+    });
+  });
+
+  describe("named function params", () => {
+    it("(a = 1)", () => {
+      const alias = Type.alias(
+        "Hologram.Test.Fixtures.ExJsConsistency.MatchOperator.Module1",
+      );
+
+      const args = [Type.integer(1)];
+      const result = Interpreter.callNamedFunction(alias, "test_a/1", args);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.atom("a"), Type.integer(1)]]),
+      );
+    });
+
+    it("(1 = a)", () => {
+      const alias = Type.alias(
+        "Hologram.Test.Fixtures.ExJsConsistency.MatchOperator.Module1",
+      );
+
+      const args = [Type.integer(1)];
+      const result = Interpreter.callNamedFunction(alias, "test_b/1", args);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.atom("a"), Type.integer(1)]]),
+      );
+    });
+
+    it("(a = b = 1)", () => {
+      const alias = Type.alias(
+        "Hologram.Test.Fixtures.ExJsConsistency.MatchOperator.Module1",
+      );
+
+      const args = [Type.integer(1)];
+      const result = Interpreter.callNamedFunction(alias, "test_c/1", args);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.atom("b"), Type.integer(1)],
+        ]),
+      );
+    });
+
+    it("(a = 1 = b)", () => {
+      const alias = Type.alias(
+        "Hologram.Test.Fixtures.ExJsConsistency.MatchOperator.Module1",
+      );
+
+      const args = [Type.integer(1)];
+      const result = Interpreter.callNamedFunction(alias, "test_d/1", args);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.atom("b"), Type.integer(1)],
+        ]),
       );
     });
   });
