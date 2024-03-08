@@ -69,8 +69,8 @@ export default class Hologram {
         Hologram.mountPage();
       } catch (error) {
         if (error instanceof HologramBoxedError) {
-          error.name = Interpreter.fetchErrorType(error);
-          error.message = Interpreter.fetchErrorMessage(error);
+          error.name = Interpreter.getErrorType(error);
+          error.message = Interpreter.getErrorMessage(error);
         }
 
         throw error;

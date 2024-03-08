@@ -2082,18 +2082,18 @@ describe("dotOperator()", () => {
   });
 });
 
-it("fetchErrorMessage()", () => {
+it("getErrorMessage()", () => {
   const errorStruct = Type.errorStruct("MyError", "my message");
   const jsError = new HologramBoxedError(errorStruct);
-  const result = Interpreter.fetchErrorMessage(jsError);
+  const result = Interpreter.getErrorMessage(jsError);
 
   assert.equal(result, "my message");
 });
 
-it("fetchErrorType()", () => {
+it("getErrorType()", () => {
   const errorStruct = Type.errorStruct("MyError", "my message");
   const jsError = new HologramBoxedError(errorStruct);
-  const result = Interpreter.fetchErrorType(jsError);
+  const result = Interpreter.getErrorType(jsError);
 
   assert.equal(result, "MyError");
 });

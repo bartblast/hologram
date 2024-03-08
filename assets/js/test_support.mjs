@@ -44,8 +44,8 @@ export function assertBoxedError(
     } else if (!Interpreter.isStrictlyEqual(error.struct, errorStruct)) {
       isAnyAssertFailed = true;
 
-      const receivedErrorType = Interpreter.fetchErrorType(error);
-      const receivedErrorMessage = Interpreter.fetchErrorMessage(error);
+      const receivedErrorType = Interpreter.getErrorType(error);
+      const receivedErrorMessage = Interpreter.getErrorMessage(error);
       failMessage += `but got:\n${receivedErrorType}: ${receivedErrorMessage}`;
     }
   }

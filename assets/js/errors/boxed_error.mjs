@@ -9,8 +9,8 @@ export default class HologramBoxedError extends Error {
     this.name = "HologramBoxedError";
     this.struct = struct;
 
-    const boxedType = Interpreter.fetchErrorType(this);
-    const boxedMessage = Interpreter.fetchErrorMessage(this);
+    const boxedType = Interpreter.getErrorType(this);
+    const boxedMessage = Interpreter.getErrorMessage(this);
 
     this.message = `(${boxedType}) ${boxedMessage}`;
   }

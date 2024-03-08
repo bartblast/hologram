@@ -305,12 +305,12 @@ export default class Interpreter {
     return Erlang_Maps["get/2"](right, left);
   }
 
-  static fetchErrorMessage(jsError) {
+  static getErrorMessage(jsError) {
     // TODO: use transpiled Elixir code
     return Bitstring.toText(jsError.struct.data["atom(message)"][1]);
   }
 
-  static fetchErrorType(jsError) {
+  static getErrorType(jsError) {
     // TODO: use transpiled Elixir code
     return jsError.struct.data["atom(__struct__)"][1].value.substring(7);
   }
