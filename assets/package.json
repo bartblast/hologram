@@ -1,11 +1,11 @@
 {
   "dependencies": {
-    "esbuild": "^0.19",
+    "esbuild": "^0.20",
     "lodash": "^4",
     "snabbdom": "^3"
   },
   "devDependencies": {
-    "chai": "^4",
+    "chai": "^5",
     "eslint": "^8",
     "mocha": "^10",
     "prettier": "^3",
