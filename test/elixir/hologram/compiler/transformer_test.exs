@@ -576,8 +576,8 @@ defmodule Hologram.Compiler.TransformerTest do
                clauses: [
                  %IR.FunctionClause{
                    params: [
-                     %IR.Variable{name: :holo_arg_1__},
-                     %IR.Variable{name: :holo_arg_2__}
+                     %IR.Variable{name: :"$1"},
+                     %IR.Variable{name: :"$2"}
                    ],
                    guards: [],
                    body: %IR.Block{
@@ -585,8 +585,8 @@ defmodule Hologram.Compiler.TransformerTest do
                        %IR.LocalFunctionCall{
                          function: :my_fun,
                          args: [
-                           %IR.Variable{name: :holo_arg_1__},
-                           %IR.Variable{name: :holo_arg_2__}
+                           %IR.Variable{name: :"$1"},
+                           %IR.Variable{name: :"$2"}
                          ]
                        }
                      ]
@@ -604,8 +604,8 @@ defmodule Hologram.Compiler.TransformerTest do
                clauses: [
                  %IR.FunctionClause{
                    params: [
-                     %IR.Variable{name: :holo_arg_1__},
-                     %IR.Variable{name: :holo_arg_2__}
+                     %IR.Variable{name: :"$1"},
+                     %IR.Variable{name: :"$2"}
                    ],
                    guards: [],
                    body: %IR.Block{
@@ -614,8 +614,8 @@ defmodule Hologram.Compiler.TransformerTest do
                          module: %IR.AtomType{value: Calendar.ISO},
                          function: :parse_date,
                          args: [
-                           %IR.Variable{name: :holo_arg_1__},
-                           %IR.Variable{name: :holo_arg_2__}
+                           %IR.Variable{name: :"$1"},
+                           %IR.Variable{name: :"$2"}
                          ]
                        }
                      ]
@@ -633,10 +633,10 @@ defmodule Hologram.Compiler.TransformerTest do
                clauses: [
                  %IR.FunctionClause{
                    params: [
-                     %IR.Variable{name: :holo_arg_1__},
-                     %IR.Variable{name: :holo_arg_2__},
-                     %IR.Variable{name: :holo_arg_3__},
-                     %IR.Variable{name: :holo_arg_4__}
+                     %IR.Variable{name: :"$1"},
+                     %IR.Variable{name: :"$2"},
+                     %IR.Variable{name: :"$3"},
+                     %IR.Variable{name: :"$4"}
                    ],
                    guards: [],
                    body: %IR.Block{
@@ -644,12 +644,12 @@ defmodule Hologram.Compiler.TransformerTest do
                        %IR.LocalFunctionCall{
                          function: :my_fun,
                          args: [
-                           %IR.Variable{name: :holo_arg_1__},
+                           %IR.Variable{name: :"$1"},
                            %IR.IntegerType{value: 2},
                            %IR.ListType{
                              data: [
                                %IR.IntegerType{value: 3},
-                               %IR.Variable{name: :holo_arg_4__}
+                               %IR.Variable{name: :"$4"}
                              ]
                            }
                          ]
@@ -669,10 +669,10 @@ defmodule Hologram.Compiler.TransformerTest do
                clauses: [
                  %IR.FunctionClause{
                    params: [
-                     %IR.Variable{name: :holo_arg_1__},
-                     %IR.Variable{name: :holo_arg_2__},
-                     %IR.Variable{name: :holo_arg_3__},
-                     %IR.Variable{name: :holo_arg_4__}
+                     %IR.Variable{name: :"$1"},
+                     %IR.Variable{name: :"$2"},
+                     %IR.Variable{name: :"$3"},
+                     %IR.Variable{name: :"$4"}
                    ],
                    guards: [],
                    body: %IR.Block{
@@ -681,12 +681,12 @@ defmodule Hologram.Compiler.TransformerTest do
                          module: %IR.AtomType{value: Aaa.Bbb},
                          function: :my_fun,
                          args: [
-                           %IR.Variable{name: :holo_arg_1__},
+                           %IR.Variable{name: :"$1"},
                            %IR.IntegerType{value: 2},
                            %IR.ListType{
                              data: [
                                %IR.IntegerType{value: 3},
-                               %IR.Variable{name: :holo_arg_4__}
+                               %IR.Variable{name: :"$4"}
                              ]
                            }
                          ]
@@ -706,20 +706,20 @@ defmodule Hologram.Compiler.TransformerTest do
                clauses: [
                  %IR.FunctionClause{
                    params: [
-                     %IR.Variable{name: :holo_arg_1__},
-                     %IR.Variable{name: :holo_arg_2__},
-                     %IR.Variable{name: :holo_arg_3__}
+                     %IR.Variable{name: :"$1"},
+                     %IR.Variable{name: :"$2"},
+                     %IR.Variable{name: :"$3"}
                    ],
                    guards: [],
                    body: %IR.Block{
                      expressions: [
                        %IR.ListType{
                          data: [
-                           %IR.Variable{name: :holo_arg_1__},
+                           %IR.Variable{name: :"$1"},
                            %IR.IntegerType{value: 2},
                            %IR.LocalFunctionCall{
                              function: :my_fun,
-                             args: [%IR.Variable{name: :holo_arg_3__}]
+                             args: [%IR.Variable{name: :"$3"}]
                            }
                          ]
                        }
