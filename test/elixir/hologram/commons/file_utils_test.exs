@@ -3,7 +3,7 @@ defmodule Hologram.Commons.FileUtilsTest do
   import Hologram.Commons.FileUtils
 
   describe "list_files_recursively/1" do
-    @base_path "test/elixir/fixtures/commons/file_utils/list_files_recursively"
+    @base_path "test/elixir/support/fixtures/commons/file_utils/list_files_recursively"
 
     test "single path" do
       assert list_files_recursively(@base_path) == [

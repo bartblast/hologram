@@ -5,7 +5,7 @@ defmodule Hologram.Test.BasicCase do
     quote do
       import Hologram.Test.Helpers
 
-      @fixtures_path "#{File.cwd!()}/test/elixir/fixtures"
+      @fixtures_path "#{File.cwd!()}/test/elixir/support/fixtures"
     end
   end
 end
