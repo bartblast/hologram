@@ -498,7 +498,7 @@ defmodule Hologram.Compiler do
       ir_plt
       |> PLT.get!(module)
       |> prune_module_def(module_mfas)
-      |> Encoder.encode(%Context{module: module})
+      |> Encoder.encode_ir(%Context{module: module})
     end)
   end
 

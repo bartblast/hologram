@@ -76,7 +76,7 @@ defmodule Hologram.Test.Helpers do
   def encode_code(code, context \\ %Context{}) do
     code
     |> ir(context)
-    |> Encoder.encode(context)
+    |> Encoder.encode_ir(context)
   end
 
   @doc """
@@ -111,7 +111,7 @@ defmodule Hologram.Test.Helpers do
   def js(code) do
     code
     |> ir(%Context{})
-    |> Encoder.encode(%Context{})
+    |> Encoder.encode_ir(%Context{})
   end
 
   @doc """
