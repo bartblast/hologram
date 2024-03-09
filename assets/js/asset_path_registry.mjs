@@ -5,6 +5,7 @@ import Type from "./type.mjs";
 export default class AssetPathRegistry {
   static entries = null;
 
+  // deps: [:maps.put/3]
   static hydrate(assetManifest) {
     AssetPathRegistry.entries = Type.map([]);
 
@@ -20,6 +21,7 @@ export default class AssetPathRegistry {
     }
   }
 
+  // deps: [:maps.get/3]
   static lookup(staticPath) {
     return Erlang_Maps["get/3"](
       staticPath,
