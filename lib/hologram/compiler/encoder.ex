@@ -15,6 +15,41 @@ defmodule Hologram.Compiler.Encoder do
   alias Hologram.Compiler.IR
 
   @doc """
+  Encodes Elixir or Erlang alias as JavaScript class name.
+
+  ## Examples
+
+      iex> encode_as_class_name(Aaa.Bbb.Ccc)
+      "Elixir_Aaa_Bbb_Ccc"
+
+      iex> encode_as_class_name(:erlang)
+      "Erlang"
+      
+      iex> encode_as_class_name(:aaa_bbb)
+      "Erlang_Aaa_Bbb"      
+  """
+  @spec encode_as_class_name(module | atom) :: String.t()
+  def encode_as_class_name(alias_atom)
+
+  def encode_as_class_name(:erlang), do: "Erlang"
+
+  def encode_as_class_name(alias_atom) do
+    module_segments =
+      alias_atom
+      |> to_string()
+      |> String.split([".", "_"])
+
+    class_segments =
+      if hd(module_segments) == "Elixir" do
+        module_segments
+      else
+        ["Erlang" | module_segments]
+      end
+
+    Enum.map_join(class_segments, "_", &:string.titlecase/1)
+  end
+
+  @doc """
   Encodes Elixir IR to JavaScript source code.
 
   ## Examples
@@ -327,41 +362,6 @@ defmodule Hologram.Compiler.Encoder do
   # TODO: finish implementing
   def encode_ir(%IR.With{}, _context) do
     "Interpreter.with()"
-  end
-
-  @doc """
-  Encodes Elixir or Erlang alias as JavaScript class name.
-
-  ## Examples
-
-      iex> encode_as_class_name(Aaa.Bbb.Ccc)
-      "Elixir_Aaa_Bbb_Ccc"
-
-      iex> encode_as_class_name(:erlang)
-      "Erlang"
-      
-      iex> encode_as_class_name(:aaa_bbb)
-      "Erlang_Aaa_Bbb"      
-  """
-  @spec encode_as_class_name(module | atom) :: String.t()
-  def encode_as_class_name(alias_atom)
-
-  def encode_as_class_name(:erlang), do: "Erlang"
-
-  def encode_as_class_name(alias_atom) do
-    module_segments =
-      alias_atom
-      |> to_string()
-      |> String.split([".", "_"])
-
-    class_segments =
-      if hd(module_segments) == "Elixir" do
-        module_segments
-      else
-        ["Erlang" | module_segments]
-      end
-
-    Enum.map_join(class_segments, "_", &:string.titlecase/1)
   end
 
   @doc """
