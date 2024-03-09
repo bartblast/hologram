@@ -7,12 +7,14 @@
   "devDependencies": {
     "chai": "^5",
     "eslint": "^8",
+    "jsdom": "^24",
+    "jsdom-global": "^3",
     "mocha": "^10",
     "prettier": "^3",
     "sinon": "^17"
   },
   "scripts": {
-    "test": "mocha '../test/javascript/**/*.mjs' --color",
+    "test": "mocha '../test/javascript/**/*.mjs' --color --require jsdom-global/register",
     "test-file": "mocha --color"
   }
 }
