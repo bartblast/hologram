@@ -9,7 +9,7 @@ import {
   unlinkModules,
 } from "../../assets/js/test_support.mjs";
 
-import {defineModule1Fixture} from "./fixtures/ex_js_consistency/match_operator/module_1.mjs";
+import {defineModule1Fixture} from "./support/fixtures/ex_js_consistency/match_operator/module_1.mjs";
 
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
