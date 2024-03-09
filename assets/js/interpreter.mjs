@@ -13,6 +13,7 @@ import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
 export default class Interpreter {
+  // deps: [:lists.keyfind/3]
   static accessKeywordListElement(keywordList, key) {
     const keyfindRes = Erlang_Lists["keyfind/3"](
       key,
@@ -135,6 +136,7 @@ export default class Interpreter {
     }
   }
 
+  // deps: [Enum.into/2, Enum.to_list/1]
   static comprehension(generators, filters, collectable, unique, mapper, vars) {
     const generatorsCount = generators.length;
 
@@ -294,6 +296,7 @@ export default class Interpreter {
     });
   }
 
+  // deps: [:maps.get/2]
   static dotOperator(left, right) {
     // if left argument is a boxed atom, treat the operator as a remote function call
     if (Type.isAtom(left)) {
@@ -533,6 +536,7 @@ export default class Interpreter {
     return Interpreter.raiseError("CompileError", message);
   }
 
+  // deps: [:erlang.error/1]
   static raiseError(aliasStr, message) {
     const errorStruct = Type.errorStruct(aliasStr, message);
     return Erlang["error/1"](errorStruct);
@@ -907,6 +911,7 @@ export default class Interpreter {
     );
   }
 
+  // deps: [:erlang.hd/1, :erlang.tl/1]
   static #matchConsPattern(right, left, vars) {
     if (!Type.isList(right) || right.data.length === 0) {
       throw new HologramMatchError(right);
