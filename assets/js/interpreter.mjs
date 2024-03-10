@@ -583,7 +583,7 @@ export default class Interpreter {
       // TODO: handle after block
       if (afterBlock) {
         // eslint-disable-next-line no-unsafe-finally
-        throw new Error(
+        throw new HologramInterpreterError(
           '"try" expression after block is not yet implemented in Hologram',
         );
       }
@@ -593,7 +593,7 @@ export default class Interpreter {
       return result;
     } else {
       // TODO: handle else clauses
-      throw new Error(
+      throw new HologramInterpreterError(
         '"try" expression else clauses are not yet implemented in Hologram',
       );
     }
@@ -608,7 +608,9 @@ export default class Interpreter {
 
   // TODO: finish implementing
   static with() {
-    throw new Error('"with" expression is not yet implemented in Hologram');
+    throw new HologramInterpreterError(
+      '"with" expression is not yet implemented in Hologram',
+    );
   }
 
   static #comparePids(pid1, pid2) {
@@ -906,7 +908,7 @@ export default class Interpreter {
 
   static #matchCatchClause(_clause, _error, _vars) {
     // TODO: handle catch clauses
-    throw new Error(
+    throw new HologramInterpreterError(
       '"try" expression catch clauses are not yet implemented in Hologram',
     );
   }
@@ -972,7 +974,7 @@ export default class Interpreter {
 
   static #matchRescueClause(_clause, _error, _vars) {
     // TODO: handle rescue clauses
-    throw new Error(
+    throw new HologramInterpreterError(
       '"try" expression rescue clauses are not yet implemented in Hologram',
     );
   }
