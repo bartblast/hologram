@@ -1,6 +1,6 @@
 "use strict";
 
-import {assert} from "../../../assets/js/test_support.mjs";
+import {assert} from "../support/helpers.mjs";
 import HologramMatchError from "../../../assets/js/errors/match_error.mjs";
 
 it("HologramMatchError", () => {

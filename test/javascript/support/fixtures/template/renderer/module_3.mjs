@@ -1,6 +1,6 @@
 "use strict";
 
-import {buildComponentStruct} from "../../../../../../assets/js/test_support.mjs";
+import {buildComponentStruct} from "../../../helpers.mjs";
 
 import Interpreter from "../../../../../../assets/js/interpreter.mjs";
 import Type from "../../../../../../assets/js/type.mjs";

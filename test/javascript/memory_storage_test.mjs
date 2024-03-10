@@ -1,10 +1,7 @@
 "use strict";
 
-import {
-  assert,
-  linkModules,
-  unlinkModules,
-} from "../../assets/js/test_support.mjs";
+import {assert, linkModules, unlinkModules} from "./support/helpers.mjs";
+
 import MemoryStorage from "../../assets/js/memory_storage.mjs";
 
 before(() => linkModules());

@@ -7,7 +7,7 @@ import {
   assertBoxedTrue,
   linkModules,
   unlinkModules,
-} from "../../../assets/js/test_support.mjs";
+} from "../support/helpers.mjs";
 
 import Erlang_Lists from "../../../assets/js/erlang/lists.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";

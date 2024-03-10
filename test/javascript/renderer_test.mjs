@@ -9,7 +9,7 @@ import {
   linkModules,
   unlinkModules,
   vnode,
-} from "../../assets/js/test_support.mjs";
+} from "./support/helpers.mjs";
 
 import {defineLayoutFixture} from "./support/fixtures/layout_fixture.mjs";
 import {defineModule1Fixture} from "./support/fixtures/template/renderer/module_1.mjs";

@@ -5,7 +5,7 @@ import {
   assertBoxedError,
   linkModules,
   unlinkModules,
-} from "../../../assets/js/test_support.mjs";
+} from "../support/helpers.mjs";
 
 import Erlang_Elixir_Aliases from "../../../assets/js/erlang/elixir_aliases.mjs";
 import Type from "../../../assets/js/type.mjs";

@@ -1,8 +1,4 @@
-import {
-  assert,
-  linkModules,
-  unlinkModules,
-} from "../../../assets/js/test_support.mjs";
+import {assert, linkModules, unlinkModules} from "../support/helpers.mjs";
 
 import Elixir_Kernel from "../../../assets/js/elixir/kernel.mjs";
 import Type from "../../../assets/js/type.mjs";

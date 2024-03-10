@@ -5,7 +5,7 @@ import {
   buildComponentStruct,
   linkModules,
   unlinkModules,
-} from "../../assets/js/test_support.mjs";
+} from "./support/helpers.mjs";
 
 import Store from "../../assets/js/store.mjs";
 import Type from "../../assets/js/type.mjs";

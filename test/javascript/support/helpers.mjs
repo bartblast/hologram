@@ -1,23 +1,23 @@
 "use strict";
 
-import Elixir_Kernel from "./elixir/kernel.mjs";
-import Erlang from "./erlang/erlang.mjs";
-import Erlang_Lists from "./erlang/lists.mjs";
-import Erlang_Maps from "./erlang/maps.mjs";
-import Erlang_Persistent_Term from "./erlang/persistent_term.mjs";
-import Erlang_Unicode from "./erlang/unicode.mjs";
-import HologramBoxedError from "./errors/boxed_error.mjs";
-import HologramInterpreterError from "./errors/interpreter_error.mjs";
-import HologramMatchError from "./errors/match_error.mjs";
-import Interpreter from "./interpreter.mjs";
-import Store from "./store.mjs";
-import Type from "./type.mjs";
+import Elixir_Kernel from "../../../assets/js/elixir/kernel.mjs";
+import Erlang from "../../../assets/js/erlang/erlang.mjs";
+import Erlang_Lists from "../../../assets/js/erlang/lists.mjs";
+import Erlang_Maps from "../../../assets/js/erlang/maps.mjs";
+import Erlang_Persistent_Term from "../../../assets/js/erlang/persistent_term.mjs";
+import Erlang_Unicode from "../../../assets/js/erlang/unicode.mjs";
+import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
+import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
+import HologramMatchError from "../../../assets/js/errors/match_error.mjs";
+import Interpreter from "../../../assets/js/interpreter.mjs";
+import Store from "../../../assets/js/store.mjs";
+import Type from "../../../assets/js/type.mjs";
 
-import {assert} from "chai";
+import {assert} from "../../../assets/node_modules/chai/index.js";
 
-export {assert} from "chai";
-export * as sinon from "../node_modules/sinon/pkg/sinon-esm.js";
-export {h as vnode} from "snabbdom";
+export {assert} from "../../../assets/node_modules/chai/index.js";
+export * as sinon from "../../../assets/node_modules/sinon/pkg/sinon-esm.js";
+export {h as vnode} from "../../../assets/node_modules/snabbdom/build/index.js";
 
 export function assertBoxedError(
   callable,

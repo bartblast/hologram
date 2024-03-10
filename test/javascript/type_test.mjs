@@ -1,10 +1,7 @@
 "use strict";
 
-import {
-  assert,
-  linkModules,
-  unlinkModules,
-} from "../../assets/js/test_support.mjs";
+import {assert, linkModules, unlinkModules} from "./support/helpers.mjs";
+
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Sequence from "../../assets/js/sequence.mjs";
 import Type from "../../assets/js/type.mjs";

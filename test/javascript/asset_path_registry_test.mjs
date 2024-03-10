@@ -1,10 +1,6 @@
 "use strict";
 
-import {
-  assert,
-  linkModules,
-  unlinkModules,
-} from "../../assets/js/test_support.mjs";
+import {assert, linkModules, unlinkModules} from "./support/helpers.mjs";
 
 import AssetPathRegistry from "../../assets/js/asset_path_registry.mjs";
 import Type from "../../assets/js/type.mjs";

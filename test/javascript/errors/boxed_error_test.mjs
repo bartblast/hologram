@@ -1,6 +1,6 @@
 "use strict";
 
-import {assert} from "../../../assets/js/test_support.mjs";
+import {assert} from "../support/helpers.mjs";
 import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
 import Type from "../../../assets/js/type.mjs";
 

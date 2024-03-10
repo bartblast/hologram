@@ -5,7 +5,8 @@ import {
   assertBoxedError,
   linkModules,
   unlinkModules,
-} from "../../assets/js/test_support.mjs";
+} from "./support/helpers.mjs";
+
 import Bitstring from "../../assets/js/bitstring.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Type from "../../assets/js/type.mjs";

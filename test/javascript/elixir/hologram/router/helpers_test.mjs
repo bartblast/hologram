@@ -5,7 +5,7 @@ import {
   assertBoxedError,
   linkModules,
   unlinkModules,
-} from "../../../../../assets/js/test_support.mjs";
+} from "../../../support/helpers.mjs";
 
 import AssetPathRegistry from "../../../../../assets/js/asset_path_registry.mjs";
 import Elixir_Hologram_Router_Helpers from "../../../../../assets/js/elixir/hologram/router/helpers.mjs";

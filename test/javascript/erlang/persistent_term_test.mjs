@@ -1,10 +1,6 @@
 "use strict";
 
-import {
-  assert,
-  linkModules,
-  unlinkModules,
-} from "../../../assets/js/test_support.mjs";
+import {assert, linkModules, unlinkModules} from "../support/helpers.mjs";
 
 import Erlang_Persistent_Term from "../../../assets/js/erlang/persistent_term.mjs";
 import MemoryStorage from "../../../assets/js/memory_storage.mjs";

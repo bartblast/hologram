@@ -8,7 +8,7 @@ import {
   freeze,
   linkModules,
   unlinkModules,
-} from "../../../assets/js/test_support.mjs";
+} from "../support/helpers.mjs";
 
 import Erlang_Maps from "../../../assets/js/erlang/maps.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";

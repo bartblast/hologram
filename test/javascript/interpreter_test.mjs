@@ -7,7 +7,7 @@ import {
   linkModules,
   sinon,
   unlinkModules,
-} from "../../assets/js/test_support.mjs";
+} from "./support/helpers.mjs";
 
 import {defineModule1Fixture} from "./support/fixtures/ex_js_consistency/match_operator/module_1.mjs";
 

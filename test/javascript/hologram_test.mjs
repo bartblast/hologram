@@ -1,6 +1,6 @@
 "use strict";
 
-import {linkModules, unlinkModules} from "../../assets/js/test_support.mjs";
+import {linkModules, unlinkModules} from "./support/helpers.mjs";
 
 before(() => linkModules());
 after(() => unlinkModules());

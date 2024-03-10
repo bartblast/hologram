@@ -7,7 +7,7 @@ import {
   assertBoxedTrue,
   linkModules,
   unlinkModules,
-} from "../../../assets/js/test_support.mjs";
+} from "../support/helpers.mjs";
 
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
