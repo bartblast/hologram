@@ -1,6 +1,7 @@
 "use strict";
 
 import {assert} from "../support/helpers.mjs";
+
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 
 it("HologramInterpreterError", () => {
