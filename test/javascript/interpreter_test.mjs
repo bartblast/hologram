@@ -283,7 +283,7 @@ describe("callAnonymousFunction()", () => {
             Interpreter.matchOperator(
               Interpreter.matchOperator(
                 Type.variablePattern("y"),
-                Type.integer(1n),
+                Type.integer(1),
                 vars,
                 false,
               ),
@@ -5677,7 +5677,7 @@ describe("try()", () => {
     // end
     const body = (vars) => {
       Interpreter.matchOperator(
-        Type.integer(3n),
+        Type.integer(3),
         Type.variablePattern("a"),
         vars,
       );
