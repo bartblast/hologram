@@ -6,6 +6,7 @@ export default class Store {
   static data = Type.map([]);
 
   // null instead of boxed nil is returned by default on purpose, because the function is not used by transpiled code.
+  // deps: [:maps.get/2]
   static getComponentContext(cid) {
     const componentStruct = Store.getComponentStruct(cid);
 
@@ -15,6 +16,7 @@ export default class Store {
   }
 
   // null instead of boxed nil is returned by default on purpose, because the function is not used by transpiled code.
+  // deps: [:maps.get/2]
   static getComponentState(cid) {
     const componentStruct = Store.getComponentStruct(cid);
 
@@ -24,14 +26,17 @@ export default class Store {
   }
 
   // null instead of boxed nil is returned by default on purpose, because the function is not used by transpiled code.
+  // deps: [:maps.get/3]
   static getComponentStruct(cid) {
     return Erlang_Maps["get/3"](cid, Store.data, null);
   }
 
+  // deps: [:maps.merge/2]
   static hydrate(data) {
     Store.data = Erlang_Maps["merge/2"](Store.data, data);
   }
 
+  // deps: [Hologram.Component.__struct__/0, :maps.put/3]
   static putComponentContext(cid, context) {
     let componentStruct = Store.getComponentStruct(cid);
 
@@ -48,6 +53,7 @@ export default class Store {
     Store.putComponentStruct(cid, newComponentStruct);
   }
 
+  // deps: [Hologram.Component.__struct__/0, :maps.put/3]
   static putComponentState(cid, state) {
     let componentStruct = Store.getComponentStruct(cid);
 
@@ -64,6 +70,7 @@ export default class Store {
     Store.putComponentStruct(cid, newComponentStruct);
   }
 
+  // deps: [:maps.put/3]
   static putComponentStruct(cid, data) {
     Store.data = Erlang_Maps["put/3"](cid, data, Store.data);
   }
