@@ -719,7 +719,7 @@ describe("from()", () => {
       );
     });
 
-    // TODO: update once 16-bit float bitstring segments are implemented in Hologram
+    // TODO: update once 16-bit float bitstring segments get implemented in Hologram
     it("with float value when size * unit results in 16, 32 or 64", () => {
       const segment = Type.bitstringSegment(Type.float(123.45), {
         type: "float",
@@ -802,7 +802,7 @@ describe("from()", () => {
       );
     });
 
-    // TODO: update once 16-bit float bitstring segments are implemented in Hologram
+    // TODO: update once 16-bit float bitstring segments get implemented in Hologram
     it("with float value when size * unit results in 16, 32 or 64", () => {
       const segment = Type.bitstringSegment(Type.float(123.45), {
         type: "float",
