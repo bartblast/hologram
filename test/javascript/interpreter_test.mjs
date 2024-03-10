@@ -17,8 +17,6 @@ import HologramInterpreterError from "../../assets/js/errors/interpreter_error.m
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
 
-const clone = Interpreter.cloneVars;
-
 before(() => {
   linkModules();
 
@@ -647,12 +645,12 @@ describe("case()", () => {
   });
 });
 
-describe("cloneVars()", () => {
+describe("cloneDeep()", () => {
   it("clones vars recursively (deep clone)", () => {
     const nested = {c: 3, d: 4};
     const vars = {a: 1, b: nested};
     const expected = {a: 1, b: nested};
-    const result = Interpreter.cloneVars(vars);
+    const result = Interpreter.cloneDeep(vars);
 
     assert.deepStrictEqual(result, expected);
     assert.notEqual(result.b, nested);
@@ -4095,7 +4093,7 @@ describe("matchOperator()", () => {
     // %{x: 1, y: 2} = %{x: 1, y: 2}
     it("left and right maps have the same items", () => {
       const left = map;
-      const right = clone(map);
+      const right = Interpreter.cloneDeep(map);
       const result = Interpreter.matchOperator(right, left, vars);
 
       assert.deepStrictEqual(result, right);

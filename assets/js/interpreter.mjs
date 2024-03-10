@@ -56,7 +56,7 @@ export default class Interpreter {
     const args = Type.list(argsArray);
 
     for (const clause of fun.clauses) {
-      const varsClone = Interpreter.cloneVars(fun.vars);
+      const varsClone = Interpreter.cloneDeep(fun.vars);
       const pattern = Type.list(clause.params(varsClone));
 
       if (Interpreter.isMatched(pattern, args, varsClone)) {
@@ -81,14 +81,14 @@ export default class Interpreter {
     let conditionVars;
 
     if (typeof condition === "function") {
-      conditionVars = Interpreter.cloneVars(vars);
+      conditionVars = Interpreter.cloneDeep(vars);
       condition = condition(conditionVars);
     } else {
       conditionVars = vars;
     }
 
     for (const clause of clauses) {
-      const varsClone = Interpreter.cloneVars(conditionVars);
+      const varsClone = Interpreter.cloneDeep(conditionVars);
 
       if (Interpreter.isMatched(clause.match, condition, varsClone)) {
         Interpreter.updateVarsToMatchedValues(varsClone);
@@ -102,7 +102,7 @@ export default class Interpreter {
     return Interpreter.raiseCaseClauseError(condition);
   }
 
-  static cloneVars(vars) {
+  static cloneDeep(vars) {
     return cloneDeep(vars);
   }
 
@@ -145,7 +145,7 @@ export default class Interpreter {
     );
 
     let items = Utils.cartesianProduct(sets).reduce((acc, combination) => {
-      const varsClone = Interpreter.cloneVars(vars);
+      const varsClone = Interpreter.cloneDeep(vars);
 
       for (let i = 0; i < generatorsCount; ++i) {
         if (
@@ -180,7 +180,7 @@ export default class Interpreter {
 
   static cond(clauses, vars) {
     for (const clause of clauses) {
-      const varsClone = Interpreter.cloneVars(vars);
+      const varsClone = Interpreter.cloneDeep(vars);
 
       if (Type.isTruthy(clause.condition(varsClone))) {
         return clause.body(varsClone);
@@ -567,7 +567,7 @@ export default class Interpreter {
     let result;
 
     try {
-      const varsClone = Interpreter.cloneVars(vars);
+      const varsClone = Interpreter.cloneDeep(vars);
       result = body(varsClone);
       // TODO: finish
       // eslint-disable-next-line no-useless-catch
@@ -646,7 +646,7 @@ export default class Interpreter {
 
   static #evaluateCatchClauses(clauses, error, vars) {
     for (const clause of clauses) {
-      const varsClone = Interpreter.cloneVars(vars);
+      const varsClone = Interpreter.cloneDeep(vars);
 
       if (Interpreter.#matchCatchClause(clause, error, varsClone)) {
         return clause.body(varsClone);
@@ -672,7 +672,7 @@ export default class Interpreter {
 
   static #evaluateRescueClauses(clauses, error, vars) {
     for (const clause of clauses) {
-      const varsClone = Interpreter.cloneVars(vars);
+      const varsClone = Interpreter.cloneDeep(vars);
 
       if (Interpreter.#matchRescueClause(clause, error, varsClone)) {
         return clause.body(varsClone);

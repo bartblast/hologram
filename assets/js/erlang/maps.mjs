@@ -137,7 +137,7 @@ const Erlang_Maps = {
       Interpreter.raiseBadMapError(map);
     }
 
-    const newMap = Interpreter.cloneVars(map);
+    const newMap = Interpreter.cloneDeep(map);
     newMap.data[Type.encodeMapKey(key)] = [key, value];
 
     return newMap;

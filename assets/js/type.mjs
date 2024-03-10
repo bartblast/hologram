@@ -19,7 +19,7 @@ export default class Type {
       type: "anonymous_function",
       arity: arity,
       clauses: clauses,
-      vars: Interpreter.cloneVars(vars),
+      vars: Interpreter.cloneDeep(vars),
       uniqueId: Sequence.next(),
     };
   }
