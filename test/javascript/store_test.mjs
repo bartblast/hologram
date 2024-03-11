@@ -7,7 +7,6 @@ import {
   unlinkModules,
 } from "./support/helpers.mjs";
 
-import Interpreter from "../../assets/js/interpreter.mjs";
 import Store from "../../assets/js/store.mjs";
 import Type from "../../assets/js/type.mjs";
 
