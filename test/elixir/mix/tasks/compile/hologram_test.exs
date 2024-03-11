@@ -81,7 +81,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     num_page_bundles
   end
 
-  defp test_page_digest_plt(num_page_bundles) do
+  defp test_page_digest_plt(expected_num_page_bundles) do
     page_digest_dump_file =
       Path.join([@tmp_path, "build", Reflection.page_digest_plt_dump_file_name()])
 
@@ -90,7 +90,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
     page_digest_plt = PLT.start()
     PLT.load(page_digest_plt, page_digest_dump_file)
     page_digest_items = PLT.get_all(page_digest_plt)
-    assert Enum.count(Map.keys(page_digest_items)) == num_page_bundles
+
+    num_page_bundles =
+      page_digest_items
+      |> Map.keys()
+      |> Enum.count()
+
+    assert num_page_bundles == expected_num_page_bundles
+
     assert page_digest_items[Module1] =~ ~r/^[0-9a-f]{32}$/
   end
 

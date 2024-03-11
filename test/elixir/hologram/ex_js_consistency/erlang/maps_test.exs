@@ -179,7 +179,9 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
 
     test "raises BadMapError if the first argument is not a map" do
       assert_raise BadMapError, "expected a map, got: 123", fn ->
-        :maps.merge(build_value(123), %{a: 1})
+        123
+        |> build_value()
+        |> :maps.merge(%{a: 1})
       end
     end
 
