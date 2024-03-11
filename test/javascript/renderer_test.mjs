@@ -1160,7 +1160,7 @@ describe("context", () => {
   it("emitted in page, accessed in component nested in page", () => {
     initStoreComponentStruct(Type.bitstring("layout"));
 
-    Store.putComponentContext(
+    Store.putComponentEmittedContext(
       Type.bitstring("page"),
       Type.map([
         [
@@ -1181,7 +1181,7 @@ describe("context", () => {
   it("emitted in page, accessed in component nested in layout", () => {
     initStoreComponentStruct(Type.bitstring("layout"));
 
-    Store.putComponentContext(
+    Store.putComponentEmittedContext(
       Type.bitstring("page"),
       Type.map([
         [
@@ -1202,7 +1202,7 @@ describe("context", () => {
   it("emitted in page, accessed in layout", () => {
     initStoreComponentStruct(Type.bitstring("layout"));
 
-    Store.putComponentContext(
+    Store.putComponentEmittedContext(
       Type.bitstring("page"),
       Type.map([
         [
@@ -1223,7 +1223,7 @@ describe("context", () => {
   it("emmited in layout, accessed in component nested in page", () => {
     initStoreComponentStruct(Type.bitstring("page"));
 
-    Store.putComponentContext(
+    Store.putComponentEmittedContext(
       Type.bitstring("layout"),
       Type.map([
         [
@@ -1244,7 +1244,7 @@ describe("context", () => {
   it("emitted in layout, accessed in component nested in layout", () => {
     initStoreComponentStruct(Type.bitstring("page"));
 
-    Store.putComponentContext(
+    Store.putComponentEmittedContext(
       Type.bitstring("layout"),
       Type.map([
         [
@@ -1265,7 +1265,7 @@ describe("context", () => {
   it("emitted in component, accessed in component", () => {
     const cid = Type.bitstring("component_37");
 
-    Store.putComponentContext(
+    Store.putComponentEmittedContext(
       cid,
       Type.map([
         [

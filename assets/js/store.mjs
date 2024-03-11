@@ -7,11 +7,11 @@ export default class Store {
 
   // null instead of boxed nil is returned by default on purpose, because the function is not used by transpiled code.
   // deps: [:maps.get/2]
-  static getComponentContext(cid) {
+  static getComponentEmittedContext(cid) {
     const componentStruct = Store.getComponentStruct(cid);
 
     return componentStruct !== null
-      ? Erlang_Maps["get/2"](Type.atom("context"), componentStruct)
+      ? Erlang_Maps["get/2"](Type.atom("emitted_context"), componentStruct)
       : null;
   }
 
@@ -37,7 +37,7 @@ export default class Store {
   }
 
   // deps: [Hologram.Component.__struct__/0, :maps.put/3]
-  static putComponentContext(cid, context) {
+  static putComponentEmittedContext(cid, emittedContext) {
     let componentStruct = Store.getComponentStruct(cid);
 
     if (componentStruct === null) {
@@ -45,8 +45,8 @@ export default class Store {
     }
 
     const newComponentStruct = Erlang_Maps["put/3"](
-      Type.atom("context"),
-      context,
+      Type.atom("emitted_context"),
+      emittedContext,
       componentStruct,
     );
 

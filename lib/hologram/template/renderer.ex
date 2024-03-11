@@ -288,7 +288,10 @@ defmodule Hologram.Template.Renderer do
     |> StringUtils.prepend(" ")
   end
 
-  defp render_page_inside_layout(page_module, params, %{context: page_context, state: page_state}) do
+  defp render_page_inside_layout(page_module, params, %{
+         emitted_context: page_emitted_context,
+         state: page_state
+       }) do
     vars = Map.merge(params, page_state)
     page_dom = page_module.template().(vars)
 
@@ -296,13 +299,13 @@ defmodule Hologram.Template.Renderer do
     layout_props_dom = build_layout_props_dom(page_module, page_state)
     layout_node = {:component, layout_module, layout_props_dom, page_dom}
 
-    render_dom(layout_node, page_context, [])
+    render_dom(layout_node, page_emitted_context, [])
   end
 
   defp render_stateful_component(module, props, children_dom, context) do
     {component_struct, _server_struct} = init_component(module, props)
     vars = Map.merge(props, component_struct.state)
-    merged_context = Map.merge(context, component_struct.context)
+    merged_context = Map.merge(context, component_struct.emitted_context)
 
     {html, children_component_structs} =
       render_template(module, vars, children_dom, merged_context)

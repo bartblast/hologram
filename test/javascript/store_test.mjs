@@ -7,6 +7,7 @@ import {
   unlinkModules,
 } from "./support/helpers.mjs";
 
+import Interpreter from "../../assets/js/interpreter.mjs";
 import Store from "../../assets/js/store.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -21,33 +22,33 @@ afterEach(() => {
   Store.data = Type.map([]);
 });
 
-describe("getComponentContext()", () => {
-  it("component data exists", () => {
+describe("getComponentEmittedContext()", () => {
+  it("component struct exists", () => {
     const cid = Type.bitstring("my_component_2");
 
     Store.data = Type.map([
       [
         Type.bitstring("my_component_1"),
-        Type.map([[Type.atom("context"), "dummy_1"]]),
+        Type.map([[Type.atom("emitted_context"), "dummy_1"]]),
       ],
-      [cid, Type.map([[Type.atom("context"), "dummy_2"]])],
+      [cid, Type.map([[Type.atom("emitted_context"), "dummy_2"]])],
     ]);
 
-    const result = Store.getComponentContext(cid);
+    const result = Store.getComponentEmittedContext(cid);
 
     assert.equal(result, "dummy_2");
   });
 
-  it("component data doesn't exist", () => {
+  it("component struct doesn't exist", () => {
     const cid = Type.bitstring("my_component");
-    const result = Store.getComponentContext(cid);
+    const result = Store.getComponentEmittedContext(cid);
 
     assert.isNull(result);
   });
 });
 
 describe("getComponentStruct()", () => {
-  it("component data exists", () => {
+  it("component struct exists", () => {
     const cid = Type.bitstring("my_component_2");
 
     Store.data = Type.map([
@@ -60,7 +61,7 @@ describe("getComponentStruct()", () => {
     assert.equal(result, "dummy_2");
   });
 
-  it("component data doesn't exist", () => {
+  it("component struct doesn't exist", () => {
     const cid = Type.bitstring("my_component");
     const result = Store.getComponentStruct(cid);
 
@@ -69,7 +70,7 @@ describe("getComponentStruct()", () => {
 });
 
 describe("getComponentState()", () => {
-  it("component data exists", () => {
+  it("component struct exists", () => {
     const cid = Type.bitstring("my_component_2");
 
     Store.data = Type.map([
@@ -85,7 +86,7 @@ describe("getComponentState()", () => {
     assert.equal(result, "dummy_2");
   });
 
-  it("component data doesn't exist", () => {
+  it("component struct doesn't exist", () => {
     const cid = Type.bitstring("my_component");
     const result = Store.getComponentState(cid);
 
@@ -116,21 +117,21 @@ it("hydrate()", () => {
   );
 });
 
-describe("putComponentContext()", () => {
+describe("putComponentEmittedContext()", () => {
   const cid = Type.bitstring("my_component");
 
-  it("when component data exists", () => {
+  it("when component struct exists", () => {
     Store.data = Type.map([
       [
         cid,
         Type.map([
-          [Type.atom("context"), "dummy_context_1"],
+          [Type.atom("emitted_context"), "dummy_context_1"],
           [Type.atom("state"), "dummy_state"],
         ]),
       ],
     ]);
 
-    Store.putComponentContext(cid, "dummy_context_2");
+    Store.putComponentEmittedContext(cid, "dummy_context_2");
 
     assert.deepStrictEqual(
       Store.data,
@@ -138,7 +139,7 @@ describe("putComponentContext()", () => {
         [
           cid,
           Type.map([
-            [Type.atom("context"), "dummy_context_2"],
+            [Type.atom("emitted_context"), "dummy_context_2"],
             [Type.atom("state"), "dummy_state"],
           ]),
         ],
@@ -146,12 +147,14 @@ describe("putComponentContext()", () => {
     );
   });
 
-  it("when component data doesn't exist", () => {
-    Store.putComponentContext(cid, "dummy_context");
+  it("when component struct doesn't exist", () => {
+    Store.putComponentEmittedContext(cid, "dummy_context");
 
     assert.deepStrictEqual(
       Store.data,
-      Type.map([[cid, buildComponentStruct({context: "dummy_context"})]]),
+      Type.map([
+        [cid, buildComponentStruct({emittedContext: "dummy_context"})],
+      ]),
     );
   });
 });
@@ -159,12 +162,12 @@ describe("putComponentContext()", () => {
 describe("putComponentState()", () => {
   const cid = Type.bitstring("my_component");
 
-  it("when component data exists", () => {
+  it("when component struct exists", () => {
     Store.data = Type.map([
       [
         cid,
         Type.map([
-          [Type.atom("context"), "dummy_context"],
+          [Type.atom("emitted_context"), "dummy_context"],
           [Type.atom("state"), "dummy_state_1"],
         ]),
       ],
@@ -178,7 +181,7 @@ describe("putComponentState()", () => {
         [
           cid,
           Type.map([
-            [Type.atom("context"), "dummy_context"],
+            [Type.atom("emitted_context"), "dummy_context"],
             [Type.atom("state"), "dummy_state_2"],
           ]),
         ],
@@ -186,7 +189,7 @@ describe("putComponentState()", () => {
     );
   });
 
-  it("when component data doesn't exist", () => {
+  it("when component struct doesn't exist", () => {
     Store.putComponentState(cid, "dummy_state");
 
     assert.deepStrictEqual(
@@ -201,7 +204,7 @@ it("putComponentStruct()", () => {
     [
       Type.bitstring("my_component_1"),
       Type.map([
-        [Type.atom("context"), "dummy_context_1"],
+        [Type.atom("emitted_context"), "dummy_context_1"],
         [Type.atom("state"), "dummy_state_1"],
       ]),
     ],
@@ -210,7 +213,7 @@ it("putComponentStruct()", () => {
   const cid = Type.bitstring("my_component_2");
 
   const componentData = Type.map([
-    [Type.atom("context"), "dummy_context_2"],
+    [Type.atom("emitted_context"), "dummy_context_2"],
     [Type.atom("state"), "dummy_state_2"],
   ]);
 
@@ -222,14 +225,14 @@ it("putComponentStruct()", () => {
       [
         Type.bitstring("my_component_1"),
         Type.map([
-          [Type.atom("context"), "dummy_context_1"],
+          [Type.atom("emitted_context"), "dummy_context_1"],
           [Type.atom("state"), "dummy_state_1"],
         ]),
       ],
       [
         Type.bitstring("my_component_2"),
         Type.map([
-          [Type.atom("context"), "dummy_context_2"],
+          [Type.atom("emitted_context"), "dummy_context_2"],
           [Type.atom("state"), "dummy_state_2"],
         ]),
       ],

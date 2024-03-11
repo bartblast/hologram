@@ -4,10 +4,10 @@ defmodule Hologram.Component do
   alias Hologram.Operation
   alias Hologram.Server
 
-  defstruct context: %{}, next_command: nil, state: %{}
+  defstruct emitted_context: %{}, next_command: nil, state: %{}
 
   @type t :: %__MODULE__{
-          context: %{atom => any} | %{{module, atom} => any},
+          emitted_context: %{atom => any} | %{{module, atom} => any},
           next_command: Operation.t() | nil,
           state: %{atom => any}
         }
@@ -110,11 +110,11 @@ defmodule Hologram.Component do
   end
 
   @doc """
-  Puts the given key-value pair to the component context.
+  Puts the given key-value pair to the component emitted context.
   """
   @spec put_context(Component.t(), any, any) :: Component.t()
-  def put_context(%{context: context} = component, key, value) do
-    %{component | context: Map.put(context, key, value)}
+  def put_context(%{emitted_context: context} = component, key, value) do
+    %{component | emitted_context: Map.put(context, key, value)}
   end
 
   @doc """

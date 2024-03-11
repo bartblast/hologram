@@ -395,10 +395,10 @@ defmodule Hologram.Template.RendererTest do
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component{
-                    context: %{}
+                    emitted_context: %{}
                   },
                   "page" => %Component{
-                    context: %{
+                    emitted_context: %{
                       {Hologram.Runtime, :initial_page?} => false,
                       {Hologram.Runtime, :page_digest} => :dummy_module_39_digest,
                       {Hologram.Runtime, :page_mounted?} => true,
@@ -415,10 +415,10 @@ defmodule Hologram.Template.RendererTest do
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component{
-                    context: %{}
+                    emitted_context: %{}
                   },
                   "page" => %Component{
-                    context: %{
+                    emitted_context: %{
                       {Hologram.Runtime, :initial_page?} => false,
                       {Hologram.Runtime, :page_digest} => :dummy_module_46_digest,
                       {Hologram.Runtime, :page_mounted?} => true,
@@ -435,10 +435,10 @@ defmodule Hologram.Template.RendererTest do
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component{
-                    context: %{}
+                    emitted_context: %{}
                   },
                   "page" => %Component{
-                    context: %{
+                    emitted_context: %{
                       {Hologram.Runtime, :initial_page?} => false,
                       {Hologram.Runtime, :page_digest} => :dummy_module_40_digest,
                       {Hologram.Runtime, :page_mounted?} => true,
@@ -455,10 +455,10 @@ defmodule Hologram.Template.RendererTest do
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component{
-                    context: %{{:my_scope, :my_key} => 123}
+                    emitted_context: %{{:my_scope, :my_key} => 123}
                   },
                   "page" => %Component{
-                    context: %{
+                    emitted_context: %{
                       {Hologram.Runtime, :initial_page?} => false,
                       {Hologram.Runtime, :page_digest} => :dummy_module_43_digest,
                       {Hologram.Runtime, :page_mounted?} => true
@@ -474,10 +474,10 @@ defmodule Hologram.Template.RendererTest do
                {"prop_aaa = 123",
                 %{
                   "layout" => %Component{
-                    context: %{{:my_scope, :my_key} => 123}
+                    emitted_context: %{{:my_scope, :my_key} => 123}
                   },
                   "page" => %Component{
-                    context: %{
+                    emitted_context: %{
                       {Hologram.Runtime, :initial_page?} => false,
                       {Hologram.Runtime, :page_digest} => :dummy_module_45_digest,
                       {Hologram.Runtime, :page_mounted?} => true
@@ -493,7 +493,7 @@ defmodule Hologram.Template.RendererTest do
                {"prop_aaa = 123",
                 %{
                   "component_37" => %Component{
-                    context: %{
+                    emitted_context: %{
                       {:my_scope, :my_key} => 123
                     }
                   }
@@ -584,7 +584,7 @@ defmodule Hologram.Template.RendererTest do
                 %{
                   "layout" => %Component{},
                   "page" => %Component{
-                    context: %{
+                    emitted_context: %{
                       {Hologram.Runtime, :initial_page?} => false,
                       {Hologram.Runtime, :page_digest} => :dummy_module_28_digest,
                       {Hologram.Runtime, :page_mounted?} => true
@@ -604,7 +604,7 @@ defmodule Hologram.Template.RendererTest do
                     state: %{state_1: "value_1", state_2: "value_2"}
                   },
                   "page" => %Component{
-                    context: %{
+                    emitted_context: %{
                       {Hologram.Runtime, :initial_page?} => false,
                       {Hologram.Runtime, :page_digest} => :dummy_module_29_digest,
                       {Hologram.Runtime, :page_mounted?} => true
@@ -639,7 +639,7 @@ defmodule Hologram.Template.RendererTest do
       assert {html, _} = render_page(Module48, @params_dom, @opts)
 
       expected =
-        ~s/componentStructs: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("context"), Type.map([])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])], [Type.bitstring("page"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("initial_page?")]), Type.atom("false")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_mounted?")]), Type.atom("true")]])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])/
+        ~s/componentStructs: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])], [Type.bitstring("page"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("initial_page?")]), Type.atom("false")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_mounted?")]), Type.atom("true")]])], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])/
 
       assert String.contains?(html, expected)
     end

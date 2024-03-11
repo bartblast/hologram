@@ -197,7 +197,7 @@ export default class Renderer {
   // deps: [Hologram.Component.__struct__/0, :maps.get/2]
   static #maybeInitComponent(cid, moduleRef, props) {
     let componentState = Store.getComponentState(cid);
-    let componentContext;
+    let componentEmittedContext;
 
     if (componentState === null) {
       if ("init/2" in moduleRef) {
@@ -216,8 +216,8 @@ export default class Renderer {
           componentStruct,
         );
 
-        componentContext = Erlang_Maps["get/2"](
-          Type.atom("context"),
+        componentEmittedContext = Erlang_Maps["get/2"](
+          Type.atom("emitted_context"),
           componentStruct,
         );
       } else {
@@ -228,10 +228,10 @@ export default class Renderer {
         throw new HologramInterpreterError(message);
       }
     } else {
-      componentContext = Store.getComponentContext(cid);
+      componentEmittedContext = Store.getComponentEmittedContext(cid);
     }
 
-    return [componentState, componentContext];
+    return [componentState, componentEmittedContext];
   }
 
   // Based on inject_props_from_context/3
@@ -377,8 +377,8 @@ export default class Renderer {
     pageParams,
     pageComponentStruct,
   ) {
-    const pageContext = Erlang_Maps["get/2"](
-      Type.atom("context"),
+    const pageEmittedContext = Erlang_Maps["get/2"](
+      Type.atom("emitted_context"),
       pageComponentStruct,
     );
 
@@ -404,7 +404,11 @@ export default class Renderer {
       pageDom,
     ]);
 
-    return Renderer.renderDom(layoutNode, pageContext, Type.keywordList([]));
+    return Renderer.renderDom(
+      layoutNode,
+      pageEmittedContext,
+      Type.keywordList([]),
+    );
   }
 
   // Based on render_dom/3 (slot case)
@@ -422,14 +426,14 @@ export default class Renderer {
   static #renderStatefulComponent(moduleRef, props, childrenDom, context) {
     const cid = Erlang_Maps["get/2"](Type.atom("cid"), props);
 
-    const [componentState, componentContext] = Renderer.#maybeInitComponent(
-      cid,
-      moduleRef,
-      props,
-    );
+    const [componentState, componentEmittedContext] =
+      Renderer.#maybeInitComponent(cid, moduleRef, props);
 
     const vars = Erlang_Maps["merge/2"](props, componentState);
-    const mergedContext = Erlang_Maps["merge/2"](context, componentContext);
+    const mergedContext = Erlang_Maps["merge/2"](
+      context,
+      componentEmittedContext,
+    );
 
     return Renderer.#renderTemplate(
       moduleRef,

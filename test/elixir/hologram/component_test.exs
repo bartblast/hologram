@@ -69,10 +69,10 @@ defmodule Hologram.ComponentTest do
   end
 
   test "put_context/3" do
-    component = %Component{context: %{a: 1}}
+    component = %Component{emitted_context: %{a: 1}}
 
     assert put_context(component, :b, 2) == %Component{
-             context: %{a: 1, b: 2}
+             emitted_context: %{a: 1, b: 2}
            }
   end
 

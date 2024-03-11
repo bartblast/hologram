@@ -93,12 +93,12 @@ export function assertMatchError(callable, value) {
 export function buildComponentStruct(data) {
   let componentStruct = elixirHologramComponentStruct0();
 
-  const {context, nextCommand, state} = data;
+  const {emittedContext, nextCommand, state} = data;
 
-  if (typeof context !== "undefined") {
+  if (typeof emittedContext !== "undefined") {
     componentStruct = Erlang_Maps["put/3"](
-      Type.atom("context"),
-      context,
+      Type.atom("emitted_context"),
+      emittedContext,
       componentStruct,
     );
   }
@@ -125,7 +125,7 @@ export function buildComponentStruct(data) {
 export function elixirHologramComponentStruct0() {
   return Type.map([
     [Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")],
-    [Type.atom("context"), Type.map([])],
+    [Type.atom("emitted_context"), Type.map([])],
     [Type.atom("next_command"), Type.atom("nil")],
     [Type.atom("state"), Type.map([])],
   ]);
