@@ -1,0 +1,18 @@
+version: 2
+
+updates:
+
+  - package-ecosystem: "mix"
+    directory: "/"
+    schedule:
+      interval: "daily"
+
+  - package-ecosystem: "mix"
+    directory: "/test/features"
+    schedule:
+      interval: "daily"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
