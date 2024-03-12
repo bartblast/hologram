@@ -5491,10 +5491,6 @@ describe("matchOperator()", () => {
   });
 });
 
-it("moduleRef()", () => {
-  assert.equal(Interpreter.moduleRef("maps"), Erlang_Maps);
-});
-
 describe("moduleName()", () => {
   describe("boxed alias argument", () => {
     it("Elixir module alias without camel case segments", () => {
@@ -5559,6 +5555,10 @@ describe("moduleName()", () => {
       assert.equal(result, "Erlang_Aaa_Bbb");
     });
   });
+});
+
+it("moduleRef()", () => {
+  assert.equal(Interpreter.moduleRef("maps"), Erlang_Maps);
 });
 
 it("raiseArgumentError()", () => {
