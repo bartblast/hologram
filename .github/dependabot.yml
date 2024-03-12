@@ -11,6 +11,11 @@ updates:
     directory: "/test/features"
     schedule:
       interval: "daily"
+      
+  - package-ecosystem: "npm"
+    directory: "/assets"
+    schedule:
+      interval: "daily"      
 
   - package-ecosystem: "github-actions"
     directory: "/"
