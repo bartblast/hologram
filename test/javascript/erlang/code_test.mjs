@@ -1,6 +1,11 @@
 "use strict";
 
-import {assert, linkModules, unlinkModules} from "../support/helpers.mjs";
+import {
+  assert,
+  assertBoxedError,
+  linkModules,
+  unlinkModules,
+} from "../support/helpers.mjs";
 
 import Erlang_Code from "../../../assets/js/erlang/code.mjs";
 import Type from "../../../assets/js/type.mjs";
@@ -29,5 +34,13 @@ describe("ensure_loaded/1", () => {
     const expected = Type.tuple([Type.atom("error"), Type.atom("nofile")]);
 
     assert.deepStrictEqual(result, expected);
+  });
+
+  it("raises FunctionClauseError if the argument is not an atom", () => {
+    assertBoxedError(
+      () => fun(Type.integer(1)),
+      "FunctionClauseError",
+      "no function clause matching in :code.ensure_loaded/1",
+    );
   });
 });

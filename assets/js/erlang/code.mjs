@@ -13,7 +13,7 @@ const Erlang_Code = {
   "ensure_loaded/1": (module) => {
     if (!Type.isAtom(module)) {
       Interpreter.raiseFunctionClauseError(
-        "no function clause matching in :code.ensure_loaded/1/1",
+        "no function clause matching in :code.ensure_loaded/1",
       );
     }
 
