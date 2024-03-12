@@ -41,7 +41,7 @@ jobs:
       
     # Step: Setup Node.js using the version specified in .tool-versions file.
     - name: Set up Node.JS
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version-file: .tool-versions    
       
@@ -195,7 +195,7 @@ jobs:
       
     # Step: Setup Node.js using the version specified in .tool-versions file.
     - name: Set up Node.JS
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version-file: .tool-versions    
       
