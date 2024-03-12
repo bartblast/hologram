@@ -37,7 +37,7 @@ jobs:
 
     # Step: Checkout the code.
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       
     # Step: Setup Node.js using the version specified in .tool-versions file.
     - name: Set up Node.JS
@@ -191,7 +191,7 @@ jobs:
 
     # Step: Checkout the code.
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       
     # Step: Setup Node.js using the version specified in .tool-versions file.
     - name: Set up Node.JS
