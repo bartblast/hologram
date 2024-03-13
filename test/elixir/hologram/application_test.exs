@@ -18,7 +18,7 @@ defmodule Hologram.ApplicationTest do
     stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
     stub_with(PageModuleResolverMock, PageModuleResolverStub)
 
-    setup_asset_fixtures(AssetPathRegistryStub.static_dir_path())
+    setup_asset_fixtures(AssetPathRegistryStub.static_dir())
     setup_page_digest_registry_dump(PageDigestRegistryStub)
 
     :ok

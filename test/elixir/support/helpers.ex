@@ -176,27 +176,27 @@ defmodule Hologram.Test.Helpers do
   Sets up asset fixtures.
   """
   @spec setup_asset_fixtures(String.t()) :: [mapping: %{String.t() => String.t()}]
-  def setup_asset_fixtures(static_path) do
-    clean_dir(static_path)
+  def setup_asset_fixtures(static_dir) do
+    clean_dir(static_dir)
 
-    dir_2_path = static_path <> "/test_dir_1/test_dir_2"
-    file_1_path = dir_2_path <> "/test_file_1-11111111111111111111111111111111.css"
-    file_2_path = dir_2_path <> "/test_file_2-22222222222222222222222222222222.css"
-    file_3_path = dir_2_path <> "/page-33333333333333333333333333333333.js"
+    dir_2 = static_dir <> "/test_dir_1/test_dir_2"
+    file_1_path = dir_2 <> "/test_file_1-11111111111111111111111111111111.css"
+    file_2_path = dir_2 <> "/test_file_2-22222222222222222222222222222222.css"
+    file_3_path = dir_2 <> "/page-33333333333333333333333333333333.js"
 
-    dir_3_path = static_path <> "/test_dir_3"
-    file_4_path = dir_3_path <> "/test_file_4-44444444444444444444444444444444.css"
-    file_5_path = dir_3_path <> "/test_file_5-55555555555555555555555555555555.css"
-    file_6_path = dir_3_path <> "/page-66666666666666666666666666666666.js"
+    dir_3 = static_dir <> "/test_dir_3"
+    file_4_path = dir_3 <> "/test_file_4-44444444444444444444444444444444.css"
+    file_5_path = dir_3 <> "/test_file_5-55555555555555555555555555555555.css"
+    file_6_path = dir_3 <> "/page-66666666666666666666666666666666.js"
 
-    dir_4_path = static_path <> "/hologram"
-    file_7_path = dir_4_path <> "/page-77777777777777777777777777777777.js"
-    file_8_path = dir_4_path <> "/page-88888888888888888888888888888888.js"
-    file_9_path = dir_4_path <> "/test_file_9-99999999999999999999999999999999.css"
+    dir_4 = static_dir <> "/hologram"
+    file_7_path = dir_4 <> "/page-77777777777777777777777777777777.js"
+    file_8_path = dir_4 <> "/page-88888888888888888888888888888888.js"
+    file_9_path = dir_4 <> "/test_file_9-99999999999999999999999999999999.css"
 
-    File.mkdir_p!(dir_2_path)
-    File.mkdir_p!(dir_3_path)
-    File.mkdir_p!(dir_4_path)
+    File.mkdir_p!(dir_2)
+    File.mkdir_p!(dir_3)
+    File.mkdir_p!(dir_4)
 
     file_paths = [
       file_1_path,

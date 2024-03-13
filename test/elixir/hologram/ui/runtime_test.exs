@@ -17,7 +17,7 @@ defmodule Hologram.UI.RuntimeTest do
     stub_with(AssetManifestCacheMock, AssetManifestCacheStub)
     stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
 
-    setup_asset_fixtures(AssetPathRegistryStub.static_dir_path())
+    setup_asset_fixtures(AssetPathRegistryStub.static_dir())
     AssetPathRegistry.start_link([])
     AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
 

@@ -1,11 +1,11 @@
 alias Hologram.Assets.ManifestCache, as: AssetManifestCache
 alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
 alias Hologram.Assets.PageDigestRegistry
+alias Hologram.Commons.Reflection
 alias Hologram.Router.PageModuleResolver
 
 # Create tmp dir if it doesn't exist yet.
-tmp_path = "#{File.cwd!()}/tmp"
-File.mkdir_p!(tmp_path)
+File.mkdir_p!(Reflection.tmp_dir())
 
 ExUnit.start()
 

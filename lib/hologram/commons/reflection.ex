@@ -149,7 +149,7 @@ defmodule Hologram.Commons.Reflection do
   @spec list_all_otp_apps() :: list(atom)
   # sobelow_skip ["DOS.StringToAtom"]
   def list_all_otp_apps do
-    "#{root_path()}/_build/#{Hologram.env()}/**/ebin/*.app"
+    "#{root_dir()}/_build/#{Hologram.env()}/**/ebin/*.app"
     |> Path.wildcard()
     |> Stream.map(&Path.basename(&1, ".app"))
     |> Stream.map(&String.to_atom/1)
@@ -382,8 +382,8 @@ defmodule Hologram.Commons.Reflection do
   @doc """
   Returns the release priv dir path.
   """
-  @spec release_priv_path() :: String.t()
-  def release_priv_path do
+  @spec release_priv_dir() :: String.t()
+  def release_priv_dir do
     otp_app()
     |> :code.priv_dir()
     |> to_string()
@@ -392,21 +392,21 @@ defmodule Hologram.Commons.Reflection do
   @doc """
   Returns the release static dir path.
   """
-  @spec release_static_path() :: String.t()
-  def release_static_path do
-    release_priv_path() <> "/static"
+  @spec release_static_dir() :: String.t()
+  def release_static_dir do
+    release_priv_dir() <> "/static"
   end
 
   @doc """
-  Returns the absolute path of the project.
+  Returns the absolute dir path of the project.
 
   ## Examples
 
-      iex> root_path()
+      iex> root_dir()
       "/Users/bartblast/Projects/my_project"
   """
-  @spec root_path() :: String.t()
-  def root_path do
+  @spec root_dir() :: String.t()
+  def root_dir do
     File.cwd!()
   end
 
@@ -415,12 +415,12 @@ defmodule Hologram.Commons.Reflection do
 
   ## Examples
 
-      iex> root_priv_path()
+      iex> root_priv_dir()
       "/Users/bartblast/Projects/my_project/priv/hologram"
   """
-  @spec root_priv_path() :: String.t()
-  def root_priv_path do
-    root_path() <> "/priv/hologram"
+  @spec root_priv_dir() :: String.t()
+  def root_priv_dir do
+    root_dir() <> "/priv/hologram"
   end
 
   @doc """
@@ -436,11 +436,11 @@ defmodule Hologram.Commons.Reflection do
 
   ## Examples
 
-      iex> tmp_path()
+      iex> tmp_dir()
       "/Users/bartblast/Projects/my_project/tmp"
   """
-  @spec tmp_path() :: String.t()
-  def tmp_path do
-    root_path() <> "/tmp"
+  @spec tmp_dir() :: String.t()
+  def tmp_dir do
+    root_dir() <> "/tmp"
   end
 end

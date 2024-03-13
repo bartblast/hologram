@@ -9,11 +9,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Module1
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Module2
 
-  @root_path Reflection.root_path()
-  @tmp_path "#{Reflection.tmp_path()}/#{__MODULE__}/run_1"
+  @root_dir Reflection.root_dir()
+  @tmp_dir "#{Reflection.tmp_dir()}/#{__MODULE__}/run_1"
 
   setup do
-    clean_dir(@tmp_path)
+    clean_dir(@tmp_dir)
     :ok
   end
 
@@ -28,7 +28,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   defp test_call_graph do
-    call_graph_dump_path = "#{@tmp_path}/build/call_graph.bin"
+    call_graph_dump_path = "#{@tmp_dir}/build/call_graph.bin"
     assert File.exists?(call_graph_dump_path)
 
     call_graph = CallGraph.start()
@@ -40,7 +40,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   defp test_ir_plt do
-    ir_plt_dump_path = "#{@tmp_path}/build/ir.plt"
+    ir_plt_dump_path = "#{@tmp_dir}/build/ir.plt"
     assert File.exists?(ir_plt_dump_path)
 
     ir_plt = PLT.start()
@@ -49,7 +49,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   defp test_module_digest_plt do
-    module_digest_plt_dump_path = "#{@tmp_path}/build/module_digest.plt"
+    module_digest_plt_dump_path = "#{@tmp_dir}/build/module_digest.plt"
     assert File.exists?(module_digest_plt_dump_path)
 
     module_digest_plt = PLT.start()
@@ -65,14 +65,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   defp test_page_bundles do
     num_page_bundles =
-      "#{@tmp_path}/bundle/hologram/page-????????????????????????????????.js"
+      "#{@tmp_dir}/bundle/hologram/page-????????????????????????????????.js"
       |> Path.wildcard()
       |> Enum.count()
 
     assert num_page_bundles > 1
 
     num_page_source_maps =
-      "#{@tmp_path}/bundle/hologram/page-????????????????????????????????.js.map"
+      "#{@tmp_dir}/bundle/hologram/page-????????????????????????????????.js.map"
       |> Path.wildcard()
       |> Enum.count()
 
@@ -83,7 +83,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   defp test_page_digest_plt(expected_num_page_bundles) do
     page_digest_dump_file =
-      Path.join([@tmp_path, "build", Reflection.page_digest_plt_dump_file_name()])
+      Path.join([@tmp_dir, "build", Reflection.page_digest_plt_dump_file_name()])
 
     assert File.exists?(page_digest_dump_file)
 
@@ -103,14 +103,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   defp test_runtime_bundle do
     num_runtime_bundles =
-      "#{@tmp_path}/bundle/hologram/runtime-????????????????????????????????.js"
+      "#{@tmp_dir}/bundle/hologram/runtime-????????????????????????????????.js"
       |> Path.wildcard()
       |> Enum.count()
 
     assert num_runtime_bundles == 1
 
     num_runtime_source_maps =
-      "#{@tmp_path}/bundle/hologram/runtime-????????????????????????????????.js.map"
+      "#{@tmp_dir}/bundle/hologram/runtime-????????????????????????????????.js.map"
       |> Path.wildcard()
       |> Enum.count()
 
@@ -120,14 +120,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
   # There are two tests in one test block here, because setup for the second test is expensive.
   test "compile/1" do
     opts = [
-      assets_source_dir: "#{@root_path}/assets",
-      build_dir: "#{@tmp_path}/build",
-      bundle_dir: "#{@tmp_path}/bundle/hologram",
-      esbuild_path: "#{@root_path}/assets/node_modules/.bin/esbuild",
-      js_formatter_bin_path: "#{@root_path}/assets/node_modules/.bin/prettier",
-      js_formatter_config_path: "#{@root_path}/assets/.prettierrc.json",
-      js_source_dir: "#{@root_path}/assets/js",
-      tmp_dir: "#{@tmp_path}/tmp"
+      assets_source_dir: "#{@root_dir}/assets",
+      build_dir: "#{@tmp_dir}/build",
+      bundle_dir: "#{@tmp_dir}/bundle/hologram",
+      esbuild_path: "#{@root_dir}/assets/node_modules/.bin/esbuild",
+      js_formatter_bin_path: "#{@root_dir}/assets/node_modules/.bin/prettier",
+      js_formatter_config_path: "#{@root_dir}/assets/.prettierrc.json",
+      js_source_dir: "#{@root_dir}/assets/js",
+      tmp_dir: "#{@tmp_dir}/tmp"
     ]
 
     # Test case 1: when there are no previous build artifacts

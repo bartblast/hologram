@@ -270,12 +270,12 @@ defmodule Hologram.Commons.ReflectionTest do
     assert page_digest_plt_dump_file_name() == "page_digest.plt"
   end
 
-  test "release_priv_path/0" do
-    assert release_priv_path() == File.cwd!() <> "/_build/test/lib/hologram/priv"
+  test "release_priv_dir/0" do
+    assert release_priv_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv"
   end
 
-  test "release_static_path/0" do
-    assert release_static_path() == File.cwd!() <> "/_build/test/lib/hologram/priv/static"
+  test "release_static_dir/0" do
+    assert release_static_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv/static"
   end
 
   describe "protocol?/1" do
@@ -292,19 +292,19 @@ defmodule Hologram.Commons.ReflectionTest do
     end
   end
 
-  test "root_path/0" do
-    assert root_path() == File.cwd!()
+  test "root_dir/0" do
+    assert root_dir() == File.cwd!()
   end
 
-  test "root_priv_path/0" do
-    assert root_priv_path() == File.cwd!() <> "/priv/hologram"
+  test "root_priv_dir/0" do
+    assert root_priv_dir() == File.cwd!() <> "/priv/hologram"
   end
 
   test "source_path/1" do
     assert source_path(__MODULE__) == __ENV__.file
   end
 
-  test "tmp_path/0" do
-    assert tmp_path() == File.cwd!() <> "/tmp"
+  test "tmp_dir/0" do
+    assert tmp_dir() == File.cwd!() <> "/tmp"
   end
 end

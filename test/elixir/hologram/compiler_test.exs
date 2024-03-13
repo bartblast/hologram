@@ -20,7 +20,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module8
   alias Hologram.Test.Fixtures.Compiler.Module9
 
-  @assets_dir Path.join([Reflection.root_path(), "assets"])
+  @assets_dir Path.join([Reflection.root_dir(), "assets"])
   @source_dir Path.join([@assets_dir, "js"])
   @erlang_source_dir Path.join([@source_dir, "erlang"])
 
@@ -204,12 +204,12 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "bundle/4" do
-    @esbuild_path Reflection.root_path() <> "/assets/node_modules/.bin/esbuild"
-    @js_formatter_bin_path Reflection.root_path() <> "/assets/node_modules/.bin/prettier"
-    @js_formatter_config_path Reflection.root_path() <> "/assets/.prettierrc.json"
+    @esbuild_path Reflection.root_dir() <> "/assets/node_modules/.bin/esbuild"
+    @js_formatter_bin_path Reflection.root_dir() <> "/assets/node_modules/.bin/prettier"
+    @js_formatter_config_path Reflection.root_dir() <> "/assets/.prettierrc.json"
     @js_code "const myVar  =  123"
     @entry_name "my_entry"
-    @tmp_path "#{Reflection.tmp_path()}/#{__MODULE__}/build_4"
+    @tmp_dir "#{Reflection.tmp_dir()}/#{__MODULE__}/build_4"
     @bundle_name "my_bundle"
 
     @opts [
@@ -217,21 +217,21 @@ defmodule Hologram.CompilerTest do
       esbuild_path: @esbuild_path,
       js_formatter_bin_path: @js_formatter_bin_path,
       js_formatter_config_path: @js_formatter_config_path,
-      tmp_dir: @tmp_path,
-      bundle_dir: @tmp_path,
+      tmp_dir: @tmp_dir,
+      bundle_dir: @tmp_dir,
       bundle_name: @bundle_name
     ]
 
     setup do
-      clean_dir(@tmp_path)
+      clean_dir(@tmp_dir)
       :ok
     end
 
     test "creates tmp and bundle nested path dirs if they don't exist" do
       opts =
         @opts
-        |> Keyword.put(:tmp_dir, "#{@tmp_path}/nested_1/nested_2/nested_3")
-        |> Keyword.put(:bundle_dir, "#{@tmp_path}/nested_4/nested_5/nested_6")
+        |> Keyword.put(:tmp_dir, "#{@tmp_dir}/nested_1/nested_2/nested_3")
+        |> Keyword.put(:bundle_dir, "#{@tmp_dir}/nested_4/nested_5/nested_6")
 
       assert bundle(@js_code, opts)
       assert File.exists?(opts[:tmp_dir])
@@ -241,15 +241,15 @@ defmodule Hologram.CompilerTest do
     test "formats entry file" do
       bundle(@js_code, @opts)
 
-      entry_file = "#{@tmp_path}/#{@entry_name}.entry.js"
+      entry_file = "#{@tmp_dir}/#{@entry_name}.entry.js"
       assert File.read!(entry_file) == "const myVar = 123;\n"
     end
 
     test "bundles files" do
       assert bundle(@js_code, @opts) ==
                {"957e59b82bd39eb76bb8c7fea2ca29a8",
-                bundle_file = "#{@tmp_path}/my_bundle-957e59b82bd39eb76bb8c7fea2ca29a8.js",
-                source_map_file = "#{@tmp_path}/my_bundle-957e59b82bd39eb76bb8c7fea2ca29a8.js.map"}
+                bundle_file = "#{@tmp_dir}/my_bundle-957e59b82bd39eb76bb8c7fea2ca29a8.js",
+                source_map_file = "#{@tmp_dir}/my_bundle-957e59b82bd39eb76bb8c7fea2ca29a8.js.map"}
 
       assert File.read!(bundle_file) == """
              (()=>{})();

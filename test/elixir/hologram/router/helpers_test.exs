@@ -13,7 +13,7 @@ defmodule Hologram.Router.HelpersTest do
 
   setup do
     stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
-    setup_asset_fixtures(AssetPathRegistryStub.static_dir_path())
+    setup_asset_fixtures(AssetPathRegistryStub.static_dir())
   end
 
   describe "asset_path/1" do

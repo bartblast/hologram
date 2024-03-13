@@ -18,7 +18,7 @@ defmodule Hologram.Assets.PathRegistry do
   @doc """
   Returns the path of the static dir used by the asset path registry registered process.
   """
-  @callback static_dir_path() :: String.t()
+  @callback static_dir() :: String.t()
 
   @doc """
   Starts asset path registry process.
@@ -33,7 +33,7 @@ defmodule Hologram.Assets.PathRegistry do
     ets_table_name = impl().ets_table_name()
     ETS.create_named_table(ets_table_name)
 
-    impl().static_dir_path()
+    impl().static_dir()
     |> find_assets()
     |> Enum.each(fn {key, value} -> ETS.put(ets_table_name, key, value) end)
 
@@ -94,15 +94,15 @@ defmodule Hologram.Assets.PathRegistry do
   @doc """
   Returns the implementation of the asset path registry's static dir path.
   """
-  @spec static_dir_path() :: String.t()
-  def static_dir_path do
-    Reflection.release_static_path()
+  @spec static_dir() :: String.t()
+  def static_dir do
+    Reflection.release_static_dir()
   end
 
-  defp find_assets(static_dir_path) do
-    regex = ~r"#{Regex.escape(static_dir_path)}/(.+)\-([0-9a-f]{32})(.+)$"
+  defp find_assets(static_dir) do
+    regex = ~r"#{Regex.escape(static_dir)}/(.+)\-([0-9a-f]{32})(.+)$"
 
-    static_dir_path
+    static_dir
     |> FileUtils.list_files_recursively()
     |> Stream.map(&Regex.run(regex, &1))
     |> Stream.filter(& &1)

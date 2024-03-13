@@ -21,8 +21,8 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module8
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module9
 
-  @tmp_path Reflection.tmp_path()
-  @dump_dir "#{@tmp_path}/#{__MODULE__}"
+  @tmp_dir Reflection.tmp_dir()
+  @dump_dir "#{@tmp_dir}/#{__MODULE__}"
   @dump_file "#{@dump_dir}/test.bin"
 
   setup do

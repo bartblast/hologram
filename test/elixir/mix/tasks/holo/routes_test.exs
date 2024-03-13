@@ -14,7 +14,7 @@ defmodule Mix.Tasks.Holo.RoutesTest do
     --------------------------------------------------------------------------------
     /hologram-test-fixtures-mix-tasks-holo-routes-module1
     Hologram.Test.Fixtures.Mix.Tasks.Holo.Routes.Module1
-    #{@fixtures_path}/mix/tasks/holo/routes/module_1.ex
+    #{@fixtures_dir}/mix/tasks/holo/routes/module_1.ex
     --------------------------------------------------------------------------------\
     """
 

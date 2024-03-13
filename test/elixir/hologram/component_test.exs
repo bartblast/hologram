@@ -48,7 +48,7 @@ defmodule Hologram.ComponentTest do
 
   describe "maybe_define_template_fun/1" do
     test "valid template path" do
-      template_path = "#{@fixtures_path}/template/template_1.holo"
+      template_path = "#{@fixtures_dir}/template/template_1.holo"
 
       assert maybe_define_template_fun(template_path, Component) ==
                {:__block__, [],
