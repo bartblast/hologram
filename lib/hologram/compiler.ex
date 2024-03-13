@@ -385,10 +385,7 @@ defmodule Hologram.Compiler do
   end
 
   defp include_mfas_used_by_manually_ported_code_module(mfas) do
-    mfas ++
-      [
-        {:code, :ensure_loaded, 1}
-      ]
+    [{:code, :ensure_loaded, 1} | mfas]
   end
 
   defp include_mfas_used_by_manually_ported_hologram_router_helpers_module(mfas, call_graph) do
