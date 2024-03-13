@@ -24,6 +24,7 @@ export default class Hologram {
     Type: Type,
   };
 
+  static #componentStructs = null;
   static #isInitiated = false;
   static #pageModule = null;
   static #pageParams = null;
@@ -53,11 +54,13 @@ export default class Hologram {
   static #mountPage() {
     window.__hologramPageReachableFunctionDefs__(Hologram.#deps);
 
-    const mountData = Hologram.#loadMountData();
+    Hologram.#loadMountData();
+
+    Store.hydrate(Hologram.#componentStructs);
 
     Hologram.#maybeInitAssetPathRegistry();
 
-    Renderer.renderPage(mountData.pageModule, mountData.pageParams);
+    Renderer.renderPage(Hologram.#pageModule, Hologram.#pageParams);
   }
 
   static #onReady(callback) {
@@ -96,12 +99,9 @@ export default class Hologram {
   static #loadMountData() {
     const mountData = window.__hologramPageMountData__(Hologram.#deps);
 
-    Store.hydrate(mountData.componentStructs);
-
+    Hologram.#componentStructs = mountData.componentStructs;
     Hologram.#pageModule = mountData.pageModule;
     Hologram.#pageParams = mountData.pageParams;
-
-    return mountData;
   }
 
   static #maybeInitAssetPathRegistry() {
