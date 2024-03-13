@@ -33,6 +33,8 @@ export default class Hologram {
 
     window.console.inspect = (term) =>
       console.log("INSPECT: " + Interpreter.inspect(term));
+
+    Hologram.#isInitiated = true;
   }
 
   static #mountPage() {
