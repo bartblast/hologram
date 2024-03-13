@@ -1,6 +1,6 @@
 "use strict";
 
-import {buildComponentStruct} from "../../../helpers.mjs";
+import {putComponentState} from "../../../helpers.mjs";
 
 import Interpreter from "../../../../../../assets/js/interpreter.mjs";
 import Type from "../../../../../../assets/js/type.mjs";
@@ -32,13 +32,14 @@ export function defineModule3Fixture() {
           Type.variablePattern("component"),
         ],
         guards: [],
-        body: (_vars) => {
-          return buildComponentStruct({
-            state: Type.map([
+        body: (vars) => {
+          return putComponentState(
+            vars.component,
+            Type.map([
               [Type.atom("a"), Type.integer(11)],
               [Type.atom("b"), Type.integer(22)],
             ]),
-          });
+          );
         },
       },
     ],
