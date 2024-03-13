@@ -77,8 +77,8 @@ defmodule Hologram.Component do
   Resolves the colocated template path for the given component module given its file path.
   """
   @spec colocated_template_path(String.t()) :: String.t()
-  def colocated_template_path(templatable_file) do
-    Path.rootname(templatable_file) <> ".holo"
+  def colocated_template_path(templatable_path) do
+    Path.rootname(templatable_path) <> ".holo"
   end
 
   @doc """

@@ -241,22 +241,22 @@ defmodule Hologram.CompilerTest do
     test "formats entry file" do
       bundle(@js_code, @opts)
 
-      entry_file = "#{@tmp_dir}/#{@entry_name}.entry.js"
-      assert File.read!(entry_file) == "const myVar = 123;\n"
+      entry_file_path = "#{@tmp_dir}/#{@entry_name}.entry.js"
+      assert File.read!(entry_file_path) == "const myVar = 123;\n"
     end
 
     test "bundles files" do
       assert bundle(@js_code, @opts) ==
                {"957e59b82bd39eb76bb8c7fea2ca29a8",
-                bundle_file = "#{@tmp_dir}/my_bundle-957e59b82bd39eb76bb8c7fea2ca29a8.js",
-                source_map_file = "#{@tmp_dir}/my_bundle-957e59b82bd39eb76bb8c7fea2ca29a8.js.map"}
+                bundle_path = "#{@tmp_dir}/my_bundle-957e59b82bd39eb76bb8c7fea2ca29a8.js",
+                source_map_path = "#{@tmp_dir}/my_bundle-957e59b82bd39eb76bb8c7fea2ca29a8.js.map"}
 
-      assert File.read!(bundle_file) == """
+      assert File.read!(bundle_path) == """
              (()=>{})();
              //# sourceMappingURL=my_bundle-957e59b82bd39eb76bb8c7fea2ca29a8.js.map
              """
 
-      assert File.read!(source_map_file) == """
+      assert File.read!(source_map_path) == """
              {
                "version": 3,
                "sources": [],

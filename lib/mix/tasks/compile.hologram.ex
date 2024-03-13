@@ -124,7 +124,7 @@ defmodule Mix.Tasks.Compile.Hologram do
         bundle_dir: opts[:bundle_dir]
       ]
 
-      {digest, _bundle_file, _source_map_file} =
+      {digest, _bundle_path, _source_map_path} =
         page_module
         |> Compiler.build_page_js(call_graph, ir_plt, opts[:js_source_dir])
         |> Compiler.bundle(page_bundle_opts)

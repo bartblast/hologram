@@ -145,19 +145,19 @@ defmodule Hologram.Compiler do
     File.mkdir_p!(tmp_dir)
     File.mkdir_p!(bundle_dir)
 
-    entry_file = tmp_dir <> "/#{entry_name}.entry.js"
-    File.write!(entry_file, js)
+    entry_file_path = tmp_dir <> "/#{entry_name}.entry.js"
+    File.write!(entry_file_path, js)
 
-    format_entry_file(entry_file, opts)
+    format_entry_file(entry_file_path, opts)
 
-    bundle_file = "#{bundle_dir}/#{bundle_name}.js"
+    bundle_path = "#{bundle_dir}/#{bundle_name}.js"
 
     esbuild_cmd = [
-      entry_file,
+      entry_file_path,
       "--bundle",
       "--log-level=warning",
       "--minify",
-      "--outfile=#{bundle_file}",
+      "--outfile=#{bundle_path}",
       "--sourcemap",
       "--target=es2020"
     ]
@@ -165,29 +165,29 @@ defmodule Hologram.Compiler do
     System.cmd(esbuild_path, esbuild_cmd, env: [])
 
     digest =
-      bundle_file
+      bundle_path
       |> File.read!()
       |> CryptographicUtils.digest(:md5, :hex)
 
-    bundle_file_with_digest = "#{bundle_dir}/#{bundle_name}-#{digest}.js"
+    bundle_path_with_digest = "#{bundle_dir}/#{bundle_name}-#{digest}.js"
 
-    source_map_file = bundle_file <> ".map"
-    source_map_file_with_digest = bundle_file_with_digest <> ".map"
+    source_map_path = bundle_path <> ".map"
+    source_map_path_with_digest = bundle_path_with_digest <> ".map"
 
-    File.rename!(bundle_file, bundle_file_with_digest)
-    File.rename!(source_map_file, source_map_file_with_digest)
+    File.rename!(bundle_path, bundle_path_with_digest)
+    File.rename!(source_map_path, source_map_path_with_digest)
 
     js_with_replaced_source_map_url =
-      bundle_file_with_digest
+      bundle_path_with_digest
       |> File.read!()
       |> String.replace(
         "//# sourceMappingURL=#{bundle_name}.js.map",
         "//# sourceMappingURL=#{bundle_name}-#{digest}.js.map"
       )
 
-    File.write!(bundle_file_with_digest, js_with_replaced_source_map_url)
+    File.write!(bundle_path_with_digest, js_with_replaced_source_map_url)
 
-    {digest, bundle_file_with_digest, source_map_file_with_digest}
+    {digest, bundle_path_with_digest, source_map_path_with_digest}
   end
 
   @doc """
@@ -436,9 +436,9 @@ defmodule Hologram.Compiler do
   end
 
   # sobelow_skip ["CI.System"]
-  defp format_entry_file(entry_file, opts) do
+  defp format_entry_file(entry_file_path, opts) do
     cmd = [
-      entry_file,
+      entry_file_path,
       "--config=#{opts[:js_formatter_config_path]}",
       # "none" is not a valid path or a flag value,
       # any non-existing path would work the same here, i.e. disable "ignore" functionality.
