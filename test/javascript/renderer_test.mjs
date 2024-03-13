@@ -1,3 +1,5 @@
+// Based on Elixir Hologram.Template.RendererTest
+
 "use strict";
 
 import {

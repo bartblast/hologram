@@ -1,3 +1,5 @@
+// Based on Elixir Hologram.Template.Renderer
+
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
@@ -8,7 +10,6 @@ import Type from "./type.mjs";
 
 import {h as vnode} from "snabbdom";
 
-// Based on Hologram.Template.Renderer
 // deps: [String.Chars.to_string/1]
 export default class Renderer {
   // Based on render_dom/3
