@@ -2,6 +2,7 @@
 
 import AssetPathRegistry from "./asset_path_registry.mjs";
 import Bitstring from "./bitstring.mjs";
+import Elixir_Code from "./elixir/code.mjs";
 import Elixir_Hologram_Router_Helpers from "./elixir/hologram/router/helpers.mjs";
 import Elixir_Kernel from "./elixir/kernel.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
@@ -27,9 +28,21 @@ export default class Hologram {
   static #pageModule = null;
   static #pageParams = null;
 
+  static #defineManuallyPortedFunctions() {
+    window.Elixir_Code = {};
+    window.Elixir_Code["ensure_compiled/1"] = Elixir_Code["ensure_compiled/1"];
+
+    window.Elixir_Hologram_Router_Helpers = {};
+    window.Elixir_Hologram_Router_Helpers["asset_path/1"] =
+      Elixir_Hologram_Router_Helpers["asset_path/1"];
+
+    window.Elixir_Kernel = {};
+    window.Elixir_Kernel["inspect/1"] = Elixir_Kernel["inspect/1"];
+    window.Elixir_Kernel["inspect/2"] = Elixir_Kernel["inspect/2"];
+  }
+
   static #init() {
-    window.Elixir_Hologram_Router_Helpers = Elixir_Hologram_Router_Helpers;
-    window.Elixir_Kernel = Elixir_Kernel;
+    Hologram.#defineManuallyPortedFunctions();
 
     window.console.inspect = (term) =>
       console.log("INSPECT: " + Interpreter.inspect(term));

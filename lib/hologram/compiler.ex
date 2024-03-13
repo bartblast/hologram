@@ -481,6 +481,7 @@ defmodule Hologram.Compiler do
 
   defp remove_call_graph_vertices_of_manually_ported_elixir_functions(call_graph) do
     call_graph
+    |> CallGraph.remove_vertex({Code, :ensure_loaded, 1})
     |> CallGraph.remove_vertex({Hologram.Router.Helpers, :asset_path, 1})
     |> CallGraph.remove_vertex({Kernel, :inspect, 1})
     |> CallGraph.remove_vertex({Kernel, :inspect, 2})
