@@ -46,28 +46,6 @@ describe("getComponentEmittedContext()", () => {
   });
 });
 
-describe("getComponentStruct()", () => {
-  it("component struct exists", () => {
-    const cid = Type.bitstring("my_component_2");
-
-    Store.data = Type.map([
-      [Type.bitstring("my_component_1"), "dummy_1"],
-      [cid, "dummy_2"],
-    ]);
-
-    const result = Store.getComponentStruct(cid);
-
-    assert.equal(result, "dummy_2");
-  });
-
-  it("component struct doesn't exist", () => {
-    const cid = Type.bitstring("my_component");
-    const result = Store.getComponentStruct(cid);
-
-    assert.isNull(result);
-  });
-});
-
 describe("getComponentState()", () => {
   it("component struct exists", () => {
     const cid = Type.bitstring("my_component_2");
@@ -88,6 +66,28 @@ describe("getComponentState()", () => {
   it("component struct doesn't exist", () => {
     const cid = Type.bitstring("my_component");
     const result = Store.getComponentState(cid);
+
+    assert.isNull(result);
+  });
+});
+
+describe("getComponentStruct()", () => {
+  it("component struct exists", () => {
+    const cid = Type.bitstring("my_component_2");
+
+    Store.data = Type.map([
+      [Type.bitstring("my_component_1"), "dummy_1"],
+      [cid, "dummy_2"],
+    ]);
+
+    const result = Store.getComponentStruct(cid);
+
+    assert.equal(result, "dummy_2");
+  });
+
+  it("component struct doesn't exist", () => {
+    const cid = Type.bitstring("my_component");
+    const result = Store.getComponentStruct(cid);
 
     assert.isNull(result);
   });
