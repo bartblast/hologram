@@ -2,8 +2,10 @@
 
 import {assert} from "../../../assets/node_modules/chai/index.js";
 
+import Elixir_Code from "../../../assets/js/elixir/code.mjs";
 import Elixir_Kernel from "../../../assets/js/elixir/kernel.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
+import Erlang_Code from "../../../assets/js/erlang/code.mjs";
 import Erlang_Lists from "../../../assets/js/erlang/lists.mjs";
 import Erlang_Maps from "../../../assets/js/erlang/maps.mjs";
 import Erlang_Persistent_Term from "../../../assets/js/erlang/persistent_term.mjs";
@@ -174,10 +176,12 @@ export function initStoreComponentStruct(cid) {
 
 export function linkModules() {
   globalThis.Erlang = Erlang;
+  globalThis.Erlang_Code = Erlang_Code;
   globalThis.Erlang_Lists = Erlang_Lists;
   globalThis.Erlang_Maps = Erlang_Maps;
   globalThis.Erlang_Persistent_Term = Erlang_Persistent_Term;
   globalThis.Erlang_Unicode = Erlang_Unicode;
+  globalThis.Elixir_Code = Elixir_Code;
   globalThis.Elixir_Enum = {};
   globalThis.Elixir_Kernel = Elixir_Kernel;
 
@@ -198,10 +202,12 @@ export function putComponentState(component, state) {
 
 export function unlinkModules() {
   delete globalThis.Erlang;
+  delete globalThis.Erlang_Code;
   delete globalThis.Erlang_Lists;
   delete globalThis.Erlang_Maps;
   delete globalThis.Erlang_Persistent_Term;
   delete globalThis.Erlang_Unicode;
+  delete globalThis.Elixir_Code;
   delete globalThis.Elixir_Enum;
   delete globalThis.Elixir_Hologram_Component;
   delete globalThis.Elixir_Kernel;
