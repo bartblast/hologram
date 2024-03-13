@@ -8,8 +8,8 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.Compiler.list_runtime_mfas/1.
 
 const Erlang_Code = {
-  // start ensure_loaded/1
   // This function is simplified - it returns either {:module, MyModule} or {:error, :nofile}.
+  // start ensure_loaded/1
   "ensure_loaded/1": (module) => {
     if (!Type.isAtom(module)) {
       Interpreter.raiseFunctionClauseError(
