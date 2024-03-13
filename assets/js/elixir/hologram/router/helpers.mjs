@@ -5,7 +5,7 @@ import Bitstring from "../../../bitstring.mjs";
 import Interpreter from "../../../interpreter.mjs";
 import Type from "../../../type.mjs";
 
-// deps: [Hologram.AssetNotFoundError]
+// deps: []
 const Elixir_Hologram_Router_Helpers = {
   "asset_path/1": (staticPath) => {
     const assetPath = AssetPathRegistry.lookup(staticPath);
