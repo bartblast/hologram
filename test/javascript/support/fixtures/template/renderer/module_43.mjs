@@ -8,6 +8,7 @@ export function defineModule43Fixture() {
     "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module43",
     "__layout_module__",
     0,
+    "public",
     [
       {
         params: (_vars) => [],
@@ -25,6 +26,7 @@ export function defineModule43Fixture() {
     "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module43",
     "__layout_props__",
     0,
+    "public",
     [
       {
         params: (_vars) => [],
@@ -40,6 +42,7 @@ export function defineModule43Fixture() {
     "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module43",
     "__props__",
     0,
+    "public",
     [
       {
         params: (_vars) => [],
@@ -55,6 +58,7 @@ export function defineModule43Fixture() {
     "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module43",
     "template",
     0,
+    "public",
     [
       {
         params: (_vars) => [],

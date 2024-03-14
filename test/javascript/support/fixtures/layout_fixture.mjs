@@ -8,6 +8,7 @@ export function defineLayoutFixture() {
     "Elixir_Hologram_Test_Fixtures_LayoutFixture",
     "__props__",
     0,
+    "public",
     [
       {
         params: (_vars) => [],
@@ -23,6 +24,7 @@ export function defineLayoutFixture() {
     "Elixir_Hologram_Test_Fixtures_LayoutFixture",
     "template",
     0,
+    "public",
     [
       {
         params: (_vars) => [],

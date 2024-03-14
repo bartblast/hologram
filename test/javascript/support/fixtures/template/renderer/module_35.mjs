@@ -8,6 +8,7 @@ export function defineModule35Fixture() {
     "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module35",
     "__props__",
     0,
+    "public",
     [
       {
         params: (_vars) => [],
@@ -25,6 +26,7 @@ export function defineModule35Fixture() {
     "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module35",
     "template",
     0,
+    "public",
     [
       {
         params: (_vars) => [],

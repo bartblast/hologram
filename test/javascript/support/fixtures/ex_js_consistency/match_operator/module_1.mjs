@@ -8,6 +8,7 @@ export function defineModule1Fixture() {
     "Elixir_Hologram_Test_Fixtures_ExJsConsistency_MatchOperator_Module1",
     "test_a",
     1,
+    "public",
     [
       {
         params: (vars) => [
@@ -29,6 +30,7 @@ export function defineModule1Fixture() {
     "Elixir_Hologram_Test_Fixtures_ExJsConsistency_MatchOperator_Module1",
     "test_b",
     1,
+    "public",
     [
       {
         params: (vars) => [
@@ -50,6 +52,7 @@ export function defineModule1Fixture() {
     "Elixir_Hologram_Test_Fixtures_ExJsConsistency_MatchOperator_Module1",
     "test_c",
     1,
+    "public",
     [
       {
         params: (vars) => [
@@ -79,6 +82,7 @@ export function defineModule1Fixture() {
     "Elixir_Hologram_Test_Fixtures_ExJsConsistency_MatchOperator_Module1",
     "test_d",
     1,
+    "public",
     [
       {
         params: (vars) => [
