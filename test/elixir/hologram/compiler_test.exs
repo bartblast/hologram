@@ -188,11 +188,14 @@ defmodule Hologram.CompilerTest do
 
     js = build_runtime_js(@source_dir, call_graph, ir_plt)
 
-    assert String.contains?(js, ~s/Interpreter.defineElixirFunction("Elixir_Enum", "into", 2/)
+    assert String.contains?(
+             js,
+             ~s/Interpreter.defineElixirFunction("Elixir_Enum", "into", 2, "public"/
+           )
 
     assert String.contains?(
              js,
-             ~s/Interpreter.defineElixirFunction("Elixir_Enum", "into_protocol", 2/
+             ~s/Interpreter.defineElixirFunction("Elixir_Enum", "into_protocol", 2, "private"/
            )
 
     assert String.contains?(js, ~s/Interpreter.defineErlangFunction("Erlang", "error", 1/)
