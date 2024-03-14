@@ -201,7 +201,8 @@ export default class Interpreter {
   static defineElixirFunction(
     moduleName,
     functionName,
-    functionArity,
+    arity,
+    visibility,
     clauses,
   ) {
     if (!globalThis[moduleName]) {
@@ -221,12 +222,13 @@ export default class Interpreter {
       );
 
       globalThis[moduleName].__hologramJsModuleName__ = moduleName;
+      globalThis[moduleName].__exports__ = new Set();
     }
 
-    globalThis[moduleName][`${functionName}/${functionArity}`] = function () {
+    globalThis[moduleName][`${functionName}/${arity}`] = function () {
       const mfa = `${Interpreter.inspectModuleName(
         moduleName,
-      )}.${functionName}/${functionArity}`;
+      )}.${functionName}/${arity}`;
 
       // TODO: remove on release
       // Interpreter.#logFunctionCall(mfa, arguments);
@@ -254,6 +256,10 @@ export default class Interpreter {
       const message = `no function clause matching in ${mfa}`;
       Interpreter.raiseFunctionClauseError(message);
     };
+
+    if (visibility === "public") {
+      globalThis[moduleName].__exports__.add(`${functionName}/${arity}`);
+    }
   }
 
   static defineErlangFunction(

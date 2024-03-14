@@ -1680,26 +1680,32 @@ describe("consOperator()", () => {
   });
 });
 
-describe("defineElixirFunction()", () => {
+describe.only("defineElixirFunction()", () => {
   beforeEach(() => {
     // def my_fun_a(1), do: :expr_1
     // def my_fun_a(2), do: :expr_2
-    Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_a", 1, [
-      {
-        params: (_vars) => [Type.integer(1)],
-        guards: [],
-        body: (_vars) => {
-          return Type.atom("expr_1");
+    Interpreter.defineElixirFunction(
+      "Elixir_Aaa_Bbb",
+      "my_fun_a",
+      1,
+      "public",
+      [
+        {
+          params: (_vars) => [Type.integer(1)],
+          guards: [],
+          body: (_vars) => {
+            return Type.atom("expr_1");
+          },
         },
-      },
-      {
-        params: (_vars) => [Type.integer(2)],
-        guards: [],
-        body: (_vars) => {
-          return Type.atom("expr_2");
+        {
+          params: (_vars) => [Type.integer(2)],
+          guards: [],
+          body: (_vars) => {
+            return Type.atom("expr_2");
+          },
         },
-      },
-    ]);
+      ],
+    );
   });
 
   afterEach(() => {
@@ -1707,7 +1713,7 @@ describe("defineElixirFunction()", () => {
   });
 
   it("initiates the module global var if it is not initiated yet", () => {
-    Interpreter.defineElixirFunction("Elixir_Ddd", "my_fun_d", 4, []);
+    Interpreter.defineElixirFunction("Elixir_Ddd", "my_fun_d", 4, "public", []);
 
     assert.isDefined(globalThis.Elixir_Ddd);
     assert.isDefined(globalThis.Elixir_Ddd["my_fun_d/4"]);
@@ -1719,8 +1725,13 @@ describe("defineElixirFunction()", () => {
   });
 
   it("appends to the module global var if it is already initiated", () => {
-    globalThis.Elixir_Eee = {"dummy/1": "dummy_body"};
-    Interpreter.defineElixirFunction("Elixir_Eee", "my_fun_e", 5, []);
+    globalThis.Elixir_Eee = {
+      __exports__: new Set(),
+      __hologramJsModuleName__: "Elixir_Eee",
+      "dummy/1": "dummy_body",
+    };
+
+    Interpreter.defineElixirFunction("Elixir_Eee", "my_fun_e", 5, "public", []);
 
     assert.isDefined(globalThis.Elixir_Eee);
     assert.isDefined(globalThis.Elixir_Eee["my_fun_e/5"]);
@@ -1732,15 +1743,25 @@ describe("defineElixirFunction()", () => {
 
   it("defines function with multiple params", () => {
     // def my_fun_e(1, 2, 3), do: :ok
-    Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_e", 3, [
-      {
-        params: (_vars) => [Type.integer(1), Type.integer(2), Type.integer(3)],
-        guards: [],
-        body: (_vars) => {
-          return Type.atom("ok");
+    Interpreter.defineElixirFunction(
+      "Elixir_Aaa_Bbb",
+      "my_fun_e",
+      3,
+      "public",
+      [
+        {
+          params: (_vars) => [
+            Type.integer(1),
+            Type.integer(2),
+            Type.integer(3),
+          ],
+          guards: [],
+          body: (_vars) => {
+            return Type.atom("ok");
+          },
         },
-      },
-    ]);
+      ],
+    );
 
     const result = globalThis.Elixir_Aaa_Bbb["my_fun_e/3"](
       Type.integer(1),
@@ -1765,29 +1786,35 @@ describe("defineElixirFunction()", () => {
     // def my_fun_b(x) when x == 1, do: :expr_1
     // def my_fun_b(y) when y == 2, do: :expr_2
     // def my_fun_b(z) when z == 3, do: :expr_3
-    Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_b", 1, [
-      {
-        params: (_vars) => [Type.variablePattern("x")],
-        guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(1))],
-        body: (_vars) => {
-          return Type.atom("expr_1");
+    Interpreter.defineElixirFunction(
+      "Elixir_Aaa_Bbb",
+      "my_fun_b",
+      1,
+      "public",
+      [
+        {
+          params: (_vars) => [Type.variablePattern("x")],
+          guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(1))],
+          body: (_vars) => {
+            return Type.atom("expr_1");
+          },
         },
-      },
-      {
-        params: (_vars) => [Type.variablePattern("y")],
-        guards: [(vars) => Erlang["==/2"](vars.y, Type.integer(2))],
-        body: (_vars) => {
-          return Type.atom("expr_2");
+        {
+          params: (_vars) => [Type.variablePattern("y")],
+          guards: [(vars) => Erlang["==/2"](vars.y, Type.integer(2))],
+          body: (_vars) => {
+            return Type.atom("expr_2");
+          },
         },
-      },
-      {
-        params: (_vars) => [Type.variablePattern("z")],
-        guards: [(vars) => Erlang["==/2"](vars.z, Type.integer(3))],
-        body: (_vars) => {
-          return Type.atom("expr_3");
+        {
+          params: (_vars) => [Type.variablePattern("z")],
+          guards: [(vars) => Erlang["==/2"](vars.z, Type.integer(3))],
+          body: (_vars) => {
+            return Type.atom("expr_3");
+          },
         },
-      },
-    ]);
+      ],
+    );
 
     const result = globalThis.Elixir_Aaa_Bbb["my_fun_b/1"](Type.integer(3));
 
@@ -1798,18 +1825,24 @@ describe("defineElixirFunction()", () => {
     // def my_fun_b(x) when x == 1 when x == 2, do: x
     //
     // def my_fun_b(x) when :erlang.==(x, 1) when :erlang.==(x, 2), do: x
-    Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_b", 1, [
-      {
-        params: (_vars) => [Type.variablePattern("x")],
-        guards: [
-          (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
-          (vars) => Erlang["==/2"](vars.x, Type.integer(2)),
-        ],
-        body: (vars) => {
-          return vars.x;
+    Interpreter.defineElixirFunction(
+      "Elixir_Aaa_Bbb",
+      "my_fun_b",
+      1,
+      "public",
+      [
+        {
+          params: (_vars) => [Type.variablePattern("x")],
+          guards: [
+            (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
+            (vars) => Erlang["==/2"](vars.x, Type.integer(2)),
+          ],
+          body: (vars) => {
+            return vars.x;
+          },
         },
-      },
-    ]);
+      ],
+    );
 
     const result1 = globalThis.Elixir_Aaa_Bbb["my_fun_b/1"](Type.integer(1));
     assert.deepStrictEqual(result1, Type.integer(1));
@@ -1827,22 +1860,28 @@ describe("defineElixirFunction()", () => {
   it("defines function which clones vars for each clause", () => {
     // def my_fun_c(x) when x == 1, do: :expr_1
     // def my_fun_c(x) when x == 2, do: :expr_2
-    Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_c", 1, [
-      {
-        params: (_vars) => [Type.variablePattern("x")],
-        guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(1))],
-        body: (_vars) => {
-          return Type.atom("expr_1");
+    Interpreter.defineElixirFunction(
+      "Elixir_Aaa_Bbb",
+      "my_fun_c",
+      1,
+      "public",
+      [
+        {
+          params: (_vars) => [Type.variablePattern("x")],
+          guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(1))],
+          body: (_vars) => {
+            return Type.atom("expr_1");
+          },
         },
-      },
-      {
-        params: (_vars) => [Type.variablePattern("x")],
-        guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(2))],
-        body: (_vars) => {
-          return Type.atom("expr_2");
+        {
+          params: (_vars) => [Type.variablePattern("x")],
+          guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(2))],
+          body: (_vars) => {
+            return Type.atom("expr_2");
+          },
         },
-      },
-    ]);
+      ],
+    );
 
     const result = globalThis.Elixir_Aaa_Bbb["my_fun_c/1"](Type.integer(2));
 
@@ -1859,40 +1898,79 @@ describe("defineElixirFunction()", () => {
 
   it("defines function which has match operator in params", () => {
     // def my_fun_d(x = 1 = y), do: x + y
-    Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_d", 1, [
-      {
-        params: (vars) => [
-          Interpreter.matchOperator(
+    Interpreter.defineElixirFunction(
+      "Elixir_Aaa_Bbb",
+      "my_fun_d",
+      1,
+      "public",
+      [
+        {
+          params: (vars) => [
             Interpreter.matchOperator(
-              Type.variablePattern("y"),
-              Type.integer(1),
+              Interpreter.matchOperator(
+                Type.variablePattern("y"),
+                Type.integer(1),
+                vars,
+                false,
+              ),
+              Type.variablePattern("x"),
               vars,
-              false,
             ),
-            Type.variablePattern("x"),
-            vars,
-          ),
-        ],
-        guards: [],
-        body: (vars) => {
-          return Erlang["+/2"](vars.x, vars.y);
+          ],
+          guards: [],
+          body: (vars) => {
+            return Erlang["+/2"](vars.x, vars.y);
+          },
         },
-      },
-    ]);
+      ],
+    );
 
     const result = globalThis.Elixir_Aaa_Bbb["my_fun_d/1"](Type.integer(1));
 
     assert.deepStrictEqual(result, Type.integer(2));
   });
 
+  it("flags public functions as module exports", () => {
+    Interpreter.defineElixirFunction("Elixir_Ddd", "my_fun_d", 4, "public", []);
+
+    assert.deepStrictEqual(
+      globalThis.Elixir_Ddd.__exports__,
+      new Set(["my_fun_d/4"]),
+    );
+
+    // cleanup
+    delete globalThis.Elixir_Ddd;
+  });
+
+  it("doesn't flag private functions as module exports", () => {
+    Interpreter.defineElixirFunction(
+      "Elixir_Ddd",
+      "my_fun_d",
+      4,
+      "private",
+      [],
+    );
+
+    assert.deepStrictEqual(globalThis.Elixir_Ddd.__exports__, new Set());
+
+    // cleanup
+    delete globalThis.Elixir_Ddd;
+  });
+
   it("errors raised inside function body are not caught", () => {
-    Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "my_fun_f", 0, [
-      {
-        params: () => [],
-        guards: [],
-        body: (_vars) => Interpreter.raiseArgumentError("my message"),
-      },
-    ]);
+    Interpreter.defineElixirFunction(
+      "Elixir_Aaa_Bbb",
+      "my_fun_f",
+      0,
+      "public",
+      [
+        {
+          params: () => [],
+          guards: [],
+          body: (_vars) => Interpreter.raiseArgumentError("my message"),
+        },
+      ],
+    );
 
     assertBoxedError(
       () => globalThis.Elixir_Aaa_Bbb["my_fun_f/0"](),
