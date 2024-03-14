@@ -265,11 +265,11 @@ defmodule Hologram.Compiler.Encoder do
 
     body.expressions
     |> aggregate_module_functions()
-    |> Enum.reduce([], fn {{function, arity}, clauses}, acc ->
+    |> Enum.reduce([], fn {{function, arity, visibility}, clauses}, acc ->
       clauses_js = encode_as_array(clauses, context)
 
       [
-        ~s/Interpreter.defineElixirFunction("#{class}", "#{function}", #{arity}, #{clauses_js});/
+        ~s/Interpreter.defineElixirFunction("#{class}", "#{function}", #{arity}, "#{visibility}", #{clauses_js});/
         | acc
       ]
     end)
@@ -399,8 +399,9 @@ defmodule Hologram.Compiler.Encoder do
   defp aggregate_module_functions(exprs) do
     exprs
     |> Enum.reduce(%{}, fn
-      %IR.FunctionDefinition{name: name, arity: arity, clause: clause}, acc ->
-        key = {name, arity}
+      %IR.FunctionDefinition{name: name, arity: arity, visibility: visibility, clause: clause},
+      acc ->
+        key = {name, arity, visibility}
 
         if acc[key] do
           %{acc | key => [clause | acc[key]]}
