@@ -205,7 +205,7 @@ defmodule Hologram.Compiler.Encoder do
 
   def encode_ir(%IR.FunctionClause{} = clause, context) do
     params_array = encode_as_array(clause.params, %{context | pattern?: true})
-    params_closure = "(vars) => #{params_array}"
+    params_closure = "(context) => #{params_array}"
 
     guards = encode_as_array(clause.guards, context, &encode_closure/2)
     body = encode_closure(clause.body, context)
@@ -511,7 +511,7 @@ defmodule Hologram.Compiler.Encoder do
   defp encode_closure(nil, _context), do: "null"
 
   defp encode_closure(ir, context) do
-    "(vars) => #{encode_ir(ir, context)}"
+    "(context) => #{encode_ir(ir, context)}"
   end
 
   defp encode_named_function_call(%IR.AtomType{value: :erlang}, :andalso, [left, right], context) do

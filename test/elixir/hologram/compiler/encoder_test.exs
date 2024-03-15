@@ -38,7 +38,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) == """
-             Type.anonymousFunction(1, [{params: (vars) => [Type.variablePattern("x")], guards: [], body: (vars) => {
+             Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("x")], guards: [], body: (context) => {
              return Type.atom("expr");
              }}], context)\
              """
@@ -70,9 +70,9 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) == """
-             Type.anonymousFunction(1, [{params: (vars) => [Type.variablePattern("x")], guards: [], body: (vars) => {
+             Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("x")], guards: [], body: (context) => {
              return Type.atom("expr_a");
-             }}, {params: (vars) => [Type.variablePattern("y")], guards: [], body: (vars) => {
+             }}, {params: (context) => [Type.variablePattern("y")], guards: [], body: (context) => {
              return Type.atom("expr_b");
              }}], context)\
              """
@@ -450,9 +450,9 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) == """
-             Interpreter.case(vars.my_var, [{match: Type.variablePattern("x"), guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(100n))], body: (vars) => {
+             Interpreter.case(vars.my_var, [{match: Type.variablePattern("x"), guards: [(context) => Erlang["==/2"](vars.x, Type.integer(100n))], body: (context) => {
              return Type.atom("ok");
-             }}, {match: Type.variablePattern("y"), guards: [], body: (vars) => {
+             }}, {match: Type.variablePattern("y"), guards: [], body: (context) => {
              return vars.y;
              }}], context)\
              """
@@ -481,10 +481,10 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) == """
-             Interpreter.case((vars) => {
+             Interpreter.case((context) => {
              Type.integer(1n);
              return Type.integer(2n);
-             }, [{match: Type.integer(2n), guards: [], body: (vars) => {
+             }, [{match: Type.integer(2n), guards: [], body: (context) => {
              return Type.atom("ok");
              }}], context)\
              """
@@ -505,7 +505,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) ==
-               "{match: Type.variablePattern(\"x\"), guards: [], body: (vars) => {\nreturn Type.integer(1n);\n}}"
+               "{match: Type.variablePattern(\"x\"), guards: [], body: (context) => {\nreturn Type.integer(1n);\n}}"
     end
 
     test "single guard" do
@@ -521,7 +521,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) ==
-               "{match: Type.variablePattern(\"x\"), guards: [(vars) => vars.y], body: (vars) => {\nreturn Type.integer(1n);\n}}"
+               "{match: Type.variablePattern(\"x\"), guards: [(context) => vars.y], body: (context) => {\nreturn Type.integer(1n);\n}}"
     end
 
     test "multiple guards" do
@@ -537,7 +537,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) ==
-               "{match: Type.variablePattern(\"x\"), guards: [(vars) => vars.y, (vars) => vars.z], body: (vars) => {\nreturn Type.integer(1n);\n}}"
+               "{match: Type.variablePattern(\"x\"), guards: [(context) => vars.y, (context) => vars.z], body: (context) => {\nreturn Type.integer(1n);\n}}"
     end
   end
 
@@ -626,7 +626,7 @@ defmodule Hologram.Compiler.EncoderTest do
     }
 
     assert encode_ir(ir) ==
-             "Interpreter.comprehension([{match: Type.variablePattern(\"x\"), guards: [(vars) => Erlang[\"</2\"](vars.x, Type.integer(3n))], body: (vars) => Type.list([Type.integer(1n), Type.integer(2n)])}, {match: Type.variablePattern(\"y\"), guards: [(vars) => Erlang[\"</2\"](vars.y, Type.integer(5n))], body: (vars) => Type.list([Type.integer(3n), Type.integer(4n)])}], [(vars) => Erlang[\"is_integer/1\"](vars.x), (vars) => Erlang[\"is_integer/1\"](vars.y)], Type.map([]), true, (vars) => Type.tuple([vars.x, vars.y]), vars)"
+             "Interpreter.comprehension([{match: Type.variablePattern(\"x\"), guards: [(context) => Erlang[\"</2\"](vars.x, Type.integer(3n))], body: (context) => Type.list([Type.integer(1n), Type.integer(2n)])}, {match: Type.variablePattern(\"y\"), guards: [(context) => Erlang[\"</2\"](vars.y, Type.integer(5n))], body: (context) => Type.list([Type.integer(3n), Type.integer(4n)])}], [(context) => Erlang[\"is_integer/1\"](vars.x), (context) => Erlang[\"is_integer/1\"](vars.y)], Type.map([]), true, (context) => Type.tuple([vars.x, vars.y]), vars)"
   end
 
   test "comprehension filter" do
@@ -639,7 +639,7 @@ defmodule Hologram.Compiler.EncoderTest do
     }
 
     assert encode_ir(ir, %Context{module: MyModule}) ==
-             "(vars) => Elixir_MyModule[\"my_filter/1\"](vars.a)"
+             "(context) => Elixir_MyModule[\"my_filter/1\"](vars.a)"
   end
 
   test "comprehension generator" do
@@ -669,7 +669,7 @@ defmodule Hologram.Compiler.EncoderTest do
     }
 
     assert encode_ir(ir, %Context{module: MyModule}) ==
-             "{match: Type.tuple([Type.variablePattern(\"a\"), Type.variablePattern(\"b\")]), guards: [(vars) => Elixir_MyModule[\"my_guard/2\"](vars.a, Type.integer(2n))], body: (vars) => Type.list([Type.integer(1n), Type.integer(2n)])}"
+             "{match: Type.tuple([Type.variablePattern(\"a\"), Type.variablePattern(\"b\")]), guards: [(context) => Elixir_MyModule[\"my_guard/2\"](vars.a, Type.integer(2n))], body: (context) => Type.list([Type.integer(1n), Type.integer(2n)])}"
   end
 
   test "cond" do
@@ -712,9 +712,9 @@ defmodule Hologram.Compiler.EncoderTest do
     ir = %IR.Cond{clauses: [clause_1, clause_2]}
 
     assert encode_ir(ir) == """
-           Interpreter.cond([{condition: (vars) => Erlang["</2"](vars.x, Type.integer(1n)), body: (vars) => {
+           Interpreter.cond([{condition: (context) => Erlang["</2"](vars.x, Type.integer(1n)), body: (context) => {
            return Type.integer(1n);
-           }}, {condition: (vars) => Erlang["</2"](vars.x, Type.integer(2n)), body: (vars) => {
+           }}, {condition: (context) => Erlang["</2"](vars.x, Type.integer(2n)), body: (context) => {
            return Type.integer(2n);
            }}], vars)\
            """
@@ -742,7 +742,7 @@ defmodule Hologram.Compiler.EncoderTest do
     }
 
     assert encode_ir(ir) == """
-           {condition: (vars) => Erlang[\"</2\"](vars.x, Type.integer(3n)), body: (vars) => {
+           {condition: (context) => Erlang[\"</2\"](vars.x, Type.integer(3n)), body: (context) => {
            Type.integer(1n);
            return Type.integer(2n);
            }}\
@@ -797,7 +797,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) == """
-             {params: (vars) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (vars) => {
+             {params: (context) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (context) => {
              Type.atom("expr_1");
              return Type.atom("expr_2");
              }}\
@@ -823,7 +823,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) == """
-             {params: (vars) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [(vars) => Erlang["is_integer/1"](vars.x)], body: (vars) => {
+             {params: (context) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [(context) => Erlang["is_integer/1"](vars.x)], body: (context) => {
              Type.atom("expr_1");
              return Type.atom("expr_2");
              }}\
@@ -854,7 +854,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) == """
-             {params: (vars) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [(vars) => Erlang["is_integer/1"](vars.x), (vars) => Erlang["is_integer/1"](vars.y)], body: (vars) => {
+             {params: (context) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [(context) => Erlang["is_integer/1"](vars.x), (context) => Erlang["is_integer/1"](vars.y)], body: (context) => {
              Type.atom("expr_1");
              return Type.atom("expr_2");
              }}\
@@ -881,7 +881,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) == """
-             {params: (vars) => [Interpreter.matchOperator(Interpreter.matchOperator(Type.variablePattern("y"), Type.integer(1n), vars, false), Type.variablePattern("x"), vars)], guards: [], body: (vars) => {
+             {params: (context) => [Interpreter.matchOperator(Interpreter.matchOperator(Type.variablePattern("y"), Type.integer(1n), vars, false), Type.variablePattern("x"), vars)], guards: [], body: (context) => {
              return Type.atom("ok");
              }}\
              """
@@ -1230,23 +1230,23 @@ defmodule Hologram.Compiler.EncoderTest do
     }
 
     assert encode_ir(ir) == """
-           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_1", 1, "public", [{params: (vars) => [Type.variablePattern("c")], guards: [(vars) => Erlang["is_integer/1"](vars.c)], body: (vars) => {
+           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_1", 1, "public", [{params: (context) => [Type.variablePattern("c")], guards: [(context) => Erlang["is_integer/1"](vars.c)], body: (context) => {
            return vars.c;
            }}]);
 
-           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_1", 2, "public", [{params: (vars) => [Type.integer(9n), Type.integer(8n)], guards: [], body: (vars) => {
+           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_1", 2, "public", [{params: (context) => [Type.integer(9n), Type.integer(8n)], guards: [], body: (context) => {
            return Type.atom("expr_1");
-           }}, {params: (vars) => [Type.variablePattern("a"), Type.variablePattern("b")], guards: [], body: (vars) => {
+           }}, {params: (context) => [Type.variablePattern("a"), Type.variablePattern("b")], guards: [], body: (context) => {
            return Erlang["+/2"](vars.a, vars.b);
            }}]);
 
-           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_2", 1, "private", [{params: (vars) => [Type.integer(9n)], guards: [], body: (vars) => {
+           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_2", 1, "private", [{params: (context) => [Type.integer(9n)], guards: [], body: (context) => {
            return Type.atom("expr_2");
-           }}, {params: (vars) => [Type.variablePattern("z")], guards: [(vars) => Erlang["is_float/1"](vars.z)], body: (vars) => {
+           }}, {params: (context) => [Type.variablePattern("z")], guards: [(context) => Erlang["is_float/1"](vars.z)], body: (context) => {
            return vars.z;
            }}]);
 
-           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_2", 2, "private", [{params: (vars) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (vars) => {
+           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_2", 2, "private", [{params: (context) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (context) => {
            return Erlang["*/2"](vars.x, vars.y);
            }}]);\
            """
@@ -1336,9 +1336,9 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir, %Context{module: MyModule}) == """
-             Interpreter.callNamedFunction(Interpreter.case(vars.my_var, [{match: Type.atom("a"), guards: [], body: (vars) => {
+             Interpreter.callNamedFunction(Interpreter.case(vars.my_var, [{match: Type.atom("a"), guards: [], body: (context) => {
              return Type.atom("Elixir.MyModule1");
-             }}, {match: Type.atom("b"), guards: [], body: (vars) => {
+             }}, {match: Type.atom("b"), guards: [], body: (context) => {
              return Type.atom("Elixir.MyModule2");
              }}], context), "my_fun!/2", [Type.integer(1n), Type.integer(2n)])\
              """
@@ -1356,7 +1356,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) ==
-               ~s'Erlang["andalso/2"]((vars) => Type.integer(1n), (vars) => Type.integer(2n), vars)'
+               ~s'Erlang["andalso/2"]((context) => Type.integer(1n), (context) => Type.integer(2n), vars)'
     end
 
     test ":erlang.orelse/2 call" do
@@ -1371,7 +1371,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) ==
-               ~s'Erlang["orelse/2"]((vars) => Type.integer(1n), (vars) => Type.integer(2n), vars)'
+               ~s'Erlang["orelse/2"]((context) => Type.integer(1n), (context) => Type.integer(2n), vars)'
     end
   end
 
@@ -1398,7 +1398,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) == """
-             Interpreter.try((vars) => {
+             Interpreter.try((context) => {
              return Type.atom("ok");
              }, [], [], [], null, vars)\
              """
@@ -1429,9 +1429,9 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) == """
-             Interpreter.try((vars) => {
+             Interpreter.try((context) => {
              return Type.atom("ok");
-             }, [{variable: null, modules: [Type.atom("Elixir.RuntimeError")], body: (vars) => {
+             }, [{variable: null, modules: [Type.atom("Elixir.RuntimeError")], body: (context) => {
              return Type.atom("error");
              }}], [], [], null, vars)\
              """
@@ -1470,11 +1470,11 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) == """
-             Interpreter.try((vars) => {
+             Interpreter.try((context) => {
              return Type.atom("ok");
-             }, [{variable: null, modules: [Type.atom("Elixir.ArgumentError")], body: (vars) => {
+             }, [{variable: null, modules: [Type.atom("Elixir.ArgumentError")], body: (context) => {
              return Type.atom("error_1");
-             }}, {variable: null, modules: [Type.atom("Elixir.RuntimeError")], body: (vars) => {
+             }}, {variable: null, modules: [Type.atom("Elixir.RuntimeError")], body: (context) => {
              return Type.atom("error_2");
              }}], [], [], null, vars)\
              """
@@ -1505,9 +1505,9 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) == """
-             Interpreter.try((vars) => {
+             Interpreter.try((context) => {
              return Type.atom("ok");
-             }, [{variable: Type.variablePattern("e"), modules: [], body: (vars) => {
+             }, [{variable: Type.variablePattern("e"), modules: [], body: (context) => {
              return Type.atom("error");
              }}], [], [], null, vars)\
              """
@@ -1541,9 +1541,9 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) == """
-             Interpreter.try((vars) => {
+             Interpreter.try((context) => {
              return Type.atom("ok");
-             }, [{variable: null, modules: [Type.atom("Elixir.ArgumentError"), Type.atom("Elixir.RuntimeError")], body: (vars) => {
+             }, [{variable: null, modules: [Type.atom("Elixir.ArgumentError"), Type.atom("Elixir.RuntimeError")], body: (context) => {
              return Type.atom("error");
              }}], [], [], null, vars)\
              """
