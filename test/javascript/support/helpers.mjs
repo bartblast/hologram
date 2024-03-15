@@ -126,7 +126,7 @@ export function buildComponentStruct(data) {
 
 export function buildContext(data = {}) {
   const {module, vars} = data;
-  const context = buildContext();
+  const context = {module: Type.alias("MyModule"), vars: {}};
 
   if (typeof module !== "undefined") {
     context.module = module;
