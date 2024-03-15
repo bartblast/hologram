@@ -56,7 +56,7 @@ export function defineModule8Fixture() {
                 },
               },
             ],
-            vars,
+            context,
           );
           Interpreter.updateVarsToMatchedValues(vars);
           return globalThis.__hologramReturn__;

@@ -109,7 +109,7 @@ export function defineModule10Fixture() {
                 },
               },
             ],
-            vars,
+            context,
           );
           Interpreter.updateVarsToMatchedValues(vars);
           return globalThis.__hologramReturn__;

@@ -70,7 +70,7 @@ export function defineModule36Fixture() {
                 },
               },
             ],
-            vars,
+            context,
           );
           Interpreter.updateVarsToMatchedValues(vars);
           return globalThis.__hologramReturn__;

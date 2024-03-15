@@ -14,12 +14,12 @@ export default class Type {
     return Type.isAtom(term) && term.value.startsWith("Elixir.");
   }
 
-  static anonymousFunction(arity, clauses, vars) {
+  static anonymousFunction(arity, clauses, context) {
     return {
       type: "anonymous_function",
       arity: arity,
       clauses: clauses,
-      vars: Interpreter.cloneDeep(vars),
+      context: Interpreter.cloneDeep(context),
       uniqueId: Sequence.next(),
     };
   }

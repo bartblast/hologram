@@ -85,7 +85,7 @@ describe("foldl/3", () => {
         },
       },
     ],
-    {},
+    {module: Type.alias("MyModule"), vars: {}},
   );
 
   const acc = Type.integer(0);
@@ -124,7 +124,7 @@ describe("foldl/3", () => {
           },
         },
       ],
-      {},
+      {module: Type.alias("MyModule"), vars: {}},
     );
 
     assertBoxedError(
@@ -228,7 +228,7 @@ describe("map/2", () => {
         },
       },
     ],
-    {},
+    {module: Type.alias("MyModule"), vars: {}},
   );
 
   const emptyList = Type.list([]);
@@ -274,7 +274,7 @@ describe("map/2", () => {
           },
         },
       ],
-      {},
+      {module: Type.alias("MyModule"), vars: {}},
     );
 
     assertBoxedError(

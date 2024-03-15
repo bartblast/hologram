@@ -102,7 +102,10 @@ describe("callAnonymousFunction()", () => {
   let vars, anonFun;
 
   beforeEach(() => {
-    vars = {a: Type.integer(5), b: Type.integer(6), x: Type.integer(9)};
+    context = {
+      module: Type.alias("MyModule"),
+      vars: {a: Type.integer(5), b: Type.integer(6), x: Type.integer(9)},
+    };
 
     // fn
     //   1 -> :expr_1
@@ -126,7 +129,7 @@ describe("callAnonymousFunction()", () => {
           },
         },
       ],
-      vars,
+      context,
     );
   });
 
@@ -177,7 +180,7 @@ describe("callAnonymousFunction()", () => {
           },
         },
       ],
-      vars,
+      context,
     );
 
     const result = Interpreter.callAnonymousFunction(anonFun, [
@@ -205,7 +208,7 @@ describe("callAnonymousFunction()", () => {
           },
         },
       ],
-      vars,
+      context,
     );
 
     const result1 = Interpreter.callAnonymousFunction(anonFun, [
@@ -252,7 +255,7 @@ describe("callAnonymousFunction()", () => {
           },
         },
       ],
-      vars,
+      context,
     );
 
     const result = Interpreter.callAnonymousFunction(anonFun, [
@@ -295,7 +298,7 @@ describe("callAnonymousFunction()", () => {
           },
         },
       ],
-      vars,
+      context,
     );
 
     const result = Interpreter.callAnonymousFunction(anonFun, [
@@ -315,7 +318,7 @@ describe("callAnonymousFunction()", () => {
           body: (_vars) => Interpreter.raiseArgumentError("my message"),
         },
       ],
-      vars,
+      context,
     );
 
     assertBoxedError(

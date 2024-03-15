@@ -40,7 +40,7 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == """
              Type.anonymousFunction(1, [{params: (vars) => [Type.variablePattern("x")], guards: [], body: (vars) => {
              return Type.atom("expr");
-             }}], vars)\
+             }}], context)\
              """
     end
 
@@ -74,7 +74,7 @@ defmodule Hologram.Compiler.EncoderTest do
              return Type.atom("expr_a");
              }}, {params: (vars) => [Type.variablePattern("y")], guards: [], body: (vars) => {
              return Type.atom("expr_b");
-             }}], vars)\
+             }}], context)\
              """
     end
   end

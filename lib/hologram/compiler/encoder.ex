@@ -76,7 +76,7 @@ defmodule Hologram.Compiler.Encoder do
 
   def encode_ir(%IR.AnonymousFunctionType{arity: arity, clauses: clauses}, context) do
     clauses_js = encode_as_array(clauses, context)
-    "Type.anonymousFunction(#{arity}, #{clauses_js}, vars)"
+    "Type.anonymousFunction(#{arity}, #{clauses_js}, context)"
   end
 
   def encode_ir(%IR.AtomType{value: value}, _context) do

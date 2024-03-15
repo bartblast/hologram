@@ -26,13 +26,13 @@ describe("anonymousFunction()", () => {
   });
 
   it("returns boxed anonymous function", () => {
-    const result = Type.anonymousFunction(arity, clauses, vars);
+    const result = Type.anonymousFunction(arity, clauses, context);
 
     const expected = {
       type: "anonymous_function",
       arity: arity,
       clauses: clauses,
-      vars: vars,
+      context: context,
       uniqueId: Sequence.next() - 1,
     };
 
@@ -202,10 +202,11 @@ it("consPattern()", () => {
 
 describe("encodeMapKey()", () => {
   it("encodes boxed anonymous function value as map key", () => {
-    const boxed = Type.anonymousFunction({}, (varsClone) => {
-      const _vars = varsClone;
-      return (param) => param;
-    });
+    const boxed = Type.anonymousFunction(
+      "dummyArity",
+      "dummyClauses",
+      "dummyContext",
+    );
 
     const result = Type.encodeMapKey(boxed);
 
@@ -381,7 +382,12 @@ describe("isAlias()", () => {
 
 describe("isAnonymousFunction()", () => {
   it("returns true if the term is an anonymous function", () => {
-    const term = Type.anonymousFunction(3, ["dummy_clause"], {});
+    const term = Type.anonymousFunction(
+      "dummyArity",
+      "dummyClauses",
+      "dummyContext",
+    );
+
     assert.isTrue(Type.isAnonymousFunction(term));
   });
 
