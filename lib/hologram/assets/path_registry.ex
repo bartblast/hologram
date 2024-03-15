@@ -108,6 +108,7 @@ defmodule Hologram.Assets.PathRegistry do
     |> Stream.filter(& &1)
     |> Stream.map(&List.to_tuple/1)
     |> stream_reject_page_bundles()
+    |> stream_reject_source_maps()
     |> stream_build_asset_entries()
     |> Enum.to_list()
   end
@@ -125,6 +126,12 @@ defmodule Hologram.Assets.PathRegistry do
   defp stream_reject_page_bundles(file_infos) do
     Stream.reject(file_infos, fn {_file_path, prefix, _digest, _suffix} ->
       prefix == "hologram/page"
+    end)
+  end
+
+  defp stream_reject_source_maps(file_infos) do
+    Stream.reject(file_infos, fn {_file_path, _prefix, _digest, suffix} ->
+      suffix == ".js.map"
     end)
   end
 end

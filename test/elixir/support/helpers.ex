@@ -183,16 +183,20 @@ defmodule Hologram.Test.Helpers do
     file_1_path = dir_2 <> "/test_file_1-11111111111111111111111111111111.css"
     file_2_path = dir_2 <> "/test_file_2-22222222222222222222222222222222.css"
     file_3_path = dir_2 <> "/page-33333333333333333333333333333333.js"
+    file_4_path = dir_2 <> "/page-33333333333333333333333333333333.js.map"
 
     dir_3 = static_dir <> "/test_dir_3"
-    file_4_path = dir_3 <> "/test_file_4-44444444444444444444444444444444.css"
-    file_5_path = dir_3 <> "/test_file_5-55555555555555555555555555555555.css"
-    file_6_path = dir_3 <> "/page-66666666666666666666666666666666.js"
+    file_5_path = dir_3 <> "/test_file_4-44444444444444444444444444444444.css"
+    file_6_path = dir_3 <> "/test_file_5-55555555555555555555555555555555.css"
+    file_7_path = dir_3 <> "/page-66666666666666666666666666666666.js"
+    file_8_path = dir_3 <> "/page-66666666666666666666666666666666.js.map"
 
     dir_4 = static_dir <> "/hologram"
-    file_7_path = dir_4 <> "/page-77777777777777777777777777777777.js"
-    file_8_path = dir_4 <> "/page-88888888888888888888888888888888.js"
-    file_9_path = dir_4 <> "/test_file_9-99999999999999999999999999999999.css"
+    file_9_path = dir_4 <> "/page-77777777777777777777777777777777.js"
+    file_10_path = dir_4 <> "/page-77777777777777777777777777777777.js.map"
+    file_11_path = dir_4 <> "/page-88888888888888888888888888888888.js"
+    file_12_path = dir_4 <> "/page-88888888888888888888888888888888.js.map"
+    file_13_path = dir_4 <> "/test_file_9-99999999999999999999999999999999.css"
 
     File.mkdir_p!(dir_2)
     File.mkdir_p!(dir_3)
@@ -207,7 +211,11 @@ defmodule Hologram.Test.Helpers do
       file_6_path,
       file_7_path,
       file_8_path,
-      file_9_path
+      file_9_path,
+      file_10_path,
+      file_11_path,
+      file_12_path,
+      file_13_path
     ]
 
     Enum.each(file_paths, &File.write!(&1, ""))
