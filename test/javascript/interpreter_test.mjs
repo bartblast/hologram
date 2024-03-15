@@ -4,6 +4,7 @@ import {
   assert,
   assertBoxedError,
   assertMatchError,
+  buildContext,
   linkModules,
   sinon,
   unlinkModules,
@@ -102,10 +103,9 @@ describe("callAnonymousFunction()", () => {
   let vars, anonFun;
 
   beforeEach(() => {
-    context = {
-      module: Type.alias("MyModule"),
+    context = buildContext({
       vars: {a: Type.integer(5), b: Type.integer(6), x: Type.integer(9)},
-    };
+    });
 
     // fn
     //   1 -> :expr_1

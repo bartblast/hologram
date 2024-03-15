@@ -5,6 +5,7 @@ import {
   assertBoxedError,
   assertBoxedFalse,
   assertBoxedTrue,
+  buildContext,
   freeze,
   linkModules,
   unlinkModules,
@@ -53,7 +54,7 @@ describe("fold/3", () => {
             Erlang["+/2"](vars.acc, Erlang["*/2"](vars.key, vars.value)),
         },
       ],
-      {module: Type.alias("MyModule"), vars: {}},
+      buildContext(),
     );
 
     map = Type.map([
@@ -89,7 +90,7 @@ describe("fold/3", () => {
     fun = Type.anonymousFunction(
       0,
       [{params: (_vars) => [], guards: [], body: (_vars) => Type.atom("abc")}],
-      {module: Type.alias("MyModule"), vars: {}},
+      buildContext(),
     );
 
     assertBoxedError(
@@ -259,7 +260,7 @@ describe("map/2", () => {
         },
       },
     ],
-    {module: Type.alias("MyModule"), vars: {}},
+    buildContext(),
   );
 
   it("maps empty map", () => {
@@ -307,7 +308,7 @@ describe("map/2", () => {
           },
         },
       ],
-      {module: Type.alias("MyModule"), vars: {}},
+      buildContext(),
     );
 
     assertBoxedError(
