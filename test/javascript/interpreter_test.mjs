@@ -1718,7 +1718,7 @@ describe("defineElixirFunction()", () => {
     assert.isDefined(globalThis.Elixir_Ddd);
     assert.isDefined(globalThis.Elixir_Ddd["my_fun_d/4"]);
 
-    assert.equal(globalThis.Elixir_Ddd.__hologramJsModuleName__, "Elixir_Ddd");
+    assert.equal(globalThis.Elixir_Ddd.__varName__, "Elixir_Ddd");
 
     // cleanup
     delete globalThis.Elixir_Ddd;
@@ -1727,7 +1727,7 @@ describe("defineElixirFunction()", () => {
   it("appends to the module global var if it is already initiated", () => {
     globalThis.Elixir_Eee = {
       __exports__: new Set(),
-      __hologramJsModuleName__: "Elixir_Eee",
+      __varName__: "Elixir_Eee",
       "dummy/1": "dummy_body",
     };
 

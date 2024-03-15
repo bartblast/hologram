@@ -221,7 +221,7 @@ export default class Interpreter {
         },
       );
 
-      globalThis[moduleName].__hologramJsModuleName__ = moduleName;
+      globalThis[moduleName].__varName__ = moduleName;
       globalThis[moduleName].__exports__ = new Set();
     }
 
