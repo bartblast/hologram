@@ -1,13 +1,9 @@
 "use strict";
 
-import {
-  assert,
-  buildContext,
-  linkModules,
-  unlinkModules,
-} from "./support/helpers.mjs";
+import {assert, linkModules, unlinkModules} from "./support/helpers.mjs";
 
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
+import Interpreter from "../../assets/js/interpreter.mjs";
 import Sequence from "../../assets/js/sequence.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -27,7 +23,11 @@ describe("anonymousFunction()", () => {
   beforeEach(() => {
     arity = 3;
     clauses = ["clause_dummy_1", "clause_dummy_2"];
-    context = buildContext({vars: {a: Type.integer(1), b: Type.integer(2)}});
+
+    context = Interpreter.buildContext({
+      module: Type.alias("MyModule"),
+      vars: {a: Type.integer(1), b: Type.integer(2)},
+    });
   });
 
   it("returns boxed anonymous function", () => {

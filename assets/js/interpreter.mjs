@@ -43,6 +43,21 @@ export default class Interpreter {
     }
   }
 
+  static buildContext(data = {}) {
+    const {module, vars} = data;
+    const context = {module: null, vars: {}};
+
+    if (typeof module !== "undefined") {
+      context.module = module;
+    }
+
+    if (typeof vars !== "undefined") {
+      context.vars = vars;
+    }
+
+    return context;
+  }
+
   static buildErrorsFoundMsg(argumentIndex, message) {
     // Based on: https://stackoverflow.com/a/39466341/13040586
     const suffix =

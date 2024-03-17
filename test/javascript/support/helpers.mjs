@@ -124,21 +124,6 @@ export function buildComponentStruct(data) {
   return componentStruct;
 }
 
-export function buildContext(data = {}) {
-  const {module, vars} = data;
-  const context = {module: Type.alias("MyModule"), vars: {}};
-
-  if (typeof module !== "undefined") {
-    context.module = module;
-  }
-
-  if (typeof vars !== "undefined") {
-    context.vars = vars;
-  }
-
-  return context;
-}
-
 export function elixirHologramComponentStruct0() {
   return Type.map([
     [Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")],

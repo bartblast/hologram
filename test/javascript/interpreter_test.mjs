@@ -4,7 +4,6 @@ import {
   assert,
   assertBoxedError,
   assertMatchError,
-  buildContext,
   linkModules,
   sinon,
   unlinkModules,
@@ -49,6 +48,34 @@ describe("accessKeywordListElement()", () => {
     );
 
     assert.isNull(result);
+  });
+});
+
+describe("buildContext()", () => {
+  it("module undefined, vars undefined", () => {
+    const result = Interpreter.buildContext();
+    const expected = {module: null, vars: {}};
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("module defined", () => {
+    const result = Interpreter.buildContext({module: Type.alias("MyModule")});
+    const expected = {module: Type.alias("MyModule"), vars: {}};
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("vars defined", () => {
+    const result = Interpreter.buildContext({
+      vars: {a: Type.integer(1), b: Type.integer(2)},
+    });
+    const expected = {
+      module: null,
+      vars: {a: Type.integer(1), b: Type.integer(2)},
+    };
+
+    assert.deepStrictEqual(result, expected);
   });
 });
 
@@ -103,7 +130,8 @@ describe("callAnonymousFunction()", () => {
   let vars, anonFun;
 
   beforeEach(() => {
-    context = buildContext({
+    context = Interpreter.buildContext({
+      module: Type.alias("MyModule"),
       vars: {a: Type.integer(5), b: Type.integer(6), x: Type.integer(9)},
     });
 
@@ -351,7 +379,8 @@ describe("case()", () => {
   let context;
 
   beforeEach(() => {
-    context = buildContext({
+    context = Interpreter.buildContext({
+      module: Type.alias("MyModule"),
       vars: {a: Type.integer(5), b: Type.integer(6), x: Type.integer(9)},
     });
   });
@@ -488,7 +517,10 @@ describe("case()", () => {
       },
     };
 
-    const context = buildContext({vars: {my_var: Type.integer(22)}});
+    const context = Interpreter.buildContext({
+      module: Type.alias("MyModule"),
+      vars: {my_var: Type.integer(22)},
+    });
 
     const result = Interpreter.case(
       vars.my_var,
@@ -5772,7 +5804,8 @@ describe("try()", () => {
 });
 
 it("updateVarsToMatchedValues()", () => {
-  const context = buildContext({
+  const context = Interpreter.buildContext({
+    module: Type.alias("MyModule"),
     vars: {
       a: 1,
       b: 2,
@@ -5788,7 +5821,8 @@ it("updateVarsToMatchedValues()", () => {
 
   const result = Interpreter.updateVarsToMatchedValues(context);
 
-  const expected = buildContext({
+  const expected = Interpreter.buildContext({
+    module: Type.alias("MyModule"),
     vars: {
       a: 11,
       b: 2,
