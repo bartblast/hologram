@@ -78,17 +78,17 @@ export default class Interpreter {
   }
 
   static case(condition, clauses, context) {
-    let conditionVars;
+    let conditionContext;
 
     if (typeof condition === "function") {
-      conditionVars = Interpreter.cloneDeep(context);
-      condition = condition(conditionVars);
+      conditionContext = Interpreter.cloneDeep(context);
+      condition = condition(conditionContext);
     } else {
-      conditionVars = context;
+      conditionContext = context;
     }
 
     for (const clause of clauses) {
-      const contextClone = Interpreter.cloneDeep(conditionVars);
+      const contextClone = Interpreter.cloneDeep(conditionContext);
 
       if (Interpreter.isMatched(clause.match, condition, contextClone)) {
         Interpreter.updateVarsToMatchedValues(contextClone);
