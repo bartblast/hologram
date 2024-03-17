@@ -77,24 +77,24 @@ export default class Interpreter {
     return Interpreter.moduleRef(alias)[functionArityStr](...args);
   }
 
-  static case(condition, clauses, vars) {
+  static case(condition, clauses, context) {
     let conditionVars;
 
     if (typeof condition === "function") {
-      conditionVars = Interpreter.cloneDeep(vars);
+      conditionVars = Interpreter.cloneDeep(context);
       condition = condition(conditionVars);
     } else {
-      conditionVars = vars;
+      conditionVars = context;
     }
 
     for (const clause of clauses) {
-      const varsClone = Interpreter.cloneDeep(conditionVars);
+      const contextClone = Interpreter.cloneDeep(conditionVars);
 
-      if (Interpreter.isMatched(clause.match, condition, varsClone)) {
+      if (Interpreter.isMatched(clause.match, condition, contextClone)) {
         Interpreter.updateVarsToMatchedValues(contextClone);
 
         if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
-          return clause.body(varsClone);
+          return clause.body(contextClone);
         }
       }
     }
@@ -102,8 +102,8 @@ export default class Interpreter {
     return Interpreter.raiseCaseClauseError(condition);
   }
 
-  static cloneDeep(vars) {
-    return cloneDeep(vars);
+  static cloneDeep(context) {
+    return cloneDeep(context);
   }
 
   // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
@@ -137,19 +137,30 @@ export default class Interpreter {
   }
 
   // deps: [Enum.into/2, Enum.to_list/1]
-  static comprehension(generators, filters, collectable, unique, mapper, vars) {
+  static comprehension(
+    generators,
+    filters,
+    collectable,
+    unique,
+    mapper,
+    context,
+  ) {
     const generatorsCount = generators.length;
 
     const sets = generators.map(
-      (generator) => Elixir_Enum["to_list/1"](generator.body(vars)).data,
+      (generator) => Elixir_Enum["to_list/1"](generator.body(context)).data,
     );
 
     let items = Utils.cartesianProduct(sets).reduce((acc, combination) => {
-      const varsClone = Interpreter.cloneDeep(vars);
+      const contextClone = Interpreter.cloneDeep(context);
 
       for (let i = 0; i < generatorsCount; ++i) {
         if (
-          Interpreter.isMatched(generators[i].match, combination[i], varsClone)
+          Interpreter.isMatched(
+            generators[i].match,
+            combination[i],
+            contextClone,
+          )
         ) {
           Interpreter.updateVarsToMatchedValues(contextClone);
 
@@ -162,12 +173,12 @@ export default class Interpreter {
       }
 
       for (const filter of filters) {
-        if (Type.isFalsy(filter(varsClone))) {
+        if (Type.isFalsy(filter(contextClone))) {
           return acc;
         }
       }
 
-      acc.push(mapper(varsClone));
+      acc.push(mapper(contextClone));
       return acc;
     }, []);
 
@@ -178,12 +189,12 @@ export default class Interpreter {
     return Elixir_Enum["into/2"](Type.list(items), collectable);
   }
 
-  static cond(clauses, vars) {
+  static cond(clauses, context) {
     for (const clause of clauses) {
-      const varsClone = Interpreter.cloneDeep(vars);
+      const contextClone = Interpreter.cloneDeep(context);
 
-      if (Type.isTruthy(clause.condition(varsClone))) {
-        return clause.body(varsClone);
+      if (Type.isTruthy(clause.condition(contextClone))) {
+        return clause.body(contextClone);
       }
     }
 
@@ -415,9 +426,9 @@ export default class Interpreter {
     return isEqual(left, right);
   }
 
-  static isMatched(left, right, vars) {
+  static isMatched(left, right, context) {
     try {
-      Interpreter.matchOperator(right, left, vars);
+      Interpreter.matchOperator(right, left, context);
       return true;
     } catch {
       return false;
@@ -432,15 +443,15 @@ export default class Interpreter {
     return isEqual(left, right);
   }
 
-  // vars.__matched__ keeps track of already pattern matched variables,
+  // context.vars.__matched__ keeps track of already pattern matched variables,
   // which enables to fail pattern matching if the variables with the same name
   // are being pattern matched to different values
   // and to update the var values after pattern matching is finished.
   //
   // right param is before left param, because we need the right arg evaluated before left arg.
-  static matchOperator(right, left, vars) {
-    if (!vars.__matched__) {
-      vars.__matched__ = {};
+  static matchOperator(right, left, context) {
+    if (!context.vars.__matched__) {
+      context.vars.__matched__ = {};
     }
 
     if (Interpreter.#hasUnresolvedVariablePattern(right)) {
@@ -448,8 +459,8 @@ export default class Interpreter {
     }
 
     if (left.type === "match_pattern") {
-      Interpreter.matchOperator(right, left.right, vars);
-      return Interpreter.matchOperator(right, left.left, vars);
+      Interpreter.matchOperator(right, left.right, context);
+      return Interpreter.matchOperator(right, left.left, context);
     }
 
     if (Type.isMatchPlaceholder(left)) {
@@ -457,15 +468,15 @@ export default class Interpreter {
     }
 
     if (Type.isVariablePattern(left)) {
-      return Interpreter.#matchVariablePattern(right, left, vars);
+      return Interpreter.#matchVariablePattern(right, left, context);
     }
 
     if (Type.isConsPattern(left)) {
-      return Interpreter.#matchConsPattern(right, left, vars);
+      return Interpreter.#matchConsPattern(right, left, context);
     }
 
     if (Type.isBitstringPattern(left)) {
-      return Interpreter.#matchBitstringPattern(right, left, vars);
+      return Interpreter.#matchBitstringPattern(right, left, context);
     }
 
     if (left.type !== right.type) {
@@ -473,11 +484,11 @@ export default class Interpreter {
     }
 
     if (Type.isList(left) || Type.isTuple(left)) {
-      return Interpreter.#matchListOrTuple(right, left, vars);
+      return Interpreter.#matchListOrTuple(right, left, context);
     }
 
     if (Type.isMap(left)) {
-      return Interpreter.#matchMap(right, left, vars);
+      return Interpreter.#matchMap(right, left, context);
     }
 
     if (!Interpreter.isStrictlyEqual(left, right)) {
@@ -562,12 +573,19 @@ export default class Interpreter {
     );
   }
 
-  static try(body, rescueClauses, catchClauses, elseClauses, afterBlock, vars) {
+  static try(
+    body,
+    rescueClauses,
+    catchClauses,
+    elseClauses,
+    afterBlock,
+    context,
+  ) {
     let result;
 
     try {
-      const varsClone = Interpreter.cloneDeep(vars);
-      result = body(varsClone);
+      const contextClone = Interpreter.cloneDeep(context);
+      result = body(contextClone);
       // TODO: finish
       // eslint-disable-next-line no-useless-catch
     } catch (error) {
@@ -576,8 +594,8 @@ export default class Interpreter {
       // TODO: handle errors
       // eslint-disable-next-line no-unreachable
       result =
-        Interpreter.#evaluateRescueClauses(rescueClauses, error, vars) ||
-        Interpreter.#evaluateCatchClauses(catchClauses, error, vars);
+        Interpreter.#evaluateRescueClauses(rescueClauses, error, context) ||
+        Interpreter.#evaluateCatchClauses(catchClauses, error, context);
     } finally {
       // TODO: handle after block
       if (afterBlock) {
@@ -643,12 +661,12 @@ export default class Interpreter {
     return 0;
   }
 
-  static #evaluateCatchClauses(clauses, error, vars) {
+  static #evaluateCatchClauses(clauses, error, context) {
     for (const clause of clauses) {
-      const varsClone = Interpreter.cloneDeep(vars);
+      const contextClone = Interpreter.cloneDeep(context);
 
-      if (Interpreter.#matchCatchClause(clause, error, varsClone)) {
-        return clause.body(varsClone);
+      if (Interpreter.#matchCatchClause(clause, error, contextClone)) {
+        return clause.body(contextClone);
       }
     }
 
@@ -669,12 +687,12 @@ export default class Interpreter {
     return false;
   }
 
-  static #evaluateRescueClauses(clauses, error, vars) {
+  static #evaluateRescueClauses(clauses, error, context) {
     for (const clause of clauses) {
-      const varsClone = Interpreter.cloneDeep(vars);
+      const contextClone = Interpreter.cloneDeep(context);
 
-      if (Interpreter.#matchRescueClause(clause, error, varsClone)) {
-        return clause.body(varsClone);
+      if (Interpreter.#matchRescueClause(clause, error, contextClone)) {
+        return clause.body(contextClone);
       }
     }
 
@@ -858,7 +876,7 @@ export default class Interpreter {
     Console.endGroup(mfa);
   }
 
-  static #matchBitstringPattern(right, left, vars) {
+  static #matchBitstringPattern(right, left, context) {
     if (right.type !== "bitstring" && right.type !== "bitstring_pattern") {
       throw new HologramMatchError(right);
     }
@@ -878,7 +896,7 @@ export default class Interpreter {
         }
 
         const [value, segmentLen] = valueInfo;
-        Interpreter.matchOperator(value, segment.value, vars);
+        Interpreter.matchOperator(value, segment.value, context);
         offset += segmentLen;
       } else {
         const segmentBitstring = Type.bitstring([segment]);
@@ -905,7 +923,7 @@ export default class Interpreter {
     return right;
   }
 
-  static #matchCatchClause(_clause, _error, _vars) {
+  static #matchCatchClause(_clause, _error, _context) {
     // TODO: handle catch clauses
     throw new HologramInterpreterError(
       '"try" expression catch clauses are not yet implemented in Hologram',
@@ -913,7 +931,7 @@ export default class Interpreter {
   }
 
   // deps: [:erlang.hd/1, :erlang.tl/1]
-  static #matchConsPattern(right, left, vars) {
+  static #matchConsPattern(right, left, context) {
     if (!Type.isList(right) || right.data.length === 0) {
       throw new HologramMatchError(right);
     }
@@ -929,8 +947,8 @@ export default class Interpreter {
     const rightTail = Erlang["tl/1"](right);
 
     if (
-      !Interpreter.isMatched(left.head, rightHead, vars) ||
-      !Interpreter.isMatched(left.tail, rightTail, vars)
+      !Interpreter.isMatched(left.head, rightHead, context) ||
+      !Interpreter.isMatched(left.tail, rightTail, context)
     ) {
       throw new HologramMatchError(right);
     }
@@ -938,7 +956,7 @@ export default class Interpreter {
     return right;
   }
 
-  static #matchListOrTuple(right, left, vars) {
+  static #matchListOrTuple(right, left, context) {
     const count = left.data.length;
 
     if (left.data.length !== right.data.length) {
@@ -950,7 +968,7 @@ export default class Interpreter {
     }
 
     for (let i = 0; i < count; ++i) {
-      if (!Interpreter.isMatched(left.data[i], right.data[i], vars)) {
+      if (!Interpreter.isMatched(left.data[i], right.data[i], context)) {
         throw new HologramMatchError(right);
       }
     }
@@ -958,11 +976,11 @@ export default class Interpreter {
     return right;
   }
 
-  static #matchMap(right, left, vars) {
+  static #matchMap(right, left, context) {
     for (const [key, value] of Object.entries(left.data)) {
       if (
         typeof right.data[key] === "undefined" ||
-        !Interpreter.isMatched(value[1], right.data[key][1], vars)
+        !Interpreter.isMatched(value[1], right.data[key][1], context)
       ) {
         throw new HologramMatchError(right);
       }
@@ -971,20 +989,22 @@ export default class Interpreter {
     return right;
   }
 
-  static #matchRescueClause(_clause, _error, _vars) {
+  static #matchRescueClause(_clause, _error, _context) {
     // TODO: handle rescue clauses
     throw new HologramInterpreterError(
       '"try" expression rescue clauses are not yet implemented in Hologram',
     );
   }
 
-  static #matchVariablePattern(right, left, vars) {
-    if (vars.__matched__[left.name]) {
-      if (!Interpreter.isStrictlyEqual(vars.__matched__[left.name], right)) {
+  static #matchVariablePattern(right, left, context) {
+    if (context.vars.__matched__[left.name]) {
+      if (
+        !Interpreter.isStrictlyEqual(context.vars.__matched__[left.name], right)
+      ) {
         throw new HologramMatchError(right);
       }
     } else {
-      vars.__matched__[left.name] = right;
+      context.vars.__matched__[left.name] = right;
     }
 
     return right;
