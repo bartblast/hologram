@@ -12,8 +12,6 @@ defmodule Hologram.Compiler do
   """
   @spec build_erlang_function_definition(module, atom, integer, String.t()) :: String.t()
   def build_erlang_function_definition(module, function, arity, erlang_source_dir) do
-    class = Encoder.encode_as_class_name(module)
-
     file_path =
       if module == :erlang do
         "#{erlang_source_dir}/erlang.mjs"
@@ -29,9 +27,9 @@ defmodule Hologram.Compiler do
       end
 
     if source_code do
-      ~s/Interpreter.defineErlangFunction("#{class}", "#{function}", #{arity}, #{source_code});/
+      ~s/Interpreter.defineErlangFunction("#{module}", "#{function}", #{arity}, #{source_code});/
     else
-      ~s/Interpreter.defineNotImplementedErlangFunction("#{module}", "#{class}", "#{function}", #{arity});/
+      ~s/Interpreter.defineNotImplementedErlangFunction("#{module}", "#{function}", #{arity});/
     end
   end
 

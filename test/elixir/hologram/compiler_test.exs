@@ -34,7 +34,7 @@ defmodule Hologram.CompilerTest do
       output = build_erlang_function_definition(:erlang, :+, 2, @erlang_source_dir)
 
       assert output == """
-             Interpreter.defineErlangFunction("Erlang", "+", 2, (left, right) => {
+             Interpreter.defineErlangFunction("erlang", "+", 2, (left, right) => {
                  if (!Type.isNumber(left) || !Type.isNumber(right)) {
                    Interpreter.raiseArithmeticError();
                  }
@@ -55,14 +55,14 @@ defmodule Hologram.CompilerTest do
       output = build_erlang_function_definition(:erlang, :not_implemented, 2, @erlang_source_dir)
 
       assert output ==
-               ~s/Interpreter.defineNotImplementedErlangFunction("erlang", "Erlang", "not_implemented", 2);/
+               ~s/Interpreter.defineNotImplementedErlangFunction("erlang", "not_implemented", 2);/
     end
 
     test ":maps module function that is implemented" do
       output = build_erlang_function_definition(:maps, :get, 2, @erlang_source_dir)
 
       assert output == """
-             Interpreter.defineErlangFunction("Erlang_Maps", "get", 2, (key, map) => {
+             Interpreter.defineErlangFunction("maps", "get", 2, (key, map) => {
                  const value = Erlang_Maps["get/3"](key, map, null);
 
                  if (value !== null) {
@@ -82,7 +82,7 @@ defmodule Hologram.CompilerTest do
       output = build_erlang_function_definition(:maps, :not_implemented, 2, @erlang_source_dir)
 
       assert output ==
-               ~s/Interpreter.defineNotImplementedErlangFunction("maps", "Erlang_Maps", "not_implemented", 2);/
+               ~s/Interpreter.defineNotImplementedErlangFunction("maps", "not_implemented", 2);/
     end
   end
 
@@ -165,8 +165,8 @@ defmodule Hologram.CompilerTest do
         |> PLT.put(Module7, module_7_ir)
         |> PLT.put(Module12, module_12_ir)
 
-      js_fragment_1 = ~s/defineElixirFunction("Elixir_Hologram_Test_Fixtures_Compiler_Module7"/
-      js_fragment_2 = ~s/defineElixirFunction("Elixir_ModuleWithoutBEAMFile"/
+      js_fragment_1 = ~s/defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module7"/
+      js_fragment_2 = ~s/defineElixirFunction("ModuleWithoutBEAMFile"/
 
       result = build_page_js(Module12, call_graph, ir_plt, @source_dir)
 
@@ -190,19 +190,19 @@ defmodule Hologram.CompilerTest do
 
     assert String.contains?(
              js,
-             ~s/Interpreter.defineElixirFunction("Elixir_Enum", "into", 2, "public"/
+             ~s/Interpreter.defineElixirFunction("Enum", "into", 2, "public"/
            )
 
     assert String.contains?(
              js,
-             ~s/Interpreter.defineElixirFunction("Elixir_Enum", "into_protocol", 2, "private"/
+             ~s/Interpreter.defineElixirFunction("Enum", "into_protocol", 2, "private"/
            )
 
-    assert String.contains?(js, ~s/Interpreter.defineErlangFunction("Erlang", "error", 1/)
+    assert String.contains?(js, ~s/Interpreter.defineErlangFunction("erlang", "error", 1/)
 
     assert String.contains?(
              js,
-             ~s/Interpreter.defineNotImplementedErlangFunction("erpc", "Erlang_Erpc", "call", 4/
+             ~s/Interpreter.defineNotImplementedErlangFunction("erpc", "call", 4/
            )
   end
 
