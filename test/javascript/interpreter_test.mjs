@@ -1999,7 +1999,7 @@ describe("defineElixirFunction()", () => {
 
 describe("defineErlangFunction()", () => {
   beforeEach(() => {
-    Interpreter.defineErlangFunction("Erlang_Aaa_Bbb", "my_fun_a", 2, () =>
+    Interpreter.defineErlangFunction("aaa_bbb", "my_fun_a", 2, () =>
       Type.atom("expr_a"),
     );
   });
@@ -2009,7 +2009,7 @@ describe("defineErlangFunction()", () => {
   });
 
   it("initiates the module global var if it is not initiated yet", () => {
-    Interpreter.defineErlangFunction("Erlang_Ddd", "my_fun_d", 3, []);
+    Interpreter.defineErlangFunction("ddd", "my_fun_d", 3, []);
 
     assert.isDefined(globalThis.Erlang_Ddd);
     assert.isDefined(globalThis.Erlang_Ddd["my_fun_d/3"]);
@@ -2020,7 +2020,7 @@ describe("defineErlangFunction()", () => {
 
   it("appends to the module global var if it is already initiated", () => {
     globalThis.Erlang_Eee = {dummy: "dummy"};
-    Interpreter.defineErlangFunction("Erlang_Eee", "my_fun_e", 1, []);
+    Interpreter.defineErlangFunction("eee", "my_fun_e", 1, []);
 
     assert.isDefined(globalThis.Erlang_Eee);
     assert.isDefined(globalThis.Erlang_Eee["my_fun_e/1"]);

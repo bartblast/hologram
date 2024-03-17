@@ -261,17 +261,14 @@ export default class Interpreter {
     }
   }
 
-  static defineErlangFunction(
-    moduleName,
-    functionName,
-    functionArity,
-    jsFunction,
-  ) {
-    if (!globalThis[moduleName]) {
-      globalThis[moduleName] = {};
+  static defineErlangFunction(moduleExName, functionName, arity, jsFunction) {
+    const moduleJsName = Interpreter.moduleName(moduleExName);
+
+    if (!globalThis[moduleJsName]) {
+      globalThis[moduleJsName] = {};
     }
 
-    globalThis[moduleName][`${functionName}/${functionArity}`] = jsFunction;
+    globalThis[moduleJsName][`${functionName}/${arity}`] = jsFunction;
   }
 
   static defineNotImplementedErlangFunction(
