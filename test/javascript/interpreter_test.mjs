@@ -348,10 +348,12 @@ it("callNamedFunction()", () => {
 });
 
 describe("case()", () => {
-  let vars;
+  let context;
 
   beforeEach(() => {
-    vars = {a: Type.integer(5), b: Type.integer(6), x: Type.integer(9)};
+    context = buildContext({
+      vars: {a: Type.integer(5), b: Type.integer(6), x: Type.integer(9)},
+    });
   });
 
   it("returns the result of the first matching clause's block (and ignores non-matching clauses)", () => {
@@ -364,7 +366,7 @@ describe("case()", () => {
     const clause1 = {
       match: Type.integer(1),
       guards: [],
-      body: (_vars) => {
+      body: (_context) => {
         return Type.atom("expr_1");
       },
     };
@@ -372,7 +374,7 @@ describe("case()", () => {
     const clause2 = {
       match: Type.integer(2),
       guards: [],
-      body: (_vars) => {
+      body: (_context) => {
         return Type.atom("expr_2");
       },
     };
@@ -380,7 +382,7 @@ describe("case()", () => {
     const clause3 = {
       match: Type.integer(3),
       guards: [],
-      body: (_vars) => {
+      body: (_context) => {
         return Type.atom("expr_3");
       },
     };
@@ -388,7 +390,7 @@ describe("case()", () => {
     const result = Interpreter.case(
       Type.integer(2),
       [clause1, clause2, clause3],
-      vars,
+      context,
     );
 
     assert.deepStrictEqual(result, Type.atom("expr_2"));
@@ -409,8 +411,8 @@ describe("case()", () => {
 
     const clause1 = {
       match: Type.variablePattern("x"),
-      guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(1))],
-      body: (_vars) => {
+      guards: [(context) => Erlang["==/2"](context.vars.x, Type.integer(1))],
+      body: (_context) => {
         return Type.atom("expr_1");
       },
     };
@@ -434,7 +436,7 @@ describe("case()", () => {
     const result = Interpreter.case(
       Type.integer(2),
       [clause1, clause2, clause3],
-      vars,
+      context,
     );
 
     assert.deepStrictEqual(result, Type.atom("expr_2"));
@@ -486,12 +488,12 @@ describe("case()", () => {
       },
     };
 
-    const vars = {my_var: Type.integer(22)};
+    const context = buildContext({vars: {my_var: Type.integer(22)}});
 
     const result = Interpreter.case(
       vars.my_var,
       [clause1, clause2, clause3],
-      vars,
+      context,
     );
 
     assert.deepStrictEqual(result, Type.atom("expr_2"));
@@ -521,7 +523,11 @@ describe("case()", () => {
       },
     };
 
-    const result = Interpreter.case(Type.integer(2), [clause1, clause2], vars);
+    const result = Interpreter.case(
+      Type.integer(2),
+      [clause1, clause2],
+      context,
+    );
 
     assert.deepStrictEqual(result, Type.integer(9));
   });
@@ -549,7 +555,7 @@ describe("case()", () => {
     };
 
     assertBoxedError(
-      () => Interpreter.case(Type.integer(3), [clause1, clause2], vars),
+      () => Interpreter.case(Type.integer(3), [clause1, clause2], context),
       "CaseClauseError",
       "no case clause matching: 3",
     );
@@ -563,7 +569,7 @@ describe("case()", () => {
     };
 
     assertBoxedError(
-      () => Interpreter.case(Type.integer(1), [clause], vars),
+      () => Interpreter.case(Type.integer(1), [clause], context),
       "ArgumentError",
       "my message",
     );
@@ -587,7 +593,7 @@ describe("case()", () => {
           },
         },
       ],
-      vars,
+      context,
     );
 
     assert.deepStrictEqual(result, Type.atom("ok"));
@@ -613,7 +619,7 @@ describe("case()", () => {
       // case (1; 2) do
       //   1 -> :ok
       // end
-      () => Interpreter.case(condition, clauses, vars),
+      () => Interpreter.case(condition, clauses, context),
       "CaseClauseError",
       "no case clause matching: 2",
     );
@@ -641,7 +647,7 @@ describe("case()", () => {
           },
         },
       ],
-      vars,
+      context,
     );
 
     assert.deepStrictEqual(result, Type.integer(1));
