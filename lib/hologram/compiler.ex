@@ -8,32 +8,6 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.IR
 
   @doc """
-  Extracts JavaScript source code for the given ported Erlang function and generates interpreter function definition JavaScript statetement.
-  """
-  @spec build_erlang_function_definition(module, atom, integer, String.t()) :: String.t()
-  def build_erlang_function_definition(module, function, arity, erlang_source_dir) do
-    file_path =
-      if module == :erlang do
-        "#{erlang_source_dir}/erlang.mjs"
-      else
-        "#{erlang_source_dir}/#{module}.mjs"
-      end
-
-    source_code =
-      if File.exists?(file_path) do
-        extract_erlang_function_source_code(file_path, function, arity)
-      else
-        nil
-      end
-
-    if source_code do
-      ~s/Interpreter.defineErlangFunction("#{module}", "#{function}", #{arity}, #{source_code});/
-    else
-      ~s/Interpreter.defineNotImplementedErlangFunction("#{module}", "#{function}", #{arity});/
-    end
-  end
-
-  @doc """
   Builds a persistent lookup table (PLT) containing the BEAM defs digests for all the modules in the project.
   """
   @spec build_module_digest_plt() :: PLT.t()
@@ -409,22 +383,6 @@ defmodule Hologram.Compiler do
       ]
   end
 
-  defp extract_erlang_function_source_code(file_path, function, arity) do
-    key = "#{function}/#{arity}"
-    start_marker = "// start #{key}"
-    end_marker = "// end #{key}"
-
-    regex =
-      ~r/#{Regex.escape(start_marker)}[[:space:]]+"#{Regex.escape(key)}":[[:space:]]+(.+),[[:space:]]+#{Regex.escape(end_marker)}/s
-
-    file_contents = File.read!(file_path)
-
-    case Regex.run(regex, file_contents) do
-      [_full_capture, source_code] -> source_code
-      nil -> nil
-    end
-  end
-
   defp filter_elixir_mfas(mfas) do
     Enum.filter(mfas, fn {module, _function, _arity} -> Reflection.alias?(module) end)
   end
@@ -505,7 +463,7 @@ defmodule Hologram.Compiler do
     mfas
     |> filter_erlang_mfas()
     |> Enum.map_join("\n\n", fn {module, function, arity} ->
-      build_erlang_function_definition(module, function, arity, erlang_source_dir)
+      Encoder.encode_erlang_function(module, function, arity, erlang_source_dir)
     end)
   end
 end

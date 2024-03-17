@@ -2,10 +2,13 @@ defmodule Hologram.Compiler.EncoderTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.Encoder, except: [encode_ir: 2]
 
+  alias Hologram.Commons.Reflection
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
 
   defdelegate encode_ir(ir, context \\ %Context{}), to: Hologram.Compiler.Encoder
+
+  @erlang_source_dir Path.join([Reflection.root_dir(), "assets", "js", "erlang"])
 
   test "anonymous function call" do
     # my_fun.(1, 2)
@@ -776,6 +779,63 @@ defmodule Hologram.Compiler.EncoderTest do
 
     assert encode_ir(ir) ==
              "Interpreter.dotOperator(vars.my_module, Type.atom(\"my_key\"))"
+  end
+
+  describe "encode_erlang_function/4" do
+    test ":erlang module function that is implemented" do
+      output = encode_erlang_function(:erlang, :+, 2, @erlang_source_dir)
+
+      assert output == """
+             Interpreter.defineErlangFunction("erlang", "+", 2, (left, right) => {
+                 if (!Type.isNumber(left) || !Type.isNumber(right)) {
+                   Interpreter.raiseArithmeticError();
+                 }
+
+                 const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
+                   left,
+                   right,
+                 );
+
+                 const result = leftValue.value + rightValue.value;
+
+                 return type === "float" ? Type.float(result) : Type.integer(result);
+               });\
+             """
+    end
+
+    test ":erlang module function that is not implemented" do
+      output = encode_erlang_function(:erlang, :not_implemented, 2, @erlang_source_dir)
+
+      assert output ==
+               ~s/Interpreter.defineNotImplementedErlangFunction("erlang", "not_implemented", 2);/
+    end
+
+    test ":maps module function that is implemented" do
+      output = encode_erlang_function(:maps, :get, 2, @erlang_source_dir)
+
+      assert output == """
+             Interpreter.defineErlangFunction("maps", "get", 2, (key, map) => {
+                 const value = Erlang_Maps["get/3"](key, map, null);
+
+                 if (value !== null) {
+                   return value;
+                 }
+
+                 Interpreter.raiseKeyError(
+                   `key ${Interpreter.inspect(key)} not found in: ${Interpreter.inspect(
+                     map,
+                   )}`,
+                 );
+               });\
+             """
+    end
+
+    test ":maps module function that is not implemented" do
+      output = encode_erlang_function(:maps, :not_implemented, 2, @erlang_source_dir)
+
+      assert output ==
+               ~s/Interpreter.defineNotImplementedErlangFunction("maps", "not_implemented", 2);/
+    end
   end
 
   test "float type" do

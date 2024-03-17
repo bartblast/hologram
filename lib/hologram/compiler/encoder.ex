@@ -51,6 +51,32 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   @doc """
+  Extracts JavaScript source code for the given ported Erlang function and generates interpreter function definition JavaScript statetement.
+  """
+  @spec encode_erlang_function(module, atom, integer, String.t()) :: String.t()
+  def encode_erlang_function(module, function, arity, erlang_source_dir) do
+    file_path =
+      if module == :erlang do
+        "#{erlang_source_dir}/erlang.mjs"
+      else
+        "#{erlang_source_dir}/#{module}.mjs"
+      end
+
+    source_code =
+      if File.exists?(file_path) do
+        extract_erlang_function_source_code(file_path, function, arity)
+      else
+        nil
+      end
+
+    if source_code do
+      ~s/Interpreter.defineErlangFunction("#{module}", "#{function}", #{arity}, #{source_code});/
+    else
+      ~s/Interpreter.defineNotImplementedErlangFunction("#{module}", "#{function}", #{arity});/
+    end
+  end
+
+  @doc """
   Encodes Elixir IR to JavaScript source code.
 
   ## Examples
@@ -563,6 +589,22 @@ defmodule Hologram.Compiler.Encoder do
       ~s'vars["#{var_name}"]'
     else
       "vars.#{var_name}"
+    end
+  end
+
+  defp extract_erlang_function_source_code(file_path, function, arity) do
+    key = "#{function}/#{arity}"
+    start_marker = "// start #{key}"
+    end_marker = "// end #{key}"
+
+    regex =
+      ~r/#{Regex.escape(start_marker)}[[:space:]]+"#{Regex.escape(key)}":[[:space:]]+(.+),[[:space:]]+#{Regex.escape(end_marker)}/s
+
+    file_contents = File.read!(file_path)
+
+    case Regex.run(regex, file_contents) do
+      [_full_capture, source_code] -> source_code
+      nil -> nil
     end
   end
 

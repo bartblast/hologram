@@ -22,68 +22,10 @@ defmodule Hologram.CompilerTest do
 
   @assets_dir Path.join([Reflection.root_dir(), "assets"])
   @source_dir Path.join([@assets_dir, "js"])
-  @erlang_source_dir Path.join([@source_dir, "erlang"])
 
   setup_all do
     install_js_deps(@assets_dir)
     :ok
-  end
-
-  describe "build_erlang_function_definition/4" do
-    test ":erlang module function that is implemented" do
-      output = build_erlang_function_definition(:erlang, :+, 2, @erlang_source_dir)
-
-      assert output == """
-             Interpreter.defineErlangFunction("erlang", "+", 2, (left, right) => {
-                 if (!Type.isNumber(left) || !Type.isNumber(right)) {
-                   Interpreter.raiseArithmeticError();
-                 }
-
-                 const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
-                   left,
-                   right,
-                 );
-
-                 const result = leftValue.value + rightValue.value;
-
-                 return type === "float" ? Type.float(result) : Type.integer(result);
-               });\
-             """
-    end
-
-    test ":erlang module function that is not implemented" do
-      output = build_erlang_function_definition(:erlang, :not_implemented, 2, @erlang_source_dir)
-
-      assert output ==
-               ~s/Interpreter.defineNotImplementedErlangFunction("erlang", "not_implemented", 2);/
-    end
-
-    test ":maps module function that is implemented" do
-      output = build_erlang_function_definition(:maps, :get, 2, @erlang_source_dir)
-
-      assert output == """
-             Interpreter.defineErlangFunction("maps", "get", 2, (key, map) => {
-                 const value = Erlang_Maps["get/3"](key, map, null);
-
-                 if (value !== null) {
-                   return value;
-                 }
-
-                 Interpreter.raiseKeyError(
-                   `key ${Interpreter.inspect(key)} not found in: ${Interpreter.inspect(
-                     map,
-                   )}`,
-                 );
-               });\
-             """
-    end
-
-    test ":maps module function that is not implemented" do
-      output = build_erlang_function_definition(:maps, :not_implemented, 2, @erlang_source_dir)
-
-      assert output ==
-               ~s/Interpreter.defineNotImplementedErlangFunction("maps", "not_implemented", 2);/
-    end
   end
 
   test "build_module_digest_plt/0" do
