@@ -62,7 +62,7 @@ export default class Interpreter {
       if (Interpreter.isMatched(pattern, args, varsClone)) {
         Interpreter.updateVarsToMatchedValues(varsClone);
 
-        if (Interpreter.#evaluateGuards(clause.guards, varsClone)) {
+        if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
           return clause.body(varsClone);
         }
       }
@@ -93,7 +93,7 @@ export default class Interpreter {
       if (Interpreter.isMatched(clause.match, condition, varsClone)) {
         Interpreter.updateVarsToMatchedValues(varsClone);
 
-        if (Interpreter.#evaluateGuards(clause.guards, varsClone)) {
+        if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
           return clause.body(varsClone);
         }
       }
@@ -153,7 +153,7 @@ export default class Interpreter {
         ) {
           Interpreter.updateVarsToMatchedValues(varsClone);
 
-          if (Interpreter.#evaluateGuards(generators[i].guards, varsClone)) {
+          if (Interpreter.#evaluateGuards(generators[i].guards, contextClone)) {
             continue;
           }
         }
@@ -241,7 +241,7 @@ export default class Interpreter {
         if (Interpreter.isMatched(pattern, args, vars)) {
           Interpreter.updateVarsToMatchedValues(vars);
 
-          if (Interpreter.#evaluateGuards(clause.guards, vars)) {
+          if (Interpreter.#evaluateGuards(clause.guards, context)) {
             const result = clause.body(vars);
 
             // TODO: remove on release
@@ -655,13 +655,13 @@ export default class Interpreter {
     return false;
   }
 
-  static #evaluateGuards(guards, vars) {
+  static #evaluateGuards(guards, context) {
     if (guards.length === 0) {
       return true;
     }
 
     for (const guard of guards) {
-      if (Type.isTrue(guard(vars))) {
+      if (Type.isTrue(guard(context))) {
         return true;
       }
     }
