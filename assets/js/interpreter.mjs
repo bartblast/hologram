@@ -56,14 +56,14 @@ export default class Interpreter {
     const args = Type.list(argsArray);
 
     for (const clause of fun.clauses) {
-      const varsClone = Interpreter.cloneDeep(fun.vars);
-      const pattern = Type.list(clause.params(varsClone));
+      const contextClone = Interpreter.cloneDeep(fun.context);
+      const pattern = Type.list(clause.params(contextClone));
 
-      if (Interpreter.isMatched(pattern, args, varsClone)) {
+      if (Interpreter.isMatched(pattern, args, contextClone)) {
         Interpreter.updateVarsToMatchedValues(contextClone);
 
         if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
-          return clause.body(varsClone);
+          return clause.body(contextClone);
         }
       }
     }
