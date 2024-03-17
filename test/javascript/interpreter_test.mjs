@@ -5772,29 +5772,33 @@ describe("try()", () => {
 });
 
 it("updateVarsToMatchedValues()", () => {
-  const vars = {
-    a: 1,
-    b: 2,
-    c: 3,
-    __matched__: {
-      d: 4,
-      a: 11,
-      e: 5,
-      c: 33,
+  const context = buildContext({
+    vars: {
+      a: 1,
+      b: 2,
+      c: 3,
+      __matched__: {
+        d: 4,
+        a: 11,
+        e: 5,
+        c: 33,
+      },
     },
-  };
+  });
 
-  const result = Interpreter.updateVarsToMatchedValues(vars);
+  const result = Interpreter.updateVarsToMatchedValues(context);
 
-  const expected = {
-    a: 11,
-    b: 2,
-    c: 33,
-    d: 4,
-    e: 5,
-  };
+  const expected = buildContext({
+    vars: {
+      a: 11,
+      b: 2,
+      c: 33,
+      d: 4,
+      e: 5,
+    },
+  });
 
-  assert.equal(result, vars);
+  assert.equal(result, context);
   assert.deepStrictEqual(result, expected);
 });
 

@@ -60,7 +60,7 @@ export default class Interpreter {
       const pattern = Type.list(clause.params(varsClone));
 
       if (Interpreter.isMatched(pattern, args, varsClone)) {
-        Interpreter.updateVarsToMatchedValues(varsClone);
+        Interpreter.updateVarsToMatchedValues(contextClone);
 
         if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
           return clause.body(varsClone);
@@ -91,7 +91,7 @@ export default class Interpreter {
       const varsClone = Interpreter.cloneDeep(conditionVars);
 
       if (Interpreter.isMatched(clause.match, condition, varsClone)) {
-        Interpreter.updateVarsToMatchedValues(varsClone);
+        Interpreter.updateVarsToMatchedValues(contextClone);
 
         if (Interpreter.#evaluateGuards(clause.guards, contextClone)) {
           return clause.body(varsClone);
@@ -151,7 +151,7 @@ export default class Interpreter {
         if (
           Interpreter.isMatched(generators[i].match, combination[i], varsClone)
         ) {
-          Interpreter.updateVarsToMatchedValues(varsClone);
+          Interpreter.updateVarsToMatchedValues(contextClone);
 
           if (Interpreter.#evaluateGuards(generators[i].guards, contextClone)) {
             continue;
@@ -239,7 +239,7 @@ export default class Interpreter {
         const pattern = Type.list(clause.params(vars));
 
         if (Interpreter.isMatched(pattern, args, vars)) {
-          Interpreter.updateVarsToMatchedValues(vars);
+          Interpreter.updateVarsToMatchedValues(context);
 
           if (Interpreter.#evaluateGuards(clause.guards, context)) {
             const result = clause.body(vars);
@@ -598,11 +598,11 @@ export default class Interpreter {
     }
   }
 
-  static updateVarsToMatchedValues(vars) {
-    Object.assign(vars, vars.__matched__);
-    delete vars.__matched__;
+  static updateVarsToMatchedValues(context) {
+    Object.assign(context.vars, context.vars.__matched__);
+    delete context.vars.__matched__;
 
-    return vars;
+    return context;
   }
 
   // TODO: finish implementing
