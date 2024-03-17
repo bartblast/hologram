@@ -2038,12 +2038,7 @@ describe("defineErlangFunction()", () => {
 
 describe("defineNotImplementedErlangFunction()", () => {
   beforeEach(() => {
-    Interpreter.defineNotImplementedErlangFunction(
-      "aaa_bbb",
-      "Erlang_Aaa_Bbb",
-      "my_fun_a",
-      2,
-    );
+    Interpreter.defineNotImplementedErlangFunction("aaa_bbb", "my_fun_a", 2);
   });
 
   afterEach(() => {
@@ -2051,13 +2046,7 @@ describe("defineNotImplementedErlangFunction()", () => {
   });
 
   it("initiates the module global var if it is not initiated yet", () => {
-    Interpreter.defineNotImplementedErlangFunction(
-      "ddd",
-      "Erlang_Ddd",
-      "my_fun_d",
-      3,
-      [],
-    );
+    Interpreter.defineNotImplementedErlangFunction("ddd", "my_fun_d", 3, []);
 
     assert.isDefined(globalThis.Erlang_Ddd);
     assert.isDefined(globalThis.Erlang_Ddd["my_fun_d/3"]);
@@ -2068,13 +2057,7 @@ describe("defineNotImplementedErlangFunction()", () => {
 
   it("appends to the module global var if it is already initiated", () => {
     globalThis.Erlang_Eee = {dummy: "dummy"};
-    Interpreter.defineNotImplementedErlangFunction(
-      "eee",
-      "Erlang_Eee",
-      "my_fun_e",
-      1,
-      [],
-    );
+    Interpreter.defineNotImplementedErlangFunction("eee", "my_fun_e", 1, []);
 
     assert.isDefined(globalThis.Erlang_Eee);
     assert.isDefined(globalThis.Erlang_Eee["my_fun_e/1"]);

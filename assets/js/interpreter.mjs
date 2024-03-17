@@ -271,19 +271,16 @@ export default class Interpreter {
     globalThis[moduleJsName][`${functionName}/${arity}`] = jsFunction;
   }
 
-  static defineNotImplementedErlangFunction(
-    exModuleName,
-    jsModuleName,
-    functionName,
-    functionArity,
-  ) {
-    if (!globalThis[jsModuleName]) {
-      globalThis[jsModuleName] = {};
+  static defineNotImplementedErlangFunction(moduleExName, functionName, arity) {
+    const moduleJsName = Interpreter.moduleName(moduleExName);
+
+    if (!globalThis[moduleJsName]) {
+      globalThis[moduleJsName] = {};
     }
 
-    globalThis[jsModuleName][`${functionName}/${functionArity}`] = () => {
+    globalThis[moduleJsName][`${functionName}/${arity}`] = () => {
       // TODO: update the URL
-      const message = `Function :${exModuleName}.${functionName}/${functionArity} is not yet ported. See what to do here: https://www.hologram.page/TODO`;
+      const message = `Function :${moduleExName}.${functionName}/${arity} is not yet ported. See what to do here: https://www.hologram.page/TODO`;
 
       throw new HologramInterpreterError(message);
     };
