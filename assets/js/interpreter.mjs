@@ -199,36 +199,35 @@ export default class Interpreter {
   }
 
   static defineElixirFunction(
-    moduleName,
+    moduleExName,
     functionName,
     arity,
     visibility,
     clauses,
   ) {
-    if (!globalThis[moduleName]) {
-      globalThis[moduleName] = new Proxy(
+    const moduleJsName = Interpreter.moduleName("Elixir." + moduleExName);
+
+    if (!globalThis[moduleJsName]) {
+      globalThis[moduleJsName] = new Proxy(
         {},
         {
-          get(module, fun) {
-            if (fun in module) return module[fun];
+          get(moduleJsVar, functionNameWithArity) {
+            if (functionNameWithArity in moduleJsVar)
+              return moduleJsVar[functionNameWithArity];
 
-            const message = `Function ${Interpreter.inspectModuleName(
-              moduleName,
-            )}.${fun} is not available on the client. See what to do here: https://www.hologram.page/TODO`;
+            const message = `Function ${moduleExName}.${functionNameWithArity} is not available on the client. See what to do here: https://www.hologram.page/TODO`;
 
             throw new HologramInterpreterError(message);
           },
         },
       );
 
-      globalThis[moduleName].__varName__ = moduleName;
-      globalThis[moduleName].__exports__ = new Set();
+      globalThis[moduleJsName].__varName__ = moduleJsName;
+      globalThis[moduleJsName].__exports__ = new Set();
     }
 
-    globalThis[moduleName][`${functionName}/${arity}`] = function () {
-      const mfa = `${Interpreter.inspectModuleName(
-        moduleName,
-      )}.${functionName}/${arity}`;
+    globalThis[moduleJsName][`${functionName}/${arity}`] = function () {
+      const mfa = `${moduleExName}.${functionName}/${arity}`;
 
       // TODO: remove on release
       // Interpreter.#logFunctionCall(mfa, arguments);
@@ -258,7 +257,7 @@ export default class Interpreter {
     };
 
     if (visibility === "public") {
-      globalThis[moduleName].__exports__.add(`${functionName}/${arity}`);
+      globalThis[moduleJsName].__exports__.add(`${functionName}/${arity}`);
     }
   }
 
