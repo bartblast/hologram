@@ -10,6 +10,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   alias Hologram.Commons.IntegerUtils
+  alias Hologram.Commons.Reflection
   alias Hologram.Commons.StringUtils
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
@@ -261,7 +262,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode_ir(%IR.ModuleDefinition{module: module, body: body}, context) do
-    class = encode_as_class_name(module.value)
+    module_name = Reflection.module_name(module.value)
 
     body.expressions
     |> aggregate_module_functions()
@@ -269,7 +270,7 @@ defmodule Hologram.Compiler.Encoder do
       clauses_js = encode_as_array(clauses, context)
 
       [
-        ~s/Interpreter.defineElixirFunction("#{class}", "#{function}", #{arity}, "#{visibility}", #{clauses_js});/
+        ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js});/
         | acc
       ]
     end)

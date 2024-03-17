@@ -1230,23 +1230,23 @@ defmodule Hologram.Compiler.EncoderTest do
     }
 
     assert encode_ir(ir) == """
-           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_1", 1, "public", [{params: (context) => [Type.variablePattern("c")], guards: [(context) => Erlang["is_integer/1"](vars.c)], body: (context) => {
+           Interpreter.defineElixirFunction("Aaa.Bbb", "fun_1", 1, "public", [{params: (context) => [Type.variablePattern("c")], guards: [(context) => Erlang["is_integer/1"](vars.c)], body: (context) => {
            return vars.c;
            }}]);
 
-           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_1", 2, "public", [{params: (context) => [Type.integer(9n), Type.integer(8n)], guards: [], body: (context) => {
+           Interpreter.defineElixirFunction("Aaa.Bbb", "fun_1", 2, "public", [{params: (context) => [Type.integer(9n), Type.integer(8n)], guards: [], body: (context) => {
            return Type.atom("expr_1");
            }}, {params: (context) => [Type.variablePattern("a"), Type.variablePattern("b")], guards: [], body: (context) => {
            return Erlang["+/2"](vars.a, vars.b);
            }}]);
 
-           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_2", 1, "private", [{params: (context) => [Type.integer(9n)], guards: [], body: (context) => {
+           Interpreter.defineElixirFunction("Aaa.Bbb", "fun_2", 1, "private", [{params: (context) => [Type.integer(9n)], guards: [], body: (context) => {
            return Type.atom("expr_2");
            }}, {params: (context) => [Type.variablePattern("z")], guards: [(context) => Erlang["is_float/1"](vars.z)], body: (context) => {
            return vars.z;
            }}]);
 
-           Interpreter.defineElixirFunction("Elixir_Aaa_Bbb", "fun_2", 2, "private", [{params: (context) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (context) => {
+           Interpreter.defineElixirFunction("Aaa.Bbb", "fun_2", 2, "private", [{params: (context) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (context) => {
            return Erlang["*/2"](vars.x, vars.y);
            }}]);\
            """
