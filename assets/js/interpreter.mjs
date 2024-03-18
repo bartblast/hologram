@@ -261,14 +261,16 @@ export default class Interpreter {
       const args = Type.list([...arguments]);
 
       for (const clause of clauses) {
-        const vars = {};
-        const pattern = Type.list(clause.params(vars));
+        const context = Interpreter.buildContext({
+          module: Type.alias(moduleExName),
+        });
+        const pattern = Type.list(clause.params(context));
 
-        if (Interpreter.isMatched(pattern, args, vars)) {
+        if (Interpreter.isMatched(pattern, args, context)) {
           Interpreter.updateVarsToMatchedValues(context);
 
           if (Interpreter.#evaluateGuards(clause.guards, context)) {
-            const result = clause.body(vars);
+            const result = clause.body(context);
 
             // TODO: remove on release
             // Interpreter.#logFunctionResult(mfa, result);
