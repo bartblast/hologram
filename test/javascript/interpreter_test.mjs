@@ -1614,10 +1614,12 @@ describe("comprehension()", () => {
 });
 
 describe("cond()", () => {
-  let vars;
+  let context;
 
   beforeEach(() => {
-    vars = {a: Type.integer(5), b: Type.integer(6), x: Type.integer(9)};
+    context = Interpreter.buildContext({
+      vars: {a: Type.integer(5), b: Type.integer(6), x: Type.integer(9)},
+    });
   });
 
   it("returns the result of the block of the first clause whose condition evaluates to a truthy value (and ignores other clauses)", () => {
@@ -1628,27 +1630,27 @@ describe("cond()", () => {
     // end
 
     const clause1 = {
-      condition: (_vars) => Type.nil(),
-      body: (_vars) => {
+      condition: (_context) => Type.nil(),
+      body: (_context) => {
         return Type.atom("expr_1");
       },
     };
 
     const clause2 = {
-      condition: (_vars) => Type.integer(2),
-      body: (_vars) => {
+      condition: (_context) => Type.integer(2),
+      body: (_context) => {
         return Type.atom("expr_2");
       },
     };
 
     const clause3 = {
-      condition: (_vars) => Type.integer(3),
-      body: (_vars) => {
+      condition: (_context) => Type.integer(3),
+      body: (_context) => {
         return Type.atom("expr_3");
       },
     };
 
-    const result = Interpreter.cond([clause1, clause2, clause3], vars);
+    const result = Interpreter.cond([clause1, clause2, clause3], context);
 
     assert.deepStrictEqual(result, Type.atom("expr_2"));
   });
@@ -1662,25 +1664,25 @@ describe("cond()", () => {
     // end
 
     const clause1 = {
-      condition: (vars) =>
+      condition: (context) =>
         Interpreter.matchOperator(
           Type.boolean(false),
           Type.variablePattern("x"),
-          vars,
+          context,
         ),
-      body: (_vars) => {
+      body: (_context) => {
         return Type.atom("expr_1");
       },
     };
 
     const clause2 = {
-      condition: (_vars) => Type.boolean(true),
-      body: (vars) => {
-        return vars.x;
+      condition: (_context) => Type.boolean(true),
+      body: (context) => {
+        return context.vars.x;
       },
     };
 
-    const result = Interpreter.cond([clause1, clause2], vars);
+    const result = Interpreter.cond([clause1, clause2], context);
 
     assert.deepStrictEqual(result, Type.integer(9));
   });
@@ -1692,21 +1694,21 @@ describe("cond()", () => {
     // end
 
     const clause1 = {
-      condition: (_vars) => Type.nil(),
-      body: (_vars) => {
+      condition: (_context) => Type.nil(),
+      body: (_context) => {
         return Type.atom("expr_1");
       },
     };
 
     const clause2 = {
-      condition: (_vars) => Type.boolean(false),
-      body: (_vars) => {
+      condition: (_context) => Type.boolean(false),
+      body: (_context) => {
         return Type.atom("expr_2");
       },
     };
 
     assertBoxedError(
-      () => Interpreter.cond([clause1, clause2], vars),
+      () => Interpreter.cond([clause1, clause2], context),
       "CondClauseError",
       "no cond clause evaluated to a truthy value",
     );
