@@ -5826,13 +5826,15 @@ describe("serialize()", () => {
 });
 
 describe("try()", () => {
-  let vars;
+  let context;
 
   beforeEach(() => {
-    vars = {
-      a: Type.integer(1),
-      b: Type.integer(2),
-    };
+    context = Interpreter.buildContext({
+      vars: {
+        a: Type.integer(1),
+        b: Type.integer(2),
+      },
+    });
   });
 
   it("body without any errors, throws or exists / vars are not mutated in body", () => {
@@ -5840,19 +5842,19 @@ describe("try()", () => {
     //   a = 3
     //   :ok
     // end
-    const body = (vars) => {
+    const body = (context) => {
       Interpreter.matchOperator(
         Type.integer(3),
         Type.variablePattern("a"),
-        vars,
+        context,
       );
       return Type.atom("ok");
     };
 
-    const result = Interpreter.try(body, [], [], [], null, vars);
+    const result = Interpreter.try(body, [], [], [], null, context);
 
     assert.deepStrictEqual(result, Type.atom("ok"));
-    assert.deepStrictEqual(vars.a, Type.integer(1));
+    assert.deepStrictEqual(context.vars.a, Type.integer(1));
   });
 });
 
