@@ -2615,10 +2615,11 @@ describe("isStrictlyEqual()", () => {
 // to make the test as close as possible to real behaviour in which the matchOperator() call is encoded as a whole.
 describe("matchOperator()", () => {
   const varsWithEmptyMatchedValues = {a: Type.integer(9), __matched__: {}};
-  let vars;
+
+  let context;
 
   beforeEach(() => {
-    vars = {a: Type.integer(9)};
+    context = Interpreter.buildContext({vars: {a: Type.integer(9)}});
   });
 
   describe("atom type", () => {
@@ -2627,11 +2628,11 @@ describe("matchOperator()", () => {
       const result = Interpreter.matchOperator(
         Type.atom("abc"),
         Type.atom("abc"),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, Type.atom("abc"));
-      assert.deepStrictEqual(vars, varsWithEmptyMatchedValues);
+      assert.deepStrictEqual(context.vars, varsWithEmptyMatchedValues);
     });
 
     // :abc = :xyz
@@ -2639,7 +2640,7 @@ describe("matchOperator()", () => {
       const myAtom = Type.atom("xyz");
 
       assertMatchError(
-        () => Interpreter.matchOperator(myAtom, Type.atom("abc"), vars),
+        () => Interpreter.matchOperator(myAtom, Type.atom("abc"), context),
         myAtom,
       );
     });
@@ -2649,7 +2650,7 @@ describe("matchOperator()", () => {
       const myInteger = Type.integer(2);
 
       assertMatchError(
-        () => Interpreter.matchOperator(myInteger, Type.atom("abc"), vars),
+        () => Interpreter.matchOperator(myInteger, Type.atom("abc"), context),
         myInteger,
       );
     });
@@ -2683,11 +2684,11 @@ describe("matchOperator()", () => {
         }),
       ]);
 
-      const result = Interpreter.matchOperator(right, left, vars);
+      const result = Interpreter.matchOperator(right, left, context);
 
       assert.deepStrictEqual(result, right);
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {value: Type.float(123.45)},
       });
@@ -2710,11 +2711,11 @@ describe("matchOperator()", () => {
         }),
       ]);
 
-      const result = Interpreter.matchOperator(right, left, vars);
+      const result = Interpreter.matchOperator(right, left, context);
 
       assert.deepStrictEqual(result, right);
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {value: Type.float(123.44999694824219)},
       });
@@ -2758,7 +2759,7 @@ describe("matchOperator()", () => {
       const right = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]);
 
       assertMatchError(
-        () => Interpreter.matchOperator(right, left, vars),
+        () => Interpreter.matchOperator(right, left, context),
         right,
       );
     });
@@ -2775,11 +2776,11 @@ describe("matchOperator()", () => {
       // 170 == 0b10101010
       const right = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]);
 
-      const result = Interpreter.matchOperator(right, left, vars);
+      const result = Interpreter.matchOperator(right, left, context);
 
       assert.deepStrictEqual(result, right);
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {value: Type.integer(-86)},
       });
@@ -2823,11 +2824,11 @@ describe("matchOperator()", () => {
         }),
       ]);
 
-      const result = Interpreter.matchOperator(right, left, vars);
+      const result = Interpreter.matchOperator(right, left, context);
 
       assert.deepStrictEqual(result, right);
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {value: Type.float(123.45)},
       });
@@ -2850,11 +2851,11 @@ describe("matchOperator()", () => {
         }),
       ]);
 
-      const result = Interpreter.matchOperator(right, left, vars);
+      const result = Interpreter.matchOperator(right, left, context);
 
       assert.deepStrictEqual(result, right);
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {value: Type.float(123.44999694824219)},
       });
@@ -2898,7 +2899,7 @@ describe("matchOperator()", () => {
       const right = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]);
 
       assertMatchError(
-        () => Interpreter.matchOperator(right, left, vars),
+        () => Interpreter.matchOperator(right, left, context),
         right,
       );
     });
@@ -2915,11 +2916,11 @@ describe("matchOperator()", () => {
       // 170 == 0b10101010
       const right = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]);
 
-      const result = Interpreter.matchOperator(right, left, vars);
+      const result = Interpreter.matchOperator(right, left, context);
 
       assert.deepStrictEqual(result, right);
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {value: Type.integer(170)},
       });
@@ -2949,7 +2950,7 @@ describe("matchOperator()", () => {
       const result = Interpreter.matchOperator(
         emptyBitstringValue,
         emptyBitstringPattern,
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, emptyBitstringValue);
@@ -2961,7 +2962,11 @@ describe("matchOperator()", () => {
 
       assertMatchError(
         () =>
-          Interpreter.matchOperator(myBitstring, emptyBitstringPattern, vars),
+          Interpreter.matchOperator(
+            myBitstring,
+            emptyBitstringPattern,
+            context,
+          ),
         myBitstring,
       );
     });
@@ -2971,7 +2976,7 @@ describe("matchOperator()", () => {
       const myAtom = Type.atom("abc");
 
       assertMatchError(
-        () => Interpreter.matchOperator(myAtom, emptyBitstringPattern, vars),
+        () => Interpreter.matchOperator(myAtom, emptyBitstringPattern, context),
         myAtom,
       );
     });
@@ -2984,7 +2989,7 @@ describe("matchOperator()", () => {
         Type.bitstringPattern([
           Type.bitstringSegment(Type.integer(1), {type: "integer"}),
         ]),
-        vars,
+        context,
       );
 
       const expected = Type.bitstring([
@@ -3006,7 +3011,7 @@ describe("matchOperator()", () => {
             Type.bitstringPattern([
               Type.bitstringSegment(Type.integer(1), {type: "integer"}),
             ]),
-            vars,
+            context,
           ),
         myBitstring,
       );
@@ -3022,7 +3027,7 @@ describe("matchOperator()", () => {
             Type.bitstringPattern([
               Type.bitstringSegment(Type.integer(1), {type: "integer"}),
             ]),
-            vars,
+            context,
           ),
         myAtom,
       );
@@ -3050,7 +3055,7 @@ describe("matchOperator()", () => {
             size: Type.integer(1),
           }),
         ]),
-        vars,
+        context,
       );
 
       const expected = Type.bitstring([
@@ -3077,7 +3082,7 @@ describe("matchOperator()", () => {
           Type.bitstringSegment(Type.float(1.0), {type: "float"}),
           Type.bitstringSegment(Type.float(2.0), {type: "float"}),
         ]),
-        vars,
+        context,
       );
 
       const expected = Type.bitstring([
@@ -3098,7 +3103,7 @@ describe("matchOperator()", () => {
           Type.bitstringSegment(Type.integer(1), {type: "integer"}),
           Type.bitstringSegment(Type.integer(2), {type: "integer"}),
         ]),
-        vars,
+        context,
       );
 
       const expected = Type.bitstring([
@@ -3119,7 +3124,7 @@ describe("matchOperator()", () => {
           Type.bitstringSegment(Type.string("aaa"), {type: "utf8"}),
           Type.bitstringSegment(Type.string("bbb"), {type: "utf8"}),
         ]),
-        vars,
+        context,
       );
 
       const expected = Type.bitstring([
@@ -3141,12 +3146,12 @@ describe("matchOperator()", () => {
         Type.bitstringPattern([
           Type.bitstringSegment(Type.variablePattern("x"), {type: "integer"}),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, myBitstring);
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           x: Type.integer(1),
@@ -3162,12 +3167,12 @@ describe("matchOperator()", () => {
           Type.bitstringSegment(Type.variablePattern("x"), {type: "integer"}),
           Type.bitstringSegment(Type.variablePattern("y"), {type: "integer"}),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, multiSegmentBitstringValue);
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           x: Type.integer(1),
@@ -3188,7 +3193,7 @@ describe("matchOperator()", () => {
                 type: "integer",
               }),
             ]),
-            vars,
+            context,
           ),
         multiSegmentBitstringValue,
       );
@@ -3207,7 +3212,7 @@ describe("matchOperator()", () => {
                 size: Type.integer(7),
               }),
             ]),
-            vars,
+            context,
           ),
         multiSegmentBitstringValue,
       );
@@ -3226,7 +3231,7 @@ describe("matchOperator()", () => {
                 size: Type.integer(9),
               }),
             ]),
-            vars,
+            context,
           ),
         multiSegmentBitstringValue,
       );
@@ -4186,10 +4191,10 @@ describe("matchOperator()", () => {
     it("left and right maps have the same items", () => {
       const left = map;
       const right = Interpreter.cloneDeep(map);
-      const result = Interpreter.matchOperator(right, left, vars);
+      const result = Interpreter.matchOperator(right, left, context);
 
       assert.deepStrictEqual(result, right);
-      assert.deepStrictEqual(vars, varsWithEmptyMatchedValues);
+      assert.deepStrictEqual(context.vars, varsWithEmptyMatchedValues);
     });
 
     // %{x: 1, y: 2} = %{x: 1, y: 2, z: 3}
@@ -4202,10 +4207,10 @@ describe("matchOperator()", () => {
         [Type.atom("z"), Type.integer(3)],
       ]);
 
-      const result = Interpreter.matchOperator(right, left, vars);
+      const result = Interpreter.matchOperator(right, left, context);
 
       assert.deepStrictEqual(result, right);
-      assert.deepStrictEqual(vars, varsWithEmptyMatchedValues);
+      assert.deepStrictEqual(context.vars, varsWithEmptyMatchedValues);
     });
 
     // %{x: 1, y: 2, z: 3} = %{x: 1, y: 2}
@@ -4219,7 +4224,7 @@ describe("matchOperator()", () => {
       const right = map;
 
       assertMatchError(
-        () => Interpreter.matchOperator(right, left, vars),
+        () => Interpreter.matchOperator(right, left, context),
         right,
       );
     });
@@ -4234,7 +4239,7 @@ describe("matchOperator()", () => {
       ]);
 
       assertMatchError(
-        () => Interpreter.matchOperator(right, left, vars),
+        () => Interpreter.matchOperator(right, left, context),
         right,
       );
     });
@@ -4245,7 +4250,7 @@ describe("matchOperator()", () => {
       const right = Type.atom("abc");
 
       assertMatchError(
-        () => Interpreter.matchOperator(right, left, vars),
+        () => Interpreter.matchOperator(right, left, context),
         right,
       );
     });
@@ -4264,11 +4269,11 @@ describe("matchOperator()", () => {
         [Type.atom("n"), Type.integer(3)],
       ]);
 
-      const result = Interpreter.matchOperator(right, left, vars);
+      const result = Interpreter.matchOperator(right, left, context);
 
       assert.deepStrictEqual(result, right);
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           x: Type.integer(1),
@@ -4283,7 +4288,7 @@ describe("matchOperator()", () => {
       const right = emptyMap;
 
       assertMatchError(
-        () => Interpreter.matchOperator(right, left, vars),
+        () => Interpreter.matchOperator(right, left, context),
         right,
       );
     });
@@ -4292,20 +4297,22 @@ describe("matchOperator()", () => {
     it("left is an empty map, right is a non-empty map", () => {
       const left = emptyMap;
       const right = map;
-      const result = Interpreter.matchOperator(right, left, vars);
+      const result = Interpreter.matchOperator(right, left, context);
 
       assert.deepStrictEqual(result, right);
-      assert.deepStrictEqual(vars, varsWithEmptyMatchedValues);
+
+      assert.deepStrictEqual(context.vars, varsWithEmptyMatchedValues);
     });
 
     // %{} = %{}
     it("both left and right maps are empty", () => {
       const left = emptyMap;
       const right = emptyMap;
-      const result = Interpreter.matchOperator(right, left, vars);
+      const result = Interpreter.matchOperator(right, left, context);
 
       assert.deepStrictEqual(result, right);
-      assert.deepStrictEqual(vars, varsWithEmptyMatchedValues);
+
+      assert.deepStrictEqual(context.vars, varsWithEmptyMatchedValues);
     });
   });
 
@@ -4314,24 +4321,25 @@ describe("matchOperator()", () => {
     const result = Interpreter.matchOperator(
       Type.integer(2),
       Type.matchPlaceholder(),
-      vars,
+      context,
     );
 
     assert.deepStrictEqual(result, Type.integer(2));
-    assert.deepStrictEqual(vars, varsWithEmptyMatchedValues);
+
+    assert.deepStrictEqual(context.vars, varsWithEmptyMatchedValues);
   });
 
   describe("nested match operators", () => {
     it("x = 2 = 2", () => {
       const result = Interpreter.matchOperator(
-        Interpreter.matchOperator(Type.integer(2), Type.integer(2), vars),
+        Interpreter.matchOperator(Type.integer(2), Type.integer(2), context),
         Type.variablePattern("x"),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, Type.integer(2));
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           x: Type.integer(2),
@@ -4343,9 +4351,13 @@ describe("matchOperator()", () => {
       assertMatchError(
         () =>
           Interpreter.matchOperator(
-            Interpreter.matchOperator(Type.integer(3), Type.integer(2), vars),
+            Interpreter.matchOperator(
+              Type.integer(3),
+              Type.integer(2),
+              context,
+            ),
             Type.variablePattern("x"),
-            vars,
+            context,
           ),
         Type.integer(3),
       );
@@ -4356,15 +4368,15 @@ describe("matchOperator()", () => {
         Interpreter.matchOperator(
           Type.integer(2),
           Type.variablePattern("x"),
-          vars,
+          context,
         ),
         Type.integer(2),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, Type.integer(2));
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           x: Type.integer(2),
@@ -4379,30 +4391,33 @@ describe("matchOperator()", () => {
             Interpreter.matchOperator(
               Type.integer(3),
               Type.variablePattern("x"),
-              vars,
+              context,
             ),
             Type.integer(2),
-            vars,
+            context,
           ),
         Type.integer(3),
       );
     });
 
     it("2 = 2 = x, (x = 2)", () => {
-      const vars = {
-        a: Type.integer(9),
-        x: Type.integer(2),
-      };
+      const context = Interpreter.buildContext({
+        module: Type.alias("MyModule"),
+        vars: {
+          a: Type.integer(9),
+          x: Type.integer(2),
+        },
+      });
 
       const result = Interpreter.matchOperator(
-        Interpreter.matchOperator(vars.x, Type.integer(2), vars),
+        Interpreter.matchOperator(context.vars.x, Type.integer(2), context),
         Type.integer(2),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, Type.integer(2));
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         x: Type.integer(2),
         __matched__: {},
@@ -4410,64 +4425,73 @@ describe("matchOperator()", () => {
     });
 
     it("2 = 2 = x, (x = 3)", () => {
-      const vars = {
-        a: Type.integer(9),
-        x: Type.integer(3),
-      };
+      const context = Interpreter.buildContext({
+        module: Type.alias("MyModule"),
+        vars: {
+          a: Type.integer(9),
+          x: Type.integer(3),
+        },
+      });
 
       assertMatchError(
         () =>
           Interpreter.matchOperator(
-            Interpreter.matchOperator(vars.x, Type.integer(2), vars),
+            Interpreter.matchOperator(context.vars.x, Type.integer(2), context),
             Type.integer(2),
-            vars,
+            context,
           ),
         Type.integer(3),
       );
     });
 
     it("1 = 2 = x, (x = 2)", () => {
-      const vars = {
-        a: Type.integer(9),
-        x: Type.integer(2),
-      };
+      const context = Interpreter.buildContext({
+        module: Type.alias("MyModule"),
+        vars: {
+          a: Type.integer(9),
+          x: Type.integer(2),
+        },
+      });
 
       assertMatchError(
         () =>
           Interpreter.matchOperator(
-            Interpreter.matchOperator(vars.x, Type.integer(2), vars),
+            Interpreter.matchOperator(context.vars.x, Type.integer(2), context),
             Type.integer(1),
-            vars,
+            context,
           ),
         Type.integer(2),
       );
     });
 
     it("y = x + (x = 3) + x, (x = 11)", () => {
-      const vars = {
-        a: Type.integer(9),
-        x: Type.integer(11),
-      };
+      const context = Interpreter.buildContext({
+        module: Type.alias("MyModule"),
+        vars: {
+          a: Type.integer(9),
+          x: Type.integer(11),
+        },
+      });
 
       const result = Interpreter.matchOperator(
         Erlang["+/2"](
           Erlang["+/2"](
-            vars.x,
+            context.vars.x,
             Interpreter.matchOperator(
               Type.integer(3),
               Type.variablePattern("x"),
-              vars,
+              context,
             ),
           ),
-          vars.x,
+          context.vars.x,
         ),
         Type.variablePattern("y"),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, Type.integer(25));
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         x: Type.integer(11),
         __matched__: {
@@ -4480,16 +4504,16 @@ describe("matchOperator()", () => {
     it("[1 = 1] = [1 = 1]", () => {
       const result = Interpreter.matchOperator(
         Type.list([
-          Interpreter.matchOperator(Type.integer(1), Type.integer(1), vars),
+          Interpreter.matchOperator(Type.integer(1), Type.integer(1), context),
         ]),
         Type.list([
-          Interpreter.matchOperator(Type.integer(1), Type.integer(1), vars),
+          Interpreter.matchOperator(Type.integer(1), Type.integer(1), context),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
-      assert.deepStrictEqual(vars, varsWithEmptyMatchedValues);
+      assert.deepStrictEqual(context.vars, varsWithEmptyMatchedValues);
     });
 
     it("[1 = 1] = [1 = 2]", () => {
@@ -4497,12 +4521,20 @@ describe("matchOperator()", () => {
         () =>
           Interpreter.matchOperator(
             Type.list([
-              Interpreter.matchOperator(Type.integer(2), Type.integer(1), vars),
+              Interpreter.matchOperator(
+                Type.integer(2),
+                Type.integer(1),
+                context,
+              ),
             ]),
             Type.list([
-              Interpreter.matchOperator(Type.integer(1), Type.integer(1), vars),
+              Interpreter.matchOperator(
+                Type.integer(1),
+                Type.integer(1),
+                context,
+              ),
             ]),
-            vars,
+            context,
           ),
         Type.integer(2),
       );
@@ -4513,12 +4545,20 @@ describe("matchOperator()", () => {
         () =>
           Interpreter.matchOperator(
             Type.list([
-              Interpreter.matchOperator(Type.integer(1), Type.integer(2), vars),
+              Interpreter.matchOperator(
+                Type.integer(1),
+                Type.integer(2),
+                context,
+              ),
             ]),
             Type.list([
-              Interpreter.matchOperator(Type.integer(1), Type.integer(1), vars),
+              Interpreter.matchOperator(
+                Type.integer(1),
+                Type.integer(1),
+                context,
+              ),
             ]),
-            vars,
+            context,
           ),
         Type.integer(1),
       );
@@ -4530,12 +4570,20 @@ describe("matchOperator()", () => {
         () =>
           Interpreter.matchOperator(
             Type.list([
-              Interpreter.matchOperator(Type.integer(1), Type.integer(1), vars),
+              Interpreter.matchOperator(
+                Type.integer(1),
+                Type.integer(1),
+                context,
+              ),
             ]),
             Type.list([
-              Interpreter.matchOperator(Type.integer(2), Type.integer(1), vars),
+              Interpreter.matchOperator(
+                Type.integer(2),
+                Type.integer(1),
+                context,
+              ),
             ]),
-            vars,
+            context,
           ),
         Type.integer(2),
       );
@@ -4547,51 +4595,66 @@ describe("matchOperator()", () => {
         () =>
           Interpreter.matchOperator(
             Type.list([
-              Interpreter.matchOperator(Type.integer(1), Type.integer(1), vars),
+              Interpreter.matchOperator(
+                Type.integer(1),
+                Type.integer(1),
+                context,
+              ),
             ]),
             Type.list([
-              Interpreter.matchOperator(Type.integer(1), Type.integer(2), vars),
+              Interpreter.matchOperator(
+                Type.integer(1),
+                Type.integer(2),
+                context,
+              ),
             ]),
-            vars,
+            context,
           ),
         Type.integer(1),
       );
     });
 
     it("{a = b, 2, 3} = {1, c = d, 3} = {1, 2, e = f}", () => {
-      const vars = {
-        a: Type.integer(9),
-        f: Type.integer(3),
-      };
+      const context = Interpreter.buildContext({
+        module: Type.alias("MyModule"),
+        vars: {
+          a: Type.integer(9),
+          f: Type.integer(3),
+        },
+      });
 
       const result = Interpreter.matchOperator(
         Interpreter.matchOperator(
           Type.tuple([
             Type.integer(1),
             Type.integer(2),
-            Interpreter.matchOperator(vars.f, Type.variablePattern("e"), vars),
+            Interpreter.matchOperator(
+              context.vars.f,
+              Type.variablePattern("e"),
+              context,
+            ),
           ]),
           Type.tuple([
             Type.integer(1),
             Interpreter.matchOperator(
               Type.variablePattern("d"),
               Type.variablePattern("c"),
-              vars,
+              context,
             ),
             Type.integer(3),
           ]),
-          vars,
+          context,
         ),
         Type.tuple([
           Interpreter.matchOperator(
             Type.variablePattern("b"),
             Type.variablePattern("a"),
-            vars,
+            context,
           ),
           Type.integer(2),
           Type.integer(3),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(
@@ -4599,7 +4662,7 @@ describe("matchOperator()", () => {
         Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
       );
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         f: Type.integer(3),
         __matched__: {
@@ -4629,10 +4692,10 @@ describe("matchOperator()", () => {
               Type.variablePattern("a"),
               Type.variablePattern("b"),
             ),
-            vars,
+            context,
           ),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(
@@ -4642,7 +4705,7 @@ describe("matchOperator()", () => {
         ]),
       );
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           a: Type.integer(1),
@@ -4678,13 +4741,13 @@ describe("matchOperator()", () => {
                   Type.variablePattern("a"),
                   Type.variablePattern("b"),
                 ),
-                vars,
+                context,
               ),
             ]),
-            vars,
+            context,
           ),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(
@@ -4696,7 +4759,7 @@ describe("matchOperator()", () => {
         ]),
       );
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           a: Type.integer(1),
@@ -4716,10 +4779,10 @@ describe("matchOperator()", () => {
           Interpreter.matchOperator(
             Type.list([Type.variablePattern("c"), Type.variablePattern("d")]),
             Type.list([Type.variablePattern("a"), Type.variablePattern("b")]),
-            vars,
+            context,
           ),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(
@@ -4727,7 +4790,7 @@ describe("matchOperator()", () => {
         Type.list([Type.list([Type.integer(1), Type.integer(2)])]),
       );
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           a: Type.integer(1),
@@ -4756,13 +4819,13 @@ describe("matchOperator()", () => {
                   Type.variablePattern("a"),
                   Type.variablePattern("b"),
                 ]),
-                vars,
+                context,
               ),
             ]),
-            vars,
+            context,
           ),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(
@@ -4770,7 +4833,7 @@ describe("matchOperator()", () => {
         Type.list([Type.list([Type.list([Type.integer(1), Type.integer(2)])])]),
       );
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           a: Type.integer(1),
@@ -4790,15 +4853,15 @@ describe("matchOperator()", () => {
           Interpreter.matchOperator(
             Type.variablePattern("y"),
             Type.variablePattern("x"),
-            vars,
+            context,
           ),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           x: Type.integer(1),
@@ -4814,15 +4877,15 @@ describe("matchOperator()", () => {
           Interpreter.matchOperator(
             Type.variablePattern("x"),
             Type.integer(1),
-            vars,
+            context,
           ),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           x: Type.integer(1),
@@ -4837,15 +4900,15 @@ describe("matchOperator()", () => {
           Interpreter.matchOperator(
             Type.integer(1),
             Type.variablePattern("x"),
-            vars,
+            context,
           ),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           x: Type.integer(1),
@@ -4861,18 +4924,18 @@ describe("matchOperator()", () => {
             Interpreter.matchOperator(
               Type.variablePattern("z"),
               Type.variablePattern("y"),
-              vars,
+              context,
             ),
             Type.variablePattern("x"),
-            vars,
+            context,
           ),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           x: Type.integer(1),
@@ -4890,18 +4953,18 @@ describe("matchOperator()", () => {
             Interpreter.matchOperator(
               Type.variablePattern("y"),
               Type.variablePattern("x"),
-              vars,
+              context,
             ),
             Type.integer(1),
-            vars,
+            context,
           ),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           x: Type.integer(1),
@@ -4918,18 +4981,18 @@ describe("matchOperator()", () => {
             Interpreter.matchOperator(
               Type.variablePattern("y"),
               Type.integer(1),
-              vars,
+              context,
             ),
             Type.variablePattern("x"),
-            vars,
+            context,
           ),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           x: Type.integer(1),
@@ -4946,18 +5009,18 @@ describe("matchOperator()", () => {
             Interpreter.matchOperator(
               Type.integer(1),
               Type.variablePattern("y"),
-              vars,
+              context,
             ),
             Type.variablePattern("x"),
-            vars,
+            context,
           ),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           x: Type.integer(1),
@@ -4975,21 +5038,21 @@ describe("matchOperator()", () => {
               Interpreter.matchOperator(
                 Type.variablePattern("z"),
                 Type.variablePattern("y"),
-                vars,
+                context,
               ),
               Type.variablePattern("x"),
-              vars,
+              context,
             ),
             Type.variablePattern("v"),
-            vars,
+            context,
           ),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           v: Type.integer(1),
@@ -5009,21 +5072,21 @@ describe("matchOperator()", () => {
               Interpreter.matchOperator(
                 Type.variablePattern("z"),
                 Type.variablePattern("y"),
-                vars,
+                context,
               ),
               Type.variablePattern("x"),
-              vars,
+              context,
             ),
             Type.integer(1),
-            vars,
+            context,
           ),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           x: Type.integer(1),
@@ -5042,21 +5105,21 @@ describe("matchOperator()", () => {
               Interpreter.matchOperator(
                 Type.variablePattern("z"),
                 Type.variablePattern("y"),
-                vars,
+                context,
               ),
               Type.integer(1),
-              vars,
+              context,
             ),
             Type.variablePattern("x"),
-            vars,
+            context,
           ),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           x: Type.integer(1),
@@ -5075,21 +5138,21 @@ describe("matchOperator()", () => {
               Interpreter.matchOperator(
                 Type.variablePattern("z"),
                 Type.integer(1),
-                vars,
+                context,
               ),
               Type.variablePattern("y"),
-              vars,
+              context,
             ),
             Type.variablePattern("x"),
-            vars,
+            context,
           ),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           x: Type.integer(1),
@@ -5108,20 +5171,20 @@ describe("matchOperator()", () => {
               Interpreter.matchOperator(
                 Type.integer(1),
                 Type.variablePattern("z"),
-                vars,
+                context,
               ),
               Type.variablePattern("y"),
-              vars,
+              context,
             ),
             Type.variablePattern("x"),
-            vars,
+            context,
           ),
         ]),
-        vars,
+        context,
       );
       assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           x: Type.integer(1),
@@ -5139,13 +5202,13 @@ describe("matchOperator()", () => {
               Interpreter.matchOperator(
                 Type.integer(2),
                 Type.variablePattern("c"),
-                vars,
+                context,
               ),
               Type.variablePattern("b"),
-              vars,
+              context,
             ),
             Type.variablePattern("a"),
-            vars,
+            context,
           ),
         ]),
         Type.list([
@@ -5153,18 +5216,18 @@ describe("matchOperator()", () => {
             Interpreter.matchOperator(
               Type.variablePattern("z"),
               Type.variablePattern("y"),
-              vars,
+              context,
             ),
             Type.variablePattern("x"),
-            vars,
+            context,
           ),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, Type.list([Type.integer(2)]));
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           a: Type.integer(2),
@@ -5200,11 +5263,11 @@ describe("matchOperator()", () => {
                 [Type.atom("a"), Type.variablePattern("a")],
                 [Type.atom("b"), Type.variablePattern("b")],
               ]),
-              vars,
+              context,
             ),
           ],
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(
@@ -5220,7 +5283,7 @@ describe("matchOperator()", () => {
         ]),
       );
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           a: Type.integer(1),
@@ -5272,15 +5335,15 @@ describe("matchOperator()", () => {
                       [Type.atom("a"), Type.variablePattern("a")],
                       [Type.atom("b"), Type.variablePattern("b")],
                     ]),
-                    vars,
+                    context,
                   ),
                 ],
               ]),
-              vars,
+              context,
             ),
           ],
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(
@@ -5301,7 +5364,7 @@ describe("matchOperator()", () => {
         ]),
       );
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           a: Type.integer(1),
@@ -5321,10 +5384,10 @@ describe("matchOperator()", () => {
           Interpreter.matchOperator(
             Type.tuple([Type.variablePattern("c"), Type.variablePattern("d")]),
             Type.tuple([Type.variablePattern("a"), Type.variablePattern("b")]),
-            vars,
+            context,
           ),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(
@@ -5332,7 +5395,7 @@ describe("matchOperator()", () => {
         Type.tuple([Type.tuple([Type.integer(1), Type.integer(2)])]),
       );
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           a: Type.integer(1),
@@ -5366,13 +5429,13 @@ describe("matchOperator()", () => {
                   Type.variablePattern("a"),
                   Type.variablePattern("b"),
                 ]),
-                vars,
+                context,
               ),
             ]),
-            vars,
+            context,
           ),
         ]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(
@@ -5382,7 +5445,7 @@ describe("matchOperator()", () => {
         ]),
       );
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           a: Type.integer(1),
@@ -5468,12 +5531,12 @@ describe("matchOperator()", () => {
       const result = Interpreter.matchOperator(
         Type.integer(2),
         Type.variablePattern("x"),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(result, Type.integer(2));
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           x: Type.integer(2),
@@ -5486,7 +5549,7 @@ describe("matchOperator()", () => {
       const result = Interpreter.matchOperator(
         Type.list([Type.integer(1), Type.integer(1)]),
         Type.list([Type.variablePattern("x"), Type.variablePattern("x")]),
-        vars,
+        context,
       );
 
       assert.deepStrictEqual(
@@ -5494,7 +5557,7 @@ describe("matchOperator()", () => {
         Type.list([Type.integer(1), Type.integer(1)]),
       );
 
-      assert.deepStrictEqual(vars, {
+      assert.deepStrictEqual(context.vars, {
         a: Type.integer(9),
         __matched__: {
           x: Type.integer(1),
@@ -5512,7 +5575,7 @@ describe("matchOperator()", () => {
       const right = Type.list([Type.integer(1), Type.integer(2)]);
 
       assertMatchError(
-        () => Interpreter.matchOperator(right, left, vars),
+        () => Interpreter.matchOperator(right, left, context),
         right,
       );
     });
