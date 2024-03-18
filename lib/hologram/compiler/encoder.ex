@@ -545,7 +545,7 @@ defmodule Hologram.Compiler.Encoder do
     left_js = encode_closure(left, context)
     right_js = encode_closure(right, context)
 
-    "Erlang[\"andalso/2\"](#{left_js}, #{right_js}, vars)"
+    "Erlang[\"andalso/2\"](#{left_js}, #{right_js}, context)"
   end
 
   defp encode_named_function_call(%IR.AtomType{value: :erlang}, :orelse, [left, right], context) do
