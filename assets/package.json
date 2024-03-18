@@ -15,6 +15,6 @@
   },
   "scripts": {
     "test": "mocha '../test/javascript/**/*.mjs' --color --require jsdom-global/register",
-    "test-file": "mocha --color"
+    "test-file": "mocha --color --require jsdom-global/register"
   }
 }
