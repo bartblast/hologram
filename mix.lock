@@ -1,5 +1,5 @@
 %{
-  "beam_file": {:hex, :beam_file, "0.5.3", "8ef6b6ab3b2981e5d67c20e635fdddab4b82d96d25fe50c26a259bafed996ead", [:mix], [], "hexpm", "f4722cc3b811b94c4941fa981e25319f7b2ae24495196fcf075208cffb9228e4"},
+  "beam_file": {:hex, :beam_file, "0.6.0", "7ffce10001078e62428d6bfdfe3d563c7a1be2993ec20ce864cce41f9a0a6e5d", [:mix], [], "hexpm", "4b8645cdfc3153c7a61521a7a0665139ba53893d26c7d0379257e21e462221cd"},
   "bunt": {:hex, :bunt, "1.0.0", "081c2c665f086849e6d57900292b3a161727ab40431219529f13c4ddcf3e7a44", [:mix], [], "hexpm", "dc5f86aa08a5f6fa6b8096f0735c4e76d54ae5c9fa2c143e5a1fc7c1cd9bb6b5"},
   "castore": {:hex, :castore, "1.0.5", "9eeebb394cc9a0f3ae56b813459f990abb0a3dedee1be6b27fdb50301930502f", [:mix], [], "hexpm", "8d7c597c3e4a64c395980882d4bca3cebb8d74197c590dc272cfd3b6a6310578"},
   "credo": {:hex, :credo, "1.7.5", "643213503b1c766ec0496d828c90c424471ea54da77c8a168c725686377b9545", [:mix], [{:bunt, "~> 0.2.1 or ~> 1.0", [hex: :bunt, repo: "hexpm", optional: false]}, {:file_system, "~> 0.2 or ~> 1.0", [hex: :file_system, repo: "hexpm", optional: false]}, {:jason, "~> 1.0", [hex: :jason, repo: "hexpm", optional: false]}], "hexpm", "f799e9b5cd1891577d8c773d245668aa74a2fcd15eb277f51a0131690ebfb3fd"},
