@@ -154,8 +154,8 @@ const Erlang = {
   // deps: [:erlang.==/2, :erlang.>/2]
 
   // start andalso/2
-  "andalso/2": (leftFun, rightFun, vars) => {
-    const left = leftFun(vars);
+  "andalso/2": (leftFun, rightFun, context) => {
+    const left = leftFun(context);
 
     if (!Type.isBoolean(left)) {
       Interpreter.raiseArgumentError(
@@ -163,7 +163,7 @@ const Erlang = {
       );
     }
 
-    return Type.isTrue(left) ? rightFun(vars) : left;
+    return Type.isTrue(left) ? rightFun(context) : left;
   },
   // end andalso/2
   // deps: []

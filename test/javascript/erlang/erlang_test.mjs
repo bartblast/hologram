@@ -1050,24 +1050,30 @@ describe(">=/2", () => {
 
 describe("andalso/2", () => {
   it("returns false if the first argument is false", () => {
-    const vars = {left: Type.boolean(false), right: Type.atom("abc")};
+    const context = Interpreter.buildContext({
+      module: Type.alias("MyModule"),
+      vars: {left: Type.boolean(false), right: Type.atom("abc")},
+    });
 
     const result = Erlang["andalso/2"](
-      (vars) => vars.left,
-      (vars) => vars.right,
-      vars,
+      (context) => context.vars.left,
+      (context) => context.vars.right,
+      context,
     );
 
     assertBoxedFalse(result);
   });
 
   it("returns the second argument if the first argument is true", () => {
-    const vars = {left: Type.boolean(true), right: Type.atom("abc")};
+    const context = Interpreter.buildContext({
+      module: Type.alias("MyModule"),
+      vars: {left: Type.boolean(true), right: Type.atom("abc")},
+    });
 
     const result = Erlang["andalso/2"](
-      (vars) => vars.left,
-      (vars) => vars.right,
-      vars,
+      (context) => context.vars.left,
+      (context) => context.vars.right,
+      context,
     );
 
     assert.deepStrictEqual(result, Type.atom("abc"));
@@ -1075,25 +1081,28 @@ describe("andalso/2", () => {
 
   it("doesn't evaluate the second argument if the first argument is false", () => {
     const result = Erlang["andalso/2"](
-      (_vars) => Type.boolean(false),
-      (_vars) => {
+      (_context) => Type.boolean(false),
+      (_context) => {
         throw new Error("impossible");
       },
-      {},
+      Interpreter.buildContext({module: Type.alias("MyModule")}),
     );
 
     assertBoxedFalse(result);
   });
 
   it("raises ArgumentError if the first argument is not a boolean", () => {
-    const vars = {left: Type.nil(), right: Type.boolean(true)};
+    const context = Interpreter.buildContext({
+      module: Type.alias("MyModule"),
+      vars: {left: Type.nil(), right: Type.boolean(true)},
+    });
 
     assertBoxedError(
       () =>
         Erlang["andalso/2"](
-          (vars) => vars.left,
-          (vars) => vars.right,
-          vars,
+          (context) => context.vars.left,
+          (vacontextrs) => context.vars.right,
+          context,
         ),
       "ArgumentError",
       "argument error: nil",
