@@ -5,15 +5,15 @@ import Type from "../../../../../../assets/js/type.mjs";
 
 export function defineModule33Fixture() {
   Interpreter.defineElixirFunction(
-    "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module33",
+    "Hologram.Test.Fixtures.Template.Renderer.Module33",
     "__props__",
     0,
     "public",
     [
       {
-        params: (_vars) => [],
+        params: (_context) => [],
         guards: [],
-        body: (_vars) => {
+        body: (_context) => {
           return Type.list([]);
         },
       },
@@ -21,28 +21,28 @@ export function defineModule33Fixture() {
   );
 
   Interpreter.defineElixirFunction(
-    "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module33",
+    "Hologram.Test.Fixtures.Template.Renderer.Module33",
     "template",
     0,
     "public",
     [
       {
-        params: (_vars) => [],
+        params: (_context) => [],
         guards: [],
-        body: (vars) => {
+        body: (context) => {
           globalThis.__hologramReturn__ = Type.anonymousFunction(
             1,
             [
               {
-                params: (_vars) => [Type.variablePattern("vars")],
+                params: (_context) => [Type.variablePattern("vars")],
                 guards: [],
-                body: (vars) => {
+                body: (context) => {
                   Interpreter.matchOperator(
-                    vars.vars,
+                    context.vars.vars,
                     Type.matchPlaceholder(),
-                    vars,
+                    context,
                   );
-                  Interpreter.updateVarsToMatchedValues(vars);
+                  Interpreter.updateVarsToMatchedValues(context);
                   return Type.list([
                     Type.tuple([Type.atom("text"), Type.bitstring("33a,")]),
                     Type.tuple([
@@ -58,7 +58,7 @@ export function defineModule33Fixture() {
             ],
             context,
           );
-          Interpreter.updateVarsToMatchedValues(vars);
+          Interpreter.updateVarsToMatchedValues(context);
           return globalThis.__hologramReturn__;
         },
       },

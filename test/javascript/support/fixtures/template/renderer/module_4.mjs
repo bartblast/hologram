@@ -5,15 +5,15 @@ import Type from "../../../../../../assets/js/type.mjs";
 
 export function defineModule4Fixture() {
   Interpreter.defineElixirFunction(
-    "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module4",
+    "Hologram.Test.Fixtures.Template.Renderer.Module4",
     "__props__",
     0,
     "public",
     [
       {
-        params: (_vars) => [],
+        params: (_context) => [],
         guards: [],
-        body: (_vars) => {
+        body: (_context) => {
           return Type.list([
             Type.tuple([Type.atom("c"), Type.atom("string"), Type.list([])]),
             Type.tuple([Type.atom("b"), Type.atom("string"), Type.list([])]),
@@ -24,28 +24,28 @@ export function defineModule4Fixture() {
   );
 
   Interpreter.defineElixirFunction(
-    "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module4",
+    "Hologram.Test.Fixtures.Template.Renderer.Module4",
     "template",
     0,
     "public",
     [
       {
-        params: (_vars) => [],
+        params: (_context) => [],
         guards: [],
-        body: (vars) => {
+        body: (context) => {
           globalThis.__hologramReturn__ = Type.anonymousFunction(
             1,
             [
               {
-                params: (_vars) => [Type.variablePattern("vars")],
+                params: (_context) => [Type.variablePattern("vars")],
                 guards: [],
-                body: (vars) => {
+                body: (context) => {
                   Interpreter.matchOperator(
-                    vars.vars,
+                    context.vars.vars,
                     Type.matchPlaceholder(),
-                    vars,
+                    context,
                   );
-                  Interpreter.updateVarsToMatchedValues(vars);
+                  Interpreter.updateVarsToMatchedValues(context);
                   return Type.list([
                     Type.tuple([
                       Type.atom("element"),
@@ -59,7 +59,10 @@ export function defineModule4Fixture() {
                         Type.tuple([
                           Type.atom("expression"),
                           Type.tuple([
-                            Interpreter.dotOperator(vars.vars, Type.atom("a")),
+                            Interpreter.dotOperator(
+                              context.vars.vars,
+                              Type.atom("a"),
+                            ),
                           ]),
                         ]),
                         Type.tuple([
@@ -69,7 +72,10 @@ export function defineModule4Fixture() {
                         Type.tuple([
                           Type.atom("expression"),
                           Type.tuple([
-                            Interpreter.dotOperator(vars.vars, Type.atom("b")),
+                            Interpreter.dotOperator(
+                              context.vars.vars,
+                              Type.atom("b"),
+                            ),
                           ]),
                         ]),
                         Type.tuple([
@@ -79,7 +85,10 @@ export function defineModule4Fixture() {
                         Type.tuple([
                           Type.atom("expression"),
                           Type.tuple([
-                            Interpreter.dotOperator(vars.vars, Type.atom("c")),
+                            Interpreter.dotOperator(
+                              context.vars.vars,
+                              Type.atom("c"),
+                            ),
                           ]),
                         ]),
                       ]),
@@ -90,7 +99,7 @@ export function defineModule4Fixture() {
             ],
             context,
           );
-          Interpreter.updateVarsToMatchedValues(vars);
+          Interpreter.updateVarsToMatchedValues(context);
           return globalThis.__hologramReturn__;
         },
       },

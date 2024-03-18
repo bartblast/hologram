@@ -5,15 +5,15 @@ import Type from "../../../../../../assets/js/type.mjs";
 
 export function defineModule24Fixture() {
   Interpreter.defineElixirFunction(
-    "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module24",
+    "Hologram.Test.Fixtures.Template.Renderer.Module24",
     "__layout_module__",
     0,
     "public",
     [
       {
-        params: (_vars) => [],
+        params: (_context) => [],
         guards: [],
-        body: (_vars) => {
+        body: (_context) => {
           return Type.atom(
             "Elixir.Hologram.Test.Fixtures.Template.Renderer.Module23",
           );
@@ -23,15 +23,15 @@ export function defineModule24Fixture() {
   );
 
   Interpreter.defineElixirFunction(
-    "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module24",
+    "Hologram.Test.Fixtures.Template.Renderer.Module24",
     "__layout_props__",
     0,
     "public",
     [
       {
-        params: (_vars) => [],
+        params: (_context) => [],
         guards: [],
-        body: (_vars) => {
+        body: (_context) => {
           return Type.list([
             Type.tuple([Type.atom("key_1"), Type.bitstring("prop_value_1")]),
             Type.tuple([Type.atom("key_2"), Type.bitstring("prop_value_2")]),
@@ -42,15 +42,15 @@ export function defineModule24Fixture() {
   );
 
   Interpreter.defineElixirFunction(
-    "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module24",
+    "Hologram.Test.Fixtures.Template.Renderer.Module24",
     "__props__",
     0,
     "public",
     [
       {
-        params: (_vars) => [],
+        params: (_context) => [],
         guards: [],
-        body: (_vars) => {
+        body: (_context) => {
           return Type.list([]);
         },
       },
@@ -58,35 +58,35 @@ export function defineModule24Fixture() {
   );
 
   Interpreter.defineElixirFunction(
-    "Elixir_Hologram_Test_Fixtures_Template_Renderer_Module24",
+    "Hologram.Test.Fixtures.Template.Renderer.Module24",
     "template",
     0,
     "public",
     [
       {
-        params: (_vars) => [],
+        params: (_context) => [],
         guards: [],
-        body: (vars) => {
+        body: (context) => {
           globalThis.__hologramReturn__ = Type.anonymousFunction(
             1,
             [
               {
-                params: (_vars) => [Type.variablePattern("vars")],
+                params: (_context) => [Type.variablePattern("vars")],
                 guards: [],
-                body: (vars) => {
+                body: (context) => {
                   Interpreter.matchOperator(
-                    vars.vars,
+                    context.vars.vars,
                     Type.matchPlaceholder(),
-                    vars,
+                    context,
                   );
-                  Interpreter.updateVarsToMatchedValues(vars);
+                  Interpreter.updateVarsToMatchedValues(context);
                   return Type.list([]);
                 },
               },
             ],
             context,
           );
-          Interpreter.updateVarsToMatchedValues(vars);
+          Interpreter.updateVarsToMatchedValues(context);
           return globalThis.__hologramReturn__;
         },
       },
