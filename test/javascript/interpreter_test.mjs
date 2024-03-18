@@ -2525,25 +2525,33 @@ describe("isEqual()", () => {
 });
 
 describe("isMatched()", () => {
+  let context;
+
+  beforeEach(() => {
+    context = Interpreter.buildContext({module: Type.alias("MyModule")});
+  });
+
   it("is matched", () => {
-    assert.isTrue(Interpreter.isMatched(Type.integer(1), Type.integer(1), {}));
+    assert.isTrue(
+      Interpreter.isMatched(Type.integer(1), Type.integer(1), context),
+    );
   });
 
   it("is not matched", () => {
-    assert.isFalse(Interpreter.isMatched(Type.integer(1), Type.integer(2), {}));
+    assert.isFalse(
+      Interpreter.isMatched(Type.integer(1), Type.integer(2), context),
+    );
   });
 
   it("adds matched vars to __matched__ field", () => {
-    const vars = {};
-
     const result = Interpreter.isMatched(
       Type.variablePattern("x"),
       Type.integer(9),
-      vars,
+      context,
     );
 
     assert.isTrue(result);
-    assert.deepStrictEqual(vars, {__matched__: {x: Type.integer(9)}});
+    assert.deepStrictEqual(context.vars, {__matched__: {x: Type.integer(9)}});
   });
 });
 
