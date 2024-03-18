@@ -1431,7 +1431,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) ==
-               ~s'Erlang["orelse/2"]((context) => Type.integer(1n), (context) => Type.integer(2n), vars)'
+               ~s'Erlang["orelse/2"]((context) => Type.integer(1n), (context) => Type.integer(2n), context)'
     end
   end
 
