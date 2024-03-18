@@ -1688,24 +1688,30 @@ describe("map_size/1", () => {
 
 describe("orelse/2", () => {
   it("returns true if the first argument is true", () => {
-    const vars = {left: Type.boolean(true), right: Type.atom("abc")};
+    const context = Interpreter.buildContext({
+      module: Type.alias("MyModule"),
+      vars: {left: Type.boolean(true), right: Type.atom("abc")},
+    });
 
     const result = Erlang["orelse/2"](
-      (vars) => vars.left,
-      (vars) => vars.right,
-      vars,
+      (context) => context.vars.left,
+      (context) => context.vars.right,
+      context,
     );
 
     assertBoxedTrue(result);
   });
 
   it("returns the second argument if the first argument is false", () => {
-    const vars = {left: Type.boolean(false), right: Type.atom("abc")};
+    const context = Interpreter.buildContext({
+      module: Type.alias("MyModule"),
+      vars: {left: Type.boolean(false), right: Type.atom("abc")},
+    });
 
     const result = Erlang["orelse/2"](
-      (vars) => vars.left,
-      (vars) => vars.right,
-      vars,
+      (context) => context.vars.left,
+      (context) => context.vars.right,
+      context,
     );
 
     assert.deepStrictEqual(result, Type.atom("abc"));
@@ -1713,25 +1719,28 @@ describe("orelse/2", () => {
 
   it("doesn't evaluate the second argument if the first argument is true", () => {
     const result = Erlang["orelse/2"](
-      (_vars) => Type.boolean(true),
-      (_vars) => {
+      (_context) => Type.boolean(true),
+      (_context) => {
         throw new Error("impossible");
       },
-      {},
+      Interpreter.buildContext({module: Type.alias("MyModule")}),
     );
 
     assertBoxedTrue(result);
   });
 
   it("raises ArgumentError if the first argument is not a boolean", () => {
-    const vars = {left: Type.nil(), right: Type.boolean(true)};
+    const context = Interpreter.buildContext({
+      module: Type.alias("MyModule"),
+      vars: {left: Type.nil(), right: Type.boolean(true)},
+    });
 
     assertBoxedError(
       () =>
         Erlang["orelse/2"](
-          (vars) => vars.left,
-          (vars) => vars.right,
-          vars,
+          (context) => context.vars.left,
+          (context) => context.vars.right,
+          context,
         ),
       "ArgumentError",
       "argument error: nil",
