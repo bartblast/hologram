@@ -1034,10 +1034,12 @@ describe("compareTerms()", () => {
 });
 
 describe("comprehension()", () => {
-  let vars, prevIntoFun, prevToListFun;
+  let context, prevIntoFun, prevToListFun;
 
   beforeEach(() => {
-    vars = {a: Type.integer(1), b: Type.integer(2)};
+    context = Interpreter.buildContext({
+      vars: {a: Type.integer(1), b: Type.integer(2)},
+    });
 
     prevIntoFun = globalThis.Elixir_Enum["into/2"];
 
@@ -1064,13 +1066,13 @@ describe("comprehension()", () => {
       const generator1 = {
         match: Type.variablePattern("x"),
         guards: [],
-        body: (_vars) => Type.list([Type.integer(1), Type.integer(2)]),
+        body: (_context) => Type.list([Type.integer(1), Type.integer(2)]),
       };
 
       const generator2 = {
         match: Type.variablePattern("y"),
         guards: [],
-        body: (_vars) => Type.list([Type.integer(3), Type.integer(4)]),
+        body: (_context) => Type.list([Type.integer(3), Type.integer(4)]),
       };
 
       const result = Interpreter.comprehension(
@@ -1078,8 +1080,8 @@ describe("comprehension()", () => {
         [],
         Type.map([]),
         false,
-        (vars) => Type.tuple([vars.x, vars.y]),
-        vars,
+        (context) => Type.tuple([context.vars.x, context.vars.y]),
+        context,
       );
 
       const expected = Type.list([
@@ -1097,7 +1099,7 @@ describe("comprehension()", () => {
       //     {12, y} <- [5, {12, 6}, 7, {12, 8}],
       //     do: {x, y}
 
-      const enumerable1 = (_vars) =>
+      const enumerable1 = (_context) =>
         Type.list([
           Type.integer(1),
           Type.tuple([Type.integer(11), Type.integer(2)]),
@@ -1111,7 +1113,7 @@ describe("comprehension()", () => {
         body: enumerable1,
       };
 
-      const enumerable2 = (_vars) =>
+      const enumerable2 = (_context) =>
         Type.list([
           Type.integer(5),
           Type.tuple([Type.integer(12), Type.integer(6)]),
@@ -1130,8 +1132,8 @@ describe("comprehension()", () => {
         [],
         Type.list([]),
         false,
-        (vars) => Type.tuple([vars.x, vars.y]),
-        vars,
+        (context) => Type.tuple([context.vars.x, context.vars.y]),
+        context,
       );
 
       const expected = Type.list([
@@ -1147,7 +1149,7 @@ describe("comprehension()", () => {
     it("uses Enum.to_list/1 to convert generator enumerables to lists", () => {
       // for x <- [1, 2], y <- [3, 4], do: {x, y}
 
-      const enumerable1 = (_vars) =>
+      const enumerable1 = (_context) =>
         Type.list([Type.integer(1), Type.integer(2)]);
 
       const generator1 = {
@@ -1156,7 +1158,7 @@ describe("comprehension()", () => {
         body: enumerable1,
       };
 
-      const enumerable2 = (_vars) =>
+      const enumerable2 = (_context) =>
         Type.list([Type.integer(3), Type.integer(4)]);
 
       const generator2 = {
@@ -1174,12 +1176,12 @@ describe("comprehension()", () => {
         [],
         Type.map([]),
         false,
-        (vars) => Type.tuple([vars.x, vars.y]),
-        vars,
+        (context) => Type.tuple([context.vars.x, context.vars.y]),
+        context,
       );
 
-      sinon.assert.calledWith(stub, enumerable1(vars));
-      sinon.assert.calledWith(stub, enumerable2(vars));
+      sinon.assert.calledWith(stub, enumerable1(context));
+      sinon.assert.calledWith(stub, enumerable2(context));
     });
   });
 
@@ -1193,10 +1195,11 @@ describe("comprehension()", () => {
       //     y when :erlang."/="(y, 4) <- [4, 5, 6],
       //     do: {x, y}
 
-      const enumerable1 = (_vars) =>
+      const enumerable1 = (_context) =>
         Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
-      const guard1a = (vars) => Erlang["/=/2"](vars.x, Type.integer(2));
+      const guard1a = (context) =>
+        Erlang["/=/2"](context.vars.x, Type.integer(2));
 
       const generator1 = {
         match: Type.variablePattern("x"),
@@ -1204,10 +1207,11 @@ describe("comprehension()", () => {
         body: enumerable1,
       };
 
-      const enumerable2 = (_vars) =>
+      const enumerable2 = (_context) =>
         Type.list([Type.integer(4), Type.integer(5), Type.integer(6)]);
 
-      const guard2a = (vars) => Erlang["/=/2"](vars.y, Type.integer(4));
+      const guard2a = (context) =>
+        Erlang["/=/2"](context.vars.y, Type.integer(4));
 
       const generator2 = {
         match: Type.variablePattern("y"),
@@ -1220,8 +1224,8 @@ describe("comprehension()", () => {
         [],
         Type.list([]),
         false,
-        (vars) => Type.tuple([vars.x, vars.y]),
-        vars,
+        (context) => Type.tuple([context.vars.x, context.vars.y]),
+        context,
       );
 
       const expected = Type.list([
@@ -1243,7 +1247,7 @@ describe("comprehension()", () => {
       //     y when :erlang."=="(y, 5) when :erlang."=="(y, 7) <- [5, 6, 7, 8],
       //     do: {x, y}
 
-      const enumerable1 = (_vars) =>
+      const enumerable1 = (_context) =>
         Type.list([
           Type.integer(1),
           Type.integer(2),
@@ -1251,8 +1255,10 @@ describe("comprehension()", () => {
           Type.integer(4),
         ]);
 
-      const guard1a = (vars) => Erlang["==/2"](vars.x, Type.integer(2));
-      const guard1b = (vars) => Erlang["==/2"](vars.x, Type.integer(4));
+      const guard1a = (context) =>
+        Erlang["==/2"](context.vars.x, Type.integer(2));
+      const guard1b = (context) =>
+        Erlang["==/2"](context.vars.x, Type.integer(4));
 
       const generator1 = {
         match: Type.variablePattern("x"),
@@ -1260,7 +1266,7 @@ describe("comprehension()", () => {
         body: enumerable1,
       };
 
-      const enumerable2 = (_vars) =>
+      const enumerable2 = (_context) =>
         Type.list([
           Type.integer(5),
           Type.integer(6),
@@ -1268,8 +1274,10 @@ describe("comprehension()", () => {
           Type.integer(8),
         ]);
 
-      const guard2a = (vars) => Erlang["==/2"](vars.y, Type.integer(5));
-      const guard2b = (vars) => Erlang["==/2"](vars.y, Type.integer(7));
+      const guard2a = (context) =>
+        Erlang["==/2"](context.vars.y, Type.integer(5));
+      const guard2b = (context) =>
+        Erlang["==/2"](context.vars.y, Type.integer(7));
 
       const generator2 = {
         match: Type.variablePattern("y"),
@@ -1282,8 +1290,8 @@ describe("comprehension()", () => {
         [],
         Type.list([]),
         false,
-        (vars) => Type.tuple([vars.x, vars.y]),
-        vars,
+        (context) => Type.tuple([context.vars.x, context.vars.y]),
+        context,
       );
 
       const expected = Type.list([
@@ -1299,10 +1307,10 @@ describe("comprehension()", () => {
     it("can access variables from comprehension outer scope", () => {
       // for x when x != b <- [1, 2, 3], do: x
 
-      const enumerable = (_vars) =>
+      const enumerable = (_context) =>
         Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
-      const guard = (vars) => Erlang["/=/2"](vars.x, vars.b);
+      const guard = (context) => Erlang["/=/2"](context.vars.x, context.vars.b);
 
       const generator = {
         match: Type.variablePattern("x"),
@@ -1315,8 +1323,8 @@ describe("comprehension()", () => {
         [],
         Type.list([]),
         false,
-        (vars) => vars.x,
-        vars,
+        (context) => context.vars.x,
+        context,
       );
 
       const expected = Type.list([Type.integer(1), Type.integer(3)]);
@@ -1327,7 +1335,7 @@ describe("comprehension()", () => {
     it("can access variables pattern matched in preceding guards", () => {
       // for x <- [1, 2], y when x != 1 <- [3, 4], do: {x, y}
 
-      const enumerable1 = (_vars) =>
+      const enumerable1 = (_context) =>
         Type.list([Type.integer(1), Type.integer(2)]);
 
       const generator1 = {
@@ -1336,10 +1344,11 @@ describe("comprehension()", () => {
         body: enumerable1,
       };
 
-      const enumerable2 = (_vars) =>
+      const enumerable2 = (_context) =>
         Type.list([Type.integer(3), Type.integer(4)]);
 
-      const guard2 = (vars) => Erlang["/=/2"](vars.x, Type.integer(1));
+      const guard2 = (context) =>
+        Erlang["/=/2"](context.vars.x, Type.integer(1));
 
       const generator2 = {
         match: Type.variablePattern("y"),
@@ -1352,8 +1361,8 @@ describe("comprehension()", () => {
         [],
         Type.list([]),
         false,
-        (vars) => Type.tuple([vars.x, vars.y]),
-        vars,
+        (context) => Type.tuple([context.vars.x, context.vars.y]),
+        context,
       );
 
       const expected = Type.list([
@@ -1365,10 +1374,10 @@ describe("comprehension()", () => {
     });
 
     it("errors raised inside generators are not caught", () => {
-      const enumerable = (_vars) =>
+      const enumerable = (_context) =>
         Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
-      const guard = (_vars) => Interpreter.raiseArgumentError("my message");
+      const guard = (_context) => Interpreter.raiseArgumentError("my message");
 
       const generator = {
         match: Type.variablePattern("x"),
@@ -1383,8 +1392,8 @@ describe("comprehension()", () => {
             [],
             Type.list([]),
             false,
-            (vars) => vars.x,
-            vars,
+            (context) => context.vars.x,
+            context,
           ),
         "ArgumentError",
         "my message",
@@ -1406,7 +1415,7 @@ describe("comprehension()", () => {
       //     :erlang.>(:erlang.-(y, x), 2),
       //     do: {x, y}
 
-      const enumerable1 = (_vars) =>
+      const enumerable1 = (_context) =>
         Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
       const generator1 = {
@@ -1415,7 +1424,7 @@ describe("comprehension()", () => {
         body: enumerable1,
       };
 
-      const enumerable2 = (_vars) =>
+      const enumerable2 = (_context) =>
         Type.list([Type.integer(4), Type.integer(5), Type.integer(6)]);
 
       const generator2 = {
@@ -1425,8 +1434,16 @@ describe("comprehension()", () => {
       };
 
       const filters = [
-        (vars) => Erlang["</2"](Erlang["+/2"](vars.x, vars.y), Type.integer(8)),
-        (vars) => Erlang[">/2"](Erlang["-/2"](vars.y, vars.x), Type.integer(2)),
+        (context) =>
+          Erlang["</2"](
+            Erlang["+/2"](context.vars.x, context.vars.y),
+            Type.integer(8),
+          ),
+        (context) =>
+          Erlang[">/2"](
+            Erlang["-/2"](context.vars.y, context.vars.x),
+            Type.integer(2),
+          ),
       ];
 
       const result = Interpreter.comprehension(
@@ -1434,8 +1451,8 @@ describe("comprehension()", () => {
         filters,
         Type.list([]),
         false,
-        (vars) => Type.tuple([vars.x, vars.y]),
-        vars,
+        (context) => Type.tuple([context.vars.x, context.vars.y]),
+        context,
       );
 
       const expected = Type.list([
@@ -1451,7 +1468,7 @@ describe("comprehension()", () => {
     it("can access variables from comprehension outer scope", () => {
       // for x <- [1, 2, 3], x != b, do: x
 
-      const enumerable = (_vars) =>
+      const enumerable = (_context) =>
         Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
       const generator = {
@@ -1460,15 +1477,16 @@ describe("comprehension()", () => {
         body: enumerable,
       };
 
-      const filter = (vars) => Erlang["/=/2"](vars.x, vars.b);
+      const filter = (context) =>
+        Erlang["/=/2"](context.vars.x, context.vars.b);
 
       const result = Interpreter.comprehension(
         [generator],
         [filter],
         Type.list([]),
         false,
-        (vars) => vars.x,
-        vars,
+        (context) => context.vars.x,
+        context,
       );
 
       const expected = Type.list([Type.integer(1), Type.integer(3)]);
@@ -1481,7 +1499,7 @@ describe("comprehension()", () => {
     it("non-unique items are removed if 'uniq' option is set to true", () => {
       // for x <- [1, 2, 1], y <- [3, 4, 3], do: {x, y}
 
-      const enumerable1 = (_vars) =>
+      const enumerable1 = (_context) =>
         Type.list([Type.integer(1), Type.integer(2), Type.integer(1)]);
 
       const generator1 = {
@@ -1490,7 +1508,7 @@ describe("comprehension()", () => {
         body: enumerable1,
       };
 
-      const enumerable2 = (_vars) =>
+      const enumerable2 = (_context) =>
         Type.list([Type.integer(3), Type.integer(4), Type.integer(3)]);
 
       const generator2 = {
@@ -1504,8 +1522,8 @@ describe("comprehension()", () => {
         [],
         Type.list([]),
         true,
-        (vars) => Type.tuple([vars.x, vars.y]),
-        vars,
+        (context) => Type.tuple([context.vars.x, context.vars.y]),
+        context,
       );
 
       const expected = Type.list([
@@ -1523,7 +1541,7 @@ describe("comprehension()", () => {
     it("can access variables from comprehension outer scope", () => {
       // for x <- [1, 2], do: {x, b}
 
-      const enumerable = (_vars) =>
+      const enumerable = (_context) =>
         Type.list([Type.integer(1), Type.integer(2)]);
 
       const generator = {
@@ -1537,8 +1555,8 @@ describe("comprehension()", () => {
         [],
         Type.list([]),
         false,
-        (vars) => Type.tuple([vars.x, vars.b]),
-        vars,
+        (context) => Type.tuple([context.vars.x, context.vars.b]),
+        context,
       );
 
       const expected = Type.list([
@@ -1552,7 +1570,7 @@ describe("comprehension()", () => {
     it("uses Enum.into/2 to insert the comprehension result into a collectable", () => {
       // for x <- [1, 2], y <- [3, 4], do: {x, y}
 
-      const enumerable1 = (_vars) =>
+      const enumerable1 = (_context) =>
         Type.list([Type.integer(1), Type.integer(2)]);
 
       const generator1 = {
@@ -1561,7 +1579,7 @@ describe("comprehension()", () => {
         body: enumerable1,
       };
 
-      const enumerable2 = (_vars) =>
+      const enumerable2 = (_context) =>
         Type.list([Type.integer(3), Type.integer(4)]);
 
       const generator2 = {
@@ -1579,8 +1597,8 @@ describe("comprehension()", () => {
         [],
         Type.map([]),
         false,
-        (vars) => Type.tuple([vars.x, vars.y]),
-        vars,
+        (context) => Type.tuple([context.vars.x, context.vars.y]),
+        context,
       );
 
       const expectedArg = Type.list([
