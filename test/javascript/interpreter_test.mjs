@@ -697,9 +697,9 @@ describe("case()", () => {
 describe("cloneDeep()", () => {
   it("clones vars recursively (deep clone)", () => {
     const nested = {c: 3, d: 4};
-    const vars = {a: 1, b: nested};
+    const obj = {a: 1, b: nested};
     const expected = {a: 1, b: nested};
-    const result = Interpreter.cloneDeep(vars);
+    const result = Interpreter.cloneDeep(obj);
 
     assert.deepStrictEqual(result, expected);
     assert.notEqual(result.b, nested);
