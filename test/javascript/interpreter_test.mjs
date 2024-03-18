@@ -456,16 +456,16 @@ describe("case()", () => {
 
     const clause2 = {
       match: Type.variablePattern("y"),
-      guards: [(vars) => Erlang["==/2"](vars.y, Type.integer(2))],
-      body: (_vars) => {
+      guards: [(context) => Erlang["==/2"](context.vars.y, Type.integer(2))],
+      body: (_context) => {
         return Type.atom("expr_2");
       },
     };
 
     const clause3 = {
       match: Type.variablePattern("z"),
-      guards: [(vars) => Erlang["==/2"](vars.z, Type.integer(3))],
-      body: (_vars) => {
+      guards: [(context) => Erlang["==/2"](context.vars.z, Type.integer(3))],
+      body: (_context) => {
         return Type.atom("expr_3");
       },
     };
@@ -495,10 +495,10 @@ describe("case()", () => {
     const clause1 = {
       match: Type.variablePattern("x"),
       guards: [
-        (vars) => Erlang["==/2"](vars.x, Type.integer(1)),
-        (vars) => Erlang["==/2"](vars.x, Type.integer(11)),
+        (context) => Erlang["==/2"](context.vars.x, Type.integer(1)),
+        (context) => Erlang["==/2"](context.vars.x, Type.integer(11)),
       ],
-      body: (_vars) => {
+      body: (_context) => {
         return Type.atom("expr_1");
       },
     };
@@ -506,10 +506,10 @@ describe("case()", () => {
     const clause2 = {
       match: Type.variablePattern("y"),
       guards: [
-        (vars) => Erlang["==/2"](vars.y, Type.integer(2)),
-        (vars) => Erlang["==/2"](vars.y, Type.integer(22)),
+        (context) => Erlang["==/2"](context.vars.y, Type.integer(2)),
+        (context) => Erlang["==/2"](context.vars.y, Type.integer(22)),
       ],
-      body: (_vars) => {
+      body: (_context) => {
         return Type.atom("expr_2");
       },
     };
@@ -517,10 +517,10 @@ describe("case()", () => {
     const clause3 = {
       match: Type.variablePattern("z"),
       guards: [
-        (vars) => Erlang["==/2"](vars.z, Type.integer(3)),
-        (vars) => Erlang["==/2"](vars.z, Type.integer(33)),
+        (context) => Erlang["==/2"](context.vars.z, Type.integer(3)),
+        (context) => Erlang["==/2"](context.vars.z, Type.integer(33)),
       ],
-      body: (_vars) => {
+      body: (_context) => {
         return Type.atom("expr_3");
       },
     };
@@ -531,7 +531,7 @@ describe("case()", () => {
     });
 
     const result = Interpreter.case(
-      vars.my_var,
+      context.vars.my_var,
       [clause1, clause2, clause3],
       context,
     );
@@ -549,8 +549,8 @@ describe("case()", () => {
 
     const clause1 = {
       match: Type.variablePattern("x"),
-      guards: [(vars) => Erlang["==/2"](vars.x, Type.integer(1))],
-      body: (_vars) => {
+      guards: [(context) => Erlang["==/2"](context.vars.x, Type.integer(1))],
+      body: (_context) => {
         return Type.atom("expr_1");
       },
     };
@@ -558,8 +558,8 @@ describe("case()", () => {
     const clause2 = {
       match: Type.variablePattern("y"),
       guards: [],
-      body: (vars) => {
-        return vars.x;
+      body: (context) => {
+        return context.vars.x;
       },
     };
 
@@ -581,7 +581,7 @@ describe("case()", () => {
     const clause1 = {
       match: Type.integer(1),
       guards: [],
-      body: (_vars) => {
+      body: (_context) => {
         return Type.atom("expr_1");
       },
     };
@@ -589,7 +589,7 @@ describe("case()", () => {
     const clause2 = {
       match: Type.integer(2),
       guards: [],
-      body: (_vars) => {
+      body: (_context) => {
         return Type.atom("expr_2");
       },
     };
@@ -605,7 +605,7 @@ describe("case()", () => {
     const clause = {
       match: Type.integer(1),
       guards: [],
-      body: (_vars) => Interpreter.raiseArgumentError("my message"),
+      body: (_context) => Interpreter.raiseArgumentError("my message"),
     };
 
     assertBoxedError(
@@ -620,7 +620,7 @@ describe("case()", () => {
     //   2 -> :ok
     // end
     const result = Interpreter.case(
-      (_vars) => {
+      (_context) => {
         Type.integer(1);
         return Type.integer(2);
       },
@@ -628,7 +628,7 @@ describe("case()", () => {
         {
           match: Type.integer(2),
           guards: [],
-          body: (_vars) => {
+          body: (_context) => {
             return Type.atom("ok");
           },
         },
@@ -640,7 +640,7 @@ describe("case()", () => {
   });
 
   it("mutliple-expression condition that is not matched by any of the clauses", () => {
-    const condition = (_vars) => {
+    const condition = (_context) => {
       Type.integer(1);
       return Type.integer(2);
     };
@@ -649,7 +649,7 @@ describe("case()", () => {
       {
         match: Type.integer(1),
         guards: [],
-        body: (_vars) => {
+        body: (_context) => {
           return Type.atom("ok");
         },
       },
@@ -670,11 +670,11 @@ describe("case()", () => {
     //   2 -> x
     // end
     const result = Interpreter.case(
-      (vars) => {
+      (context) => {
         Interpreter.matchOperator(
           Type.integer(1),
           Type.variablePattern("x"),
-          vars,
+          context,
         );
         return Type.integer(2);
       },
@@ -682,8 +682,8 @@ describe("case()", () => {
         {
           match: Type.integer(2),
           guards: [],
-          body: (vars) => {
-            return vars.x;
+          body: (context) => {
+            return context.vars.x;
           },
         },
       ],
