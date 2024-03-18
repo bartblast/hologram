@@ -264,6 +264,7 @@ export default class Interpreter {
         const context = Interpreter.buildContext({
           module: Type.alias(moduleExName),
         });
+
         const pattern = Type.list(clause.params(context));
 
         if (Interpreter.isMatched(pattern, args, context)) {
