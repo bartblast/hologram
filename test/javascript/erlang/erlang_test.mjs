@@ -1101,7 +1101,7 @@ describe("andalso/2", () => {
       () =>
         Erlang["andalso/2"](
           (context) => context.vars.left,
-          (vacontextrs) => context.vars.right,
+          (context) => context.vars.right,
           context,
         ),
       "ArgumentError",
