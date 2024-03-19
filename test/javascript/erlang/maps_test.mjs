@@ -43,14 +43,17 @@ describe("fold/3", () => {
       3,
       [
         {
-          params: (_vars) => [
+          params: (_context) => [
             Type.variablePattern("key"),
             Type.variablePattern("value"),
             Type.variablePattern("acc"),
           ],
           guards: [],
-          body: (vars) =>
-            Erlang["+/2"](vars.acc, Erlang["*/2"](vars.key, vars.value)),
+          body: (context) =>
+            Erlang["+/2"](
+              context.vars.acc,
+              Erlang["*/2"](context.vars.key, context.vars.value),
+            ),
         },
       ],
       Interpreter.buildContext({module: Type.alias("MyModule")}),
@@ -88,7 +91,13 @@ describe("fold/3", () => {
   it("raises ArgumentError if the first argument is an anonymous function with arity different than 3", () => {
     fun = Type.anonymousFunction(
       0,
-      [{params: (_vars) => [], guards: [], body: (_vars) => Type.atom("abc")}],
+      [
+        {
+          params: (_context) => [],
+          guards: [],
+          body: (_context) => Type.atom("abc"),
+        },
+      ],
       Interpreter.buildContext({module: Type.alias("MyModule")}),
     );
 
@@ -249,13 +258,13 @@ describe("map/2", () => {
     2,
     [
       {
-        params: (_vars) => [
+        params: (_context) => [
           Type.matchPlaceholder(),
           Type.variablePattern("value"),
         ],
         guards: [],
-        body: (vars) => {
-          return Erlang["*/2"](vars.value, Type.integer(10));
+        body: (context) => {
+          return Erlang["*/2"](context.vars.value, Type.integer(10));
         },
       },
     ],
@@ -300,10 +309,10 @@ describe("map/2", () => {
       1,
       [
         {
-          params: (_vars) => [Type.variablePattern("x")],
+          params: (_context) => [Type.variablePattern("x")],
           guards: [],
-          body: (vars) => {
-            return vars.x;
+          body: (context) => {
+            return context.vars.x;
           },
         },
       ],

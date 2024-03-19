@@ -75,13 +75,13 @@ describe("foldl/3", () => {
     2,
     [
       {
-        params: (_vars) => [
+        params: (_context) => [
           Type.variablePattern("elem"),
           Type.variablePattern("acc"),
         ],
         guards: [],
-        body: (vars) => {
-          return Erlang["+/2"](vars.acc, vars.elem);
+        body: (context) => {
+          return Erlang["+/2"](context.vars.acc, context.vars.elem);
         },
       },
     ],
@@ -117,10 +117,10 @@ describe("foldl/3", () => {
       1,
       [
         {
-          params: (_vars) => [Type.variablePattern("x")],
+          params: (_context) => [Type.variablePattern("x")],
           guards: [],
-          body: (vars) => {
-            return vars.x;
+          body: (context) => {
+            return context.vars.x;
           },
         },
       ],
@@ -221,10 +221,10 @@ describe("map/2", () => {
     1,
     [
       {
-        params: (_vars) => [Type.variablePattern("elem")],
+        params: (_context) => [Type.variablePattern("elem")],
         guards: [],
-        body: (vars) => {
-          return Erlang["*/2"](vars.elem, Type.integer(10));
+        body: (context) => {
+          return Erlang["*/2"](context.vars.elem, Type.integer(10));
         },
       },
     ],
@@ -264,13 +264,13 @@ describe("map/2", () => {
       2,
       [
         {
-          params: (_vars) => [
+          params: (_context) => [
             Type.variablePattern("x"),
             Type.variablePattern("y"),
           ],
           guards: [],
-          body: (vars) => {
-            return Erlang["+/2"](vars.x, vars.y);
+          body: (context) => {
+            return Erlang["+/2"](context.vars.x, context.vars.y);
           },
         },
       ],
