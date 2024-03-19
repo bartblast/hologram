@@ -5,6 +5,7 @@ import {
   assertBoxedError,
   assertBoxedFalse,
   assertBoxedTrue,
+  contextFixture,
   linkModules,
   unlinkModules,
 } from "../support/helpers.mjs";
@@ -85,7 +86,7 @@ describe("foldl/3", () => {
         },
       },
     ],
-    Interpreter.buildContext({module: "MyModule"}),
+    contextFixture(),
   );
 
   const acc = Type.integer(0);
@@ -124,7 +125,7 @@ describe("foldl/3", () => {
           },
         },
       ],
-      Interpreter.buildContext({module: "MyModule"}),
+      contextFixture(),
     );
 
     assertBoxedError(
@@ -228,7 +229,7 @@ describe("map/2", () => {
         },
       },
     ],
-    Interpreter.buildContext({module: "MyModule"}),
+    contextFixture(),
   );
 
   const emptyList = Type.list([]);
@@ -274,7 +275,7 @@ describe("map/2", () => {
           },
         },
       ],
-      Interpreter.buildContext({module: "MyModule"}),
+      contextFixture(),
     );
 
     assertBoxedError(

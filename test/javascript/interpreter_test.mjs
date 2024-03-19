@@ -4,6 +4,7 @@ import {
   assert,
   assertBoxedError,
   assertMatchError,
+  contextFixture,
   linkModules,
   sinon,
   unlinkModules,
@@ -132,8 +133,7 @@ describe("callAnonymousFunction()", () => {
   let anonFun, context;
 
   beforeEach(() => {
-    context = Interpreter.buildContext({
-      module: "MyModule",
+    context = contextFixture({
       vars: {a: Type.integer(5), b: Type.integer(6), x: Type.integer(9)},
     });
 
@@ -389,8 +389,7 @@ describe("case()", () => {
   let context;
 
   beforeEach(() => {
-    context = Interpreter.buildContext({
-      module: "MyModule",
+    context = contextFixture({
       vars: {a: Type.integer(5), b: Type.integer(6), x: Type.integer(9)},
     });
   });
@@ -527,10 +526,7 @@ describe("case()", () => {
       },
     };
 
-    const context = Interpreter.buildContext({
-      module: "MyModule",
-      vars: {my_var: Type.integer(22)},
-    });
+    const context = contextFixture({vars: {my_var: Type.integer(22)}});
 
     const result = Interpreter.case(
       context.vars.my_var,
@@ -1027,10 +1023,7 @@ describe("comprehension()", () => {
   let context, prevIntoFun, prevToListFun;
 
   beforeEach(() => {
-    context = Interpreter.buildContext({
-      vars: {a: Type.integer(1), b: Type.integer(2)},
-    });
-
+    context = contextFixture({vars: {a: Type.integer(1), b: Type.integer(2)}});
     prevIntoFun = globalThis.Elixir_Enum["into/2"];
 
     globalThis.Elixir_Enum["into/2"] = (enumerable, _collectable) => {
@@ -1607,7 +1600,7 @@ describe("cond()", () => {
   let context;
 
   beforeEach(() => {
-    context = Interpreter.buildContext({
+    context = contextFixture({
       vars: {a: Type.integer(5), b: Type.integer(6), x: Type.integer(9)},
     });
   });
@@ -2484,7 +2477,7 @@ describe("isMatched()", () => {
   let context;
 
   beforeEach(() => {
-    context = Interpreter.buildContext({module: "MyModule"});
+    context = contextFixture();
   });
 
   it("is matched", () => {
@@ -2575,7 +2568,7 @@ describe("matchOperator()", () => {
   let context;
 
   beforeEach(() => {
-    context = Interpreter.buildContext({vars: {a: Type.integer(9)}});
+    context = contextFixture({vars: {a: Type.integer(9)}});
   });
 
   describe("atom type", () => {
@@ -4357,8 +4350,7 @@ describe("matchOperator()", () => {
     });
 
     it("2 = 2 = x, (x = 2)", () => {
-      const context = Interpreter.buildContext({
-        module: "MyModule",
+      const context = contextFixture({
         vars: {
           a: Type.integer(9),
           x: Type.integer(2),
@@ -4381,8 +4373,7 @@ describe("matchOperator()", () => {
     });
 
     it("2 = 2 = x, (x = 3)", () => {
-      const context = Interpreter.buildContext({
-        module: "MyModule",
+      const context = contextFixture({
         vars: {
           a: Type.integer(9),
           x: Type.integer(3),
@@ -4401,8 +4392,7 @@ describe("matchOperator()", () => {
     });
 
     it("1 = 2 = x, (x = 2)", () => {
-      const context = Interpreter.buildContext({
-        module: "MyModule",
+      const context = contextFixture({
         vars: {
           a: Type.integer(9),
           x: Type.integer(2),
@@ -4421,8 +4411,7 @@ describe("matchOperator()", () => {
     });
 
     it("y = x + (x = 3) + x, (x = 11)", () => {
-      const context = Interpreter.buildContext({
-        module: "MyModule",
+      const context = contextFixture({
         vars: {
           a: Type.integer(9),
           x: Type.integer(11),
@@ -4571,8 +4560,7 @@ describe("matchOperator()", () => {
     });
 
     it("{a = b, 2, 3} = {1, c = d, 3} = {1, 2, e = f}", () => {
-      const context = Interpreter.buildContext({
-        module: "MyModule",
+      const context = contextFixture({
         vars: {
           a: Type.integer(9),
           f: Type.integer(3),
@@ -5756,7 +5744,7 @@ describe("try()", () => {
   let context;
 
   beforeEach(() => {
-    context = Interpreter.buildContext({
+    context = contextFixture({
       vars: {
         a: Type.integer(1),
         b: Type.integer(2),
@@ -5786,8 +5774,7 @@ describe("try()", () => {
 });
 
 it("updateVarsToMatchedValues()", () => {
-  const context = Interpreter.buildContext({
-    module: "MyModule",
+  const context = contextFixture({
     vars: {
       a: 1,
       b: 2,
@@ -5803,8 +5790,7 @@ it("updateVarsToMatchedValues()", () => {
 
   const result = Interpreter.updateVarsToMatchedValues(context);
 
-  const expected = Interpreter.buildContext({
-    module: "MyModule",
+  const expected = contextFixture({
     vars: {
       a: 11,
       b: 2,

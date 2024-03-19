@@ -125,6 +125,20 @@ export function buildComponentStruct(data) {
   return componentStruct;
 }
 
+export function contextFixture(data = {}) {
+  let {module, vars} = data;
+
+  if (typeof module === "undefined") {
+    module = "MyModule";
+  }
+
+  if (typeof vars === "undefined") {
+    vars = {};
+  }
+
+  return Interpreter.buildContext({module: module, vars: vars});
+}
+
 export function debug(term) {
   console.log(Utils.serialize(term));
 

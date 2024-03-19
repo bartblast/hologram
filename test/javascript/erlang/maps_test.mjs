@@ -5,6 +5,7 @@ import {
   assertBoxedError,
   assertBoxedFalse,
   assertBoxedTrue,
+  contextFixture,
   freeze,
   linkModules,
   unlinkModules,
@@ -56,7 +57,7 @@ describe("fold/3", () => {
             ),
         },
       ],
-      Interpreter.buildContext({module: "MyModule"}),
+      contextFixture(),
     );
 
     map = Type.map([
@@ -98,7 +99,7 @@ describe("fold/3", () => {
           body: (_context) => Type.atom("abc"),
         },
       ],
-      Interpreter.buildContext({module: "MyModule"}),
+      contextFixture(),
     );
 
     assertBoxedError(
@@ -268,7 +269,7 @@ describe("map/2", () => {
         },
       },
     ],
-    Interpreter.buildContext({module: "MyModule"}),
+    contextFixture(),
   );
 
   it("maps empty map", () => {
@@ -316,7 +317,7 @@ describe("map/2", () => {
           },
         },
       ],
-      Interpreter.buildContext({module: "MyModule"}),
+      contextFixture(),
     );
 
     assertBoxedError(

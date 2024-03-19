@@ -5,6 +5,7 @@ import {
   assertBoxedError,
   assertBoxedFalse,
   assertBoxedTrue,
+  contextFixture,
   linkModules,
   unlinkModules,
 } from "../support/helpers.mjs";
@@ -1050,8 +1051,7 @@ describe(">=/2", () => {
 
 describe("andalso/2", () => {
   it("returns false if the first argument is false", () => {
-    const context = Interpreter.buildContext({
-      module: "MyModule",
+    const context = contextFixture({
       vars: {left: Type.boolean(false), right: Type.atom("abc")},
     });
 
@@ -1065,8 +1065,7 @@ describe("andalso/2", () => {
   });
 
   it("returns the second argument if the first argument is true", () => {
-    const context = Interpreter.buildContext({
-      module: "MyModule",
+    const context = contextFixture({
       vars: {left: Type.boolean(true), right: Type.atom("abc")},
     });
 
@@ -1085,15 +1084,14 @@ describe("andalso/2", () => {
       (_context) => {
         throw new Error("impossible");
       },
-      Interpreter.buildContext({module: "MyModule"}),
+      contextFixture(),
     );
 
     assertBoxedFalse(result);
   });
 
   it("raises ArgumentError if the first argument is not a boolean", () => {
-    const context = Interpreter.buildContext({
-      module: "MyModule",
+    const context = contextFixture({
       vars: {left: Type.nil(), right: Type.boolean(true)},
     });
 
@@ -1680,8 +1678,7 @@ describe("map_size/1", () => {
 
 describe("orelse/2", () => {
   it("returns true if the first argument is true", () => {
-    const context = Interpreter.buildContext({
-      module: "MyModule",
+    const context = contextFixture({
       vars: {left: Type.boolean(true), right: Type.atom("abc")},
     });
 
@@ -1695,8 +1692,7 @@ describe("orelse/2", () => {
   });
 
   it("returns the second argument if the first argument is false", () => {
-    const context = Interpreter.buildContext({
-      module: "MyModule",
+    const context = contextFixture({
       vars: {left: Type.boolean(false), right: Type.atom("abc")},
     });
 
@@ -1715,15 +1711,14 @@ describe("orelse/2", () => {
       (_context) => {
         throw new Error("impossible");
       },
-      Interpreter.buildContext({module: "MyModule"}),
+      contextFixture(),
     );
 
     assertBoxedTrue(result);
   });
 
   it("raises ArgumentError if the first argument is not a boolean", () => {
-    const context = Interpreter.buildContext({
-      module: "MyModule",
+    const context = contextFixture({
       vars: {left: Type.nil(), right: Type.boolean(true)},
     });
 
