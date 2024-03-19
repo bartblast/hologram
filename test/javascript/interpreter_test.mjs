@@ -16,6 +16,7 @@ import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
+import Utils from "../../assets/js/utils.mjs";
 
 before(() => {
   linkModules();
@@ -691,18 +692,6 @@ describe("case()", () => {
     );
 
     assert.deepStrictEqual(result, Type.integer(1));
-  });
-});
-
-describe("cloneDeep()", () => {
-  it("clones vars recursively (deep clone)", () => {
-    const nested = {c: 3, d: 4};
-    const obj = {a: 1, b: nested};
-    const expected = {a: 1, b: nested};
-    const result = Interpreter.cloneDeep(obj);
-
-    assert.deepStrictEqual(result, expected);
-    assert.notEqual(result.b, nested);
   });
 });
 
@@ -4156,7 +4145,7 @@ describe("matchOperator()", () => {
     // %{x: 1, y: 2} = %{x: 1, y: 2}
     it("left and right maps have the same items", () => {
       const left = map;
-      const right = Interpreter.cloneDeep(map);
+      const right = Utils.cloneDeep(map);
       const result = Interpreter.matchOperator(right, left, context);
 
       assert.deepStrictEqual(result, right);

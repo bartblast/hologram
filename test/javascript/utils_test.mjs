@@ -57,6 +57,18 @@ describe("cartesianProduct()", () => {
   });
 });
 
+describe("cloneDeep()", () => {
+  it("clones vars recursively (deep clone)", () => {
+    const nested = {c: 3, d: 4};
+    const obj = {a: 1, b: nested};
+    const expected = {a: 1, b: nested};
+    const result = Utils.cloneDeep(obj);
+
+    assert.deepStrictEqual(result, expected);
+    assert.notEqual(result.b, nested);
+  });
+});
+
 describe("concatUint8Arrays()", () => {
   it("concatenates multiple 8-bit unsigned integer arrays", () => {
     const arrays = [

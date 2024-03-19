@@ -1,7 +1,5 @@
 "use strict";
 
-// See: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
-import cloneDeep from "lodash/cloneDeep.js";
 import isEqual from "lodash/isEqual.js";
 import uniqWith from "lodash/uniqWith.js";
 
@@ -71,7 +69,7 @@ export default class Interpreter {
     const args = Type.list(argsArray);
 
     for (const clause of fun.clauses) {
-      const contextClone = Interpreter.cloneDeep(fun.context);
+      const contextClone = Utils.cloneDeep(fun.context);
       const pattern = Type.list(clause.params(contextClone));
 
       if (Interpreter.isMatched(pattern, args, contextClone)) {
@@ -96,14 +94,14 @@ export default class Interpreter {
     let conditionContext;
 
     if (typeof condition === "function") {
-      conditionContext = Interpreter.cloneDeep(context);
+      conditionContext = Utils.cloneDeep(context);
       condition = condition(conditionContext);
     } else {
       conditionContext = context;
     }
 
     for (const clause of clauses) {
-      const contextClone = Interpreter.cloneDeep(conditionContext);
+      const contextClone = Utils.cloneDeep(conditionContext);
 
       if (Interpreter.isMatched(clause.match, condition, contextClone)) {
         Interpreter.updateVarsToMatchedValues(contextClone);
@@ -115,10 +113,6 @@ export default class Interpreter {
     }
 
     return Interpreter.raiseCaseClauseError(condition);
-  }
-
-  static cloneDeep(context) {
-    return cloneDeep(context);
   }
 
   // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
@@ -167,7 +161,7 @@ export default class Interpreter {
     );
 
     let items = Utils.cartesianProduct(sets).reduce((acc, combination) => {
-      const contextClone = Interpreter.cloneDeep(context);
+      const contextClone = Utils.cloneDeep(context);
 
       for (let i = 0; i < generatorsCount; ++i) {
         if (
@@ -206,7 +200,7 @@ export default class Interpreter {
 
   static cond(clauses, context) {
     for (const clause of clauses) {
-      const contextClone = Interpreter.cloneDeep(context);
+      const contextClone = Utils.cloneDeep(context);
 
       if (Type.isTruthy(clause.condition(contextClone))) {
         return clause.body(contextClone);
@@ -593,7 +587,7 @@ export default class Interpreter {
     let result;
 
     try {
-      const contextClone = Interpreter.cloneDeep(context);
+      const contextClone = Utils.cloneDeep(context);
       result = body(contextClone);
       // TODO: finish
       // eslint-disable-next-line no-useless-catch
@@ -672,7 +666,7 @@ export default class Interpreter {
 
   static #evaluateCatchClauses(clauses, error, context) {
     for (const clause of clauses) {
-      const contextClone = Interpreter.cloneDeep(context);
+      const contextClone = Utils.cloneDeep(context);
 
       if (Interpreter.#matchCatchClause(clause, error, contextClone)) {
         return clause.body(contextClone);
@@ -698,7 +692,7 @@ export default class Interpreter {
 
   static #evaluateRescueClauses(clauses, error, context) {
     for (const clause of clauses) {
-      const contextClone = Interpreter.cloneDeep(context);
+      const contextClone = Utils.cloneDeep(context);
 
       if (Interpreter.#matchRescueClause(clause, error, contextClone)) {
         return clause.body(contextClone);

@@ -4,6 +4,7 @@ import Bitstring from "./bitstring.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Sequence from "./sequence.mjs";
+import Utils from "./utils.mjs";
 
 export default class Type {
   static alias(aliasStr) {
@@ -19,7 +20,7 @@ export default class Type {
       type: "anonymous_function",
       arity: arity,
       clauses: clauses,
-      context: Interpreter.cloneDeep(context),
+      context: Utils.cloneDeep(context),
       uniqueId: Sequence.next(),
     };
   }
