@@ -46,7 +46,7 @@ export default class Interpreter {
     const context = {module: null, vars: {}};
 
     if (typeof module !== "undefined") {
-      context.module = module;
+      context.module = Type.alias(module);
     }
 
     if (typeof vars !== "undefined") {
@@ -255,10 +255,7 @@ export default class Interpreter {
       const args = Type.list([...arguments]);
 
       for (const clause of clauses) {
-        const context = Interpreter.buildContext({
-          module: Type.alias(moduleExName),
-        });
-
+        const context = Interpreter.buildContext({module: moduleExName});
         const pattern = Type.list(clause.params(context));
 
         if (Interpreter.isMatched(pattern, args, context)) {

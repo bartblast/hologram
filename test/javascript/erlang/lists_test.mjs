@@ -85,7 +85,7 @@ describe("foldl/3", () => {
         },
       },
     ],
-    Interpreter.buildContext({module: Type.alias("MyModule")}),
+    Interpreter.buildContext({module: "MyModule"}),
   );
 
   const acc = Type.integer(0);
@@ -124,7 +124,7 @@ describe("foldl/3", () => {
           },
         },
       ],
-      Interpreter.buildContext({module: Type.alias("MyModule")}),
+      Interpreter.buildContext({module: "MyModule"}),
     );
 
     assertBoxedError(
@@ -228,7 +228,7 @@ describe("map/2", () => {
         },
       },
     ],
-    Interpreter.buildContext({module: Type.alias("MyModule")}),
+    Interpreter.buildContext({module: "MyModule"}),
   );
 
   const emptyList = Type.list([]);
@@ -274,7 +274,7 @@ describe("map/2", () => {
           },
         },
       ],
-      Interpreter.buildContext({module: Type.alias("MyModule")}),
+      Interpreter.buildContext({module: "MyModule"}),
     );
 
     assertBoxedError(

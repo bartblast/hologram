@@ -61,8 +61,8 @@ describe("buildContext()", () => {
   });
 
   it("module defined", () => {
-    const result = Interpreter.buildContext({module: Type.alias("MyModule")});
-    const expected = {module: Type.alias("MyModule"), vars: {}};
+    const result = Interpreter.buildContext({module: "MyModule"});
+    const expected = {module: Type.atom("Elixir.MyModule"), vars: {}};
 
     assert.deepStrictEqual(result, expected);
   });
@@ -71,6 +71,7 @@ describe("buildContext()", () => {
     const result = Interpreter.buildContext({
       vars: {a: Type.integer(1), b: Type.integer(2)},
     });
+
     const expected = {
       module: null,
       vars: {a: Type.integer(1), b: Type.integer(2)},
@@ -132,7 +133,7 @@ describe("callAnonymousFunction()", () => {
 
   beforeEach(() => {
     context = Interpreter.buildContext({
-      module: Type.alias("MyModule"),
+      module: "MyModule",
       vars: {a: Type.integer(5), b: Type.integer(6), x: Type.integer(9)},
     });
 
@@ -389,7 +390,7 @@ describe("case()", () => {
 
   beforeEach(() => {
     context = Interpreter.buildContext({
-      module: Type.alias("MyModule"),
+      module: "MyModule",
       vars: {a: Type.integer(5), b: Type.integer(6), x: Type.integer(9)},
     });
   });
@@ -527,7 +528,7 @@ describe("case()", () => {
     };
 
     const context = Interpreter.buildContext({
-      module: Type.alias("MyModule"),
+      module: "MyModule",
       vars: {my_var: Type.integer(22)},
     });
 
@@ -2483,7 +2484,7 @@ describe("isMatched()", () => {
   let context;
 
   beforeEach(() => {
-    context = Interpreter.buildContext({module: Type.alias("MyModule")});
+    context = Interpreter.buildContext({module: "MyModule"});
   });
 
   it("is matched", () => {
@@ -4357,7 +4358,7 @@ describe("matchOperator()", () => {
 
     it("2 = 2 = x, (x = 2)", () => {
       const context = Interpreter.buildContext({
-        module: Type.alias("MyModule"),
+        module: "MyModule",
         vars: {
           a: Type.integer(9),
           x: Type.integer(2),
@@ -4381,7 +4382,7 @@ describe("matchOperator()", () => {
 
     it("2 = 2 = x, (x = 3)", () => {
       const context = Interpreter.buildContext({
-        module: Type.alias("MyModule"),
+        module: "MyModule",
         vars: {
           a: Type.integer(9),
           x: Type.integer(3),
@@ -4401,7 +4402,7 @@ describe("matchOperator()", () => {
 
     it("1 = 2 = x, (x = 2)", () => {
       const context = Interpreter.buildContext({
-        module: Type.alias("MyModule"),
+        module: "MyModule",
         vars: {
           a: Type.integer(9),
           x: Type.integer(2),
@@ -4421,7 +4422,7 @@ describe("matchOperator()", () => {
 
     it("y = x + (x = 3) + x, (x = 11)", () => {
       const context = Interpreter.buildContext({
-        module: Type.alias("MyModule"),
+        module: "MyModule",
         vars: {
           a: Type.integer(9),
           x: Type.integer(11),
@@ -4571,7 +4572,7 @@ describe("matchOperator()", () => {
 
     it("{a = b, 2, 3} = {1, c = d, 3} = {1, 2, e = f}", () => {
       const context = Interpreter.buildContext({
-        module: Type.alias("MyModule"),
+        module: "MyModule",
         vars: {
           a: Type.integer(9),
           f: Type.integer(3),
@@ -5786,7 +5787,7 @@ describe("try()", () => {
 
 it("updateVarsToMatchedValues()", () => {
   const context = Interpreter.buildContext({
-    module: Type.alias("MyModule"),
+    module: "MyModule",
     vars: {
       a: 1,
       b: 2,
@@ -5803,7 +5804,7 @@ it("updateVarsToMatchedValues()", () => {
   const result = Interpreter.updateVarsToMatchedValues(context);
 
   const expected = Interpreter.buildContext({
-    module: Type.alias("MyModule"),
+    module: "MyModule",
     vars: {
       a: 11,
       b: 2,

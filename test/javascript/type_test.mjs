@@ -25,7 +25,7 @@ describe("anonymousFunction()", () => {
     clauses = ["clause_dummy_1", "clause_dummy_2"];
 
     context = Interpreter.buildContext({
-      module: Type.alias("MyModule"),
+      module: "MyModule",
       vars: {a: Type.integer(1), b: Type.integer(2)},
     });
   });

@@ -1051,7 +1051,7 @@ describe(">=/2", () => {
 describe("andalso/2", () => {
   it("returns false if the first argument is false", () => {
     const context = Interpreter.buildContext({
-      module: Type.alias("MyModule"),
+      module: "MyModule",
       vars: {left: Type.boolean(false), right: Type.atom("abc")},
     });
 
@@ -1066,7 +1066,7 @@ describe("andalso/2", () => {
 
   it("returns the second argument if the first argument is true", () => {
     const context = Interpreter.buildContext({
-      module: Type.alias("MyModule"),
+      module: "MyModule",
       vars: {left: Type.boolean(true), right: Type.atom("abc")},
     });
 
@@ -1085,7 +1085,7 @@ describe("andalso/2", () => {
       (_context) => {
         throw new Error("impossible");
       },
-      Interpreter.buildContext({module: Type.alias("MyModule")}),
+      Interpreter.buildContext({module: "MyModule"}),
     );
 
     assertBoxedFalse(result);
@@ -1093,7 +1093,7 @@ describe("andalso/2", () => {
 
   it("raises ArgumentError if the first argument is not a boolean", () => {
     const context = Interpreter.buildContext({
-      module: Type.alias("MyModule"),
+      module: "MyModule",
       vars: {left: Type.nil(), right: Type.boolean(true)},
     });
 
@@ -1681,7 +1681,7 @@ describe("map_size/1", () => {
 describe("orelse/2", () => {
   it("returns true if the first argument is true", () => {
     const context = Interpreter.buildContext({
-      module: Type.alias("MyModule"),
+      module: "MyModule",
       vars: {left: Type.boolean(true), right: Type.atom("abc")},
     });
 
@@ -1696,7 +1696,7 @@ describe("orelse/2", () => {
 
   it("returns the second argument if the first argument is false", () => {
     const context = Interpreter.buildContext({
-      module: Type.alias("MyModule"),
+      module: "MyModule",
       vars: {left: Type.boolean(false), right: Type.atom("abc")},
     });
 
@@ -1715,7 +1715,7 @@ describe("orelse/2", () => {
       (_context) => {
         throw new Error("impossible");
       },
-      Interpreter.buildContext({module: Type.alias("MyModule")}),
+      Interpreter.buildContext({module: "MyModule"}),
     );
 
     assertBoxedTrue(result);
@@ -1723,7 +1723,7 @@ describe("orelse/2", () => {
 
   it("raises ArgumentError if the first argument is not a boolean", () => {
     const context = Interpreter.buildContext({
-      module: Type.alias("MyModule"),
+      module: "MyModule",
       vars: {left: Type.nil(), right: Type.boolean(true)},
     });
 

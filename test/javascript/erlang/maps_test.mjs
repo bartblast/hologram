@@ -56,7 +56,7 @@ describe("fold/3", () => {
             ),
         },
       ],
-      Interpreter.buildContext({module: Type.alias("MyModule")}),
+      Interpreter.buildContext({module: "MyModule"}),
     );
 
     map = Type.map([
@@ -98,7 +98,7 @@ describe("fold/3", () => {
           body: (_context) => Type.atom("abc"),
         },
       ],
-      Interpreter.buildContext({module: Type.alias("MyModule")}),
+      Interpreter.buildContext({module: "MyModule"}),
     );
 
     assertBoxedError(
@@ -268,7 +268,7 @@ describe("map/2", () => {
         },
       },
     ],
-    Interpreter.buildContext({module: Type.alias("MyModule")}),
+    Interpreter.buildContext({module: "MyModule"}),
   );
 
   it("maps empty map", () => {
@@ -316,7 +316,7 @@ describe("map/2", () => {
           },
         },
       ],
-      Interpreter.buildContext({module: Type.alias("MyModule")}),
+      Interpreter.buildContext({module: "MyModule"}),
     );
 
     assertBoxedError(
