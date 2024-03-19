@@ -242,8 +242,8 @@ export default class Interpreter {
         },
       );
 
-      globalThis[moduleJsName].__varName__ = moduleJsName;
       globalThis[moduleJsName].__exports__ = new Set();
+      globalThis[moduleJsName].__jsName__ = moduleJsName;
     }
 
     globalThis[moduleJsName][`${functionName}/${arity}`] = function () {

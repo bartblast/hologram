@@ -223,7 +223,7 @@ export default class Renderer {
         );
       } else {
         const message = `component ${Interpreter.inspectModuleName(
-          moduleRef.__varName__,
+          moduleRef.__jsName__,
         )} is initialized on the client, but doesn't have init/2 implemented`;
 
         throw new HologramInterpreterError(message);
