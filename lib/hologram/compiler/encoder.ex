@@ -192,7 +192,7 @@ defmodule Hologram.Compiler.Encoder do
     unique = comprehension.unique.value
     mapper = encode_closure(comprehension.mapper, context)
 
-    "Interpreter.comprehension(#{generators}, #{filters}, #{collectable}, #{unique}, #{mapper}, vars)"
+    "Interpreter.comprehension(#{generators}, #{filters}, #{collectable}, #{unique}, #{mapper}, context)"
   end
 
   def encode_ir(%IR.ComprehensionFilter{expression: expr}, context) do
@@ -201,7 +201,7 @@ defmodule Hologram.Compiler.Encoder do
 
   def encode_ir(%IR.Cond{clauses: clauses_ir}, context) do
     clauses_js = encode_as_array(clauses_ir, context)
-    "Interpreter.cond(#{clauses_js}, vars)"
+    "Interpreter.cond(#{clauses_js}, context)"
   end
 
   def encode_ir(%IR.CondClause{condition: condition_ir, body: body_ir}, context) do
@@ -269,14 +269,14 @@ defmodule Hologram.Compiler.Encoder do
     left = encode_ir(left, %{context | pattern?: true})
     right = encode_ir(right, context)
 
-    "Interpreter.matchOperator(#{right}, #{left}, vars, false)"
+    "Interpreter.matchOperator(#{right}, #{left}, context, false)"
   end
 
   def encode_ir(%IR.MatchOperator{left: left, right: right}, context) do
     left = encode_ir(left, %{context | match_operator?: true, pattern?: true})
     right = encode_ir(right, %{context | match_operator?: true})
 
-    "Interpreter.matchOperator(#{right}, #{left}, vars)"
+    "Interpreter.matchOperator(#{right}, #{left}, context)"
   end
 
   def encode_ir(%IR.MatchPlaceholder{}, _context) do
@@ -324,7 +324,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode_ir(%IR.PinOperator{name: name}, _context) do
-    "vars.#{name}"
+    "context.vars.#{name}"
   end
 
   def encode_ir(%IR.PortType{value: value}, _context) do
@@ -355,7 +355,7 @@ defmodule Hologram.Compiler.Encoder do
     body_js = encode_closure(ir.body, context)
     rescue_clauses_js = encode_as_array(ir.rescue_clauses, context)
 
-    "Interpreter.try(#{body_js}, #{rescue_clauses_js}, [], [], null, vars)"
+    "Interpreter.try(#{body_js}, #{rescue_clauses_js}, [], [], null, context)"
   end
 
   def encode_ir(%IR.TryRescueClause{} = ir, context) do
@@ -514,7 +514,7 @@ defmodule Hologram.Compiler.Encoder do
     """
 
     window.__hologramReturn__ = #{expr_js};
-    Interpreter.updateVarsToMatchedValues(vars);
+    Interpreter.updateVarsToMatchedValues(context);
     return window.__hologramReturn__;\
     """
   end
@@ -527,7 +527,7 @@ defmodule Hologram.Compiler.Encoder do
     """
 
     #{expr_js};
-    Interpreter.updateVarsToMatchedValues(vars);\
+    Interpreter.updateVarsToMatchedValues(context);\
     """
   end
 
@@ -586,9 +586,9 @@ defmodule Hologram.Compiler.Encoder do
     var_name = to_string(var_name)
 
     if String.match?(var_name, ~r/[^a-zA-Z0-9_]+/) do
-      ~s'vars["#{var_name}"]'
+      ~s'context.vars["#{var_name}"]'
     else
-      "vars.#{var_name}"
+      "context.vars.#{var_name}"
     end
   end
 
