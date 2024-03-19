@@ -568,7 +568,7 @@ defmodule Hologram.Compiler.Encoder do
     function_arity_str = "#{function}/#{Enum.count(args)}"
     args_js = encode_as_array(args, context)
 
-    "Interpreter.callNamedFunction(#{module_js}, \"#{function_arity_str}\", #{args_js})"
+    "Interpreter.callNamedFunction(#{module_js}, \"#{function_arity_str}\", #{args_js}, context)"
   end
 
   defp encode_primitive_type(type, value, as_string)

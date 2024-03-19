@@ -1360,7 +1360,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) ==
-               "Interpreter.callNamedFunction(context.vars.x, \"my_fun!/2\", [Type.integer(1n), Type.integer(2n)])"
+               "Interpreter.callNamedFunction(context.vars.x, \"my_fun!/2\", [Type.integer(1n), Type.integer(2n)], context)"
     end
 
     test "called on expression" do
@@ -1400,7 +1400,7 @@ defmodule Hologram.Compiler.EncoderTest do
              return Type.atom("Elixir.MyModule1");
              }}, {match: Type.atom("b"), guards: [], body: (context) => {
              return Type.atom("Elixir.MyModule2");
-             }}], context), "my_fun!/2", [Type.integer(1n), Type.integer(2n)])\
+             }}], context), "my_fun!/2", [Type.integer(1n), Type.integer(2n)], context)\
              """
     end
 
