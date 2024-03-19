@@ -2352,19 +2352,19 @@ describe("inspect()", () => {
   });
 });
 
-describe("inspectModuleName()", () => {
+describe("inspectModuleJsName()", () => {
   it("inspects Elixir module name", () => {
-    const result = Interpreter.inspectModuleName("Elixir_Aaa_Bbb_Ccc");
+    const result = Interpreter.inspectModuleJsName("Elixir_Aaa_Bbb_Ccc");
     assert.deepStrictEqual(result, "Aaa.Bbb.Ccc");
   });
 
   it("inspects 'Erlang' module name", () => {
-    const result = Interpreter.inspectModuleName("Erlang");
+    const result = Interpreter.inspectModuleJsName("Erlang");
     assert.deepStrictEqual(result, ":erlang");
   });
 
   it("inspects Erlang standard lib module name", () => {
-    const result = Interpreter.inspectModuleName("Erlang_Uri_String");
+    const result = Interpreter.inspectModuleJsName("Erlang_Uri_String");
     assert.deepStrictEqual(result, ":uri_string");
   });
 });

@@ -222,7 +222,7 @@ export default class Renderer {
           componentStruct,
         );
       } else {
-        const message = `component ${Interpreter.inspectModuleName(
+        const message = `component ${Interpreter.inspectModuleJsName(
           moduleRef.__jsName__,
         )} is initialized on the client, but doesn't have init/2 implemented`;
 

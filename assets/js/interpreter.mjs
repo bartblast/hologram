@@ -404,7 +404,7 @@ export default class Interpreter {
     }
   }
 
-  static inspectModuleName(moduleJsName) {
+  static inspectModuleJsName(moduleJsName) {
     if (moduleJsName.startsWith("Elixir_")) {
       return moduleJsName.slice(7).replaceAll("_", ".");
     }
