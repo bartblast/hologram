@@ -50,6 +50,7 @@ defmodule Hologram.Compiler do
         Interpreter,
         MemoryStorage,
         Type,
+        Utils,
       } = deps;#{erlang_function_defs}#{elixir_function_defs}
     }
 

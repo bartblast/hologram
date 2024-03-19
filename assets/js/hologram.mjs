@@ -12,6 +12,7 @@ import MemoryStorage from "./memory_storage.mjs";
 import Renderer from "./renderer.mjs";
 import Store from "./store.mjs";
 import Type from "./type.mjs";
+import Utils from "./utils.mjs";
 
 // TODO: test
 export default class Hologram {
@@ -22,6 +23,7 @@ export default class Hologram {
     Interpreter: Interpreter,
     MemoryStorage: MemoryStorage,
     Type: Type,
+    Utils: Utils,
   };
 
   static #componentStructs = null;
