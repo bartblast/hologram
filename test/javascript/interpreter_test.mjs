@@ -5601,39 +5601,39 @@ describe("matchOperator()", () => {
   });
 });
 
-describe("moduleName()", () => {
+describe("moduleJsName()", () => {
   describe("boxed alias argument", () => {
     it("Elixir module alias without camel case segments", () => {
       const alias = Type.atom("Elixir.Aaa.Bbb.Ccc");
-      const result = Interpreter.moduleName(alias);
+      const result = Interpreter.moduleJsName(alias);
 
       assert.equal(result, "Elixir_Aaa_Bbb_Ccc");
     });
 
     it("Elixir module alias with camel case segments", () => {
       const alias = Type.atom("Elixir.AaaBbb.CccDdd");
-      const result = Interpreter.moduleName(alias);
+      const result = Interpreter.moduleJsName(alias);
 
       assert.equal(result, "Elixir_AaaBbb_CccDdd");
     });
 
     it(":erlang alias", () => {
       const alias = Type.atom("erlang");
-      const result = Interpreter.moduleName(alias);
+      const result = Interpreter.moduleJsName(alias);
 
       assert.equal(result, "Erlang");
     });
 
     it("single-segment Erlang module alias", () => {
       const alias = Type.atom("aaa");
-      const result = Interpreter.moduleName(alias);
+      const result = Interpreter.moduleJsName(alias);
 
       assert.equal(result, "Erlang_Aaa");
     });
 
     it("multiple-segment Erlang module alias", () => {
       const alias = Type.atom("aaa_bbb");
-      const result = Interpreter.moduleName(alias);
+      const result = Interpreter.moduleJsName(alias);
 
       assert.equal(result, "Erlang_Aaa_Bbb");
     });
@@ -5641,27 +5641,27 @@ describe("moduleName()", () => {
 
   describe("JS string argument", () => {
     it("Elixir module alias without camel case segments", () => {
-      const result = Interpreter.moduleName("Elixir.Aaa.Bbb.Ccc");
+      const result = Interpreter.moduleJsName("Elixir.Aaa.Bbb.Ccc");
       assert.equal(result, "Elixir_Aaa_Bbb_Ccc");
     });
 
     it("Elixir module alias with camel case segments", () => {
-      const result = Interpreter.moduleName("Elixir.AaaBbb.CccDdd");
+      const result = Interpreter.moduleJsName("Elixir.AaaBbb.CccDdd");
       assert.equal(result, "Elixir_AaaBbb_CccDdd");
     });
 
     it(":erlang alias", () => {
-      const result = Interpreter.moduleName("erlang");
+      const result = Interpreter.moduleJsName("erlang");
       assert.equal(result, "Erlang");
     });
 
     it("single-segment Erlang module alias", () => {
-      const result = Interpreter.moduleName("aaa");
+      const result = Interpreter.moduleJsName("aaa");
       assert.equal(result, "Erlang_Aaa");
     });
 
     it("multiple-segment Erlang module alias", () => {
-      const result = Interpreter.moduleName("aaa_bbb");
+      const result = Interpreter.moduleJsName("aaa_bbb");
       assert.equal(result, "Erlang_Aaa_Bbb");
     });
   });

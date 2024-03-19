@@ -225,7 +225,7 @@ export default class Interpreter {
     visibility,
     clauses,
   ) {
-    const moduleJsName = Interpreter.moduleName("Elixir." + moduleExName);
+    const moduleJsName = Interpreter.moduleJsName("Elixir." + moduleExName);
 
     if (!globalThis[moduleJsName]) {
       globalThis[moduleJsName] = new Proxy(
@@ -285,7 +285,7 @@ export default class Interpreter {
   }
 
   static defineErlangFunction(moduleExName, functionName, arity, jsFunction) {
-    const moduleJsName = Interpreter.moduleName(moduleExName);
+    const moduleJsName = Interpreter.moduleJsName(moduleExName);
 
     if (!globalThis[moduleJsName]) {
       globalThis[moduleJsName] = {};
@@ -295,7 +295,7 @@ export default class Interpreter {
   }
 
   static defineNotImplementedErlangFunction(moduleExName, functionName, arity) {
-    const moduleJsName = Interpreter.moduleName(moduleExName);
+    const moduleJsName = Interpreter.moduleJsName(moduleExName);
 
     if (!globalThis[moduleJsName]) {
       globalThis[moduleJsName] = {};
@@ -404,17 +404,17 @@ export default class Interpreter {
     }
   }
 
-  static inspectModuleName(moduleName) {
-    if (moduleName.startsWith("Elixir_")) {
-      return moduleName.slice(7).replaceAll("_", ".");
+  static inspectModuleName(moduleJsName) {
+    if (moduleJsName.startsWith("Elixir_")) {
+      return moduleJsName.slice(7).replaceAll("_", ".");
     }
 
-    if (moduleName === "Erlang") {
+    if (moduleJsName === "Erlang") {
       return ":erlang";
     }
 
     // starts with "Erlang_"
-    return ":" + moduleName.slice(7).toLowerCase();
+    return ":" + moduleJsName.slice(7).toLowerCase();
   }
 
   static isEqual(left, right) {
@@ -502,7 +502,7 @@ export default class Interpreter {
   }
 
   // Based on: Hologram.Compiler.Encoder.encode_as_class_name/1
-  static moduleName(alias) {
+  static moduleJsName(alias) {
     const aliasStr = Type.isAtom(alias) ? alias.value : alias;
 
     if (aliasStr === "erlang") {
@@ -519,7 +519,7 @@ export default class Interpreter {
   }
 
   static moduleRef(alias) {
-    return globalThis[Interpreter.moduleName(alias)];
+    return globalThis[Interpreter.moduleJsName(alias)];
   }
 
   static raiseArgumentError(message) {
