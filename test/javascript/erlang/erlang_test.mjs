@@ -1517,21 +1517,13 @@ describe("is_function/2", () => {
   const fun = Erlang["is_function/2"];
 
   it("function with the given arity", () => {
-    const term = Type.anonymousFunction(
-      "dummyArity",
-      "dummyClauses",
-      "dummyContext",
-    );
+    const term = Type.anonymousFunction(3, "dummyClauses", "dummyContext");
 
     assertBoxedTrue(fun(term, Type.integer(3)));
   });
 
   it("function with a different arity", () => {
-    const term = Type.anonymousFunction(
-      "dummyArity",
-      "dummyClauses",
-      "dummyContext",
-    );
+    const term = Type.anonymousFunction(3, "dummyClauses", "dummyContext");
 
     assertBoxedFalse(fun(term, Type.integer(4)));
   });
