@@ -124,6 +124,12 @@ export function buildComponentStruct(data) {
   return componentStruct;
 }
 
+export function debug(term) {
+  console.log(Interpreter.serialize(term));
+
+  return term;
+}
+
 export function elixirHologramComponentStruct0() {
   return Type.map([
     [Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")],

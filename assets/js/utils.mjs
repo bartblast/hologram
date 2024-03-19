@@ -30,12 +30,6 @@ export default class Utils {
     }, new Uint8Array());
   }
 
-  static debug(term) {
-    console.log(Interpreter.serialize(term));
-
-    return term;
-  }
-
   static evaluate(code) {
     return new Function(`return (${code});`)();
   }
