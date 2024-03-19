@@ -87,3 +87,32 @@ it("evaluate()", () => {
   const result = Utils.evaluate("{value: 2 + 2}");
   assert.deepStrictEqual(result, {value: 4});
 });
+
+describe("serialize()", () => {
+  it("serializes number to JSON", () => {
+    assert.equal(Utils.serialize(123), "123");
+  });
+
+  it("serializes string to JSON", () => {
+    assert.equal(Utils.serialize("abc"), '"abc"');
+  });
+
+  it("serializes non-negative bigint to JSON", () => {
+    assert.equal(Utils.serialize(123n), '"__bigint__:123"');
+  });
+
+  it("serializes negative bigint to JSON", () => {
+    assert.equal(Utils.serialize(-123n), '"__bigint__:-123"');
+  });
+
+  it("serializes non-nested object to JSON", () => {
+    assert.equal(Utils.serialize({a: 1, b: 2}), '{"a":1,"b":2}');
+  });
+
+  it("serializes nested object to JSON", () => {
+    const term = {a: 1, b: 2, c: {d: 3, e: 4}};
+    const expected = '{"a":1,"b":2,"c":{"d":3,"e":4}}';
+
+    assert.equal(Utils.serialize(term), expected);
+  });
+});

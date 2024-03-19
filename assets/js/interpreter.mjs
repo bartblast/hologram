@@ -400,7 +400,7 @@ export default class Interpreter {
 
       // TODO: remove when all types are supported
       default:
-        return Interpreter.serialize(term);
+        return Utils.serialize(term);
     }
   }
 
@@ -568,12 +568,6 @@ export default class Interpreter {
       "no match of right hand side value: " + Interpreter.inspect(arg);
 
     return Interpreter.raiseError("MatchError", message);
-  }
-
-  static serialize(term) {
-    return JSON.stringify(term, (_key, value) =>
-      typeof value === "bigint" ? `__bigint__:${value.toString()}` : value,
-    );
   }
 
   static try(

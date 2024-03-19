@@ -2,7 +2,6 @@
 
 import Bitstring from "./bitstring.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
-import Interpreter from "./interpreter.mjs";
 import Sequence from "./sequence.mjs";
 import Utils from "./utils.mjs";
 
@@ -110,7 +109,7 @@ export default class Type {
     if (data.length < 2) {
       throw new HologramInterpreterError(
         "improper list must have at least 2 items, received " +
-          Interpreter.serialize(data),
+          Utils.serialize(data),
       );
     }
 

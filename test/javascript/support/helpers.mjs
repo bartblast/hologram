@@ -16,6 +16,7 @@ import HologramMatchError from "../../../assets/js/errors/match_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Store from "../../../assets/js/store.mjs";
 import Type from "../../../assets/js/type.mjs";
+import Utils from "../../../assets/js/utils.mjs";
 
 export {assert} from "../../../assets/node_modules/chai/index.js";
 export * as sinon from "../../../assets/node_modules/sinon/pkg/sinon-esm.js";
@@ -125,7 +126,7 @@ export function buildComponentStruct(data) {
 }
 
 export function debug(term) {
-  console.log(Interpreter.serialize(term));
+  console.log(Utils.serialize(term));
 
   return term;
 }
