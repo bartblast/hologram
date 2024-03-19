@@ -941,7 +941,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) == """
-             {params: (context) => [Interpreter.matchOperator(Interpreter.matchOperator(Type.variablePattern("y"), Type.integer(1n), context, false), Type.variablePattern("x"), context)], guards: [], body: (context) => {
+             {params: (context) => [Interpreter.matchOperator(Interpreter.matchOperator(Type.variablePattern("y"), Type.integer(1n), context), Type.variablePattern("x"), context)], guards: [], body: (context) => {
              return Type.atom("ok");
              }}\
              """
@@ -1062,7 +1062,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) ==
-               ~s/Interpreter.matchOperator(Interpreter.matchOperator(Type.integer(3n), Type.integer(2n), context, false), Type.variablePattern("x"), context)/
+               ~s/Interpreter.matchOperator(Interpreter.matchOperator(Type.integer(3n), Type.integer(2n), context), Type.variablePattern("x"), context)/
     end
 
     test "nested, variable in the middle" do
@@ -1076,7 +1076,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) ==
-               ~s/Interpreter.matchOperator(Interpreter.matchOperator(Type.integer(3n), Type.variablePattern("x"), context, false), Type.integer(1n), context)/
+               ~s/Interpreter.matchOperator(Interpreter.matchOperator(Type.integer(3n), Type.variablePattern("x"), context), Type.integer(1n), context)/
     end
 
     test "nested, variable in expression" do
@@ -1090,7 +1090,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) ==
-               "Interpreter.matchOperator(Interpreter.matchOperator(context.vars.x, Type.integer(2n), context, false), Type.integer(1n), context)"
+               "Interpreter.matchOperator(Interpreter.matchOperator(context.vars.x, Type.integer(2n), context), Type.integer(1n), context)"
     end
 
     test "nested multiple-times" do
@@ -1131,7 +1131,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) ==
-               ~s/Interpreter.matchOperator(Interpreter.matchOperator(Type.tuple([Type.integer(1n), Type.integer(2n), Interpreter.matchOperator(context.vars.f, Type.variablePattern("e"), context, false)]), Type.tuple([Type.integer(1n), Interpreter.matchOperator(Type.variablePattern("d"), Type.variablePattern("c"), context, false), Type.integer(3n)]), context, false), Type.tuple([Interpreter.matchOperator(Type.variablePattern("b"), Type.variablePattern("a"), context, false), Type.integer(2n), Type.integer(3n)]), context)/
+               ~s/Interpreter.matchOperator(Interpreter.matchOperator(Type.tuple([Type.integer(1n), Type.integer(2n), Interpreter.matchOperator(context.vars.f, Type.variablePattern("e"), context)]), Type.tuple([Type.integer(1n), Interpreter.matchOperator(Type.variablePattern("d"), Type.variablePattern("c"), context), Type.integer(3n)]), context), Type.tuple([Interpreter.matchOperator(Type.variablePattern("b"), Type.variablePattern("a"), context), Type.integer(2n), Type.integer(3n)]), context)/
     end
   end
 

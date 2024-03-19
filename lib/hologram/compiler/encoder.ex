@@ -269,7 +269,7 @@ defmodule Hologram.Compiler.Encoder do
     left = encode_ir(left, %{context | pattern?: true})
     right = encode_ir(right, context)
 
-    "Interpreter.matchOperator(#{right}, #{left}, context, false)"
+    "Interpreter.matchOperator(#{right}, #{left}, context)"
   end
 
   def encode_ir(%IR.MatchOperator{left: left, right: right}, context) do
