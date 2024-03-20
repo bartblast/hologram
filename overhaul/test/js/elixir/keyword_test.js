@@ -12,68 +12,6 @@ beforeEach(() => cleanup());
 import Keyword from "../../../assets/js/hologram/elixir/keyword";
 import Type from "../../../assets/js/hologram/type";
 
-describe("delete()", () => {
-  const key = Type.atom("a");
-
-  const keywords1 = Type.list([
-    Type.tuple([key, Type.integer(1)]),
-    Type.tuple([Type.atom("b"), Type.integer(2)]),
-  ]);
-
-  const keywords2 = Type.list([Type.tuple([Type.atom("b"), Type.integer(2)])]);
-
-  it("deletes the entry in the keyword list for specific a key when there is one matching entry", () => {
-    const result = Keyword.delete(keywords1, key);
-    assert.deepStrictEqual(result, keywords2);
-  });
-
-  it("deletes the entries in the keyword list for specific a key when there are multiple matching entries", () => {
-    const keywords1 = Type.list([
-      Type.tuple([key, Type.integer(1)]),
-      Type.tuple([Type.atom("b"), Type.integer(2)]),
-      Type.tuple([key, Type.integer(3)]),
-    ]);
-
-    const result = Keyword.delete(keywords1, key);
-
-    assert.deepStrictEqual(result, keywords2);
-  });
-
-  it("returns the keyword list unchanged if there are no entries matching the given key", () => {
-    const result = Keyword.delete(keywords2, key);
-    assert.deepStrictEqual(result, keywords2);
-  });
-
-  it("returns frozen object", () => {
-    const result = Keyword.delete(keywords1, key);
-    assertFrozen(result);
-  });
-});
-
-describe("get()", () => {
-  const keywordElems = [
-    Type.tuple([Type.atom("a"), Type.integer(1)]),
-    Type.tuple([Type.atom("b"), Type.integer(2)]),
-  ];
-
-  const keywords = Type.list(keywordElems);
-
-  it("gets the value for a specific key in keyword list if the given key exists in the given keyword list", () => {
-    const result = Keyword.get(keywords, Type.atom("b"));
-    assert.deepStrictEqual(result, Type.integer(2));
-  });
-
-  it("returns boxed nil by default if the given key doesn't exist in the given keyword list", () => {
-    const result = Keyword.get(keywords, Type.atom("c"));
-    assert.deepStrictEqual(result, Type.nil());
-  });
-
-  it("it returns the default_value arg if the given key doesn't exist in the given keyword list and the default_value param is specified", () => {
-    const result = Keyword.get(keywords, Type.atom("c"), Type.integer(9));
-    assert.deepStrictEqual(result, Type.integer(9));
-  });
-});
-
 describe("has_key$question()", () => {
   let keywords;
 
