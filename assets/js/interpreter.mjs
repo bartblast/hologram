@@ -239,22 +239,23 @@ export default class Interpreter {
     const moduleJsName = Interpreter.moduleJsName("Elixir." + moduleExName);
 
     if (!globalThis[moduleJsName]) {
-      globalThis[moduleJsName] = new Proxy(
-        {},
-        {
-          get(moduleJsVar, functionNameArityStr) {
-            if (functionNameArityStr in moduleJsVar)
-              return moduleJsVar[functionNameArityStr];
+      const handler = {
+        get(moduleRef, functionArityStr) {
+          if (functionArityStr in moduleRef) {
+            return moduleRef[functionArityStr];
+          }
 
-            Interpreter.raiseUndefinedFunctionError(
-              moduleExName,
-              functionName,
-              arity,
-            );
-          },
+          const [functionName, arity] = functionArityStr.split("/");
+
+          Interpreter.raiseUndefinedFunctionError(
+            moduleExName,
+            functionName,
+            arity,
+          );
         },
-      );
+      };
 
+      globalThis[moduleJsName] = new Proxy({}, handler);
       globalThis[moduleJsName].__exports__ = new Set();
       globalThis[moduleJsName].__jsName__ = moduleJsName;
     }
