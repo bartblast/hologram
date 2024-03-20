@@ -168,6 +168,9 @@ const Erlang = {
   // end andalso/2
   // deps: []
 
+  // :erlang.apply/3 calls are encoded as Interpreter.callNamedFuntion() calls.
+  // See: https://github.com/bartblast/hologram/blob/4e832c722af7b0c1a0cca1c8c08287b999ecae78/lib/hologram/compiler/encoder.ex#L559
+
   // start atom_to_binary/1
   "atom_to_binary/1": (atom) => {
     if (!Type.isAtom(atom)) {
