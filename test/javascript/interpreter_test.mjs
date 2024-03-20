@@ -2072,11 +2072,11 @@ describe("defineElixirFunction()", () => {
     );
   });
 
-  it("raises HologramInterpreterError when undefined Elixir/Erlang function is being called", () => {
-    assert.throw(
+  it("raises UndefinedFunctionError when undefined Elixir/Erlang function is being called", () => {
+    assertBoxedError(
       () => globalThis.Elixir_Aaa_Bbb["my_fun_x/5"],
-      HologramInterpreterError,
-      "Function Aaa.Bbb.my_fun_x/5 is not available on the client. See what to do here: https://www.hologram.page/TODO",
+      "UndefinedFunctionError",
+      "function Aaa.Bbb.my_fun_x/5 is undefined or private",
     );
   });
 });
