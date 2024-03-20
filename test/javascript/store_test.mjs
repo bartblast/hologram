@@ -2,7 +2,7 @@
 
 import {
   assert,
-  buildComponentStruct,
+  componentStructFixture,
   linkModules,
   unlinkModules,
 } from "./support/helpers.mjs";
@@ -152,7 +152,7 @@ describe("putComponentEmittedContext()", () => {
     assert.deepStrictEqual(
       Store.data,
       Type.map([
-        [cid, buildComponentStruct({emittedContext: "dummy_context"})],
+        [cid, componentStructFixture({emittedContext: "dummy_context"})],
       ]),
     );
   });
@@ -193,7 +193,7 @@ describe("putComponentState()", () => {
 
     assert.deepStrictEqual(
       Store.data,
-      Type.map([[cid, buildComponentStruct({state: "dummy_state"})]]),
+      Type.map([[cid, componentStructFixture({state: "dummy_state"})]]),
     );
   });
 });

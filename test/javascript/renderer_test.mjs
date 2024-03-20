@@ -5,7 +5,7 @@
 import {
   assert,
   assertBoxedError,
-  buildComponentStruct,
+  componentStructFixture,
   elixirHologramComponentStruct0,
   initStoreComponentStruct,
   linkModules,
@@ -347,7 +347,7 @@ describe("element node", () => {
       Type.map([
         [
           cid3,
-          buildComponentStruct({
+          componentStructFixture({
             state: Type.map([
               [Type.atom("a"), Type.integer(1)],
               [Type.atom("b"), Type.integer(2)],
@@ -356,7 +356,7 @@ describe("element node", () => {
         ],
         [
           cid7,
-          buildComponentStruct({
+          componentStructFixture({
             state: Type.map([
               [Type.atom("c"), Type.integer(3)],
               [Type.atom("d"), Type.integer(4)],
@@ -475,7 +475,7 @@ describe("node list", () => {
       Type.map([
         [
           cid3,
-          buildComponentStruct({
+          componentStructFixture({
             state: Type.map([
               [Type.atom("a"), Type.integer(1)],
               [Type.atom("b"), Type.integer(2)],
@@ -484,7 +484,7 @@ describe("node list", () => {
         ],
         [
           cid7,
-          buildComponentStruct({
+          componentStructFixture({
             state: Type.map([
               [Type.atom("c"), Type.integer(3)],
               [Type.atom("d"), Type.integer(4)],
@@ -558,7 +558,7 @@ describe("node list", () => {
       Type.map([
         [
           cid51,
-          buildComponentStruct({
+          componentStructFixture({
             state: Type.map([
               [Type.atom("a"), Type.integer(1)],
               [Type.atom("b"), Type.integer(2)],
@@ -567,7 +567,7 @@ describe("node list", () => {
         ],
         [
           cid52,
-          buildComponentStruct({
+          componentStructFixture({
             state: Type.map([
               [Type.atom("c"), Type.integer(3)],
               [Type.atom("d"), Type.integer(4)],
@@ -769,7 +769,7 @@ describe("stateful component", () => {
 
     assert.deepStrictEqual(
       Store.data,
-      Type.map([[cid, buildComponentStruct({state: state})]]),
+      Type.map([[cid, componentStructFixture({state: state})]]),
     );
   });
 
@@ -799,7 +799,7 @@ describe("stateful component", () => {
       Type.map([
         [
           cid,
-          buildComponentStruct({
+          componentStructFixture({
             state: Type.map([
               [Type.atom("a"), Type.integer(11)],
               [Type.atom("b"), Type.integer(22)],
@@ -850,7 +850,7 @@ describe("stateful component", () => {
 
     assert.deepStrictEqual(
       Store.data,
-      Type.map([[cid, buildComponentStruct({state: state})]]),
+      Type.map([[cid, componentStructFixture({state: state})]]),
     );
   });
 
@@ -1023,19 +1023,19 @@ describe("default slot", () => {
       Type.map([
         [
           cid10,
-          buildComponentStruct({
+          componentStructFixture({
             state: Type.map([[Type.atom("a"), Type.integer(10)]]),
           }),
         ],
         [
           cid11,
-          buildComponentStruct({
+          componentStructFixture({
             state: Type.map([[Type.atom("a"), Type.integer(11)]]),
           }),
         ],
         [
           cid12,
-          buildComponentStruct({
+          componentStructFixture({
             state: Type.map([[Type.atom("a"), Type.integer(12)]]),
           }),
         ],
@@ -1121,7 +1121,7 @@ describe("default slot", () => {
       Type.map([
         [
           cid34,
-          buildComponentStruct({
+          componentStructFixture({
             state: Type.map([
               [Type.atom("cid"), Type.bitstring("component_34")],
               [Type.atom("a"), Type.bitstring("34a_prop")],
@@ -1135,7 +1135,7 @@ describe("default slot", () => {
         ],
         [
           cid35,
-          buildComponentStruct({
+          componentStructFixture({
             state: Type.map([
               [Type.atom("cid"), Type.bitstring("component_35")],
               [Type.atom("a"), Type.bitstring("35a_prop")],
@@ -1145,7 +1145,7 @@ describe("default slot", () => {
         ],
         [
           cid36,
-          buildComponentStruct({
+          componentStructFixture({
             state: Type.map([
               [Type.atom("cid"), Type.bitstring("component_36")],
               [Type.atom("a"), Type.bitstring("36a_prop")],
