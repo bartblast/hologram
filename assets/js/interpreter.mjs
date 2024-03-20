@@ -86,8 +86,19 @@ export default class Interpreter {
     return Interpreter.raiseFunctionClauseError(message);
   }
 
-  static callNamedFunction(alias, functionArityStr, args) {
-    return Interpreter.moduleRef(alias)[functionArityStr](...args);
+  static callNamedFunction(module, functionArityStr, args, context) {
+    const moduleRef = Interpreter.moduleRef(module);
+
+    if (
+      !moduleRef.__exports__.has(functionArityStr) &&
+      !Interpreter.isEqual(module, context.module)
+    ) {
+      const message = `function ${Interpreter.inspectModuleJsName(moduleRef.__jsName__)}.${functionArityStr} is undefined or private`;
+
+      Interpreter.raiseError("UndefinedFunctionError", message);
+    }
+
+    return moduleRef[functionArityStr](...args);
   }
 
   static case(condition, clauses, context) {
@@ -231,13 +242,12 @@ export default class Interpreter {
       globalThis[moduleJsName] = new Proxy(
         {},
         {
-          get(moduleJsVar, functionNameWithArity) {
-            if (functionNameWithArity in moduleJsVar)
-              return moduleJsVar[functionNameWithArity];
+          get(moduleJsVar, functionNameArityStr) {
+            if (functionNameArityStr in moduleJsVar)
+              return moduleJsVar[functionNameArityStr];
 
-            const message = `Function ${moduleExName}.${functionNameWithArity} is not available on the client. See what to do here: https://www.hologram.page/TODO`;
-
-            throw new HologramInterpreterError(message);
+            const message = `function ${moduleExName}.${functionNameArityStr} is undefined or private`;
+            Interpreter.raiseError("UndefinedFunctionError", message);
           },
         },
       );

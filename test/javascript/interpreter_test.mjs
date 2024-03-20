@@ -366,22 +366,111 @@ describe("callAnonymousFunction()", () => {
   });
 });
 
-it("callNamedFunction()", () => {
-  // setup
-  globalThis.Elixir_MyModule = {
-    "my_fun/2": (arg1, arg2) => {
-      return Erlang["+/2"](arg1, arg2);
-    },
-  };
+describe("callNamedFunction()", () => {
+  let alias, args;
 
-  const alias = Type.alias("MyModule");
-  const args = [Type.integer(1), Type.integer(2)];
-  const result = Interpreter.callNamedFunction(alias, "my_fun/2", args);
+  beforeEach(() => {
+    Interpreter.defineElixirFunction("MyModule", "my_public_fun", 2, "public", [
+      {
+        params: (_context) => [
+          Type.variablePattern("x"),
+          Type.variablePattern("y"),
+        ],
+        guards: [],
+        body: (context) => {
+          return Erlang["+/2"](context.vars.x, context.vars.y);
+        },
+      },
+    ]);
 
-  assert.deepStrictEqual(result, Type.integer(3));
+    Interpreter.defineElixirFunction(
+      "MyModule",
+      "my_private_fun",
+      2,
+      "private",
+      [
+        {
+          params: (_context) => [
+            Type.variablePattern("x"),
+            Type.variablePattern("y"),
+          ],
+          guards: [],
+          body: (context) => {
+            return Erlang["-/2"](context.vars.x, context.vars.y);
+          },
+        },
+      ],
+    );
 
-  // cleanup
-  delete globalThis.Elixir_MyModule;
+    alias = Type.alias("MyModule");
+    args = [Type.integer(1), Type.integer(2)];
+    context = contextFixture({module: "MyModule"});
+  });
+
+  afterEach(() => {
+    delete globalThis.Elixir_MyModule;
+  });
+
+  it("local public function call", () => {
+    const result = Interpreter.callNamedFunction(
+      alias,
+      "my_public_fun/2",
+      args,
+      context,
+    );
+
+    assert.deepStrictEqual(result, Type.integer(3));
+  });
+
+  it("remote public function call", () => {
+    const result = Interpreter.callNamedFunction(
+      alias,
+      "my_public_fun/2",
+      args,
+      contextFixture({module: "MyOtherModule"}),
+    );
+
+    assert.deepStrictEqual(result, Type.integer(3));
+  });
+
+  it("local private function call", () => {
+    const result = Interpreter.callNamedFunction(
+      alias,
+      "my_private_fun/2",
+      args,
+      context,
+    );
+
+    assert.deepStrictEqual(result, Type.integer(-1));
+  });
+
+  it("remote private function call", () => {
+    assertBoxedError(
+      () =>
+        Interpreter.callNamedFunction(
+          alias,
+          "my_private_fun/2",
+          args,
+          contextFixture({module: "MyOtherModule"}),
+        ),
+      "UndefinedFunctionError",
+      "function MyModule.my_private_fun/2 is undefined or private",
+    );
+  });
+
+  it("undefined function", () => {
+    assertBoxedError(
+      () =>
+        Interpreter.callNamedFunction(
+          alias,
+          "my_undefined_fun/2",
+          args,
+          context,
+        ),
+      "UndefinedFunctionError",
+      "function MyModule.my_undefined_fun/2 is undefined or private",
+    );
+  });
 });
 
 describe("case()", () => {
