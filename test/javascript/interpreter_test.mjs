@@ -5827,6 +5827,14 @@ it("raiseMatchError()", () => {
   );
 });
 
+it("raiseUndefinedFunctionError()", () => {
+  assertBoxedError(
+    () => Interpreter.raiseUndefinedFunctionError("MyModule", "my_function", 2),
+    "UndefinedFunctionError",
+    "function MyModule.my_function/2 is undefined or private",
+  );
+});
+
 describe("try()", () => {
   let context;
 

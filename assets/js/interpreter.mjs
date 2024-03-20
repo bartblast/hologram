@@ -246,8 +246,11 @@ export default class Interpreter {
             if (functionNameArityStr in moduleJsVar)
               return moduleJsVar[functionNameArityStr];
 
-            const message = `function ${moduleExName}.${functionNameArityStr} is undefined or private`;
-            Interpreter.raiseError("UndefinedFunctionError", message);
+            Interpreter.raiseUndefinedFunctionError(
+              moduleExName,
+              functionName,
+              arity,
+            );
           },
         },
       );
@@ -575,6 +578,11 @@ export default class Interpreter {
       "no match of right hand side value: " + Interpreter.inspect(arg);
 
     return Interpreter.raiseError("MatchError", message);
+  }
+
+  static raiseUndefinedFunctionError(moduleExName, functionName, arity) {
+    const message = `function ${moduleExName}.${functionName}/${arity} is undefined or private`;
+    return Interpreter.raiseError("UndefinedFunctionError", message);
   }
 
   static try(
