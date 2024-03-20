@@ -256,6 +256,7 @@ export default class Interpreter {
       };
 
       globalThis[moduleJsName] = new Proxy({}, handler);
+      globalThis[moduleJsName].__exName__ = moduleExName;
       globalThis[moduleJsName].__exports__ = new Set();
       globalThis[moduleJsName].__jsName__ = moduleJsName;
     }
