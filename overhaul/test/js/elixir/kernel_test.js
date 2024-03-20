@@ -14,38 +14,6 @@ import Kernel from "../../../assets/js/hologram/elixir/kernel";
 import Map from "../../../assets/js/hologram/elixir/map";
 import Type from "../../../assets/js/hologram/type";
 
-describe("apply()", () => {
-  let functionName, module;
-
-  beforeEach(() => {
-    module = Type.module("ModuleStub1");
-    functionName = Type.atom("test");
-  });
-
-  // apply/3
-  it("invokes the function on the module with the args", () => {
-    const args = Type.list([Type.integer(1), Type.integer(2)]);
-
-    const result = Kernel.apply(module, functionName, args);
-    const expected = Type.integer(3);
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  // apply/2
-  it("throws an error if number of args is different than 3", () => {
-    const expectedMessage =
-      'Kernel.apply(): arguments = {"0":{"type":"module","className":"ModuleStub1"},"1":{"type":"atom","value":"test"}}';
-    assert.throw(
-      () => {
-        Kernel.apply(module, functionName);
-      },
-      HologramNotImplementedError,
-      expectedMessage
-    );
-  });
-});
-
 describe("elem()", () => {
   it("gets the element at the zero-based index in tuple", () => {
     const tuple = Type.tuple([

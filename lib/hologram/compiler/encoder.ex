@@ -541,11 +541,28 @@ defmodule Hologram.Compiler.Encoder do
     "(context) => #{encode_ir(ir, context)}"
   end
 
+  defp encode_dynamic_named_function_call(module, function, args, context) do
+    module_js = encode_ir(module, context)
+    arity = Enum.count(args)
+    args_js = encode_as_array(args, context)
+
+    "Interpreter.callNamedFunction(#{module_js}, \"#{function}\", #{arity}, #{args_js}, context)"
+  end
+
   defp encode_named_function_call(%IR.AtomType{value: :erlang}, :andalso, [left, right], context) do
     left_js = encode_closure(left, context)
     right_js = encode_closure(right, context)
 
     "Erlang[\"andalso/2\"](#{left_js}, #{right_js}, context)"
+  end
+
+  defp encode_named_function_call(
+         %IR.AtomType{value: :erlang},
+         :apply,
+         [module, function, args],
+         context
+       ) do
+    encode_dynamic_named_function_call(module, function.value, args.data, context)
   end
 
   defp encode_named_function_call(%IR.AtomType{value: :erlang}, :orelse, [left, right], context) do
@@ -564,11 +581,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   defp encode_named_function_call(module, function, args, context) do
-    module_js = encode_ir(module, context)
-    arity = Enum.count(args)
-    args_js = encode_as_array(args, context)
-
-    "Interpreter.callNamedFunction(#{module_js}, \"#{function}\", #{arity}, #{args_js}, context)"
+    encode_dynamic_named_function_call(module, function, args, context)
   end
 
   defp encode_primitive_type(type, value, as_string)

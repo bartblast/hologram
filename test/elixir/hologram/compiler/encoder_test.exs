@@ -1419,6 +1419,27 @@ defmodule Hologram.Compiler.EncoderTest do
                ~s'Erlang["andalso/2"]((context) => Type.integer(1n), (context) => Type.integer(2n), context)'
     end
 
+    test ":erlang.apply/3 call" do
+      # :erlang.apply(MyModule, :my_fun, [1, 2])
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :apply,
+        args: [
+          %IR.AtomType{value: MyModule},
+          %IR.AtomType{value: :my_fun},
+          %IR.ListType{
+            data: [
+              %IR.IntegerType{value: 1},
+              %IR.IntegerType{value: 2}
+            ]
+          }
+        ]
+      }
+
+      assert encode_ir(ir) ==
+               ~s'Interpreter.callNamedFunction(Type.atom("Elixir.MyModule"), "my_fun", 2, [Type.integer(1n), Type.integer(2n)], context)'
+    end
+
     test ":erlang.orelse/2 call" do
       # :erlang.orelse(1, 2)
       ir = %IR.RemoteFunctionCall{

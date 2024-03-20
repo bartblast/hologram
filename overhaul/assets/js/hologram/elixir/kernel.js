@@ -6,20 +6,6 @@ import Runtime from "../runtime"
 import Type from "../type"
 
 export default class Kernel {
-  static apply() {
-    if (arguments.length === 3) {
-      const module = Runtime.getClassByClassName(arguments[0].className)
-      const functionName = arguments[1].value
-      const args = arguments[2].data
-
-      return module[functionName](...args)
-
-    } else {
-      const message = `Kernel.apply(): arguments = ${JSON.stringify(arguments)}`
-      throw new HologramNotImplementedError(message)
-    }
-  }
-
   // TODO: raise ArgumentError when index is negative or it is out of range
   static elem(tuple, index) {
     return tuple.data[index]
