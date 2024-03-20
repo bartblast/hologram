@@ -2,8 +2,6 @@
 
 import {
   assert,
-  assertBoxedFalse,
-  assertBoxedTrue,
   assertFrozen,
   cleanup,
 } from "../support/commons";
@@ -11,68 +9,6 @@ beforeEach(() => cleanup());
 
 import Map from "../../../assets/js/hologram/elixir/map";
 import Type from "../../../assets/js/hologram/type";
-
-describe("get()", () => {
-  let elems = {};
-  elems[Type.atomKey("a")] = Type.integer(1);
-  elems[Type.atomKey("b")] = Type.integer(2);
-  const map = Type.map(elems);
-
-  it("gets the value for a specific key in map if the given key exists in the given map", () => {
-    const result = Map.get(map, Type.atom("b"));
-    assert.deepStrictEqual(result, Type.integer(2));
-  });
-
-  it("returns boxed nil by default if the given key doesn't exist in the given map", () => {
-    const result = Map.get(map, Type.atom("c"));
-    assert.deepStrictEqual(result, Type.nil());
-  });
-
-  it("it returns the default_value arg if the given key doesn't exist in the given map and the default_value param is specified", () => {
-    const result = Map.get(map, Type.atom("c"), Type.integer(9));
-    assert.deepStrictEqual(result, Type.integer(9));
-  });
-});
-
-describe("has_key$question()", () => {
-  let elems = {};
-  elems[Type.atomKey("a")] = Type.integer(1);
-  elems[Type.atomKey("b")] = Type.integer(2);
-  const map = Type.map(elems);
-
-  it("returns boxed true if the given key exists in the given map", () => {
-    const result = Map.has_key$question(map, Type.atom("b"));
-    assertBoxedTrue(result);
-  });
-
-  it("returns boxed false if the given key doesn't exist in the given map", () => {
-    const result = Map.has_key$question(map, Type.atom("c"));
-    assertBoxedFalse(result);
-  });
-});
-
-describe("keys()", () => {
-  it("returns keys of a non-empty map", () => {
-    let map = Type.map();
-    map = Map.put(map, Type.atom("a"), Type.integer(1));
-    map = Map.put(map, Type.atom("b"), Type.integer(2));
-
-    const result = Map.keys(map);
-    const expected = Type.list([Type.atom("a"), Type.atom("b")]);
-
-    assert.deepStrictEqual(result, expected);
-  });
-
-  it("returns keys of an empty map", () => {
-    const result = Map.keys(Type.map());
-    assert.deepStrictEqual(result, Type.list());
-  });
-
-  it("returns frozen object", () => {
-    const result = Map.keys(Type.map());
-    assertFrozen(result);
-  });
-});
 
 describe("put()", () => {
   let map1, map2, result;

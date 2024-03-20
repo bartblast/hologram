@@ -91,6 +91,17 @@ const Erlang_Maps = {
   // end is_key/2
   // deps: []
 
+  // start keys/1
+  "keys/1": (map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    return Type.list(Object.values(map.data).map(([key, _value]) => key));
+  },
+  // end keys/1
+  // deps: []
+
   // TODO: implement iterators
   // start map/2
   "map/2": (fun, mapOrIterator) => {

@@ -126,6 +126,22 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
   end
 
+  describe "keys/1" do
+    test "empty map" do
+      assert :maps.keys(%{}) == []
+    end
+
+    test "non-empty map" do
+      assert :maps.keys(%{a: 1, b: 2}) == [:a, :b]
+    end
+
+    test "not a map" do
+      assert_raise BadMapError, "expected a map, got: :abc", fn ->
+        :maps.keys(:abc)
+      end
+    end
+  end
+
   describe "map/2" do
     setup do
       [fun: fn _key, value -> value * 10 end]
