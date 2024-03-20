@@ -414,7 +414,8 @@ describe("callNamedFunction()", () => {
   it("local public function call", () => {
     const result = Interpreter.callNamedFunction(
       alias,
-      "my_public_fun/2",
+      "my_public_fun",
+      2,
       args,
       context,
     );
@@ -425,7 +426,8 @@ describe("callNamedFunction()", () => {
   it("remote public function call", () => {
     const result = Interpreter.callNamedFunction(
       alias,
-      "my_public_fun/2",
+      "my_public_fun",
+      2,
       args,
       contextFixture({module: "MyOtherModule"}),
     );
@@ -436,7 +438,8 @@ describe("callNamedFunction()", () => {
   it("local private function call", () => {
     const result = Interpreter.callNamedFunction(
       alias,
-      "my_private_fun/2",
+      "my_private_fun",
+      2,
       args,
       context,
     );
@@ -449,7 +452,8 @@ describe("callNamedFunction()", () => {
       () =>
         Interpreter.callNamedFunction(
           alias,
-          "my_private_fun/2",
+          "my_private_fun",
+          2,
           args,
           contextFixture({module: "MyOtherModule"}),
         ),
@@ -463,7 +467,8 @@ describe("callNamedFunction()", () => {
       () =>
         Interpreter.callNamedFunction(
           alias,
-          "my_undefined_fun/2",
+          "my_undefined_fun",
+          2,
           args,
           context,
         ),
@@ -5621,7 +5626,7 @@ describe("matchOperator()", () => {
       );
 
       const args = [Type.integer(1)];
-      const result = Interpreter.callNamedFunction(alias, "test_a/1", args);
+      const result = Interpreter.callNamedFunction(alias, "test_a", 1, args);
 
       assert.deepStrictEqual(
         result,
@@ -5635,7 +5640,7 @@ describe("matchOperator()", () => {
       );
 
       const args = [Type.integer(1)];
-      const result = Interpreter.callNamedFunction(alias, "test_b/1", args);
+      const result = Interpreter.callNamedFunction(alias, "test_b", 1, args);
 
       assert.deepStrictEqual(
         result,
@@ -5649,7 +5654,7 @@ describe("matchOperator()", () => {
       );
 
       const args = [Type.integer(1)];
-      const result = Interpreter.callNamedFunction(alias, "test_c/1", args);
+      const result = Interpreter.callNamedFunction(alias, "test_c", 1, args);
 
       assert.deepStrictEqual(
         result,
@@ -5666,7 +5671,7 @@ describe("matchOperator()", () => {
       );
 
       const args = [Type.integer(1)];
-      const result = Interpreter.callNamedFunction(alias, "test_d/1", args);
+      const result = Interpreter.callNamedFunction(alias, "test_d", 1, args);
 
       assert.deepStrictEqual(
         result,

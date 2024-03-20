@@ -86,16 +86,19 @@ export default class Interpreter {
     return Interpreter.raiseFunctionClauseError(message);
   }
 
-  static callNamedFunction(module, functionArityStr, args, context) {
+  static callNamedFunction(module, functionName, arity, args, context) {
     const moduleRef = Interpreter.moduleRef(module);
+    const functionArityStr = `${functionName}/${arity}`;
 
     if (
       !moduleRef.__exports__.has(functionArityStr) &&
       !Interpreter.isEqual(module, context.module)
     ) {
-      const message = `function ${Interpreter.inspectModuleJsName(moduleRef.__jsName__)}.${functionArityStr} is undefined or private`;
-
-      Interpreter.raiseError("UndefinedFunctionError", message);
+      Interpreter.raiseUndefinedFunctionError(
+        moduleRef.__exName__,
+        functionName,
+        arity,
+      );
     }
 
     return moduleRef[functionArityStr](...args);
