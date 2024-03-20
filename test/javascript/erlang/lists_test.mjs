@@ -217,6 +217,62 @@ describe("keyfind/3", () => {
   });
 });
 
+describe("keymember/3", () => {
+  const fun = Erlang_Lists["keymember/3"];
+
+  it("returns true if there is a tuple that fulfills the given conditions", () => {
+    const tuple = Type.tuple([
+      Type.integer(5),
+      Type.integer(6),
+      Type.integer(7),
+    ]);
+
+    const tuples = Type.list([
+      Type.tuple([Type.integer(1), Type.integer(2)]),
+      Type.atom("abc"),
+      tuple,
+    ]);
+
+    const result = fun(Type.integer(7), Type.integer(3), tuples);
+
+    assertBoxedTrue(result);
+  });
+
+  it("returns false if there is no tuple that fulfills the given conditions", () => {
+    const result = fun(
+      Type.integer(7),
+      Type.integer(3),
+      Type.list([Type.atom("abc")]),
+    );
+
+    assertBoxedFalse(result);
+  });
+
+  it("raises ArgumentError if the second argument (index) is not an integer", () => {
+    assertBoxedError(
+      () => fun(Type.atom("abc"), Type.atom("xyz"), Type.list([])),
+      "ArgumentError",
+      Interpreter.buildErrorsFoundMsg(2, "not an integer"),
+    );
+  });
+
+  it("raises ArgumentError if the second argument (index) is smaller than 1", () => {
+    assertBoxedError(
+      () => fun(Type.atom("abc"), Type.integer(0), Type.list([])),
+      "ArgumentError",
+      Interpreter.buildErrorsFoundMsg(2, "out of range"),
+    );
+  });
+
+  it("raises ArgumentError if the third argument (tuples) is not a list", () => {
+    assertBoxedError(
+      () => fun(Type.atom("abc"), Type.integer(1), Type.atom("xyz")),
+      "ArgumentError",
+      Interpreter.buildErrorsFoundMsg(3, "not a list"),
+    );
+  });
+});
+
 describe("map/2", () => {
   const fun = Type.anonymousFunction(
     1,

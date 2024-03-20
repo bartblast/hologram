@@ -327,6 +327,7 @@ defmodule Hologram.Compiler do
     |> CallGraph.add_edge({:erlang, :binary_to_existing_atom, 2}, {:erlang, :binary_to_atom, 2})
     |> CallGraph.add_edge({:erlang, :error, 1}, {:erlang, :error, 2})
     |> CallGraph.add_edge({:erlang, :integer_to_binary, 1}, {:erlang, :integer_to_binary, 2})
+    |> CallGraph.add_edge({:lists, :keymember, 3}, {:lists, :keyfind, 3})
     |> CallGraph.add_edge({:maps, :get, 2}, {:maps, :get, 3})
     |> CallGraph.add_edge(
       {:unicode, :characters_to_binary, 1},

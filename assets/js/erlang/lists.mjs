@@ -86,6 +86,15 @@ const Erlang_Lists = {
   // end keyfind/3
   // deps: []
 
+  // start keymember/3
+  "keymember/3": (value, index, tuples) => {
+    return Type.boolean(
+      Type.isTuple(Erlang_Lists["keyfind/3"](value, index, tuples)),
+    );
+  },
+  // end keymember/3
+  // deps: [:lists.keyfind/3]
+
   // start map/2
   "map/2": (fun, list) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {

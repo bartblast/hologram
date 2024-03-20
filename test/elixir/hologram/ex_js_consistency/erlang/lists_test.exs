@@ -93,6 +93,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "keymember/3" do
+    test "returns true if there is a tuple that fulfills the given conditions" do
+      assert :lists.keymember(7, 3, [{1, 2}, :abc, {5, 6, 7}]) == true
+    end
+
+    test "returns false if there is no tuple that fulfills the given conditions" do
+      assert :lists.keymember(7, 3, [:abc]) == false
+    end
+
+    test "raises ArgumentError if the second argument (index) is not an integer" do
+      assert_raise ArgumentError,
+                   build_errors_found_msg(2, "not an integer"),
+                   fn ->
+                     :lists.keymember(:abc, :xyz, [])
+                   end
+    end
+
+    test "raises ArgumentError if the second argument (index) is smaller than 1" do
+      assert_raise ArgumentError,
+                   build_errors_found_msg(2, "out of range"),
+                   fn ->
+                     :lists.keymember(:abc, 0, [])
+                   end
+    end
+
+    test "raises ArgumentError if the third argument (tuples) is not a list" do
+      assert_raise ArgumentError,
+                   build_errors_found_msg(3, "not a list"),
+                   fn ->
+                     :lists.keymember(:abc, 1, :xyz)
+                   end
+    end
+  end
+
   describe "map/2" do
     setup do
       [fun: fn elem -> elem * 10 end]
