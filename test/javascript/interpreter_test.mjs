@@ -367,7 +367,7 @@ describe("callAnonymousFunction()", () => {
 });
 
 describe("callNamedFunction()", () => {
-  let alias, args;
+  let alias, args, context;
 
   beforeEach(() => {
     Interpreter.defineElixirFunction("MyModule", "my_public_fun", 2, "public", [
