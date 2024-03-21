@@ -17,6 +17,7 @@ MFAs for sorting:
   {:erlang, :*, 2},
   {:erlang, :+, 2},
   {:erlang, :++, 2},
+  {:erlang, :-, 1},
   {:erlang, :-, 2},
   {:erlang, :--, 2},
   {:erlang, :/, 2},
@@ -28,6 +29,7 @@ MFAs for sorting:
   {:erlang, :==, 2},
   {:erlang, :>, 2},
   {:erlang, :>=, 2},
+  {:erlang, :-, 1},
 ]
 |> Enum.sort()
 */
@@ -80,6 +82,17 @@ const Erlang = {
     return Type.isProperList(right) ? Type.list(data) : Type.improperList(data);
   },
   // end ++/2
+  // deps: []
+
+  // start -/1
+  "-/1": (number) => {
+    if (!Type.isNumber(number)) {
+      Interpreter.raiseArithmeticError();
+    }
+
+    return number.value == 0 ? number : Type[number.type](-number.value);
+  },
+  // end -/1
   // deps: []
 
   // start -/2

@@ -198,8 +198,4 @@ export default class Interpreter {
       throw new HologramNotImplementedError(message)
     }
   }
-
-  static $unary_negative_operator(boxedValue) {
-    return Utils.freeze({type: boxedValue.type, value: -boxedValue.value})
-  }
 }
