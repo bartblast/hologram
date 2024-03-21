@@ -18,13 +18,6 @@ export default class Interpreter {
     return List.insert_at(tail, 0, head)
   }
 
-  // TODO: raise ArithmeticError if second argument is 0 or 0.0
-  // see: https://github.com/bartblast/hologram/issues/67
-  static $division_operator(left, right) {
-    const result = Type.float(left.value / right.value)
-    return Utils.freeze(result)
-  }
-
   static $dot_operator(left, right) {
     return left.data[Type.encodedKey(right)]
   }

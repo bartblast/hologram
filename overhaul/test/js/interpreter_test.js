@@ -40,18 +40,6 @@ describe("$cons_operator()", () => {
   })
 })
 
-describe("$division_operator()", () => {
-  it("divides 2 numbers", () => {
-    const left = Type.integer(1);
-    const right = Type.float(2.0);
-
-    const result = Interpreter.$division_operator(left, right);
-    const expected = Type.float(0.5);
-
-    assert.deepStrictEqual(result, expected);
-  });
-});
-
 describe("$dot_operator()", () => {
   let left, right, value, result;
 

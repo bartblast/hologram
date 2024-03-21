@@ -103,6 +103,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "//2" do
+    test "divides float by float" do
+      assert 3.0 / 2.0 == 1.5
+    end
+
+    test "divides integer by integer" do
+      assert 3 / 2 == 1.5
+    end
+
+    test "first arg is not a number" do
+      assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
+        build_value(:abc) / 3
+      end
+    end
+
+    test "second arg is not a number" do
+      assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
+        3 / build_value(:abc)
+      end
+    end
+
+    test "second arg is equal to (float) 0.0" do
+      assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
+        1 / build_value(0.0)
+      end
+    end
+
+    test "second arg is equal to (integer) 0" do
+      assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
+        1 / build_value(0)
+      end
+    end
+  end
+
   describe "/=/2" do
     test "atom == atom" do
       assert :erlang."/="(:a, :a) == false

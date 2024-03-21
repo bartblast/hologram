@@ -16,6 +16,7 @@ MFAs for sorting:
   {:erlang, :*, 2},
   {:erlang, :+, 2},
   {:erlang, :-, 2},
+  {:erlang, :/, 2},
   {:erlang, :"/=", 2},
   {:erlang, :<, 2},
   {:erlang, :"=/=", 2},
@@ -81,6 +82,17 @@ const Erlang = {
     return type === "float" ? Type.float(result) : Type.integer(result);
   },
   // end -/2
+  // deps: []
+
+  // start //2
+  "//2": (left, right) => {
+    if (!Type.isNumber(left) || !Type.isNumber(right) || right.value == 0) {
+      Interpreter.raiseArithmeticError();
+    }
+
+    return Type.float(Number(left.value) / Number(right.value));
+  },
+  // end //2
   // deps: []
 
   // start /=/2

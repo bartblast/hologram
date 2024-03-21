@@ -145,6 +145,56 @@ describe("-/2", () => {
   });
 });
 
+describe("//2", () => {
+  const fun = Erlang["//2"];
+
+  it("divides float by float", () => {
+    assert.deepStrictEqual(
+      fun(Type.float(3.0), Type.float(2.0)),
+      Type.float(1.5),
+    );
+  });
+
+  it("divides integer by integer", () => {
+    assert.deepStrictEqual(
+      fun(Type.integer(3), Type.integer(2)),
+      Type.float(1.5),
+    );
+  });
+
+  it("first arg is not a number", () => {
+    assertBoxedError(
+      () => fun(Type.atom("abc"), Type.integer(3)),
+      "ArithmeticError",
+      "bad argument in arithmetic expression",
+    );
+  });
+
+  it("second arg is not a number", () => {
+    assertBoxedError(
+      () => fun(Type.integer(3), Type.atom("abc")),
+      "ArithmeticError",
+      "bad argument in arithmetic expression",
+    );
+  });
+
+  it("second arg is equal to (float) 0.0", () => {
+    assertBoxedError(
+      () => fun(Type.integer(1), Type.float(0.0)),
+      "ArithmeticError",
+      "bad argument in arithmetic expression",
+    );
+  });
+
+  it("second arg is equal to (integer) 0", () => {
+    assertBoxedError(
+      () => fun(Type.integer(1), Type.integer(0)),
+      "ArithmeticError",
+      "bad argument in arithmetic expression",
+    );
+  });
+});
+
 describe("/=/2", () => {
   const fun = Erlang["/=/2"];
 
