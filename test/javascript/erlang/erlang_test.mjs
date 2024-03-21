@@ -145,6 +145,77 @@ describe("-/2", () => {
   });
 });
 
+describe("--/2", () => {
+  const fun = Erlang["--/2"];
+
+  it("there are no matching elems", () => {
+    const left = Type.list([Type.integer(1), Type.integer(2)]);
+    const right = Type.list([Type.integer(3), Type.integer(4)]);
+
+    assert.deepStrictEqual(fun(left, right), left);
+  });
+
+  it("removes the first occurrence of an element in the left list for each element in the right list", () => {
+    const left = Type.list([
+      Type.integer(1),
+      Type.integer(2),
+      Type.integer(3),
+      Type.integer(1),
+      Type.integer(2),
+      Type.integer(3),
+      Type.integer(1),
+    ]);
+
+    const right = Type.list([
+      Type.integer(1),
+      Type.integer(3),
+      Type.integer(3),
+      Type.integer(4),
+    ]);
+
+    const expected = Type.list([
+      Type.integer(2),
+      Type.integer(1),
+      Type.integer(2),
+      Type.integer(1),
+    ]);
+
+    assert.deepStrictEqual(fun(left, right), expected);
+  });
+
+  it("first list is empty", () => {
+    const left = Type.list([]);
+    const right = Type.list([Type.integer(1), Type.integer(2)]);
+
+    assert.deepStrictEqual(fun(left, right), left);
+  });
+
+  it("second list is empty", () => {
+    const left = Type.list([Type.integer(1), Type.integer(2)]);
+    const right = Type.list([]);
+
+    assert.deepStrictEqual(fun(left, right), left);
+  });
+
+  it("first arg is not a list", () => {
+    assertBoxedError(
+      () =>
+        fun(Type.atom("abc"), Type.list([Type.integer(1), Type.integer(2)])),
+      "ArgumentError",
+      "argument error",
+    );
+  });
+
+  it("second arg is not a list", () => {
+    assertBoxedError(
+      () =>
+        fun(Type.list([Type.integer(1), Type.integer(2)]), Type.atom("abc")),
+      "ArgumentError",
+      "argument error",
+    );
+  });
+});
+
 describe("//2", () => {
   const fun = Erlang["//2"];
 

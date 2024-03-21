@@ -5,6 +5,7 @@ import HologramBoxedError from "../errors/boxed_error.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
+import Utils from "../utils.mjs";
 
 // IMPORTANT!
 // If the given ported Erlang function calls other Erlang functions, then list such dependencies in a "deps" comment (see :erlang./=/2 for an example).
@@ -16,6 +17,7 @@ MFAs for sorting:
   {:erlang, :*, 2},
   {:erlang, :+, 2},
   {:erlang, :-, 2},
+  {:erlang, :--, 2},
   {:erlang, :/, 2},
   {:erlang, :"/=", 2},
   {:erlang, :<, 2},
@@ -25,6 +27,7 @@ MFAs for sorting:
   {:erlang, :==, 2},
   {:erlang, :>, 2},
   {:erlang, :>=, 2},
+  {:erlang, :--, 2}
 ]
 |> Enum.sort()
 */
@@ -82,6 +85,31 @@ const Erlang = {
     return type === "float" ? Type.float(result) : Type.integer(result);
   },
   // end -/2
+  // deps: []
+
+  // TODO: optimize
+  // This implementation is slow, i.e. O(m * n),
+  // where m = Enum.count(left), n = Enum.count(right).
+  // start --/2
+  "--/2": (left, right) => {
+    if (!Type.isList(left) || !Type.isList(right)) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    const result = Utils.cloneDeep(left.data);
+
+    for (const rightElem of right.data) {
+      for (let i = 0; i < result.length; ++i) {
+        if (Interpreter.isStrictlyEqual(rightElem, result[i])) {
+          result.splice(i, 1);
+          break;
+        }
+      }
+    }
+
+    return Type.list(result);
+  },
+  // end --/2
   // deps: []
 
   // start //2

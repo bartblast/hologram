@@ -103,6 +103,36 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "--/2" do
+    test "there are no matching elems" do
+      assert [1, 2] -- [3, 4] == [1, 2]
+    end
+
+    test "removes the first occurrence of an element in the left list for each element in the right list" do
+      assert [1, 2, 3, 1, 2, 3, 1] -- [1, 3, 3, 4] == [2, 1, 2, 1]
+    end
+
+    test "first list is empty" do
+      assert [] -- [1, 2] == []
+    end
+
+    test "second list is empty" do
+      assert [1, 2] -- [] == [1, 2]
+    end
+
+    test "first arg is not a list" do
+      assert_raise ArgumentError, "argument error", fn ->
+        build_value(:abc) -- [1, 2]
+      end
+    end
+
+    test "second arg is not a list" do
+      assert_raise ArgumentError, "argument error", fn ->
+        [1, 2] -- build_value(:abc)
+      end
+    end
+  end
+
   describe "//2" do
     test "divides float by float" do
       assert 3.0 / 2.0 == 1.5
