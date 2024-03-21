@@ -26,8 +26,7 @@ MFAs for sorting:
   {:erlang, :"=<", 2},
   {:erlang, :==, 2},
   {:erlang, :>, 2},
-  {:erlang, :>=, 2},
-  {:erlang, :--, 2}
+  {:erlang, :>=, 2}
 ]
 |> Enum.sort()
 */
