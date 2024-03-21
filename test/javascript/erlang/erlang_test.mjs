@@ -19,6 +19,7 @@ before(() => linkModules());
 after(() => unlinkModules());
 
 const atomA = Type.atom("a");
+const atomAbc = Type.atom("abc");
 const atomB = Type.atom("b");
 const float1 = Type.float(1.0);
 const float2 = Type.float(2.0);
@@ -105,6 +106,97 @@ describe("+/2", () => {
       () => fun(integer1, atomA),
       "ArithmeticError",
       "bad argument in arithmetic expression",
+    );
+  });
+});
+
+describe("++/2", () => {
+  const fun = Erlang["++/2"];
+
+  it("concatenates a proper non-empty list and another proper non-empty list", () => {
+    const left = Type.list([Type.integer(1), Type.integer(2)]);
+    const right = Type.list([Type.integer(3), Type.integer(4)]);
+
+    const result = fun(left, right);
+
+    const expected = Type.list([
+      Type.integer(1),
+      Type.integer(2),
+      Type.integer(3),
+      Type.integer(4),
+    ]);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("concatenates a proper non-empty list and an improper list", () => {
+    const left = Type.list([Type.integer(1), Type.integer(2)]);
+    const right = Type.improperList([Type.integer(3), Type.integer(4)]);
+
+    const result = fun(left, right);
+
+    const expected = Type.improperList([
+      Type.integer(1),
+      Type.integer(2),
+      Type.integer(3),
+      Type.integer(4),
+    ]);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("concatenates a proper non-empty list and a term that is not a list", () => {
+    const left = Type.list([Type.integer(1), Type.integer(2)]);
+    const right = Type.integer(3);
+
+    const result = fun(left, right);
+
+    const expected = Type.improperList([
+      Type.integer(1),
+      Type.integer(2),
+      Type.integer(3),
+    ]);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("first list is empty", () => {
+    const left = Type.list([]);
+    const right = Type.list([Type.integer(1), Type.integer(2)]);
+
+    const result = fun(left, right);
+    const expected = Type.list([Type.integer(1), Type.integer(2)]);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("second list is empty", () => {
+    const left = Type.list([Type.integer(1), Type.integer(2)]);
+    const right = Type.list([]);
+
+    const result = fun(left, right);
+    const expected = Type.list([Type.integer(1), Type.integer(2)]);
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("raises ArgumentError if the first argument is not a list", () => {
+    assertBoxedError(
+      () => fun(atomAbc, Type.list([])),
+      "ArgumentError",
+      "argument error",
+    );
+  });
+
+  it("raises ArgumentError if the first argument is an improper list", () => {
+    assertBoxedError(
+      () =>
+        fun(
+          Type.improperList([Type.integer(1), Type.integer(2)]),
+          Type.list([]),
+        ),
+      "ArgumentError",
+      "argument error",
     );
   });
 });

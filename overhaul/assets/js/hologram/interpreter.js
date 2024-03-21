@@ -145,32 +145,6 @@ export default class Interpreter {
     return Type.boolean(left.value < right.value)
   }
 
-  static $list_concatenation_operator(left, right) {
-    const result = Type.list(left.data.concat(right.data))
-    return Utils.freeze(result)
-  }
-
-  static $list_subtraction_operator(left, right) {
-    const rightElems = Utils.clone(right.data)
-    const resultElems = []
-
-    for (let leftElem of left.data) {
-      let isLeftElemPreserved = true
-      let rightElemIndex = rightElems.findIndex(rightElem => Utils.isEqual(rightElem, leftElem))
-
-      if (rightElemIndex != -1) {
-        isLeftElemPreserved = false
-        rightElems.splice(rightElemIndex, 1)
-      }
-
-      if (isLeftElemPreserved) {
-        resultElems.push(leftElem)
-      }
-    }
-
-    return Type.list(resultElems)
-  }
-
   static $membership_operator(left, right) {
     return Enum.member$question(right, left)
   }

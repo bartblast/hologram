@@ -71,6 +71,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "++/2" do
+    test "concatenates a proper non-empty list and another proper non-empty list" do
+      assert :erlang.++([1, 2], [3, 4]) == [1, 2, 3, 4]
+    end
+
+    test "concatenates a proper non-empty list and an improper list" do
+      assert :erlang.++([1, 2], [3 | 4]) == [1, 2, 3 | 4]
+    end
+
+    test "concatenates a proper non-empty list and a term that is not a list" do
+      assert :erlang.++([1, 2], 3) == [1, 2 | 3]
+    end
+
+    test "first list is empty" do
+      assert :erlang.++([], [1, 2]) == [1, 2]
+    end
+
+    test "second list is empty" do
+      assert :erlang.++([1, 2], []) == [1, 2]
+    end
+
+    test "raises ArgumentError if the first argument is not a list" do
+      assert_raise ArgumentError, "argument error", fn ->
+        :erlang.++(build_value(:abc), [])
+      end
+    end
+
+    test "raises ArgumentError if the first argument is an improper list" do
+      assert_raise ArgumentError, "argument error", fn ->
+        :erlang.++(build_value([1 | 2]), [])
+      end
+    end
+  end
+
   describe "-/2" do
     test "float - float" do
       assert :erlang.-(3.0, 2.0) === 1.0
