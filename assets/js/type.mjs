@@ -212,8 +212,8 @@ export default class Type {
     return boxed.type === "port";
   }
 
-  static isProperList(boxedValue) {
-    return Type.isList(boxedValue) && boxedValue.isProper === true;
+  static isProperList(boxed) {
+    return Type.isList(boxed) && boxed.isProper === true;
   }
 
   static isReference(boxed) {
