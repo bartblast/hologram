@@ -5774,22 +5774,12 @@ it("raiseArgumentError()", () => {
   );
 });
 
-describe("raiseArithmeticError()", () => {
-  it("default message", () => {
-    assertBoxedError(
-      () => Interpreter.raiseArithmeticError(),
-      "ArithmeticError",
-      "bad argument in arithmetic expression",
-    );
-  });
-
-  it("custom message", () => {
-    assertBoxedError(
-      () => Interpreter.raiseArithmeticError("custom message"),
-      "ArithmeticError",
-      "custom message",
-    );
-  });
+it("raiseArithmeticError()", () => {
+  assertBoxedError(
+    () => Interpreter.raiseArithmeticError(),
+    "ArithmeticError",
+    "bad argument in arithmetic expression",
+  );
 });
 
 it("raiseBadMapError()", () => {

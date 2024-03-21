@@ -541,10 +541,10 @@ export default class Interpreter {
     return Interpreter.raiseError("ArgumentError", message);
   }
 
-  static raiseArithmeticError(message = null) {
+  static raiseArithmeticError() {
     return Interpreter.raiseError(
       "ArithmeticError",
-      message || "bad argument in arithmetic expression",
+      "bad argument in arithmetic expression",
     );
   }
 
