@@ -536,6 +536,17 @@ const Erlang = {
   // end map_size/1
   // deps: []
 
+  // start not/1
+  "not/1": (term) => {
+    if (!Type.isBoolean(term)) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    return Type.boolean(term.value == "true" ? false : true);
+  },
+  // end not/1
+  // deps: []
+
   // start orelse/2
   "orelse/2": (leftFun, rightFun, context) => {
     const left = leftFun(context);

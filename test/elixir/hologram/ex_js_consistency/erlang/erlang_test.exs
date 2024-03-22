@@ -1549,6 +1549,22 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "not/1" do
+    test "true" do
+      assert :erlang.not(true) == false
+    end
+
+    test "false" do
+      assert :erlang.not(false) == true
+    end
+
+    test "not boolean" do
+      assert_raise ArgumentError, "argument error", fn ->
+        :erlang.not(build_value("abc"))
+      end
+    end
+  end
+
   describe "orelse/2" do
     test "returns true if the first argument is true" do
       assert :erlang.orelse(true, :abc) == true

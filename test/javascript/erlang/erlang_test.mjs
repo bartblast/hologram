@@ -1925,6 +1925,22 @@ describe("map_size/1", () => {
   });
 });
 
+describe("not/1", () => {
+  const fun = Erlang["not/1"];
+
+  it("true", () => {
+    assert.deepStrictEqual(fun(Type.boolean(true)), Type.boolean(false));
+  });
+
+  it("false", () => {
+    assert.deepStrictEqual(fun(Type.boolean(false)), Type.boolean(true));
+  });
+
+  it("not boolean", () => {
+    assertBoxedError(() => fun(atomAbc), "ArgumentError", "argument error");
+  });
+});
+
 describe("orelse/2", () => {
   it("returns true if the first argument is true", () => {
     const context = contextFixture({
