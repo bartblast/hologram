@@ -1236,7 +1236,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   describe "bit_size/1" do
     test "bitstring" do
-      assert bit_size(<<2::7>>) == 7
+      assert :erlang.bit_size(<<2::7>>) == 7
     end
 
     test "not bitstring" do
@@ -1245,7 +1245,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    fn ->
                      :abc
                      |> build_value()
-                     |> bit_size()
+                     |> :erlang.bit_size()
                    end
     end
   end
