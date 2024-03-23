@@ -4,10 +4,11 @@ defmodule Hologram.Component do
   alias Hologram.Operation
   alias Hologram.Server
 
-  defstruct emitted_context: %{}, next_command: nil, state: %{}
+  defstruct emitted_context: %{}, next_action: nil, next_command: nil, state: %{}
 
   @type t :: %__MODULE__{
           emitted_context: %{atom => any} | %{{module, atom} => any},
+          next_action: Operation.t() | nil,
           next_command: Operation.t() | nil,
           state: %{atom => any}
         }
