@@ -7,33 +7,33 @@ updates:
     schedule:
       interval: "weekly"
     groups:
-      all:
+      lib-elixir:
         patterns:
-          - "*"      
+          - "*"
+          
+  - package-ecosystem: "npm"
+    directory: "/assets"
+    schedule:
+      interval: "weekly"
+    groups:
+      lib-javascript:
+        patterns:
+          - "*"
 
   - package-ecosystem: "mix"
     directory: "/test/features"
     schedule:
       interval: "weekly"
     groups:
-      all:
+      feature-tests:
         patterns:
           - "*"
-      
-  - package-ecosystem: "npm"
-    directory: "/assets"
-    schedule:
-      interval: "weekly"
-    groups:
-      all:
-        patterns:
-          - "*"            
 
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
     groups:
-      all:
+      github-actions:
         patterns:
-          - "*"      
+          - "*"
