@@ -1,7 +1,6 @@
 version: 2
 
 updates:
-
   - package-ecosystem: "mix"
     directory: "/"
     schedule:
@@ -10,7 +9,7 @@ updates:
       lib-elixir:
         patterns:
           - "*"
-          
+
   - package-ecosystem: "npm"
     directory: "/assets"
     schedule:

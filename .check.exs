@@ -12,10 +12,10 @@
     {:ex_doc, env: %{"MIX_ENV" => "test"}},
     {:ex_unit, enabled: true},
     {:formatter, env: %{"MIX_ENV" => "test"}},
-    {:formatter_js,
-     "assets/node_modules/.bin/prettier 'assets/*.js' 'assets/*.json' 'assets/js/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern"},
     {:hex_audit, "mix hex.audit"},
     {:mix_audit, env: %{"MIX_ENV" => "test"}},
+    {:prettier,
+     "assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.js' 'assets/*.json' 'assets/js/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern"},
     {:sobelow, "mix sobelow --config"},
     {:test_js, "mix test.js"},
 

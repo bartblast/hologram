@@ -5,9 +5,9 @@ name: CI
 # branch.
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
 
 # Sets the ENV `MIX_ENV` to `test` for running tests
 env:
@@ -24,149 +24,148 @@ jobs:
       # Specify the OTP and Elixir versions to use when building
       # and running the workflow steps.
       matrix:
-        otp: ['26.2.2']
-        elixir: ['1.16.1-otp-26']
+        otp: ["26.2.2"]
+        elixir: ["1.16.1-otp-26"]
     steps:
+      # Step: Setup Elixir + Erlang image as the base.
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
 
-    # Step: Setup Elixir + Erlang image as the base.
-    - name: Set up Elixir
-      uses: erlef/setup-beam@v1
-      with:
-        otp-version: ${{ matrix.otp }}
-        elixir-version: ${{ matrix.elixir }}
+      # Step: Checkout the code.
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    # Step: Checkout the code.
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    # Step: Setup Node.js using the version specified in .tool-versions file.
-    - name: Set up Node.JS
-      uses: actions/setup-node@v4
-      with:
-        node-version-file: .tool-versions    
-      
-    ### LIB CHECKS ###
+      # Step: Setup Node.js using the version specified in .tool-versions file.
+      - name: Set up Node.JS
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
 
-    # Step: Define how to cache the lib Elixir dependencies.
-    - name: Cache lib Elixir deps
-      id: cache-lib-elixir-deps
-      uses: actions/cache@v4
-      env:
-        cache-name: cache-lib-elixir-deps
-      with:
-        path: deps
-        key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('mix.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-mix-${{ env.cache-name }}-          
+      ### LIB CHECKS ###
 
-    # Step: Define how to cache the lib Elixir build.
-    - name: Cache lib Elixir build
-      id: cache-lib-elixir-build
-      uses: actions/cache@v4
-      env:
-        cache-name: cache-lib-elixir-build
-      with:
-        path: _build
-        key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('mix.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-mix-${{ env.cache-name }}-
-          ${{ runner.os }}-mix-           
+      # Step: Define how to cache the lib Elixir dependencies.
+      - name: Cache lib Elixir deps
+        id: cache-lib-elixir-deps
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-lib-elixir-deps
+        with:
+          path: deps
+          key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-${{ env.cache-name }}-
 
-    # Step: Download lib Elixir dependencies.
-    # If unchanged, uses the cached version.
-    - name: Download lib Elixir deps
-      run: mix deps.get
+      # Step: Define how to cache the lib Elixir build.
+      - name: Cache lib Elixir build
+        id: cache-lib-elixir-build
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-lib-elixir-build
+        with:
+          path: _build
+          key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-${{ env.cache-name }}-
+            ${{ runner.os }}-mix-
 
-    # Step: Download lib JavaScript dependencies.
-    - name: Download lib JavaScript deps
-      run: cd assets && npm install
-      
-    # Step: Compile the lib project treating any warnings as errors.
-    - name: Check lib project compiles without warnings
-      run: mix compile --all-warnings --warnings-as-errors      
+      # Step: Download lib Elixir dependencies.
+      # If unchanged, uses the cached version.
+      - name: Download lib Elixir deps
+        run: mix deps.get
 
-    # Step: Check if lib mix.lock has any unused dependencies.
-    - name: Check lib unused Elixir deps
-      run: mix deps.unlock --check-unused
-      
-    # Step: Check if there are any lib Elixir dependencies which have been marked as retired.
-    - name: Check lib retired Elixir deps
-      run: mix hex.audit      
+      # Step: Download lib JavaScript dependencies.
+      - name: Download lib JavaScript deps
+        run: cd assets && npm install
 
-    # Step: Check if there are any security vulnerabilities in the lib Elixir dependencies.
-    - name: Check lib security vulnerabilities in Elixir deps
-      run: mix deps.audit
+      # Step: Compile the lib project treating any warnings as errors.
+      - name: Check lib project compiles without warnings
+        run: mix compile --all-warnings --warnings-as-errors
 
-    # Step: Check that the lib Elixir code has already been formatted.
-    - name: Check lib Elixir code formatted
-      run: mix format --check-formatted
+      # Step: Check if lib mix.lock has any unused dependencies.
+      - name: Check lib unused Elixir deps
+        run: mix deps.unlock --check-unused
 
-    # Step: Check that the lib JavaScript & JSON code has already been formatted.
-    - name: Check lib JavaScript & JSON code formatted
-      run: assets/node_modules/.bin/prettier 'assets/*.js' 'assets/*.json' 'assets/js/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern
+      # Step: Check if there are any lib Elixir dependencies which have been marked as retired.
+      - name: Check lib retired Elixir deps
+        run: mix hex.audit
 
-    # Step: Check that lib doc and spec coverage are above thresholds (with Doctor).
-    - name: Check lib doc and spec coverage
-      run: mix doctor
+      # Step: Check if there are any security vulnerabilities in the lib Elixir dependencies.
+      - name: Check lib security vulnerabilities in Elixir deps
+        run: mix deps.audit
 
-    # Step: Run lib Elixir static code analysis with Credo.
-    - name: Run lib Elixir static code analysis with Credo
-      run: mix credo --strict
+      # Step: Check that the lib Elixir code has already been formatted.
+      - name: Check lib Elixir code formatted
+        run: mix format --check-formatted
 
-    # Step: Run lib Elixir security-focused analysis with Sobelow.
-    - name: Run lib Elixir security-focused analysis with Sobelow
-      run: mix sobelow --config
+      # Step: Check that the lib JavaScript, JSON & YAML code has already been formatted.
+      - name: Check lib JavaScript, JSON & YAML code formatted
+        run: assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.js' 'assets/*.json' 'assets/js/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern
 
-    # Step: Restore lib Dialyzer PLT cache.
-    # Cache key is based on Erlang/Elixir version and the mix.lock hash.
-    - name: Restore lib Dialyzer PLT cache
-      id: restore-lib-dialyzer-plt-cache
-      uses: actions/cache/restore@v4
-      with:
-        key: |
-          dialyzer-plt-lib-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('mix.lock') }}
-        restore-keys: |
-          dialyzer-plt-lib-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-
-        path: |
-          priv/plts
+      # Step: Check that lib doc and spec coverage are above thresholds (with Doctor).
+      - name: Check lib doc and spec coverage
+        run: mix doctor
 
-    # Step: Create lib Dialyzer PLTs if no cache was found.
-    - name: Create lib Dialyzer PLTs
-      if: steps.restore-lib-dialyzer-plt-cache.outputs.cache-hit != 'true'
-      run: mix dialyzer --plt
-      
-    # Step: Save lib Dialyzer PLT cache.
-    # By default, the GitHub Cache action will only save the cache if all steps in the job succeed,
-    # so we separate the cache restore and save steps in case running dialyzer fails.
-    - name: Save lib Dialyzer PLT cache
-      id: save-lib-dialyzer-plt-cache
-      uses: actions/cache/save@v4
-      if: steps.restore-lib-dialyzer-plt-cache.outputs.cache-hit != 'true'
-      with:
-        key: |
-          dialyzer-plt-lib-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('mix.lock') }}
-        path: |
-          priv/plts      
+      # Step: Run lib Elixir static code analysis with Credo.
+      - name: Run lib Elixir static code analysis with Credo
+        run: mix credo --strict
 
-    # Step: Run lib Elixir static code analysis with Dialyzer.
-    - name: Run lib Elixir static code analysis with Dialyzer
-      run: mix dialyzer --format github
+      # Step: Run lib Elixir security-focused analysis with Sobelow.
+      - name: Run lib Elixir security-focused analysis with Sobelow
+        run: mix sobelow --config
 
-    # Step: Check that all lib test scripts have valid file names.
-    - name: Check lib test file names
-      run: mix holo.test.check_file_names test/elixir/hologram
+      # Step: Restore lib Dialyzer PLT cache.
+      # Cache key is based on Erlang/Elixir version and the mix.lock hash.
+      - name: Restore lib Dialyzer PLT cache
+        id: restore-lib-dialyzer-plt-cache
+        uses: actions/cache/restore@v4
+        with:
+          key: |
+            dialyzer-plt-lib-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            dialyzer-plt-lib-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-
+          path: |
+            priv/plts
 
-    # Step: Run lib JavaScript static code analysis with ESLint.
-    - name: Run lib JavaScript static code analysis with ESLint
-      run: mix eslint
+      # Step: Create lib Dialyzer PLTs if no cache was found.
+      - name: Create lib Dialyzer PLTs
+        if: steps.restore-lib-dialyzer-plt-cache.outputs.cache-hit != 'true'
+        run: mix dialyzer --plt
 
-    # Step: Execute lib Elixir unit tests.
-    - name: Run lib Elixir unit tests
-      run: mix test --warnings-as-errors
+      # Step: Save lib Dialyzer PLT cache.
+      # By default, the GitHub Cache action will only save the cache if all steps in the job succeed,
+      # so we separate the cache restore and save steps in case running dialyzer fails.
+      - name: Save lib Dialyzer PLT cache
+        id: save-lib-dialyzer-plt-cache
+        uses: actions/cache/save@v4
+        if: steps.restore-lib-dialyzer-plt-cache.outputs.cache-hit != 'true'
+        with:
+          key: |
+            dialyzer-plt-lib-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('mix.lock') }}
+          path: |
+            priv/plts
 
-    # Step: Execute lib JavaScript unit tests.
-    - name: Run lib JavaScript unit tests
-      run: mix test.js
+      # Step: Run lib Elixir static code analysis with Dialyzer.
+      - name: Run lib Elixir static code analysis with Dialyzer
+        run: mix dialyzer --format github
+
+      # Step: Check that all lib test scripts have valid file names.
+      - name: Check lib test file names
+        run: mix holo.test.check_file_names test/elixir/hologram
+
+      # Step: Run lib JavaScript static code analysis with ESLint.
+      - name: Run lib JavaScript static code analysis with ESLint
+        run: mix eslint
+
+      # Step: Execute lib Elixir unit tests.
+      - name: Run lib Elixir unit tests
+        run: mix test --warnings-as-errors
+
+      # Step: Execute lib JavaScript unit tests.
+      - name: Run lib JavaScript unit tests
+        run: mix test.js
 
   feature_tests:
     runs-on: ubuntu-latest
@@ -178,118 +177,117 @@ jobs:
       # Specify the OTP and Elixir versions to use when building
       # and running the workflow steps.
       matrix:
-        otp: ['26.1.2']
-        elixir: ['1.15.7-otp-26']
+        otp: ["26.1.2"]
+        elixir: ["1.15.7-otp-26"]
     steps:
+      # Step: Setup Elixir + Erlang image as the base.
+      - name: Set up Elixir
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ matrix.otp }}
+          elixir-version: ${{ matrix.elixir }}
 
-    # Step: Setup Elixir + Erlang image as the base.
-    - name: Set up Elixir
-      uses: erlef/setup-beam@v1
-      with:
-        otp-version: ${{ matrix.otp }}
-        elixir-version: ${{ matrix.elixir }}
+      # Step: Checkout the code.
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    # Step: Checkout the code.
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    # Step: Setup Node.js using the version specified in .tool-versions file.
-    - name: Set up Node.JS
-      uses: actions/setup-node@v4
-      with:
-        node-version-file: .tool-versions    
-      
-    ### FEATURE TESTS APP CHECKS ###  
-      
-    # Step: Define how to cache the feature tests app Elixir dependencies.
-    - name: Cache feature tests app Elixir deps
-      id: cache-feature-tests-app-elixir-deps
-      uses: actions/cache@v4
-      env:
-        cache-name: cache-feature-tests-app-elixir-deps
-      with:
-        path: test/features/deps
-        key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('test/features/mix.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-mix-${{ env.cache-name }}-
-          
-    # Step: Define how to cache the feature tests app Elixir build.
-    - name: Cache feature tests app Elixir build
-      id: cache-feature-tests-app-elixir-build
-      uses: actions/cache@v4
-      env:
-        cache-name: cache-feature-tests-app-elixir-build
-      with:
-        path: test/features/_build
-        key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('test/features/mix.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-mix-${{ env.cache-name }}-
-          ${{ runner.os }}-mix-
-      
-    # Step: Download feature tests app Elixir dependencies.
-    # If unchanged, uses the cached version.
-    - name: Download feature tests app Elixir deps
-      run: mix deps.get
-      
-    # Step: Compile the feature tests app project treating any warnings as errors.
-    - name: Check feature tests app project compiles without warnings
-      run: mix compile --all-warnings --warnings-as-errors      
-      
-    # Step: Check if feature tests app mix.lock has any unused dependencies.
-    - name: Check feature tests app unused Elixir deps
-      run: mix deps.unlock --check-unused
-      
-    # Step: Check if there are any feature tests app Elixir dependencies which have been marked as retired.
-    - name: Check feature tests app retired Elixir deps
-      run: mix hex.audit
-      
-    # Step: Check that the feature tests app Elixir code has already been formatted.
-    - name: Check feature tests app Elixir code formatted
-      run: mix format --check-formatted
-      
-    # Step: Run feature tests app Elixir static code analysis with Credo.
-    - name: Run feature tests app Elixir static code analysis with Credo
-      run: mix credo --strict
-      
-    # Step: Restore feature tests app Dialyzer PLT cache.
-    # Cache key is based on Erlang/Elixir version and the mix.lock hash.
-    - name: Restore feature tests app Dialyzer PLT cache
-      id: restore-feature-tests-app-dialyzer-plt-cache
-      uses: actions/cache/restore@v4
-      with:
-        key: |
-          dialyzer-plt-feature-tests-app-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('test/features/mix.lock') }}
-        restore-keys: |
-          dialyzer-plt-feature-tests-app--${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-
-        path: |
-          test/features/priv/plts
-          
-    # Step: Create feature tests app Dialyzer PLTs if no cache was found.
-    - name: Create feature tests app Dialyzer PLTs
-      if: steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true'
-      run: mix dialyzer --plt
-      
-    # Step: Save feature tests app Dialyzer PLT cache.
-    # By default, the GitHub Cache action will only save the cache if all steps in the job succeed,
-    # so we separate the cache restore and save steps in case running dialyzer fails.
-    - name: Save feature tests app Dialyzer PLT cache
-      id: save-feature-tests-app-dialyzer-plt-cache
-      uses: actions/cache/save@v4
-      if: steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true'
-      with:
-        key: |
-          dialyzer-plt-feature-tests-app-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('test/features/mix.lock') }}
-        path: |
-          test/features/priv/plts
-          
-    # Step: Run feature tests app Elixir static code analysis with Dialyzer.
-    - name: Run feature tests app Elixir static code analysis with Dialyzer
-      run: mix dialyzer --format github
-      
-    # Step: Check that all feature tests app test scripts have valid file names.
-    - name: Check feature tests app test file names
-      run: mix holo.test.check_file_names test/hologram_feature_tests test/hologram_feature_tests_web
-      
-    # Step: Execute feature tests app Elixir unit tests.
-    - name: Run feature tests app Elixir unit tests
-      run: mix test --warnings-as-errors
+      # Step: Setup Node.js using the version specified in .tool-versions file.
+      - name: Set up Node.JS
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .tool-versions
+
+      ### FEATURE TESTS APP CHECKS ###
+
+      # Step: Define how to cache the feature tests app Elixir dependencies.
+      - name: Cache feature tests app Elixir deps
+        id: cache-feature-tests-app-elixir-deps
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-feature-tests-app-elixir-deps
+        with:
+          path: test/features/deps
+          key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('test/features/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-${{ env.cache-name }}-
+
+      # Step: Define how to cache the feature tests app Elixir build.
+      - name: Cache feature tests app Elixir build
+        id: cache-feature-tests-app-elixir-build
+        uses: actions/cache@v4
+        env:
+          cache-name: cache-feature-tests-app-elixir-build
+        with:
+          path: test/features/_build
+          key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('test/features/mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-mix-${{ env.cache-name }}-
+            ${{ runner.os }}-mix-
+
+      # Step: Download feature tests app Elixir dependencies.
+      # If unchanged, uses the cached version.
+      - name: Download feature tests app Elixir deps
+        run: mix deps.get
+
+      # Step: Compile the feature tests app project treating any warnings as errors.
+      - name: Check feature tests app project compiles without warnings
+        run: mix compile --all-warnings --warnings-as-errors
+
+      # Step: Check if feature tests app mix.lock has any unused dependencies.
+      - name: Check feature tests app unused Elixir deps
+        run: mix deps.unlock --check-unused
+
+      # Step: Check if there are any feature tests app Elixir dependencies which have been marked as retired.
+      - name: Check feature tests app retired Elixir deps
+        run: mix hex.audit
+
+      # Step: Check that the feature tests app Elixir code has already been formatted.
+      - name: Check feature tests app Elixir code formatted
+        run: mix format --check-formatted
+
+      # Step: Run feature tests app Elixir static code analysis with Credo.
+      - name: Run feature tests app Elixir static code analysis with Credo
+        run: mix credo --strict
+
+      # Step: Restore feature tests app Dialyzer PLT cache.
+      # Cache key is based on Erlang/Elixir version and the mix.lock hash.
+      - name: Restore feature tests app Dialyzer PLT cache
+        id: restore-feature-tests-app-dialyzer-plt-cache
+        uses: actions/cache/restore@v4
+        with:
+          key: |
+            dialyzer-plt-feature-tests-app-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('test/features/mix.lock') }}
+          restore-keys: |
+            dialyzer-plt-feature-tests-app--${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-
+          path: |
+            test/features/priv/plts
+
+      # Step: Create feature tests app Dialyzer PLTs if no cache was found.
+      - name: Create feature tests app Dialyzer PLTs
+        if: steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true'
+        run: mix dialyzer --plt
+
+      # Step: Save feature tests app Dialyzer PLT cache.
+      # By default, the GitHub Cache action will only save the cache if all steps in the job succeed,
+      # so we separate the cache restore and save steps in case running dialyzer fails.
+      - name: Save feature tests app Dialyzer PLT cache
+        id: save-feature-tests-app-dialyzer-plt-cache
+        uses: actions/cache/save@v4
+        if: steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true'
+        with:
+          key: |
+            dialyzer-plt-feature-tests-app-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('test/features/mix.lock') }}
+          path: |
+            test/features/priv/plts
+
+      # Step: Run feature tests app Elixir static code analysis with Dialyzer.
+      - name: Run feature tests app Elixir static code analysis with Dialyzer
+        run: mix dialyzer --format github
+
+      # Step: Check that all feature tests app test scripts have valid file names.
+      - name: Check feature tests app test file names
+        run: mix holo.test.check_file_names test/hologram_feature_tests test/hologram_feature_tests_web
+
+      # Step: Execute feature tests app Elixir unit tests.
+      - name: Run feature tests app Elixir unit tests
+        run: mix test --warnings-as-errors

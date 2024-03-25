@@ -6,9 +6,9 @@ defmodule Hologram.MixProject do
     [
       eslint:
         "cmd assets/node_modules/.bin/eslint --color --config assets/.eslintrc.js --ext .mjs assets/js/** test/javascript/**",
-      f: ["format", "format.js", "cmd cd test/features && mix format"],
-      "format.js":
-        "cmd assets/node_modules/.bin/prettier 'assets/*.js' 'assets/*.json' 'assets/js/**' 'test/javascript/**' --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern --write",
+      f: ["format", "prettier", "cmd cd test/features && mix format"],
+      prettier:
+        "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.js' 'assets/*.json' 'assets/js/**' 'test/javascript/**' --config 'assets/.prettierrc.json'  --write",
       t: ["test", "test.js"],
       "test.js": [&test_js/1]
     ]
