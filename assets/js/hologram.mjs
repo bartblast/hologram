@@ -31,6 +31,25 @@ export default class Hologram {
   static #pageModule = null;
   static #pageParams = null;
 
+  static run() {
+    Hologram.#onReady(() => {
+      if (!Hologram.#isInitiated) {
+        Hologram.#init();
+      }
+
+      try {
+        Hologram.#mountPage();
+      } catch (error) {
+        if (error instanceof HologramBoxedError) {
+          error.name = Interpreter.getErrorType(error);
+          error.message = Interpreter.getErrorMessage(error);
+        }
+
+        throw error;
+      }
+    });
+  }
+
   static #defineManuallyPortedFunctions() {
     window.Elixir_Code = {};
     window.Elixir_Code["ensure_compiled/1"] = Elixir_Code["ensure_compiled/1"];
@@ -77,25 +96,6 @@ export default class Hologram {
         callback();
       });
     }
-  }
-
-  static run() {
-    Hologram.#onReady(() => {
-      if (!Hologram.#isInitiated) {
-        Hologram.#init();
-      }
-
-      try {
-        Hologram.#mountPage();
-      } catch (error) {
-        if (error instanceof HologramBoxedError) {
-          error.name = Interpreter.getErrorType(error);
-          error.message = Interpreter.getErrorMessage(error);
-        }
-
-        throw error;
-      }
-    });
   }
 
   static #loadMountData() {
