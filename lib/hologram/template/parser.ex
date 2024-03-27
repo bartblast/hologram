@@ -681,7 +681,7 @@ defmodule Hologram.Template.Parser do
     add_processed_tag(context, new_tag)
   end
 
-  defp add_block_end_tag_tag(context, block_name) do
+  defp add_block_end_tag(context, block_name) do
     new_tag = {:block_end, block_name}
     add_processed_tag(context, new_tag)
   end
