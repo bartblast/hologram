@@ -681,7 +681,7 @@ defmodule Hologram.Template.Parser do
     add_processed_tag(context, new_tag)
   end
 
-  defp add_block_end(context, block_name) do
+  defp add_block_end_tag_tag(context, block_name) do
     new_tag = {:block_end, block_name}
     add_processed_tag(context, new_tag)
   end
@@ -794,7 +794,7 @@ defmodule Hologram.Template.Parser do
     |> maybe_add_text_tag()
     |> add_processed_token(token)
     |> set_prev_status(:text)
-    |> add_block_end(block_name)
+    |> add_block_end_tag(block_name)
     |> set_prev_status(:block_end)
     |> reset_token_buffer()
     |> parse_tokens(:text, rest)
