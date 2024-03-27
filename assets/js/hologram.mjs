@@ -31,6 +31,10 @@ export default class Hologram {
   static #pageModule = null;
   static #pageParams = null;
 
+  static handleEvent(_event, _operationSpecVdom) {
+    console.log("TODO");
+  }
+
   static run() {
     Hologram.#onReady(() => {
       if (!Hologram.#isInitiated) {

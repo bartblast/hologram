@@ -9,6 +9,7 @@ import {
   elixirHologramComponentStruct0,
   initStoreComponentStruct,
   linkModules,
+  sinon,
   unlinkModules,
   vnode,
 } from "./support/helpers.mjs";
@@ -55,6 +56,7 @@ import {defineModule7Fixture} from "./support/fixtures/template/renderer/module_
 import {defineModule8Fixture} from "./support/fixtures/template/renderer/module_8.mjs";
 import {defineModule9Fixture} from "./support/fixtures/template/renderer/module_9.mjs";
 
+import Hologram from "../../assets/js/hologram.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Store from "../../assets/js/store.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -429,6 +431,101 @@ describe("element node", () => {
         ],
       ]),
     );
+  });
+
+  describe("client-only behaviour", () => {
+    describe("event listeners", () => {
+      it("single event listener", () => {
+        const node = Type.tuple([
+          Type.atom("element"),
+          Type.bitstring("button"),
+          Type.list([
+            Type.tuple([
+              Type.bitstring("$click"),
+              Type.list([
+                Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+              ]),
+            ]),
+          ]),
+          Type.list([
+            Type.tuple([Type.atom("text"), Type.bitstring("Click me")]),
+          ]),
+        ]);
+
+        const result = Renderer.renderDom(node, context, slots);
+
+        assert.deepStrictEqual(Object.keys(result.data.on), ["click"]);
+
+        const stub = sinon
+          .stub(Hologram, "handleEvent")
+          .callsFake((_event, _operationSpecVdom) => null);
+
+        result.data.on.click("dummyEvent");
+
+        sinon.assert.calledWith(
+          stub,
+          "dummyEvent",
+          Type.list([
+            Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+          ]),
+        );
+      });
+
+      it("multiple event listeners", () => {
+        const node = Type.tuple([
+          Type.atom("element"),
+          Type.bitstring("input"),
+          Type.list([
+            Type.tuple([
+              Type.bitstring("$click"),
+              Type.list([
+                Type.tuple([
+                  Type.atom("text"),
+                  Type.bitstring("my_click_action"),
+                ]),
+              ]),
+            ]),
+            Type.tuple([
+              Type.bitstring("$focus"),
+              Type.list([
+                Type.tuple([
+                  Type.atom("text"),
+                  Type.bitstring("my_focus_action"),
+                ]),
+              ]),
+            ]),
+          ]),
+          Type.list([]),
+        ]);
+
+        const result = Renderer.renderDom(node, context, slots);
+
+        assert.deepStrictEqual(Object.keys(result.data.on), ["click", "focus"]);
+
+        const stub = sinon
+          .stub(Hologram, "handleEvent")
+          .callsFake((_event, _operationSpecVdom) => null);
+
+        result.data.on.click("dummyClickEvent");
+        result.data.on.focus("dummyFocusEvent");
+
+        sinon.assert.calledWith(
+          stub,
+          "dummyClickEvent",
+          Type.list([
+            Type.tuple([Type.atom("text"), Type.bitstring("my_click_action")]),
+          ]),
+        );
+
+        sinon.assert.calledWith(
+          stub,
+          "dummyFocusEvent",
+          Type.list([
+            Type.tuple([Type.atom("text"), Type.bitstring("my_focus_action")]),
+          ]),
+        );
+      });
+    });
   });
 });
 

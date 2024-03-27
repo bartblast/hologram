@@ -3,6 +3,7 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
+import Hologram from "./hologram.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Store from "./store.mjs";
@@ -356,10 +357,31 @@ export default class Renderer {
     const attrsDom = dom.data[2];
     const attrsVdom = Renderer.#renderAttributes(attrsDom);
 
+    const eventListenersVdom = Renderer.#renderEventListeners(attrsDom);
+
     const childrenDom = dom.data[3];
     const childrenVdom = Renderer.renderDom(childrenDom, context, slots);
 
-    return vnode(tagName, {attrs: attrsVdom}, childrenVdom);
+    return vnode(
+      tagName,
+      {attrs: attrsVdom, on: eventListenersVdom},
+      childrenVdom,
+    );
+  }
+
+  static #renderEventListeners(attrsDom) {
+    if (attrsDom.data.length === 0) {
+      return {};
+    }
+
+    return attrsDom.data
+      .filter((attrDom) => Bitstring.toText(attrDom.data[0]).startsWith("$"))
+      .reduce((acc, attrDom) => {
+        const nameText = Bitstring.toText(attrDom.data[0]).substring(1);
+        acc[nameText] = (event) => Hologram.handleEvent(event, attrDom.data[1]);
+
+        return acc;
+      }, {});
   }
 
   // Based on render_dom/3 (list case)
