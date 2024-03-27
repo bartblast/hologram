@@ -331,7 +331,7 @@ defmodule Hologram.Template.Parser do
       ) do
     context
     |> buffer_token(token)
-    |> add_block_start()
+    |> add_block_start_tag()
     |> add_processed_token(token)
     |> pop_delimiter_stack()
     |> reset_token_buffer()
@@ -675,7 +675,7 @@ defmodule Hologram.Template.Parser do
     %{context | attribute_value: [part | context.attribute_value]}
   end
 
-  defp add_block_start(context) do
+  defp add_block_start_tag(context) do
     expression = encode_tokens(context.token_buffer)
     new_tag = {:block_start, {context.block_name, expression}}
     add_processed_tag(context, new_tag)
