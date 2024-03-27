@@ -282,6 +282,7 @@ defmodule Hologram.Template.Renderer do
 
   defp render_attributes(attrs_dom) do
     attrs_dom
+    |> Enum.reject(fn {name, _value_dom} -> String.starts_with?(name, "$") end)
     |> Enum.map_join(" ", fn {name, value_dom} ->
       render_attribute(name, value_dom)
     end)

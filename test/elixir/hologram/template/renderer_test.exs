@@ -110,6 +110,24 @@ defmodule Hologram.Template.RendererTest do
       assert render_dom(node, %{}, []) == {~s(<img attr_1 attr_2 />), %{}}
     end
 
+    test "filters out attributes that specify event handlers (starting with '$' character)" do
+      node =
+        {:element, "div",
+         [
+           {"attr_1", [text: "aaa"]},
+           {"$attr_2", [text: "bbb"]},
+           {"attr_3", [expression: {111}]},
+           {"$attr_4", [expression: {222}]},
+           {"attr_5", [text: "ccc", expression: {999}, text: "ddd"]},
+           {"$attr_6", [text: "eee", expression: {888}, text: "fff"]},
+           {"attr_7", []},
+           {"$attr_8", []}
+         ], []}
+
+      assert render_dom(node, %{}, []) ==
+               {~s(<div attr_1="aaa" attr_3="111" attr_5="ccc999ddd" attr_7></div>), %{}}
+    end
+
     test "with nested stateful components" do
       node =
         {:element, "div", [{"attr", [text: "value"]}],
