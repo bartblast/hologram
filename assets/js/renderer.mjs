@@ -300,16 +300,18 @@ export default class Renderer {
       return {};
     }
 
-    return attrsDom.data.reduce((acc, attrDom) => {
-      const [nameText, valueText] = Renderer.#renderAttribute(
-        attrDom.data[0],
-        attrDom.data[1],
-      );
+    return attrsDom.data
+      .filter((attrDom) => !Bitstring.toText(attrDom.data[0]).startsWith("$"))
+      .reduce((acc, attrDom) => {
+        const [nameText, valueText] = Renderer.#renderAttribute(
+          attrDom.data[0],
+          attrDom.data[1],
+        );
 
-      acc[nameText] = valueText;
+        acc[nameText] = valueText;
 
-      return acc;
-    }, {});
+        return acc;
+      }, {});
   }
 
   // Based on render_dom/3 (component case)
@@ -352,9 +354,9 @@ export default class Renderer {
     }
 
     const attrsDom = dom.data[2];
-    const childrenDom = dom.data[3];
-
     const attrsVdom = Renderer.#renderAttributes(attrsDom);
+
+    const childrenDom = dom.data[3];
     const childrenVdom = Renderer.renderDom(childrenDom, context, slots);
 
     return vnode(tagName, {attrs: attrsVdom}, childrenVdom);

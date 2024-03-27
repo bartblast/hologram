@@ -277,6 +277,70 @@ describe("element node", () => {
     assert.deepStrictEqual(result, expected);
   });
 
+  it("filters out attributes that specify event handlers (starting with '$' character)", () => {
+    const node = Type.tuple([
+      Type.atom("element"),
+      Type.bitstring("div"),
+      Type.list([
+        Type.tuple([
+          Type.bitstring("attr_1"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("aaa")]]),
+        ]),
+        Type.tuple([
+          Type.bitstring("$attr_2"),
+          Type.keywordList([[Type.atom("text"), Type.bitstring("bbb")]]),
+        ]),
+        Type.tuple([
+          Type.bitstring("attr_3"),
+          Type.keywordList([
+            [Type.atom("expression"), Type.tuple([Type.integer(111)])],
+          ]),
+        ]),
+        Type.tuple([
+          Type.bitstring("$attr_4"),
+          Type.keywordList([
+            [Type.atom("expression"), Type.tuple([Type.integer(222)])],
+          ]),
+        ]),
+        Type.tuple([
+          Type.bitstring("attr_5"),
+          Type.keywordList([
+            [Type.atom("text"), Type.bitstring("ccc")],
+            [Type.atom("expression"), Type.tuple([Type.integer(999)])],
+            [Type.atom("text"), Type.bitstring("ddd")],
+          ]),
+        ]),
+        Type.tuple([
+          Type.bitstring("$attr_6"),
+          Type.keywordList([
+            [Type.atom("text"), Type.bitstring("eee")],
+            [Type.atom("expression"), Type.tuple([Type.integer(888)])],
+            [Type.atom("text"), Type.bitstring("fff")],
+          ]),
+        ]),
+        Type.tuple([Type.bitstring("attr_7"), Type.keywordList([])]),
+        Type.tuple([Type.bitstring("$attr_8"), Type.keywordList([])]),
+      ]),
+      Type.list([]),
+    ]);
+
+    const result = Renderer.renderDom(node, context, slots);
+    const expected = vnode(
+      "div",
+      {
+        attrs: {
+          attr_1: "aaa",
+          attr_3: "111",
+          attr_5: "ccc999ddd",
+          attr_7: true,
+        },
+      },
+      [],
+    );
+
+    assert.deepStrictEqual(result, expected);
+  });
+
   it("with nested stateful components", () => {
     const cid3 = Type.bitstring("component_3");
     const cid7 = Type.bitstring("component_7");
