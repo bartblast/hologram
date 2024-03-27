@@ -158,63 +158,77 @@ defmodule Hologram.Template.ParserTest do
   end
 
   describe "attributes and properties" do
-    Enum.each([{"attribute", "div"}, {"property", "Aaa.Bbb"}], fn {name, tag} ->
-      test "#{name} value text" do
-        markup = "<#{unquote(tag)} id=\"test\">"
+    Enum.each(
+      [
+        {"attribute", "div", "my_attr"},
+        {"event handler", "div", "$click"},
+        {"property", "Aaa.Bbb", "my_prop"}
+      ],
+      fn {name, tag, key} ->
+        test "#{name} value text" do
+          markup = "<#{unquote(tag)} #{unquote(key)}=\"test\">"
 
-        assert parse_markup(markup) == [
-                 start_tag: {unquote(tag), [{"id", [text: "test"]}]}
-               ]
+          assert parse_markup(markup) == [
+                   start_tag: {unquote(tag), [{unquote(key), [text: "test"]}]}
+                 ]
+        end
+
+        test "#{name} value expression" do
+          markup = "<#{unquote(tag)} #{unquote(key)}={1 + 2}>"
+
+          assert parse_markup(markup) == [
+                   start_tag: {unquote(tag), [{unquote(key), [expression: "{1 + 2}"]}]}
+                 ]
+        end
+
+        test "#{name} value expression in double quotes" do
+          markup = "<#{unquote(tag)} #{unquote(key)}=\"{1 + 2}\">"
+
+          assert parse_markup(markup) == [
+                   start_tag:
+                     {unquote(tag), [{unquote(key), [text: "", expression: "{1 + 2}", text: ""]}]}
+                 ]
+        end
+
+        test "multi-part #{name} value: text, expression" do
+          markup = "<#{unquote(tag)} #{unquote(key)}=\"abc{1 + 2}\">"
+
+          assert parse_markup(markup) == [
+                   start_tag:
+                     {unquote(tag),
+                      [{unquote(key), [text: "abc", expression: "{1 + 2}", text: ""]}]}
+                 ]
+        end
+
+        test "multi-part #{name} value: expression, text" do
+          markup = "<#{unquote(tag)} #{unquote(key)}=\"{1 + 2}abc\">"
+
+          assert parse_markup(markup) == [
+                   start_tag:
+                     {unquote(tag),
+                      [{unquote(key), [text: "", expression: "{1 + 2}", text: "abc"]}]}
+                 ]
+        end
+
+        test "boolean #{name} followed by start tag closing" do
+          markup = "<#{unquote(tag)} #{unquote(key)}>"
+          assert parse_markup(markup) == [start_tag: {unquote(tag), [{unquote(key), []}]}]
+        end
+
+        test "multiple #{name}(s)" do
+          markup = ~s(<#{unquote(tag)} #{unquote(key)}_1="value_1" #{unquote(key)}_2="value_2">)
+
+          assert parse_markup(markup) == [
+                   start_tag:
+                     {unquote(tag),
+                      [
+                        {"#{unquote(key)}_1", [text: "value_1"]},
+                        {"#{unquote(key)}_2", [text: "value_2"]}
+                      ]}
+                 ]
+        end
       end
-
-      test "#{name} value expression" do
-        markup = "<#{unquote(tag)} id={1 + 2}>"
-
-        assert parse_markup(markup) == [
-                 start_tag: {unquote(tag), [{"id", [expression: "{1 + 2}"]}]}
-               ]
-      end
-
-      test "#{name} value expression in double quotes" do
-        markup = "<#{unquote(tag)} id=\"{1 + 2}\">"
-
-        assert parse_markup(markup) == [
-                 start_tag: {unquote(tag), [{"id", [text: "", expression: "{1 + 2}", text: ""]}]}
-               ]
-      end
-
-      test "multi-part #{name} value: text, expression" do
-        markup = "<#{unquote(tag)} id=\"abc{1 + 2}\">"
-
-        assert parse_markup(markup) == [
-                 start_tag:
-                   {unquote(tag), [{"id", [text: "abc", expression: "{1 + 2}", text: ""]}]}
-               ]
-      end
-
-      test "multi-part #{name} value: expression, text" do
-        markup = "<#{unquote(tag)} id=\"{1 + 2}abc\">"
-
-        assert parse_markup(markup) == [
-                 start_tag:
-                   {unquote(tag), [{"id", [text: "", expression: "{1 + 2}", text: "abc"]}]}
-               ]
-      end
-
-      test "boolean #{name} followed by start tag closing" do
-        markup = "<#{unquote(tag)} key>"
-        assert parse_markup(markup) == [start_tag: {unquote(tag), [{"key", []}]}]
-      end
-
-      test "multiple #{name}(s)" do
-        markup = ~s(<#{unquote(tag)} key_1="value_1" key_2="value_2">)
-
-        assert parse_markup(markup) == [
-                 start_tag:
-                   {unquote(tag), [{"key_1", [text: "value_1"]}, {"key_2", [text: "value_2"]}]}
-               ]
-      end
-    end)
+    )
   end
 
   describe "for block" do
