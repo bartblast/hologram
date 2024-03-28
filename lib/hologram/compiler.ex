@@ -85,7 +85,8 @@ defmodule Hologram.Compiler do
     import HologramInterpreterError from "#{source_dir}/errors/interpreter_error.mjs";
     import Interpreter from "#{source_dir}/interpreter.mjs";
     import MemoryStorage from "#{source_dir}/memory_storage.mjs";
-    import Type from "#{source_dir}/type.mjs";#{erlang_function_defs}#{elixir_function_defs}
+    import Type from "#{source_dir}/type.mjs";
+    import Utils from "#{source_dir}/utils.mjs";#{erlang_function_defs}#{elixir_function_defs}
 
     document.addEventListener("hologram:pageScriptLoaded", () => Hologram.run());
 
