@@ -1258,6 +1258,8 @@ describe("comprehension()", () => {
 
       sinon.assert.calledWith(stub, enumerable1(context));
       sinon.assert.calledWith(stub, enumerable2(context));
+
+      Elixir_Enum["to_list/1"].restore();
     });
   });
 
@@ -1685,6 +1687,8 @@ describe("comprehension()", () => {
       ]);
 
       assert.isTrue(stub.calledOnceWith(expectedArg));
+
+      Elixir_Enum["into/2"].restore();
     });
   });
 });

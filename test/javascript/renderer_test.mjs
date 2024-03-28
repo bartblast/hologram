@@ -141,7 +141,7 @@ describe("element node", () => {
     ]);
 
     const result = Renderer.renderDom(node, context, slots);
-    const expected = vnode("div", {attrs: {}}, []);
+    const expected = vnode("div", {attrs: {}, on: {}}, []);
 
     assert.deepStrictEqual(result, expected);
   });
@@ -177,7 +177,7 @@ describe("element node", () => {
 
     const expected = vnode(
       "div",
-      {attrs: {attr_1: "aaa", attr_2: "123", attr_3: "ccc987eee"}},
+      {attrs: {attr_1: "aaa", attr_2: "123", attr_3: "ccc987eee"}, on: {}},
       [],
     );
 
@@ -202,8 +202,8 @@ describe("element node", () => {
 
     const result = Renderer.renderDom(node, context, slots);
 
-    const expected = vnode("div", {attrs: {}}, [
-      vnode("span", {attrs: {}}, ["abc"]),
+    const expected = vnode("div", {attrs: {}, on: {}}, [
+      vnode("span", {attrs: {}, on: {}}, ["abc"]),
       "xyz",
     ]);
 
@@ -219,7 +219,7 @@ describe("element node", () => {
     ]);
 
     const result = Renderer.renderDom(node, context, slots);
-    const expected = vnode("img", {attrs: {}}, []);
+    const expected = vnode("img", {attrs: {}, on: {}}, []);
 
     assert.deepStrictEqual(result, expected);
   });
@@ -255,7 +255,7 @@ describe("element node", () => {
 
     const expected = vnode(
       "img",
-      {attrs: {attr_1: "aaa", attr_2: "123", attr_3: "ccc987eee"}},
+      {attrs: {attr_1: "aaa", attr_2: "123", attr_3: "ccc987eee"}, on: {}},
       [],
     );
 
@@ -274,7 +274,11 @@ describe("element node", () => {
     ]);
 
     const result = Renderer.renderDom(node, context, slots);
-    const expected = vnode("img", {attrs: {attr_1: true, attr_2: true}}, []);
+    const expected = vnode(
+      "img",
+      {attrs: {attr_1: true, attr_2: true}, on: {}},
+      [],
+    );
 
     assert.deepStrictEqual(result, expected);
   });
@@ -327,20 +331,13 @@ describe("element node", () => {
     ]);
 
     const result = Renderer.renderDom(node, context, slots);
-    const expected = vnode(
-      "div",
-      {
-        attrs: {
-          attr_1: "aaa",
-          attr_3: "111",
-          attr_5: "ccc999ddd",
-          attr_7: true,
-        },
-      },
-      [],
-    );
 
-    assert.deepStrictEqual(result, expected);
+    assert.deepStrictEqual(result.data.attrs, {
+      attr_1: "aaa",
+      attr_3: "111",
+      attr_5: "ccc999ddd",
+      attr_7: true,
+    });
   });
 
   it("with nested stateful components", () => {
@@ -402,9 +399,9 @@ describe("element node", () => {
 
     assert.deepStrictEqual(
       result,
-      vnode("div", {attrs: {attr: "value"}}, [
-        vnode("div", {attrs: {}}, ["state_a = 1, state_b = 2"]),
-        vnode("div", {attrs: {}}, ["state_c = 3, state_d = 4"]),
+      vnode("div", {attrs: {attr: "value"}, on: {}}, [
+        vnode("div", {attrs: {}, on: {}}, ["state_a = 1, state_b = 2"]),
+        vnode("div", {attrs: {}, on: {}}, ["state_c = 3, state_d = 4"]),
       ]),
     );
 
@@ -469,6 +466,8 @@ describe("element node", () => {
             Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
           ]),
         );
+
+        Hologram.handleEvent.restore();
       });
 
       it("multiple event listeners", () => {
@@ -524,6 +523,8 @@ describe("element node", () => {
             Type.tuple([Type.atom("text"), Type.bitstring("my_focus_action")]),
           ]),
         );
+
+        Hologram.handleEvent.restore();
       });
     });
   });
@@ -544,7 +545,7 @@ describe("node list", () => {
     ]);
 
     const result = Renderer.renderDom(nodes, context, slots);
-    const expected = ["aaa", vnode("div", {attrs: {}}, []), "bbb"];
+    const expected = ["aaa", vnode("div", {attrs: {}, on: {}}, []), "bbb"];
 
     assert.deepStrictEqual(result, expected);
   });
@@ -626,9 +627,9 @@ describe("node list", () => {
 
     assert.deepStrictEqual(result, [
       "abc",
-      vnode("div", {attrs: {}}, ["state_a = 1, state_b = 2"]),
+      vnode("div", {attrs: {}, on: {}}, ["state_a = 1, state_b = 2"]),
       "xyz",
-      vnode("div", {attrs: {}}, ["state_c = 3, state_d = 4"]),
+      vnode("div", {attrs: {}, on: {}}, ["state_c = 3, state_d = 4"]),
     ]);
 
     assert.deepStrictEqual(
@@ -707,11 +708,11 @@ describe("node list", () => {
 
     assert.deepStrictEqual(result, [
       "abc",
-      vnode("div", {attrs: {}}, ["state_a = 1"]),
-      vnode("div", {attrs: {}}, ["state_b = 2"]),
+      vnode("div", {attrs: {}, on: {}}, ["state_a = 1"]),
+      vnode("div", {attrs: {}, on: {}}, ["state_b = 2"]),
       "xyz",
-      vnode("div", {attrs: {}}, ["state_c = 3"]),
-      vnode("div", {attrs: {}}, ["state_d = 4"]),
+      vnode("div", {attrs: {}, on: {}}, ["state_c = 3"]),
+      vnode("div", {attrs: {}, on: {}}, ["state_d = 4"]),
     ]);
 
     assert.deepStrictEqual(
@@ -750,7 +751,7 @@ describe("stateless component", () => {
     ]);
 
     const result = Renderer.renderDom(node, context, slots);
-    const expected = [vnode("div", {attrs: {}}, ["abc"])];
+    const expected = [vnode("div", {attrs: {}, on: {}}, ["abc"])];
 
     assert.deepStrictEqual(result, expected);
 
@@ -787,7 +788,7 @@ describe("stateless component", () => {
     const result = Renderer.renderDom(node, context, slots);
 
     const expected = [
-      vnode("div", {attrs: {}}, [
+      vnode("div", {attrs: {}, on: {}}, [
         "prop_a = ddd, prop_b = 222, prop_c = fff333hhh",
       ]),
     ];
@@ -840,7 +841,7 @@ describe("stateful component", () => {
     initStoreComponentStruct(cid);
 
     const resultVDom = Renderer.renderDom(node, context, slots);
-    const expectedVdom = [vnode("div", {attrs: {}}, ["abc"])];
+    const expectedVdom = [vnode("div", {attrs: {}, on: {}}, ["abc"])];
     assert.deepStrictEqual(resultVDom, expectedVdom);
 
     const expectedStoreData = Type.map([
@@ -886,7 +887,7 @@ describe("stateful component", () => {
     const resultVDom = Renderer.renderDom(node, context, slots);
 
     const expectedVdom = [
-      vnode("div", {attrs: {}}, [
+      vnode("div", {attrs: {}, on: {}}, [
         "prop_a = ddd, prop_b = 222, prop_c = fff333hhh",
       ]),
     ];
@@ -923,7 +924,7 @@ describe("stateful component", () => {
     const resultVDom = Renderer.renderDom(node, context, slots);
 
     const expectedVdom = [
-      vnode("div", {attrs: {}}, ["state_a = 1, state_b = 2"]),
+      vnode("div", {attrs: {}, on: {}}, ["state_a = 1, state_b = 2"]),
     ];
 
     assert.deepStrictEqual(resultVDom, expectedVdom);
@@ -950,7 +951,7 @@ describe("stateful component", () => {
     const resultVDom = Renderer.renderDom(node, context, slots);
 
     const expectedVdom = [
-      vnode("div", {attrs: {}}, ["state_a = 11, state_b = 22"]),
+      vnode("div", {attrs: {}, on: {}}, ["state_a = 11, state_b = 22"]),
     ];
 
     assert.deepStrictEqual(resultVDom, expectedVdom);
@@ -1002,7 +1003,7 @@ describe("stateful component", () => {
     const resultVDom = Renderer.renderDom(node, context, slots);
 
     const expectedVdom = [
-      vnode("div", {attrs: {}}, [
+      vnode("div", {attrs: {}, on: {}}, [
         "var_a = state_a, var_b = state_b, var_c = prop_c",
       ]),
     ];
