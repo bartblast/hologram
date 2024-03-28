@@ -80,6 +80,20 @@ export default class Hologram {
     Hologram.#isInitiated = true;
   }
 
+  static #loadMountData() {
+    const mountData = window.__hologramPageMountData__(Hologram.#deps);
+
+    Hologram.#componentStructs = mountData.componentStructs;
+    Hologram.#pageModule = mountData.pageModule;
+    Hologram.#pageParams = mountData.pageParams;
+  }
+
+  static #maybeInitAssetPathRegistry() {
+    if (AssetPathRegistry.entries === null) {
+      AssetPathRegistry.hydrate(window.__hologramAssetManifest__);
+    }
+  }
+
   static #mountPage() {
     window.__hologramPageReachableFunctionDefs__(Hologram.#deps);
 
@@ -103,20 +117,6 @@ export default class Hologram {
         document.removeEventListener("DOMContentLoaded", listener);
         callback();
       });
-    }
-  }
-
-  static #loadMountData() {
-    const mountData = window.__hologramPageMountData__(Hologram.#deps);
-
-    Hologram.#componentStructs = mountData.componentStructs;
-    Hologram.#pageModule = mountData.pageModule;
-    Hologram.#pageParams = mountData.pageParams;
-  }
-
-  static #maybeInitAssetPathRegistry() {
-    if (AssetPathRegistry.entries === null) {
-      AssetPathRegistry.hydrate(window.__hologramAssetManifest__);
     }
   }
 
