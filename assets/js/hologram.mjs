@@ -14,7 +14,7 @@ import Store from "./store.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
-import {attributesModule, eventListenersModule, toVNode} from "snabbdom";
+import {attributesModule, eventListenersModule, init, toVNode} from "snabbdom";
 const patch = init([attributesModule, eventListenersModule]);
 
 // TODO: test
