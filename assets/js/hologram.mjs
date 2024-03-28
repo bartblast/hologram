@@ -14,6 +14,9 @@ import Store from "./store.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
+import {attributesModule, eventListenersModule, toVNode} from "snabbdom";
+const patch = init([attributesModule, eventListenersModule]);
+
 // TODO: test
 export default class Hologram {
   static #deps = {
@@ -30,6 +33,7 @@ export default class Hologram {
   static #isInitiated = false;
   static #pageModule = null;
   static #pageParams = null;
+  static #virtualDocument = null;
 
   static handleEvent(_event, _operationSpecVdom) {
     console.log("TODO");
@@ -85,7 +89,7 @@ export default class Hologram {
 
     Hologram.#maybeInitAssetPathRegistry();
 
-    Renderer.renderPage(Hologram.#pageModule, Hologram.#pageParams);
+    Hologram.#render();
   }
 
   static #onReady(callback) {
@@ -114,5 +118,20 @@ export default class Hologram {
     if (AssetPathRegistry.entries === null) {
       AssetPathRegistry.hydrate(window.__hologramAssetManifest__);
     }
+  }
+
+  static #render() {
+    if (!Hologram.#virtualDocument) {
+      Hologram.#virtualDocument = toVNode(window.document.documentElement);
+    }
+
+    const newVirtualDocument = Renderer.renderPage(
+      Hologram.#pageModule,
+      Hologram.#pageParams,
+    )[0];
+
+    patch(Hologram.#virtualDocument, newVirtualDocument);
+
+    Hologram.#virtualDocument = newVirtualDocument;
   }
 }
