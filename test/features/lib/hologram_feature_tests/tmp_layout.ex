@@ -4,9 +4,21 @@ defmodule HologramFeatureTests.TmpLayout do
 
   def template do
     ~H"""
-    <Runtime />
-    layout
-    <slot />
+    <html>
+      <head>
+        <Runtime />
+      </head>
+      
+      <body>
+        <div>layout start</div>
+        
+        <div>
+          <slot />
+        </div>
+        
+        <div>layout end</div>
+      </body>
+    </html>
     """
   end
 end
