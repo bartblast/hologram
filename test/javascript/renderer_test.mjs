@@ -52,6 +52,13 @@ import {defineModule46Fixture} from "./support/fixtures/template/renderer/module
 import {defineModule47Fixture} from "./support/fixtures/template/renderer/module_47.mjs";
 import {defineModule51Fixture} from "./support/fixtures/template/renderer/module_51.mjs";
 import {defineModule52Fixture} from "./support/fixtures/template/renderer/module_52.mjs";
+import {defineModule55Fixture} from "./support/fixtures/template/renderer/module_55.mjs";
+import {defineModule56Fixture} from "./support/fixtures/template/renderer/module_56.mjs";
+import {defineModule57Fixture} from "./support/fixtures/template/renderer/module_57.mjs";
+import {defineModule58Fixture} from "./support/fixtures/template/renderer/module_58.mjs";
+import {defineModule59Fixture} from "./support/fixtures/template/renderer/module_59.mjs";
+import {defineModule60Fixture} from "./support/fixtures/template/renderer/module_60.mjs";
+import {defineModule61Fixture} from "./support/fixtures/template/renderer/module_61.mjs";
 import {defineModule7Fixture} from "./support/fixtures/template/renderer/module_7.mjs";
 import {defineModule8Fixture} from "./support/fixtures/template/renderer/module_8.mjs";
 import {defineModule9Fixture} from "./support/fixtures/template/renderer/module_9.mjs";
@@ -102,6 +109,13 @@ before(() => {
   defineModule47Fixture();
   defineModule51Fixture();
   defineModule52Fixture();
+  defineModule55Fixture();
+  defineModule56Fixture();
+  defineModule57Fixture();
+  defineModule58Fixture();
+  defineModule59Fixture();
+  defineModule60Fixture();
+  defineModule61Fixture();
   defineModule7Fixture();
   defineModule8Fixture();
   defineModule9Fixture();
@@ -111,11 +125,12 @@ after(() => unlinkModules());
 
 const cid = Type.bitstring("my_component");
 const context = Type.map([]);
+const defaultTarget = "my_default_target";
 const slots = Type.keywordList([]);
 
 it("text node", () => {
   const node = Type.tuple([Type.atom("text"), Type.bitstring("abc")]);
-  const result = Renderer.renderDom(node, context, slots);
+  const result = Renderer.renderDom(node, context, slots, defaultTarget);
 
   assert.equal(result, "abc");
 });
@@ -126,7 +141,7 @@ it("expression node", () => {
     Type.tuple([Type.integer(123)]),
   ]);
 
-  const result = Renderer.renderDom(node, context, slots);
+  const result = Renderer.renderDom(node, context, slots, defaultTarget);
 
   assert.equal(result, "123");
 });
@@ -140,7 +155,7 @@ describe("element node", () => {
       Type.list([]),
     ]);
 
-    const result = Renderer.renderDom(node, context, slots);
+    const result = Renderer.renderDom(node, context, slots, defaultTarget);
     const expected = vnode("div", {attrs: {}, on: {}}, []);
 
     assert.deepStrictEqual(result, expected);
@@ -173,7 +188,7 @@ describe("element node", () => {
       Type.list([]),
     ]);
 
-    const result = Renderer.renderDom(node, context, slots);
+    const result = Renderer.renderDom(node, context, slots, defaultTarget);
 
     const expected = vnode(
       "div",
@@ -200,7 +215,7 @@ describe("element node", () => {
       ]),
     ]);
 
-    const result = Renderer.renderDom(node, context, slots);
+    const result = Renderer.renderDom(node, context, slots, defaultTarget);
 
     const expected = vnode("div", {attrs: {}, on: {}}, [
       vnode("span", {attrs: {}, on: {}}, ["abc"]),
@@ -218,7 +233,7 @@ describe("element node", () => {
       Type.list([]),
     ]);
 
-    const result = Renderer.renderDom(node, context, slots);
+    const result = Renderer.renderDom(node, context, slots, defaultTarget);
     const expected = vnode("img", {attrs: {}, on: {}}, []);
 
     assert.deepStrictEqual(result, expected);
@@ -251,7 +266,7 @@ describe("element node", () => {
       Type.list([]),
     ]);
 
-    const result = Renderer.renderDom(node, context, slots);
+    const result = Renderer.renderDom(node, context, slots, defaultTarget);
 
     const expected = vnode(
       "img",
@@ -273,7 +288,8 @@ describe("element node", () => {
       Type.list([]),
     ]);
 
-    const result = Renderer.renderDom(node, context, slots);
+    const result = Renderer.renderDom(node, context, slots, defaultTarget);
+
     const expected = vnode(
       "img",
       {attrs: {attr_1: true, attr_2: true}, on: {}},
@@ -330,7 +346,7 @@ describe("element node", () => {
       Type.list([]),
     ]);
 
-    const result = Renderer.renderDom(node, context, slots);
+    const result = Renderer.renderDom(node, context, slots, defaultTarget);
 
     assert.deepStrictEqual(result.data.attrs, {
       attr_1: "aaa",
@@ -395,7 +411,7 @@ describe("element node", () => {
       ]),
     );
 
-    const result = Renderer.renderDom(node, context, slots);
+    const result = Renderer.renderDom(node, context, slots, defaultTarget);
 
     assert.deepStrictEqual(
       result,
@@ -449,22 +465,26 @@ describe("element node", () => {
           ]),
         ]);
 
-        const result = Renderer.renderDom(node, context, slots);
+        const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
 
-        assert.deepStrictEqual(Object.keys(result.data.on), ["click"]);
+        assert.deepStrictEqual(Object.keys(vdom.data.on), ["click"]);
 
         const stub = sinon
           .stub(Hologram, "handleEvent")
-          .callsFake((_event, _operationSpecVdom) => null);
+          .callsFake(
+            (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
+          );
 
-        result.data.on.click("dummyEvent");
+        vdom.data.on.click("dummyEvent");
 
         sinon.assert.calledWith(
           stub,
           "dummyEvent",
+          "click",
           Type.list([
             Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
           ]),
+          defaultTarget,
         );
 
         Hologram.handleEvent.restore();
@@ -497,31 +517,210 @@ describe("element node", () => {
           Type.list([]),
         ]);
 
-        const result = Renderer.renderDom(node, context, slots);
+        const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
 
-        assert.deepStrictEqual(Object.keys(result.data.on), ["click", "focus"]);
+        assert.deepStrictEqual(Object.keys(vdom.data.on), ["click", "focus"]);
 
         const stub = sinon
           .stub(Hologram, "handleEvent")
-          .callsFake((_event, _operationSpecVdom) => null);
+          .callsFake(
+            (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
+          );
 
-        result.data.on.click("dummyClickEvent");
-        result.data.on.focus("dummyFocusEvent");
+        vdom.data.on.click("dummyClickEvent");
+        vdom.data.on.focus("dummyFocusEvent");
 
         sinon.assert.calledWith(
           stub,
           "dummyClickEvent",
+          "click",
           Type.list([
             Type.tuple([Type.atom("text"), Type.bitstring("my_click_action")]),
           ]),
+          defaultTarget,
         );
 
         sinon.assert.calledWith(
           stub,
           "dummyFocusEvent",
+          "focus",
           Type.list([
             Type.tuple([Type.atom("text"), Type.bitstring("my_focus_action")]),
           ]),
+          defaultTarget,
+        );
+
+        Hologram.handleEvent.restore();
+      });
+    });
+
+    describe("default operation target", () => {
+      it("current stateful component", () => {
+        const node = Type.tuple([
+          Type.atom("component"),
+          Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module55"),
+          Type.list([
+            Type.tuple([
+              Type.bitstring("cid"),
+              Type.list([Type.tuple([Type.atom("text"), cid])]),
+            ]),
+          ]),
+          Type.list([]),
+        ]);
+
+        initStoreComponentStruct(cid);
+
+        const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+
+        const stub = sinon
+          .stub(Hologram, "handleEvent")
+          .callsFake(
+            (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
+          );
+
+        vdom[0].children[1].data.on.click("dummyEvent");
+
+        sinon.assert.calledWith(
+          stub,
+          "dummyEvent",
+          "click",
+          Type.list([
+            Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+          ]),
+          cid,
+        );
+
+        Hologram.handleEvent.restore();
+      });
+
+      it("parent stateful component", () => {
+        const node = Type.tuple([
+          Type.atom("component"),
+          Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module55"),
+          Type.list([]),
+          Type.list([]),
+        ]);
+
+        const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+
+        const stub = sinon
+          .stub(Hologram, "handleEvent")
+          .callsFake(
+            (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
+          );
+
+        vdom[0].children[1].data.on.click("dummyEvent");
+
+        sinon.assert.calledWith(
+          stub,
+          "dummyEvent",
+          "click",
+          Type.list([
+            Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+          ]),
+          defaultTarget,
+        );
+
+        Hologram.handleEvent.restore();
+      });
+
+      it("page", () => {
+        initStoreComponentStruct(Type.bitstring("page"));
+        initStoreComponentStruct(Type.bitstring("layout"));
+
+        const vdom = Renderer.renderPage(
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module56"),
+          Type.map([]),
+        );
+
+        const stub = sinon
+          .stub(Hologram, "handleEvent")
+          .callsFake(
+            (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
+          );
+
+        vdom[0].children[1].data.on.click("dummyEvent");
+
+        sinon.assert.calledWith(
+          stub,
+          "dummyEvent",
+          "click",
+          Type.list([
+            Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+          ]),
+          Type.bitstring("page"),
+        );
+
+        Hologram.handleEvent.restore();
+      });
+
+      it("layout", () => {
+        initStoreComponentStruct(Type.bitstring("page"));
+        initStoreComponentStruct(Type.bitstring("layout"));
+
+        const vdom = Renderer.renderPage(
+          Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module57"),
+          Type.map([]),
+        );
+
+        const stub = sinon
+          .stub(Hologram, "handleEvent")
+          .callsFake(
+            (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
+          );
+
+        vdom[0].children[1].data.on.click("dummyEvent");
+
+        sinon.assert.calledWith(
+          stub,
+          "dummyEvent",
+          "click",
+          Type.list([
+            Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+          ]),
+          Type.bitstring("layout"),
+        );
+
+        Hologram.handleEvent.restore();
+      });
+
+      it("slot of a stateful component nested in another stateful component", () => {
+        const node = Type.tuple([
+          Type.atom("component"),
+          Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module59"),
+          Type.list([
+            Type.tuple([
+              Type.bitstring("cid"),
+              Type.list([
+                Type.tuple([Type.atom("text"), Type.bitstring("component_59")]),
+              ]),
+            ]),
+          ]),
+          Type.list([]),
+        ]);
+
+        initStoreComponentStruct(Type.bitstring("component_59"));
+        initStoreComponentStruct(Type.bitstring("component_60"));
+        initStoreComponentStruct(Type.bitstring("component_61"));
+
+        const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+
+        const stub = sinon
+          .stub(Hologram, "handleEvent")
+          .callsFake(
+            (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
+          );
+
+        vdom[0].children[1].children[1].data.on.click("dummyEvent");
+
+        sinon.assert.calledWith(
+          stub,
+          "dummyEvent",
+          "click",
+          Type.list([
+            Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+          ]),
+          Type.bitstring("component_61"),
         );
 
         Hologram.handleEvent.restore();
@@ -544,7 +743,7 @@ describe("node list", () => {
       Type.tuple([Type.atom("text"), Type.bitstring("bbb")]),
     ]);
 
-    const result = Renderer.renderDom(nodes, context, slots);
+    const result = Renderer.renderDom(nodes, context, slots, defaultTarget);
     const expected = ["aaa", vnode("div", {attrs: {}, on: {}}, []), "bbb"];
 
     assert.deepStrictEqual(result, expected);
@@ -558,7 +757,7 @@ describe("node list", () => {
       Type.tuple([Type.atom("expression"), Type.tuple([Type.integer(222)])]),
     ]);
 
-    const result = Renderer.renderDom(nodes, context, slots);
+    const result = Renderer.renderDom(nodes, context, slots, defaultTarget);
 
     assert.deepStrictEqual(result, ["aaa111bbb222"]);
   });
@@ -571,7 +770,7 @@ describe("node list", () => {
       Type.nil(),
     ]);
 
-    const result = Renderer.renderDom(nodes, context, slots);
+    const result = Renderer.renderDom(nodes, context, slots, defaultTarget);
 
     assert.deepStrictEqual(result, ["aaabbb"]);
   });
@@ -623,7 +822,7 @@ describe("node list", () => {
       ]),
     );
 
-    const result = Renderer.renderDom(nodes, context, slots);
+    const result = Renderer.renderDom(nodes, context, slots, defaultTarget);
 
     assert.deepStrictEqual(result, [
       "abc",
@@ -704,7 +903,7 @@ describe("node list", () => {
       ]),
     );
 
-    const result = Renderer.renderDom(nodes, context, slots);
+    const result = Renderer.renderDom(nodes, context, slots, defaultTarget);
 
     assert.deepStrictEqual(result, [
       "abc",
@@ -750,7 +949,7 @@ describe("stateless component", () => {
       Type.list([]),
     ]);
 
-    const result = Renderer.renderDom(node, context, slots);
+    const result = Renderer.renderDom(node, context, slots, defaultTarget);
     const expected = [vnode("div", {attrs: {}, on: {}}, ["abc"])];
 
     assert.deepStrictEqual(result, expected);
@@ -785,7 +984,7 @@ describe("stateless component", () => {
       Type.list([]),
     ]);
 
-    const result = Renderer.renderDom(node, context, slots);
+    const result = Renderer.renderDom(node, context, slots, defaultTarget);
 
     const expected = [
       vnode("div", {attrs: {}, on: {}}, [
@@ -816,7 +1015,7 @@ describe("stateless component", () => {
     ]);
 
     assertBoxedError(
-      () => Renderer.renderDom(node, context, slots),
+      () => Renderer.renderDom(node, context, slots, defaultTarget),
       "KeyError",
       'key :b not found in: %{a: "111"}',
     );
@@ -840,7 +1039,7 @@ describe("stateful component", () => {
 
     initStoreComponentStruct(cid);
 
-    const resultVDom = Renderer.renderDom(node, context, slots);
+    const resultVDom = Renderer.renderDom(node, context, slots, defaultTarget);
     const expectedVdom = [vnode("div", {attrs: {}, on: {}}, ["abc"])];
     assert.deepStrictEqual(resultVDom, expectedVdom);
 
@@ -884,7 +1083,7 @@ describe("stateful component", () => {
 
     initStoreComponentStruct(cid);
 
-    const resultVDom = Renderer.renderDom(node, context, slots);
+    const resultVDom = Renderer.renderDom(node, context, slots, defaultTarget);
 
     const expectedVdom = [
       vnode("div", {attrs: {}, on: {}}, [
@@ -921,7 +1120,7 @@ describe("stateful component", () => {
 
     Store.putComponentState(cid, state);
 
-    const resultVDom = Renderer.renderDom(node, context, slots);
+    const resultVDom = Renderer.renderDom(node, context, slots, defaultTarget);
 
     const expectedVdom = [
       vnode("div", {attrs: {}, on: {}}, ["state_a = 1, state_b = 2"]),
@@ -948,7 +1147,7 @@ describe("stateful component", () => {
       Type.list([]),
     ]);
 
-    const resultVDom = Renderer.renderDom(node, context, slots);
+    const resultVDom = Renderer.renderDom(node, context, slots, defaultTarget);
 
     const expectedVdom = [
       vnode("div", {attrs: {}, on: {}}, ["state_a = 11, state_b = 22"]),
@@ -1000,7 +1199,7 @@ describe("stateful component", () => {
 
     Store.putComponentState(cid, state);
 
-    const resultVDom = Renderer.renderDom(node, context, slots);
+    const resultVDom = Renderer.renderDom(node, context, slots, defaultTarget);
 
     const expectedVdom = [
       vnode("div", {attrs: {}, on: {}}, [
@@ -1053,7 +1252,7 @@ describe("stateful component", () => {
 
     initStoreComponentStruct(cid);
 
-    const result = Renderer.renderDom(node, context, slots);
+    const result = Renderer.renderDom(node, context, slots, defaultTarget);
 
     assert.equal(
       result,
@@ -1088,7 +1287,7 @@ describe("stateful component", () => {
     );
 
     assertBoxedError(
-      () => Renderer.renderDom(node, context, slots),
+      () => Renderer.renderDom(node, context, slots, defaultTarget),
       "KeyError",
       'key :c not found in: %{cid: "my_component", a: "111", b: 222}',
     );
@@ -1104,7 +1303,7 @@ describe("default slot", () => {
       Type.keywordList([[Type.atom("text"), Type.bitstring("123")]]),
     ]);
 
-    const result = Renderer.renderDom(node, context, slots);
+    const result = Renderer.renderDom(node, context, slots, defaultTarget);
 
     assert.deepStrictEqual(result, ["abc123xyz"]);
   });
@@ -1120,7 +1319,7 @@ describe("default slot", () => {
       ]),
     ]);
 
-    const result = Renderer.renderDom(node, context, slots);
+    const result = Renderer.renderDom(node, context, slots, defaultTarget);
 
     assert.deepStrictEqual(result, ["abc123456xyz"]);
   });
@@ -1140,7 +1339,7 @@ describe("default slot", () => {
       ]),
     ]);
 
-    const result = Renderer.renderDom(node, context, slots);
+    const result = Renderer.renderDom(node, context, slots, defaultTarget);
 
     assert.deepStrictEqual(result, ["abcdef789uvwxyz"]);
   });
@@ -1177,7 +1376,7 @@ describe("default slot", () => {
       Type.map([[Type.atom("a"), Type.integer(12)]]),
     );
 
-    const result = Renderer.renderDom(node, context, slots);
+    const result = Renderer.renderDom(node, context, slots, defaultTarget);
     assert.deepStrictEqual(result, ["10,11,10,12,10"]);
 
     assert.deepStrictEqual(
@@ -1213,7 +1412,7 @@ describe("default slot", () => {
       Type.keywordList([[Type.atom("text"), Type.bitstring("abc")]]),
     ]);
 
-    const result = Renderer.renderDom(node, context, slots);
+    const result = Renderer.renderDom(node, context, slots, defaultTarget);
 
     assert.deepStrictEqual(result, [
       "31a,32a,31b,33a,31c,abc,31x,33z,31y,32z,31z",
@@ -1272,7 +1471,7 @@ describe("default slot", () => {
       ]),
     );
 
-    const result = Renderer.renderDom(node, context, slots);
+    const result = Renderer.renderDom(node, context, slots, defaultTarget);
 
     assert.deepStrictEqual(result, [
       "34a_prop,35a_prop,34b_state,36a_prop,34c_state,abc,34x_state,36z_state,34y_state,35z_state,34z_state",
@@ -1451,7 +1650,7 @@ describe("context", () => {
       Type.list([]),
     ]);
 
-    const result = Renderer.renderDom(node, context, slots);
+    const result = Renderer.renderDom(node, context, slots, defaultTarget);
 
     assert.deepStrictEqual(result, ["prop_aaa = 123"]);
   });

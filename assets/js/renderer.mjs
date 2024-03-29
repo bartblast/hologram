@@ -14,19 +14,19 @@ import {h as vnode} from "snabbdom";
 // deps: [String.Chars.to_string/1]
 export default class Renderer {
   // Based on render_dom/3
-  static renderDom(dom, context, slots) {
+  static renderDom(dom, context, slots, defaultTarget) {
     if (Type.isList(dom)) {
-      return Renderer.#renderNodes(dom, context, slots);
+      return Renderer.#renderNodes(dom, context, slots, defaultTarget);
     }
 
     const nodeType = dom.data[0].value;
 
     switch (nodeType) {
       case "component":
-        return Renderer.#renderComponent(dom, context, slots);
+        return Renderer.#renderComponent(dom, context, slots, defaultTarget);
 
       case "element":
-        return Renderer.#renderElement(dom, context, slots);
+        return Renderer.#renderElement(dom, context, slots, defaultTarget);
 
       case "expression":
         return Bitstring.toText(
@@ -34,7 +34,12 @@ export default class Renderer {
         );
 
       case "page":
-        return Renderer.renderDom(dom.data[1], context, slots);
+        return Renderer.renderDom(
+          dom.data[1],
+          context,
+          slots,
+          Type.bitstring("page"),
+        );
 
       case "text":
         return Bitstring.toText(dom.data[1]);
@@ -319,7 +324,7 @@ export default class Renderer {
   }
 
   // Based on render_dom/3 (component case)
-  static #renderComponent(dom, context, slots) {
+  static #renderComponent(dom, context, slots, defaultTarget) {
     const moduleRef = Interpreter.moduleRef(dom.data[1]);
     const propsDom = dom.data[2];
     let childrenDom = dom.data[3];
@@ -345,25 +350,34 @@ export default class Renderer {
         props,
         expandedChildrenDom,
         context,
+        defaultTarget,
       );
     }
   }
 
   // Based on render_dom/3 (element & slot case)
-  static #renderElement(dom, context, slots) {
+  static #renderElement(dom, context, slots, defaultTarget) {
     const tagName = Bitstring.toText(dom.data[1]);
 
     if (tagName === "slot") {
-      return Renderer.#renderSlotElement(slots, context);
+      return Renderer.#renderSlotElement(slots, context, defaultTarget);
     }
 
     const attrsDom = dom.data[2];
     const attrsVdom = Renderer.#renderAttributes(attrsDom);
 
-    const eventListenersVdom = Renderer.#renderEventListeners(attrsDom);
+    const eventListenersVdom = Renderer.#renderEventListeners(
+      attrsDom,
+      defaultTarget,
+    );
 
     const childrenDom = dom.data[3];
-    const childrenVdom = Renderer.renderDom(childrenDom, context, slots);
+    const childrenVdom = Renderer.renderDom(
+      childrenDom,
+      context,
+      slots,
+      defaultTarget,
+    );
 
     return vnode(
       tagName,
@@ -372,7 +386,7 @@ export default class Renderer {
     );
   }
 
-  static #renderEventListeners(attrsDom) {
+  static #renderEventListeners(attrsDom, defaultTarget) {
     if (attrsDom.data.length === 0) {
       return {};
     }
@@ -381,19 +395,20 @@ export default class Renderer {
       .filter((attrDom) => Bitstring.toText(attrDom.data[0]).startsWith("$"))
       .reduce((acc, attrDom) => {
         const nameText = Bitstring.toText(attrDom.data[0]).substring(1);
-        acc[nameText] = (event) => Hologram.handleEvent(event, attrDom.data[1]);
+        acc[nameText] = (event) =>
+          Hologram.handleEvent(event, nameText, attrDom.data[1], defaultTarget);
 
         return acc;
       }, {});
   }
 
   // Based on render_dom/3 (list case)
-  static #renderNodes(nodes, context, slots) {
+  static #renderNodes(nodes, context, slots, defaultTarget) {
     return Renderer.#mergeNeighbouringTextNodes(
       nodes.data
         // There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if}
         .filter((node) => !Type.isNil(node))
-        .map((node) => Renderer.renderDom(node, context, slots))
+        .map((node) => Renderer.renderDom(node, context, slots, defaultTarget))
         .flat(),
     );
   }
@@ -438,17 +453,23 @@ export default class Renderer {
       layoutNode,
       pageEmittedContext,
       Type.keywordList([]),
+      Type.bitstring("layout"),
     );
   }
 
   // Based on render_dom/3 (slot case)
-  static #renderSlotElement(slots, context) {
+  static #renderSlotElement(slots, context, defaultTarget) {
     const slotDom = Interpreter.accessKeywordListElement(
       slots,
       Type.atom("default"),
     );
 
-    return Renderer.renderDom(slotDom, context, Type.keywordList([]));
+    return Renderer.renderDom(
+      slotDom,
+      context,
+      Type.keywordList([]),
+      defaultTarget,
+    );
   }
 
   // Based on render_stateful_component/4
@@ -470,15 +491,16 @@ export default class Renderer {
       vars,
       childrenDom,
       mergedContext,
+      cid,
     );
   }
 
   // Based on render_template/4
-  static #renderTemplate(moduleRef, vars, childrenDom, context) {
+  static #renderTemplate(moduleRef, vars, childrenDom, context, defaultTarget) {
     const dom = Renderer.#evaluateTemplate(moduleRef, vars);
     const slots = Type.keywordList([[Type.atom("default"), childrenDom]]);
 
-    return Renderer.renderDom(dom, context, slots);
+    return Renderer.renderDom(dom, context, slots, defaultTarget);
   }
 
   // deps: [String.Chars.to_string/1]
