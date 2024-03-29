@@ -33,6 +33,9 @@ export default class Renderer {
           Elixir_String_Chars["to_string/1"](dom.data[1].data[0]),
         );
 
+      case "page":
+        return Renderer.renderDom(dom.data[1], context, slots);
+
       case "text":
         return Bitstring.toText(dom.data[1]);
     }
@@ -422,11 +425,13 @@ export default class Renderer {
       pageState,
     );
 
+    const pageNodes = Type.tuple([Type.atom("page"), pageDom]);
+
     const layoutNode = Type.tuple([
       Type.atom("component"),
       layoutModule,
       layoutPropsDom,
-      pageDom,
+      pageNodes,
     ]);
 
     return Renderer.renderDom(
