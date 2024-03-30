@@ -60,6 +60,21 @@ export default class Renderer {
     );
   }
 
+  // deps: [String.Chars.to_string/1]
+  static valueDomToBitstring(valueDom) {
+    const bitstringChunks = valueDom.data.map((node) => {
+      const nodeType = node.data[0].value;
+
+      if (nodeType === "text") {
+        return node.data[1];
+      } else {
+        return Elixir_String_Chars["to_string/1"](node.data[1].data[0]);
+      }
+    });
+
+    return Bitstring.merge(bitstringChunks);
+  }
+
   // Based on build_layout_props_dom/2
   // deps: [:maps.from_list/1, :maps.merge/2]
   static #buildLayoutPropsDom(pageModuleRef, pageState) {
@@ -173,7 +188,7 @@ export default class Renderer {
     ) {
       evaluatedValue = valueDom.data[0].data[1].data[0];
     } else {
-      evaluatedValue = Renderer.#valueDomToBitstring(valueDom);
+      evaluatedValue = Renderer.valueDomToBitstring(valueDom);
     }
 
     return Type.tuple([name, evaluatedValue]);
@@ -503,22 +518,7 @@ export default class Renderer {
     return Renderer.renderDom(dom, context, slots, defaultTarget);
   }
 
-  // deps: [String.Chars.to_string/1]
-  static #valueDomToBitstring(valueDom) {
-    const bitstringChunks = valueDom.data.map((node) => {
-      const nodeType = node.data[0].value;
-
-      if (nodeType === "text") {
-        return node.data[1];
-      } else {
-        return Elixir_String_Chars["to_string/1"](node.data[1].data[0]);
-      }
-    });
-
-    return Bitstring.merge(bitstringChunks);
-  }
-
   static #valueDomToText(valueDom) {
-    return Bitstring.toText(Renderer.#valueDomToBitstring(valueDom));
+    return Bitstring.toText(Renderer.valueDomToBitstring(valueDom));
   }
 }

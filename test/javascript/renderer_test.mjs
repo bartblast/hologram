@@ -1755,3 +1755,68 @@ describe("page", () => {
     ]);
   });
 });
+
+describe("valueDomToBitstring()", () => {
+  it("text", () => {
+    const dom = Type.keywordList([[Type.atom("text"), Type.bitstring("aaa")]]);
+    const result = Renderer.valueDomToBitstring(dom);
+
+    assert.deepStrictEqual(result, Type.bitstring("aaa"));
+  });
+
+  it("expression", () => {
+    const dom = Type.keywordList([
+      [Type.atom("expression"), Type.tuple([Type.integer(123)])],
+    ]);
+
+    const result = Renderer.valueDomToBitstring(dom);
+
+    assert.deepStrictEqual(result, Type.bitstring("123"));
+  });
+
+  it("text, expression", () => {
+    const dom = Type.keywordList([
+      [Type.atom("text"), Type.bitstring("aaa")],
+      [Type.atom("expression"), Type.tuple([Type.integer(123)])],
+    ]);
+
+    const result = Renderer.valueDomToBitstring(dom);
+
+    assert.deepStrictEqual(result, Type.bitstring("aaa123"));
+  });
+
+  it("expression, text", () => {
+    const dom = Type.keywordList([
+      [Type.atom("expression"), Type.tuple([Type.integer(123)])],
+      [Type.atom("text"), Type.bitstring("aaa")],
+    ]);
+
+    const result = Renderer.valueDomToBitstring(dom);
+
+    assert.deepStrictEqual(result, Type.bitstring("123aaa"));
+  });
+
+  it("text, expression, text", () => {
+    const dom = Type.keywordList([
+      [Type.atom("text"), Type.bitstring("aaa")],
+      [Type.atom("expression"), Type.tuple([Type.integer(123)])],
+      [Type.atom("text"), Type.bitstring("bbb")],
+    ]);
+
+    const result = Renderer.valueDomToBitstring(dom);
+
+    assert.deepStrictEqual(result, Type.bitstring("aaa123bbb"));
+  });
+
+  it("expression, text, expression", () => {
+    const dom = Type.keywordList([
+      [Type.atom("expression"), Type.tuple([Type.integer(123)])],
+      [Type.atom("text"), Type.bitstring("aaa")],
+      [Type.atom("expression"), Type.tuple([Type.integer(987)])],
+    ]);
+
+    const result = Renderer.valueDomToBitstring(dom);
+
+    assert.deepStrictEqual(result, Type.bitstring("123aaa987"));
+  });
+});
