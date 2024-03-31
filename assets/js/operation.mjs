@@ -1,28 +1,51 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
+import Erlang_Maps from "./erlang/maps.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Renderer from "./renderer.mjs";
 import Type from "./type.mjs";
 
 export default class Operation {
-  constructor(specDom, defaultTarget, _eventParam) {
-    // this.target = Operation.#resolveTarget(specDom, defaultTarget)
-    // this.params = Operation.#resolveParams(specDom, eventParam)
-
+  constructor(specDom, defaultTarget, eventParam) {
     if (Operation.#isTextSyntax(specDom)) {
-      this.constructFromTextSyntaxSpec(specDom, defaultTarget);
+      this.constructFromTextSyntaxSpec(specDom, defaultTarget, eventParam);
     } else if (Operation.#isExpressionShorthandSyntax(specDom)) {
-      this.constructFromExpressionShorthandSyntaxSpec(specDom, defaultTarget);
+      this.constructFromExpressionShorthandSyntaxSpec(
+        specDom,
+        defaultTarget,
+        eventParam,
+      );
     } else if (Operation.#isExpressionLonghandSyntax(specDom)) {
-      this.constructFromExpressionLonghandSyntaxSpec(specDom, defaultTarget);
+      this.constructFromExpressionLonghandSyntaxSpec(
+        specDom,
+        defaultTarget,
+        eventParam,
+      );
     } else {
-      this.constructFromMultiChunkSyntaxSpec(specDom, defaultTarget);
+      this.constructFromMultiChunkSyntaxSpec(
+        specDom,
+        defaultTarget,
+        eventParam,
+      );
     }
   }
 
-  constructFromExpressionLonghandSyntaxSpec(specDom, defaultTarget) {
+  // deps: [:maps.from_list/1, :maps.put/3]
+  buildParamsMap(paramsKeywordList, eventParam) {
+    this.params = Erlang_Maps["put/3"](
+      Type.atom("event"),
+      eventParam,
+      Erlang_Maps["from_list/1"](paramsKeywordList),
+    );
+  }
+
+  constructFromExpressionLonghandSyntaxSpec(
+    specDom,
+    defaultTarget,
+    eventParam,
+  ) {
     const target = Interpreter.accessKeywordListElement(
       specDom.data[0].data[1].data[0],
       Type.atom("target"),
@@ -30,6 +53,54 @@ export default class Operation {
 
     this.target = target ? target : defaultTarget;
 
+    this.resolveNameAndType(specDom, defaultTarget);
+
+    const paramsKeywordList =
+      Interpreter.accessKeywordListElement(
+        specDom.data[0].data[1].data[0],
+        Type.atom("params"),
+      ) || Type.keywordList([]);
+
+    this.buildParamsMap(paramsKeywordList, eventParam);
+  }
+
+  constructFromExpressionShorthandSyntaxSpec(
+    specDom,
+    defaultTarget,
+    eventParam,
+  ) {
+    this.name = specDom.data[0].data[1].data[0];
+    this.target = defaultTarget;
+    this.type = "action";
+
+    const paramsKeywordList =
+      specDom.data[0].data[1].data[1] || Type.keywordList([]);
+
+    this.buildParamsMap(paramsKeywordList, eventParam);
+  }
+
+  // $click="aaa{123}bbb"
+  constructFromMultiChunkSyntaxSpec(specDom, defaultTarget, eventParam) {
+    const nameBitstring = Renderer.valueDomToBitstring(specDom);
+    const nameText = Bitstring.toText(nameBitstring);
+
+    this.name = Type.atom(nameText);
+    this.params = Type.map([[Type.atom("event"), eventParam]]);
+    this.target = defaultTarget;
+    this.type = "action";
+  }
+
+  constructFromTextSyntaxSpec(specDom, defaultTarget, eventParam) {
+    const nameBitstring = specDom.data[0].data[1];
+    const nameText = Bitstring.toText(nameBitstring);
+
+    this.name = Type.atom(nameText);
+    this.params = Type.map([[Type.atom("event"), eventParam]]);
+    this.target = defaultTarget;
+    this.type = "action";
+  }
+
+  resolveNameAndType(specDom, defaultTarget) {
     const action = Interpreter.accessKeywordListElement(
       specDom.data[0].data[1].data[0],
       Type.atom("action"),
@@ -55,31 +126,6 @@ export default class Operation {
     throw new HologramInterpreterError(
       `Operation spec is invalid: "${Interpreter.inspect(specDom.data[0].data[1])}". See what to do here: https://www.hologram.page/TODO`,
     );
-  }
-
-  constructFromExpressionShorthandSyntaxSpec(specDom, defaultTarget) {
-    this.name = specDom.data[0].data[1].data[0];
-    this.target = defaultTarget;
-    this.type = "action";
-  }
-
-  // $click="aaa{123}bbb"
-  constructFromMultiChunkSyntaxSpec(specDom, defaultTarget) {
-    const nameBitstring = Renderer.valueDomToBitstring(specDom);
-    const nameText = Bitstring.toText(nameBitstring);
-
-    this.name = Type.atom(nameText);
-    this.target = defaultTarget;
-    this.type = "action";
-  }
-
-  constructFromTextSyntaxSpec(specDom, defaultTarget) {
-    const nameBitstring = specDom.data[0].data[1];
-    const nameText = Bitstring.toText(nameBitstring);
-
-    this.name = Type.atom(nameText);
-    this.target = defaultTarget;
-    this.type = "action";
   }
 
   // $click={action: :my_action, params: [a: 1, b: 2]}
