@@ -7,23 +7,29 @@ import Renderer from "./renderer.mjs";
 import Type from "./type.mjs";
 
 export default class Operation {
-  constructor(specDom, _defaultTarget, _eventParam) {
-    // this.type = Operation.#resolveType(specDom);
+  constructor(specDom, defaultTarget, _eventParam) {
     // this.target = Operation.#resolveTarget(specDom, defaultTarget)
     // this.params = Operation.#resolveParams(specDom, eventParam)
 
     if (Operation.#isTextSyntax(specDom)) {
-      this.constructFromTextSyntaxSpec(specDom);
+      this.constructFromTextSyntaxSpec(specDom, defaultTarget);
     } else if (Operation.#isExpressionShorthandSyntax(specDom)) {
-      this.constructFromExpressionShorthandSyntaxSpec(specDom);
+      this.constructFromExpressionShorthandSyntaxSpec(specDom, defaultTarget);
     } else if (Operation.#isExpressionLonghandSyntax(specDom)) {
-      this.constructFromExpressionLonghandSyntaxSpec(specDom);
+      this.constructFromExpressionLonghandSyntaxSpec(specDom, defaultTarget);
     } else {
-      this.constructFromMultiChunkSyntaxSpec(specDom);
+      this.constructFromMultiChunkSyntaxSpec(specDom, defaultTarget);
     }
   }
 
-  constructFromExpressionLonghandSyntaxSpec(specDom) {
+  constructFromExpressionLonghandSyntaxSpec(specDom, defaultTarget) {
+    const target = Interpreter.accessKeywordListElement(
+      specDom.data[0].data[1].data[0],
+      Type.atom("target"),
+    );
+
+    this.target = target ? target : defaultTarget;
+
     const action = Interpreter.accessKeywordListElement(
       specDom.data[0].data[1].data[0],
       Type.atom("action"),
@@ -51,25 +57,28 @@ export default class Operation {
     );
   }
 
-  constructFromExpressionShorthandSyntaxSpec(specDom) {
+  constructFromExpressionShorthandSyntaxSpec(specDom, defaultTarget) {
     this.name = specDom.data[0].data[1].data[0];
+    this.target = defaultTarget;
     this.type = "action";
   }
 
   // $click="aaa{123}bbb"
-  constructFromMultiChunkSyntaxSpec(specDom) {
+  constructFromMultiChunkSyntaxSpec(specDom, defaultTarget) {
     const nameBitstring = Renderer.valueDomToBitstring(specDom);
     const nameText = Bitstring.toText(nameBitstring);
 
     this.name = Type.atom(nameText);
+    this.target = defaultTarget;
     this.type = "action";
   }
 
-  constructFromTextSyntaxSpec(specDom) {
+  constructFromTextSyntaxSpec(specDom, defaultTarget) {
     const nameBitstring = specDom.data[0].data[1];
     const nameText = Bitstring.toText(nameBitstring);
 
     this.name = Type.atom(nameText);
+    this.target = defaultTarget;
     this.type = "action";
   }
 

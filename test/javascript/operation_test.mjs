@@ -9,14 +9,17 @@ import Type from "../../assets/js/type.mjs";
 before(() => linkModules());
 after(() => unlinkModules());
 
+const defaultTarget = Type.bitstring("my_default_target");
+
 it("single text chunk", () => {
   const specDom = Type.keywordList([
     [Type.atom("text"), Type.bitstring("my_action")],
   ]);
 
-  const operation = new Operation(specDom);
+  const operation = new Operation(specDom, defaultTarget);
 
   assert.deepStrictEqual(operation.name, Type.atom("my_action"));
+  assert.deepStrictEqual(operation.target, defaultTarget);
   assert.deepStrictEqual(operation.type, "action");
 });
 
@@ -25,13 +28,14 @@ it("single expression chunk, shorthand syntax", () => {
     [Type.atom("expression"), Type.tuple([Type.atom("my_action")])],
   ]);
 
-  const operation = new Operation(specDom);
+  const operation = new Operation(specDom, defaultTarget);
 
   assert.deepStrictEqual(operation.name, Type.atom("my_action"));
+  assert.deepStrictEqual(operation.target, defaultTarget);
   assert.deepStrictEqual(operation.type, "action");
 });
 
-it("single expression chunk, longhand syntax, action", () => {
+it("single expression chunk, longhand syntax, action, default target", () => {
   const specDom = Type.keywordList([
     [
       Type.atom("expression"),
@@ -50,13 +54,14 @@ it("single expression chunk, longhand syntax, action", () => {
     ],
   ]);
 
-  const operation = new Operation(specDom);
+  const operation = new Operation(specDom, defaultTarget);
 
   assert.deepStrictEqual(operation.name, Type.atom("my_action"));
+  assert.deepStrictEqual(operation.target, defaultTarget);
   assert.deepStrictEqual(operation.type, "action");
 });
 
-it("single expression chunk, longhand syntax, command", () => {
+it("single expression chunk, longhand syntax, command, default target", () => {
   const specDom = Type.keywordList([
     [
       Type.atom("expression"),
@@ -75,10 +80,35 @@ it("single expression chunk, longhand syntax, command", () => {
     ],
   ]);
 
-  const operation = new Operation(specDom);
+  const operation = new Operation(specDom, defaultTarget);
 
   assert.deepStrictEqual(operation.name, Type.atom("my_command"));
+  assert.deepStrictEqual(operation.target, defaultTarget);
   assert.deepStrictEqual(operation.type, "command");
+});
+
+it("single expression chunk, longhand syntax, target specified", () => {
+  const specDom = Type.keywordList([
+    [
+      Type.atom("expression"),
+      Type.tuple([
+        Type.keywordList([
+          [Type.atom("action"), Type.atom("my_action")],
+          [
+            Type.atom("params"),
+            Type.keywordList([
+              [Type.atom("a"), Type.integer(1)],
+              [Type.atom("b"), Type.integer(2)],
+            ]),
+          ],
+        ]),
+      ]),
+    ],
+  ]);
+
+  const operation = new Operation(specDom, Type.bitstring("my_target"));
+
+  assert.deepStrictEqual(operation.target, Type.bitstring("my_target"));
 });
 
 it("multiple chunks", () => {
