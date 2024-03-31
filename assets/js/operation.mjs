@@ -31,6 +31,7 @@ export default class Operation {
 
     if (action) {
       this.name = action;
+      this.type = "action";
       return;
     }
 
@@ -41,6 +42,7 @@ export default class Operation {
 
     if (command) {
       this.name = command;
+      this.type = "command";
       return;
     }
 
@@ -51,6 +53,7 @@ export default class Operation {
 
   constructFromExpressionShorthandSyntaxSpec(specDom) {
     this.name = specDom.data[0].data[1].data[0];
+    this.type = "action";
   }
 
   // $click="aaa{123}bbb"
@@ -59,6 +62,7 @@ export default class Operation {
     const nameText = Bitstring.toText(nameBitstring);
 
     this.name = Type.atom(nameText);
+    this.type = "action";
   }
 
   constructFromTextSyntaxSpec(specDom) {
@@ -66,6 +70,7 @@ export default class Operation {
     const nameText = Bitstring.toText(nameBitstring);
 
     this.name = Type.atom(nameText);
+    this.type = "action";
   }
 
   // $click={action: :my_action, params: [a: 1, b: 2]}
