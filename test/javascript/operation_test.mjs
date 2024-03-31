@@ -111,7 +111,7 @@ describe("name", () => {
     assert.throw(
       () => new Operation(specDom),
       HologramInterpreterError,
-      `Can't resolve operation name in: "{[params: [a: 1, b: 2]]}". See what to do here: https://www.hologram.page/TODO`,
+      `Operation spec is invalid: "{[params: [a: 1, b: 2]]}". See what to do here: https://www.hologram.page/TODO`,
     );
   });
 });
