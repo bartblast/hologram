@@ -1,7 +1,6 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
-import Erlang_Maps from "./erlang/maps.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Renderer from "./renderer.mjs";
@@ -9,100 +8,84 @@ import Type from "./type.mjs";
 
 export default class Operation {
   constructor(specDom, defaultTarget, eventParam) {
+    this.defaultTarget = defaultTarget;
+    this.eventParam = eventParam;
+    this.specDom = specDom;
+
     if (Operation.#isTextSyntax(specDom)) {
-      this.constructFromTextSyntaxSpec(specDom, defaultTarget, eventParam);
+      this.#constructFromTextSyntaxSpec();
     } else if (Operation.#isExpressionShorthandSyntax(specDom)) {
-      this.constructFromExpressionShorthandSyntaxSpec(
-        specDom,
-        defaultTarget,
-        eventParam,
-      );
+      this.#constructFromExpressionShorthandSyntaxSpec();
     } else if (Operation.#isExpressionLonghandSyntax(specDom)) {
-      this.constructFromExpressionLonghandSyntaxSpec(
-        specDom,
-        defaultTarget,
-        eventParam,
-      );
+      this.#constructFromExpressionLonghandSyntaxSpec();
     } else {
-      this.constructFromMultiChunkSyntaxSpec(
-        specDom,
-        defaultTarget,
-        eventParam,
-      );
+      this.#constructFromMultiChunkSyntaxSpec();
     }
   }
 
   // deps: [:maps.from_list/1, :maps.put/3]
-  buildParamsMap(paramsKeywordList, eventParam) {
+  #buildParamsMap(paramsKeywordList) {
     this.params = Erlang_Maps["put/3"](
       Type.atom("event"),
-      eventParam,
+      this.eventParam,
       Erlang_Maps["from_list/1"](paramsKeywordList),
     );
   }
 
-  constructFromExpressionLonghandSyntaxSpec(
-    specDom,
-    defaultTarget,
-    eventParam,
-  ) {
+  #constructFromExpressionLonghandSyntaxSpec() {
     const target = Interpreter.accessKeywordListElement(
-      specDom.data[0].data[1].data[0],
+      this.specDom.data[0].data[1].data[0],
       Type.atom("target"),
     );
 
-    this.target = target ? target : defaultTarget;
+    this.target = target ? target : this.defaultTarget;
 
-    this.resolveNameAndType(specDom, defaultTarget);
+    this.#resolveNameAndType();
 
     const paramsKeywordList =
       Interpreter.accessKeywordListElement(
-        specDom.data[0].data[1].data[0],
+        this.specDom.data[0].data[1].data[0],
         Type.atom("params"),
       ) || Type.keywordList([]);
 
-    this.buildParamsMap(paramsKeywordList, eventParam);
+    this.#buildParamsMap(paramsKeywordList);
   }
 
-  constructFromExpressionShorthandSyntaxSpec(
-    specDom,
-    defaultTarget,
-    eventParam,
-  ) {
-    this.name = specDom.data[0].data[1].data[0];
-    this.target = defaultTarget;
+  #constructFromExpressionShorthandSyntaxSpec() {
+    this.name = this.specDom.data[0].data[1].data[0];
+    this.target = this.defaultTarget;
     this.type = "action";
 
     const paramsKeywordList =
-      specDom.data[0].data[1].data[1] || Type.keywordList([]);
+      this.specDom.data[0].data[1].data[1] || Type.keywordList([]);
 
-    this.buildParamsMap(paramsKeywordList, eventParam);
+    this.#buildParamsMap(paramsKeywordList);
   }
 
   // $click="aaa{123}bbb"
-  constructFromMultiChunkSyntaxSpec(specDom, defaultTarget, eventParam) {
-    const nameBitstring = Renderer.valueDomToBitstring(specDom);
+  #constructFromMultiChunkSyntaxSpec() {
+    const nameBitstring = Renderer.valueDomToBitstring(this.specDom);
     const nameText = Bitstring.toText(nameBitstring);
 
     this.name = Type.atom(nameText);
-    this.params = Type.map([[Type.atom("event"), eventParam]]);
-    this.target = defaultTarget;
+    this.params = Type.map([[Type.atom("event"), this.eventParam]]);
+    this.target = this.defaultTarget;
     this.type = "action";
   }
 
-  constructFromTextSyntaxSpec(specDom, defaultTarget, eventParam) {
-    const nameBitstring = specDom.data[0].data[1];
+  #constructFromTextSyntaxSpec() {
+    const nameBitstring = this.specDom.data[0].data[1];
     const nameText = Bitstring.toText(nameBitstring);
 
     this.name = Type.atom(nameText);
-    this.params = Type.map([[Type.atom("event"), eventParam]]);
-    this.target = defaultTarget;
+    this.params = Type.map([[Type.atom("event"), this.eventParam]]);
+    this.target = this.defaultTarget;
     this.type = "action";
   }
 
-  resolveNameAndType(specDom, defaultTarget) {
+  #resolveNameAndType() {
     const action = Interpreter.accessKeywordListElement(
-      specDom.data[0].data[1].data[0],
+      this.specDom.data[0].data[1].data[0],
       Type.atom("action"),
     );
 
@@ -113,7 +96,7 @@ export default class Operation {
     }
 
     const command = Interpreter.accessKeywordListElement(
-      specDom.data[0].data[1].data[0],
+      this.specDom.data[0].data[1].data[0],
       Type.atom("command"),
     );
 
@@ -124,7 +107,7 @@ export default class Operation {
     }
 
     throw new HologramInterpreterError(
-      `Operation spec is invalid: "${Interpreter.inspect(specDom.data[0].data[1])}". See what to do here: https://www.hologram.page/TODO`,
+      `Operation spec is invalid: "${Interpreter.inspect(this.specDom.data[0].data[1])}". See what to do here: https://www.hologram.page/TODO`,
     );
   }
 
