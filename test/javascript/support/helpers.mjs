@@ -93,7 +93,7 @@ export function assertMatchError(callable, value) {
   }
 }
 
-export function componentStructFixture(data) {
+export function componentStructFixture(data = {}) {
   let componentStruct = elixirHologramComponentStruct0();
 
   const {emittedContext, nextAction, nextCommand, state} = data;
