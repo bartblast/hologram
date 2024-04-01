@@ -25,12 +25,6 @@ export default class OldComponentRegistry {
       : null;
   }
 
-  // null instead of boxed nil is returned by default on purpose, because the function is not used by transpiled code.
-  // deps: [:maps.get/3]
-  static getComponentStruct(cid) {
-    return Erlang_Maps["get/3"](cid, ComponentRegistry.data, null);
-  }
-
   // deps: [Hologram.Component.__struct__/0, :maps.put/3]
   static putComponentEmittedContext(cid, emittedContext) {
     let componentStruct = ComponentRegistry.getComponentStruct(cid);

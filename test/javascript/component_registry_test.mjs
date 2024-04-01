@@ -64,6 +64,18 @@ describe("ComponentRegistry", () => {
     ComponentRegistry.data = Type.map([]);
   });
 
+  describe("getComponentStruct()", () => {
+    it("entry exists", () => {
+      const result = ComponentRegistry.getComponentStruct(cid2);
+      assert.equal(result, struct2);
+    });
+
+    it("doesn't exist", () => {
+      const result = ComponentRegistry.getComponentStruct(cid3);
+      assert.isNull(result);
+    });
+  });
+
   describe("getEntry()", () => {
     it("entry exists", () => {
       const result = ComponentRegistry.getEntry(cid2);
