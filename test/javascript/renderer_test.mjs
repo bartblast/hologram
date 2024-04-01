@@ -7,7 +7,7 @@ import {
   assertBoxedError,
   componentStructFixture,
   elixirHologramComponentStruct0,
-  initStoreComponentStruct,
+  initComponentRegistryComponentStruct,
   linkModules,
   sinon,
   unlinkModules,
@@ -65,7 +65,7 @@ import {defineModule9Fixture} from "./support/fixtures/template/renderer/module_
 
 import Hologram from "../../assets/js/hologram.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
-import Store from "../../assets/js/store.mjs";
+import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Type from "../../assets/js/type.mjs";
 
 before(() => {
@@ -395,7 +395,7 @@ describe("element node", () => {
       ]),
     ]);
 
-    Store.putComponentState(
+    ComponentRegistry.putComponentState(
       cid3,
       Type.map([
         [Type.atom("a"), Type.integer(1)],
@@ -403,7 +403,7 @@ describe("element node", () => {
       ]),
     );
 
-    Store.putComponentState(
+    ComponentRegistry.putComponentState(
       cid7,
       Type.map([
         [Type.atom("c"), Type.integer(3)],
@@ -422,7 +422,7 @@ describe("element node", () => {
     );
 
     assert.deepStrictEqual(
-      Store.data,
+      ComponentRegistry.data,
       Type.map([
         [
           cid3,
@@ -487,7 +487,7 @@ describe("element node", () => {
           defaultTarget,
         );
 
-        Hologram.handleEvent.restore();
+        Hologram.handleEvent.reComponentRegistry();
       });
 
       it("multiple event listeners", () => {
@@ -550,7 +550,7 @@ describe("element node", () => {
           defaultTarget,
         );
 
-        Hologram.handleEvent.restore();
+        Hologram.handleEvent.reComponentRegistry();
       });
     });
 
@@ -568,7 +568,7 @@ describe("element node", () => {
           Type.list([]),
         ]);
 
-        initStoreComponentStruct(cid);
+        initComponentRegistryComponentStruct(cid);
 
         const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
 
@@ -590,7 +590,7 @@ describe("element node", () => {
           cid,
         );
 
-        Hologram.handleEvent.restore();
+        Hologram.handleEvent.reComponentRegistry();
       });
 
       it("parent stateful component", () => {
@@ -621,12 +621,12 @@ describe("element node", () => {
           defaultTarget,
         );
 
-        Hologram.handleEvent.restore();
+        Hologram.handleEvent.reComponentRegistry();
       });
 
       it("page", () => {
-        initStoreComponentStruct(Type.bitstring("page"));
-        initStoreComponentStruct(Type.bitstring("layout"));
+        initComponentRegistryComponentStruct(Type.bitstring("page"));
+        initComponentRegistryComponentStruct(Type.bitstring("layout"));
 
         const vdom = Renderer.renderPage(
           Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module56"),
@@ -651,12 +651,12 @@ describe("element node", () => {
           Type.bitstring("page"),
         );
 
-        Hologram.handleEvent.restore();
+        Hologram.handleEvent.reComponentRegistry();
       });
 
       it("layout", () => {
-        initStoreComponentStruct(Type.bitstring("page"));
-        initStoreComponentStruct(Type.bitstring("layout"));
+        initComponentRegistryComponentStruct(Type.bitstring("page"));
+        initComponentRegistryComponentStruct(Type.bitstring("layout"));
 
         const vdom = Renderer.renderPage(
           Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module57"),
@@ -681,7 +681,7 @@ describe("element node", () => {
           Type.bitstring("layout"),
         );
 
-        Hologram.handleEvent.restore();
+        Hologram.handleEvent.reComponentRegistry();
       });
 
       it("slot of a stateful component nested in another stateful component", () => {
@@ -699,9 +699,9 @@ describe("element node", () => {
           Type.list([]),
         ]);
 
-        initStoreComponentStruct(Type.bitstring("component_59"));
-        initStoreComponentStruct(Type.bitstring("component_60"));
-        initStoreComponentStruct(Type.bitstring("component_61"));
+        initComponentRegistryComponentStruct(Type.bitstring("component_59"));
+        initComponentRegistryComponentStruct(Type.bitstring("component_60"));
+        initComponentRegistryComponentStruct(Type.bitstring("component_61"));
 
         const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
 
@@ -723,7 +723,7 @@ describe("element node", () => {
           Type.bitstring("component_61"),
         );
 
-        Hologram.handleEvent.restore();
+        Hologram.handleEvent.reComponentRegistry();
       });
     });
   });
@@ -806,7 +806,7 @@ describe("node list", () => {
       ]),
     ]);
 
-    Store.putComponentState(
+    ComponentRegistry.putComponentState(
       cid3,
       Type.map([
         [Type.atom("a"), Type.integer(1)],
@@ -814,7 +814,7 @@ describe("node list", () => {
       ]),
     );
 
-    Store.putComponentState(
+    ComponentRegistry.putComponentState(
       cid7,
       Type.map([
         [Type.atom("c"), Type.integer(3)],
@@ -832,7 +832,7 @@ describe("node list", () => {
     ]);
 
     assert.deepStrictEqual(
-      Store.data,
+      ComponentRegistry.data,
       Type.map([
         [
           cid3,
@@ -887,7 +887,7 @@ describe("node list", () => {
       ]),
     ]);
 
-    Store.putComponentState(
+    ComponentRegistry.putComponentState(
       cid51,
       Type.map([
         [Type.atom("a"), Type.integer(1)],
@@ -895,7 +895,7 @@ describe("node list", () => {
       ]),
     );
 
-    Store.putComponentState(
+    ComponentRegistry.putComponentState(
       cid52,
       Type.map([
         [Type.atom("c"), Type.integer(3)],
@@ -915,7 +915,7 @@ describe("node list", () => {
     ]);
 
     assert.deepStrictEqual(
-      Store.data,
+      ComponentRegistry.data,
       Type.map([
         [
           cid51,
@@ -954,7 +954,7 @@ describe("stateless component", () => {
 
     assert.deepStrictEqual(result, expected);
 
-    assert.deepStrictEqual(Store.data, Type.map([]));
+    assert.deepStrictEqual(ComponentRegistry.data, Type.map([]));
   });
 
   it("with props", () => {
@@ -994,7 +994,7 @@ describe("stateless component", () => {
 
     assert.deepStrictEqual(result, expected);
 
-    assert.deepStrictEqual(Store.data, Type.map([]));
+    assert.deepStrictEqual(ComponentRegistry.data, Type.map([]));
   });
 
   it("with unregistered var used", () => {
@@ -1037,17 +1037,20 @@ describe("stateful component", () => {
       Type.list([]),
     ]);
 
-    initStoreComponentStruct(cid);
+    initComponentRegistryComponentStruct(cid);
 
     const resultVDom = Renderer.renderDom(node, context, slots, defaultTarget);
     const expectedVdom = [vnode("div", {attrs: {}, on: {}}, ["abc"])];
     assert.deepStrictEqual(resultVDom, expectedVdom);
 
-    const expectedStoreData = Type.map([
+    const expectedComponentRegistryData = Type.map([
       [cid, elixirHologramComponentStruct0()],
     ]);
 
-    assert.deepStrictEqual(Store.data, expectedStoreData);
+    assert.deepStrictEqual(
+      ComponentRegistry.data,
+      expectedComponentRegistryData,
+    );
   });
 
   it("with props", () => {
@@ -1081,7 +1084,7 @@ describe("stateful component", () => {
       Type.list([]),
     ]);
 
-    initStoreComponentStruct(cid);
+    initComponentRegistryComponentStruct(cid);
 
     const resultVDom = Renderer.renderDom(node, context, slots, defaultTarget);
 
@@ -1093,11 +1096,14 @@ describe("stateful component", () => {
 
     assert.deepStrictEqual(resultVDom, expectedVdom);
 
-    const expectedStoreData = Type.map([
+    const expectedComponentRegistryData = Type.map([
       [cid, elixirHologramComponentStruct0()],
     ]);
 
-    assert.deepStrictEqual(Store.data, expectedStoreData);
+    assert.deepStrictEqual(
+      ComponentRegistry.data,
+      expectedComponentRegistryData,
+    );
   });
 
   it("with state, component has already been initialized", () => {
@@ -1118,7 +1124,7 @@ describe("stateful component", () => {
       [Type.atom("b"), Type.integer(2)],
     ]);
 
-    Store.putComponentState(cid, state);
+    ComponentRegistry.putComponentState(cid, state);
 
     const resultVDom = Renderer.renderDom(node, context, slots, defaultTarget);
 
@@ -1129,7 +1135,7 @@ describe("stateful component", () => {
     assert.deepStrictEqual(resultVDom, expectedVdom);
 
     assert.deepStrictEqual(
-      Store.data,
+      ComponentRegistry.data,
       Type.map([[cid, componentStructFixture({state: state})]]),
     );
   });
@@ -1156,7 +1162,7 @@ describe("stateful component", () => {
     assert.deepStrictEqual(resultVDom, expectedVdom);
 
     assert.deepStrictEqual(
-      Store.data,
+      ComponentRegistry.data,
       Type.map([
         [
           cid,
@@ -1197,7 +1203,7 @@ describe("stateful component", () => {
       [Type.atom("b"), Type.bitstring("state_b")],
     ]);
 
-    Store.putComponentState(cid, state);
+    ComponentRegistry.putComponentState(cid, state);
 
     const resultVDom = Renderer.renderDom(node, context, slots, defaultTarget);
 
@@ -1210,7 +1216,7 @@ describe("stateful component", () => {
     assert.deepStrictEqual(resultVDom, expectedVdom);
 
     assert.deepStrictEqual(
-      Store.data,
+      ComponentRegistry.data,
       Type.map([[cid, componentStructFixture({state: state})]]),
     );
   });
@@ -1250,7 +1256,7 @@ describe("stateful component", () => {
       Type.list([]),
     ]);
 
-    initStoreComponentStruct(cid);
+    initComponentRegistryComponentStruct(cid);
 
     const result = Renderer.renderDom(node, context, slots, defaultTarget);
 
@@ -1281,7 +1287,7 @@ describe("stateful component", () => {
       Type.list([]),
     ]);
 
-    Store.putComponentState(
+    ComponentRegistry.putComponentState(
       cid,
       Type.map([[Type.atom("b"), Type.integer(222)]]),
     );
@@ -1361,17 +1367,17 @@ describe("default slot", () => {
       Type.list([]),
     ]);
 
-    Store.putComponentState(
+    ComponentRegistry.putComponentState(
       cid10,
       Type.map([[Type.atom("a"), Type.integer(10)]]),
     );
 
-    Store.putComponentState(
+    ComponentRegistry.putComponentState(
       cid11,
       Type.map([[Type.atom("a"), Type.integer(11)]]),
     );
 
-    Store.putComponentState(
+    ComponentRegistry.putComponentState(
       cid12,
       Type.map([[Type.atom("a"), Type.integer(12)]]),
     );
@@ -1380,7 +1386,7 @@ describe("default slot", () => {
     assert.deepStrictEqual(result, ["10,11,10,12,10"]);
 
     assert.deepStrictEqual(
-      Store.data,
+      ComponentRegistry.data,
       Type.map([
         [
           cid10,
@@ -1440,7 +1446,7 @@ describe("default slot", () => {
       Type.keywordList([[Type.atom("text"), Type.bitstring("abc")]]),
     ]);
 
-    Store.putComponentState(
+    ComponentRegistry.putComponentState(
       cid34,
       Type.map([
         [Type.atom("cid"), cid34],
@@ -1453,7 +1459,7 @@ describe("default slot", () => {
       ]),
     );
 
-    Store.putComponentState(
+    ComponentRegistry.putComponentState(
       cid35,
       Type.map([
         [Type.atom("cid"), cid35],
@@ -1462,7 +1468,7 @@ describe("default slot", () => {
       ]),
     );
 
-    Store.putComponentState(
+    ComponentRegistry.putComponentState(
       cid36,
       Type.map([
         [Type.atom("cid"), cid36],
@@ -1478,7 +1484,7 @@ describe("default slot", () => {
     ]);
 
     assert.deepStrictEqual(
-      Store.data,
+      ComponentRegistry.data,
       Type.map([
         [
           cid34,
@@ -1521,9 +1527,9 @@ describe("default slot", () => {
 
 describe("context", () => {
   it("emitted in page, accessed in component nested in page", () => {
-    initStoreComponentStruct(Type.bitstring("layout"));
+    initComponentRegistryComponentStruct(Type.bitstring("layout"));
 
-    Store.putComponentEmittedContext(
+    ComponentRegistry.putComponentEmittedContext(
       Type.bitstring("page"),
       Type.map([
         [
@@ -1542,9 +1548,9 @@ describe("context", () => {
   });
 
   it("emitted in page, accessed in component nested in layout", () => {
-    initStoreComponentStruct(Type.bitstring("layout"));
+    initComponentRegistryComponentStruct(Type.bitstring("layout"));
 
-    Store.putComponentEmittedContext(
+    ComponentRegistry.putComponentEmittedContext(
       Type.bitstring("page"),
       Type.map([
         [
@@ -1563,9 +1569,9 @@ describe("context", () => {
   });
 
   it("emitted in page, accessed in layout", () => {
-    initStoreComponentStruct(Type.bitstring("layout"));
+    initComponentRegistryComponentStruct(Type.bitstring("layout"));
 
-    Store.putComponentEmittedContext(
+    ComponentRegistry.putComponentEmittedContext(
       Type.bitstring("page"),
       Type.map([
         [
@@ -1584,9 +1590,9 @@ describe("context", () => {
   });
 
   it("emmited in layout, accessed in component nested in page", () => {
-    initStoreComponentStruct(Type.bitstring("page"));
+    initComponentRegistryComponentStruct(Type.bitstring("page"));
 
-    Store.putComponentEmittedContext(
+    ComponentRegistry.putComponentEmittedContext(
       Type.bitstring("layout"),
       Type.map([
         [
@@ -1605,9 +1611,9 @@ describe("context", () => {
   });
 
   it("emitted in layout, accessed in component nested in layout", () => {
-    initStoreComponentStruct(Type.bitstring("page"));
+    initComponentRegistryComponentStruct(Type.bitstring("page"));
 
-    Store.putComponentEmittedContext(
+    ComponentRegistry.putComponentEmittedContext(
       Type.bitstring("layout"),
       Type.map([
         [
@@ -1628,7 +1634,7 @@ describe("context", () => {
   it("emitted in component, accessed in component", () => {
     const cid = Type.bitstring("component_37");
 
-    Store.putComponentEmittedContext(
+    ComponentRegistry.putComponentEmittedContext(
       cid,
       Type.map([
         [
@@ -1658,8 +1664,8 @@ describe("context", () => {
 
 describe("page", () => {
   it("inside layout slot", () => {
-    initStoreComponentStruct(Type.bitstring("page"));
-    initStoreComponentStruct(Type.bitstring("layout"));
+    initComponentRegistryComponentStruct(Type.bitstring("page"));
+    initComponentRegistryComponentStruct(Type.bitstring("layout"));
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module14"),
@@ -1675,8 +1681,8 @@ describe("page", () => {
   // it("cast page params")
 
   it("cast layout explicit static props", () => {
-    initStoreComponentStruct(Type.bitstring("page"));
-    initStoreComponentStruct(Type.bitstring("layout"));
+    initComponentRegistryComponentStruct(Type.bitstring("page"));
+    initComponentRegistryComponentStruct(Type.bitstring("layout"));
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module25"),
@@ -1689,7 +1695,7 @@ describe("page", () => {
   });
 
   it("cast layout props passed implicitely from page state", () => {
-    Store.putComponentState(
+    ComponentRegistry.putComponentState(
       Type.bitstring("page"),
       Type.map([
         [Type.atom("prop_1"), Type.bitstring("prop_value_1")],
@@ -1698,7 +1704,7 @@ describe("page", () => {
       ]),
     );
 
-    initStoreComponentStruct(Type.bitstring("layout"));
+    initComponentRegistryComponentStruct(Type.bitstring("layout"));
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module27"),
@@ -1711,7 +1717,7 @@ describe("page", () => {
   });
 
   it("aggregate page vars, giving state vars priority over param vars when there are name conflicts", () => {
-    Store.putComponentState(
+    ComponentRegistry.putComponentState(
       Type.bitstring("page"),
       Type.map([
         [Type.atom("key_2"), Type.bitstring("state_value_2")],
@@ -1719,7 +1725,7 @@ describe("page", () => {
       ]),
     );
 
-    initStoreComponentStruct(Type.bitstring("layout"));
+    initComponentRegistryComponentStruct(Type.bitstring("layout"));
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module21"),
@@ -1735,9 +1741,9 @@ describe("page", () => {
   });
 
   it("aggregate layout vars, giving state vars priority over prop vars when there are name conflicts", () => {
-    initStoreComponentStruct(Type.bitstring("page"));
+    initComponentRegistryComponentStruct(Type.bitstring("page"));
 
-    Store.putComponentState(
+    ComponentRegistry.putComponentState(
       Type.bitstring("layout"),
       Type.map([
         [Type.atom("key_2"), Type.bitstring("state_value_2")],

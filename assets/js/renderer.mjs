@@ -3,10 +3,10 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
+import ComponentRegistry from "./component_registry.mjs";
 import Hologram from "./hologram.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
-import Store from "./store.mjs";
 import Type from "./type.mjs";
 
 import {h as vnode} from "snabbdom";
@@ -51,7 +51,7 @@ export default class Renderer {
     const pageModuleRef = Interpreter.moduleRef(pageModule);
 
     const cid = Type.bitstring("page");
-    const pageComponentStruct = Store.getComponentStruct(cid);
+    const pageComponentStruct = ComponentRegistry.getComponentStruct(cid);
 
     return Renderer.#renderPageInsideLayout(
       pageModuleRef,
@@ -221,7 +221,7 @@ export default class Renderer {
 
   // deps: [Hologram.Component.__struct__/0, :maps.get/2]
   static #maybeInitComponent(cid, moduleRef, props) {
-    let componentState = Store.getComponentState(cid);
+    let componentState = ComponentRegistry.getComponentState(cid);
     let componentEmittedContext;
 
     if (componentState === null) {
@@ -234,7 +234,7 @@ export default class Renderer {
           emptyComponentStruct,
         );
 
-        Store.putComponentStruct(cid, componentStruct);
+        ComponentRegistry.putComponentStruct(cid, componentStruct);
 
         componentState = Erlang_Maps["get/2"](
           Type.atom("state"),
@@ -253,7 +253,8 @@ export default class Renderer {
         throw new HologramInterpreterError(message);
       }
     } else {
-      componentEmittedContext = Store.getComponentEmittedContext(cid);
+      componentEmittedContext =
+        ComponentRegistry.getComponentEmittedContext(cid);
     }
 
     return [componentState, componentEmittedContext];

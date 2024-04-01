@@ -14,7 +14,7 @@ import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import HologramMatchError from "../../../assets/js/errors/match_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
-import Store from "../../../assets/js/store.mjs";
+import ComponentRegistry from "../../../assets/js/component_registry.mjs";
 import Type from "../../../assets/js/type.mjs";
 import Utils from "../../../assets/js/utils.mjs";
 
@@ -188,11 +188,11 @@ export function freeze(obj) {
   return Object.freeze(obj);
 }
 
-export function initStoreComponentStruct(cid) {
+export function initComponentRegistryComponentStruct(cid) {
   const emptyComponentStruct =
     globalThis.Elixir_Hologram_Component["__struct__/0"]();
 
-  Store.putComponentStruct(cid, emptyComponentStruct);
+  ComponentRegistry.putComponentStruct(cid, emptyComponentStruct);
 }
 
 export function linkModules() {

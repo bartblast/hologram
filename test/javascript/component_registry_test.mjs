@@ -7,25 +7,25 @@ import {
   unlinkModules,
 } from "./support/helpers.mjs";
 
-import Store from "../../assets/js/store.mjs";
+import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Type from "../../assets/js/type.mjs";
 
 before(() => linkModules());
 after(() => unlinkModules());
 
 beforeEach(() => {
-  Store.data = Type.map([]);
+  ComponentRegistry.data = Type.map([]);
 });
 
 afterEach(() => {
-  Store.data = Type.map([]);
+  ComponentRegistry.data = Type.map([]);
 });
 
 describe("getComponentEmittedContext()", () => {
   it("component struct exists", () => {
     const cid = Type.bitstring("my_component_2");
 
-    Store.data = Type.map([
+    ComponentRegistry.data = Type.map([
       [
         Type.bitstring("my_component_1"),
         Type.map([[Type.atom("emitted_context"), "dummy_1"]]),
@@ -33,14 +33,14 @@ describe("getComponentEmittedContext()", () => {
       [cid, Type.map([[Type.atom("emitted_context"), "dummy_2"]])],
     ]);
 
-    const result = Store.getComponentEmittedContext(cid);
+    const result = ComponentRegistry.getComponentEmittedContext(cid);
 
     assert.equal(result, "dummy_2");
   });
 
   it("component struct doesn't exist", () => {
     const cid = Type.bitstring("my_component");
-    const result = Store.getComponentEmittedContext(cid);
+    const result = ComponentRegistry.getComponentEmittedContext(cid);
 
     assert.isNull(result);
   });
@@ -50,7 +50,7 @@ describe("getComponentState()", () => {
   it("component struct exists", () => {
     const cid = Type.bitstring("my_component_2");
 
-    Store.data = Type.map([
+    ComponentRegistry.data = Type.map([
       [
         Type.bitstring("my_component_1"),
         Type.map([[Type.atom("state"), "dummy_1"]]),
@@ -58,14 +58,14 @@ describe("getComponentState()", () => {
       [cid, Type.map([[Type.atom("state"), "dummy_2"]])],
     ]);
 
-    const result = Store.getComponentState(cid);
+    const result = ComponentRegistry.getComponentState(cid);
 
     assert.equal(result, "dummy_2");
   });
 
   it("component struct doesn't exist", () => {
     const cid = Type.bitstring("my_component");
-    const result = Store.getComponentState(cid);
+    const result = ComponentRegistry.getComponentState(cid);
 
     assert.isNull(result);
   });
@@ -75,31 +75,31 @@ describe("getComponentStruct()", () => {
   it("component struct exists", () => {
     const cid = Type.bitstring("my_component_2");
 
-    Store.data = Type.map([
+    ComponentRegistry.data = Type.map([
       [Type.bitstring("my_component_1"), "dummy_1"],
       [cid, "dummy_2"],
     ]);
 
-    const result = Store.getComponentStruct(cid);
+    const result = ComponentRegistry.getComponentStruct(cid);
 
     assert.equal(result, "dummy_2");
   });
 
   it("component struct doesn't exist", () => {
     const cid = Type.bitstring("my_component");
-    const result = Store.getComponentStruct(cid);
+    const result = ComponentRegistry.getComponentStruct(cid);
 
     assert.isNull(result);
   });
 });
 
 it("hydrate()", () => {
-  Store.data = Type.map([
+  ComponentRegistry.data = Type.map([
     [Type.atom("a"), Type.integer(1)],
     [Type.atom("b"), Type.integer(2)],
   ]);
 
-  Store.hydrate(
+  ComponentRegistry.hydrate(
     Type.map([
       [Type.atom("c"), Type.integer(3)],
       [Type.atom("a"), Type.integer(4)],
@@ -107,7 +107,7 @@ it("hydrate()", () => {
   );
 
   assert.deepStrictEqual(
-    Store.data,
+    ComponentRegistry.data,
     Type.map([
       [Type.atom("a"), Type.integer(4)],
       [Type.atom("b"), Type.integer(2)],
@@ -120,7 +120,7 @@ describe("putComponentEmittedContext()", () => {
   const cid = Type.bitstring("my_component");
 
   it("when component struct exists", () => {
-    Store.data = Type.map([
+    ComponentRegistry.data = Type.map([
       [
         cid,
         Type.map([
@@ -130,10 +130,10 @@ describe("putComponentEmittedContext()", () => {
       ],
     ]);
 
-    Store.putComponentEmittedContext(cid, "dummy_context_2");
+    ComponentRegistry.putComponentEmittedContext(cid, "dummy_context_2");
 
     assert.deepStrictEqual(
-      Store.data,
+      ComponentRegistry.data,
       Type.map([
         [
           cid,
@@ -147,10 +147,10 @@ describe("putComponentEmittedContext()", () => {
   });
 
   it("when component struct doesn't exist", () => {
-    Store.putComponentEmittedContext(cid, "dummy_context");
+    ComponentRegistry.putComponentEmittedContext(cid, "dummy_context");
 
     assert.deepStrictEqual(
-      Store.data,
+      ComponentRegistry.data,
       Type.map([
         [cid, componentStructFixture({emittedContext: "dummy_context"})],
       ]),
@@ -162,7 +162,7 @@ describe("putComponentState()", () => {
   const cid = Type.bitstring("my_component");
 
   it("when component struct exists", () => {
-    Store.data = Type.map([
+    ComponentRegistry.data = Type.map([
       [
         cid,
         Type.map([
@@ -172,10 +172,10 @@ describe("putComponentState()", () => {
       ],
     ]);
 
-    Store.putComponentState(cid, "dummy_state_2");
+    ComponentRegistry.putComponentState(cid, "dummy_state_2");
 
     assert.deepStrictEqual(
-      Store.data,
+      ComponentRegistry.data,
       Type.map([
         [
           cid,
@@ -189,17 +189,17 @@ describe("putComponentState()", () => {
   });
 
   it("when component struct doesn't exist", () => {
-    Store.putComponentState(cid, "dummy_state");
+    ComponentRegistry.putComponentState(cid, "dummy_state");
 
     assert.deepStrictEqual(
-      Store.data,
+      ComponentRegistry.data,
       Type.map([[cid, componentStructFixture({state: "dummy_state"})]]),
     );
   });
 });
 
 it("putComponentStruct()", () => {
-  Store.data = Type.map([
+  ComponentRegistry.data = Type.map([
     [
       Type.bitstring("my_component_1"),
       Type.map([
@@ -216,10 +216,10 @@ it("putComponentStruct()", () => {
     [Type.atom("state"), "dummy_state_2"],
   ]);
 
-  Store.putComponentStruct(cid, componentData);
+  ComponentRegistry.putComponentStruct(cid, componentData);
 
   assert.deepStrictEqual(
-    Store.data,
+    ComponentRegistry.data,
     Type.map([
       [
         Type.bitstring("my_component_1"),

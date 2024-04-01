@@ -2,6 +2,7 @@
 
 import AssetPathRegistry from "./asset_path_registry.mjs";
 import Bitstring from "./bitstring.mjs";
+import ComponentRegistry from "./component_registry.mjs";
 import Elixir_Code from "./elixir/code.mjs";
 import Elixir_Hologram_Router_Helpers from "./elixir/hologram/router/helpers.mjs";
 import Elixir_Kernel from "./elixir/kernel.mjs";
@@ -10,7 +11,6 @@ import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import MemoryStorage from "./memory_storage.mjs";
 import Renderer from "./renderer.mjs";
-import Store from "./store.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
@@ -99,7 +99,7 @@ export default class Hologram {
 
     Hologram.#loadMountData();
 
-    Store.hydrate(Hologram.#componentStructs);
+    ComponentRegistry.hydrate(Hologram.#componentStructs);
 
     Hologram.#maybeInitAssetPathRegistry();
 
