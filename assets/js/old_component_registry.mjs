@@ -31,14 +31,6 @@ export default class OldComponentRegistry {
     return Erlang_Maps["get/3"](cid, ComponentRegistry.data, null);
   }
 
-  // deps: [:maps.merge/2]
-  static hydrate(data) {
-    ComponentRegistry.data = Erlang_Maps["merge/2"](
-      ComponentRegistry.data,
-      data,
-    );
-  }
-
   // deps: [Hologram.Component.__struct__/0, :maps.put/3]
   static putComponentEmittedContext(cid, emittedContext) {
     let componentStruct = ComponentRegistry.getComponentStruct(cid);

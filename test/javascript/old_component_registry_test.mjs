@@ -93,29 +93,6 @@ describe("getComponentStruct()", () => {
   });
 });
 
-it("hydrate()", () => {
-  ComponentRegistry.data = Type.map([
-    [Type.atom("a"), Type.integer(1)],
-    [Type.atom("b"), Type.integer(2)],
-  ]);
-
-  ComponentRegistry.hydrate(
-    Type.map([
-      [Type.atom("c"), Type.integer(3)],
-      [Type.atom("a"), Type.integer(4)],
-    ]),
-  );
-
-  assert.deepStrictEqual(
-    ComponentRegistry.data,
-    Type.map([
-      [Type.atom("a"), Type.integer(4)],
-      [Type.atom("b"), Type.integer(2)],
-      [Type.atom("c"), Type.integer(3)],
-    ]),
-  );
-});
-
 describe("putComponentEmittedContext()", () => {
   const cid = Type.bitstring("my_component");
 
