@@ -1,6 +1,11 @@
 "use strict";
 
-import {assert, linkModules, unlinkModules} from "./support/helpers.mjs";
+import {
+  assert,
+  componentStructFixture,
+  linkModules,
+  unlinkModules,
+} from "./support/helpers.mjs";
 
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -8,47 +13,71 @@ import Type from "../../assets/js/type.mjs";
 before(() => linkModules());
 after(() => unlinkModules());
 
-beforeEach(() => {
-  ComponentRegistry.data = Type.map([]);
-});
+describe("ComponentRegistry", () => {
+  const cid1 = Type.bitstring("my_component_1");
+  const cid2 = Type.bitstring("my_component_2");
+  const cid3 = Type.bitstring("my_component_3");
 
-afterEach(() => {
-  ComponentRegistry.data = Type.map([]);
-});
+  const module1 = Type.alias("MyModule1");
+  const module2 = Type.alias("MyModule2");
 
-const cid1 = Type.bitstring("my_component_1");
-const cid2 = Type.bitstring("my_component_2");
+  const struct1 = componentStructFixture({
+    emittedContext: Type.map([
+      [Type.atom("context_1a"), Type.integer(11)],
+      [(Type.atom("context_1b"), Type.integer(12))],
+    ]),
+    state: Type.map([
+      [Type.atom("state_1a"), Type.integer(101)],
+      [(Type.atom("state_1b"), Type.integer(102))],
+    ]),
+  });
 
-describe("getEntry()", () => {
-  it("entry exists", () => {
+  const struct2 = componentStructFixture({
+    emittedContext: Type.map([
+      [Type.atom("context_2a"), Type.integer(21)],
+      [(Type.atom("context_2b"), Type.integer(22))],
+    ]),
+    state: Type.map([
+      [Type.atom("state_2a"), Type.integer(201)],
+      [(Type.atom("state_2b"), Type.integer(202))],
+    ]),
+  });
+
+  const entry1 = Type.map([
+    [Type.atom("module"), module1],
+    [Type.atom("struct"), struct1],
+  ]);
+
+  const entry2 = Type.map([
+    [Type.atom("module"), module2],
+    [Type.atom("struct"), struct2],
+  ]);
+
+  beforeEach(() => {
     ComponentRegistry.data = Type.map([
-      [cid1, "dummy_1"],
-      [cid2, "dummy_2"],
+      [cid1, entry1],
+      [cid2, entry2],
     ]);
-
-    const result = ComponentRegistry.getEntry(cid2);
-
-    assert.equal(result, "dummy_2");
   });
 
-  it("entry doesn't exist", () => {
-    const result = ComponentRegistry.getEntry(cid1);
-    assert.isNull(result);
+  afterEach(() => {
+    ComponentRegistry.data = Type.map([]);
   });
-});
 
-it("hydrate()", () => {
-  ComponentRegistry.data = Type.map([
-    [Type.atom("a"), Type.integer(1)],
-    [Type.atom("b"), Type.integer(2)],
-  ]);
+  describe("getEntry()", () => {
+    it("entry exists", () => {
+      const result = ComponentRegistry.getEntry(cid2);
+      assert.equal(result, entry2);
+    });
 
-  const data = Type.map([
-    [Type.atom("c"), Type.integer(3)],
-    [Type.atom("a"), Type.integer(4)],
-  ]);
+    it("entry doesn't exist", () => {
+      const result = ComponentRegistry.getEntry(cid3);
+      assert.isNull(result);
+    });
+  });
 
-  ComponentRegistry.hydrate(data);
-
-  assert.deepStrictEqual(ComponentRegistry.data, data);
+  it("hydrate()", () => {
+    ComponentRegistry.hydrate("dummyData");
+    assert.equal(ComponentRegistry.data, "dummyData");
+  });
 });
