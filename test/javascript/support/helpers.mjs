@@ -2,6 +2,7 @@
 
 import {assert} from "../../../assets/node_modules/chai/index.js";
 
+import ComponentRegistry from "../../../assets/js/component_registry.mjs";
 import Elixir_Code from "../../../assets/js/elixir/code.mjs";
 import Elixir_Kernel from "../../../assets/js/elixir/kernel.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
@@ -14,7 +15,6 @@ import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import HologramMatchError from "../../../assets/js/errors/match_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
-import ComponentRegistry from "../../../assets/js/component_registry.mjs";
 import Type from "../../../assets/js/type.mjs";
 import Utils from "../../../assets/js/utils.mjs";
 
