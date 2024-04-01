@@ -487,7 +487,7 @@ describe("element node", () => {
           defaultTarget,
         );
 
-        Hologram.handleEvent.reComponentRegistry();
+        Hologram.handleEvent.restore();
       });
 
       it("multiple event listeners", () => {
@@ -550,7 +550,7 @@ describe("element node", () => {
           defaultTarget,
         );
 
-        Hologram.handleEvent.reComponentRegistry();
+        Hologram.handleEvent.restore();
       });
     });
 
@@ -590,7 +590,7 @@ describe("element node", () => {
           cid,
         );
 
-        Hologram.handleEvent.reComponentRegistry();
+        Hologram.handleEvent.restore();
       });
 
       it("parent stateful component", () => {
@@ -621,7 +621,7 @@ describe("element node", () => {
           defaultTarget,
         );
 
-        Hologram.handleEvent.reComponentRegistry();
+        Hologram.handleEvent.restore();
       });
 
       it("page", () => {
@@ -651,7 +651,7 @@ describe("element node", () => {
           Type.bitstring("page"),
         );
 
-        Hologram.handleEvent.reComponentRegistry();
+        Hologram.handleEvent.restore();
       });
 
       it("layout", () => {
@@ -681,7 +681,7 @@ describe("element node", () => {
           Type.bitstring("layout"),
         );
 
-        Hologram.handleEvent.reComponentRegistry();
+        Hologram.handleEvent.restore();
       });
 
       it("slot of a stateful component nested in another stateful component", () => {
@@ -723,7 +723,7 @@ describe("element node", () => {
           Type.bitstring("component_61"),
         );
 
-        Hologram.handleEvent.reComponentRegistry();
+        Hologram.handleEvent.restore();
       });
     });
   });
