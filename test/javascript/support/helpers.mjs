@@ -96,12 +96,20 @@ export function assertMatchError(callable, value) {
 export function componentStructFixture(data) {
   let componentStruct = elixirHologramComponentStruct0();
 
-  const {emittedContext, nextCommand, state} = data;
+  const {emittedContext, nextAction, nextCommand, state} = data;
 
   if (typeof emittedContext !== "undefined") {
     componentStruct = Erlang_Maps["put/3"](
       Type.atom("emitted_context"),
       emittedContext,
+      componentStruct,
+    );
+  }
+
+  if (typeof nextAction !== "undefined") {
+    componentStruct = Erlang_Maps["put/3"](
+      Type.atom("next_action"),
+      nextAction,
       componentStruct,
     );
   }
@@ -149,6 +157,7 @@ export function elixirHologramComponentStruct0() {
   return Type.map([
     [Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")],
     [Type.atom("emitted_context"), Type.map([])],
+    [Type.atom("next_action"), Type.atom("nil")],
     [Type.atom("next_command"), Type.atom("nil")],
     [Type.atom("state"), Type.map([])],
   ]);
