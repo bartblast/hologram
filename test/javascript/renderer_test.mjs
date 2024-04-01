@@ -63,9 +63,9 @@ import {defineModule7Fixture} from "./support/fixtures/template/renderer/module_
 import {defineModule8Fixture} from "./support/fixtures/template/renderer/module_8.mjs";
 import {defineModule9Fixture} from "./support/fixtures/template/renderer/module_9.mjs";
 
+import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
-import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Type from "../../assets/js/type.mjs";
 
 before(() => {
