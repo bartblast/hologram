@@ -2,7 +2,7 @@
 
 import Type from "./type.mjs";
 
-export default class ComponentRegistry {
+export default class OldComponentRegistry {
   static data = Type.map([]);
 
   // null instead of boxed nil is returned by default on purpose, because the function is not used by transpiled code.
