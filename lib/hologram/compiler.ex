@@ -255,6 +255,7 @@ defmodule Hologram.Compiler do
       |> include_mfas_used_by_asset_path_registry()
       |> include_mfas_used_by_interpreter()
       |> include_mfas_used_by_manually_ported_code_module()
+      |> include_mfas_used_by_operation()
       |> include_mfas_used_by_renderer()
       |> include_mfas_used_by_store()
       |> Enum.uniq()
@@ -360,6 +361,14 @@ defmodule Hologram.Compiler do
 
   defp include_mfas_used_by_manually_ported_code_module(mfas) do
     [{:code, :ensure_loaded, 1} | mfas]
+  end
+
+  defp include_mfas_used_by_operation(mfas) do
+    mfas ++
+      [
+        {:maps, :from_list, 1},
+        {:maps, :put, 3}
+      ]
   end
 
   defp include_mfas_used_by_renderer(mfas) do
