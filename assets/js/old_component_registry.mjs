@@ -7,16 +7,6 @@ export default class OldComponentRegistry {
 
   // null instead of boxed nil is returned by default on purpose, because the function is not used by transpiled code.
   // deps: [:maps.get/2]
-  static getComponentEmittedContext(cid) {
-    const componentStruct = ComponentRegistry.getComponentStruct(cid);
-
-    return componentStruct !== null
-      ? Erlang_Maps["get/2"](Type.atom("emitted_context"), componentStruct)
-      : null;
-  }
-
-  // null instead of boxed nil is returned by default on purpose, because the function is not used by transpiled code.
-  // deps: [:maps.get/2]
   static getComponentState(cid) {
     const componentStruct = ComponentRegistry.getComponentStruct(cid);
 

@@ -21,11 +21,18 @@ describe("ComponentRegistry", () => {
   const module1 = Type.alias("MyModule1");
   const module2 = Type.alias("MyModule2");
 
+  const emittedContext1 = Type.map([
+    [Type.atom("context_1a"), Type.integer(11)],
+    [(Type.atom("context_1b"), Type.integer(12))],
+  ]);
+
+  const emittedContext2 = Type.map([
+    [Type.atom("context_2a"), Type.integer(21)],
+    [(Type.atom("context_2b"), Type.integer(22))],
+  ]);
+
   const struct1 = componentStructFixture({
-    emittedContext: Type.map([
-      [Type.atom("context_1a"), Type.integer(11)],
-      [(Type.atom("context_1b"), Type.integer(12))],
-    ]),
+    emittedContext: emittedContext1,
     state: Type.map([
       [Type.atom("state_1a"), Type.integer(101)],
       [(Type.atom("state_1b"), Type.integer(102))],
@@ -33,10 +40,7 @@ describe("ComponentRegistry", () => {
   });
 
   const struct2 = componentStructFixture({
-    emittedContext: Type.map([
-      [Type.atom("context_2a"), Type.integer(21)],
-      [(Type.atom("context_2b"), Type.integer(22))],
-    ]),
+    emittedContext: emittedContext2,
     state: Type.map([
       [Type.atom("state_2a"), Type.integer(201)],
       [(Type.atom("state_2b"), Type.integer(202))],
@@ -64,13 +68,25 @@ describe("ComponentRegistry", () => {
     ComponentRegistry.data = Type.map([]);
   });
 
+  describe("getComponentEmittedContext()", () => {
+    it("entry exists", () => {
+      const result = ComponentRegistry.getComponentEmittedContext(cid2);
+      assert.deepStrictEqual(result, emittedContext2);
+    });
+
+    it("entry doesn't exist", () => {
+      const result = ComponentRegistry.getComponentEmittedContext(cid3);
+      assert.isNull(result);
+    });
+  });
+
   describe("getComponentStruct()", () => {
     it("entry exists", () => {
       const result = ComponentRegistry.getComponentStruct(cid2);
       assert.equal(result, struct2);
     });
 
-    it("doesn't exist", () => {
+    it("entry doesn't exist", () => {
       const result = ComponentRegistry.getComponentStruct(cid3);
       assert.isNull(result);
     });
