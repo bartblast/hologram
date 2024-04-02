@@ -31,20 +31,24 @@ describe("ComponentRegistry", () => {
     [(Type.atom("context_2b"), Type.integer(22))],
   ]);
 
+  const state1 = Type.map([
+    [Type.atom("state_1a"), Type.integer(101)],
+    [(Type.atom("state_1b"), Type.integer(102))],
+  ]);
+
+  const state2 = Type.map([
+    [Type.atom("state_2a"), Type.integer(201)],
+    [(Type.atom("state_2b"), Type.integer(202))],
+  ]);
+
   const struct1 = componentStructFixture({
     emittedContext: emittedContext1,
-    state: Type.map([
-      [Type.atom("state_1a"), Type.integer(101)],
-      [(Type.atom("state_1b"), Type.integer(102))],
-    ]),
+    state: state1,
   });
 
   const struct2 = componentStructFixture({
     emittedContext: emittedContext2,
-    state: Type.map([
-      [Type.atom("state_2a"), Type.integer(201)],
-      [(Type.atom("state_2b"), Type.integer(202))],
-    ]),
+    state: state2,
   });
 
   const entry1 = Type.map([
@@ -76,6 +80,18 @@ describe("ComponentRegistry", () => {
 
     it("entry doesn't exist", () => {
       const result = ComponentRegistry.getComponentEmittedContext(cid3);
+      assert.isNull(result);
+    });
+  });
+
+  describe("getComponentState()", () => {
+    it("entry exists", () => {
+      const result = ComponentRegistry.getComponentState(cid2);
+      assert.deepStrictEqual(result, state2);
+    });
+
+    it("entry doesn't exist", () => {
+      const result = ComponentRegistry.getComponentState(cid3);
       assert.isNull(result);
     });
   });

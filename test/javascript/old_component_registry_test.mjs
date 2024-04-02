@@ -21,31 +21,6 @@ afterEach(() => {
   ComponentRegistry.data = Type.map([]);
 });
 
-describe("getComponentState()", () => {
-  it("component struct exists", () => {
-    const cid = Type.bitstring("my_component_2");
-
-    ComponentRegistry.data = Type.map([
-      [
-        Type.bitstring("my_component_1"),
-        Type.map([[Type.atom("state"), "dummy_1"]]),
-      ],
-      [cid, Type.map([[Type.atom("state"), "dummy_2"]])],
-    ]);
-
-    const result = ComponentRegistry.getComponentState(cid);
-
-    assert.equal(result, "dummy_2");
-  });
-
-  it("component struct doesn't exist", () => {
-    const cid = Type.bitstring("my_component");
-    const result = ComponentRegistry.getComponentState(cid);
-
-    assert.isNull(result);
-  });
-});
-
 describe("putComponentEmittedContext()", () => {
   const cid = Type.bitstring("my_component");
 
