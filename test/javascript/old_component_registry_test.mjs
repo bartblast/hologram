@@ -21,48 +21,6 @@ afterEach(() => {
   ComponentRegistry.data = Type.map([]);
 });
 
-describe("putComponentEmittedContext()", () => {
-  const cid = Type.bitstring("my_component");
-
-  it("when component struct exists", () => {
-    ComponentRegistry.data = Type.map([
-      [
-        cid,
-        Type.map([
-          [Type.atom("emitted_context"), "dummy_context_1"],
-          [Type.atom("state"), "dummy_state"],
-        ]),
-      ],
-    ]);
-
-    ComponentRegistry.putComponentEmittedContext(cid, "dummy_context_2");
-
-    assert.deepStrictEqual(
-      ComponentRegistry.data,
-      Type.map([
-        [
-          cid,
-          Type.map([
-            [Type.atom("emitted_context"), "dummy_context_2"],
-            [Type.atom("state"), "dummy_state"],
-          ]),
-        ],
-      ]),
-    );
-  });
-
-  it("when component struct doesn't exist", () => {
-    ComponentRegistry.putComponentEmittedContext(cid, "dummy_context");
-
-    assert.deepStrictEqual(
-      ComponentRegistry.data,
-      Type.map([
-        [cid, componentStructFixture({emittedContext: "dummy_context"})],
-      ]),
-    );
-  });
-});
-
 describe("putComponentState()", () => {
   const cid = Type.bitstring("my_component");
 
