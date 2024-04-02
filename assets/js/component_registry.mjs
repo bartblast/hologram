@@ -6,7 +6,7 @@ export default class ComponentRegistry {
   static entries = Type.map([]);
 
   // null instead of boxed nil is returned by default on purpose, because the function is not used by transpiled code.
-  // deps: [:maps.get/2]
+  // Deps: [:maps.get/2]
   static getComponentEmittedContext(cid) {
     const componentStruct = ComponentRegistry.getComponentStruct(cid);
 
@@ -16,7 +16,7 @@ export default class ComponentRegistry {
   }
 
   // null instead of boxed nil is returned by default on purpose, because the function is not used by transpiled code.
-  // deps: [:maps.get/2]
+  // Deps: [:maps.get/2]
   static getComponentState(cid) {
     const componentStruct = ComponentRegistry.getComponentStruct(cid);
 
@@ -26,7 +26,7 @@ export default class ComponentRegistry {
   }
 
   // null instead of boxed nil is returned by default on purpose, because the function is not used by transpiled code.
-  // deps: [:maps.get/3]
+  // Deps: [:maps.get/3]
   static getComponentStruct(cid) {
     const entry = ComponentRegistry.getEntry(cid);
 
@@ -36,7 +36,7 @@ export default class ComponentRegistry {
   }
 
   // null instead of boxed nil is returned by default on purpose, because the function is not used by transpiled code.
-  // deps: [:maps.get/3]
+  // Deps: [:maps.get/3]
   static getEntry(cid) {
     return Erlang_Maps["get/3"](cid, ComponentRegistry.entries, null);
   }

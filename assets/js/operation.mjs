@@ -23,7 +23,7 @@ export default class Operation {
     }
   }
 
-  // deps: [:maps.from_list/1, :maps.put/3]
+  // Deps: [:maps.from_list/1, :maps.put/3]
   #buildParamsMap(paramsKeywordList) {
     this.params = Erlang_Maps["put/3"](
       Type.atom("event"),

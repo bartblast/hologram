@@ -50,7 +50,7 @@ const Erlang = {
     return type === "float" ? Type.float(result) : Type.integer(result);
   },
   // end */2
-  // deps: []
+  // Deps: []
 
   // start +/2
   "+/2": (left, right) => {
@@ -68,7 +68,7 @@ const Erlang = {
     return type === "float" ? Type.float(result) : Type.integer(result);
   },
   // end +/2
-  // deps: []
+  // Deps: []
 
   // start ++/2
   "++/2": (left, right) => {
@@ -81,7 +81,7 @@ const Erlang = {
     return Type.isProperList(right) ? Type.list(data) : Type.improperList(data);
   },
   // end ++/2
-  // deps: []
+  // Deps: []
 
   // start -/1
   "-/1": (number) => {
@@ -92,7 +92,7 @@ const Erlang = {
     return number.value == 0 ? number : Type[number.type](-number.value);
   },
   // end -/1
-  // deps: []
+  // Deps: []
 
   // start -/2
   "-/2": (left, right) => {
@@ -110,7 +110,7 @@ const Erlang = {
     return type === "float" ? Type.float(result) : Type.integer(result);
   },
   // end -/2
-  // deps: []
+  // Deps: []
 
   // TODO: optimize
   // This implementation is slow, i.e. O(m * n),
@@ -135,7 +135,7 @@ const Erlang = {
     return Type.list(result);
   },
   // end --/2
-  // deps: []
+  // Deps: []
 
   // start //2
   "//2": (left, right) => {
@@ -146,35 +146,35 @@ const Erlang = {
     return Type.float(Number(left.value) / Number(right.value));
   },
   // end //2
-  // deps: []
+  // Deps: []
 
   // start /=/2
   "/=/2": (left, right) => {
     return Type.boolean(!Interpreter.isEqual(left, right));
   },
   // end /=/2
-  // deps: []
+  // Deps: []
 
   // start </2
   "</2": (left, right) => {
     return Type.boolean(Interpreter.compareTerms(left, right) === -1);
   },
   // end </2
-  // deps: []
+  // Deps: []
 
   // start =/=/2
   "=/=/2": (left, right) => {
     return Type.boolean(!Interpreter.isStrictlyEqual(left, right));
   },
   // end =/=/2
-  // deps: []
+  // Deps: []
 
   // start =:=/2
   "=:=/2": (left, right) => {
     return Type.boolean(Interpreter.isStrictlyEqual(left, right));
   },
   // end =:=/2
-  // deps: []
+  // Deps: []
 
   // start =</2
   "=</2": (left, right) => {
@@ -188,21 +188,21 @@ const Erlang = {
     return Type.boolean(result);
   },
   // end =</2
-  // deps: [:erlang.</2, :erlang.==/2]
+  // Deps: [:erlang.</2, :erlang.==/2]
 
   // start ==/2
   "==/2": (left, right) => {
     return Type.boolean(Interpreter.isEqual(left, right));
   },
   // end ==/2
-  // deps: []
+  // Deps: []
 
   // start >/2
   ">/2": (left, right) => {
     return Type.boolean(Interpreter.compareTerms(left, right) === 1);
   },
   // end >/2
-  // deps: []
+  // Deps: []
 
   // start >=/2
   ">=/2": (left, right) => {
@@ -216,7 +216,7 @@ const Erlang = {
     return Type.boolean(result);
   },
   // end >=/2
-  // deps: [:erlang.==/2, :erlang.>/2]
+  // Deps: [:erlang.==/2, :erlang.>/2]
 
   // start andalso/2
   "andalso/2": (leftFun, rightFun, context) => {
@@ -231,7 +231,7 @@ const Erlang = {
     return Type.isTrue(left) ? rightFun(context) : left;
   },
   // end andalso/2
-  // deps: []
+  // Deps: []
 
   // :erlang.apply/3 calls are encoded as Interpreter.callNamedFuntion() calls.
   // See: https://github.com/bartblast/hologram/blob/4e832c722af7b0c1a0cca1c8c08287b999ecae78/lib/hologram/compiler/encoder.ex#L559
@@ -247,7 +247,7 @@ const Erlang = {
     return Type.bitstring(atom.value);
   },
   // end atom_to_binary/1
-  // deps: []
+  // Deps: []
 
   // start atom_to_list/1
   "atom_to_list/1": (atom) => {
@@ -264,14 +264,14 @@ const Erlang = {
     return Type.list(codePoints);
   },
   // end atom_to_list/1
-  // deps: []
+  // Deps: []
 
   // start binary_to_atom/1
   "binary_to_atom/1": (binary) => {
     return Erlang["binary_to_atom/2"](binary, Type.atom("utf8"));
   },
   // end binary_to_atom/1
-  // deps: [:erlang.binary_to_atom/2]
+  // Deps: [:erlang.binary_to_atom/2]
 
   // start binary_to_atom/2
   "binary_to_atom/2": (binary, encoding) => {
@@ -293,7 +293,7 @@ const Erlang = {
     return Type.atom(Bitstring.toText(binary));
   },
   // end binary_to_atom/2
-  // deps: []
+  // Deps: []
 
   // Note: due to practical reasons the behaviour of the client version is inconsistent with the server version.
   // The client version works exactly the same as binary_to_atom/1.
@@ -302,7 +302,7 @@ const Erlang = {
     return Erlang["binary_to_atom/1"](binary);
   },
   // end binary_to_existing_atom/1
-  // deps: [:erlang.binary_to_atom/1]
+  // Deps: [:erlang.binary_to_atom/1]
 
   // Note: due to practical reasons the behaviour of the client version is inconsistent with the server version.
   // The client version works exactly the same as binary_to_atom/2.
@@ -311,7 +311,7 @@ const Erlang = {
     return Erlang["binary_to_atom/2"](binary, encoding);
   },
   // end binary_to_existing_atom/2
-  // deps: [:erlang.binary_to_atom/2]
+  // Deps: [:erlang.binary_to_atom/2]
 
   // start bit_size/1
   "bit_size/1": (term) => {
@@ -324,7 +324,7 @@ const Erlang = {
     return Type.integer(term.bits.length);
   },
   // end bit_size/1
-  // deps: []
+  // Deps: []
 
   // start element/2
   "element/2": (index, tuple) => {
@@ -349,7 +349,7 @@ const Erlang = {
     return tuple.data[Number(index.value) - 1];
   },
   // end element/2
-  // deps: []
+  // Deps: []
 
   // TODO: review this function after error reporting is implemented (and implement Elixir & JS consistency tests).
   // start error/1
@@ -357,7 +357,7 @@ const Erlang = {
     Erlang["error/2"](reason, Type.atom("none"));
   },
   // end error/1
-  // deps: [:erlang.error/2]
+  // Deps: [:erlang.error/2]
 
   // TODO: review this function after error reporting is implemented (and implement Elixir & JS consistency tests).
   // TODO: maybe use args param
@@ -366,7 +366,7 @@ const Erlang = {
     throw new HologramBoxedError(reason);
   },
   // end error/2
-  // deps: []
+  // Deps: []
 
   // start hd/1
   "hd/1": (list) => {
@@ -379,14 +379,14 @@ const Erlang = {
     return list.data[0];
   },
   // end hd/1
-  // deps: []
+  // Deps: []
 
   // start integer_to_binary/1
   "integer_to_binary/1": (integer) => {
     return Erlang["integer_to_binary/2"](integer, Type.integer(10));
   },
   // end integer_to_binary/1
-  // deps: [:erlang.integer_to_binary/2]
+  // Deps: [:erlang.integer_to_binary/2]
 
   // start integer_to_binary/2
   "integer_to_binary/2": (integer, base) => {
@@ -410,42 +410,42 @@ const Erlang = {
     return Type.bitstring(str);
   },
   // end integer_to_binary/2
-  // deps: []
+  // Deps: []
 
   // start is_atom/1
   "is_atom/1": (term) => {
     return Type.boolean(Type.isAtom(term));
   },
   // end is_atom/1
-  // deps: []
+  // Deps: []
 
   // start is_binary/1
   "is_binary/1": (term) => {
     return Type.boolean(Type.isBinary(term));
   },
   // end is_binary/1
-  // deps: []
+  // Deps: []
 
   // start is_bitstring/1
   "is_bitstring/1": (term) => {
     return Type.boolean(Type.isBitstring(term));
   },
   // end is_bitstring/1
-  // deps: []
+  // Deps: []
 
   // start is_float/1
   "is_float/1": (term) => {
     return Type.boolean(Type.isFloat(term));
   },
   // end is_float/1
-  // deps: []
+  // Deps: []
 
   // start is_function/1
   "is_function/1": (term) => {
     return Type.boolean(Type.isAnonymousFunction(term));
   },
   // end is_function/1
-  // deps: []
+  // Deps: []
 
   // start is_function/2
   "is_function/2": (term, arity) => {
@@ -454,63 +454,63 @@ const Erlang = {
     );
   },
   // end is_function/2
-  // deps: []
+  // Deps: []
 
   // start is_integer/1
   "is_integer/1": (term) => {
     return Type.boolean(Type.isInteger(term));
   },
   // end is_integer/1
-  // deps: []
+  // Deps: []
 
   // start is_list/1
   "is_list/1": (term) => {
     return Type.boolean(Type.isList(term));
   },
   // end is_list/1
-  // deps: []
+  // Deps: []
 
   // start is_map/1
   "is_map/1": (term) => {
     return Type.boolean(Type.isMap(term));
   },
   // end is_map/1
-  // deps: []
+  // Deps: []
 
   // start is_number/1
   "is_number/1": (term) => {
     return Type.boolean(Type.isNumber(term));
   },
   // end is_number/1
-  // deps: []
+  // Deps: []
 
   // start is_pid/1
   "is_pid/1": (term) => {
     return Type.boolean(Type.isPid(term));
   },
   // end is_pid/1
-  // deps: []
+  // Deps: []
 
   // start is_port/1
   "is_port/1": (term) => {
     return Type.boolean(Type.isPort(term));
   },
   // end is_port/1
-  // deps: []
+  // Deps: []
 
   // start is_reference/1
   "is_reference/1": (term) => {
     return Type.boolean(Type.isReference(term));
   },
   // end is_reference/1
-  // deps: []
+  // Deps: []
 
   // start is_tuple/1
   "is_tuple/1": (term) => {
     return Type.boolean(Type.isTuple(term));
   },
   // end is_tuple/1
-  // deps: []
+  // Deps: []
 
   // start length/1
   "length/1": (list) => {
@@ -523,7 +523,7 @@ const Erlang = {
     return Type.integer(list.data.length);
   },
   // end length/1
-  // deps: []
+  // Deps: []
 
   // start map_size/1
   "map_size/1": (map) => {
@@ -534,7 +534,7 @@ const Erlang = {
     return Type.integer(Object.keys(map.data).length);
   },
   // end map_size/1
-  // deps: []
+  // Deps: []
 
   // start not/1
   "not/1": (term) => {
@@ -545,7 +545,7 @@ const Erlang = {
     return Type.boolean(term.value == "true" ? false : true);
   },
   // end not/1
-  // deps: []
+  // Deps: []
 
   // start orelse/2
   "orelse/2": (leftFun, rightFun, context) => {
@@ -560,7 +560,7 @@ const Erlang = {
     return Type.isTrue(left) ? left : rightFun(context);
   },
   // end orelse/2
-  // deps: []
+  // Deps: []
 
   // start tl/1
   "tl/1": (list) => {
@@ -587,7 +587,7 @@ const Erlang = {
     return isProper ? Type.list(data) : Type.improperList(data);
   },
   // end tl/1
-  // deps: []
+  // Deps: []
 
   // start tuple_to_list/1
   "tuple_to_list/1": (tuple) => {
@@ -600,7 +600,7 @@ const Erlang = {
     return Type.list(tuple.data);
   },
   // end tuple_to_list/1
-  // deps: []
+  // Deps: []
 };
 
 export default Erlang;

@@ -14,7 +14,7 @@ const Erlang_Persistent_Term = {
     return MemoryStorage.get(Type.encodeMapKey(scopedKey)) || defaultValue;
   },
   // end get/2
-  // deps: []
+  // Deps: []
 };
 
 export default Erlang_Persistent_Term;

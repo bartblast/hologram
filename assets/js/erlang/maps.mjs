@@ -31,7 +31,7 @@ const Erlang_Maps = {
     );
   },
   // end fold/3
-  // deps: []
+  // Deps: []
 
   // start from_list/1
   "from_list/1": (list) => {
@@ -44,7 +44,7 @@ const Erlang_Maps = {
     return Type.map(list.data.map((tuple) => tuple.data));
   },
   // end from_list/1
-  // deps: []
+  // Deps: []
 
   // start get/2
   "get/2": (key, map) => {
@@ -61,7 +61,7 @@ const Erlang_Maps = {
     );
   },
   // end get/2
-  // deps: [:maps.get/3]
+  // Deps: [:maps.get/3]
 
   // start get/3
   "get/3": (key, map, defaultValue) => {
@@ -78,7 +78,7 @@ const Erlang_Maps = {
     return defaultValue;
   },
   // end get/3
-  // deps: []
+  // Deps: []
 
   // start is_key/2
   "is_key/2": (key, map) => {
@@ -89,7 +89,7 @@ const Erlang_Maps = {
     return Type.boolean(Type.encodeMapKey(key) in map.data);
   },
   // end is_key/2
-  // deps: []
+  // Deps: []
 
   // start keys/1
   "keys/1": (map) => {
@@ -100,7 +100,7 @@ const Erlang_Maps = {
     return Type.list(Object.values(map.data).map(([key, _value]) => key));
   },
   // end keys/1
-  // deps: []
+  // Deps: []
 
   // TODO: implement iterators
   // start map/2
@@ -126,7 +126,7 @@ const Erlang_Maps = {
     );
   },
   // end map/2
-  // deps: []
+  // Deps: []
 
   // start merge/2
   "merge/2": (map1, map2) => {
@@ -141,7 +141,7 @@ const Erlang_Maps = {
     return {type: "map", data: {...map1.data, ...map2.data}};
   },
   // end merge/2
-  // deps: []
+  // Deps: []
 
   // start put/3
   "put/3": (key, value, map) => {
@@ -155,7 +155,7 @@ const Erlang_Maps = {
     return newMap;
   },
   // end put/3
-  // deps: []
+  // Deps: []
 
   // TODO: implement iterators
   // start to_list/1
@@ -169,7 +169,7 @@ const Erlang_Maps = {
     );
   },
   // end to_list/1
-  // deps: []
+  // Deps: []
 };
 
 export default Erlang_Maps;

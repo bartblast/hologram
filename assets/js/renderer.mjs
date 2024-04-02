@@ -11,7 +11,7 @@ import Type from "./type.mjs";
 
 import {h as vnode} from "snabbdom";
 
-// deps: [String.Chars.to_string/1]
+// Deps: [String.Chars.to_string/1]
 export default class Renderer {
   // Based on render_dom/3
   static renderDom(dom, context, slots, defaultTarget) {
@@ -60,7 +60,7 @@ export default class Renderer {
     );
   }
 
-  // deps: [String.Chars.to_string/1]
+  // Deps: [String.Chars.to_string/1]
   static valueDomToBitstring(valueDom) {
     const bitstringChunks = valueDom.data.map((node) => {
       const nodeType = node.data[0].value;
@@ -76,7 +76,7 @@ export default class Renderer {
   }
 
   // Based on build_layout_props_dom/2
-  // deps: [:maps.from_list/1, :maps.merge/2]
+  // Deps: [:maps.from_list/1, :maps.merge/2]
   static #buildLayoutPropsDom(pageModuleRef, pageState) {
     const propsFromPage = Erlang_Maps["from_list/1"](
       pageModuleRef["__layout_props__/0"](),
@@ -100,7 +100,7 @@ export default class Renderer {
   }
 
   // Based on cast_props/2
-  // deps: [:maps.from_list/1]
+  // Deps: [:maps.from_list/1]
   static #castProps(propsDom, moduleRef) {
     const propsTuples = Renderer.#filterAllowedProps(propsDom, moduleRef)
       .map((propDom) => Renderer.#evalutatePropValue(propDom))
@@ -167,7 +167,7 @@ export default class Renderer {
   }
 
   // Based on expand_slots/3 (list case)
-  // deps: [:lists.flatten/1]
+  // Deps: [:lists.flatten/1]
   static #expandSlotsInNodes(nodes, slots) {
     return Erlang_Lists["flatten/1"](
       Type.list(nodes.data.map((node) => Renderer.#expandSlots(node, slots))),
@@ -199,7 +199,7 @@ export default class Renderer {
   }
 
   // Based on filter_allowed_props/2
-  // deps: [String.Chars.to_string/1]
+  // Deps: [String.Chars.to_string/1]
   static #filterAllowedProps(propsDom, moduleRef) {
     const registeredPropNames = moduleRef["__props__/0"]()
       .data.filter((prop) => Renderer.#contextKey(prop.data[2]) === null)
@@ -219,7 +219,7 @@ export default class Renderer {
     return "atom(cid)" in props.data;
   }
 
-  // deps: [Hologram.Component.__struct__/0, :maps.get/2]
+  // Deps: [Hologram.Component.__struct__/0, :maps.get/2]
   static #maybeInitComponent(cid, moduleRef, props) {
     let componentState = ComponentRegistry.getComponentState(cid);
     let componentEmittedContext;
@@ -267,7 +267,7 @@ export default class Renderer {
   }
 
   // Based on inject_props_from_context/3
-  // deps: [:maps.from_list/1, :maps.get/2, :maps.merge/2]
+  // Deps: [:maps.from_list/1, :maps.get/2, :maps.merge/2]
   static #injectPropsFromContext(propsFromTemplate, moduleRef, context) {
     const propsFromContextTuples = moduleRef["__props__/0"]()
       .data.filter((prop) => Renderer.#contextKey(prop.data[2]) !== null)
@@ -304,7 +304,7 @@ export default class Renderer {
   }
 
   // Based on normalize_prop_name/1
-  // deps: [:erlang.binary_to_atom/1]
+  // Deps: [:erlang.binary_to_atom/1]
   static #normalizePropName(propDom) {
     return Type.tuple([
       Erlang["binary_to_atom/1"](propDom.data[0]),
@@ -436,7 +436,7 @@ export default class Renderer {
   }
 
   // Based on render_page_inside_layout/3
-  // deps: [:maps.get/2, :maps.merge/2]
+  // Deps: [:maps.get/2, :maps.merge/2]
   static #renderPageInsideLayout(
     pageModuleRef,
     pageParams,
@@ -495,7 +495,7 @@ export default class Renderer {
   }
 
   // Based on render_stateful_component/4
-  // deps: [:maps.get/2, :maps.merge/2]
+  // Deps: [:maps.get/2, :maps.merge/2]
   static #renderStatefulComponent(moduleRef, props, childrenDom, context) {
     const cid = Erlang_Maps["get/2"](Type.atom("cid"), props);
 

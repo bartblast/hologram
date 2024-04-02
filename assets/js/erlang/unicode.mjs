@@ -16,7 +16,7 @@ const Erlang_Unicode = {
     return Erlang_Unicode["characters_to_binary/3"](input, encoding, encoding);
   },
   // end characters_to_binary/1
-  // deps: [:unicode.characters_to_binary/3]
+  // Deps: [:unicode.characters_to_binary/3]
 
   // start characters_to_binary/3
   "characters_to_binary/3": (input, inputEncoding, outputEncoding) => {
@@ -83,7 +83,7 @@ const Erlang_Unicode = {
     return Bitstring.merge(chunks);
   },
   // end characters_to_binary/3
-  // deps: [:lists.flatten/1]
+  // Deps: [:lists.flatten/1]
 };
 
 export default Erlang_Unicode;

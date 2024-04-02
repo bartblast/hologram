@@ -22,7 +22,7 @@ const Erlang_Code = {
       : Type.tuple([Type.atom("module"), module]);
   },
   // end ensure_loaded/1
-  // deps: []
+  // Deps: []
 };
 
 export default Erlang_Code;

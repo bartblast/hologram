@@ -28,7 +28,7 @@ const Erlang_Lists = {
     return Type.list(data);
   },
   // end flatten/1
-  // deps: []
+  // Deps: []
 
   // start foldl/3
   "foldl/3": (fun, initialAcc, list) => {
@@ -48,7 +48,7 @@ const Erlang_Lists = {
     );
   },
   // end foldl/3
-  // deps: []
+  // Deps: []
 
   // start keyfind/3
   "keyfind/3": (value, index, tuples) => {
@@ -84,7 +84,7 @@ const Erlang_Lists = {
     return Type.boolean(false);
   },
   // end keyfind/3
-  // deps: []
+  // Deps: []
 
   // start keymember/3
   "keymember/3": (value, index, tuples) => {
@@ -93,7 +93,7 @@ const Erlang_Lists = {
     );
   },
   // end keymember/3
-  // deps: [:lists.keyfind/3]
+  // Deps: [:lists.keyfind/3]
 
   // start map/2
   "map/2": (fun, list) => {
@@ -112,7 +112,7 @@ const Erlang_Lists = {
     );
   },
   // end map/2
-  // deps: []
+  // Deps: []
 
   // start member/2
   "member/2": (elem, list) => {
@@ -131,7 +131,7 @@ const Erlang_Lists = {
     return Type.boolean(false);
   },
   // end member/2
-  // deps: []
+  // Deps: []
 
   // start reverse/1
   "reverse/1": (list) => {
@@ -144,7 +144,7 @@ const Erlang_Lists = {
     return Type.list(list.data.toReversed());
   },
   // end reverse/1
-  // deps: []
+  // Deps: []
 
   // start sort/1
   "sort/1": (list) => {
@@ -157,7 +157,7 @@ const Erlang_Lists = {
     return Type.list(list.data.sort(Interpreter.compareTerms));
   },
   // end sort/1
-  // deps: []
+  // Deps: []
 };
 
 export default Erlang_Lists;

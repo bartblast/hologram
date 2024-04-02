@@ -50,7 +50,7 @@ const Erlang_Elixir_Aliases = {
     return Type.atom(normalizedSegments.join("."));
   },
   // end concat/1
-  // deps: []
+  // Deps: []
 };
 
 export default Erlang_Elixir_Aliases;
