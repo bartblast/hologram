@@ -3,6 +3,8 @@
 import {
   assert,
   componentStructFixture,
+  inspectEx,
+  inspectJs,
   linkModules,
   unlinkModules,
 } from "./support/helpers.mjs";
@@ -20,25 +22,36 @@ describe("ComponentRegistry", () => {
 
   const module1 = Type.alias("MyModule1");
   const module2 = Type.alias("MyModule2");
+  const module3 = Type.alias("MyModule3");
 
   const emittedContext1 = Type.map([
     [Type.atom("context_1a"), Type.integer(11)],
-    [(Type.atom("context_1b"), Type.integer(12))],
+    [Type.atom("context_1b"), Type.integer(12)],
   ]);
 
   const emittedContext2 = Type.map([
     [Type.atom("context_2a"), Type.integer(21)],
-    [(Type.atom("context_2b"), Type.integer(22))],
+    [Type.atom("context_2b"), Type.integer(22)],
+  ]);
+
+  const emittedContext3 = Type.map([
+    [Type.atom("context_3a"), Type.integer(31)],
+    [Type.atom("context_3b"), Type.integer(32)],
   ]);
 
   const state1 = Type.map([
     [Type.atom("state_1a"), Type.integer(101)],
-    [(Type.atom("state_1b"), Type.integer(102))],
+    [Type.atom("state_1b"), Type.integer(102)],
   ]);
 
   const state2 = Type.map([
     [Type.atom("state_2a"), Type.integer(201)],
-    [(Type.atom("state_2b"), Type.integer(202))],
+    [Type.atom("state_2b"), Type.integer(202)],
+  ]);
+
+  const state3 = Type.map([
+    [Type.atom("state_3a"), Type.integer(301)],
+    [Type.atom("state_3b"), Type.integer(302)],
   ]);
 
   const struct1 = componentStructFixture({
@@ -51,6 +64,11 @@ describe("ComponentRegistry", () => {
     state: state2,
   });
 
+  const struct3 = componentStructFixture({
+    emittedContext: emittedContext3,
+    state: state3,
+  });
+
   const entry1 = Type.map([
     [Type.atom("module"), module1],
     [Type.atom("struct"), struct1],
@@ -61,15 +79,20 @@ describe("ComponentRegistry", () => {
     [Type.atom("struct"), struct2],
   ]);
 
+  const entry3 = Type.map([
+    [Type.atom("module"), module3],
+    [Type.atom("struct"), struct3],
+  ]);
+
   beforeEach(() => {
-    ComponentRegistry.data = Type.map([
+    ComponentRegistry.entries = Type.map([
       [cid1, entry1],
       [cid2, entry2],
     ]);
   });
 
   afterEach(() => {
-    ComponentRegistry.data = Type.map([]);
+    ComponentRegistry.entries = Type.map([]);
   });
 
   describe("getComponentEmittedContext()", () => {
@@ -121,7 +144,20 @@ describe("ComponentRegistry", () => {
   });
 
   it("hydrate()", () => {
-    ComponentRegistry.hydrate("dummyData");
-    assert.equal(ComponentRegistry.data, "dummyData");
+    ComponentRegistry.hydrate("dummyentries");
+    assert.equal(ComponentRegistry.entries, "dummyentries");
+  });
+
+  it("putEntry()", () => {
+    ComponentRegistry.putEntry(cid3, entry3);
+
+    assert.deepStrictEqual(
+      ComponentRegistry.entries,
+      Type.map([
+        [cid1, entry1],
+        [cid2, entry2],
+        [cid3, entry3],
+      ]),
+    );
   });
 });

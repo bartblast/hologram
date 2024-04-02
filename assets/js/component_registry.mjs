@@ -3,7 +3,7 @@
 import Type from "./type.mjs";
 
 export default class ComponentRegistry {
-  static data = Type.map([]);
+  static entries = Type.map([]);
 
   // null instead of boxed nil is returned by default on purpose, because the function is not used by transpiled code.
   // deps: [:maps.get/2]
@@ -38,10 +38,15 @@ export default class ComponentRegistry {
   // null instead of boxed nil is returned by default on purpose, because the function is not used by transpiled code.
   // deps: [:maps.get/3]
   static getEntry(cid) {
-    return Erlang_Maps["get/3"](cid, ComponentRegistry.data, null);
+    return Erlang_Maps["get/3"](cid, ComponentRegistry.entries, null);
   }
 
-  static hydrate(data) {
-    ComponentRegistry.data = data;
+  static hydrate(entries) {
+    ComponentRegistry.entries = entries;
+  }
+
+  // Optimized
+  static putEntry(cid, entry) {
+    ComponentRegistry.entries.data[Type.encodeMapKey(cid)] = [cid, entry];
   }
 }
