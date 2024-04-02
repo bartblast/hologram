@@ -234,7 +234,13 @@ export default class Renderer {
           emptyComponentStruct,
         );
 
-        ComponentRegistry.putComponentStruct(cid, componentStruct);
+        ComponentRegistry.putEntry(
+          cid,
+          Type.map([
+            [Type.atom("module"), moduleRef.__exModule__],
+            [Type.atom("struct"), componentStruct],
+          ]),
+        );
 
         componentState = Erlang_Maps["get/2"](
           Type.atom("state"),
