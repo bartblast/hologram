@@ -62,7 +62,7 @@ export default class Operation {
     this.#buildParamsMap(paramsKeywordList);
   }
 
-  // $click="aaa{123}bbb"
+  // Example: $click="aaa{123}bbb"
   #constructFromMultiChunkSyntaxSpec() {
     const nameBitstring = Renderer.valueDomToBitstring(this.specDom);
     const nameText = Bitstring.toText(nameBitstring);
@@ -111,7 +111,7 @@ export default class Operation {
     );
   }
 
-  // $click={action: :my_action, params: [a: 1, b: 2]}
+  // Example: $click={action: :my_action, params: [a: 1, b: 2]}
   static #isExpressionLonghandSyntax(specDom) {
     return (
       specDom.data.length === 1 &&
@@ -120,7 +120,7 @@ export default class Operation {
     );
   }
 
-  // $click={:my_action, a: 1, b: 2}
+  // Example: $click={:my_action, a: 1, b: 2}
   static #isExpressionShorthandSyntax(specDom) {
     return (
       specDom.data.length === 1 &&
