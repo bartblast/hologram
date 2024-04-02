@@ -349,10 +349,8 @@ defmodule Hologram.Compiler do
   defp include_mfas_used_by_component_registry(mfas) do
     mfas ++
       [
-        {Hologram.Component, :__struct__, 0},
         {:maps, :get, 2},
-        {:maps, :get, 3},
-        {:maps, :put, 3}
+        {:maps, :get, 3}
       ]
   end
 
