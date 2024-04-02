@@ -242,7 +242,7 @@ export function linkModules() {
   globalThis.Elixir_String_Chars["to_string/1"] = elixirStringCharsToString1;
 }
 
-export function putComponentState(component, state) {
+export function putState(component, state) {
   const oldState = Erlang_Maps["get/2"](Type.atom("state"), component);
   const newState = Erlang_Maps["merge/2"](oldState, state);
 

@@ -1,6 +1,6 @@
 "use strict";
 
-import {putComponentState} from "../../../helpers.mjs";
+import {putState} from "../../../helpers.mjs";
 
 import Interpreter from "../../../../../../assets/js/interpreter.mjs";
 import Type from "../../../../../../assets/js/type.mjs";
@@ -35,7 +35,7 @@ export function defineModule3Fixture() {
         ],
         guards: [],
         body: (context) => {
-          return putComponentState(
+          return putState(
             context.vars.component,
             Type.map([
               [Type.atom("a"), Type.integer(11)],
