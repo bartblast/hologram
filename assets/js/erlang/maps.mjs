@@ -9,7 +9,7 @@ import Utils from "../utils.mjs";
 // Also, in such case add respective call graph edges in Hologram.Compiler.list_runtime_mfas/1.
 
 const Erlang_Maps = {
-  // start fold/3
+  // Start fold/3
   "fold/3": (fun, initialAcc, map) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 3) {
       Interpreter.raiseArgumentError(
@@ -30,10 +30,10 @@ const Erlang_Maps = {
       initialAcc,
     );
   },
-  // end fold/3
+  // End fold/3
   // Deps: []
 
-  // start from_list/1
+  // Start from_list/1
   "from_list/1": (list) => {
     if (!Type.isList(list)) {
       Interpreter.raiseArgumentError(
@@ -43,10 +43,10 @@ const Erlang_Maps = {
 
     return Type.map(list.data.map((tuple) => tuple.data));
   },
-  // end from_list/1
+  // End from_list/1
   // Deps: []
 
-  // start get/2
+  // Start get/2
   "get/2": (key, map) => {
     const value = Erlang_Maps["get/3"](key, map, null);
 
@@ -60,10 +60,10 @@ const Erlang_Maps = {
       )}`,
     );
   },
-  // end get/2
+  // End get/2
   // Deps: [:maps.get/3]
 
-  // start get/3
+  // Start get/3
   "get/3": (key, map, defaultValue) => {
     if (!Type.isMap(map)) {
       Interpreter.raiseBadMapError(map);
@@ -77,10 +77,10 @@ const Erlang_Maps = {
 
     return defaultValue;
   },
-  // end get/3
+  // End get/3
   // Deps: []
 
-  // start is_key/2
+  // Start is_key/2
   "is_key/2": (key, map) => {
     if (!Type.isMap(map)) {
       Interpreter.raiseBadMapError(map);
@@ -88,10 +88,10 @@ const Erlang_Maps = {
 
     return Type.boolean(Type.encodeMapKey(key) in map.data);
   },
-  // end is_key/2
+  // End is_key/2
   // Deps: []
 
-  // start keys/1
+  // Start keys/1
   "keys/1": (map) => {
     if (!Type.isMap(map)) {
       Interpreter.raiseBadMapError(map);
@@ -99,11 +99,11 @@ const Erlang_Maps = {
 
     return Type.list(Object.values(map.data).map(([key, _value]) => key));
   },
-  // end keys/1
+  // End keys/1
   // Deps: []
 
   // TODO: implement iterators
-  // start map/2
+  // Start map/2
   "map/2": (fun, mapOrIterator) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
       Interpreter.raiseArgumentError(
@@ -125,10 +125,10 @@ const Erlang_Maps = {
       ]),
     );
   },
-  // end map/2
+  // End map/2
   // Deps: []
 
-  // start merge/2
+  // Start merge/2
   "merge/2": (map1, map2) => {
     if (!Type.isMap(map1)) {
       Interpreter.raiseBadMapError(map1);
@@ -140,10 +140,10 @@ const Erlang_Maps = {
 
     return {type: "map", data: {...map1.data, ...map2.data}};
   },
-  // end merge/2
+  // End merge/2
   // Deps: []
 
-  // start put/3
+  // Start put/3
   "put/3": (key, value, map) => {
     if (!Type.isMap(map)) {
       Interpreter.raiseBadMapError(map);
@@ -154,11 +154,11 @@ const Erlang_Maps = {
 
     return newMap;
   },
-  // end put/3
+  // End put/3
   // Deps: []
 
   // TODO: implement iterators
-  // start to_list/1
+  // Start to_list/1
   "to_list/1": (mapOrIterator) => {
     if (!Type.isMap(mapOrIterator)) {
       Interpreter.raiseBadMapError(mapOrIterator);
@@ -168,7 +168,7 @@ const Erlang_Maps = {
       Object.values(mapOrIterator.data).map((item) => Type.tuple(item)),
     );
   },
-  // end to_list/1
+  // End to_list/1
   // Deps: []
 };
 

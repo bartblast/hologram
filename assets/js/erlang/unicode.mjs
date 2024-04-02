@@ -10,15 +10,15 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.Compiler.list_runtime_mfas/1.
 
 const Erlang_Unicode = {
-  // start characters_to_binary/1
+  // Start characters_to_binary/1
   "characters_to_binary/1": (input) => {
     const encoding = Type.atom("utf8");
     return Erlang_Unicode["characters_to_binary/3"](input, encoding, encoding);
   },
-  // end characters_to_binary/1
+  // End characters_to_binary/1
   // Deps: [:unicode.characters_to_binary/3]
 
-  // start characters_to_binary/3
+  // Start characters_to_binary/3
   "characters_to_binary/3": (input, inputEncoding, outputEncoding) => {
     // TODO: implement inputEncoding and outputEncoding arguments validation
 
@@ -82,7 +82,7 @@ const Erlang_Unicode = {
 
     return Bitstring.merge(chunks);
   },
-  // end characters_to_binary/3
+  // End characters_to_binary/3
   // Deps: [:lists.flatten/1]
 };
 

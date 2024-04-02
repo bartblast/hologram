@@ -9,7 +9,7 @@ import Type from "../type.mjs";
 
 const Erlang_Code = {
   // This function is simplified - it returns either {:module, MyModule} or {:error, :nofile}.
-  // start ensure_loaded/1
+  // Start ensure_loaded/1
   "ensure_loaded/1": (module) => {
     if (!Type.isAtom(module)) {
       Interpreter.raiseFunctionClauseError(
@@ -21,7 +21,7 @@ const Erlang_Code = {
       ? Type.tuple([Type.atom("error"), Type.atom("nofile")])
       : Type.tuple([Type.atom("module"), module]);
   },
-  // end ensure_loaded/1
+  // End ensure_loaded/1
   // Deps: []
 };
 

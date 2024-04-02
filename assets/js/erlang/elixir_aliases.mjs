@@ -9,7 +9,7 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.Compiler.list_runtime_mfas/1.
 
 const Erlang_Elixir_Aliases = {
-  // start concat/1
+  // Start concat/1
   "concat/1": (segments) => {
     if (!Type.isList(segments)) {
       Interpreter.raiseFunctionClauseError(
@@ -49,7 +49,7 @@ const Erlang_Elixir_Aliases = {
 
     return Type.atom(normalizedSegments.join("."));
   },
-  // end concat/1
+  // End concat/1
   // Deps: []
 };
 

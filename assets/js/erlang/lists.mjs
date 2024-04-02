@@ -8,7 +8,7 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.Compiler.list_runtime_mfas/1.
 
 const Erlang_Lists = {
-  // start flatten/1
+  // Start flatten/1
   "flatten/1": (list) => {
     if (!Type.isList(list)) {
       Interpreter.raiseFunctionClauseError(
@@ -27,10 +27,10 @@ const Erlang_Lists = {
 
     return Type.list(data);
   },
-  // end flatten/1
+  // End flatten/1
   // Deps: []
 
-  // start foldl/3
+  // Start foldl/3
   "foldl/3": (fun, initialAcc, list) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
       Interpreter.raiseFunctionClauseError(
@@ -47,10 +47,10 @@ const Erlang_Lists = {
       initialAcc,
     );
   },
-  // end foldl/3
+  // End foldl/3
   // Deps: []
 
-  // start keyfind/3
+  // Start keyfind/3
   "keyfind/3": (value, index, tuples) => {
     if (!Type.isInteger(index)) {
       Interpreter.raiseArgumentError(
@@ -83,19 +83,19 @@ const Erlang_Lists = {
 
     return Type.boolean(false);
   },
-  // end keyfind/3
+  // End keyfind/3
   // Deps: []
 
-  // start keymember/3
+  // Start keymember/3
   "keymember/3": (value, index, tuples) => {
     return Type.boolean(
       Type.isTuple(Erlang_Lists["keyfind/3"](value, index, tuples)),
     );
   },
-  // end keymember/3
+  // End keymember/3
   // Deps: [:lists.keyfind/3]
 
-  // start map/2
+  // Start map/2
   "map/2": (fun, list) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
       Interpreter.raiseFunctionClauseError(
@@ -111,10 +111,10 @@ const Erlang_Lists = {
       list.data.map((elem) => Interpreter.callAnonymousFunction(fun, [elem])),
     );
   },
-  // end map/2
+  // End map/2
   // Deps: []
 
-  // start member/2
+  // Start member/2
   "member/2": (elem, list) => {
     if (!Type.isList(list)) {
       Interpreter.raiseArgumentError(
@@ -130,10 +130,10 @@ const Erlang_Lists = {
 
     return Type.boolean(false);
   },
-  // end member/2
+  // End member/2
   // Deps: []
 
-  // start reverse/1
+  // Start reverse/1
   "reverse/1": (list) => {
     if (!Type.isList(list)) {
       Interpreter.raiseFunctionClauseError(
@@ -143,10 +143,10 @@ const Erlang_Lists = {
 
     return Type.list(list.data.toReversed());
   },
-  // end reverse/1
+  // End reverse/1
   // Deps: []
 
-  // start sort/1
+  // Start sort/1
   "sort/1": (list) => {
     if (!Type.isList(list)) {
       Interpreter.raiseFunctionClauseError(
@@ -156,7 +156,7 @@ const Erlang_Lists = {
 
     return Type.list(list.data.sort(Interpreter.compareTerms));
   },
-  // end sort/1
+  // End sort/1
   // Deps: []
 };
 

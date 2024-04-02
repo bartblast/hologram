@@ -607,8 +607,8 @@ defmodule Hologram.Compiler.Encoder do
 
   defp extract_erlang_function_source_code(file_path, function, arity) do
     key = "#{function}/#{arity}"
-    start_marker = "// start #{key}"
-    end_marker = "// end #{key}"
+    start_marker = "// Start #{key}"
+    end_marker = "// End #{key}"
 
     regex =
       ~r/#{Regex.escape(start_marker)}[[:space:]]+"#{Regex.escape(key)}":[[:space:]]+(.+),[[:space:]]+#{Regex.escape(end_marker)}/s

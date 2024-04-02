@@ -8,12 +8,12 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.Compiler.list_runtime_mfas/1.
 
 const Erlang_Persistent_Term = {
-  // start get/2
+  // Start get/2
   "get/2": (key, defaultValue) => {
     const scopedKey = Type.tuple([Type.atom("persistent_term"), key]);
     return MemoryStorage.get(Type.encodeMapKey(scopedKey)) || defaultValue;
   },
-  // end get/2
+  // End get/2
   // Deps: []
 };
 

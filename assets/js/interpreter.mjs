@@ -429,7 +429,7 @@ export default class Interpreter {
       return ":erlang";
     }
 
-    // starts with "Erlang_"
+    // Starts with "Erlang_"
     return ":" + moduleJsName.slice(7).toLowerCase();
   }
 
