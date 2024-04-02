@@ -8,7 +8,7 @@ import {
   componentRegistryEntryFixture,
   componentStructFixture,
   elixirHologramComponentStruct0,
-  initComponentRegistryComponentStruct,
+  initComponentRegistryEntry,
   linkModules,
   sinon,
   unlinkModules,
@@ -555,7 +555,7 @@ describe("element node", () => {
           Type.list([]),
         ]);
 
-        initComponentRegistryComponentStruct(cid);
+        initComponentRegistryEntry(cid);
 
         const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
 
@@ -612,8 +612,8 @@ describe("element node", () => {
       });
 
       it("page", () => {
-        initComponentRegistryComponentStruct(Type.bitstring("page"));
-        initComponentRegistryComponentStruct(Type.bitstring("layout"));
+        initComponentRegistryEntry(Type.bitstring("page"));
+        initComponentRegistryEntry(Type.bitstring("layout"));
 
         const vdom = Renderer.renderPage(
           Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module56"),
@@ -642,8 +642,8 @@ describe("element node", () => {
       });
 
       it("layout", () => {
-        initComponentRegistryComponentStruct(Type.bitstring("page"));
-        initComponentRegistryComponentStruct(Type.bitstring("layout"));
+        initComponentRegistryEntry(Type.bitstring("page"));
+        initComponentRegistryEntry(Type.bitstring("layout"));
 
         const vdom = Renderer.renderPage(
           Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module57"),
@@ -686,9 +686,9 @@ describe("element node", () => {
           Type.list([]),
         ]);
 
-        initComponentRegistryComponentStruct(Type.bitstring("component_59"));
-        initComponentRegistryComponentStruct(Type.bitstring("component_60"));
-        initComponentRegistryComponentStruct(Type.bitstring("component_61"));
+        initComponentRegistryEntry(Type.bitstring("component_59"));
+        initComponentRegistryEntry(Type.bitstring("component_60"));
+        initComponentRegistryEntry(Type.bitstring("component_61"));
 
         const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
 
@@ -996,7 +996,7 @@ describe("stateful component", () => {
       Type.list([]),
     ]);
 
-    initComponentRegistryComponentStruct(cid);
+    initComponentRegistryEntry(cid);
 
     const resultVDom = Renderer.renderDom(node, context, slots, defaultTarget);
     const expectedVdom = [vnode("div", {attrs: {}, on: {}}, ["abc"])];
@@ -1043,7 +1043,7 @@ describe("stateful component", () => {
       Type.list([]),
     ]);
 
-    initComponentRegistryComponentStruct(cid);
+    initComponentRegistryEntry(cid);
 
     const resultVDom = Renderer.renderDom(node, context, slots, defaultTarget);
 
@@ -1213,7 +1213,7 @@ describe("stateful component", () => {
       Type.list([]),
     ]);
 
-    initComponentRegistryComponentStruct(cid);
+    initComponentRegistryEntry(cid);
 
     const result = Renderer.renderDom(node, context, slots, defaultTarget);
 
@@ -1445,9 +1445,9 @@ describe("default slot", () => {
 
 describe("context", () => {
   it("emitted in page, accessed in component nested in page", () => {
-    initComponentRegistryComponentStruct(Type.bitstring("layout"));
+    initComponentRegistryEntry(Type.bitstring("layout"));
 
-    const entry = componentRegistryEntryFixture({
+    const pageEntry = componentRegistryEntryFixture({
       emittedContext: Type.map([
         [
           Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
@@ -1456,7 +1456,7 @@ describe("context", () => {
       ]),
     });
 
-    ComponentRegistry.putEntry(Type.bitstring("page"), entry);
+    ComponentRegistry.putEntry(Type.bitstring("page"), pageEntry);
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module39"),
@@ -1467,9 +1467,9 @@ describe("context", () => {
   });
 
   it("emitted in page, accessed in component nested in layout", () => {
-    initComponentRegistryComponentStruct(Type.bitstring("layout"));
+    initComponentRegistryEntry(Type.bitstring("layout"));
 
-    const entry = componentRegistryEntryFixture({
+    const pageEntry = componentRegistryEntryFixture({
       emittedContext: Type.map([
         [
           Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
@@ -1478,7 +1478,7 @@ describe("context", () => {
       ]),
     });
 
-    ComponentRegistry.putEntry(Type.bitstring("page"), entry);
+    ComponentRegistry.putEntry(Type.bitstring("page"), pageEntry);
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module46"),
@@ -1489,9 +1489,9 @@ describe("context", () => {
   });
 
   it("emitted in page, accessed in layout", () => {
-    initComponentRegistryComponentStruct(Type.bitstring("layout"));
+    initComponentRegistryEntry(Type.bitstring("layout"));
 
-    const entry = componentRegistryEntryFixture({
+    const pageEntry = componentRegistryEntryFixture({
       emittedContext: Type.map([
         [
           Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
@@ -1500,7 +1500,7 @@ describe("context", () => {
       ]),
     });
 
-    ComponentRegistry.putEntry(Type.bitstring("page"), entry);
+    ComponentRegistry.putEntry(Type.bitstring("page"), pageEntry);
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module40"),
@@ -1511,9 +1511,9 @@ describe("context", () => {
   });
 
   it("emmited in layout, accessed in component nested in page", () => {
-    initComponentRegistryComponentStruct(Type.bitstring("page"));
+    initComponentRegistryEntry(Type.bitstring("page"));
 
-    const entry = componentRegistryEntryFixture({
+    const layoutEntry = componentRegistryEntryFixture({
       emittedContext: Type.map([
         [
           Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
@@ -1522,7 +1522,7 @@ describe("context", () => {
       ]),
     });
 
-    ComponentRegistry.putEntry(Type.bitstring("layout"), entry);
+    ComponentRegistry.putEntry(Type.bitstring("layout"), layoutEntry);
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module43"),
@@ -1533,9 +1533,9 @@ describe("context", () => {
   });
 
   it("emitted in layout, accessed in component nested in layout", () => {
-    initComponentRegistryComponentStruct(Type.bitstring("page"));
+    initComponentRegistryEntry(Type.bitstring("page"));
 
-    const entry = componentRegistryEntryFixture({
+    const layoutEntry = componentRegistryEntryFixture({
       emittedContext: Type.map([
         [
           Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
@@ -1544,7 +1544,7 @@ describe("context", () => {
       ]),
     });
 
-    ComponentRegistry.putEntry(Type.bitstring("layout"), entry);
+    ComponentRegistry.putEntry(Type.bitstring("layout"), layoutEntry);
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module45"),
@@ -1588,8 +1588,8 @@ describe("context", () => {
 
 describe("page", () => {
   it("inside layout slot", () => {
-    initComponentRegistryComponentStruct(Type.bitstring("page"));
-    initComponentRegistryComponentStruct(Type.bitstring("layout"));
+    initComponentRegistryEntry(Type.bitstring("page"));
+    initComponentRegistryEntry(Type.bitstring("layout"));
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module14"),
@@ -1605,8 +1605,8 @@ describe("page", () => {
   // it("cast page params")
 
   it("cast layout explicit static props", () => {
-    initComponentRegistryComponentStruct(Type.bitstring("page"));
-    initComponentRegistryComponentStruct(Type.bitstring("layout"));
+    initComponentRegistryEntry(Type.bitstring("page"));
+    initComponentRegistryEntry(Type.bitstring("layout"));
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module25"),
@@ -1619,7 +1619,7 @@ describe("page", () => {
   });
 
   it("cast layout props passed implicitely from page state", () => {
-    const entry = componentRegistryEntryFixture({
+    const pageEntry = componentRegistryEntryFixture({
       state: Type.map([
         [Type.atom("prop_1"), Type.bitstring("prop_value_1")],
         [Type.atom("prop_2"), Type.bitstring("prop_value_2")],
@@ -1627,9 +1627,9 @@ describe("page", () => {
       ]),
     });
 
-    ComponentRegistry.putEntry(Type.bitstring("page"), entry);
+    ComponentRegistry.putEntry(Type.bitstring("page"), pageEntry);
 
-    initComponentRegistryComponentStruct(Type.bitstring("layout"));
+    initComponentRegistryEntry(Type.bitstring("layout"));
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module27"),
@@ -1642,16 +1642,16 @@ describe("page", () => {
   });
 
   it("aggregate page vars, giving state vars priority over param vars when there are name conflicts", () => {
-    const entry = componentRegistryEntryFixture({
+    const pageEntry = componentRegistryEntryFixture({
       state: Type.map([
         [Type.atom("key_2"), Type.bitstring("state_value_2")],
         [Type.atom("key_3"), Type.bitstring("state_value_3")],
       ]),
     });
 
-    ComponentRegistry.putEntry(Type.bitstring("page"), entry);
+    ComponentRegistry.putEntry(Type.bitstring("page"), pageEntry);
 
-    initComponentRegistryComponentStruct(Type.bitstring("layout"));
+    initComponentRegistryEntry(Type.bitstring("layout"));
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module21"),
@@ -1667,16 +1667,16 @@ describe("page", () => {
   });
 
   it("aggregate layout vars, giving state vars priority over prop vars when there are name conflicts", () => {
-    initComponentRegistryComponentStruct(Type.bitstring("page"));
+    initComponentRegistryEntry(Type.bitstring("page"));
 
-    const entry = componentRegistryEntryFixture({
+    const layoutEntry = componentRegistryEntryFixture({
       state: Type.map([
         [Type.atom("key_2"), Type.bitstring("state_value_2")],
         [Type.atom("key_3"), Type.bitstring("state_value_3")],
       ]),
     });
 
-    ComponentRegistry.putEntry(Type.bitstring("layout"), entry);
+    ComponentRegistry.putEntry(Type.bitstring("layout"), layoutEntry);
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module24"),

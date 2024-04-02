@@ -204,11 +204,9 @@ export function freeze(obj) {
   return Object.freeze(obj);
 }
 
-export function initComponentRegistryComponentStruct(cid) {
-  const emptyComponentStruct =
-    globalThis.Elixir_Hologram_Component["__struct__/0"]();
-
-  ComponentRegistry.putComponentStruct(cid, emptyComponentStruct);
+export function initComponentRegistryEntry(cid) {
+  const entry = componentRegistryEntryFixture();
+  ComponentRegistry.putEntry(cid, entry);
 }
 
 export function inspectEx(term) {
