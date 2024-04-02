@@ -6,8 +6,6 @@ import {
   assert,
   assertBoxedError,
   componentRegistryEntryFixture,
-  componentStructFixture,
-  elixirHologramComponentStruct0,
   initComponentRegistryEntry,
   linkModules,
   sinon,
