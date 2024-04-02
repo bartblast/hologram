@@ -5,6 +5,7 @@
 import {
   assert,
   assertBoxedError,
+  componentRegistryEntryFixture,
   componentStructFixture,
   elixirHologramComponentStruct0,
   initComponentRegistryComponentStruct,
@@ -395,21 +396,23 @@ describe("element node", () => {
       ]),
     ]);
 
-    ComponentRegistry.putComponentState(
-      cid3,
-      Type.map([
+    const entry3 = componentRegistryEntryFixture({
+      state: Type.map([
         [Type.atom("a"), Type.integer(1)],
         [Type.atom("b"), Type.integer(2)],
       ]),
-    );
+    });
 
-    ComponentRegistry.putComponentState(
-      cid7,
-      Type.map([
+    ComponentRegistry.putEntry(cid3, entry3);
+
+    const entry7 = componentRegistryEntryFixture({
+      state: Type.map([
         [Type.atom("c"), Type.integer(3)],
         [Type.atom("d"), Type.integer(4)],
       ]),
-    );
+    });
+
+    ComponentRegistry.putEntry(cid7, entry7);
 
     const result = Renderer.renderDom(node, context, slots, defaultTarget);
 
@@ -422,26 +425,10 @@ describe("element node", () => {
     );
 
     assert.deepStrictEqual(
-      ComponentRegistry.data,
+      ComponentRegistry.entries,
       Type.map([
-        [
-          cid3,
-          componentStructFixture({
-            state: Type.map([
-              [Type.atom("a"), Type.integer(1)],
-              [Type.atom("b"), Type.integer(2)],
-            ]),
-          }),
-        ],
-        [
-          cid7,
-          componentStructFixture({
-            state: Type.map([
-              [Type.atom("c"), Type.integer(3)],
-              [Type.atom("d"), Type.integer(4)],
-            ]),
-          }),
-        ],
+        [cid3, entry3],
+        [cid7, entry7],
       ]),
     );
   });
@@ -806,21 +793,23 @@ describe("node list", () => {
       ]),
     ]);
 
-    ComponentRegistry.putComponentState(
-      cid3,
-      Type.map([
+    const entry3 = componentRegistryEntryFixture({
+      state: Type.map([
         [Type.atom("a"), Type.integer(1)],
         [Type.atom("b"), Type.integer(2)],
       ]),
-    );
+    });
 
-    ComponentRegistry.putComponentState(
-      cid7,
-      Type.map([
+    ComponentRegistry.putEntry(cid3, entry3);
+
+    const entry7 = componentRegistryEntryFixture({
+      state: Type.map([
         [Type.atom("c"), Type.integer(3)],
         [Type.atom("d"), Type.integer(4)],
       ]),
-    );
+    });
+
+    ComponentRegistry.putEntry(cid7, entry7);
 
     const result = Renderer.renderDom(nodes, context, slots, defaultTarget);
 
@@ -832,26 +821,10 @@ describe("node list", () => {
     ]);
 
     assert.deepStrictEqual(
-      ComponentRegistry.data,
+      ComponentRegistry.entries,
       Type.map([
-        [
-          cid3,
-          componentStructFixture({
-            state: Type.map([
-              [Type.atom("a"), Type.integer(1)],
-              [Type.atom("b"), Type.integer(2)],
-            ]),
-          }),
-        ],
-        [
-          cid7,
-          componentStructFixture({
-            state: Type.map([
-              [Type.atom("c"), Type.integer(3)],
-              [Type.atom("d"), Type.integer(4)],
-            ]),
-          }),
-        ],
+        [cid3, entry3],
+        [cid7, entry7],
       ]),
     );
   });
@@ -887,21 +860,23 @@ describe("node list", () => {
       ]),
     ]);
 
-    ComponentRegistry.putComponentState(
-      cid51,
-      Type.map([
+    const entry51 = componentRegistryEntryFixture({
+      state: Type.map([
         [Type.atom("a"), Type.integer(1)],
         [Type.atom("b"), Type.integer(2)],
       ]),
-    );
+    });
 
-    ComponentRegistry.putComponentState(
-      cid52,
-      Type.map([
+    ComponentRegistry.putEntry(cid51, entry51);
+
+    const entry52 = componentRegistryEntryFixture({
+      state: Type.map([
         [Type.atom("c"), Type.integer(3)],
         [Type.atom("d"), Type.integer(4)],
       ]),
-    );
+    });
+
+    ComponentRegistry.putEntry(cid52, entry52);
 
     const result = Renderer.renderDom(nodes, context, slots, defaultTarget);
 
@@ -915,26 +890,10 @@ describe("node list", () => {
     ]);
 
     assert.deepStrictEqual(
-      ComponentRegistry.data,
+      ComponentRegistry.entries,
       Type.map([
-        [
-          cid51,
-          componentStructFixture({
-            state: Type.map([
-              [Type.atom("a"), Type.integer(1)],
-              [Type.atom("b"), Type.integer(2)],
-            ]),
-          }),
-        ],
-        [
-          cid52,
-          componentStructFixture({
-            state: Type.map([
-              [Type.atom("c"), Type.integer(3)],
-              [Type.atom("d"), Type.integer(4)],
-            ]),
-          }),
-        ],
+        [cid51, entry51],
+        [cid52, entry52],
       ]),
     );
   });
@@ -1119,12 +1078,14 @@ describe("stateful component", () => {
       Type.list([]),
     ]);
 
-    const state = Type.map([
-      [Type.atom("a"), Type.integer(1)],
-      [Type.atom("b"), Type.integer(2)],
-    ]);
+    const entry = componentRegistryEntryFixture({
+      state: Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]),
+    });
 
-    ComponentRegistry.putComponentState(cid, state);
+    ComponentRegistry.putEntry(cid, entry);
 
     const resultVDom = Renderer.renderDom(node, context, slots, defaultTarget);
 
@@ -1134,10 +1095,7 @@ describe("stateful component", () => {
 
     assert.deepStrictEqual(resultVDom, expectedVdom);
 
-    assert.deepStrictEqual(
-      ComponentRegistry.data,
-      Type.map([[cid, componentStructFixture({state: state})]]),
-    );
+    assert.deepStrictEqual(ComponentRegistry.entries, Type.map([[cid, entry]]));
   });
 
   it("with state, component hasn't been initialized yet", () => {
@@ -1198,12 +1156,14 @@ describe("stateful component", () => {
       Type.list([]),
     ]);
 
-    const state = Type.map([
-      [Type.atom("a"), Type.bitstring("state_a")],
-      [Type.atom("b"), Type.bitstring("state_b")],
-    ]);
+    const entry = componentRegistryEntryFixture({
+      state: Type.map([
+        [Type.atom("a"), Type.bitstring("state_a")],
+        [Type.atom("b"), Type.bitstring("state_b")],
+      ]),
+    });
 
-    ComponentRegistry.putComponentState(cid, state);
+    ComponentRegistry.putEntry(cid, entry);
 
     const resultVDom = Renderer.renderDom(node, context, slots, defaultTarget);
 
@@ -1215,10 +1175,7 @@ describe("stateful component", () => {
 
     assert.deepStrictEqual(resultVDom, expectedVdom);
 
-    assert.deepStrictEqual(
-      ComponentRegistry.data,
-      Type.map([[cid, componentStructFixture({state: state})]]),
-    );
+    assert.deepStrictEqual(ComponentRegistry.entries, Type.map([[cid, entry]]));
   });
 
   it("cast props", () => {
@@ -1287,10 +1244,11 @@ describe("stateful component", () => {
       Type.list([]),
     ]);
 
-    ComponentRegistry.putComponentState(
-      cid,
-      Type.map([[Type.atom("b"), Type.integer(222)]]),
-    );
+    const entry = componentRegistryEntryFixture({
+      state: Type.map([[Type.atom("b"), Type.integer(222)]]),
+    });
+
+    ComponentRegistry.putEntry(cid, entry);
 
     assertBoxedError(
       () => Renderer.renderDom(node, context, slots, defaultTarget),
@@ -1367,45 +1325,33 @@ describe("default slot", () => {
       Type.list([]),
     ]);
 
-    ComponentRegistry.putComponentState(
-      cid10,
-      Type.map([[Type.atom("a"), Type.integer(10)]]),
-    );
+    const entry10 = componentRegistryEntryFixture({
+      state: Type.map([[Type.atom("a"), Type.integer(10)]]),
+    });
 
-    ComponentRegistry.putComponentState(
-      cid11,
-      Type.map([[Type.atom("a"), Type.integer(11)]]),
-    );
+    ComponentRegistry.putEntry(cid10, entry10);
 
-    ComponentRegistry.putComponentState(
-      cid12,
-      Type.map([[Type.atom("a"), Type.integer(12)]]),
-    );
+    const entry11 = componentRegistryEntryFixture({
+      state: Type.map([[Type.atom("a"), Type.integer(11)]]),
+    });
+
+    ComponentRegistry.putEntry(cid11, entry11);
+
+    const entry12 = componentRegistryEntryFixture({
+      state: Type.map([[Type.atom("a"), Type.integer(12)]]),
+    });
+
+    ComponentRegistry.putEntry(cid12, entry12);
 
     const result = Renderer.renderDom(node, context, slots, defaultTarget);
     assert.deepStrictEqual(result, ["10,11,10,12,10"]);
 
     assert.deepStrictEqual(
-      ComponentRegistry.data,
+      ComponentRegistry.entries,
       Type.map([
-        [
-          cid10,
-          componentStructFixture({
-            state: Type.map([[Type.atom("a"), Type.integer(10)]]),
-          }),
-        ],
-        [
-          cid11,
-          componentStructFixture({
-            state: Type.map([[Type.atom("a"), Type.integer(11)]]),
-          }),
-        ],
-        [
-          cid12,
-          componentStructFixture({
-            state: Type.map([[Type.atom("a"), Type.integer(12)]]),
-          }),
-        ],
+        [cid10, entry10],
+        [cid11, entry11],
+        [cid12, entry12],
       ]),
     );
   });
@@ -1446,9 +1392,8 @@ describe("default slot", () => {
       Type.keywordList([[Type.atom("text"), Type.bitstring("abc")]]),
     ]);
 
-    ComponentRegistry.putComponentState(
-      cid34,
-      Type.map([
+    const entry34 = componentRegistryEntryFixture({
+      state: Type.map([
         [Type.atom("cid"), cid34],
         [Type.atom("a"), Type.bitstring("34a_prop")],
         [Type.atom("b"), Type.bitstring("34b_state")],
@@ -1457,25 +1402,29 @@ describe("default slot", () => {
         [Type.atom("y"), Type.bitstring("34y_state")],
         [Type.atom("z"), Type.bitstring("34z_state")],
       ]),
-    );
+    });
 
-    ComponentRegistry.putComponentState(
-      cid35,
-      Type.map([
+    ComponentRegistry.putEntry(cid34, entry34);
+
+    const entry35 = componentRegistryEntryFixture({
+      state: Type.map([
         [Type.atom("cid"), cid35],
         [Type.atom("a"), Type.bitstring("35a_prop")],
         [Type.atom("z"), Type.bitstring("35z_state")],
       ]),
-    );
+    });
 
-    ComponentRegistry.putComponentState(
-      cid36,
-      Type.map([
+    ComponentRegistry.putEntry(cid35, entry35);
+
+    const entry36 = componentRegistryEntryFixture({
+      state: Type.map([
         [Type.atom("cid"), cid36],
         [Type.atom("a"), Type.bitstring("36a_prop")],
         [Type.atom("z"), Type.bitstring("36z_state")],
       ]),
-    );
+    });
+
+    ComponentRegistry.putEntry(cid36, entry36);
 
     const result = Renderer.renderDom(node, context, slots, defaultTarget);
 
@@ -1484,42 +1433,11 @@ describe("default slot", () => {
     ]);
 
     assert.deepStrictEqual(
-      ComponentRegistry.data,
+      ComponentRegistry.entries,
       Type.map([
-        [
-          cid34,
-          componentStructFixture({
-            state: Type.map([
-              [Type.atom("cid"), Type.bitstring("component_34")],
-              [Type.atom("a"), Type.bitstring("34a_prop")],
-              [Type.atom("b"), Type.bitstring("34b_state")],
-              [Type.atom("c"), Type.bitstring("34c_state")],
-              [Type.atom("x"), Type.bitstring("34x_state")],
-              [Type.atom("y"), Type.bitstring("34y_state")],
-              [Type.atom("z"), Type.bitstring("34z_state")],
-            ]),
-          }),
-        ],
-        [
-          cid35,
-          componentStructFixture({
-            state: Type.map([
-              [Type.atom("cid"), Type.bitstring("component_35")],
-              [Type.atom("a"), Type.bitstring("35a_prop")],
-              [Type.atom("z"), Type.bitstring("35z_state")],
-            ]),
-          }),
-        ],
-        [
-          cid36,
-          componentStructFixture({
-            state: Type.map([
-              [Type.atom("cid"), Type.bitstring("component_36")],
-              [Type.atom("a"), Type.bitstring("36a_prop")],
-              [Type.atom("z"), Type.bitstring("36z_state")],
-            ]),
-          }),
-        ],
+        [cid34, entry34],
+        [cid35, entry35, ,],
+        [cid36, entry36],
       ]),
     );
   });
@@ -1695,14 +1613,15 @@ describe("page", () => {
   });
 
   it("cast layout props passed implicitely from page state", () => {
-    ComponentRegistry.putComponentState(
-      Type.bitstring("page"),
-      Type.map([
+    const entry = componentRegistryEntryFixture({
+      state: Type.map([
         [Type.atom("prop_1"), Type.bitstring("prop_value_1")],
         [Type.atom("prop_2"), Type.bitstring("prop_value_2")],
         [Type.atom("prop_3"), Type.bitstring("prop_value_3")],
       ]),
-    );
+    });
+
+    ComponentRegistry.putEntry(Type.bitstring("page"), entry);
 
     initComponentRegistryComponentStruct(Type.bitstring("layout"));
 
@@ -1717,13 +1636,14 @@ describe("page", () => {
   });
 
   it("aggregate page vars, giving state vars priority over param vars when there are name conflicts", () => {
-    ComponentRegistry.putComponentState(
-      Type.bitstring("page"),
-      Type.map([
+    const entry = componentRegistryEntryFixture({
+      state: Type.map([
         [Type.atom("key_2"), Type.bitstring("state_value_2")],
         [Type.atom("key_3"), Type.bitstring("state_value_3")],
       ]),
-    );
+    });
+
+    ComponentRegistry.putEntry(Type.bitstring("page"), entry);
 
     initComponentRegistryComponentStruct(Type.bitstring("layout"));
 
@@ -1743,13 +1663,14 @@ describe("page", () => {
   it("aggregate layout vars, giving state vars priority over prop vars when there are name conflicts", () => {
     initComponentRegistryComponentStruct(Type.bitstring("page"));
 
-    ComponentRegistry.putComponentState(
-      Type.bitstring("layout"),
-      Type.map([
+    const entry = componentRegistryEntryFixture({
+      state: Type.map([
         [Type.atom("key_2"), Type.bitstring("state_value_2")],
         [Type.atom("key_3"), Type.bitstring("state_value_3")],
       ]),
-    );
+    });
+
+    ComponentRegistry.putEntry(Type.bitstring("layout"), entry);
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module24"),
