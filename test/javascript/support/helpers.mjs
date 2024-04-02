@@ -93,6 +93,19 @@ export function assertMatchError(callable, value) {
   }
 }
 
+export function componentRegistryEntryFixture(data = {}) {
+  let {module} = data;
+
+  if (typeof module === "undefined") {
+    module = Type.alias("MyModule");
+  }
+
+  return Type.map([
+    [Type.atom("module"), module],
+    [Type.atom("struct"), componentStructFixture(data)],
+  ]);
+}
+
 export function componentStructFixture(data = {}) {
   let componentStruct = elixirHologramComponentStruct0();
 
