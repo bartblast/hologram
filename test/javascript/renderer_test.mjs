@@ -1447,15 +1447,16 @@ describe("context", () => {
   it("emitted in page, accessed in component nested in page", () => {
     initComponentRegistryComponentStruct(Type.bitstring("layout"));
 
-    ComponentRegistry.putComponentEmittedContext(
-      Type.bitstring("page"),
-      Type.map([
+    const entry = componentRegistryEntryFixture({
+      emittedContext: Type.map([
         [
           Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
           Type.integer(123),
         ],
       ]),
-    );
+    });
+
+    ComponentRegistry.putEntry(Type.bitstring("page"), entry);
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module39"),
@@ -1468,15 +1469,16 @@ describe("context", () => {
   it("emitted in page, accessed in component nested in layout", () => {
     initComponentRegistryComponentStruct(Type.bitstring("layout"));
 
-    ComponentRegistry.putComponentEmittedContext(
-      Type.bitstring("page"),
-      Type.map([
+    const entry = componentRegistryEntryFixture({
+      emittedContext: Type.map([
         [
           Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
           Type.integer(123),
         ],
       ]),
-    );
+    });
+
+    ComponentRegistry.putEntry(Type.bitstring("page"), entry);
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module46"),
@@ -1489,15 +1491,16 @@ describe("context", () => {
   it("emitted in page, accessed in layout", () => {
     initComponentRegistryComponentStruct(Type.bitstring("layout"));
 
-    ComponentRegistry.putComponentEmittedContext(
-      Type.bitstring("page"),
-      Type.map([
+    const entry = componentRegistryEntryFixture({
+      emittedContext: Type.map([
         [
           Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
           Type.integer(123),
         ],
       ]),
-    );
+    });
+
+    ComponentRegistry.putEntry(Type.bitstring("page"), entry);
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module40"),
@@ -1510,15 +1513,16 @@ describe("context", () => {
   it("emmited in layout, accessed in component nested in page", () => {
     initComponentRegistryComponentStruct(Type.bitstring("page"));
 
-    ComponentRegistry.putComponentEmittedContext(
-      Type.bitstring("layout"),
-      Type.map([
+    const entry = componentRegistryEntryFixture({
+      emittedContext: Type.map([
         [
           Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
           Type.integer(123),
         ],
       ]),
-    );
+    });
+
+    ComponentRegistry.putEntry(Type.bitstring("layout"), entry);
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module43"),
@@ -1531,15 +1535,16 @@ describe("context", () => {
   it("emitted in layout, accessed in component nested in layout", () => {
     initComponentRegistryComponentStruct(Type.bitstring("page"));
 
-    ComponentRegistry.putComponentEmittedContext(
-      Type.bitstring("layout"),
-      Type.map([
+    const entry = componentRegistryEntryFixture({
+      emittedContext: Type.map([
         [
           Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
           Type.integer(123),
         ],
       ]),
-    );
+    });
+
+    ComponentRegistry.putEntry(Type.bitstring("layout"), entry);
 
     const result = Renderer.renderPage(
       Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module45"),
@@ -1552,15 +1557,16 @@ describe("context", () => {
   it("emitted in component, accessed in component", () => {
     const cid = Type.bitstring("component_37");
 
-    ComponentRegistry.putComponentEmittedContext(
-      cid,
-      Type.map([
+    const entry = componentRegistryEntryFixture({
+      emittedContext: Type.map([
         [
           Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
           Type.integer(123),
         ],
       ]),
-    );
+    });
+
+    ComponentRegistry.putEntry(cid, entry);
 
     const node = Type.tuple([
       Type.atom("component"),
