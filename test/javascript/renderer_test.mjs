@@ -1489,7 +1489,7 @@ describe("Renderer", () => {
         ComponentRegistry.entries,
         Type.map([
           [cid34, entry34],
-          [cid35, entry35, ,],
+          [cid35, entry35],
           [cid36, entry36],
         ]),
       );
