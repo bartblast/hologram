@@ -147,7 +147,13 @@ export function contextFixture(data = {}) {
   return Interpreter.buildContext({module: module, vars: vars});
 }
 
-export function debug(term) {
+export function inspectEx(term) {
+  console.log(Interpreter.inspect(term));
+
+  return term;
+}
+
+export function inspectJs(term) {
   console.log(Utils.serialize(term));
 
   return term;
