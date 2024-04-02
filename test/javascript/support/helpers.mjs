@@ -147,18 +147,6 @@ export function contextFixture(data = {}) {
   return Interpreter.buildContext({module: module, vars: vars});
 }
 
-export function inspectEx(term) {
-  console.log(Interpreter.inspect(term));
-
-  return term;
-}
-
-export function inspectJs(term) {
-  console.log(Utils.serialize(term));
-
-  return term;
-}
-
 export function elixirHologramComponentStruct0() {
   return Type.map([
     [Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")],
@@ -208,6 +196,18 @@ export function initComponentRegistryComponentStruct(cid) {
     globalThis.Elixir_Hologram_Component["__struct__/0"]();
 
   ComponentRegistry.putComponentStruct(cid, emptyComponentStruct);
+}
+
+export function inspectEx(term) {
+  console.log(Interpreter.inspect(term));
+
+  return term;
+}
+
+export function inspectJs(term) {
+  console.log(Utils.serialize(term));
+
+  return term;
 }
 
 export function linkModules() {
