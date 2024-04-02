@@ -89,10 +89,6 @@ describe("ComponentRegistry", () => {
     ]);
   });
 
-  afterEach(() => {
-    ComponentRegistry.entries = Type.map([]);
-  });
-
   describe("getComponentEmittedContext()", () => {
     it("entry exists", () => {
       const result = ComponentRegistry.getComponentEmittedContext(cid2);
