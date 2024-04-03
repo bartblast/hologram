@@ -55,7 +55,14 @@ export default class ComponentRegistry {
     ComponentRegistry.entries = entries;
   }
 
-  // Optimized
+  // Optimized (mutates entries/struct field)
+  static putComponentStruct(cid, componentStruct) {
+    ComponentRegistry.entries.data[Type.encodeMapKey(cid)][1].data[
+      "atom(struct)"
+    ][1] = componentStruct;
+  }
+
+  // Optimized (mutates entries field)
   static putEntry(cid, entry) {
     ComponentRegistry.entries.data[Type.encodeMapKey(cid)] = [cid, entry];
   }

@@ -3,6 +3,7 @@
 import {
   assert,
   componentStructFixture,
+  inspectEx,
   linkModules,
   unlinkModules,
 } from "./support/helpers.mjs";
@@ -165,5 +166,12 @@ describe("ComponentRegistry", () => {
         [cid3, entry3],
       ]),
     );
+  });
+
+  it("putComponentStruct()", () => {
+    const componentStruct = componentStructFixture();
+    ComponentRegistry.putComponentStruct(cid2, componentStruct);
+
+    assert.equal(ComponentRegistry.getComponentStruct(cid2), componentStruct);
   });
 });
