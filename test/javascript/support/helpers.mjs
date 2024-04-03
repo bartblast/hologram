@@ -240,6 +240,21 @@ export function linkModules() {
   globalThis.Elixir_String_Chars["to_string/1"] = elixirStringCharsToString1;
 }
 
+export function putContext(component, context) {
+  const oldContext = Erlang_Maps["get/2"](
+    Type.atom("emitted_context"),
+    component,
+  );
+
+  const newContext = Erlang_Maps["merge/2"](oldContext, context);
+
+  return Erlang_Maps["put/3"](
+    Type.atom("emitted_context"),
+    newContext,
+    component,
+  );
+}
+
 export function putState(component, state) {
   const oldState = Erlang_Maps["get/2"](Type.atom("state"), component);
   const newState = Erlang_Maps["merge/2"](oldState, state);
