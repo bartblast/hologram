@@ -101,6 +101,18 @@ describe("ComponentRegistry", () => {
     });
   });
 
+  describe("getComponentModule()", () => {
+    it("entry exists", () => {
+      const result = ComponentRegistry.getComponentModule(cid2);
+      assert.equal(result, module2);
+    });
+
+    it("entry doesn't exist", () => {
+      const result = ComponentRegistry.getComponentModule(cid3);
+      assert.isNull(result);
+    });
+  });
+
   describe("getComponentState()", () => {
     it("entry exists", () => {
       const result = ComponentRegistry.getComponentState(cid2);
