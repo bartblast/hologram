@@ -61,8 +61,15 @@ describe("buildContext()", () => {
     assert.deepStrictEqual(result, expected);
   });
 
-  it("module defined", () => {
+  it("module defined, string", () => {
     const result = Interpreter.buildContext({module: "MyModule"});
+    const expected = {module: Type.atom("Elixir.MyModule"), vars: {}};
+
+    assert.deepStrictEqual(result, expected);
+  });
+
+  it("module defined, boxed alias", () => {
+    const result = Interpreter.buildContext({module: Type.alias("MyModule")});
     const expected = {module: Type.atom("Elixir.MyModule"), vars: {}};
 
     assert.deepStrictEqual(result, expected);
