@@ -9,10 +9,16 @@ before(() => linkModules());
 after(() => unlinkModules());
 
 it("buildOperationParam()", () => {
-  const event = {};
+  const event = {pageX: 1, pageY: 2};
   const result = ClickEvent.buildOperationParam(event);
 
-  assert.deepStrictEqual(result, Type.map([]));
+  assert.deepStrictEqual(
+    result,
+    Type.map([
+      [Type.atom("page_x"), Type.integer(1)],
+      [Type.atom("page_y"), Type.integer(2)],
+    ]),
+  );
 });
 
 describe("isEventIgnored()", () => {
