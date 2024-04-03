@@ -1915,8 +1915,6 @@ describe("defineElixirFunction()", () => {
       },
     ]);
 
-    console.log(globalThis);
-
     const result = globalThis.Elixir_Aaa_Bbb["my_fun_e/3"](
       Type.integer(1),
       Type.integer(2),
