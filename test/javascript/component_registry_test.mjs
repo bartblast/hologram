@@ -3,6 +3,7 @@
 import {
   assert,
   componentStructFixture,
+  initComponentRegistryEntry,
   linkModules,
   unlinkModules,
 } from "./support/helpers.mjs";
@@ -17,6 +18,7 @@ describe("ComponentRegistry", () => {
   const cid1 = Type.bitstring("my_component_1");
   const cid2 = Type.bitstring("my_component_2");
   const cid3 = Type.bitstring("my_component_3");
+  const cid4 = Type.bitstring("my_component_4");
 
   const module1 = Type.alias("MyModule1");
   const module2 = Type.alias("MyModule2");
@@ -168,9 +170,11 @@ describe("ComponentRegistry", () => {
   });
 
   it("putComponentStruct()", () => {
-    const componentStruct = componentStructFixture();
-    ComponentRegistry.putComponentStruct(cid2, componentStruct);
+    initComponentRegistryEntry(cid4);
 
-    assert.equal(ComponentRegistry.getComponentStruct(cid2), componentStruct);
+    const componentStruct = componentStructFixture();
+    ComponentRegistry.putComponentStruct(cid4, componentStruct);
+
+    assert.equal(ComponentRegistry.getComponentStruct(cid4), componentStruct);
   });
 });
