@@ -129,7 +129,7 @@ describe("Renderer", () => {
 
   const cid = Type.bitstring("my_component");
   const context = Type.map([]);
-  const defaultTarget = "my_default_target";
+  const defaultTarget = Type.bitstring("my_default_target");
   const slots = Type.keywordList([]);
 
   it("text node", () => {
