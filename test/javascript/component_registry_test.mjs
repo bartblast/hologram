@@ -3,7 +3,6 @@
 import {
   assert,
   componentStructFixture,
-  inspectEx,
   linkModules,
   unlinkModules,
 } from "./support/helpers.mjs";
