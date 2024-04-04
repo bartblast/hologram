@@ -23,7 +23,8 @@ defmodule HologramFeatureTests.MixProject do
       {:phoenix, "~> 1.7"},
       {:plug_cowboy, "~> 2.0"},
       {:telemetry_metrics, "~> 1.0"},
-      {:telemetry_poller, "~> 1.0"}
+      {:telemetry_poller, "~> 1.0"},
+      {:wallaby, "~> 0.30", only: :test, runtime: false}
     ]
   end
 

@@ -6,3 +6,8 @@ config :hologram_feature_tests, HologramFeatureTestsWeb.Endpoint,
   server: true
 
 config :logger, level: :warning
+
+config :wallaby,
+  driver: Wallaby.Chrome,
+  otp_app: :hologram_feature_tests,
+  screenshot_dir: "./tmp/screenshots"
