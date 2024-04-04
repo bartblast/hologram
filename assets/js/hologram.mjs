@@ -10,9 +10,13 @@ import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import MemoryStorage from "./memory_storage.mjs";
+import Operation from "./operation.mjs";
 import Renderer from "./renderer.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
+
+// Events
+import ClickEvent from "./events/click_event.mjs";
 
 import {attributesModule, eventListenersModule, init, toVNode} from "snabbdom";
 const patch = init([attributesModule, eventListenersModule]);
@@ -35,8 +39,40 @@ export default class Hologram {
   static #pageParams = null;
   static #virtualDocument = null;
 
-  static handleEvent(_event, _operationSpecVdom) {
-    console.log("TODO");
+  static handleEvent(event, eventType, operationSpecDom, defaultTarget) {
+    const eventImpl = Hologram.#getEventImplementation(eventType);
+
+    if (!eventImpl.isEventIgnored(event)) {
+      event.preventDefault();
+
+      const eventParam = eventImpl.buildOperationParam(event);
+
+      const operation = new Operation(
+        operationSpecDom,
+        defaultTarget,
+        eventParam,
+      );
+
+      operation.type === "action"
+        ? Hologram.#executeAction(operation)
+        : Hologram.#executeCommand(operation);
+    }
+  }
+
+  // FIXME: Made public only to make it stubable in tests
+  static render() {
+    if (!Hologram.#virtualDocument) {
+      Hologram.#virtualDocument = toVNode(window.document.documentElement);
+    }
+
+    const newVirtualDocument = Renderer.renderPage(
+      Hologram.#pageModule,
+      Hologram.#pageParams,
+    )[0];
+
+    patch(Hologram.#virtualDocument, newVirtualDocument);
+
+    Hologram.#virtualDocument = newVirtualDocument;
   }
 
   static run() {
@@ -71,6 +107,47 @@ export default class Hologram {
     window.Elixir_Kernel["inspect/2"] = Elixir_Kernel["inspect/2"];
   }
 
+  // Already tested
+  static #executeAction(operation) {
+    const componentModule = ComponentRegistry.getComponentModule(
+      operation.target,
+    );
+
+    const componentStruct = ComponentRegistry.getComponentStruct(
+      operation.target,
+    );
+
+    const args = [operation.name, operation.params, componentStruct];
+
+    const context = Interpreter.buildContext({
+      module: componentModule,
+      vars: {},
+    });
+
+    const newComponentStruct = Interpreter.callNamedFunction(
+      componentModule,
+      "action",
+      3,
+      args,
+      context,
+    );
+
+    ComponentRegistry.putComponentStruct(operation.target, newComponentStruct);
+
+    Hologram.render();
+  }
+
+  static #executeCommand(_operation) {
+    // TODO: implement
+  }
+
+  static #getEventImplementation(eventType) {
+    switch (eventType) {
+      case "click":
+        return ClickEvent;
+    }
+  }
+
   static #init() {
     Hologram.#defineManuallyPortedFunctions();
 
@@ -103,7 +180,7 @@ export default class Hologram {
 
     Hologram.#maybeInitAssetPathRegistry();
 
-    Hologram.#render();
+    Hologram.render();
   }
 
   static #onReady(callback) {
@@ -118,20 +195,5 @@ export default class Hologram {
         callback();
       });
     }
-  }
-
-  static #render() {
-    if (!Hologram.#virtualDocument) {
-      Hologram.#virtualDocument = toVNode(window.document.documentElement);
-    }
-
-    const newVirtualDocument = Renderer.renderPage(
-      Hologram.#pageModule,
-      Hologram.#pageParams,
-    )[0];
-
-    patch(Hologram.#virtualDocument, newVirtualDocument);
-
-    Hologram.#virtualDocument = newVirtualDocument;
   }
 }
