@@ -79,7 +79,7 @@ const Erlang = {
 
     return number;
   },
-  // End -/1
+  // End +/1
   // Deps: []
 
   // Start ++/2
