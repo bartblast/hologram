@@ -70,7 +70,7 @@ defmodule Hologram.Component do
       Returns the list of property definitions for the compiled component.
       """
       @spec __props__() :: list({atom, atom, keyword})
-      def __props__, do: @__props__
+      def __props__, do: Enum.reverse(@__props__)
     end
   end
 

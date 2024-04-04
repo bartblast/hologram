@@ -15,7 +15,7 @@ defmodule Hologram.ComponentTest do
   end
 
   test "__props__/0" do
-    assert Module4.__props__() == [{:b, :integer, [opt_1: 111, opt_2: 222]}, {:a, :string, []}]
+    assert Module4.__props__() == [{:a, :string, []}, {:b, :integer, [opt_1: 111, opt_2: 222]}]
   end
 
   test "colocated_template_path/1" do
