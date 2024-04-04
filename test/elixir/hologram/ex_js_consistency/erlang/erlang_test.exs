@@ -39,6 +39,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "+/1" do
+    test "positive float" do
+      assert :erlang.+(1.23) == 1.23
+    end
+
+    test "positive integer" do
+      assert :erlang.+(123) == 123
+    end
+
+    test "negative float" do
+      assert :erlang.+(-1.23) == -1.23
+    end
+
+    test "negative integer" do
+      assert :erlang.+(-123) == -123
+    end
+
+    test "0.0 (float)" do
+      assert :erlang.+(0.0) == 0.0
+    end
+
+    test "0 (integer)" do
+      assert :erlang.+(0) == 0
+    end
+
+    test "non-number" do
+      assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
+        :abc
+        |> build_value()
+        |> :erlang.+()
+      end
+    end
+  end
+
   describe "+/2" do
     test "float + float" do
       assert :erlang.+(1.0, 2.0) === 3.0

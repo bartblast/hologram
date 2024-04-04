@@ -15,6 +15,7 @@ import Utils from "../utils.mjs";
 MFAs for sorting:
 [
   {:erlang, :*, 2},
+  {:erlang, :+, 1},
   {:erlang, :+, 2},
   {:erlang, :++, 2},
   {:erlang, :-, 1},
@@ -68,6 +69,17 @@ const Erlang = {
     return type === "float" ? Type.float(result) : Type.integer(result);
   },
   // End +/2
+  // Deps: []
+
+  // Start +/1
+  "+/1": (number) => {
+    if (!Type.isNumber(number)) {
+      Interpreter.raiseArithmeticError();
+    }
+
+    return number;
+  },
+  // End -/1
   // Deps: []
 
   // Start ++/2

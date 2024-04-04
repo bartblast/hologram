@@ -74,6 +74,42 @@ describe("*/2", () => {
   });
 });
 
+describe("+/1", () => {
+  const fun = Erlang["+/1"];
+
+  it("positive float", () => {
+    assert.deepStrictEqual(fun(Type.float(1.23)), Type.float(1.23));
+  });
+
+  it("positive integer", () => {
+    assert.deepStrictEqual(fun(Type.integer(123)), Type.integer(123));
+  });
+
+  it("negative float", () => {
+    assert.deepStrictEqual(fun(Type.float(-1.23)), Type.float(-1.23));
+  });
+
+  it("negative integer", () => {
+    assert.deepStrictEqual(fun(Type.integer(-123)), Type.integer(-123));
+  });
+
+  it("0.0 (float)", () => {
+    assert.deepStrictEqual(fun(Type.float(0.0)), Type.float(0.0));
+  });
+
+  it("0 (integer)", () => {
+    assert.deepStrictEqual(fun(Type.integer(0)), Type.integer(0));
+  });
+
+  it("non-number", () => {
+    assertBoxedError(
+      () => fun(atomAbc),
+      "ArithmeticError",
+      "bad argument in arithmetic expression",
+    );
+  });
+});
+
 describe("+/2", () => {
   const fun = Erlang["+/2"];
 
