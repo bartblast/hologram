@@ -404,6 +404,85 @@ describe("reverse/1", () => {
   });
 });
 
+describe("reverse/2", () => {
+  const fun = Erlang_Lists["reverse/2"];
+
+  const integer1 = Type.integer(1);
+  const integer2 = Type.integer(2);
+  const integer3 = Type.integer(3);
+  const integer4 = Type.integer(4);
+  const integer5 = Type.integer(5);
+
+  const emptyList = Type.list([]);
+
+  const list12 = Type.list([integer1, integer2]);
+  const list34 = Type.list([integer3, integer4]);
+
+  const improperList12 = Type.improperList([integer1, integer2]);
+  const improperList34 = Type.improperList([integer3, integer4]);
+
+  describe("1st arg = [1, 2]", () => {
+    it("2nd arg = [3, 4]", () => {
+      const expected = Type.list([integer2, integer1, integer3, integer4]);
+      assert.deepStrictEqual(fun(list12, list34), expected);
+    });
+
+    it("2nd arg = [3 | 4]", () => {
+      const expected = Type.improperList([
+        integer2,
+        integer1,
+        integer3,
+        integer4,
+      ]);
+      assert.deepStrictEqual(fun(list12, improperList34), expected);
+    });
+
+    it("2nd arg = []", () => {
+      const expected = Type.list([integer2, integer1]);
+      assert.deepStrictEqual(fun(list12, emptyList), expected);
+    });
+
+    it("2nd arg = 5", () => {
+      const expected = Type.improperList([integer2, integer1, integer5]);
+      assert.deepStrictEqual(fun(list12, integer5), expected);
+    });
+  });
+
+  it("1st arg is an improper list", () => {
+    assertBoxedError(
+      () => fun(improperList12, list34),
+      "ArgumentError",
+      Interpreter.buildErrorsFoundMsg(1, "not a proper list"),
+    );
+  });
+
+  describe("1st arg = []", () => {
+    it("2nd arg = [3, 4]", () => {
+      assert.deepStrictEqual(fun(emptyList, list34), list34);
+    });
+
+    it("2nd arg = [3 | 4]", () => {
+      assert.deepStrictEqual(fun(emptyList, improperList34), improperList34);
+    });
+
+    it("2nd arg = []", () => {
+      assert.deepStrictEqual(fun(emptyList, emptyList), emptyList);
+    });
+
+    it("2nd arg = 5", () => {
+      assert.deepStrictEqual(fun(emptyList, integer5), integer5);
+    });
+  });
+
+  it("1st arg is not a list", () => {
+    assertBoxedError(
+      () => fun(integer5, list34),
+      "ArgumentError",
+      Interpreter.buildErrorsFoundMsg(1, "not a list"),
+    );
+  });
+});
+
 describe("sort/1", () => {
   const fun = Erlang_Lists["sort/1"];
 

@@ -146,6 +146,33 @@ const Erlang_Lists = {
   // End reverse/1
   // Deps: []
 
+  // Start reverse/2
+  "reverse/2": (list, tail) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildErrorsFoundMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildErrorsFoundMsg(1, "not a proper list"),
+      );
+    }
+
+    if (list.data.length === 0 && !Type.isList(tail)) {
+      return tail;
+    }
+
+    const data = list.data
+      .toReversed()
+      .concat(Type.isList(tail) ? tail.data : [tail]);
+
+    return Type.isProperList(tail) ? Type.list(data) : Type.improperList(data);
+  },
+  // End reverse/2
+  // Deps: []
+
   // Start sort/1
   "sort/1": (list) => {
     if (!Type.isList(list)) {

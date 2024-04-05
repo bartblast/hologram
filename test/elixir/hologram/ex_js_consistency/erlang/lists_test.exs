@@ -193,6 +193,52 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "reverse/2" do
+    test "1st arg = [1, 2], 2nd arg = [3, 4]" do
+      assert :lists.reverse([1, 2], [3, 4]) == [2, 1, 3, 4]
+    end
+
+    test "1st arg = [1, 2], 2nd arg = [3 | 4]" do
+      assert :lists.reverse([1, 2], [3 | 4]) == [2, 1, 3 | 4]
+    end
+
+    test "1st arg = [1, 2], 2nd arg = []" do
+      assert :lists.reverse([1, 2], []) == [2, 1]
+    end
+
+    test "1st arg = [1, 2], 2nd arg = 5" do
+      assert :lists.reverse([1, 2], 5) == [2, 1 | 5]
+    end
+
+    test "1st arg is an improper list" do
+      assert_raise ArgumentError, build_errors_found_msg(1, "not a proper list"), fn ->
+        :lists.reverse([1 | 2], [3, 4])
+      end
+    end
+
+    test "1st arg = [], 2nd arg = [3, 4]" do
+      assert :lists.reverse([], [3, 4]) == [3, 4]
+    end
+
+    test "1st arg = [], 2nd arg = [3 | 4]" do
+      assert :lists.reverse([], [3 | 4]) == [3 | 4]
+    end
+
+    test "1st arg = [], 2nd arg = []" do
+      assert :lists.reverse([], []) == []
+    end
+
+    test "1st arg = [], 2nd arg = 5" do
+      assert :lists.reverse([], 5) == 5
+    end
+
+    test "1st arg is not a list" do
+      assert_raise ArgumentError, build_errors_found_msg(1, "not a list"), fn ->
+        :lists.reverse(5, [3, 4])
+      end
+    end
+  end
+
   describe "sort/1" do
     test "sorts items in the list" do
       assert :lists.sort([:a, 4, 3.0, :b, 1, 2.0]) == [1, 2.0, 3.0, 4, :a, :b]
