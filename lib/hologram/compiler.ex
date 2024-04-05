@@ -252,13 +252,13 @@ defmodule Hologram.Compiler do
 
     entry_mfas =
       []
-      |> include_mfas_used_by_asset_path_registry()
-      |> include_mfas_used_by_component_registry()
+      |> include_mfas_used_by_asset_path_registry_class()
+      |> include_mfas_used_by_component_registry_class()
       |> include_mfas_used_frequently_on_the_client()
-      |> include_mfas_used_by_interpreter()
+      |> include_mfas_used_by_interpreter_class()
       |> include_mfas_used_by_manually_ported_code_module()
-      |> include_mfas_used_by_operation()
-      |> include_mfas_used_by_renderer()
+      |> include_mfas_used_by_operation_class()
+      |> include_mfas_used_by_renderer_class()
       |> Enum.uniq()
 
     call_graph_clone
@@ -339,7 +339,7 @@ defmodule Hologram.Compiler do
     |> CallGraph.add_edge({:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1})
   end
 
-  defp include_mfas_used_by_asset_path_registry(mfas) do
+  defp include_mfas_used_by_asset_path_registry_class(mfas) do
     mfas ++
       [
         {:maps, :get, 3},
@@ -347,7 +347,7 @@ defmodule Hologram.Compiler do
       ]
   end
 
-  defp include_mfas_used_by_component_registry(mfas) do
+  defp include_mfas_used_by_component_registry_class(mfas) do
     mfas ++
       [
         {:maps, :get, 2},
@@ -355,7 +355,7 @@ defmodule Hologram.Compiler do
       ]
   end
 
-  defp include_mfas_used_by_interpreter(mfas) do
+  defp include_mfas_used_by_interpreter_class(mfas) do
     mfas ++
       [
         {Enum, :into, 2},
@@ -372,7 +372,7 @@ defmodule Hologram.Compiler do
     [{:code, :ensure_loaded, 1} | mfas]
   end
 
-  defp include_mfas_used_by_operation(mfas) do
+  defp include_mfas_used_by_operation_class(mfas) do
     mfas ++
       [
         {:maps, :from_list, 1},
@@ -380,7 +380,7 @@ defmodule Hologram.Compiler do
       ]
   end
 
-  defp include_mfas_used_by_renderer(mfas) do
+  defp include_mfas_used_by_renderer_class(mfas) do
     mfas ++
       [
         {Hologram.Component, :__struct__, 0},
