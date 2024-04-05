@@ -33,7 +33,7 @@ export default class Hologram {
     Utils: Utils,
   };
 
-  static #componentStructs = null;
+  static #componentRegistry = null;
   static #isInitiated = false;
   static #pageModule = null;
   static #pageParams = null;
@@ -160,7 +160,7 @@ export default class Hologram {
   static #loadMountData() {
     const mountData = window.__hologramPageMountData__(Hologram.#deps);
 
-    Hologram.#componentStructs = mountData.componentStructs;
+    Hologram.#componentRegistry = mountData.componentRegistry;
     Hologram.#pageModule = mountData.pageModule;
     Hologram.#pageParams = mountData.pageParams;
   }
@@ -176,7 +176,7 @@ export default class Hologram {
 
     Hologram.#loadMountData();
 
-    ComponentRegistry.hydrate(Hologram.#componentStructs);
+    ComponentRegistry.hydrate(Hologram.#componentRegistry);
 
     Hologram.#maybeInitAssetPathRegistry();
 

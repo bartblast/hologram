@@ -15,15 +15,15 @@ defmodule Hologram.Template.Renderer do
 
   ## Examples
 
-      iex> dom = {:component, Module3, [{"cid", [text: "my_component"]}], []}
+      iex> dom = {:component, MyModule, [{"cid", [text: "my_component"]}], []}
       iex> render_dom(dom, %{}, [])
       {
         "<div>state_a = 1, state_b = 2</div>",
-        %{"my_component" => %Component{state: %{a: 1, b: 2}}}
+        %{"my_component" => %{module: MyModule, struct: %Component{state: %{a: 1, b: 2}}}}
       }
   """
   @spec render_dom(DOM.t(), %{(atom | {any, atom}) => any}, keyword(DOM.t())) ::
-          {String.t(), %{atom => Component.t()}}
+          {String.t(), %{String.t() => %{module: module, struct: Component.t()}}}
   def render_dom(dom, context, slots)
 
   def render_dom({:component, module, props_dom, children_dom}, context, slots) do
@@ -48,7 +48,7 @@ defmodule Hologram.Template.Renderer do
   def render_dom({:element, tag_name, attrs_dom, children_dom}, context, slots) do
     attrs_html = render_attributes(attrs_dom)
 
-    {children_html, component_structs} = render_dom(children_dom, context, slots)
+    {children_html, component_registry} = render_dom(children_dom, context, slots)
 
     html =
       if tag_name in @void_elems do
@@ -57,7 +57,7 @@ defmodule Hologram.Template.Renderer do
         "<#{tag_name}#{attrs_html}>#{children_html}</#{tag_name}>"
       end
 
-    {html, component_structs}
+    {html, component_registry}
   end
 
   def render_dom({:expression, {value}}, _context, _slots) do
@@ -72,9 +72,9 @@ defmodule Hologram.Template.Renderer do
     nodes
     # There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if}
     |> Enum.filter(& &1)
-    |> Enum.reduce({"", %{}}, fn node, {acc_html, acc_component_structs} ->
-      {html, component_struct} = render_dom(node, context, slots)
-      {acc_html <> html, Map.merge(acc_component_structs, component_struct)}
+    |> Enum.reduce({"", %{}}, fn node, {acc_html, acc_component_registry} ->
+      {html, component_registry} = render_dom(node, context, slots)
+      {acc_html <> html, Map.merge(acc_component_registry, component_registry)}
     end)
   end
 
@@ -88,10 +88,11 @@ defmodule Hologram.Template.Renderer do
       iex> render_page(MyPage, [{"param", [text: "value"]}], initial_page?: true)
       {
         "<div>full page content including layout</div>",
-        %{"page" => %Component{state: %{a: 1, b: 2}}}
+        %{"page" => %{module: MyPage, struct: %Component{state: %{a: 1, b: 2}}}}
       }
   """
-  @spec render_page(module, DOM.t(), keyword()) :: {String.t(), %{atom => Component.t()}}
+  @spec render_page(module, DOM.t(), keyword()) ::
+          {String.t(), %{String.t() => %{module: module, struct: Component.t()}}}
   def render_page(page_module, params_dom, opts) do
     initial_page? = opts[:initial_page?] || false
     params = cast_props(params_dom, page_module)
@@ -105,7 +106,7 @@ defmodule Hologram.Template.Renderer do
       |> put_page_digest_context(page_digest)
       |> put_page_mounted_flag_context(false)
 
-    {initial_html, initial_component_structs} =
+    {initial_html, initial_component_registry} =
       render_page_inside_layout(
         page_module,
         params,
@@ -117,20 +118,20 @@ defmodule Hologram.Template.Renderer do
       |> put_initial_page_flag_context(false)
       |> put_page_mounted_flag_context(true)
 
-    component_structs_with_page_struct =
+    component_registry_with_page_struct =
       Map.put(
-        initial_component_structs,
+        initial_component_registry,
         "page",
-        page_component_struct_with_emitted_context_after_rendering
+        %{module: page_module, struct: page_component_struct_with_emitted_context_after_rendering}
       )
 
     html_with_interpolated_js =
       initial_html
-      |> interpolate_component_structs_js(component_structs_with_page_struct)
+      |> interpolate_component_registry_js(component_registry_with_page_struct)
       |> interpolate_page_module_js(page_module)
       |> interpolate_page_params_js(params)
 
-    {html_with_interpolated_js, component_structs_with_page_struct}
+    {html_with_interpolated_js, component_registry_with_page_struct}
   end
 
   defp build_layout_props_dom(page_module, page_state) do
@@ -224,9 +225,9 @@ defmodule Hologram.Template.Renderer do
     Map.merge(props_from_template, props_from_context)
   end
 
-  defp interpolate_component_structs_js(html, component_structs) do
-    component_structs_js = Encoder.encode_term(component_structs)
-    String.replace(html, "$COMPONENT_STRUCTS_JS_PLACEHOLDER", component_structs_js)
+  defp interpolate_component_registry_js(html, component_registry) do
+    component_registry_js = Encoder.encode_term(component_registry)
+    String.replace(html, "$COMPONENT_REGISTRY_JS_PLACEHOLDER", component_registry_js)
   end
 
   defp interpolate_page_module_js(html, page_module) do
@@ -308,12 +309,13 @@ defmodule Hologram.Template.Renderer do
     vars = Map.merge(props, component_struct.state)
     merged_context = Map.merge(context, component_struct.emitted_context)
 
-    {html, children_component_structs} =
+    {html, children_component_registry} =
       render_template(module, vars, children_dom, merged_context)
 
-    component_structs = Map.put(children_component_structs, vars.cid, component_struct)
+    component_registry =
+      Map.put(children_component_registry, vars.cid, %{module: module, struct: component_struct})
 
-    {html, component_structs}
+    {html, component_registry}
   end
 
   defp render_template(module, vars, children_dom, context) do
