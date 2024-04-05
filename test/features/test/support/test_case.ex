@@ -6,16 +6,13 @@ defmodule HologramFeatureTestsWeb.TestCase do
     quote do
       ExUnit.Case.register_attribute(__MODULE__, :sessions)
 
-      alias Wallaby.Browser
-      alias Wallaby.Element
-      alias Wallaby.Query
-
       # Kernel.tap/2 was introduced in 1.12 and conflicts with Browser.tap/2
       import Kernel, except: [tap: 2]
 
       import HologramFeatureTestsWeb.Test.Helpers
       import Wallaby.Browser, except: [visit: 2]
       import Wallaby.Feature
+      import Wallaby.Query
 
       setup context do
         metadata = Wallaby.Feature.Utils.maybe_checkout_repos(context[:async])
