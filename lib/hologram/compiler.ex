@@ -254,6 +254,7 @@ defmodule Hologram.Compiler do
       []
       |> include_mfas_used_by_asset_path_registry()
       |> include_mfas_used_by_component_registry()
+      |> include_mfas_used_frequently_on_the_client()
       |> include_mfas_used_by_interpreter()
       |> include_mfas_used_by_manually_ported_code_module()
       |> include_mfas_used_by_operation()
@@ -389,6 +390,14 @@ defmodule Hologram.Compiler do
         {:maps, :from_list, 1},
         {:maps, :get, 2},
         {:maps, :merge, 2}
+      ]
+  end
+
+  defp include_mfas_used_frequently_on_the_client(mfas) do
+    mfas ++
+      [
+        {Hologram.Router.Helpers, :page_path, 1},
+        {Hologram.Router.Helpers, :page_path, 2}
       ]
   end
 
