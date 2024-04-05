@@ -396,6 +396,8 @@ defmodule Hologram.Compiler do
   defp include_mfas_used_frequently_on_the_client(mfas) do
     mfas ++
       [
+        # Used by __props__/0 function injected into component and page modules.
+        {Enum, :reverse, 1},
         {Hologram.Router.Helpers, :page_path, 1},
         {Hologram.Router.Helpers, :page_path, 2}
       ]
