@@ -1,4 +1,4 @@
 [
   import_deps: [:hologram, :phoenix],
-  inputs: ["*.{ex,exs}", "{config,lib,test}/**/*.{ex,exs}"]
+  inputs: ["*.{ex,exs}", "{app,config,lib,test}/**/*.{ex,exs}"]
 ]
