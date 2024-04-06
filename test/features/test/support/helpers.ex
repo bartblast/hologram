@@ -1,4 +1,4 @@
-defmodule HologramFeatureTestsWeb.Test.Helpers do
+defmodule HologramFeatureTests.Helpers do
   alias Hologram.Router
   alias Wallaby.Browser
 

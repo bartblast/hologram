@@ -10,7 +10,7 @@ defmodule HologramFeatureTests.TestCase do
       # Kernel.tap/2 was introduced in 1.12 and conflicts with Browser.tap/2
       import Kernel, except: [tap: 2]
 
-      import HologramFeatureTestsWeb.Test.Helpers
+      import HologramFeatureTests.Helpers
       import Wallaby.Browser, except: [visit: 2]
       import Wallaby.Feature
       import Wallaby.Query
