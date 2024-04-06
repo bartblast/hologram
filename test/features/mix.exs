@@ -24,7 +24,7 @@ defmodule HologramFeatureTests.MixProject do
       {:plug_cowboy, "~> 2.0"},
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"},
-      {:wallaby, "~> 0.30", only: :test, runtime: false}
+      {:wallaby, "~> 0.30", only: :test}
     ]
   end
 
@@ -42,7 +42,6 @@ defmodule HologramFeatureTests.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       dialyzer: [
         plt_add_apps: [:ex_unit, :mix],
-        plt_add_deps: :app_direct,
         plt_core_path: "priv/plts/core.plt",
         plt_local_path: "priv/plts/project.plt"
       ],
