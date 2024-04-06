@@ -1,13 +1,21 @@
 defmodule HologramFeatureTests.OperatorsTest do
-  use HologramFeatureTestsWeb.TestCase, async: true
+  use HologramFeatureTests.TestCase, async: true
+  alias HologramFeatureTests.OperatorsPage
 
-  @left 123
-  @right 234
+  @integer_1 123
+  @integer_2 234
+
+  feature "+", %{session: session} do
+    session
+    |> visit(OperatorsPage)
+    |> click(css("button[id='+']"))
+    |> assert_text(css("#result"), inspect(@integer_1 + @integer_2))
+  end
 
   feature "*", %{session: session} do
     session
-    |> visit(HologramFeatureTests.OperatorsPage)
+    |> visit(OperatorsPage)
     |> click(css("button[id='*']"))
-    |> assert_text(css("#result"), inspect(@left * @right))
+    |> assert_text(css("#result"), inspect(@integer_1 * @integer_2))
   end
 end

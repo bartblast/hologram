@@ -1,4 +1,4 @@
-defmodule HologramFeatureTestsWeb.TestCase do
+defmodule HologramFeatureTests.TestCase do
   use ExUnit.CaseTemplate
   alias Wallaby.Feature.Utils
 
