@@ -6,7 +6,7 @@ defmodule HologramFeatureTests.OperatorsPage do
   layout HologramFeatureTests.Components.DefaultLayout
   
   def init(_params, component, _server) do
-    put_state(component, integer_a: 123, integer_b: 234, result: nil)
+    put_state(component, boolean_a: true, boolean_b: false, integer_a: 123, integer_b: 234, list_a: [1, 2, 3], list_b: [2, 3, 4], result: nil)
   end
   
   def template do
