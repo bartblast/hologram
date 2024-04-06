@@ -55,4 +55,11 @@ defmodule HologramFeatureTests.OperatorsTest do
     |> click(css("button[id='++']"))
     |> assert_text(css("#result"), inspect(@list_a ++ @list_b))
   end
+
+  feature "--", %{session: session} do
+    session
+    |> visit(OperatorsPage)
+    |> click(css("button[id='--']"))
+    |> assert_text(css("#result"), inspect(@list_a -- @list_b))
+  end
 end
