@@ -1,5 +1,6 @@
 defmodule HologramFeatureTestsWeb.TestCase do
   use ExUnit.CaseTemplate
+  alias Wallaby.Feature.Utils
 
   # Based on Wallaby.Feature.__using__/1
   using do
@@ -15,22 +16,25 @@ defmodule HologramFeatureTestsWeb.TestCase do
       import Wallaby.Query
 
       setup context do
-        metadata = Wallaby.Feature.Utils.maybe_checkout_repos(context[:async])
+        metadata = Utils.maybe_checkout_repos(context[:async])
 
         start_session_opts =
-          [metadata: metadata]
-          |> Wallaby.Feature.Utils.put_create_session_fn(context[:create_session_fn])
+          Utils.put_create_session_fn(
+            [metadata: metadata],
+            context[:create_session_fn]
+          )
 
-        get_in(context, [:registered, :sessions])
-        |> Wallaby.Feature.Utils.sessions_iterable()
+        context
+        |> get_in([:registered, :sessions])
+        |> Utils.sessions_iterable()
         |> Enum.map(fn
           opts when is_list(opts) ->
-            Wallaby.Feature.Utils.start_session(opts, start_session_opts)
+            Utils.start_session(opts, start_session_opts)
 
           i when is_number(i) ->
-            Wallaby.Feature.Utils.start_session([], start_session_opts)
+            Utils.start_session([], start_session_opts)
         end)
-        |> Wallaby.Feature.Utils.build_setup_return()
+        |> Utils.build_setup_return()
       end
     end
   end
