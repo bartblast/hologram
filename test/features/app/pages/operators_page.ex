@@ -15,6 +15,7 @@ defmodule HologramFeatureTests.OperatorsPage do
       <button id="unary+" $click={:"unary+", value: @integer_a}> unary + </button>
       <button id="unary-" $click={:"unary-", value: @integer_a}> unary - </button>
       <button id="+" $click={:+, left: @integer_a, right: @integer_b}> + </button>
+      <button id="-" $click={:-, left: @integer_a, right: @integer_b}> - </button>
       <button id="*" $click={:*, left: @integer_a, right: @integer_b}> * </button>
     </p>
     <p>
@@ -33,6 +34,10 @@ defmodule HologramFeatureTests.OperatorsPage do
   
   def action(:+, %{left: left, right: right}, component) do
     put_state(component, :result, left + right)
+  end
+  
+  def action(:-, %{left: left, right: right}, component) do
+    put_state(component, :result, left - right)
   end
   
   def action(:*, %{left: left, right: right}, component) do
