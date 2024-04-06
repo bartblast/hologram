@@ -5,6 +5,13 @@ defmodule HologramFeatureTests.OperatorsTest do
   @integer_a 123
   @integer_b 234
 
+  feature "unary +", %{session: session} do
+    session
+    |> visit(OperatorsPage)
+    |> click(css("button[id='unary+']"))
+    |> assert_text(css("#result"), inspect(+@integer_a))
+  end
+
   feature "+", %{session: session} do
     session
     |> visit(OperatorsPage)

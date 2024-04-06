@@ -12,6 +12,7 @@ defmodule HologramFeatureTests.OperatorsPage do
   def template do
     ~H"""
     <p>
+      <button id="unary+" $click={:"unary+", value: @integer_a}> unary + </button>
       <button id="+" $click={:+, left: @integer_a, right: @integer_b}> + </button>
       <button id="*" $click={:*, left: @integer_a, right: @integer_b}> * </button>
     </p>
@@ -19,6 +20,10 @@ defmodule HologramFeatureTests.OperatorsPage do
       Result: <strong id="result">{inspect(@result)}</strong>
     </p>
     """
+  end
+  
+  def action(:"unary+", %{value: value}, component) do
+    put_state(component, :result, +value)
   end
   
   def action(:+, %{left: left, right: right}, component) do
