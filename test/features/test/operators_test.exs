@@ -73,4 +73,11 @@ defmodule HologramFeatureTests.OperatorsTest do
     |> click(css("button[id='and']"))
     |> assert_text(css("#result"), inspect(@boolean_a and @boolean_b))
   end
+
+  feature "&&", %{session: session} do
+    session
+    |> visit(OperatorsPage)
+    |> click(css("button[id='&&']"))
+    |> assert_text(css("#result"), inspect(@boolean_a and @boolean_b))
+  end
 end
