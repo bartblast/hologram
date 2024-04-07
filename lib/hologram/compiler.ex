@@ -259,6 +259,7 @@ defmodule Hologram.Compiler do
       |> include_mfas_used_by_manually_ported_code_module()
       |> include_mfas_used_by_operation_class()
       |> include_mfas_used_by_renderer_class()
+      |> include_mfas_used_by_type_class()
       |> Enum.uniq()
 
     call_graph_clone
@@ -364,7 +365,8 @@ defmodule Hologram.Compiler do
         {:erlang, :hd, 1},
         {:erlang, :tl, 1},
         {:lists, :keyfind, 3},
-        {:maps, :get, 2}
+        {:maps, :get, 2},
+        {:maps, :get, 3}
       ]
   end
 
@@ -391,6 +393,10 @@ defmodule Hologram.Compiler do
         {:maps, :get, 2},
         {:maps, :merge, 2}
       ]
+  end
+
+  defp include_mfas_used_by_type_class(mfas) do
+    [{:maps, :get, 3} | mfas]
   end
 
   defp include_mfas_used_frequently_on_the_client(mfas) do
