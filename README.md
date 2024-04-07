@@ -27,3 +27,4 @@
 | in       | :white_check_mark: |
 | not in   | :white_check_mark: |
 | @        | :white_check_mark: |
+| ..       | :white_check_mark: |

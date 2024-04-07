@@ -39,6 +39,7 @@ defmodule HologramFeatureTests.OperatorsPage do
       <button id="in" $click={:in, left: @integer_a, right: @list_a}> in </button>
       <button id="not in" $click={:"not in", left: @integer_a, right: @list_a}> not in </button>
       <button id="@" $click="@"> @ </button>
+      <button id=".." $click={:.., left: @integer_a, right: @integer_b}> .. </button>
     </p>
     <p>
       Result: <strong id="result">{inspect(@result)}</strong>
@@ -112,5 +113,9 @@ defmodule HologramFeatureTests.OperatorsPage do
 
   def action(:@, _params, component) do
     put_state(component, :result, @integer_c)
+  end
+
+  def action(:.., %{left: left, right: right}, component) do
+    put_state(component, :result, left..right)
   end
 end
