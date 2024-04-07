@@ -959,6 +959,19 @@ it("port()", () => {
   assert.deepStrictEqual(result, expected);
 });
 
+it("range()", () => {
+  const result = Type.range(123, 234, 345);
+
+  const expected = Type.map([
+    [Type.atom("__struct__"), Type.alias("Range")],
+    [Type.atom("first"), Type.integer(123)],
+    [Type.atom("last"), Type.integer(234)],
+    [Type.atom("step"), Type.integer(345)],
+  ]);
+
+  assert.deepStrictEqual(result, expected);
+});
+
 it("reference()", () => {
   const result = Type.reference("0.1.2.3", "client");
   const expected = {type: "reference", origin: "client", value: "0.1.2.3"};

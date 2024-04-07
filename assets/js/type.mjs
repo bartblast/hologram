@@ -290,6 +290,14 @@ export default class Type {
     return {type: "port", origin: origin, value: value};
   }
 
+  static range(first, last, step) {
+    return Type.struct("Range", [
+      [Type.atom("first"), Type.integer(first)],
+      [Type.atom("last"), Type.integer(last)],
+      [Type.atom("step"), Type.integer(step)],
+    ]);
+  }
+
   static reference(value, origin = "server") {
     return {type: "reference", origin: origin, value: value};
   }
