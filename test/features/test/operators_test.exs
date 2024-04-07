@@ -115,4 +115,11 @@ defmodule HologramFeatureTests.OperatorsTest do
     |> click(css("button[id='in']"))
     |> assert_text(css("#result"), inspect(@integer_a in @list_a))
   end
+
+  feature "not in", %{session: session} do
+    session
+    |> visit(OperatorsPage)
+    |> click(css("button[id='not in']"))
+    |> assert_text(css("#result"), inspect(@integer_a not in @list_a))
+  end
 end

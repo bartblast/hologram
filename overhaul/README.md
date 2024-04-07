@@ -201,7 +201,6 @@ without its shortcomings related to scalability, efficiency, etc.
 
 | Operator | Status             |
 | :------- | :----------------: |
-| not in   | :x:                |
 | @        | :white_check_mark: |
 | ..       | :x:                |
 | <>       | :x:                |
