@@ -2,6 +2,7 @@
 
 import Bitstring from "./bitstring.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
+import Interpreter from "./interpreter.mjs";
 import Sequence from "./sequence.mjs";
 import Utils from "./utils.mjs";
 
@@ -214,6 +215,17 @@ export default class Type {
 
   static isProperList(boxed) {
     return Type.isList(boxed) && boxed.isProper === true;
+  }
+
+  // Deps: [:maps.get/3]
+  static isRange(boxed) {
+    return (
+      Type.isMap(boxed) &&
+      Interpreter.isEqual(
+        Erlang_Maps["get/3"](Type.atom("__struct__"), boxed, Type.nil()),
+        Type.alias("Range"),
+      )
+    );
   }
 
   static isReference(boxed) {

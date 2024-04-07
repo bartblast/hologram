@@ -741,6 +741,36 @@ describe("isProperList()", () => {
   });
 });
 
+describe("isRange()", () => {
+  it("is a range", () => {
+    const term = Type.range(123, 234, 345);
+    assert.isTrue(Type.isRange(term));
+  });
+
+  it("is a struct that is not a range", () => {
+    const term = Type.struct("MyStruct", [
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+    ]);
+
+    assert.isFalse(Type.isRange(term));
+  });
+
+  it("is a map that is not a struct", () => {
+    const term = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+    ]);
+
+    assert.isFalse(Type.isRange(term));
+  });
+
+  it("is not a map", () => {
+    const term = Type.integer(123);
+    assert.isFalse(Type.isRange(term));
+  });
+});
+
 describe("isReference()", () => {
   it("returns true if the term is a reference", () => {
     const term = Type.reference("0.1.2.3");
