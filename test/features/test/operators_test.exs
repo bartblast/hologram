@@ -92,7 +92,7 @@ defmodule HologramFeatureTests.OperatorsTest do
     session
     |> visit(OperatorsPage)
     |> click(css("button[id='||']"))
-    |> assert_text(css("#result"), inspect(@boolean_a || @boolean_b))
+    |> assert_text(css("#result"), inspect(build_value(@boolean_a) || build_value(@boolean_b)))
   end
 
   feature "not", %{session: session} do
