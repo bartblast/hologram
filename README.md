@@ -20,3 +20,4 @@
 | --       | :white_check_mark: |
 | and      | :white_check_mark: |
 | &&       | :white_check_mark: |
+| or       | :white_check_mark: |
