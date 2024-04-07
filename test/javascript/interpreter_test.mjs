@@ -2415,6 +2415,18 @@ describe("inspect()", () => {
     assert.equal(result, "#PID<0.11.222>");
   });
 
+  describe("range", () => {
+    it("step == 1", () => {
+      const result = Interpreter.inspect(Type.range(123, 234, 1));
+      assert.equal(result, "123..234");
+    });
+
+    it("step > 1", () => {
+      const result = Interpreter.inspect(Type.range(123, 234, 345));
+      assert.equal(result, "123..234//345");
+    });
+  });
+
   describe("string", () => {
     it("empty text", () => {
       const result = Interpreter.inspect(Type.string(""), {});

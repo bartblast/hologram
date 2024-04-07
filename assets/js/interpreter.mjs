@@ -841,6 +841,10 @@ export default class Interpreter {
   }
 
   static #inspectMap(term, opts) {
+    if (Type.isRange(term)) {
+      return Interpreter.#inspectRange(term, opts);
+    }
+
     const isAtomKeyMap = Object.values(term.data).every(([key, _value]) =>
       Type.isAtom(key),
     );
@@ -866,6 +870,18 @@ export default class Interpreter {
     }
 
     return "%{" + itemsStr + "}";
+  }
+
+  // Deps: [:maps.get/2]
+  static #inspectRange(term, opts) {
+    const first = Erlang_Maps["get/2"](Type.atom("first"), term);
+    const last = Erlang_Maps["get/2"](Type.atom("last"), term);
+    const step = Erlang_Maps["get/2"](Type.atom("step"), term);
+
+    const stepStr =
+      step.value > 1 ? `//${Interpreter.inspect(step, opts)}` : "";
+
+    return `${Interpreter.inspect(first, opts)}..${Interpreter.inspect(last, opts)}${stepStr}`;
   }
 
   static #inspectTuple(term, opts) {
