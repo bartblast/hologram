@@ -32,6 +32,7 @@ defmodule HologramFeatureTests.OperatorsPage do
       <button id="&&" $click={:&&, left: @boolean_a, right: @boolean_b}> &amp;&amp; </button>
       <button id="or" $click={:or, left: @boolean_a, right: @boolean_b}> or </button>
       <button id="||" $click={:||, left: @boolean_a, right: @boolean_b}> || </button>
+      <button id="not" $click={:not, value: @boolean_a}> not </button>
     </p>
     <p>
       Result: <strong id="result">{inspect(@result)}</strong>
@@ -85,5 +86,9 @@ defmodule HologramFeatureTests.OperatorsPage do
 
   def action(:||, %{left: left, right: right}, component) do
     put_state(component, :result, left || right)
+  end
+
+  def action(:not, %{value: value}, component) do
+    put_state(component, :result, not value)
   end
 end

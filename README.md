@@ -22,3 +22,4 @@
 | &&       | :white_check_mark: |
 | or       | :white_check_mark: |
 | \|\|     | :white_check_mark: |
+| not      | :white_check_mark: |
