@@ -7,6 +7,7 @@ defmodule HologramFeatureTests.OperatorsTest do
 
   @integer_a 123
   @integer_b 234
+  @integer_c 345
 
   @list_a [1, 2, 3]
   @list_b [2, 3, 4]
@@ -121,5 +122,12 @@ defmodule HologramFeatureTests.OperatorsTest do
     |> visit(OperatorsPage)
     |> click(css("button[id='not in']"))
     |> assert_text(css("#result"), inspect(@integer_a not in @list_a))
+  end
+
+  feature "@", %{session: session} do
+    session
+    |> visit(OperatorsPage)
+    |> click(css("button[id='@']"))
+    |> assert_text(css("#result"), inspect(@integer_c))
   end
 end
