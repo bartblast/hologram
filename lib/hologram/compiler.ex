@@ -136,7 +136,7 @@ defmodule Hologram.Compiler do
       "--target=es2020"
     ]
 
-    System.cmd(esbuild_path, esbuild_cmd, env: [])
+    System.cmd(esbuild_path, esbuild_cmd, env: [], parallelism: true)
 
     digest =
       bundle_path
@@ -428,7 +428,7 @@ defmodule Hologram.Compiler do
       "--write"
     ]
 
-    System.cmd(opts[:js_formatter_bin_path], cmd, env: [])
+    System.cmd(opts[:js_formatter_bin_path], cmd, env: [], parallelism: true)
   end
 
   defp mapset_from_plt(plt) do
