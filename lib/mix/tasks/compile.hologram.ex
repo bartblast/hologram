@@ -8,6 +8,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
+  alias Hologram.Commons.TaskUtils
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
 
@@ -128,37 +129,41 @@ defmodule Mix.Tasks.Compile.Hologram do
     {new_module_digest_plt, old_module_digest_plt, module_digest_plt_dump_path}
   end
 
+  defp bundle_page(page_module, call_graph, ir_plt, opts) do
+    if !Reflection.has_function?(page_module, :__route__, 0) do
+      raise Hologram.CompileError,
+        message:
+          "Page '#{page_module}' doesn't have a route specified (use the route/1 macro to fix the issue)."
+    end
+
+    if !Reflection.has_function?(page_module, :__layout_module__, 0) do
+      raise Hologram.CompileError,
+        message:
+          "Page '#{page_module}' doesn't have a layout module specified (use the layout/1 macro to fix the issue)."
+    end
+
+    page_bundle_opts = [
+      esbuild_path: opts[:esbuild_path],
+      js_formatter_bin_path: opts[:js_formatter_bin_path],
+      js_formatter_config_path: opts[:js_formatter_config_path],
+      entry_name: to_string(page_module),
+      bundle_name: "page",
+      tmp_dir: opts[:tmp_dir],
+      bundle_dir: opts[:bundle_dir]
+    ]
+
+    {digest, _bundle_path, _source_map_path} =
+      page_module
+      |> Compiler.build_page_js(call_graph, ir_plt, opts[:js_source_dir])
+      |> Compiler.bundle(page_bundle_opts)
+
+    {page_module, digest}
+  end
+
   defp bundle_pages(call_graph, ir_plt, opts) do
-    Enum.map(Reflection.list_pages(), fn page_module ->
-      if !Reflection.has_function?(page_module, :__route__, 0) do
-        raise Hologram.CompileError,
-          message:
-            "Page '#{page_module}' doesn't have a route specified (use the route/1 macro to fix the issue)."
-      end
-
-      if !Reflection.has_function?(page_module, :__layout_module__, 0) do
-        raise Hologram.CompileError,
-          message:
-            "Page '#{page_module}' doesn't have a layout module specified (use the layout/1 macro to fix the issue)."
-      end
-
-      page_bundle_opts = [
-        esbuild_path: opts[:esbuild_path],
-        js_formatter_bin_path: opts[:js_formatter_bin_path],
-        js_formatter_config_path: opts[:js_formatter_config_path],
-        entry_name: to_string(page_module),
-        bundle_name: "page",
-        tmp_dir: opts[:tmp_dir],
-        bundle_dir: opts[:bundle_dir]
-      ]
-
-      {digest, _bundle_path, _source_map_path} =
-        page_module
-        |> Compiler.build_page_js(call_graph, ir_plt, opts[:js_source_dir])
-        |> Compiler.bundle(page_bundle_opts)
-
-      {page_module, digest}
-    end)
+    Reflection.list_pages()
+    |> TaskUtils.map_async(&bundle_page(&1, call_graph, ir_plt, opts))
+    |> TaskUtils.await_tasks()
   end
 
   defp bundle_runtime(call_graph, ir_plt, opts) do
