@@ -122,11 +122,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
     opts = [
       assets_source_dir: "#{@root_dir}/assets",
       build_dir: "#{@tmp_dir}/build",
-      bundle_dir: "#{@tmp_dir}/bundle/hologram",
       esbuild_path: "#{@root_dir}/assets/node_modules/.bin/esbuild",
       js_formatter_bin_path: "#{@root_dir}/assets/node_modules/.bin/prettier",
       js_formatter_config_path: "#{@root_dir}/assets/.prettierrc.json",
       js_source_dir: "#{@root_dir}/assets/js",
+      static_dir: "#{@tmp_dir}/bundle/hologram",
       tmp_dir: "#{@tmp_dir}/tmp"
     ]
 

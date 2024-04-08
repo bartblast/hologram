@@ -23,11 +23,11 @@ defmodule Mix.Tasks.Compile.Hologram do
     opts = [
       assets_source_dir: assets_source_dir,
       build_dir: build_dir,
-      bundle_dir: "#{root_dir}/priv/static/hologram",
       esbuild_path: "#{root_dir}/deps/hologram/assets/node_modules/.bin/esbuild",
       js_formatter_bin_path: "#{root_dir}/deps/hologram/assets/node_modules/.bin/prettier",
       js_formatter_config_path: "#{root_dir}/deps/hologram/assets/.prettierrc.json",
       js_source_dir: "#{assets_source_dir}/js",
+      static_dir: "#{root_dir}/priv/static/hologram",
       tmp_dir: "#{build_dir}/tmp"
     ]
 
@@ -149,7 +149,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       entry_name: to_string(page_module),
       bundle_name: "page",
       tmp_dir: opts[:tmp_dir],
-      bundle_dir: opts[:bundle_dir]
+      static_dir: opts[:static_dir]
     ]
 
     {digest, _bundle_path, _source_map_path} =
@@ -174,7 +174,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       entry_name: "runtime",
       bundle_name: "runtime",
       tmp_dir: opts[:tmp_dir],
-      bundle_dir: opts[:bundle_dir]
+      static_dir: opts[:static_dir]
     ]
 
     opts[:js_source_dir]

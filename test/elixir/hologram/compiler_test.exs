@@ -163,7 +163,7 @@ defmodule Hologram.CompilerTest do
       js_formatter_bin_path: @js_formatter_bin_path,
       js_formatter_config_path: @js_formatter_config_path,
       tmp_dir: @tmp_dir,
-      bundle_dir: @tmp_dir,
+      static_dir: @tmp_dir,
       bundle_name: @bundle_name
     ]
 
@@ -176,11 +176,11 @@ defmodule Hologram.CompilerTest do
       opts =
         @opts
         |> Keyword.put(:tmp_dir, "#{@tmp_dir}/nested_1/nested_2/nested_3")
-        |> Keyword.put(:bundle_dir, "#{@tmp_dir}/nested_4/nested_5/nested_6")
+        |> Keyword.put(:static_dir, "#{@tmp_dir}/nested_4/nested_5/nested_6")
 
       assert bundle(@js_code, opts)
       assert File.exists?(opts[:tmp_dir])
-      assert File.exists?(opts[:bundle_dir])
+      assert File.exists?(opts[:static_dir])
     end
 
     test "formats entry file" do
@@ -192,13 +192,13 @@ defmodule Hologram.CompilerTest do
 
     test "bundles files" do
       assert bundle(@js_code, @opts) ==
-               {"957e59b82bd39eb76bb8c7fea2ca29a8",
-                bundle_path = "#{@tmp_dir}/my_bundle-957e59b82bd39eb76bb8c7fea2ca29a8.js",
-                source_map_path = "#{@tmp_dir}/my_bundle-957e59b82bd39eb76bb8c7fea2ca29a8.js.map"}
+               {"f499a92d06ea057f92198bef2cba2822",
+                bundle_path = "#{@tmp_dir}/my_bundle-f499a92d06ea057f92198bef2cba2822.js",
+                source_map_path = "#{@tmp_dir}/my_bundle-f499a92d06ea057f92198bef2cba2822.js.map"}
 
       assert File.read!(bundle_path) == """
              (()=>{})();
-             //# sourceMappingURL=my_bundle-957e59b82bd39eb76bb8c7fea2ca29a8.js.map
+             //# sourceMappingURL=my_bundle-f499a92d06ea057f92198bef2cba2822.js.map
              """
 
       assert File.read!(source_map_path) == """

@@ -113,25 +113,25 @@ defmodule Hologram.Compiler do
     entry_name = opts[:entry_name]
     esbuild_path = opts[:esbuild_path]
     tmp_dir = opts[:tmp_dir]
-    bundle_dir = opts[:bundle_dir]
+    static_dir = opts[:static_dir]
     bundle_name = opts[:bundle_name]
 
     File.mkdir_p!(tmp_dir)
-    File.mkdir_p!(bundle_dir)
+    File.mkdir_p!(static_dir)
 
     entry_file_path = tmp_dir <> "/#{entry_name}.entry.js"
     File.write!(entry_file_path, js)
 
     format_entry_file(entry_file_path, opts)
 
-    bundle_path = "#{bundle_dir}/#{bundle_name}.js"
+    output_bundle_path = tmp_dir <> "/#{entry_name}.output.js"
 
     esbuild_cmd = [
       entry_file_path,
       "--bundle",
       "--log-level=warning",
       "--minify",
-      "--outfile=#{bundle_path}",
+      "--outfile=#{output_bundle_path}",
       "--sourcemap",
       "--target=es2020"
     ]
@@ -139,29 +139,29 @@ defmodule Hologram.Compiler do
     System.cmd(esbuild_path, esbuild_cmd, env: [], parallelism: true)
 
     digest =
-      bundle_path
+      output_bundle_path
       |> File.read!()
       |> CryptographicUtils.digest(:md5, :hex)
 
-    bundle_path_with_digest = "#{bundle_dir}/#{bundle_name}-#{digest}.js"
+    static_bundle_path_with_digest = "#{static_dir}/#{bundle_name}-#{digest}.js"
 
-    source_map_path = bundle_path <> ".map"
-    source_map_path_with_digest = bundle_path_with_digest <> ".map"
+    output_source_map_path = output_bundle_path <> ".map"
+    static_source_map_path_with_digest = static_bundle_path_with_digest <> ".map"
 
-    File.rename!(bundle_path, bundle_path_with_digest)
-    File.rename!(source_map_path, source_map_path_with_digest)
+    File.rename!(output_bundle_path, static_bundle_path_with_digest)
+    File.rename!(output_source_map_path, static_source_map_path_with_digest)
 
     js_with_replaced_source_map_url =
-      bundle_path_with_digest
+      static_bundle_path_with_digest
       |> File.read!()
       |> String.replace(
-        "//# sourceMappingURL=#{bundle_name}.js.map",
+        "//# sourceMappingURL=#{entry_name}.output.js.map",
         "//# sourceMappingURL=#{bundle_name}-#{digest}.js.map"
       )
 
-    File.write!(bundle_path_with_digest, js_with_replaced_source_map_url)
+    File.write!(static_bundle_path_with_digest, js_with_replaced_source_map_url)
 
-    {digest, bundle_path_with_digest, source_map_path_with_digest}
+    {digest, static_bundle_path_with_digest, static_source_map_path_with_digest}
   end
 
   @doc """
