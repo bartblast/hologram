@@ -28,3 +28,9 @@
 | not in   | :white_check_mark: |
 | @        | :white_check_mark: |
 | ..       | :white_check_mark: |
+
+#### Other
+
+| Feature                        | Status             |
+| :----------------------------- | :----------------: |
+| Regular expressions            | :x:                |
