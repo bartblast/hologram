@@ -2,6 +2,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
+  alias Hologram.Commons.TaskUtils
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
@@ -15,8 +16,8 @@ defmodule Hologram.Compiler do
     plt = PLT.start()
 
     Reflection.list_elixir_modules()
-    |> Task.async_stream(&rebuild_module_digest_plt_entry(plt, &1))
-    |> Stream.run()
+    |> TaskUtils.async_many(&rebuild_module_digest_plt_entry(plt, &1))
+    |> Task.await_many(:infinity)
 
     plt
   end
