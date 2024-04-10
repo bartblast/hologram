@@ -840,6 +840,7 @@ export default class Interpreter {
     );
   }
 
+  // TODO: inspect structs
   static #inspectMap(term, opts) {
     if (Type.isRange(term)) {
       return Interpreter.#inspectRange(term, opts);
