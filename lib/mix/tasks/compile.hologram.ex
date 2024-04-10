@@ -162,7 +162,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   defp bundle_pages(call_graph, ir_plt, opts) do
     Reflection.list_pages()
-    |> TaskUtils.map_async(&bundle_page(&1, call_graph, ir_plt, opts))
+    |> TaskUtils.async_many(&bundle_page(&1, call_graph, ir_plt, opts))
     |> Task.await_many(:infinity)
   end
 
