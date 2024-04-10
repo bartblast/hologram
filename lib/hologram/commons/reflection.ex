@@ -174,7 +174,7 @@ defmodule Hologram.Commons.Reflection do
 
   @doc """
   Lists Elixir modules belonging to the given OTP apps.
-  Elixir modules listed in @ignored_modules module attribute, Elixir modules without a BEAM file, and Erlang modules are filtered out.
+  Elixir modules listed in @ignored_modules module attribute and Erlang modules are filtered out.
   """
   @spec list_elixir_modules(list(atom)) :: list(module)
   def list_elixir_modules(apps) do
@@ -187,7 +187,6 @@ defmodule Hologram.Commons.Reflection do
     end)
     |> Enum.filter(&alias?/1)
     |> Kernel.--(@ignored_modules)
-    |> Enum.filter(&BeamFile.exists?/1)
   end
 
   @doc """
