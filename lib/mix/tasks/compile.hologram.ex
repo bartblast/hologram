@@ -42,10 +42,12 @@ defmodule Mix.Tasks.Compile.Hologram do
   def compile(opts) do
     Logger.info("Hologram: start compiling")
 
+    {module_beam_path_plt, module_beam_path_plt_dump_path} = maybe_load_module_beam_path_plt(opts)
+
     Logger.debug("Hologram: start building module digest PLTs")
 
     {new_module_digest_plt, old_module_digest_plt, module_digest_plt_dump_path} =
-      build_module_digest_plts(opts)
+      build_module_digest_plts(opts, module_beam_path_plt)
 
     Logger.debug("Hologram: finished building module digest PLTs")
 
@@ -96,6 +98,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     CallGraph.dump(call_graph, call_graph_dump_path)
     PLT.dump(ir_plt, ir_plt_dump_path)
     PLT.dump(new_module_digest_plt, module_digest_plt_dump_path)
+    PLT.dump(module_beam_path_plt, module_beam_path_plt_dump_path)
 
     Logger.info("Hologram: finished compiling")
 
@@ -120,8 +123,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     {ir_plt, ir_plt_dump_path}
   end
 
-  defp build_module_digest_plts(opts) do
-    new_module_digest_plt = Compiler.build_module_digest_plt()
+  defp build_module_digest_plts(opts, module_beam_path_plt) do
+    new_module_digest_plt = Compiler.build_module_digest_plt(module_beam_path_plt)
     old_module_digest_plt = PLT.start()
     module_digest_plt_dump_path = opts[:build_dir] <> "/module_digest.plt"
     PLT.maybe_load(old_module_digest_plt, module_digest_plt_dump_path)
@@ -180,5 +183,13 @@ defmodule Mix.Tasks.Compile.Hologram do
     opts[:js_source_dir]
     |> Compiler.build_runtime_js(call_graph, ir_plt)
     |> Compiler.bundle(runtime_bundle_opts)
+  end
+
+  defp maybe_load_module_beam_path_plt(opts) do
+    module_beam_path_plt = PLT.start()
+    module_beam_path_plt_dump_path = opts[:build_dir] <> "/module_beam_path.plt"
+    PLT.maybe_load(module_beam_path_plt, module_beam_path_plt_dump_path)
+
+    {module_beam_path_plt, module_beam_path_plt_dump_path}
   end
 end

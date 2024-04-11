@@ -26,6 +26,38 @@ defmodule Hologram.Commons.Reflection do
   def alias?(_term), do: false
 
   @doc """
+  Returns BEAM definitions for the given BEAM file path.
+
+  ## Examples
+
+      iex> beam_path = ~c"/Users/bartblast/Projects/hologram/_build/dev/lib/hologram/ebin/Elixir.Hologram.Commons.Reflection.beam"  
+      iex> beam_defs()
+      [
+        ...,
+        {{:alias?, 1}, :def, [line: 14],
+        [
+          {[line: 16], [{:term, [version: 0, line: 16], nil}],
+            [
+              {{:., [line: 16], [:erlang, :is_atom]}, [line: 16],
+              [{:term, [version: 0, line: 16], nil}]}
+            ],
+            {{:., [line: 19], [String, :starts_with?]}, [line: 19],
+            [
+              {{:., [line: 18], [String.Chars, :to_string]}, [line: 18],
+                [{:term, [version: 0, line: 17], nil}]},
+              "Elixir."
+            ]}},
+          {[line: 22], [{:_, [line: 22], nil}], [], false}
+        ]}
+      ]
+  """
+  @spec beam_defs(charlist) :: list(tuple)
+  def beam_defs(beam_path) do
+    {:ok, %{definitions: definitions}} = BeamFile.debug_info(beam_path)
+    definitions
+  end
+
+  @doc """
   Returns the build directory path.
   """
   @spec build_dir() :: String.t()
@@ -246,55 +278,6 @@ defmodule Hologram.Commons.Reflection do
   @spec list_std_lib_elixir_modules() :: list(module)
   def list_std_lib_elixir_modules do
     list_elixir_modules([:elixir])
-  end
-
-  @doc """
-  Returns BEAM definitions for the given module.
-  If the BEAM file doesn't have debug info an empty list is returned.
-
-  ## Examples
-
-      iex> module_beam_defs(Hologram.Commons.Reflection)
-      [
-        ...,
-        {{:alias?, 1}, :def, [line: 14],
-        [
-          {[line: 16], [{:term, [version: 0, line: 16], nil}],
-            [
-              {{:., [line: 16], [:erlang, :is_atom]}, [line: 16],
-              [{:term, [version: 0, line: 16], nil}]}
-            ],
-            {{:., [line: 19], [String, :starts_with?]}, [line: 19],
-            [
-              {{:., [line: 18], [String.Chars, :to_string]}, [line: 18],
-                [{:term, [version: 0, line: 17], nil}]},
-              "Elixir."
-            ]}},
-          {[line: 22], [{:_, [line: 22], nil}], [], false}
-        ]}
-      ]
-
-      iex> module_beam_defs(Elixir.Hex)
-      []
-  """
-  @spec module_beam_defs(module) :: list(tuple)
-  def module_beam_defs(module) do
-    debug_info =
-      module
-      |> :code.which()
-      |> BeamFile.debug_info()
-
-    case debug_info do
-      {:ok, %{definitions: definitions}} ->
-        definitions
-
-      {:error, :no_debug_info} ->
-        []
-
-      {:error, :non_existing} ->
-        raise Hologram.TemplateSyntaxError,
-          message: "BEAM file doesn't exist for module: #{module}"
-    end
   end
 
   @doc """

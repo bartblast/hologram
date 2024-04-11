@@ -21,6 +21,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     num_page_bundles = test_page_bundles()
     test_runtime_bundle()
 
+    test_module_beam_path_plt()
     test_module_digest_plt()
     test_ir_plt()
     test_call_graph()
@@ -46,6 +47,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
     ir_plt = PLT.start()
     PLT.load(ir_plt, ir_plt_dump_path)
     assert %IR.ModuleDefinition{} = PLT.get!(ir_plt, Module2)
+  end
+
+  defp test_module_beam_path_plt do
+    module_beam_path_plt_dump_path = "#{@tmp_dir}/build/module_beam_path.plt"
+    assert File.exists?(module_beam_path_plt_dump_path)
+
+    module_beam_path_plt = PLT.start()
+    PLT.load(module_beam_path_plt, module_beam_path_plt_dump_path)
+    assert PLT.get!(module_beam_path_plt, Module2) == :code.which(Module2)
   end
 
   defp test_module_digest_plt do

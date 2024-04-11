@@ -11,15 +11,17 @@ defmodule Hologram.Compiler do
   @doc """
   Builds a persistent lookup table (PLT) containing the BEAM defs digests for all the modules in the project.
   """
-  @spec build_module_digest_plt() :: PLT.t()
-  def build_module_digest_plt do
-    plt = PLT.start()
+  @spec build_module_digest_plt(PLT.t()) :: PLT.t()
+  def build_module_digest_plt(module_beam_path_plt) do
+    module_digest_plt = PLT.start()
 
     Reflection.list_elixir_modules()
-    |> TaskUtils.async_many(&rebuild_module_digest_plt_entry(plt, &1))
+    |> TaskUtils.async_many(
+      &rebuild_module_digest_plt_entry(&1, module_digest_plt, module_beam_path_plt)
+    )
     |> Task.await_many(:infinity)
 
-    plt
+    module_digest_plt
   end
 
   @doc """
@@ -443,14 +445,25 @@ defmodule Hologram.Compiler do
     PLT.put(plt, module, IR.for_module(module))
   end
 
-  defp rebuild_module_digest_plt_entry(plt, module) do
+  defp rebuild_module_digest_plt_entry(module, module_digest_plt, module_beam_path_plt) do
+    module_beam_path =
+      case PLT.get(module_beam_path_plt, module) do
+        {:ok, path} ->
+          path
+
+        :error ->
+          path = :code.which(module)
+          PLT.put(module_beam_path_plt, module, path)
+          path
+      end
+
     data =
-      module
-      |> Reflection.module_beam_defs()
+      module_beam_path
+      |> Reflection.beam_defs()
       |> :erlang.term_to_binary(compressed: 0)
 
     digest = CryptographicUtils.digest(data, :sha256, :binary)
-    PLT.put(plt, module, digest)
+    PLT.put(module_digest_plt, module, digest)
   end
 
   defp remove_call_graph_vertices_of_manually_ported_elixir_functions(call_graph) do
