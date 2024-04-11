@@ -283,13 +283,16 @@ defmodule Hologram.Compiler do
   """
   @spec patch_ir_plt(PLT.t(), map) :: PLT.t()
   def patch_ir_plt(ir_plt, diff) do
-    diff.removed_modules
-    |> Task.async_stream(&PLT.delete(ir_plt, &1))
-    |> Stream.run()
+    delete_tasks = TaskUtils.async_many(diff.removed_modules, &PLT.delete(ir_plt, &1))
 
-    (diff.updated_modules ++ diff.added_modules)
-    |> Task.async_stream(&rebuild_ir_plt_entry(ir_plt, &1))
-    |> Stream.run()
+    rebuild_tasks =
+      TaskUtils.async_many(
+        diff.updated_modules ++ diff.added_modules,
+        &rebuild_ir_plt_entry(ir_plt, &1)
+      )
+
+    Task.await_many(delete_tasks, :infinity)
+    Task.await_many(rebuild_tasks, :infinity)
 
     ir_plt
   end
