@@ -281,14 +281,14 @@ defmodule Hologram.Compiler do
   rebuilding the IR of modules that have been updated,
   and adding the IR of new modules.
   """
-  @spec patch_ir_plt(PLT.t(), map) :: PLT.t()
-  def patch_ir_plt(ir_plt, diff) do
+  @spec patch_ir_plt(PLT.t(), map, PLT.t()) :: PLT.t()
+  def patch_ir_plt(ir_plt, diff, module_beam_path_plt) do
     delete_tasks = TaskUtils.async_many(diff.removed_modules, &PLT.delete(ir_plt, &1))
 
     rebuild_tasks =
       TaskUtils.async_many(
         diff.updated_modules ++ diff.added_modules,
-        &rebuild_ir_plt_entry(ir_plt, &1)
+        &rebuild_ir_plt_entry(ir_plt, &1, module_beam_path_plt)
       )
 
     Task.await_many(delete_tasks, :infinity)
@@ -444,8 +444,9 @@ defmodule Hologram.Compiler do
     |> MapSet.new()
   end
 
-  defp rebuild_ir_plt_entry(plt, module) do
-    PLT.put(plt, module, IR.for_module(module))
+  defp rebuild_ir_plt_entry(plt, module, module_beam_path_plt) do
+    beam_path = PLT.get!(module_beam_path_plt, module)
+    PLT.put(plt, module, IR.for_module(beam_path))
   end
 
   defp rebuild_module_digest_plt_entry(module, module_digest_plt, module_beam_path_plt) do

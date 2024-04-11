@@ -59,7 +59,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     Logger.debug("Hologram: start building IR PLT")
 
-    {ir_plt, ir_plt_dump_path} = build_ir_plt(opts, diff)
+    {ir_plt, ir_plt_dump_path} = build_ir_plt(opts, diff, module_beam_path_plt)
 
     Logger.debug("Hologram: finished building IR PLT")
 
@@ -114,11 +114,11 @@ defmodule Mix.Tasks.Compile.Hologram do
     {call_graph, call_graph_dump_path}
   end
 
-  defp build_ir_plt(opts, diff) do
+  defp build_ir_plt(opts, diff, module_beam_path_plt) do
     ir_plt = PLT.start()
     ir_plt_dump_path = opts[:build_dir] <> "/ir.plt"
     PLT.maybe_load(ir_plt, ir_plt_dump_path)
-    Compiler.patch_ir_plt(ir_plt, diff)
+    Compiler.patch_ir_plt(ir_plt, diff, module_beam_path_plt)
 
     {ir_plt, ir_plt_dump_path}
   end
