@@ -15,40 +15,49 @@ defmodule Hologram.Compiler.IRTest do
            }
   end
 
-  test "for_module/1" do
-    assert for_module(Module1) == %IR.ModuleDefinition{
-             module: %IR.AtomType{
-               value: Module1
-             },
-             body: %IR.Block{
-               expressions: [
-                 %IR.FunctionDefinition{
-                   name: :my_fun,
-                   arity: 2,
-                   visibility: :public,
-                   clause: %IR.FunctionClause{
-                     params: [
-                       %IR.Variable{name: :x},
-                       %IR.Variable{name: :y}
-                     ],
-                     guards: [],
-                     body: %IR.Block{
-                       expressions: [
-                         %IR.RemoteFunctionCall{
-                           module: %IR.AtomType{value: :erlang},
-                           function: :+,
-                           args: [
-                             %IR.Variable{name: :x},
-                             %IR.Variable{name: :y}
-                           ]
-                         }
-                       ]
-                     }
-                   }
-                 }
-               ]
-             }
-           }
+  describe "for_module/1" do
+    @expected %IR.ModuleDefinition{
+      module: %IR.AtomType{
+        value: Module1
+      },
+      body: %IR.Block{
+        expressions: [
+          %IR.FunctionDefinition{
+            name: :my_fun,
+            arity: 2,
+            visibility: :public,
+            clause: %IR.FunctionClause{
+              params: [
+                %IR.Variable{name: :x},
+                %IR.Variable{name: :y}
+              ],
+              guards: [],
+              body: %IR.Block{
+                expressions: [
+                  %IR.RemoteFunctionCall{
+                    module: %IR.AtomType{value: :erlang},
+                    function: :+,
+                    args: [
+                      %IR.Variable{name: :x},
+                      %IR.Variable{name: :y}
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      }
+    }
+
+    test "module argument" do
+      assert for_module(Module1) == @expected
+    end
+
+    test "BEAM path argument" do
+      beam_path = :code.which(Module1)
+      assert for_module(beam_path) == @expected
+    end
   end
 
   test "for_term/1" do

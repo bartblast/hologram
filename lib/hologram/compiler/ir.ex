@@ -332,9 +332,9 @@ defmodule Hologram.Compiler.IR do
       iex> for_module(MyModule)
       %IR.ModuleDefinition{module: MyModule, body: %IR.Block{expressions: [...]}}
   """
-  @spec for_module(module) :: IR.t()
-  def for_module(module) do
-    module
+  @spec for_module(module | charlist) :: IR.t()
+  def for_module(module_or_beam_path) do
+    module_or_beam_path
     |> BeamFile.elixir_quoted!()
     |> Normalizer.normalize()
     |> Transformer.transform(%Context{})
