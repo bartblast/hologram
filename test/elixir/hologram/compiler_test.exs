@@ -4,6 +4,7 @@ defmodule Hologram.CompilerTest do
 
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
+  alias Hologram.Commons.TaskUtils
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
 
@@ -25,11 +26,18 @@ defmodule Hologram.CompilerTest do
 
   setup_all do
     install_js_deps(@assets_dir)
-    :ok
+
+    module_beam_path_plt = PLT.start()
+
+    Reflection.list_elixir_modules()
+    |> TaskUtils.async_many(&PLT.put(module_beam_path_plt, &1, :code.which(&1)))
+    |> Task.await_many(:infinity)
+
+    [module_beam_path_plt: module_beam_path_plt]
   end
 
-  test "build_module_digest_plt/0" do
-    assert %PLT{} = plt = build_module_digest_plt()
+  test "build_module_digest_plt/0", %{module_beam_path_plt: module_beam_path_plt} do
+    assert %PLT{} = plt = build_module_digest_plt(module_beam_path_plt)
     assert {:ok, <<_digest::256>>} = PLT.get(plt, Hologram.Compiler)
   end
 
@@ -309,7 +317,7 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "list_runtime_mfas/1" do
-    setup do
+    setup %{module_beam_path_plt: module_beam_path_plt} do
       diff = %{
         added_modules: Reflection.list_std_lib_elixir_modules(),
         removed_modules: [],
@@ -317,7 +325,7 @@ defmodule Hologram.CompilerTest do
       }
 
       ir_plt = PLT.start()
-      patch_ir_plt(ir_plt, diff)
+      patch_ir_plt(ir_plt, diff, module_beam_path_plt)
 
       call_graph = CallGraph.start()
       CallGraph.patch(call_graph, ir_plt, diff)
@@ -383,8 +391,8 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "patch_ir_plt/2" do
-    setup do
-      plt =
+    setup %{module_beam_path_plt: module_beam_path_plt} do
+      ir_plt =
         PLT.start()
         |> PLT.put(:module_5, :ir_5)
         |> PLT.put(:module_6, :ir_6)
@@ -399,9 +407,9 @@ defmodule Hologram.CompilerTest do
         updated_modules: [Module3, Module4]
       }
 
-      patch_ir_plt(plt, diff)
+      patch_ir_plt(ir_plt, diff, module_beam_path_plt)
 
-      [plt: plt]
+      [plt: ir_plt]
     end
 
     test "adds entries of added modules", %{plt: plt} do
