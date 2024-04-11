@@ -282,13 +282,13 @@ defmodule Hologram.Compiler.CallGraph do
     |> Task.async_stream(fn module ->
       inbound_remote_edges = inbound_remote_edges(call_graph, module)
       remove_module_vertices(call_graph, module)
-      build_module(call_graph, ir_plt, module)
+      build_for_module(call_graph, ir_plt, module)
       add_edges(call_graph, inbound_remote_edges)
     end)
     |> Stream.run()
 
     diff.added_modules
-    |> Task.async_stream(&build_module(call_graph, ir_plt, &1))
+    |> Task.async_stream(&build_for_module(call_graph, ir_plt, &1))
     |> Stream.run()
 
     call_graph
@@ -404,7 +404,7 @@ defmodule Hologram.Compiler.CallGraph do
     end)
   end
 
-  defp build_module(call_graph, ir_plt, module) do
+  defp build_for_module(call_graph, ir_plt, module) do
     module_def = PLT.get!(ir_plt, module)
     build(call_graph, module_def)
   end
