@@ -217,7 +217,7 @@ defmodule Hologram.Compiler do
   @spec install_js_deps(keyword) :: :ok
   def install_js_deps(opts) do
     cmd_opts = [cd: opts[:assets_source_dir], into: IO.stream(:stdio, :line)]
-    System.cmd("npm", ["install"], cmd_opts)
+    System.cmd("npm", ["install", "--silent", "--no-progress"], cmd_opts)
 
     package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
     package_json_digest = get_package_json_digest(opts[:assets_source_dir])
