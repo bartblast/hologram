@@ -441,8 +441,6 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp remove_module_vertices(call_graph, module) do
-    call_graph
-    |> module_vertices(module)
-    |> Enum.each(&remove_vertex(call_graph, &1))
+    remove_vertices(call_graph, module_vertices(call_graph, module))
   end
 end
