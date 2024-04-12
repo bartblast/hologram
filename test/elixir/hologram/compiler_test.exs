@@ -298,19 +298,39 @@ defmodule Hologram.CompilerTest do
            }
   end
 
-  test "install_js_deps/1" do
-    opts = setup_js_deps_test("test_install_js_deps_1")
+  describe "install_js_deps/1" do
+    setup do
+      [opts: setup_js_deps_test("test_install_js_deps_1")]
+    end
 
-    install_js_deps(opts)
+    test "installs deps in node_modules dir and creates package-lock.json file", %{opts: opts} do
+      install_js_deps(opts)
 
-    node_modules_dir = Path.join(opts[:assets_source_dir], "node_modules")
-    assert File.exists?(node_modules_dir)
+      node_modules_dir = Path.join(opts[:assets_source_dir], "node_modules")
+      assert File.exists?(node_modules_dir)
 
-    package_lock_json_path = Path.join(opts[:assets_source_dir], "package-lock.json")
-    assert File.exists?(package_lock_json_path)
+      package_lock_json_path = Path.join(opts[:assets_source_dir], "package-lock.json")
+      assert File.exists?(package_lock_json_path)
+    end
 
-    package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
-    assert File.exists?(package_json_digest_path)
+    test "creates a file containing the digest of package.json, when the build dir exists", %{
+      opts: opts
+    } do
+      install_js_deps(opts)
+
+      package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
+      assert File.exists?(package_json_digest_path)
+    end
+
+    test "creates a file containing the digest of package.json, when the build dir doesn't exists",
+         %{opts: opts} do
+      File.rmdir!(opts[:build_dir])
+
+      install_js_deps(opts)
+
+      package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
+      assert File.exists?(package_json_digest_path)
+    end
   end
 
   describe "maybe_install_js_deps/1" do

@@ -221,6 +221,11 @@ defmodule Hologram.Compiler do
 
     package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
     package_json_digest = get_package_json_digest(opts[:assets_source_dir])
+
+    package_json_digest_path
+    |> Path.dirname()
+    |> File.mkdir_p!()
+
     File.write!(package_json_digest_path, package_json_digest)
   end
 
