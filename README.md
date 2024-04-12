@@ -56,7 +56,7 @@ end
 
 * State stays on the client - solving various problems as outlined below:
 
-* No latency issues as most of the code runs immediately on the client. This enables the creation of rich UIs or even games. Currently, with LiveView, you require something like fly.io to make it bearable, but latency persists and response time cannot be guaranteed (as there is always some variance). Additionally, some JS or Alpine is still necessary to ensure functionality. Until someone devises a solution like quantum internet (utilizing entanglement), there are no workarounds for this issue. Unsure if this is technically feasible, though :wink:
+* No latency issues as most of the code runs immediately on the client. This enables the creation of rich UIs or even games. Currently, with LiveView, you require something like Fly.io to make it bearable, but latency persists and response time cannot be guaranteed (as there is always some variance). Additionally, some JS or Alpine is still necessary to ensure functionality. Until someone devises a solution like quantum internet (utilizing entanglement), there are no workarounds for this issue. Unsure if this is technically feasible, though :wink:
 
 * Enhanced offline support, addressing scenarios such as internet disconnection or poor signal. With the bulk of code executed on the client, Hologram functions offline for extended periods. This facilitates the development of Progressive Web Apps (PWAs) or mobile apps via WebView, particularly when incorporating mechanisms like LocalStorage.
 
@@ -73,6 +73,8 @@ end
 * Particularly welcoming to new Elixir converts or novice developers, prioritizing intuitive usability to streamline feature development without excessive technical troubleshooting or writing boilerplate code.
 
 ## Features
+
+Please note that the "Readme" file is currently undergoing an overhaul, and the "Features" section may not be up to date.
 
 ### Elixir Syntax
 
