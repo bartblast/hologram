@@ -2,6 +2,7 @@ defmodule Hologram.Compiler.CallGraph do
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
   alias Hologram.Commons.SerializationUtils
+  alias Hologram.Commons.TaskUtils
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
 
@@ -274,22 +275,23 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec patch(CallGraph.t(), PLT.t(), map) :: CallGraph.t()
   def patch(call_graph, ir_plt, diff) do
-    diff.removed_modules
-    |> Task.async_stream(&remove_module_vertices(call_graph, &1))
-    |> Stream.run()
+    remove_tasks =
+      TaskUtils.async_many(diff.removed_modules, &remove_module_vertices(call_graph, &1))
 
-    diff.updated_modules
-    |> Task.async_stream(fn module ->
-      inbound_remote_edges = inbound_remote_edges(call_graph, module)
-      remove_module_vertices(call_graph, module)
-      build_for_module(call_graph, ir_plt, module)
-      add_edges(call_graph, inbound_remote_edges)
-    end)
-    |> Stream.run()
+    update_tasks =
+      TaskUtils.async_many(diff.updated_modules, fn module ->
+        inbound_remote_edges = inbound_remote_edges(call_graph, module)
+        remove_module_vertices(call_graph, module)
+        build_for_module(call_graph, ir_plt, module)
+        add_edges(call_graph, inbound_remote_edges)
+      end)
 
-    diff.added_modules
-    |> Task.async_stream(&build_for_module(call_graph, ir_plt, &1))
-    |> Stream.run()
+    add_tasks =
+      TaskUtils.async_many(diff.added_modules, &build_for_module(call_graph, ir_plt, &1))
+
+    Task.await_many(remove_tasks, :infinity)
+    Task.await_many(update_tasks, :infinity)
+    Task.await_many(add_tasks, :infinity)
 
     call_graph
   end
