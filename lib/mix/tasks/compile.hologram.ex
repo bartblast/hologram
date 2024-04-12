@@ -71,7 +71,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     Logger.debug("Hologram: start installing JS deps")
 
-    Compiler.install_js_deps(opts[:assets_source_dir])
+    Compiler.maybe_install_js_deps(opts)
 
     Logger.debug("Hologram: finished installing JS deps")
 

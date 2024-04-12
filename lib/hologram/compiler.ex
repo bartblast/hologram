@@ -211,13 +211,17 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Installs JavaScript deps specified in package.json located in the given dir.
+  Installs JavaScript deps specified in package.json in :assets_source_dir to :build_dir.
+  Saves the package.json digest to package_json_digest.bin file.
   """
-  @spec install_js_deps(String.t()) :: :ok
-  def install_js_deps(dir) do
-    opts = [cd: dir, into: IO.stream(:stdio, :line)]
-    System.cmd("npm", ["install"], opts)
-    :ok
+  @spec install_js_deps(keyword) :: :ok
+  def install_js_deps(opts) do
+    cmd_opts = [cd: opts[:assets_source_dir], into: IO.stream(:stdio, :line)]
+    System.cmd("npm", ["install"], cmd_opts)
+
+    package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
+    package_json_digest = get_package_json_digest(opts[:assets_source_dir])
+    File.write!(package_json_digest_path, package_json_digest)
   end
 
   @doc """
@@ -273,6 +277,26 @@ defmodule Hologram.Compiler do
     |> Enum.reject(fn {module, _function, _arity} -> !Reflection.module?(module) end)
     |> Enum.uniq()
     |> Enum.sort()
+  end
+
+  @doc """
+  Installs JavaScript deps if package.json has changed or if the deps haven't been installed yet.
+  """
+  @spec maybe_install_js_deps(keyword) :: :ok | nil
+  def maybe_install_js_deps(opts) do
+    package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
+    package_json_lock_path = Path.join(opts[:assets_source_dir], "package-lock.json")
+
+    if !File.exists?(package_json_digest_path) or !File.exists?(package_json_lock_path) do
+      install_js_deps(opts)
+    else
+      old_package_json_digest = File.read!(package_json_digest_path)
+      new_package_json_digest = get_package_json_digest(opts[:assets_source_dir])
+
+      if new_package_json_digest != old_package_json_digest do
+        install_js_deps(opts)
+      end
+    end
   end
 
   @doc """
@@ -344,6 +368,13 @@ defmodule Hologram.Compiler do
       {:unicode, :characters_to_binary, 3}
     )
     |> CallGraph.add_edge({:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1})
+  end
+
+  defp get_package_json_digest(assets_source_dir) do
+    assets_source_dir
+    |> Path.join("package.json")
+    |> File.read!()
+    |> CryptographicUtils.digest(:sha256, :binary)
   end
 
   defp include_mfas_used_by_asset_path_registry_class(mfas) do
