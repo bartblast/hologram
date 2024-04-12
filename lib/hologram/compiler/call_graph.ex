@@ -341,6 +341,15 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Removes the vertices from the call graph.
+  """
+  @spec remove_vertices(CallGraph.t(), list(vertex)) :: CallGraph.t()
+  def remove_vertices(%{pid: pid} = call_graph, vertices) do
+    Agent.update(pid, &Graph.delete_vertices(&1, vertices))
+    call_graph
+  end
+
+  @doc """
   Returns sorted graph edges.
   """
   @spec sorted_edges(CallGraph.t()) :: list(Graph.Edge.t())
