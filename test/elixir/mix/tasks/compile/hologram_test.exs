@@ -14,7 +14,21 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   setup do
     clean_dir(@tmp_dir)
-    :ok
+
+    opts = [
+      assets_source_dir: "#{@root_dir}/assets",
+      build_dir: "#{@tmp_dir}/build",
+      esbuild_path: "#{@root_dir}/assets/node_modules/.bin/esbuild",
+      js_formatter_bin_path: "#{@root_dir}/assets/node_modules/.bin/prettier",
+      js_formatter_config_path: "#{@root_dir}/assets/.prettierrc.json",
+      js_source_dir: "#{@root_dir}/assets/js",
+      static_dir: "#{@tmp_dir}/bundle/hologram",
+      tmp_dir: "#{@tmp_dir}/tmp"
+    ]
+
+    File.mkdir!(opts[:build_dir])
+
+    [opts: opts]
   end
 
   defp test_build_artifacts do
@@ -128,18 +142,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   # There are two tests in one test block here, because setup for the second test is expensive.
-  test "compile/1" do
-    opts = [
-      assets_source_dir: "#{@root_dir}/assets",
-      build_dir: "#{@tmp_dir}/build",
-      esbuild_path: "#{@root_dir}/assets/node_modules/.bin/esbuild",
-      js_formatter_bin_path: "#{@root_dir}/assets/node_modules/.bin/prettier",
-      js_formatter_config_path: "#{@root_dir}/assets/.prettierrc.json",
-      js_source_dir: "#{@root_dir}/assets/js",
-      static_dir: "#{@tmp_dir}/bundle/hologram",
-      tmp_dir: "#{@tmp_dir}/tmp"
-    ]
-
+  test "compile/1", %{opts: opts} do
     # Test case 1: when there are no previous build artifacts
     compile(opts)
     test_build_artifacts()
