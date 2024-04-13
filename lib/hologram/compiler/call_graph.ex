@@ -308,25 +308,25 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Lists vertices that are reachable from the given call graph vertex or vertices.
   """
-  @spec reachable(CallGraph.t(), vertex | list(vertex)) :: list(vertex)
-  def reachable(call_graph, vertex_or_vertices)
+  @spec reachable(Graph.t(), vertex | list(vertex)) :: list(vertex)
+  def reachable(graph, vertex_or_vertices)
 
-  def reachable(%{pid: pid}, vertices) when is_list(vertices) do
-    pid
-    |> Agent.get(&Graph.reachable(&1, vertices))
+  def reachable(graph, vertices) when is_list(vertices) do
+    graph
+    |> Graph.reachable(vertices)
     |> Enum.reject(&(&1 == nil))
   end
 
-  def reachable(call_graph, vertex) do
-    reachable(call_graph, [vertex])
+  def reachable(graph, vertex) do
+    reachable(graph, [vertex])
   end
 
   @doc """
   Lists MFAs that are reachable from the given entry MFA or MFAs.
   """
-  @spec reachable_mfas(CallGraph.t(), mfa | list(mfa)) :: list(mfa)
-  def reachable_mfas(call_graph, entry_mfa_or_mfas) do
-    call_graph
+  @spec reachable_mfas(Graph.t(), mfa | list(mfa)) :: list(mfa)
+  def reachable_mfas(graph, entry_mfa_or_mfas) do
+    graph
     |> reachable(entry_mfa_or_mfas)
     |> Enum.filter(&is_tuple/1)
   end

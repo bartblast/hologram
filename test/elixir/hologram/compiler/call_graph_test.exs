@@ -982,7 +982,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   describe "reachable/2" do
-    setup %{call_graph: call_graph} do
+    setup do
       # 1
       # ├─ 2
       # │  ├─ 4
@@ -999,27 +999,28 @@ defmodule Hologram.Compiler.CallGraphTest do
       # │  │  ├─ 14
       # │  │  ├─ 15
 
-      call_graph
-      |> add_edge(:vertex_1, :vertex_2)
-      |> add_edge(:vertex_1, :vertex_3)
-      |> add_edge(:vertex_2, :vertex_4)
-      |> add_edge(:vertex_2, :vertex_5)
-      |> add_edge(:vertex_3, :vertex_6)
-      |> add_edge(:vertex_3, :vertex_7)
-      |> add_edge(:vertex_4, :vertex_8)
-      |> add_edge(:vertex_4, :vertex_9)
-      |> add_edge(:vertex_5, :vertex_10)
-      |> add_edge(:vertex_5, :vertex_11)
-      |> add_edge(:vertex_6, :vertex_12)
-      |> add_edge(:vertex_6, :vertex_13)
-      |> add_edge(:vertex_7, :vertex_14)
-      |> add_edge(:vertex_7, :vertex_15)
+      graph =
+        Graph.new()
+        |> Graph.add_edge(:vertex_1, :vertex_2)
+        |> Graph.add_edge(:vertex_1, :vertex_3)
+        |> Graph.add_edge(:vertex_2, :vertex_4)
+        |> Graph.add_edge(:vertex_2, :vertex_5)
+        |> Graph.add_edge(:vertex_3, :vertex_6)
+        |> Graph.add_edge(:vertex_3, :vertex_7)
+        |> Graph.add_edge(:vertex_4, :vertex_8)
+        |> Graph.add_edge(:vertex_4, :vertex_9)
+        |> Graph.add_edge(:vertex_5, :vertex_10)
+        |> Graph.add_edge(:vertex_5, :vertex_11)
+        |> Graph.add_edge(:vertex_6, :vertex_12)
+        |> Graph.add_edge(:vertex_6, :vertex_13)
+        |> Graph.add_edge(:vertex_7, :vertex_14)
+        |> Graph.add_edge(:vertex_7, :vertex_15)
 
-      :ok
+      [graph: graph]
     end
 
-    test "single vertex argument", %{call_graph: call_graph} do
-      assert reachable(call_graph, :vertex_3) == [
+    test "single vertex argument", %{graph: graph} do
+      assert reachable(graph, :vertex_3) == [
                :vertex_15,
                :vertex_14,
                :vertex_7,
@@ -1030,8 +1031,8 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "multiple vertices argument", %{call_graph: call_graph} do
-      assert reachable(call_graph, [:vertex_3, :vertex_5]) == [
+    test "multiple vertices argument", %{graph: graph} do
+      assert reachable(graph, [:vertex_3, :vertex_5]) == [
                :vertex_11,
                :vertex_10,
                :vertex_5,
@@ -1045,17 +1046,17 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "vertex that is not in the call graph", %{call_graph: call_graph} do
-      assert reachable(call_graph, :not_in_call_graph) == []
+    test "vertex that is not in the call graph", %{graph: graph} do
+      assert reachable(graph, :not_in_call_graph) == []
     end
 
-    test "vertices that are not in the call graph", %{call_graph: call_graph} do
-      assert reachable(call_graph, [:not_in_call_graph_1, :not_in_call_graph_2]) == []
+    test "vertices that are not in the call graph", %{graph: graph} do
+      assert reachable(graph, [:not_in_call_graph_1, :not_in_call_graph_2]) == []
     end
   end
 
   describe "reachable_mfas/2" do
-    setup %{call_graph: call_graph} do
+    setup do
       # 1
       # ├─ {:m2, :f2, 2}
       # │  ├─ 4
@@ -1072,27 +1073,28 @@ defmodule Hologram.Compiler.CallGraphTest do
       # │  │  ├─ 14
       # │  │  ├─ {:m15, :f15, 15}
 
-      call_graph
-      |> add_edge(:vertex_1, {:m2, :f2, 2})
-      |> add_edge(:vertex_1, {:m3, :f3, 3})
-      |> add_edge({:m2, :f2, 2}, :vertex_4)
-      |> add_edge({:m2, :f2, 2}, {:m5, :f5, 5})
-      |> add_edge({:m3, :f3, 3}, :vertex_6)
-      |> add_edge({:m3, :f3, 3}, {:m7, :f7, 7})
-      |> add_edge(:vertex_4, {:m8, :f8, 8})
-      |> add_edge(:vertex_4, :vertex_9)
-      |> add_edge({:m5, :f5, 5}, :vertex_10)
-      |> add_edge({:m5, :f5, 5}, :vertex_11)
-      |> add_edge(:vertex_6, {:m12, :f12, 12})
-      |> add_edge(:vertex_6, :vertex_13)
-      |> add_edge({:m7, :f7, 7}, :vertex_14)
-      |> add_edge({:m7, :f7, 7}, {:m15, :f15, 15})
+      graph =
+        Graph.new()
+        |> Graph.add_edge(:vertex_1, {:m2, :f2, 2})
+        |> Graph.add_edge(:vertex_1, {:m3, :f3, 3})
+        |> Graph.add_edge({:m2, :f2, 2}, :vertex_4)
+        |> Graph.add_edge({:m2, :f2, 2}, {:m5, :f5, 5})
+        |> Graph.add_edge({:m3, :f3, 3}, :vertex_6)
+        |> Graph.add_edge({:m3, :f3, 3}, {:m7, :f7, 7})
+        |> Graph.add_edge(:vertex_4, {:m8, :f8, 8})
+        |> Graph.add_edge(:vertex_4, :vertex_9)
+        |> Graph.add_edge({:m5, :f5, 5}, :vertex_10)
+        |> Graph.add_edge({:m5, :f5, 5}, :vertex_11)
+        |> Graph.add_edge(:vertex_6, {:m12, :f12, 12})
+        |> Graph.add_edge(:vertex_6, :vertex_13)
+        |> Graph.add_edge({:m7, :f7, 7}, :vertex_14)
+        |> Graph.add_edge({:m7, :f7, 7}, {:m15, :f15, 15})
 
-      :ok
+      [graph: graph]
     end
 
-    test "single MFA argument", %{call_graph: call_graph} do
-      assert reachable_mfas(call_graph, {:m3, :f3, 3}) == [
+    test "single MFA argument", %{graph: graph} do
+      assert reachable_mfas(graph, {:m3, :f3, 3}) == [
                {:m15, :f15, 15},
                {:m7, :f7, 7},
                {:m12, :f12, 12},
@@ -1100,8 +1102,8 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "multiple MFAs argument", %{call_graph: call_graph} do
-      assert reachable_mfas(call_graph, [{:m5, :f5, 5}, {:m3, :f3, 3}]) == [
+    test "multiple MFAs argument", %{graph: graph} do
+      assert reachable_mfas(graph, [{:m5, :f5, 5}, {:m3, :f3, 3}]) == [
                {:m15, :f15, 15},
                {:m7, :f7, 7},
                {:m12, :f12, 12},
