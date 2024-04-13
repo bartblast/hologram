@@ -498,11 +498,12 @@ defmodule Hologram.Compiler do
   end
 
   defp remove_call_graph_vertices_of_manually_ported_elixir_functions(graph) do
-    graph
-    |> Graph.delete_vertex({Code, :ensure_loaded, 1})
-    |> Graph.delete_vertex({Hologram.Router.Helpers, :asset_path, 1})
-    |> Graph.delete_vertex({Kernel, :inspect, 1})
-    |> Graph.delete_vertex({Kernel, :inspect, 2})
+    Graph.delete_vertices(graph, [
+      {Code, :ensure_loaded, 1},
+      {Hologram.Router.Helpers, :asset_path, 1},
+      {Kernel, :inspect, 1},
+      {Kernel, :inspect, 2}
+    ])
   end
 
   defp render_block(str) do
