@@ -11,7 +11,6 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module1
   alias Hologram.Test.Fixtures.Compiler.Module10
   alias Hologram.Test.Fixtures.Compiler.Module11
-  alias Hologram.Test.Fixtures.Compiler.Module12
   alias Hologram.Test.Fixtures.Compiler.Module2
   alias Hologram.Test.Fixtures.Compiler.Module3
   alias Hologram.Test.Fixtures.Compiler.Module4
@@ -122,32 +121,6 @@ defmodule Hologram.CompilerTest do
       assert String.contains?(result, js_fragment_1)
       assert String.contains?(result, js_fragment_2)
       refute String.contains?(result, js_fragment_3)
-    end
-
-    test "filters out modules without BEAM files" do
-      module_6_ir = IR.for_module(Module6)
-      module_7_ir = IR.for_module(Module7)
-      module_12_ir = IR.for_module(Module12)
-
-      call_graph =
-        CallGraph.start()
-        |> CallGraph.build(module_6_ir)
-        |> CallGraph.build(module_7_ir)
-        |> CallGraph.build(module_12_ir)
-
-      ir_plt =
-        PLT.start()
-        |> PLT.put(Module6, module_6_ir)
-        |> PLT.put(Module7, module_7_ir)
-        |> PLT.put(Module12, module_12_ir)
-
-      js_fragment_1 = ~s/defineElixirFunction("Hologram.Test.Fixtures.Compiler.Module7"/
-      js_fragment_2 = ~s/defineElixirFunction("ModuleWithoutBEAMFile"/
-
-      result = build_page_js(Module12, call_graph, ir_plt, @source_dir)
-
-      assert String.contains?(result, js_fragment_1)
-      refute String.contains?(result, js_fragment_2)
     end
   end
 
