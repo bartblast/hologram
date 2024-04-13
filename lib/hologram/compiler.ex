@@ -382,32 +382,29 @@ defmodule Hologram.Compiler do
   end
 
   defp include_mfas_used_by_asset_path_registry_class(mfas) do
-    mfas ++
-      [
-        {:maps, :get, 3},
-        {:maps, :put, 3}
-      ]
+    [
+      {:maps, :get, 3},
+      {:maps, :put, 3} | mfas
+    ]
   end
 
   defp include_mfas_used_by_component_registry_class(mfas) do
-    mfas ++
-      [
-        {:maps, :get, 2},
-        {:maps, :get, 3}
-      ]
+    [
+      {:maps, :get, 2},
+      {:maps, :get, 3} | mfas
+    ]
   end
 
   defp include_mfas_used_by_interpreter_class(mfas) do
-    mfas ++
-      [
-        {Enum, :into, 2},
-        {Enum, :to_list, 1},
-        {:erlang, :error, 1},
-        {:erlang, :hd, 1},
-        {:erlang, :tl, 1},
-        {:lists, :keyfind, 3},
-        {:maps, :get, 2}
-      ]
+    [
+      {Enum, :into, 2},
+      {Enum, :to_list, 1},
+      {:erlang, :error, 1},
+      {:erlang, :hd, 1},
+      {:erlang, :tl, 1},
+      {:lists, :keyfind, 3},
+      {:maps, :get, 2} | mfas
+    ]
   end
 
   defp include_mfas_used_by_manually_ported_code_module(mfas) do
@@ -415,24 +412,22 @@ defmodule Hologram.Compiler do
   end
 
   defp include_mfas_used_by_operation_class(mfas) do
-    mfas ++
-      [
-        {:maps, :from_list, 1},
-        {:maps, :put, 3}
-      ]
+    [
+      {:maps, :from_list, 1},
+      {:maps, :put, 3} | mfas
+    ]
   end
 
   defp include_mfas_used_by_renderer_class(mfas) do
-    mfas ++
-      [
-        {Hologram.Component, :__struct__, 0},
-        {String.Chars, :to_string, 1},
-        {:erlang, :binary_to_atom, 1},
-        {:lists, :flatten, 1},
-        {:maps, :from_list, 1},
-        {:maps, :get, 2},
-        {:maps, :merge, 2}
-      ]
+    [
+      {Hologram.Component, :__struct__, 0},
+      {String.Chars, :to_string, 1},
+      {:erlang, :binary_to_atom, 1},
+      {:lists, :flatten, 1},
+      {:maps, :from_list, 1},
+      {:maps, :get, 2},
+      {:maps, :merge, 2} | mfas
+    ]
   end
 
   defp include_mfas_used_by_type_class(mfas) do
@@ -440,13 +435,12 @@ defmodule Hologram.Compiler do
   end
 
   defp include_mfas_used_frequently_on_the_client(mfas) do
-    mfas ++
-      [
-        # Used by __props__/0 function injected into component and page modules.
-        {Enum, :reverse, 1},
-        {Hologram.Router.Helpers, :page_path, 1},
-        {Hologram.Router.Helpers, :page_path, 2}
-      ]
+    [
+      # Used by __props__/0 function injected into component and page modules.
+      {Enum, :reverse, 1},
+      {Hologram.Router.Helpers, :page_path, 1},
+      {Hologram.Router.Helpers, :page_path, 2} | mfas
+    ]
   end
 
   defp filter_elixir_mfas(mfas) do
