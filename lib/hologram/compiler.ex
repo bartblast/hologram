@@ -520,7 +520,6 @@ defmodule Hologram.Compiler do
     mfas
     |> filter_elixir_mfas()
     |> group_mfas_by_module()
-    |> Enum.reject(fn {module, _module_mfas} -> !BeamFile.exists?(module) end)
     |> Enum.sort()
     |> Enum.map_join("\n\n", fn {module, module_mfas} ->
       ir_plt
