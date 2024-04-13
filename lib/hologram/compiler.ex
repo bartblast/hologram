@@ -235,19 +235,19 @@ defmodule Hologram.Compiler do
   """
   @spec list_page_mfas(CallGraph.t(), module) :: list(mfa)
   def list_page_mfas(call_graph, page_module) do
-    call_graph_clone = CallGraph.clone(call_graph)
     layout_module = page_module.__layout_module__()
     runtime_mfas = list_runtime_mfas(call_graph)
 
-    call_graph_clone
-    |> CallGraph.add_edge(page_module, {page_module, :__layout_module__, 0})
-    |> CallGraph.add_edge(page_module, {page_module, :__layout_props__, 0})
-    |> CallGraph.add_edge(page_module, {page_module, :__props__, 0})
-    |> CallGraph.add_edge(page_module, {page_module, :action, 3})
-    |> CallGraph.add_edge(page_module, {page_module, :template, 0})
-    |> CallGraph.add_edge(page_module, {layout_module, :__props__, 0})
-    |> CallGraph.add_edge(page_module, {layout_module, :action, 3})
-    |> CallGraph.add_edge(page_module, {layout_module, :template, 0})
+    call_graph
+    |> CallGraph.get_graph()
+    |> Graph.add_edge(page_module, {page_module, :__layout_module__, 0})
+    |> Graph.add_edge(page_module, {page_module, :__layout_props__, 0})
+    |> Graph.add_edge(page_module, {page_module, :__props__, 0})
+    |> Graph.add_edge(page_module, {page_module, :action, 3})
+    |> Graph.add_edge(page_module, {page_module, :template, 0})
+    |> Graph.add_edge(page_module, {layout_module, :__props__, 0})
+    |> Graph.add_edge(page_module, {layout_module, :action, 3})
+    |> Graph.add_edge(page_module, {layout_module, :template, 0})
     |> remove_call_graph_vertices_of_manually_ported_elixir_functions()
     |> CallGraph.reachable(page_module)
     |> Enum.filter(&is_tuple/1)
@@ -260,8 +260,6 @@ defmodule Hologram.Compiler do
   """
   @spec list_runtime_mfas(CallGraph.t()) :: list(mfa)
   def list_runtime_mfas(call_graph) do
-    call_graph_clone = CallGraph.clone(call_graph)
-
     entry_mfas =
       []
       |> include_mfas_used_by_asset_path_registry_class()
@@ -274,7 +272,8 @@ defmodule Hologram.Compiler do
       |> include_mfas_used_by_type_class()
       |> Enum.uniq()
 
-    call_graph_clone
+    call_graph
+    |> CallGraph.get_graph()
     |> add_call_graph_edges_for_erlang_functions()
     |> remove_call_graph_vertices_of_manually_ported_elixir_functions()
     |> CallGraph.reachable_mfas(entry_mfas)
@@ -355,24 +354,24 @@ defmodule Hologram.Compiler do
 
   # Add call graph edges for Erlang functions depending on other Erlang functions.
   # credo:disable-for-next-line Credo.Check.Refactor.ABCSize
-  defp add_call_graph_edges_for_erlang_functions(call_graph) do
-    call_graph
-    |> CallGraph.add_edge({:erlang, :"=<", 2}, {:erlang, :<, 2})
-    |> CallGraph.add_edge({:erlang, :"=<", 2}, {:erlang, :==, 2})
-    |> CallGraph.add_edge({:erlang, :>=, 2}, {:erlang, :==, 2})
-    |> CallGraph.add_edge({:erlang, :>=, 2}, {:erlang, :>, 2})
-    |> CallGraph.add_edge({:erlang, :binary_to_atom, 1}, {:erlang, :binary_to_atom, 2})
-    |> CallGraph.add_edge({:erlang, :binary_to_existing_atom, 1}, {:erlang, :binary_to_atom, 1})
-    |> CallGraph.add_edge({:erlang, :binary_to_existing_atom, 2}, {:erlang, :binary_to_atom, 2})
-    |> CallGraph.add_edge({:erlang, :error, 1}, {:erlang, :error, 2})
-    |> CallGraph.add_edge({:erlang, :integer_to_binary, 1}, {:erlang, :integer_to_binary, 2})
-    |> CallGraph.add_edge({:lists, :keymember, 3}, {:lists, :keyfind, 3})
-    |> CallGraph.add_edge({:maps, :get, 2}, {:maps, :get, 3})
-    |> CallGraph.add_edge(
+  defp add_call_graph_edges_for_erlang_functions(graph) do
+    graph
+    |> Graph.add_edge({:erlang, :"=<", 2}, {:erlang, :<, 2})
+    |> Graph.add_edge({:erlang, :"=<", 2}, {:erlang, :==, 2})
+    |> Graph.add_edge({:erlang, :>=, 2}, {:erlang, :==, 2})
+    |> Graph.add_edge({:erlang, :>=, 2}, {:erlang, :>, 2})
+    |> Graph.add_edge({:erlang, :binary_to_atom, 1}, {:erlang, :binary_to_atom, 2})
+    |> Graph.add_edge({:erlang, :binary_to_existing_atom, 1}, {:erlang, :binary_to_atom, 1})
+    |> Graph.add_edge({:erlang, :binary_to_existing_atom, 2}, {:erlang, :binary_to_atom, 2})
+    |> Graph.add_edge({:erlang, :error, 1}, {:erlang, :error, 2})
+    |> Graph.add_edge({:erlang, :integer_to_binary, 1}, {:erlang, :integer_to_binary, 2})
+    |> Graph.add_edge({:lists, :keymember, 3}, {:lists, :keyfind, 3})
+    |> Graph.add_edge({:maps, :get, 2}, {:maps, :get, 3})
+    |> Graph.add_edge(
       {:unicode, :characters_to_binary, 1},
       {:unicode, :characters_to_binary, 3}
     )
-    |> CallGraph.add_edge({:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1})
+    |> Graph.add_edge({:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1})
   end
 
   defp get_package_json_digest(assets_source_dir) do
@@ -506,12 +505,12 @@ defmodule Hologram.Compiler do
     PLT.put(module_digest_plt, module, digest)
   end
 
-  defp remove_call_graph_vertices_of_manually_ported_elixir_functions(call_graph) do
-    call_graph
-    |> CallGraph.remove_vertex({Code, :ensure_loaded, 1})
-    |> CallGraph.remove_vertex({Hologram.Router.Helpers, :asset_path, 1})
-    |> CallGraph.remove_vertex({Kernel, :inspect, 1})
-    |> CallGraph.remove_vertex({Kernel, :inspect, 2})
+  defp remove_call_graph_vertices_of_manually_ported_elixir_functions(graph) do
+    graph
+    |> Graph.delete_vertex({Code, :ensure_loaded, 1})
+    |> Graph.delete_vertex({Hologram.Router.Helpers, :asset_path, 1})
+    |> Graph.delete_vertex({Kernel, :inspect, 1})
+    |> Graph.delete_vertex({Kernel, :inspect, 2})
   end
 
   defp render_block(str) do
