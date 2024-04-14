@@ -4,6 +4,8 @@ defmodule Hologram.Compiler do
   alias Hologram.Commons.Reflection
   alias Hologram.Commons.TaskUtils
 
+  @type opts :: keyword
+
   @doc """
   Builds a persistent lookup table (PLT) containing the BEAM defs digests for all the modules in the project.
   """
@@ -20,6 +22,10 @@ defmodule Hologram.Compiler do
     module_digest_plt
   end
 
+  @doc """
+  Loads module BEAM path PLT from a dump file if the file exists or creates an empty PLT.
+  """
+  @spec maybe_load_module_beam_path_plt(opts) :: {PLT.t(), String.t()}
   def maybe_load_module_beam_path_plt(opts) do
     module_beam_path_plt = PLT.start()
     module_beam_path_plt_dump_path = opts[:build_dir] <> "/module_beam_path.plt"
