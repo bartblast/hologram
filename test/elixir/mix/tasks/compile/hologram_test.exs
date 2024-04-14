@@ -10,6 +10,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   defp test_build_artifacts do
     test_module_beam_path_plt()
+    test_module_digest_plt()
   end
 
   defp test_module_beam_path_plt do
@@ -19,6 +20,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
     module_beam_path_plt = PLT.start()
     PLT.load(module_beam_path_plt, module_beam_path_plt_dump_path)
     assert PLT.get!(module_beam_path_plt, Module2) == :code.which(Module2)
+  end
+
+  defp test_module_digest_plt do
+    module_digest_plt_dump_path = "#{@tmp_dir}/build/module_digest.plt"
+    assert File.exists?(module_digest_plt_dump_path)
+
+    module_digest_plt = PLT.start()
+    PLT.load(module_digest_plt, module_digest_plt_dump_path)
+    assert <<_digest::256>> = PLT.get!(module_digest_plt, Module2)
   end
 
   setup do
@@ -68,7 +78,6 @@ end
 #     test_runtime_bundle()
 
 #     ...
-#     test_module_digest_plt()
 #     test_ir_plt()
 #     test_call_graph()
 #     test_page_digest_plt(num_page_bundles)
@@ -93,21 +102,6 @@ end
 #     ir_plt = PLT.start()
 #     PLT.load(ir_plt, ir_plt_dump_path)
 #     assert %IR.ModuleDefinition{} = PLT.get!(ir_plt, Module2)
-#   end
-
-#   defp test_module_digest_plt do
-#     module_digest_plt_dump_path = "#{@tmp_dir}/build/module_digest.plt"
-#     assert File.exists?(module_digest_plt_dump_path)
-
-#     module_digest_plt = PLT.start()
-#     PLT.load(module_digest_plt, module_digest_plt_dump_path)
-
-#     bit_size =
-#       module_digest_plt
-#       |> PLT.get!(Module2)
-#       |> bit_size()
-
-#     assert bit_size == 256
 #   end
 
 #   defp test_page_bundles do
