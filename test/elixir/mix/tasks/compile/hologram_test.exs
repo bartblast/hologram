@@ -2,13 +2,33 @@ defmodule Mix.Tasks.Compile.HologramTest do
   use Hologram.Test.BasicCase, async: true
   import Mix.Tasks.Compile.Hologram
 
-  # TODO: implement
+  alias Hologram.Commons.PLT
+  alias Hologram.Commons.Reflection
+  alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
+
+  @tmp_dir Path.join(Reflection.tmp_dir(), to_string(__MODULE__))
+
   defp test_build_artifacts do
+    test_module_beam_path_plt()
+  end
+
+  defp test_module_beam_path_plt do
+    module_beam_path_plt_dump_path = "#{@tmp_dir}/build/module_beam_path.plt"
+    assert File.exists?(module_beam_path_plt_dump_path)
+
+    module_beam_path_plt = PLT.start()
+    PLT.load(module_beam_path_plt, module_beam_path_plt_dump_path)
+    assert PLT.get!(module_beam_path_plt, Module2) == :code.which(Module2)
+  end
+
+  setup do
+    clean_dir(@tmp_dir)
   end
 
   test "run/1" do
-    # TODO: implement
-    opts = []
+    opts = [
+      build_dir: "#{@tmp_dir}/build"
+    ]
 
     # Test case 1: when there are no previous build artifacts
     run(opts)
@@ -21,22 +41,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
 end
 
 # defmodule Mix.Tasks.Compile.HologramTest do
-#   alias Hologram.Commons.PLT
-#   alias Hologram.Commons.Reflection
 #   alias Hologram.Compiler.CallGraph
 #   alias Hologram.Compiler.IR
 #   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Module1
-#   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Module2
 
 #   @root_dir Reflection.root_dir()
-#   @tmp_dir "#{Reflection.tmp_dir()}/#{__MODULE__}/run_1"
 
 #   setup do
-#     clean_dir(@tmp_dir)
-
 #     opts = [
 #       assets_source_dir: "#{@root_dir}/assets",
-#       build_dir: "#{@tmp_dir}/build",
 #       esbuild_path: "#{@root_dir}/assets/node_modules/.bin/esbuild",
 #       js_formatter_bin_path: "#{@root_dir}/assets/node_modules/.bin/prettier",
 #       js_formatter_config_path: "#{@root_dir}/assets/.prettierrc.json",
@@ -54,7 +67,7 @@ end
 #     num_page_bundles = test_page_bundles()
 #     test_runtime_bundle()
 
-#     test_module_beam_path_plt()
+#     ...
 #     test_module_digest_plt()
 #     test_ir_plt()
 #     test_call_graph()
@@ -80,15 +93,6 @@ end
 #     ir_plt = PLT.start()
 #     PLT.load(ir_plt, ir_plt_dump_path)
 #     assert %IR.ModuleDefinition{} = PLT.get!(ir_plt, Module2)
-#   end
-
-#   defp test_module_beam_path_plt do
-#     module_beam_path_plt_dump_path = "#{@tmp_dir}/build/module_beam_path.plt"
-#     assert File.exists?(module_beam_path_plt_dump_path)
-
-#     module_beam_path_plt = PLT.start()
-#     PLT.load(module_beam_path_plt, module_beam_path_plt_dump_path)
-#     assert PLT.get!(module_beam_path_plt, Module2) == :code.which(Module2)
 #   end
 
 #   defp test_module_digest_plt do

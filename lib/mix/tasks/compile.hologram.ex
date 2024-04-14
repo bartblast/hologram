@@ -5,7 +5,11 @@ defmodule Mix.Tasks.Compile.Hologram do
   """
 
   use Mix.Task.Compiler
+  require Logger
+
+  alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
+  alias Hologram.Compiler
 
   @impl Mix.Task.Compiler
   def run([]) do
@@ -27,9 +31,17 @@ defmodule Mix.Tasks.Compile.Hologram do
     run(opts)
   end
 
-  # TODO: implement
   @impl Mix.Task.Compiler
-  def run(_opts) do
+  def run(opts) do
+    Logger.info("Hologram: compiler started")
+
+    {module_beam_path_plt, module_beam_path_plt_dump_path} =
+      Compiler.maybe_load_module_beam_path_plt(opts)
+
+    PLT.dump(module_beam_path_plt, module_beam_path_plt_dump_path)
+
+    Logger.info("Hologram: compiler finished")
+
     :ok
   end
 end
@@ -37,15 +49,12 @@ end
 # # credo:disable-for-this-file Credo.Check.Refactor.ABCSize
 # defmodule Mix.Tasks.Compile.Hologram do
 #   alias Hologram.Commons.TaskUtils
-#   alias Hologram.Compiler
 #   alias Hologram.Compiler.CallGraph
 
-#   require Logger
-
 #   def compile(opts) do
-#     Logger.info("Hologram: start compiling")
+#     
 
-#     {module_beam_path_plt, module_beam_path_plt_dump_path} = maybe_load_module_beam_path_plt(opts)
+#     
 
 #     Logger.debug("Hologram: start building module digest PLTs")
 
@@ -106,9 +115,6 @@ end
 #     CallGraph.dump(call_graph, call_graph_dump_path)
 #     PLT.dump(ir_plt, ir_plt_dump_path)
 #     PLT.dump(new_module_digest_plt, module_digest_plt_dump_path)
-#     PLT.dump(module_beam_path_plt, module_beam_path_plt_dump_path)
-
-#     Logger.info("Hologram: finished compiling")
 
 #     :ok
 #   end
