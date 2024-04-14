@@ -1,3 +1,6 @@
+defmodule Mix.Tasks.Compile.Hologram do
+end
+
 # # credo:disable-for-this-file Credo.Check.Refactor.ABCSize
 # defmodule Mix.Tasks.Compile.Hologram do
 #   @moduledoc """
@@ -6,7 +9,6 @@
 
 #   use Mix.Task.Compiler
 
-#   alias Hologram.Commons.PLT
 #   alias Hologram.Commons.Reflection
 #   alias Hologram.Commons.TaskUtils
 #   alias Hologram.Compiler

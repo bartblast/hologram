@@ -1,3 +1,15 @@
+defmodule Hologram.Compiler do
+  alias Hologram.Commons.PLT
+
+  def maybe_load_module_beam_path_plt(opts) do
+    module_beam_path_plt = PLT.start()
+    module_beam_path_plt_dump_path = opts[:build_dir] <> "/module_beam_path.plt"
+    PLT.maybe_load(module_beam_path_plt, module_beam_path_plt_dump_path)
+
+    {module_beam_path_plt, module_beam_path_plt_dump_path}
+  end
+end
+
 # defmodule Hologram.Compiler do
 #   alias Hologram.Commons.CryptographicUtils
 #   alias Hologram.Commons.PLT
