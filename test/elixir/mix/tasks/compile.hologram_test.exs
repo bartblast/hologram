@@ -1,4 +1,4 @@
-# defmodule Mix.Tasks.Compile.HologramTest do
+# defmodule Mix.Tasks.CompileHologramTest do
 #   use Hologram.Test.BasicCase, async: true
 #   import Mix.Tasks.Compile.Hologram
 

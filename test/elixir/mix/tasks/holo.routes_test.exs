@@ -1,4 +1,4 @@
-defmodule Mix.Tasks.Holo.RoutesTest do
+defmodule Mix.Tasks.HoloRoutesTest do
   use Hologram.Test.BasicCase, async: true
   import ExUnit.CaptureIO
   alias Mix.Tasks.Holo.Routes, as: Task
