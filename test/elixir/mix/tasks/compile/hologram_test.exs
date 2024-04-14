@@ -1,7 +1,26 @@
-# defmodule Mix.Tasks.Compile.HologramTest do
-#   use Hologram.Test.BasicCase, async: true
-#   import Mix.Tasks.Compile.Hologram
+defmodule Mix.Tasks.Compile.HologramTest do
+  use Hologram.Test.BasicCase, async: true
+  import Mix.Tasks.Compile.Hologram
 
+  # TODO: implement
+  defp test_build_artifacts do
+  end
+
+  test "run/1" do
+    # TODO: implement
+    opts = []
+
+    # Test case 1: when there are no previous build artifacts
+    run(opts)
+    test_build_artifacts()
+
+    # Test case 2: when there are previous build artifacts
+    run(opts)
+    test_build_artifacts()
+  end
+end
+
+# defmodule Mix.Tasks.Compile.HologramTest do
 #   alias Hologram.Commons.PLT
 #   alias Hologram.Commons.Reflection
 #   alias Hologram.Compiler.CallGraph
@@ -139,16 +158,5 @@
 #       |> Enum.count()
 
 #     assert num_runtime_source_maps == 1
-#   end
-
-#   # There are two tests in one test block here, because setup for the second test is expensive.
-#   test "compile/1", %{opts: opts} do
-#     # Test case 1: when there are no previous build artifacts
-#     compile(opts)
-#     test_build_artifacts()
-
-#     # Test case 2: when there are previous build artifacts
-#     compile(opts)
-#     test_build_artifacts()
 #   end
 # end

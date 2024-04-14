@@ -1,46 +1,47 @@
 defmodule Mix.Tasks.Compile.Hologram do
+  @moduledoc """
+  Builds Hologram project JavaScript bundles, the call graph of the code,
+  PLTs needed by the runtime and PLTs needed to speed up future compilation.
+  """
+
+  use Mix.Task.Compiler
+  alias Hologram.Commons.Reflection
+
+  @impl Mix.Task.Compiler
+  def run([]) do
+    root_dir = Reflection.root_dir()
+    assets_dir = "#{root_dir}/deps/hologram/assets"
+    build_dir = Reflection.build_dir()
+
+    opts = [
+      assets_dir: assets_dir,
+      build_dir: build_dir,
+      esbuild_bin_path: "#{root_dir}/deps/hologram/assets/node_modules/.bin/esbuild",
+      formatter_bin_path: "#{root_dir}/deps/hologram/assets/node_modules/.bin/prettier",
+      formatter_config_path: "#{root_dir}/deps/hologram/assets/.prettierrc.json",
+      js_dir: "#{assets_dir}/js",
+      static_dir: "#{root_dir}/priv/static/hologram",
+      tmp_dir: "#{build_dir}/tmp"
+    ]
+
+    run(opts)
+  end
+
+  # TODO: implement
+  @impl Mix.Task.Compiler
+  def run(_opts) do
+    :ok
+  end
 end
 
 # # credo:disable-for-this-file Credo.Check.Refactor.ABCSize
 # defmodule Mix.Tasks.Compile.Hologram do
-#   @moduledoc """
-#   Builds Hologram runtime and page JavaScript files for the current project.
-#   """
-
-#   use Mix.Task.Compiler
-
-#   alias Hologram.Commons.Reflection
 #   alias Hologram.Commons.TaskUtils
 #   alias Hologram.Compiler
 #   alias Hologram.Compiler.CallGraph
 
 #   require Logger
 
-#   @impl Mix.Task.Compiler
-#   def run(_args) do
-#     root_dir = Reflection.root_dir()
-#     build_dir = Reflection.build_dir()
-#     assets_source_dir = "#{root_dir}/deps/hologram/assets"
-
-#     opts = [
-#       assets_source_dir: assets_source_dir,
-#       build_dir: build_dir,
-#       esbuild_path: "#{root_dir}/deps/hologram/assets/node_modules/.bin/esbuild",
-#       js_formatter_bin_path: "#{root_dir}/deps/hologram/assets/node_modules/.bin/prettier",
-#       js_formatter_config_path: "#{root_dir}/deps/hologram/assets/.prettierrc.json",
-#       js_source_dir: "#{assets_source_dir}/js",
-#       static_dir: "#{root_dir}/priv/static/hologram",
-#       tmp_dir: "#{build_dir}/tmp"
-#     ]
-
-#     compile(opts)
-#   end
-
-#   @doc """
-#   Builds Hologram project JavaScript bundles, call graph of the code,
-#   PLTs needed by the runtime and PLTs needed to speed up future compilation.
-#   """
-#   @spec compile(keyword) :: :ok
 #   def compile(opts) do
 #     Logger.info("Hologram: start compiling")
 
