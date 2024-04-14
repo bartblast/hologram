@@ -41,8 +41,10 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     new_module_digest_plt = Compiler.build_module_digest_plt(module_beam_path_plt)
 
-    {_old_module_digest_plt, module_digest_plt_dump_path} =
+    {old_module_digest_plt, module_digest_plt_dump_path} =
       Compiler.maybe_load_module_digest_plt(opts)
+
+    _diff = Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
 
     PLT.dump(new_module_digest_plt, module_digest_plt_dump_path)
     PLT.dump(module_beam_path_plt, module_beam_path_plt_dump_path)
@@ -59,10 +61,6 @@ end
 #   alias Hologram.Compiler.CallGraph
 
 #   def compile(opts) do
-#     diff = Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
-
-#     Logger.debug("Hologram: finished diffing module digest PLTs")
-
 #     Logger.debug("Hologram: start building IR PLT")
 
 #     {ir_plt, ir_plt_dump_path} = build_ir_plt(opts, diff, module_beam_path_plt)
