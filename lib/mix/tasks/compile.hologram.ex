@@ -59,8 +59,6 @@ end
 #   alias Hologram.Compiler.CallGraph
 
 #   def compile(opts) do
-#     Logger.debug("Hologram: start diffing module digest PLTs")
-
 #     diff = Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
 
 #     Logger.debug("Hologram: finished diffing module digest PLTs")

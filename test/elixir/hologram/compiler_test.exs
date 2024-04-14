@@ -37,6 +37,30 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  test "diff_module_digest_plts/2" do
+    old_plt =
+      PLT.start()
+      |> PLT.put(:module_1, :digest_1)
+      |> PLT.put(:module_3, :digest_3a)
+      |> PLT.put(:module_5, :digest_5)
+      |> PLT.put(:module_6, :digest_6a)
+      |> PLT.put(:module_7, :digest_7)
+
+    new_plt =
+      PLT.start()
+      |> PLT.put(:module_1, :digest_1)
+      |> PLT.put(:module_2, :digest_2)
+      |> PLT.put(:module_3, :digest_3b)
+      |> PLT.put(:module_4, :digest_4)
+      |> PLT.put(:module_6, :digest_6b)
+
+    assert diff_module_digest_plts(old_plt, new_plt) == %{
+             added_modules: [:module_2, :module_4],
+             removed_modules: [:module_5, :module_7],
+             updated_modules: [:module_3, :module_6]
+           }
+  end
+
   describe "maybe_load_module_beam_path_plt/1" do
     setup do
       subdir = "test_maybe_load_module_beam_path_plt_1"
@@ -299,40 +323,6 @@ end
 #                "names": []
 #              }
 #              """
-#     end
-#   end
-
-#   describe "diff_module_digest_plts/2" do
-#     setup do
-#       old_plt =
-#         PLT.start()
-#         |> PLT.put(:module_1, :digest_1)
-#         |> PLT.put(:module_3, :digest_3a)
-#         |> PLT.put(:module_5, :digest_5)
-#         |> PLT.put(:module_6, :digest_6a)
-#         |> PLT.put(:module_7, :digest_7)
-
-#       new_plt =
-#         PLT.start()
-#         |> PLT.put(:module_1, :digest_1)
-#         |> PLT.put(:module_2, :digest_2)
-#         |> PLT.put(:module_3, :digest_3b)
-#         |> PLT.put(:module_4, :digest_4)
-#         |> PLT.put(:module_6, :digest_6b)
-
-#       [result: diff_module_digest_plts(old_plt, new_plt)]
-#     end
-
-#     test "added modules", %{result: result} do
-#       assert %{added_modules: [:module_2, :module_4]} = result
-#     end
-
-#     test "removed modules", %{result: result} do
-#       assert %{removed_modules: [:module_5, :module_7]} = result
-#     end
-
-#     test "updated modules", %{result: result} do
-#       assert %{updated_modules: [:module_3, :module_6]} = result
 #     end
 #   end
 

@@ -23,6 +23,41 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Compares two module digest PLTs and returns the added, removed, and updated modules lists.
+  """
+  @spec diff_module_digest_plts(PLT.t(), PLT.t()) :: %{
+          added_modules: list(module),
+          removed_modules: list(module),
+          updated_modules: list(module)
+        }
+  def diff_module_digest_plts(old_plt, new_plt) do
+    old_modules = mapset_from_plt_keys(old_plt)
+    new_modules = mapset_from_plt_keys(new_plt)
+
+    removed_modules =
+      old_modules
+      |> MapSet.difference(new_modules)
+      |> MapSet.to_list()
+
+    added_modules =
+      new_modules
+      |> MapSet.difference(old_modules)
+      |> MapSet.to_list()
+
+    updated_modules =
+      old_modules
+      |> MapSet.intersection(new_modules)
+      |> MapSet.to_list()
+      |> Enum.filter(&(PLT.get!(old_plt, &1) != PLT.get!(new_plt, &1)))
+
+    %{
+      added_modules: added_modules,
+      removed_modules: removed_modules,
+      updated_modules: updated_modules
+    }
+  end
+
+  @doc """
   Loads module BEAM path PLT from a dump file if the file exists or creates an empty PLT.
   """
   @spec maybe_load_module_beam_path_plt(opts) :: {PLT.t(), String.t()}
@@ -44,6 +79,13 @@ defmodule Hologram.Compiler do
     PLT.maybe_load(module_digest_plt, module_digest_plt_dump_path)
 
     {module_digest_plt, module_digest_plt_dump_path}
+  end
+
+  defp mapset_from_plt_keys(plt) do
+    plt
+    |> PLT.get_all()
+    |> Map.keys()
+    |> MapSet.new()
   end
 
   defp rebuild_module_digest_plt_entry(module, module_digest_plt, module_beam_path_plt) do
@@ -221,41 +263,6 @@ end
 #     File.write!(entry_file_path, js)
 
 #     entry_file_path
-#   end
-
-#   @doc """
-#   Compares two module digest PLTs and returns the added, removed, and updated modules lists.
-#   """
-#   @spec diff_module_digest_plts(PLT.t(), PLT.t()) :: %{
-#           added_modules: list,
-#           removed_modules: list,
-#           updated_modules: list
-#         }
-#   def diff_module_digest_plts(old_plt, new_plt) do
-#     old_mapset = mapset_from_plt(old_plt)
-#     new_mapset = mapset_from_plt(new_plt)
-
-#     removed_modules =
-#       old_mapset
-#       |> MapSet.difference(new_mapset)
-#       |> MapSet.to_list()
-
-#     added_modules =
-#       new_mapset
-#       |> MapSet.difference(old_mapset)
-#       |> MapSet.to_list()
-
-#     updated_modules =
-#       old_mapset
-#       |> MapSet.intersection(new_mapset)
-#       |> MapSet.to_list()
-#       |> Enum.filter(&(PLT.get(old_plt, &1) != PLT.get(new_plt, &1)))
-
-#     %{
-#       added_modules: added_modules,
-#       removed_modules: removed_modules,
-#       updated_modules: updated_modules
-#     }
 #   end
 
 #   @doc """
@@ -503,13 +510,6 @@ end
 
 #   defp filter_erlang_mfas(mfas) do
 #     Enum.filter(mfas, fn {module, _function, _arity} -> !Reflection.alias?(module) end)
-#   end
-
-#   defp mapset_from_plt(plt) do
-#     plt
-#     |> PLT.get_all()
-#     |> Map.keys()
-#     |> MapSet.new()
 #   end
 
 #   defp rebuild_ir_plt_entry(plt, module, module_beam_path_plt) do
