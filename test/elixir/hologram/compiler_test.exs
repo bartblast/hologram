@@ -22,8 +22,8 @@ defmodule Hologram.CompilerTest do
     test "builds module digest PLT", %{module_beam_path_plt: module_beam_path_plt} do
       assert plt = %PLT{} = build_module_digest_plt(module_beam_path_plt)
 
-      assert {:ok, <<_digest::256>>} = PLT.get(plt, Hologram.Commons.Reflection)
-      assert {:ok, <<_digest::256>>} = PLT.get(plt, Hologram.Compiler)
+      assert <<_digest::256>> = PLT.get!(plt, Hologram.Commons.Reflection)
+      assert <<_digest::256>> = PLT.get!(plt, Hologram.Compiler)
     end
 
     test "adds missing module BEAM path PLT entries", %{
