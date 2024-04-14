@@ -5,11 +5,12 @@ defmodule Mix.Tasks.Compile.Hologram do
   """
 
   use Mix.Task.Compiler
-  require Logger
 
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
   alias Hologram.Compiler
+
+  require Logger
 
   @impl Mix.Task.Compiler
   def run([]) do
