@@ -110,22 +110,15 @@ defmodule Hologram.Compiler do
        "priv/static/my_script-caf8f4e27584852044eb27a37c5eddfd.js",
        "priv/static/my_script-caf8f4e27584852044eb27a37c5eddfd.js.map"}
   """
-  @spec bundle(String.t(), keyword) :: {String.t(), String.t(), String.t()}
+  @spec bundle(term, String.t(), keyword) :: {String.t(), String.t(), String.t()}
   # sobelow_skip ["CI.System"]
-  def bundle(js, opts) do
-    entry_name = opts[:entry_name]
-    esbuild_path = opts[:esbuild_path]
-    tmp_dir = opts[:tmp_dir]
-    static_dir = opts[:static_dir]
+  def bundle(entry_name, entry_file_path, opts) do
     bundle_name = opts[:bundle_name]
+    esbuild_path = opts[:esbuild_path]
+    static_dir = opts[:static_dir]
+    tmp_dir = opts[:tmp_dir]
 
-    File.mkdir_p!(tmp_dir)
     File.mkdir_p!(static_dir)
-
-    entry_file_path = tmp_dir <> "/#{entry_name}.entry.js"
-    File.write!(entry_file_path, js)
-
-    format_entry_file(entry_file_path, opts)
 
     output_bundle_path = tmp_dir <> "/#{entry_name}.output.js"
 
@@ -164,7 +157,16 @@ defmodule Hologram.Compiler do
 
     File.write!(static_bundle_path_with_digest, js_with_replaced_source_map_url)
 
-    {digest, static_bundle_path_with_digest, static_source_map_path_with_digest}
+    {entry_name, digest}
+  end
+
+  def create_entry_file(js, entry_name, tmp_dir) do
+    File.mkdir_p!(tmp_dir)
+
+    entry_file_path = Path.join(tmp_dir, "#{entry_name}.entry.js")
+    File.write!(entry_file_path, js)
+
+    entry_file_path
   end
 
   @doc """
@@ -447,21 +449,6 @@ defmodule Hologram.Compiler do
 
   defp filter_erlang_mfas(mfas) do
     Enum.filter(mfas, fn {module, _function, _arity} -> !Reflection.alias?(module) end)
-  end
-
-  # sobelow_skip ["CI.System"]
-  defp format_entry_file(entry_file_path, opts) do
-    cmd = [
-      entry_file_path,
-      "--config=#{opts[:js_formatter_config_path]}",
-      # "none" is not a valid path or a flag value,
-      # any non-existing path would work the same here, i.e. disable "ignore" functionality.
-      "--ignore-path=none",
-      "--no-error-on-unmatched-pattern",
-      "--write"
-    ]
-
-    System.cmd(opts[:js_formatter_bin_path], cmd, env: [], parallelism: true)
   end
 
   defp mapset_from_plt(plt) do

@@ -75,24 +75,29 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     Logger.debug("Hologram: finished installing JS deps")
 
-    Logger.debug("Hologram: start runtime bundling")
+    Logger.debug("Hologram: start runtime & pages bundling")
 
-    bundle_runtime(call_graph, ir_plt, opts)
+    runtime_entry_file_path = create_runtime_entry_file(call_graph, ir_plt, opts)
 
-    Logger.debug("Hologram: finished runtime bundling")
+    page_modules = Reflection.list_pages()
 
-    page_digest_plt = PLT.start()
+    validate_page_modules(page_modules)
 
-    page_digest_plt_dump_path =
-      Path.join([opts[:build_dir], Reflection.page_digest_plt_dump_file_name()])
+    page_entry_files_info =
+      create_page_entry_files(page_modules, call_graph, ir_plt, opts[:js_source_dir])
 
-    Logger.debug("Hologram: start pages bundling")
+    page_entry_file_paths =
+      Enum.map(page_entry_files_info, fn {_entry_name, entry_file_path} -> entry_file_path end)
 
-    call_graph
-    |> bundle_pages(ir_plt, opts)
-    |> Enum.each(fn {module, digest} -> PLT.put(page_digest_plt, module, digest) end)
+    format_files([runtime_entry_file_path | page_entry_file_paths], opts)
 
-    Logger.debug("Hologram: finished pages bundling")
+    entry_files_info = [{"runtime", runtime_entry_file_path} | page_entry_files_info]
+
+    bundle_info = bundle_entry_files(entry_files_info, opts)
+
+    Logger.debug("Hologram: finished runtime & pages bundling")
+
+    {page_digest_plt, page_digest_plt_dump_path} = build_page_digest_plt(bundle_info, opts)
 
     PLT.dump(page_digest_plt, page_digest_plt_dump_path)
     CallGraph.dump(call_graph, call_graph_dump_path)
@@ -103,6 +108,78 @@ defmodule Mix.Tasks.Compile.Hologram do
     Logger.info("Hologram: finished compiling")
 
     :ok
+  end
+
+  defp build_page_digest_plt(bundle_info, opts) do
+    page_digest_plt = PLT.start()
+
+    bundle_info
+    |> Enum.reject(fn {entry_name, _digest} -> entry_name == "runtime" end)
+    |> Enum.each(fn {page_module, digest} -> PLT.put(page_digest_plt, page_module, digest) end)
+
+    page_digest_plt_dump_path =
+      Path.join([opts[:build_dir], Reflection.page_digest_plt_dump_file_name()])
+
+    {page_digest_plt, page_digest_plt_dump_path}
+  end
+
+  defp bundle_entry_files(entry_files_info, opts) do
+    entry_files_info
+    |> TaskUtils.async_many(fn {entry_name, entry_file_path} ->
+      Compiler.bundle(entry_name, entry_file_path, opts)
+    end)
+    |> Task.await_many(:infinity)
+  end
+
+  # sobelow_skip ["CI.System"]
+  defp format_files(file_paths, opts) do
+    cmd =
+      file_paths ++
+        [
+          "--config=#{opts[:js_formatter_config_path]}",
+          # "none" is not a valid path or a flag value,
+          # any non-existing path would work the same here, i.e. disable "ignore" functionality.
+          "--ignore-path=none",
+          "--no-error-on-unmatched-pattern",
+          "--write"
+        ]
+
+    System.cmd(opts[:js_formatter_bin_path], cmd, env: [], parallelism: true)
+  end
+
+  defp validate_page_modules(page_modules) do
+    Enum.each(page_modules, fn page_module ->
+      if !Reflection.has_function?(page_module, :__route__, 0) do
+        raise Hologram.CompileError,
+          message:
+            "Page '#{page_module}' doesn't have a route specified (use the route/1 macro to fix the issue)."
+      end
+
+      if !Reflection.has_function?(page_module, :__layout_module__, 0) do
+        raise Hologram.CompileError,
+          message:
+            "Page '#{page_module}' doesn't have a layout module specified (use the layout/1 macro to fix the issue)."
+      end
+    end)
+  end
+
+  defp create_page_entry_files(page_modules, call_graph, ir_plt, js_source_dir) do
+    page_modules
+    |> TaskUtils.async_many(fn page_module ->
+      entry_file_path =
+        page_module
+        |> Compiler.build_page_js(call_graph, ir_plt, js_source_dir)
+        |> Compiler.create_entry_file(page_module, js_source_dir)
+
+      {page_module, entry_file_path}
+    end)
+    |> Task.await_many(:infinity)
+  end
+
+  defp create_runtime_entry_file(call_graph, ir_plt, opts) do
+    opts[:js_source_dir]
+    |> Compiler.build_runtime_js(call_graph, ir_plt)
+    |> Compiler.create_entry_file("runtime", opts[:tmp_dir])
   end
 
   defp build_call_graph(opts, ir_plt, diff) do
@@ -130,59 +207,6 @@ defmodule Mix.Tasks.Compile.Hologram do
     PLT.maybe_load(old_module_digest_plt, module_digest_plt_dump_path)
 
     {new_module_digest_plt, old_module_digest_plt, module_digest_plt_dump_path}
-  end
-
-  defp bundle_page(page_module, call_graph, ir_plt, opts) do
-    if !Reflection.has_function?(page_module, :__route__, 0) do
-      raise Hologram.CompileError,
-        message:
-          "Page '#{page_module}' doesn't have a route specified (use the route/1 macro to fix the issue)."
-    end
-
-    if !Reflection.has_function?(page_module, :__layout_module__, 0) do
-      raise Hologram.CompileError,
-        message:
-          "Page '#{page_module}' doesn't have a layout module specified (use the layout/1 macro to fix the issue)."
-    end
-
-    page_bundle_opts = [
-      esbuild_path: opts[:esbuild_path],
-      js_formatter_bin_path: opts[:js_formatter_bin_path],
-      js_formatter_config_path: opts[:js_formatter_config_path],
-      entry_name: to_string(page_module),
-      bundle_name: "page",
-      tmp_dir: opts[:tmp_dir],
-      static_dir: opts[:static_dir]
-    ]
-
-    {digest, _bundle_path, _source_map_path} =
-      page_module
-      |> Compiler.build_page_js(call_graph, ir_plt, opts[:js_source_dir])
-      |> Compiler.bundle(page_bundle_opts)
-
-    {page_module, digest}
-  end
-
-  defp bundle_pages(call_graph, ir_plt, opts) do
-    Reflection.list_pages()
-    |> TaskUtils.async_many(&bundle_page(&1, call_graph, ir_plt, opts))
-    |> Task.await_many(:infinity)
-  end
-
-  defp bundle_runtime(call_graph, ir_plt, opts) do
-    runtime_bundle_opts = [
-      esbuild_path: opts[:esbuild_path],
-      js_formatter_bin_path: opts[:js_formatter_bin_path],
-      js_formatter_config_path: opts[:js_formatter_config_path],
-      entry_name: "runtime",
-      bundle_name: "runtime",
-      tmp_dir: opts[:tmp_dir],
-      static_dir: opts[:static_dir]
-    ]
-
-    opts[:js_source_dir]
-    |> Compiler.build_runtime_js(call_graph, ir_plt)
-    |> Compiler.bundle(runtime_bundle_opts)
   end
 
   defp maybe_load_module_beam_path_plt(opts) do
