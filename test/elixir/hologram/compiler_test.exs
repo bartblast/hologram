@@ -4,8 +4,38 @@ defmodule Hologram.CompilerTest do
 
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
+  alias Hologram.Commons.TaskUtils
 
   @tmp_dir Reflection.tmp_dir()
+
+  setup_all do
+    module_beam_path_plt = PLT.start()
+
+    Reflection.list_elixir_modules()
+    |> TaskUtils.async_many(&PLT.put(module_beam_path_plt, &1, :code.which(&1)))
+    |> Task.await_many(:infinity)
+
+    [module_beam_path_plt: module_beam_path_plt]
+  end
+
+  describe "build_module_digest_plt/0" do
+    test "builds module digest PLT", %{module_beam_path_plt: module_beam_path_plt} do
+      assert plt = %PLT{} = build_module_digest_plt(module_beam_path_plt)
+
+      assert {:ok, <<_digest::256>>} = PLT.get(plt, Hologram.Commons.Reflection)
+      assert {:ok, <<_digest::256>>} = PLT.get(plt, Hologram.Compiler)
+    end
+
+    test "adds missing module BEAM path PLT entries", %{
+      module_beam_path_plt: module_beam_path_plt
+    } do
+      PLT.delete(module_beam_path_plt, Hologram.Compiler)
+
+      build_module_digest_plt(module_beam_path_plt)
+
+      assert PLT.get!(module_beam_path_plt, Hologram.Compiler) == :code.which(Hologram.Compiler)
+    end
+  end
 
   describe "maybe_load_module_beam_path_plt/1" do
     setup do
@@ -87,19 +117,6 @@ end
 #     ]
 
 #     maybe_install_js_deps(opts)
-
-#     module_beam_path_plt = PLT.start()
-
-#     Reflection.list_elixir_modules()
-#     |> TaskUtils.async_many(&PLT.put(module_beam_path_plt, &1, :code.which(&1)))
-#     |> Task.await_many(:infinity)
-
-#     [module_beam_path_plt: module_beam_path_plt]
-#   end
-
-#   test "build_module_digest_plt/0", %{module_beam_path_plt: module_beam_path_plt} do
-#     assert %PLT{} = plt = build_module_digest_plt(module_beam_path_plt)
-#     assert {:ok, <<_digest::256>>} = PLT.get(plt, Hologram.Compiler)
 #   end
 
 #   describe "build_page_js/3" do

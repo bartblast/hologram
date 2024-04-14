@@ -1,5 +1,24 @@
 defmodule Hologram.Compiler do
+  alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.PLT
+  alias Hologram.Commons.Reflection
+  alias Hologram.Commons.TaskUtils
+
+  @doc """
+  Builds a persistent lookup table (PLT) containing the BEAM defs digests for all the modules in the project.
+  """
+  @spec build_module_digest_plt(PLT.t()) :: PLT.t()
+  def build_module_digest_plt(module_beam_path_plt) do
+    module_digest_plt = PLT.start()
+
+    Reflection.list_elixir_modules()
+    |> TaskUtils.async_many(
+      &rebuild_module_digest_plt_entry(&1, module_digest_plt, module_beam_path_plt)
+    )
+    |> Task.await_many(:infinity)
+
+    module_digest_plt
+  end
 
   def maybe_load_module_beam_path_plt(opts) do
     module_beam_path_plt = PLT.start()
@@ -7,6 +26,27 @@ defmodule Hologram.Compiler do
     PLT.maybe_load(module_beam_path_plt, module_beam_path_plt_dump_path)
 
     {module_beam_path_plt, module_beam_path_plt_dump_path}
+  end
+
+  defp rebuild_module_digest_plt_entry(module, module_digest_plt, module_beam_path_plt) do
+    module_beam_path =
+      case PLT.get(module_beam_path_plt, module) do
+        {:ok, path} ->
+          path
+
+        :error ->
+          path = :code.which(module)
+          PLT.put(module_beam_path_plt, module, path)
+          path
+      end
+
+    data =
+      module_beam_path
+      |> Reflection.beam_defs()
+      |> :erlang.term_to_binary(compressed: 0)
+
+    digest = CryptographicUtils.digest(data, :sha256, :binary)
+    PLT.put(module_digest_plt, module, digest)
   end
 end
 
@@ -19,22 +59,6 @@ end
 #   alias Hologram.Compiler.Context
 #   alias Hologram.Compiler.Encoder
 #   alias Hologram.Compiler.IR
-
-#   @doc """
-#   Builds a persistent lookup table (PLT) containing the BEAM defs digests for all the modules in the project.
-#   """
-#   @spec build_module_digest_plt(PLT.t()) :: PLT.t()
-#   def build_module_digest_plt(module_beam_path_plt) do
-#     module_digest_plt = PLT.start()
-
-#     Reflection.list_elixir_modules()
-#     |> TaskUtils.async_many(
-#       &rebuild_module_digest_plt_entry(&1, module_digest_plt, module_beam_path_plt)
-#     )
-#     |> Task.await_many(:infinity)
-
-#     module_digest_plt
-#   end
 
 #   @doc """
 #   Builds JavaScript code for the given Hologram page.
@@ -473,27 +497,6 @@ end
 #   defp rebuild_ir_plt_entry(plt, module, module_beam_path_plt) do
 #     beam_path = PLT.get!(module_beam_path_plt, module)
 #     PLT.put(plt, module, IR.for_module(beam_path))
-#   end
-
-#   defp rebuild_module_digest_plt_entry(module, module_digest_plt, module_beam_path_plt) do
-#     module_beam_path =
-#       case PLT.get(module_beam_path_plt, module) do
-#         {:ok, path} ->
-#           path
-
-#         :error ->
-#           path = :code.which(module)
-#           PLT.put(module_beam_path_plt, module, path)
-#           path
-#       end
-
-#     data =
-#       module_beam_path
-#       |> Reflection.beam_defs()
-#       |> :erlang.term_to_binary(compressed: 0)
-
-#     digest = CryptographicUtils.digest(data, :sha256, :binary)
-#     PLT.put(module_digest_plt, module, digest)
 #   end
 
 #   defp remove_call_graph_vertices_of_manually_ported_elixir_functions(graph) do
