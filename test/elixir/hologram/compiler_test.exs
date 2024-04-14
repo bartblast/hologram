@@ -65,6 +65,35 @@ defmodule Hologram.CompilerTest do
       assert PLT.get_all(plt) == %{a: 1, b: 2}
     end
   end
+
+  describe "maybe_load_module_digest_plt/1" do
+    setup do
+      subdir = "test_maybe_load_module_digest_plt_1"
+
+      build_dir = Path.join(@tmp_dir, subdir)
+      clean_dir(build_dir)
+
+      dump_path = Path.join([@tmp_dir, subdir, "module_digest.plt"])
+      opts = [build_dir: build_dir]
+
+      [dump_path: dump_path, opts: opts]
+    end
+
+    test "dump file doesn't exist", %{dump_path: dump_path, opts: opts} do
+      assert {plt = %PLT{}, ^dump_path} = maybe_load_module_digest_plt(opts)
+      assert PLT.get_all(plt) == %{}
+    end
+
+    test "dump file exists", %{dump_path: dump_path, opts: opts} do
+      PLT.start()
+      |> PLT.put(:a, 1)
+      |> PLT.put(:b, 2)
+      |> PLT.dump(dump_path)
+
+      assert {plt = %PLT{}, ^dump_path} = maybe_load_module_digest_plt(opts)
+      assert PLT.get_all(plt) == %{a: 1, b: 2}
+    end
+  end
 end
 
 # defmodule Hologram.CompilerTest do

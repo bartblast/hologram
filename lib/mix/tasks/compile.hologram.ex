@@ -52,12 +52,6 @@ end
 #   alias Hologram.Compiler.CallGraph
 
 #   def compile(opts) do
-#     
-
-#     
-
-#     Logger.debug("Hologram: start building module digest PLTs")
-
 #     {new_module_digest_plt, old_module_digest_plt, module_digest_plt_dump_path} =
 #       build_module_digest_plts(opts, module_beam_path_plt)
 

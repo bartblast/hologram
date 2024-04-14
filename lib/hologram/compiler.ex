@@ -34,6 +34,18 @@ defmodule Hologram.Compiler do
     {module_beam_path_plt, module_beam_path_plt_dump_path}
   end
 
+  @doc """
+  Loads module digest PLT from a dump file if the file exists or creates an empty PLT.
+  """
+  @spec maybe_load_module_digest_plt(opts) :: {PLT.t(), String.t()}
+  def maybe_load_module_digest_plt(opts) do
+    module_digest_plt = PLT.start()
+    module_digest_plt_dump_path = opts[:build_dir] <> "/module_digest.plt"
+    PLT.maybe_load(module_digest_plt, module_digest_plt_dump_path)
+
+    {module_digest_plt, module_digest_plt_dump_path}
+  end
+
   defp rebuild_module_digest_plt_entry(module, module_digest_plt, module_beam_path_plt) do
     module_beam_path =
       case PLT.get(module_beam_path_plt, module) do
