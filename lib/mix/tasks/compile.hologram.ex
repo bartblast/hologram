@@ -18,7 +18,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     root_dir = Reflection.root_dir()
     assets_dir = Path.join([root_dir, "deps", "hologram", "assets"])
     build_dir = Reflection.build_dir()
-    node_modules_path = Path.join([assets_dir, "node_modules"])
+    node_modules_path = Path.join(assets_dir, "node_modules")
 
     opts = [
       assets_dir: assets_dir,
