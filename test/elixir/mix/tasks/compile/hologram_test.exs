@@ -8,8 +8,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
 
-  @root_dir Reflection.root_dir()
   @tmp_dir Path.join(Reflection.tmp_dir(), to_string(__MODULE__))
+
+  @assets_dir Path.join(@tmp_dir, "assets")
+  @build_dir Path.join(@tmp_dir, "build")
+  @root_dir Reflection.root_dir()
 
   defp test_build_artifacts do
     test_module_beam_path_plt()
@@ -20,7 +23,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   defp test_call_graph do
-    call_graph_dump_path = "#{@tmp_dir}/build/call_graph.bin"
+    call_graph_dump_path = Path.join(@build_dir, "call_graph.bin")
     assert File.exists?(call_graph_dump_path)
 
     call_graph = CallGraph.start()
@@ -30,7 +33,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   defp test_ir_plt do
-    ir_plt_dump_path = "#{@tmp_dir}/build/ir.plt"
+    ir_plt_dump_path = Path.join(@build_dir, "ir.plt")
     assert File.exists?(ir_plt_dump_path)
 
     ir_plt = PLT.start()
@@ -39,11 +42,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   defp test_js_deps do
-    assert File.exists?("#{@tmp_dir}/assets/node_modules")
+    assert File.exists?(Path.join(@assets_dir, "node_modules"))
   end
 
   defp test_module_beam_path_plt do
-    module_beam_path_plt_dump_path = "#{@tmp_dir}/build/module_beam_path.plt"
+    module_beam_path_plt_dump_path = Path.join(@build_dir, "module_beam_path.plt")
     assert File.exists?(module_beam_path_plt_dump_path)
 
     module_beam_path_plt = PLT.start()
@@ -52,7 +55,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   defp test_module_digest_plt do
-    module_digest_plt_dump_path = "#{@tmp_dir}/build/module_digest.plt"
+    module_digest_plt_dump_path = Path.join(@build_dir, "module_digest.plt")
     assert File.exists?(module_digest_plt_dump_path)
 
     module_digest_plt = PLT.start()
@@ -62,16 +65,16 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   setup do
     opts = [
-      assets_dir: "#{@tmp_dir}/assets",
-      build_dir: "#{@tmp_dir}/build"
+      assets_dir: @assets_dir,
+      build_dir: @build_dir
     ]
 
     clean_dir(@tmp_dir)
-    File.mkdir!(opts[:assets_dir])
-    File.mkdir!(opts[:build_dir])
+    File.mkdir!(@assets_dir)
+    File.mkdir!(@build_dir)
 
     lib_package_json_path = Path.join([@root_dir, "assets", "package.json"])
-    fixture_package_json_path = Path.join(opts[:assets_dir], "package.json")
+    fixture_package_json_path = Path.join(@assets_dir, "package.json")
     File.cp!(lib_package_json_path, fixture_package_json_path)
 
     [opts: opts]
