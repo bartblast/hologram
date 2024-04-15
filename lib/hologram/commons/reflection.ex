@@ -181,7 +181,8 @@ defmodule Hologram.Commons.Reflection do
   @spec list_all_otp_apps() :: list(atom)
   # sobelow_skip ["DOS.StringToAtom"]
   def list_all_otp_apps do
-    "#{root_dir()}/_build/#{Hologram.env()}/**/ebin/*.app"
+    [root_dir(), "_build", to_string(Hologram.env()), "**", "ebin", "*.app"]
+    |> Path.join()
     |> Path.wildcard()
     |> Stream.map(&Path.basename(&1, ".app"))
     |> Stream.map(&String.to_atom/1)
@@ -376,7 +377,7 @@ defmodule Hologram.Commons.Reflection do
   """
   @spec release_static_dir() :: String.t()
   def release_static_dir do
-    release_priv_dir() <> "/static"
+    Path.join(release_priv_dir(), "static")
   end
 
   @doc """
@@ -402,7 +403,7 @@ defmodule Hologram.Commons.Reflection do
   """
   @spec root_priv_dir() :: String.t()
   def root_priv_dir do
-    root_dir() <> "/priv/hologram"
+    Path.join([root_dir(), "priv", "hologram"])
   end
 
   @doc """
@@ -423,6 +424,6 @@ defmodule Hologram.Commons.Reflection do
   """
   @spec tmp_dir() :: String.t()
   def tmp_dir do
-    root_dir() <> "/tmp"
+    Path.join(root_dir(), "tmp")
   end
 end
