@@ -5,6 +5,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
   alias Hologram.Commons.TaskUtils
+  alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
 
   alias Hologram.Test.Fixtures.Compiler.Module1
@@ -65,6 +66,35 @@ defmodule Hologram.CompilerTest do
              removed_modules: [:module_5, :module_7],
              updated_modules: [:module_3, :module_6]
            }
+  end
+
+  describe "maybe_load_call_graph/1" do
+    setup do
+      subdir = "test_maybe_load_call_graph_1"
+
+      build_dir = Path.join(@tmp_dir, subdir)
+      clean_dir(build_dir)
+
+      dump_path = Path.join([@tmp_dir, subdir, "call_graph.bin"])
+      opts = [build_dir: build_dir]
+
+      [dump_path: dump_path, opts: opts]
+    end
+
+    test "dump file doesn't exist", %{dump_path: dump_path, opts: opts} do
+      assert {call_graph = %CallGraph{}, ^dump_path} = maybe_load_call_graph(opts)
+      assert CallGraph.get_graph(call_graph) == Graph.new()
+    end
+
+    test "dump file exists", %{dump_path: dump_path, opts: opts} do
+      CallGraph.start()
+      |> CallGraph.add_vertex(:a)
+      |> CallGraph.add_vertex(:b)
+      |> CallGraph.dump(dump_path)
+
+      assert {call_graph = %CallGraph{}, ^dump_path} = maybe_load_call_graph(opts)
+      assert CallGraph.get_graph(call_graph) == Graph.add_vertices(Graph.new(), [:a, :b])
+    end
   end
 
   describe "maybe_load_ir_plt/1" do
@@ -232,7 +262,6 @@ end
 #   alias Hologram.Commons.PLT
 #   alias Hologram.Commons.Reflection
 #   alias Hologram.Commons.TaskUtils
-#   alias Hologram.Compiler.CallGraph
 
 #   alias Hologram.Test.Fixtures.Compiler.Module10
 #   alias Hologram.Test.Fixtures.Compiler.Module11

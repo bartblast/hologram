@@ -3,6 +3,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
   alias Hologram.Commons.TaskUtils
+  alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
 
   @type opts :: keyword
@@ -56,6 +57,18 @@ defmodule Hologram.Compiler do
       removed_modules: removed_modules,
       updated_modules: updated_modules
     }
+  end
+
+  @doc """
+  Loads call graph from a dump file if the file exists or creates an empty call graph.
+  """
+  @spec maybe_load_call_graph(opts) :: {CallGraph.t(), String.t()}
+  def maybe_load_call_graph(opts) do
+    call_graph = CallGraph.start()
+    call_graph_dump_path = opts[:build_dir] <> "/call_graph.bin"
+    CallGraph.maybe_load(call_graph, call_graph_dump_path)
+
+    {call_graph, call_graph_dump_path}
   end
 
   @doc """
@@ -155,7 +168,6 @@ end
 #   alias Hologram.Commons.PLT
 #   alias Hologram.Commons.Reflection
 #   alias Hologram.Commons.TaskUtils
-#   alias Hologram.Compiler.CallGraph
 #   alias Hologram.Compiler.Context
 #   alias Hologram.Compiler.Encoder
 
