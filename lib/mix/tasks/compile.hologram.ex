@@ -16,18 +16,19 @@ defmodule Mix.Tasks.Compile.Hologram do
   @impl Mix.Task.Compiler
   def run([]) do
     root_dir = Reflection.root_dir()
-    assets_dir = "#{root_dir}/deps/hologram/assets"
+    assets_dir = Path.join([root_dir, "deps", "hologram", "assets"])
     build_dir = Reflection.build_dir()
+    node_modules_path = Path.join([assets_dir, "node_modules"])
 
     opts = [
       assets_dir: assets_dir,
       build_dir: build_dir,
-      esbuild_bin_path: "#{root_dir}/deps/hologram/assets/node_modules/.bin/esbuild",
-      formatter_bin_path: "#{root_dir}/deps/hologram/assets/node_modules/.bin/prettier",
-      formatter_config_path: "#{root_dir}/deps/hologram/assets/.prettierrc.json",
-      js_dir: "#{assets_dir}/js",
-      static_dir: "#{root_dir}/priv/static/hologram",
-      tmp_dir: "#{build_dir}/tmp"
+      esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+      formatter_bin_path: Path.join([node_modules_path, ".bin", "prettier"]),
+      formatter_config_path: Path.join(assets_dir, ".prettierrc.json"),
+      js_dir: Path.join(assets_dir, "js"),
+      static_dir: Path.join([root_dir, "priv", "static", "hologram"]),
+      tmp_dir: Path.join(build_dir, "tmp")
     ]
 
     run(opts)
