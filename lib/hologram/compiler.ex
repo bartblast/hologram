@@ -60,6 +60,21 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Installs JavaScript deps which are specified in package.json located in :assets_dir.
+  Saves the package.json digest to package_json_digest.bin file in :build_dir.
+  """
+  @spec install_js_deps(opts) :: :ok
+  def install_js_deps(opts) do
+    cmd_opts = [cd: opts[:assets_dir], into: IO.stream(:stdio, :line)]
+    System.cmd("npm", ["install", "--no-progress", "--silent"], cmd_opts)
+
+    package_json_digest = get_package_json_digest(opts[:assets_dir])
+    package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
+
+    File.write!(package_json_digest_path, package_json_digest)
+  end
+
+  @doc """
   Loads call graph from a dump file if the file exists or creates an empty call graph.
   """
   @spec maybe_load_call_graph(opts) :: {CallGraph.t(), String.t()}
@@ -127,6 +142,13 @@ defmodule Hologram.Compiler do
     Task.await_many(rebuild_tasks, :infinity)
 
     ir_plt
+  end
+
+  defp get_package_json_digest(assets_dir) do
+    assets_dir
+    |> Path.join("package.json")
+    |> File.read!()
+    |> CryptographicUtils.digest(:sha256, :binary)
   end
 
   defp mapset_from_plt_keys(plt) do
@@ -325,25 +347,6 @@ end
 #   end
 
 #   @doc """
-#   Installs JavaScript deps specified in package.json in :assets_dir to :build_dir.
-#   Saves the package.json digest to package_json_digest.bin file.
-#   """
-#   @spec install_js_deps(keyword) :: :ok
-#   def install_js_deps(opts) do
-#     cmd_opts = [cd: opts[:assets_dir], into: IO.stream(:stdio, :line)]
-#     System.cmd("npm", ["install", "--silent", "--no-progress"], cmd_opts)
-
-#     package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
-#     package_json_digest = get_package_json_digest(opts[:assets_dir])
-
-#     package_json_digest_path
-#     |> Path.dirname()
-#     |> File.mkdir_p!()
-
-#     File.write!(package_json_digest_path, package_json_digest)
-#   end
-
-#   @doc """
 #   Returns the list of MFAs that are reachable by the given page.
 #   Functions required by the runtime as well as manually ported Elixir functions are excluded.
 #   """
@@ -462,13 +465,6 @@ end
 #       {{:unicode, :characters_to_binary, 1}, {:unicode, :characters_to_binary, 3}},
 #       {{:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1}}
 #     ])
-#   end
-
-#   defp get_package_json_digest(assets_dir) do
-#     assets_dir
-#     |> Path.join("package.json")
-#     |> File.read!()
-#     |> CryptographicUtils.digest(:sha256, :binary)
 #   end
 
 #   defp include_mfas_used_by_asset_path_registry_class(mfas) do

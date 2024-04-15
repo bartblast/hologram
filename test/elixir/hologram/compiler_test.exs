@@ -13,7 +13,29 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module3
   alias Hologram.Test.Fixtures.Compiler.Module4
 
+  @assets_dir Path.join(Reflection.root_dir(), "assets")
   @tmp_dir Reflection.tmp_dir()
+
+  defp setup_js_deps_test(subdir) do
+    tmp_dir = Path.join(@tmp_dir, subdir)
+    assets_dir = Path.join(tmp_dir, "assets")
+    build_dir = Path.join(tmp_dir, "build")
+
+    clean_dir(tmp_dir)
+    File.mkdir!(assets_dir)
+    File.mkdir!(build_dir)
+
+    opts = [
+      assets_dir: assets_dir,
+      build_dir: build_dir
+    ]
+
+    lib_package_json_path = Path.join(@assets_dir, "package.json")
+    fixture_package_json_path = Path.join(assets_dir, "package.json")
+    File.cp!(lib_package_json_path, fixture_package_json_path)
+
+    opts
+  end
 
   setup_all do
     module_beam_path_plt = PLT.start()
@@ -66,6 +88,29 @@ defmodule Hologram.CompilerTest do
              removed_modules: [:module_5, :module_7],
              updated_modules: [:module_3, :module_6]
            }
+  end
+
+  describe "install_js_deps/1" do
+    setup do
+      [opts: setup_js_deps_test("test_install_js_deps_1")]
+    end
+
+    test "installs deps in node_modules dir and creates package-lock.json file", %{opts: opts} do
+      install_js_deps(opts)
+
+      node_modules_dir = Path.join(opts[:assets_dir], "node_modules")
+      assert File.exists?(node_modules_dir)
+
+      package_lock_json_path = Path.join(opts[:assets_dir], "package-lock.json")
+      assert File.exists?(package_lock_json_path)
+    end
+
+    test "creates a file containing the digest of package.json", %{opts: opts} do
+      install_js_deps(opts)
+
+      package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
+      assert File.exists?(package_json_digest_path)
+    end
   end
 
   describe "maybe_load_call_graph/1" do
@@ -271,29 +316,7 @@ end
 #   alias Hologram.Test.Fixtures.Compiler.Module8
 #   alias Hologram.Test.Fixtures.Compiler.Module9
 
-#   @assets_dir Path.join([Reflection.root_dir(), "assets"])
 #   @source_dir Path.join([@assets_dir, "js"])
-#   @tmp_dir Reflection.tmp_dir()
-
-#   defp setup_js_deps_test(test_name) do
-#     tmp_dir = Path.join(@tmp_dir, test_name)
-#     File.rm_rf(tmp_dir)
-#     File.mkdir!(tmp_dir)
-
-#     opts = [
-#       assets_dir: Path.join(tmp_dir, "assets_dir"),
-#       build_dir: Path.join(tmp_dir, "build_dir")
-#     ]
-
-#     File.mkdir!(opts[:assets_dir])
-#     File.mkdir!(opts[:build_dir])
-
-#     source_package_json_path = Path.join(@assets_dir, "package.json")
-#     destination_package_json_path = Path.join(opts[:assets_dir], "package.json")
-#     File.cp!(source_package_json_path, destination_package_json_path)
-
-#     opts
-#   end
 
 #   setup_all do
 #     opts = [
@@ -473,41 +496,6 @@ end
 #              module_2: [{:module_2, :fun_b, 2}, {:module_2, :fun_e, 1}],
 #              module_3: [{:module_3, :fun_c, 3}, {:module_3, :fun_f, 2}]
 #            }
-#   end
-
-#   describe "install_js_deps/1" do
-#     setup do
-#       [opts: setup_js_deps_test("test_install_js_deps_1")]
-#     end
-
-#     test "installs deps in node_modules dir and creates package-lock.json file", %{opts: opts} do
-#       install_js_deps(opts)
-
-#       node_modules_dir = Path.join(opts[:assets_dir], "node_modules")
-#       assert File.exists?(node_modules_dir)
-
-#       package_lock_json_path = Path.join(opts[:assets_dir], "package-lock.json")
-#       assert File.exists?(package_lock_json_path)
-#     end
-
-#     test "creates a file containing the digest of package.json, when the build dir exists", %{
-#       opts: opts
-#     } do
-#       install_js_deps(opts)
-
-#       package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
-#       assert File.exists?(package_json_digest_path)
-#     end
-
-#     test "creates a file containing the digest of package.json, when the build dir doesn't exists",
-#          %{opts: opts} do
-#       File.rmdir!(opts[:build_dir])
-
-#       install_js_deps(opts)
-
-#       package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
-#       assert File.exists?(package_json_digest_path)
-#     end
 #   end
 
 #   describe "maybe_install_js_deps/1" do
