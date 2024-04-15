@@ -98,10 +98,10 @@ defmodule Hologram.Compiler do
   @doc """
   Loads call graph from a dump file if the file exists or creates an empty call graph.
   """
-  @spec maybe_load_call_graph(opts) :: {CallGraph.t(), String.t()}
-  def maybe_load_call_graph(opts) do
+  @spec maybe_load_call_graph(file_path) :: {CallGraph.t(), String.t()}
+  def maybe_load_call_graph(build_dir) do
     call_graph = CallGraph.start()
-    call_graph_dump_path = Path.join(opts[:build_dir], "call_graph.bin")
+    call_graph_dump_path = Path.join(build_dir, "call_graph.bin")
     CallGraph.maybe_load(call_graph, call_graph_dump_path)
 
     {call_graph, call_graph_dump_path}

@@ -59,7 +59,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     {ir_plt, ir_plt_dump_path} = Compiler.maybe_load_ir_plt(opts)
     Compiler.patch_ir_plt(ir_plt, module_digests_diff, module_beam_path_plt)
 
-    {call_graph, call_graph_dump_path} = Compiler.maybe_load_call_graph(opts)
+    {call_graph, call_graph_dump_path} = Compiler.maybe_load_call_graph(build_dir)
     CallGraph.patch(call_graph, ir_plt, module_digests_diff)
 
     Compiler.maybe_install_js_deps(assets_dir, build_dir)

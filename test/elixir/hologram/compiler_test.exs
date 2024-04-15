@@ -174,23 +174,22 @@ defmodule Hologram.CompilerTest do
       clean_dir(build_dir)
 
       dump_path = Path.join([@tmp_dir, subdir, "call_graph.bin"])
-      opts = [build_dir: build_dir]
 
-      [dump_path: dump_path, opts: opts]
+      [build_dir: build_dir, dump_path: dump_path]
     end
 
-    test "dump file doesn't exist", %{dump_path: dump_path, opts: opts} do
-      assert {call_graph = %CallGraph{}, ^dump_path} = maybe_load_call_graph(opts)
+    test "dump file doesn't exist", %{build_dir: build_dir, dump_path: dump_path} do
+      assert {call_graph = %CallGraph{}, ^dump_path} = maybe_load_call_graph(build_dir)
       assert CallGraph.get_graph(call_graph) == Graph.new()
     end
 
-    test "dump file exists", %{dump_path: dump_path, opts: opts} do
+    test "dump file exists", %{build_dir: build_dir, dump_path: dump_path} do
       CallGraph.start()
       |> CallGraph.add_vertex(:a)
       |> CallGraph.add_vertex(:b)
       |> CallGraph.dump(dump_path)
 
-      assert {call_graph = %CallGraph{}, ^dump_path} = maybe_load_call_graph(opts)
+      assert {call_graph = %CallGraph{}, ^dump_path} = maybe_load_call_graph(build_dir)
       assert CallGraph.get_graph(call_graph) == Graph.add_vertices(Graph.new(), [:a, :b])
     end
   end
