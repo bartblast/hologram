@@ -6,7 +6,7 @@
   },
   "devDependencies": {
     "chai": "^5",
-    "eslint": "^8",
+    "eslint": "^9",
     "jsdom": "^24",
     "jsdom-global": "^3",
     "mocha": "^10",
