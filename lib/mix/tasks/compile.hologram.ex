@@ -54,6 +54,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     {call_graph, call_graph_dump_path} = Compiler.maybe_load_call_graph(opts)
     CallGraph.patch(call_graph, ir_plt, module_digests_diff)
 
+    Compiler.maybe_install_js_deps(opts)
+
     CallGraph.dump(call_graph, call_graph_dump_path)
     PLT.dump(ir_plt, ir_plt_dump_path)
     PLT.dump(new_module_digest_plt, module_digest_plt_dump_path)
@@ -70,18 +72,6 @@ end
 #   alias Hologram.Commons.TaskUtils
 
 #   def compile(opts) do
-#     Logger.debug("Hologram: start building call graph")
-
-#     {call_graph, call_graph_dump_path} = build_call_graph(opts, ir_plt, diff)
-
-#     Logger.debug("Hologram: finished building call graph")
-
-#     Logger.debug("Hologram: start installing JS deps")
-
-#     Compiler.maybe_install_js_deps(opts)
-
-#     Logger.debug("Hologram: finished installing JS deps")
-
 #     Logger.debug("Hologram: start runtime & pages bundling")
 
 #     runtime_entry_file_path = create_runtime_entry_file(call_graph, ir_plt, opts)

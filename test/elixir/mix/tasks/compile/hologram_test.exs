@@ -8,6 +8,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
 
+  @root_dir Reflection.root_dir()
   @tmp_dir Path.join(Reflection.tmp_dir(), to_string(__MODULE__))
 
   defp test_build_artifacts do
@@ -15,6 +16,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test_module_digest_plt()
     test_ir_plt()
     test_call_graph()
+    test_js_deps()
   end
 
   defp test_call_graph do
@@ -36,6 +38,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert %IR.ModuleDefinition{} = PLT.get!(ir_plt, Module2)
   end
 
+  defp test_js_deps do
+    assert File.exists?("#{@tmp_dir}/assets/node_modules")
+  end
+
   defp test_module_beam_path_plt do
     module_beam_path_plt_dump_path = "#{@tmp_dir}/build/module_beam_path.plt"
     assert File.exists?(module_beam_path_plt_dump_path)
@@ -55,14 +61,23 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   setup do
-    clean_dir(@tmp_dir)
-  end
-
-  test "run/1" do
     opts = [
+      assets_dir: "#{@tmp_dir}/assets",
       build_dir: "#{@tmp_dir}/build"
     ]
 
+    clean_dir(@tmp_dir)
+    File.mkdir!(opts[:assets_dir])
+    File.mkdir!(opts[:build_dir])
+
+    lib_package_json_path = Path.join([@root_dir, "assets", "package.json"])
+    fixture_package_json_path = Path.join(opts[:assets_dir], "package.json")
+    File.cp!(lib_package_json_path, fixture_package_json_path)
+
+    [opts: opts]
+  end
+
+  test "run/1", %{opts: opts} do
     # Test case 1: when there are no previous build artifacts
     run(opts)
     test_build_artifacts()
