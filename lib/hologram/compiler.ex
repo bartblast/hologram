@@ -110,10 +110,10 @@ defmodule Hologram.Compiler do
   @doc """
   Loads IR PLT from a dump file if the file exists or creates an empty PLT.
   """
-  @spec maybe_load_ir_plt(opts) :: {PLT.t(), String.t()}
-  def maybe_load_ir_plt(opts) do
+  @spec maybe_load_ir_plt(file_path) :: {PLT.t(), String.t()}
+  def maybe_load_ir_plt(build_dir) do
     ir_plt = PLT.start()
-    ir_plt_dump_path = Path.join(opts[:build_dir], "ir.plt")
+    ir_plt_dump_path = Path.join(build_dir, "ir.plt")
     PLT.maybe_load(ir_plt, ir_plt_dump_path)
 
     {ir_plt, ir_plt_dump_path}
