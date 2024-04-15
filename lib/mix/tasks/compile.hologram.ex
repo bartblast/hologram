@@ -46,7 +46,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     File.mkdir_p!(opts[:tmp_dir])
 
     {module_beam_path_plt, module_beam_path_plt_dump_path} =
-      Compiler.maybe_load_module_beam_path_plt(opts)
+      Compiler.maybe_load_module_beam_path_plt(build_dir)
 
     new_module_digest_plt = Compiler.build_module_digest_plt(module_beam_path_plt)
 
