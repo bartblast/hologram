@@ -51,7 +51,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     new_module_digest_plt = Compiler.build_module_digest_plt(module_beam_path_plt)
 
     {old_module_digest_plt, module_digest_plt_dump_path} =
-      Compiler.maybe_load_module_digest_plt(opts)
+      Compiler.maybe_load_module_digest_plt(build_dir)
 
     module_digests_diff =
       Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)

@@ -134,10 +134,10 @@ defmodule Hologram.Compiler do
   @doc """
   Loads module digest PLT from a dump file if the file exists or creates an empty PLT.
   """
-  @spec maybe_load_module_digest_plt(opts) :: {PLT.t(), String.t()}
-  def maybe_load_module_digest_plt(opts) do
+  @spec maybe_load_module_digest_plt(file_path) :: {PLT.t(), String.t()}
+  def maybe_load_module_digest_plt(build_dir) do
     module_digest_plt = PLT.start()
-    module_digest_plt_dump_path = Path.join(opts[:build_dir], "module_digest.plt")
+    module_digest_plt_dump_path = Path.join(build_dir, "module_digest.plt")
     PLT.maybe_load(module_digest_plt, module_digest_plt_dump_path)
 
     {module_digest_plt, module_digest_plt_dump_path}
