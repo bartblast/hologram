@@ -4,6 +4,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
+  alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
 
@@ -13,6 +14,17 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test_module_beam_path_plt()
     test_module_digest_plt()
     test_ir_plt()
+    test_call_graph()
+  end
+
+  defp test_call_graph do
+    call_graph_dump_path = "#{@tmp_dir}/build/call_graph.bin"
+    assert File.exists?(call_graph_dump_path)
+
+    call_graph = CallGraph.start()
+    CallGraph.load(call_graph, call_graph_dump_path)
+
+    assert CallGraph.has_vertex?(call_graph, Module2)
   end
 
   defp test_ir_plt do
@@ -62,7 +74,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
 end
 
 # defmodule Mix.Tasks.Compile.HologramTest do
-#   alias Hologram.Compiler.CallGraph
 #   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Module1
 
 #   @root_dir Reflection.root_dir()
@@ -88,20 +99,7 @@ end
 #     test_runtime_bundle()
 
 #     ...
-#     test_call_graph()
 #     test_page_digest_plt(num_page_bundles)
-#   end
-
-#   defp test_call_graph do
-#     call_graph_dump_path = "#{@tmp_dir}/build/call_graph.bin"
-#     assert File.exists?(call_graph_dump_path)
-
-#     call_graph = CallGraph.start()
-#     CallGraph.load(call_graph, call_graph_dump_path)
-
-#     assert CallGraph.inbound_remote_edges(call_graph, Module2) == [
-#              %Graph.Edge{v1: {Module1, :__layout_module__, 0}, v2: Module2}
-#            ]
 #   end
 
 #   defp test_page_bundles do

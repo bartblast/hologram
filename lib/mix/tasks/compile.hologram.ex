@@ -9,6 +9,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
   alias Hologram.Compiler
+  alias Hologram.Compiler.CallGraph
 
   require Logger
 
@@ -50,6 +51,10 @@ defmodule Mix.Tasks.Compile.Hologram do
     {ir_plt, ir_plt_dump_path} = Compiler.maybe_load_ir_plt(opts)
     Compiler.patch_ir_plt(ir_plt, module_digests_diff, module_beam_path_plt)
 
+    {call_graph, call_graph_dump_path} = Compiler.maybe_load_call_graph(opts)
+    CallGraph.patch(call_graph, ir_plt, module_digests_diff)
+
+    CallGraph.dump(call_graph, call_graph_dump_path)
     PLT.dump(ir_plt, ir_plt_dump_path)
     PLT.dump(new_module_digest_plt, module_digest_plt_dump_path)
     PLT.dump(module_beam_path_plt, module_beam_path_plt_dump_path)
@@ -63,7 +68,6 @@ end
 # # credo:disable-for-this-file Credo.Check.Refactor.ABCSize
 # defmodule Mix.Tasks.Compile.Hologram do
 #   alias Hologram.Commons.TaskUtils
-#   alias Hologram.Compiler.CallGraph
 
 #   def compile(opts) do
 #     Logger.debug("Hologram: start building call graph")
@@ -103,7 +107,6 @@ end
 #     {page_digest_plt, page_digest_plt_dump_path} = build_page_digest_plt(bundle_info, opts)
 
 #     PLT.dump(page_digest_plt, page_digest_plt_dump_path)
-#     CallGraph.dump(call_graph, call_graph_dump_path)
 
 #     :ok
 #   end
@@ -178,15 +181,6 @@ end
 #     opts[:js_source_dir]
 #     |> Compiler.build_runtime_js(call_graph, ir_plt)
 #     |> Compiler.create_entry_file("runtime", opts[:tmp_dir])
-#   end
-
-#   defp build_call_graph(opts, ir_plt, diff) do
-#     call_graph = CallGraph.start()
-#     call_graph_dump_path = opts[:build_dir] <> "/call_graph.bin"
-#     CallGraph.maybe_load(call_graph, call_graph_dump_path)
-#     CallGraph.patch(call_graph, ir_plt, diff)
-
-#     {call_graph, call_graph_dump_path}
 #   end
 
 #   defp maybe_load_module_beam_path_plt(opts) do
