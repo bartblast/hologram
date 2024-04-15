@@ -35,7 +35,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert CallGraph.has_vertex?(call_graph, Module2)
   end
 
-  defp test_dirs() do
+  defp test_dirs do
     assert File.exists?(@build_dir)
     assert File.exists?(@static_dir)
     assert File.exists?(@tmp_dir)
