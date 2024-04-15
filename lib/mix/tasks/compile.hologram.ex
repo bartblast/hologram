@@ -38,6 +38,10 @@ defmodule Mix.Tasks.Compile.Hologram do
   def run(opts) do
     Logger.info("Hologram: compiler started")
 
+    File.mkdir_p!(opts[:build_dir])
+    File.mkdir_p!(opts[:static_dir])
+    File.mkdir_p!(opts[:tmp_dir])
+
     {module_beam_path_plt, module_beam_path_plt_dump_path} =
       Compiler.maybe_load_module_beam_path_plt(opts)
 

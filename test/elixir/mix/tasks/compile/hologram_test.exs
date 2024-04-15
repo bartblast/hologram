@@ -8,13 +8,16 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
 
-  @tmp_dir Path.join(Reflection.tmp_dir(), to_string(__MODULE__))
+  @test_dir Path.join(Reflection.tmp_dir(), to_string(__MODULE__))
 
-  @assets_dir Path.join(@tmp_dir, "assets")
-  @build_dir Path.join(@tmp_dir, "build")
+  @assets_dir Path.join(@test_dir, "assets")
+  @build_dir Path.join(@test_dir, "build")
   @root_dir Reflection.root_dir()
+  @static_dir Path.join(@test_dir, "static")
+  @tmp_dir Path.join(@test_dir, "tmp")
 
   defp test_build_artifacts do
+    test_dirs()
     test_module_beam_path_plt()
     test_module_digest_plt()
     test_ir_plt()
@@ -30,6 +33,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
     CallGraph.load(call_graph, call_graph_dump_path)
 
     assert CallGraph.has_vertex?(call_graph, Module2)
+  end
+
+  defp test_dirs() do
+    assert File.exists?(@build_dir)
+    assert File.exists?(@static_dir)
+    assert File.exists?(@tmp_dir)
   end
 
   defp test_ir_plt do
@@ -66,18 +75,19 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   setup do
-    opts = [
-      assets_dir: @assets_dir,
-      build_dir: @build_dir
-    ]
-
-    clean_dir(@tmp_dir)
+    clean_dir(@test_dir)
     File.mkdir!(@assets_dir)
-    File.mkdir!(@build_dir)
 
     lib_package_json_path = Path.join([@root_dir, "assets", "package.json"])
     fixture_package_json_path = Path.join(@assets_dir, "package.json")
     File.cp!(lib_package_json_path, fixture_package_json_path)
+
+    opts = [
+      assets_dir: @assets_dir,
+      build_dir: @build_dir,
+      static_dir: @static_dir,
+      tmp_dir: @tmp_dir
+    ]
 
     [opts: opts]
   end
@@ -105,8 +115,8 @@ end
 #       js_formatter_bin_path: "#{@root_dir}/assets/node_modules/.bin/prettier",
 #       js_formatter_config_path: "#{@root_dir}/assets/.prettierrc.json",
 #       js_source_dir: "#{@root_dir}/assets/js",
-#       static_dir: "#{@tmp_dir}/bundle/hologram",
-#       tmp_dir: "#{@tmp_dir}/tmp"
+#       static_dir: "#{@test_dir}/bundle/hologram",
+#       tmp_dir: "#{@test_dir}/tmp"
 #     ]
 
 #     File.mkdir!(opts[:build_dir])
@@ -124,14 +134,14 @@ end
 
 #   defp test_page_bundles do
 #     num_page_bundles =
-#       "#{@tmp_dir}/bundle/hologram/page-????????????????????????????????.js"
+#       "#{@test_dir}/bundle/hologram/page-????????????????????????????????.js"
 #       |> Path.wildcard()
 #       |> Enum.count()
 
 #     assert num_page_bundles > 1
 
 #     num_page_source_maps =
-#       "#{@tmp_dir}/bundle/hologram/page-????????????????????????????????.js.map"
+#       "#{@test_dir}/bundle/hologram/page-????????????????????????????????.js.map"
 #       |> Path.wildcard()
 #       |> Enum.count()
 
@@ -142,7 +152,7 @@ end
 
 #   defp test_page_digest_plt(expected_num_page_bundles) do
 #     page_digest_dump_path =
-#       Path.join([@tmp_dir, "build", Reflection.page_digest_plt_dump_file_name()])
+#       Path.join([@test_dir, "build", Reflection.page_digest_plt_dump_file_name()])
 
 #     assert File.exists?(page_digest_dump_path)
 
@@ -162,14 +172,14 @@ end
 
 #   defp test_runtime_bundle do
 #     num_runtime_bundles =
-#       "#{@tmp_dir}/bundle/hologram/runtime-????????????????????????????????.js"
+#       "#{@test_dir}/bundle/hologram/runtime-????????????????????????????????.js"
 #       |> Path.wildcard()
 #       |> Enum.count()
 
 #     assert num_runtime_bundles == 1
 
 #     num_runtime_source_maps =
-#       "#{@tmp_dir}/bundle/hologram/runtime-????????????????????????????????.js.map"
+#       "#{@test_dir}/bundle/hologram/runtime-????????????????????????????????.js.map"
 #       |> Path.wildcard()
 #       |> Enum.count()
 
