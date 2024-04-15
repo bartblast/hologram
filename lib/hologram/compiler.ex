@@ -100,7 +100,7 @@ defmodule Hologram.Compiler do
   @spec maybe_load_call_graph(opts) :: {CallGraph.t(), String.t()}
   def maybe_load_call_graph(opts) do
     call_graph = CallGraph.start()
-    call_graph_dump_path = opts[:build_dir] <> "/call_graph.bin"
+    call_graph_dump_path = Path.join(opts[:build_dir], "call_graph.bin")
     CallGraph.maybe_load(call_graph, call_graph_dump_path)
 
     {call_graph, call_graph_dump_path}
@@ -112,7 +112,7 @@ defmodule Hologram.Compiler do
   @spec maybe_load_ir_plt(opts) :: {PLT.t(), String.t()}
   def maybe_load_ir_plt(opts) do
     ir_plt = PLT.start()
-    ir_plt_dump_path = opts[:build_dir] <> "/ir.plt"
+    ir_plt_dump_path = Path.join(opts[:build_dir], "ir.plt")
     PLT.maybe_load(ir_plt, ir_plt_dump_path)
 
     {ir_plt, ir_plt_dump_path}
@@ -124,7 +124,7 @@ defmodule Hologram.Compiler do
   @spec maybe_load_module_beam_path_plt(opts) :: {PLT.t(), String.t()}
   def maybe_load_module_beam_path_plt(opts) do
     module_beam_path_plt = PLT.start()
-    module_beam_path_plt_dump_path = opts[:build_dir] <> "/module_beam_path.plt"
+    module_beam_path_plt_dump_path = Path.join(opts[:build_dir], "module_beam_path.plt")
     PLT.maybe_load(module_beam_path_plt, module_beam_path_plt_dump_path)
 
     {module_beam_path_plt, module_beam_path_plt_dump_path}
@@ -136,7 +136,7 @@ defmodule Hologram.Compiler do
   @spec maybe_load_module_digest_plt(opts) :: {PLT.t(), String.t()}
   def maybe_load_module_digest_plt(opts) do
     module_digest_plt = PLT.start()
-    module_digest_plt_dump_path = opts[:build_dir] <> "/module_digest.plt"
+    module_digest_plt_dump_path = Path.join(opts[:build_dir], "module_digest.plt")
     PLT.maybe_load(module_digest_plt, module_digest_plt_dump_path)
 
     {module_digest_plt, module_digest_plt_dump_path}
