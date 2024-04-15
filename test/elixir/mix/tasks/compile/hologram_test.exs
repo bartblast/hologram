@@ -4,6 +4,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
+  alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
 
   @tmp_dir Path.join(Reflection.tmp_dir(), to_string(__MODULE__))
@@ -11,6 +12,16 @@ defmodule Mix.Tasks.Compile.HologramTest do
   defp test_build_artifacts do
     test_module_beam_path_plt()
     test_module_digest_plt()
+    test_ir_plt()
+  end
+
+  defp test_ir_plt do
+    ir_plt_dump_path = "#{@tmp_dir}/build/ir.plt"
+    assert File.exists?(ir_plt_dump_path)
+
+    ir_plt = PLT.start()
+    PLT.load(ir_plt, ir_plt_dump_path)
+    assert %IR.ModuleDefinition{} = PLT.get!(ir_plt, Module2)
   end
 
   defp test_module_beam_path_plt do
@@ -52,7 +63,6 @@ end
 
 # defmodule Mix.Tasks.Compile.HologramTest do
 #   alias Hologram.Compiler.CallGraph
-#   alias Hologram.Compiler.IR
 #   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Module1
 
 #   @root_dir Reflection.root_dir()
@@ -78,7 +88,6 @@ end
 #     test_runtime_bundle()
 
 #     ...
-#     test_ir_plt()
 #     test_call_graph()
 #     test_page_digest_plt(num_page_bundles)
 #   end
@@ -93,15 +102,6 @@ end
 #     assert CallGraph.inbound_remote_edges(call_graph, Module2) == [
 #              %Graph.Edge{v1: {Module1, :__layout_module__, 0}, v2: Module2}
 #            ]
-#   end
-
-#   defp test_ir_plt do
-#     ir_plt_dump_path = "#{@tmp_dir}/build/ir.plt"
-#     assert File.exists?(ir_plt_dump_path)
-
-#     ir_plt = PLT.start()
-#     PLT.load(ir_plt, ir_plt_dump_path)
-#     assert %IR.ModuleDefinition{} = PLT.get!(ir_plt, Module2)
 #   end
 
 #   defp test_page_bundles do
