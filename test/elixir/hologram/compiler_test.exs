@@ -113,6 +113,55 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "maybe_install_js_deps/1" do
+    setup do
+      [opts: setup_js_deps_test("test_maybe_install_js_deps_1")]
+    end
+
+    test "package_json_digest.bin file doesn't exist", %{opts: opts} do
+      install_js_deps(opts)
+
+      package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
+      File.rm!(package_json_digest_path)
+
+      assert maybe_install_js_deps(opts) == :ok
+      assert File.exists?(package_json_digest_path)
+    end
+
+    test "package-lock.json file doesn't exist", %{opts: opts} do
+      install_js_deps(opts)
+
+      package_lock_json_path = Path.join(opts[:assets_dir], "package-lock.json")
+      File.rm!(package_lock_json_path)
+
+      assert maybe_install_js_deps(opts) == :ok
+      assert File.exists?(package_lock_json_path)
+    end
+
+    test "package.json file changed", %{opts: opts} do
+      install_js_deps(opts)
+
+      package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
+      package_json_digest = File.read!(package_json_digest_path)
+
+      package_json_path = Path.join(opts[:assets_dir], "package.json")
+      File.write!(package_json_path, "{}")
+
+      assert maybe_install_js_deps(opts) == :ok
+      assert File.read!(package_json_digest_path) != package_json_digest
+    end
+
+    test "install is not needed", %{opts: opts} do
+      install_js_deps(opts)
+
+      package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
+      package_json_digest_mtime = File.stat!(package_json_digest_path).mtime
+
+      assert maybe_install_js_deps(opts) == nil
+      assert File.stat!(package_json_digest_path).mtime == package_json_digest_mtime
+    end
+  end
+
   describe "maybe_load_call_graph/1" do
     setup do
       subdir = "test_maybe_load_call_graph_1"
@@ -496,55 +545,6 @@ end
 #              module_2: [{:module_2, :fun_b, 2}, {:module_2, :fun_e, 1}],
 #              module_3: [{:module_3, :fun_c, 3}, {:module_3, :fun_f, 2}]
 #            }
-#   end
-
-#   describe "maybe_install_js_deps/1" do
-#     setup do
-#       [opts: setup_js_deps_test("test_maybe_install_js_deps_1")]
-#     end
-
-#     test "package_json_digest.bin file doesn't exist", %{opts: opts} do
-#       install_js_deps(opts)
-
-#       package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
-#       File.rm!(package_json_digest_path)
-
-#       assert maybe_install_js_deps(opts) == :ok
-#       assert File.exists?(package_json_digest_path)
-#     end
-
-#     test "package-lock.json file doesn't exist", %{opts: opts} do
-#       install_js_deps(opts)
-
-#       package_lock_json_path = Path.join(opts[:assets_dir], "package-lock.json")
-#       File.rm!(package_lock_json_path)
-
-#       assert maybe_install_js_deps(opts) == :ok
-#       assert File.exists?(package_lock_json_path)
-#     end
-
-#     test "package.json file changed", %{opts: opts} do
-#       install_js_deps(opts)
-
-#       package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
-#       package_json_digest = File.read!(package_json_digest_path)
-
-#       package_json_path = Path.join(opts[:assets_dir], "package.json")
-#       File.write!(package_json_path, "{}")
-
-#       assert maybe_install_js_deps(opts) == :ok
-#       assert File.read!(package_json_digest_path) != package_json_digest
-#     end
-
-#     test "install is not needed", %{opts: opts} do
-#       install_js_deps(opts)
-
-#       package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
-#       package_json_digest = File.read!(package_json_digest_path)
-
-#       assert maybe_install_js_deps(opts) == nil
-#       assert File.read!(package_json_digest_path) == package_json_digest
-#     end
 #   end
 
 #   describe "list_page_mfas/2" do

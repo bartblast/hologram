@@ -75,6 +75,26 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Installs JavaScript deps if package.json has changed or if the deps haven't been installed yet.
+  """
+  @spec maybe_install_js_deps(opts) :: :ok | nil
+  def maybe_install_js_deps(opts) do
+    package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
+    package_json_lock_path = Path.join(opts[:assets_dir], "package-lock.json")
+
+    if !File.exists?(package_json_digest_path) or !File.exists?(package_json_lock_path) do
+      install_js_deps(opts)
+    else
+      old_package_json_digest = File.read!(package_json_digest_path)
+      new_package_json_digest = get_package_json_digest(opts[:assets_dir])
+
+      if new_package_json_digest != old_package_json_digest do
+        install_js_deps(opts)
+      end
+    end
+  end
+
+  @doc """
   Loads call graph from a dump file if the file exists or creates an empty call graph.
   """
   @spec maybe_load_call_graph(opts) :: {CallGraph.t(), String.t()}
@@ -398,26 +418,6 @@ end
 #     |> Enum.reject(fn {module, _function, _arity} -> !Reflection.module?(module) end)
 #     |> Enum.uniq()
 #     |> Enum.sort()
-#   end
-
-#   @doc """
-#   Installs JavaScript deps if package.json has changed or if the deps haven't been installed yet.
-#   """
-#   @spec maybe_install_js_deps(keyword) :: :ok | nil
-#   def maybe_install_js_deps(opts) do
-#     package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
-#     package_json_lock_path = Path.join(opts[:assets_dir], "package-lock.json")
-
-#     if !File.exists?(package_json_digest_path) or !File.exists?(package_json_lock_path) do
-#       install_js_deps(opts)
-#     else
-#       old_package_json_digest = File.read!(package_json_digest_path)
-#       new_package_json_digest = get_package_json_digest(opts[:assets_dir])
-
-#       if new_package_json_digest != old_package_json_digest do
-#         install_js_deps(opts)
-#       end
-#     end
 #   end
 
 #   @doc """
