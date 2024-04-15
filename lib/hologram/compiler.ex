@@ -6,6 +6,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
 
+  @type file_path :: String.t()
   @type opts :: keyword
 
   @doc """
@@ -60,16 +61,16 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Installs JavaScript deps which are specified in package.json located in :assets_dir.
-  Saves the package.json digest to package_json_digest.bin file in :build_dir.
+  Installs JavaScript deps which are specified in package.json located in assets_dir.
+  Saves the package.json digest to package_json_digest.bin file in build_dir.
   """
-  @spec install_js_deps(opts) :: :ok
-  def install_js_deps(opts) do
-    cmd_opts = [cd: opts[:assets_dir], into: IO.stream(:stdio, :line)]
-    System.cmd("npm", ["install", "--no-progress", "--silent"], cmd_opts)
+  @spec install_js_deps(file_path, file_path) :: :ok
+  def install_js_deps(assets_dir, build_dir) do
+    opts = [cd: assets_dir, into: IO.stream(:stdio, :line)]
+    System.cmd("npm", ["install", "--no-progress", "--silent"], opts)
 
-    package_json_digest = get_package_json_digest(opts[:assets_dir])
-    package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
+    package_json_digest = get_package_json_digest(assets_dir)
+    package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
 
     File.write!(package_json_digest_path, package_json_digest)
   end
@@ -77,19 +78,19 @@ defmodule Hologram.Compiler do
   @doc """
   Installs JavaScript deps if package.json has changed or if the deps haven't been installed yet.
   """
-  @spec maybe_install_js_deps(opts) :: :ok | nil
-  def maybe_install_js_deps(opts) do
-    package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
-    package_json_lock_path = Path.join(opts[:assets_dir], "package-lock.json")
+  @spec maybe_install_js_deps(file_path, file_path) :: :ok | nil
+  def maybe_install_js_deps(assets_dir, build_dir) do
+    package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
+    package_json_lock_path = Path.join(assets_dir, "package-lock.json")
 
     if !File.exists?(package_json_digest_path) or !File.exists?(package_json_lock_path) do
-      install_js_deps(opts)
+      install_js_deps(assets_dir, build_dir)
     else
       old_package_json_digest = File.read!(package_json_digest_path)
-      new_package_json_digest = get_package_json_digest(opts[:assets_dir])
+      new_package_json_digest = get_package_json_digest(assets_dir)
 
       if new_package_json_digest != old_package_json_digest do
-        install_js_deps(opts)
+        install_js_deps(assets_dir, build_dir)
       end
     end
   end

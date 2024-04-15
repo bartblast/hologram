@@ -38,7 +38,10 @@ defmodule Mix.Tasks.Compile.Hologram do
   def run(opts) do
     Logger.info("Hologram: compiler started")
 
-    File.mkdir_p!(opts[:build_dir])
+    assets_dir = opts[:assets_dir]
+    build_dir = opts[:build_dir]
+
+    File.mkdir_p!(build_dir)
     File.mkdir_p!(opts[:static_dir])
     File.mkdir_p!(opts[:tmp_dir])
 
@@ -59,7 +62,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     {call_graph, call_graph_dump_path} = Compiler.maybe_load_call_graph(opts)
     CallGraph.patch(call_graph, ir_plt, module_digests_diff)
 
-    Compiler.maybe_install_js_deps(opts)
+    Compiler.maybe_install_js_deps(assets_dir, build_dir)
 
     CallGraph.dump(call_graph, call_graph_dump_path)
     PLT.dump(ir_plt, ir_plt_dump_path)
@@ -77,8 +80,6 @@ end
 #   alias Hologram.Commons.TaskUtils
 
 #   def compile(opts) do
-#     Logger.debug("Hologram: start runtime & pages bundling")
-
 #     runtime_entry_file_path = create_runtime_entry_file(call_graph, ir_plt, opts)
 
 #     page_modules = Reflection.list_pages()
