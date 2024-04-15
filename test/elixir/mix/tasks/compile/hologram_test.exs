@@ -59,7 +59,7 @@ end
 
 #   setup do
 #     opts = [
-#       assets_source_dir: "#{@root_dir}/assets",
+#       assets_dir: "#{@root_dir}/assets",
 #       esbuild_path: "#{@root_dir}/assets/node_modules/.bin/esbuild",
 #       js_formatter_bin_path: "#{@root_dir}/assets/node_modules/.bin/prettier",
 #       js_formatter_config_path: "#{@root_dir}/assets/.prettierrc.json",

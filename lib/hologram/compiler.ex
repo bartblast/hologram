@@ -274,16 +274,16 @@ end
 #   end
 
 #   @doc """
-#   Installs JavaScript deps specified in package.json in :assets_source_dir to :build_dir.
+#   Installs JavaScript deps specified in package.json in :assets_dir to :build_dir.
 #   Saves the package.json digest to package_json_digest.bin file.
 #   """
 #   @spec install_js_deps(keyword) :: :ok
 #   def install_js_deps(opts) do
-#     cmd_opts = [cd: opts[:assets_source_dir], into: IO.stream(:stdio, :line)]
+#     cmd_opts = [cd: opts[:assets_dir], into: IO.stream(:stdio, :line)]
 #     System.cmd("npm", ["install", "--silent", "--no-progress"], cmd_opts)
 
 #     package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
-#     package_json_digest = get_package_json_digest(opts[:assets_source_dir])
+#     package_json_digest = get_package_json_digest(opts[:assets_dir])
 
 #     package_json_digest_path
 #     |> Path.dirname()
@@ -352,13 +352,13 @@ end
 #   @spec maybe_install_js_deps(keyword) :: :ok | nil
 #   def maybe_install_js_deps(opts) do
 #     package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
-#     package_json_lock_path = Path.join(opts[:assets_source_dir], "package-lock.json")
+#     package_json_lock_path = Path.join(opts[:assets_dir], "package-lock.json")
 
 #     if !File.exists?(package_json_digest_path) or !File.exists?(package_json_lock_path) do
 #       install_js_deps(opts)
 #     else
 #       old_package_json_digest = File.read!(package_json_digest_path)
-#       new_package_json_digest = get_package_json_digest(opts[:assets_source_dir])
+#       new_package_json_digest = get_package_json_digest(opts[:assets_dir])
 
 #       if new_package_json_digest != old_package_json_digest do
 #         install_js_deps(opts)
@@ -435,8 +435,8 @@ end
 #     ])
 #   end
 
-#   defp get_package_json_digest(assets_source_dir) do
-#     assets_source_dir
+#   defp get_package_json_digest(assets_dir) do
+#     assets_dir
 #     |> Path.join("package.json")
 #     |> File.read!()
 #     |> CryptographicUtils.digest(:sha256, :binary)

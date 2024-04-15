@@ -149,15 +149,15 @@ end
 #     File.mkdir!(tmp_dir)
 
 #     opts = [
-#       assets_source_dir: Path.join(tmp_dir, "assets_source_dir"),
+#       assets_dir: Path.join(tmp_dir, "assets_dir"),
 #       build_dir: Path.join(tmp_dir, "build_dir")
 #     ]
 
-#     File.mkdir!(opts[:assets_source_dir])
+#     File.mkdir!(opts[:assets_dir])
 #     File.mkdir!(opts[:build_dir])
 
 #     source_package_json_path = Path.join(@assets_dir, "package.json")
-#     destination_package_json_path = Path.join(opts[:assets_source_dir], "package.json")
+#     destination_package_json_path = Path.join(opts[:assets_dir], "package.json")
 #     File.cp!(source_package_json_path, destination_package_json_path)
 
 #     opts
@@ -165,7 +165,7 @@ end
 
 #   setup_all do
 #     opts = [
-#       assets_source_dir: @assets_dir,
+#       assets_dir: @assets_dir,
 #       build_dir: Reflection.build_dir()
 #     ]
 
@@ -351,10 +351,10 @@ end
 #     test "installs deps in node_modules dir and creates package-lock.json file", %{opts: opts} do
 #       install_js_deps(opts)
 
-#       node_modules_dir = Path.join(opts[:assets_source_dir], "node_modules")
+#       node_modules_dir = Path.join(opts[:assets_dir], "node_modules")
 #       assert File.exists?(node_modules_dir)
 
-#       package_lock_json_path = Path.join(opts[:assets_source_dir], "package-lock.json")
+#       package_lock_json_path = Path.join(opts[:assets_dir], "package-lock.json")
 #       assert File.exists?(package_lock_json_path)
 #     end
 
@@ -396,7 +396,7 @@ end
 #     test "package-lock.json file doesn't exist", %{opts: opts} do
 #       install_js_deps(opts)
 
-#       package_lock_json_path = Path.join(opts[:assets_source_dir], "package-lock.json")
+#       package_lock_json_path = Path.join(opts[:assets_dir], "package-lock.json")
 #       File.rm!(package_lock_json_path)
 
 #       assert maybe_install_js_deps(opts) == :ok
@@ -409,7 +409,7 @@ end
 #       package_json_digest_path = Path.join(opts[:build_dir], "package_json_digest.bin")
 #       package_json_digest = File.read!(package_json_digest_path)
 
-#       package_json_path = Path.join(opts[:assets_source_dir], "package.json")
+#       package_json_path = Path.join(opts[:assets_dir], "package.json")
 #       File.write!(package_json_path, "{}")
 
 #       assert maybe_install_js_deps(opts) == :ok
