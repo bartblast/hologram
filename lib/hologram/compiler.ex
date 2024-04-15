@@ -3,6 +3,7 @@ defmodule Hologram.Compiler do
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
   alias Hologram.Commons.TaskUtils
+  alias Hologram.Compiler.IR
 
   @type opts :: keyword
 
@@ -81,11 +82,38 @@ defmodule Hologram.Compiler do
     {module_digest_plt, module_digest_plt_dump_path}
   end
 
+  @doc """
+  Given a diff of changes, updates the IR persistent lookup table (PLT)
+  by deleting entries for modules that have been removed,
+  rebuilding the IR of modules that have been updated,
+  and adding the IR of new modules.
+  """
+  @spec patch_ir_plt(PLT.t(), map, PLT.t()) :: PLT.t()
+  def patch_ir_plt(ir_plt, diff, module_beam_path_plt) do
+    delete_tasks = TaskUtils.async_many(diff.removed_modules, &PLT.delete(ir_plt, &1))
+
+    rebuild_tasks =
+      TaskUtils.async_many(
+        diff.updated_modules ++ diff.added_modules,
+        &rebuild_ir_plt_entry(ir_plt, &1, module_beam_path_plt)
+      )
+
+    Task.await_many(delete_tasks, :infinity)
+    Task.await_many(rebuild_tasks, :infinity)
+
+    ir_plt
+  end
+
   defp mapset_from_plt_keys(plt) do
     plt
     |> PLT.get_all()
     |> Map.keys()
     |> MapSet.new()
+  end
+
+  defp rebuild_ir_plt_entry(ir_plt, module, module_beam_path_plt) do
+    beam_path = PLT.get!(module_beam_path_plt, module)
+    PLT.put(ir_plt, module, IR.for_module(beam_path))
   end
 
   defp rebuild_module_digest_plt_entry(module, module_digest_plt, module_beam_path_plt) do
@@ -118,7 +146,6 @@ end
 #   alias Hologram.Compiler.CallGraph
 #   alias Hologram.Compiler.Context
 #   alias Hologram.Compiler.Encoder
-#   alias Hologram.Compiler.IR
 
 #   @doc """
 #   Builds JavaScript code for the given Hologram page.
@@ -367,28 +394,6 @@ end
 #   end
 
 #   @doc """
-#   Given a diff of changes, updates the IR persistent lookup table (PLT)
-#   by deleting entries for modules that have been removed,
-#   rebuilding the IR of modules that have been updated,
-#   and adding the IR of new modules.
-#   """
-#   @spec patch_ir_plt(PLT.t(), map, PLT.t()) :: PLT.t()
-#   def patch_ir_plt(ir_plt, diff, module_beam_path_plt) do
-#     delete_tasks = TaskUtils.async_many(diff.removed_modules, &PLT.delete(ir_plt, &1))
-
-#     rebuild_tasks =
-#       TaskUtils.async_many(
-#         diff.updated_modules ++ diff.added_modules,
-#         &rebuild_ir_plt_entry(ir_plt, &1, module_beam_path_plt)
-#       )
-
-#     Task.await_many(delete_tasks, :infinity)
-#     Task.await_many(rebuild_tasks, :infinity)
-
-#     ir_plt
-#   end
-
-#   @doc """
 #   Keeps only those IR expressions that are function definitions of the given reachable MFAs.
 #   """
 #   @spec prune_module_def(IR.ModuleDefinition.t(), list(mfa)) :: IR.ModuleDefinition.t()
@@ -510,11 +515,6 @@ end
 
 #   defp filter_erlang_mfas(mfas) do
 #     Enum.filter(mfas, fn {module, _function, _arity} -> !Reflection.alias?(module) end)
-#   end
-
-#   defp rebuild_ir_plt_entry(plt, module, module_beam_path_plt) do
-#     beam_path = PLT.get!(module_beam_path_plt, module)
-#     PLT.put(plt, module, IR.for_module(beam_path))
 #   end
 
 #   defp remove_call_graph_vertices_of_manually_ported_elixir_functions(graph) do

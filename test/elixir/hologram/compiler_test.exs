@@ -5,6 +5,12 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
   alias Hologram.Commons.TaskUtils
+  alias Hologram.Compiler.IR
+
+  alias Hologram.Test.Fixtures.Compiler.Module1
+  alias Hologram.Test.Fixtures.Compiler.Module2
+  alias Hologram.Test.Fixtures.Compiler.Module3
+  alias Hologram.Test.Fixtures.Compiler.Module4
 
   @tmp_dir Reflection.tmp_dir()
 
@@ -118,6 +124,79 @@ defmodule Hologram.CompilerTest do
       assert PLT.get_all(plt) == %{a: 1, b: 2}
     end
   end
+
+  describe "patch_ir_plt/2" do
+    setup %{module_beam_path_plt: module_beam_path_plt} do
+      ir_plt =
+        PLT.start()
+        |> PLT.put(:module_5, :ir_5)
+        |> PLT.put(:module_6, :ir_6)
+        |> PLT.put(Module3, :ir_3)
+        |> PLT.put(:module_7, :ir_7)
+        |> PLT.put(:module_8, :ir_8)
+        |> PLT.put(Module4, :ir_4)
+
+      diff = %{
+        added_modules: [Module1, Module2],
+        removed_modules: [:module_5, :module_7],
+        updated_modules: [Module3, Module4]
+      }
+
+      patch_ir_plt(ir_plt, diff, module_beam_path_plt)
+
+      [ir_plt: ir_plt]
+    end
+
+    test "adds entries of added modules", %{ir_plt: ir_plt} do
+      assert PLT.get(ir_plt, Module1) ==
+               {:ok,
+                %IR.ModuleDefinition{
+                  module: %IR.AtomType{
+                    value: Module1
+                  },
+                  body: %IR.Block{expressions: []}
+                }}
+
+      assert PLT.get(ir_plt, Module2) ==
+               {:ok,
+                %IR.ModuleDefinition{
+                  module: %IR.AtomType{
+                    value: Module2
+                  },
+                  body: %IR.Block{expressions: []}
+                }}
+    end
+
+    test "removes entries of removed modules", %{ir_plt: ir_plt} do
+      assert PLT.get(ir_plt, :module_5) == :error
+      assert PLT.get(ir_plt, :module_7) == :error
+    end
+
+    test "updates entries of updated modules", %{ir_plt: ir_plt} do
+      assert PLT.get(ir_plt, Module3) ==
+               {:ok,
+                %IR.ModuleDefinition{
+                  module: %IR.AtomType{
+                    value: Module3
+                  },
+                  body: %IR.Block{expressions: []}
+                }}
+
+      assert PLT.get(ir_plt, Module4) ==
+               {:ok,
+                %IR.ModuleDefinition{
+                  module: %IR.AtomType{
+                    value: Module4
+                  },
+                  body: %IR.Block{expressions: []}
+                }}
+    end
+
+    test "doesn't change entries of unchanged modules", %{ir_plt: ir_plt} do
+      assert PLT.get(ir_plt, :module_6) == {:ok, :ir_6}
+      assert PLT.get(ir_plt, :module_8) == {:ok, :ir_8}
+    end
+  end
 end
 
 # defmodule Hologram.CompilerTest do
@@ -125,14 +204,9 @@ end
 #   alias Hologram.Commons.Reflection
 #   alias Hologram.Commons.TaskUtils
 #   alias Hologram.Compiler.CallGraph
-#   alias Hologram.Compiler.IR
 
-#   alias Hologram.Test.Fixtures.Compiler.Module1
 #   alias Hologram.Test.Fixtures.Compiler.Module10
 #   alias Hologram.Test.Fixtures.Compiler.Module11
-#   alias Hologram.Test.Fixtures.Compiler.Module2
-#   alias Hologram.Test.Fixtures.Compiler.Module3
-#   alias Hologram.Test.Fixtures.Compiler.Module4
 #   alias Hologram.Test.Fixtures.Compiler.Module5
 #   alias Hologram.Test.Fixtures.Compiler.Module6
 #   alias Hologram.Test.Fixtures.Compiler.Module7
@@ -538,79 +612,6 @@ end
 
 #     test "sorts results", %{mfas: mfas} do
 #       assert hd(mfas) == {Access, :get, 2}
-#     end
-#   end
-
-#   describe "patch_ir_plt/2" do
-#     setup %{module_beam_path_plt: module_beam_path_plt} do
-#       ir_plt =
-#         PLT.start()
-#         |> PLT.put(:module_5, :ir_5)
-#         |> PLT.put(:module_6, :ir_6)
-#         |> PLT.put(Module3, :ir_3)
-#         |> PLT.put(:module_7, :ir_7)
-#         |> PLT.put(:module_8, :ir_8)
-#         |> PLT.put(Module4, :ir_4)
-
-#       diff = %{
-#         added_modules: [Module1, Module2],
-#         removed_modules: [:module_5, :module_7],
-#         updated_modules: [Module3, Module4]
-#       }
-
-#       patch_ir_plt(ir_plt, diff, module_beam_path_plt)
-
-#       [plt: ir_plt]
-#     end
-
-#     test "adds entries of added modules", %{plt: plt} do
-#       assert PLT.get(plt, Module1) ==
-#                {:ok,
-#                 %IR.ModuleDefinition{
-#                   module: %IR.AtomType{
-#                     value: Module1
-#                   },
-#                   body: %IR.Block{expressions: []}
-#                 }}
-
-#       assert PLT.get(plt, Module2) ==
-#                {:ok,
-#                 %IR.ModuleDefinition{
-#                   module: %IR.AtomType{
-#                     value: Module2
-#                   },
-#                   body: %IR.Block{expressions: []}
-#                 }}
-#     end
-
-#     test "removes entries of removed modules", %{plt: plt} do
-#       assert PLT.get(plt, :module_5) == :error
-#       assert PLT.get(plt, :module_7) == :error
-#     end
-
-#     test "updates entries of updated modules", %{plt: plt} do
-#       assert PLT.get(plt, Module3) ==
-#                {:ok,
-#                 %IR.ModuleDefinition{
-#                   module: %IR.AtomType{
-#                     value: Module3
-#                   },
-#                   body: %IR.Block{expressions: []}
-#                 }}
-
-#       assert PLT.get(plt, Module4) ==
-#                {:ok,
-#                 %IR.ModuleDefinition{
-#                   module: %IR.AtomType{
-#                     value: Module4
-#                   },
-#                   body: %IR.Block{expressions: []}
-#                 }}
-#     end
-
-#     test "doesn't change entries of unchanged modules", %{plt: plt} do
-#       assert PLT.get(plt, :module_6) == {:ok, :ir_6}
-#       assert PLT.get(plt, :module_8) == {:ok, :ir_8}
 #     end
 #   end
 
