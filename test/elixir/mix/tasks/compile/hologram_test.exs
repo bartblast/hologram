@@ -42,7 +42,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   defp test_js_deps do
-    assert File.exists?(Path.join(@assets_dir, "node_modules"))
+    assert @assets_dir
+           |> Path.join("node_modules")
+           |> File.exists?()
   end
 
   defp test_module_beam_path_plt do
