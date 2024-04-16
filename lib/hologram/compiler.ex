@@ -31,12 +31,12 @@ defmodule Hologram.Compiler do
   Builds Hologram runtime JavaScript source code.
   """
   @spec build_runtime_js(file_path, CallGraph.t(), PLT.t()) :: String.t()
-  def build_runtime_js(source_dir, call_graph, ir_plt) do
+  def build_runtime_js(js_dir, call_graph, ir_plt) do
     mfas = list_runtime_mfas(call_graph)
 
     erlang_function_defs =
       mfas
-      |> render_erlang_function_defs("#{source_dir}/erlang")
+      |> render_erlang_function_defs("#{js_dir}/erlang")
       |> render_block()
 
     elixir_function_defs =
@@ -47,14 +47,14 @@ defmodule Hologram.Compiler do
     """
     "use strict";
 
-    import Bitstring from "#{source_dir}/bitstring.mjs";
-    import Hologram from "#{source_dir}/hologram.mjs";
-    import HologramBoxedError from "#{source_dir}/errors/boxed_error.mjs";
-    import HologramInterpreterError from "#{source_dir}/errors/interpreter_error.mjs";
-    import Interpreter from "#{source_dir}/interpreter.mjs";
-    import MemoryStorage from "#{source_dir}/memory_storage.mjs";
-    import Type from "#{source_dir}/type.mjs";
-    import Utils from "#{source_dir}/utils.mjs";#{erlang_function_defs}#{elixir_function_defs}
+    import Bitstring from "#{js_dir}/bitstring.mjs";
+    import Hologram from "#{js_dir}/hologram.mjs";
+    import HologramBoxedError from "#{js_dir}/errors/boxed_error.mjs";
+    import HologramInterpreterError from "#{js_dir}/errors/interpreter_error.mjs";
+    import Interpreter from "#{js_dir}/interpreter.mjs";
+    import MemoryStorage from "#{js_dir}/memory_storage.mjs";
+    import Type from "#{js_dir}/type.mjs";
+    import Utils from "#{js_dir}/utils.mjs";#{erlang_function_defs}#{elixir_function_defs}
 
     document.addEventListener("hologram:pageScriptLoaded", () => Hologram.run());
 
@@ -62,6 +62,16 @@ defmodule Hologram.Compiler do
       document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));
     }\
     """
+  end
+
+  @doc """
+  Creates runtime bundle entry file.
+  """
+  @spec create_runtime_entry_file(CallGraph.t(), PLT.t(), opts) :: String.t()
+  def create_runtime_entry_file(call_graph, ir_plt, opts) do
+    opts[:js_dir]
+    |> build_runtime_js(call_graph, ir_plt)
+    |> create_entry_file("runtime", opts[:tmp_dir])
   end
 
   @doc """
@@ -289,7 +299,7 @@ defmodule Hologram.Compiler do
     ])
   end
 
-  def create_entry_file(js, entry_name, dir) do
+  defp create_entry_file(js, entry_name, dir) do
     entry_file_path = Path.join(dir, "#{entry_name}.entry.js")
     File.write!(entry_file_path, js)
 

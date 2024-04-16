@@ -173,12 +173,6 @@ end
 #     |> Task.await_many(:infinity)
 #   end
 
-#   defp create_runtime_entry_file(call_graph, ir_plt, opts) do
-#     opts[:js_source_dir]
-#     |> Compiler.build_runtime_js(call_graph, ir_plt)
-#     |> Compiler.create_entry_file("runtime", opts[:tmp_dir])
-#   end
-
 #   defp maybe_load_module_beam_path_plt(opts) do
 #     module_beam_path_plt = PLT.start()
 #     module_beam_path_plt_dump_path = opts[:build_dir] <> "/module_beam_path.plt"

@@ -103,6 +103,26 @@ defmodule Hologram.CompilerTest do
            )
   end
 
+  test "create_runtime_entry_file/3", %{call_graph: call_graph, ir_plt: ir_plt} do
+    call_graph_clone = CallGraph.clone(call_graph)
+    ir_plt_clone = PLT.clone(ir_plt)
+
+    test_tmp_subdir = "test_create_runtime_entry_file_3"
+
+    opts = [
+      js_dir: @js_dir,
+      tmp_dir: Path.join(@tmp_dir, test_tmp_subdir)
+    ]
+
+    clean_dir(opts[:tmp_dir])
+
+    entry_file_path = create_runtime_entry_file(call_graph_clone, ir_plt_clone, opts)
+
+    assert entry_file_path
+           |> File.read!()
+           |> String.contains?("Interpreter.defineElixirFunction")
+  end
+
   test "diff_module_digest_plts/2" do
     old_plt =
       PLT.start()
