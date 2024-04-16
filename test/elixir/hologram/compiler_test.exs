@@ -12,8 +12,10 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module2
   alias Hologram.Test.Fixtures.Compiler.Module3
   alias Hologram.Test.Fixtures.Compiler.Module4
+  alias Hologram.Test.Fixtures.Compiler.Module8
 
   @assets_dir Path.join(Reflection.root_dir(), "assets")
+  @js_dir Path.join(@assets_dir, "js")
   @tmp_dir Reflection.tmp_dir()
 
   defp setup_js_deps_test(subdir) do
@@ -61,6 +63,38 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  test "build_runtime_js/3" do
+    call_graph = CallGraph.start()
+    ir_plt = PLT.start()
+    modules = Reflection.list_elixir_modules()
+
+    Enum.each(modules, fn module ->
+      ir = IR.for_module(module)
+      PLT.put(ir_plt, module, ir)
+
+      CallGraph.build(call_graph, ir)
+    end)
+
+    js = build_runtime_js(@js_dir, call_graph, ir_plt)
+
+    assert String.contains?(
+             js,
+             ~s/Interpreter.defineElixirFunction("Enum", "into", 2, "public"/
+           )
+
+    assert String.contains?(
+             js,
+             ~s/Interpreter.defineElixirFunction("Enum", "into_protocol", 2, "private"/
+           )
+
+    assert String.contains?(js, ~s/Interpreter.defineErlangFunction("erlang", "error", 1/)
+
+    assert String.contains?(
+             js,
+             ~s/Interpreter.defineNotImplementedErlangFunction("erpc", "call", 4/
+           )
+  end
+
   test "diff_module_digest_plts/2" do
     old_plt =
       PLT.start()
@@ -82,6 +116,23 @@ defmodule Hologram.CompilerTest do
              added_modules: [:module_2, :module_4],
              removed_modules: [:module_5, :module_7],
              updated_modules: [:module_3, :module_6]
+           }
+  end
+
+  test "group_mfas_by_module/1" do
+    mfas = [
+      {:module_1, :fun_a, 1},
+      {:module_2, :fun_b, 2},
+      {:module_3, :fun_c, 3},
+      {:module_1, :fun_d, 3},
+      {:module_2, :fun_e, 1},
+      {:module_3, :fun_f, 2}
+    ]
+
+    assert group_mfas_by_module(mfas) == %{
+             module_1: [{:module_1, :fun_a, 1}, {:module_1, :fun_d, 3}],
+             module_2: [{:module_2, :fun_b, 2}, {:module_2, :fun_e, 1}],
+             module_3: [{:module_3, :fun_c, 3}, {:module_3, :fun_f, 2}]
            }
   end
 
@@ -424,6 +475,74 @@ defmodule Hologram.CompilerTest do
       assert PLT.get(ir_plt, :module_8) == {:ok, :ir_8}
     end
   end
+
+  test "prune_module_def/2" do
+    module_def_ir = IR.for_module(Module8)
+
+    module_def_ir_fixture = %{
+      module_def_ir
+      | body: %IR.Block{
+          expressions: [
+            %IR.IgnoredExpression{type: :public_macro_definition} | module_def_ir.body.expressions
+          ]
+        }
+    }
+
+    reachable_mfas = [
+      {Module8, :fun_2, 2},
+      {Module8, :fun_3, 1}
+    ]
+
+    assert prune_module_def(module_def_ir_fixture, reachable_mfas) == %IR.ModuleDefinition{
+             module: %IR.AtomType{value: Module8},
+             body: %IR.Block{
+               expressions: [
+                 %IR.FunctionDefinition{
+                   name: :fun_2,
+                   arity: 2,
+                   visibility: :public,
+                   clause: %IR.FunctionClause{
+                     params: [
+                       %IR.AtomType{value: :a},
+                       %IR.AtomType{value: :b}
+                     ],
+                     guards: [],
+                     body: %IR.Block{
+                       expressions: [%IR.IntegerType{value: 3}]
+                     }
+                   }
+                 },
+                 %IR.FunctionDefinition{
+                   name: :fun_2,
+                   arity: 2,
+                   visibility: :public,
+                   clause: %IR.FunctionClause{
+                     params: [
+                       %IR.AtomType{value: :b},
+                       %IR.AtomType{value: :c}
+                     ],
+                     guards: [],
+                     body: %IR.Block{
+                       expressions: [%IR.IntegerType{value: 4}]
+                     }
+                   }
+                 },
+                 %IR.FunctionDefinition{
+                   name: :fun_3,
+                   arity: 1,
+                   visibility: :public,
+                   clause: %IR.FunctionClause{
+                     params: [%IR.Variable{name: :x}],
+                     guards: [],
+                     body: %IR.Block{
+                       expressions: [%IR.Variable{name: :x}]
+                     }
+                   }
+                 }
+               ]
+             }
+           }
+  end
 end
 
 # defmodule Hologram.CompilerTest do
@@ -436,10 +555,7 @@ end
 #   alias Hologram.Test.Fixtures.Compiler.Module5
 #   alias Hologram.Test.Fixtures.Compiler.Module6
 #   alias Hologram.Test.Fixtures.Compiler.Module7
-#   alias Hologram.Test.Fixtures.Compiler.Module8
 #   alias Hologram.Test.Fixtures.Compiler.Module9
-
-#   @source_dir Path.join([@assets_dir, "js"])
 
 #   setup_all do
 #     opts = [
@@ -471,7 +587,7 @@ end
 #         |> PLT.put(Module10, module_10_ir)
 #         |> PLT.put(Map, map_ir)
 
-#       result = build_page_js(Module9, call_graph, ir_plt, @source_dir)
+#       result = build_page_js(Module9, call_graph, ir_plt, @js_dir)
 
 #       js_fragment_1 = ~s/window.__hologramPageReachableFunctionDefs__/
 #       js_fragment_2 = ~s/Interpreter.defineElixirFunction/
@@ -496,7 +612,7 @@ end
 #         |> PLT.put(Module6, module_6_ir)
 #         |> PLT.put(Module11, module_11_ir)
 
-#       result = build_page_js(Module11, call_graph, ir_plt, @source_dir)
+#       result = build_page_js(Module11, call_graph, ir_plt, @js_dir)
 
 #       js_fragment_1 = ~s/window.__hologramPageReachableFunctionDefs__/
 #       js_fragment_2 = ~s/Interpreter.defineElixirFunction/
@@ -506,37 +622,6 @@ end
 #       assert String.contains?(result, js_fragment_2)
 #       refute String.contains?(result, js_fragment_3)
 #     end
-#   end
-
-#   test "build_runtime_js/3" do
-#     call_graph = CallGraph.start()
-#     ir_plt = PLT.start()
-#     modules = Reflection.list_elixir_modules()
-
-#     Enum.each(modules, fn module ->
-#       ir = IR.for_module(module)
-#       CallGraph.build(call_graph, ir)
-#       PLT.put(ir_plt, module, ir)
-#     end)
-
-#     js = build_runtime_js(@source_dir, call_graph, ir_plt)
-
-#     assert String.contains?(
-#              js,
-#              ~s/Interpreter.defineElixirFunction("Enum", "into", 2, "public"/
-#            )
-
-#     assert String.contains?(
-#              js,
-#              ~s/Interpreter.defineElixirFunction("Enum", "into_protocol", 2, "private"/
-#            )
-
-#     assert String.contains?(js, ~s/Interpreter.defineErlangFunction("erlang", "error", 1/)
-
-#     assert String.contains?(
-#              js,
-#              ~s/Interpreter.defineNotImplementedErlangFunction("erpc", "call", 4/
-#            )
 #   end
 
 #   describe "bundle/4" do
@@ -604,23 +689,6 @@ end
 #     end
 #   end
 
-#   test "group_mfas_by_module/1" do
-#     mfas = [
-#       {:module_1, :fun_a, 1},
-#       {:module_2, :fun_b, 2},
-#       {:module_3, :fun_c, 3},
-#       {:module_1, :fun_d, 3},
-#       {:module_2, :fun_e, 1},
-#       {:module_3, :fun_f, 2}
-#     ]
-
-#     assert group_mfas_by_module(mfas) == %{
-#              module_1: [{:module_1, :fun_a, 1}, {:module_1, :fun_d, 3}],
-#              module_2: [{:module_2, :fun_b, 2}, {:module_2, :fun_e, 1}],
-#              module_3: [{:module_3, :fun_c, 3}, {:module_3, :fun_f, 2}]
-#            }
-#   end
-
 #   describe "list_page_mfas/2" do
 #     setup do
 #       module_5_ir = IR.for_module(Module5)
@@ -659,73 +727,5 @@ end
 #                {Module7, :my_fun_7a, 2}
 #              ]
 #     end
-#   end
-
-#   test "prune_module_def/2" do
-#     module_def_ir = IR.for_module(Module8)
-
-#     module_def_ir_fixture = %{
-#       module_def_ir
-#       | body: %IR.Block{
-#           expressions: [
-#             %IR.IgnoredExpression{type: :public_macro_definition} | module_def_ir.body.expressions
-#           ]
-#         }
-#     }
-
-#     reachable_mfas = [
-#       {Module8, :fun_2, 2},
-#       {Module8, :fun_3, 1}
-#     ]
-
-#     assert prune_module_def(module_def_ir_fixture, reachable_mfas) == %IR.ModuleDefinition{
-#              module: %IR.AtomType{value: Module8},
-#              body: %IR.Block{
-#                expressions: [
-#                  %IR.FunctionDefinition{
-#                    name: :fun_2,
-#                    arity: 2,
-#                    visibility: :public,
-#                    clause: %IR.FunctionClause{
-#                      params: [
-#                        %IR.AtomType{value: :a},
-#                        %IR.AtomType{value: :b}
-#                      ],
-#                      guards: [],
-#                      body: %IR.Block{
-#                        expressions: [%IR.IntegerType{value: 3}]
-#                      }
-#                    }
-#                  },
-#                  %IR.FunctionDefinition{
-#                    name: :fun_2,
-#                    arity: 2,
-#                    visibility: :public,
-#                    clause: %IR.FunctionClause{
-#                      params: [
-#                        %IR.AtomType{value: :b},
-#                        %IR.AtomType{value: :c}
-#                      ],
-#                      guards: [],
-#                      body: %IR.Block{
-#                        expressions: [%IR.IntegerType{value: 4}]
-#                      }
-#                    }
-#                  },
-#                  %IR.FunctionDefinition{
-#                    name: :fun_3,
-#                    arity: 1,
-#                    visibility: :public,
-#                    clause: %IR.FunctionClause{
-#                      params: [%IR.Variable{name: :x}],
-#                      guards: [],
-#                      body: %IR.Block{
-#                        expressions: [%IR.Variable{name: :x}]
-#                      }
-#                    }
-#                  }
-#                ]
-#              }
-#            }
 #   end
 # end

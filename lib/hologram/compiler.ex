@@ -4,6 +4,8 @@ defmodule Hologram.Compiler do
   alias Hologram.Commons.Reflection
   alias Hologram.Commons.TaskUtils
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.Context
+  alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
 
   @type file_path :: String.t()
@@ -23,6 +25,43 @@ defmodule Hologram.Compiler do
     |> Task.await_many(:infinity)
 
     module_digest_plt
+  end
+
+  @doc """
+  Builds Hologram runtime JavaScript source code.
+  """
+  @spec build_runtime_js(file_path, CallGraph.t(), PLT.t()) :: String.t()
+  def build_runtime_js(source_dir, call_graph, ir_plt) do
+    mfas = list_runtime_mfas(call_graph)
+
+    erlang_function_defs =
+      mfas
+      |> render_erlang_function_defs("#{source_dir}/erlang")
+      |> render_block()
+
+    elixir_function_defs =
+      mfas
+      |> render_elixir_function_defs(ir_plt)
+      |> render_block()
+
+    """
+    "use strict";
+
+    import Bitstring from "#{source_dir}/bitstring.mjs";
+    import Hologram from "#{source_dir}/hologram.mjs";
+    import HologramBoxedError from "#{source_dir}/errors/boxed_error.mjs";
+    import HologramInterpreterError from "#{source_dir}/errors/interpreter_error.mjs";
+    import Interpreter from "#{source_dir}/interpreter.mjs";
+    import MemoryStorage from "#{source_dir}/memory_storage.mjs";
+    import Type from "#{source_dir}/type.mjs";
+    import Utils from "#{source_dir}/utils.mjs";#{erlang_function_defs}#{elixir_function_defs}
+
+    document.addEventListener("hologram:pageScriptLoaded", () => Hologram.run());
+
+    if (window.__hologramPageScriptLoaded__) {
+      document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));
+    }\
+    """
   end
 
   @doc """
@@ -58,6 +97,14 @@ defmodule Hologram.Compiler do
       removed_modules: removed_modules,
       updated_modules: updated_modules
     }
+  end
+
+  @doc """
+  Groups the given MFAs by module.
+  """
+  @spec group_mfas_by_module(list(mfa)) :: %{module => mfa}
+  def group_mfas_by_module(mfas) do
+    Enum.group_by(mfas, fn {module, _function, _arity} -> module end)
   end
 
   @doc """
@@ -173,18 +220,19 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Given a diff of changes, updates the IR persistent lookup table (PLT)
+  Given a module digests diff of changes, updates the IR persistent lookup table (PLT)
   by deleting entries for modules that have been removed,
   rebuilding the IR of modules that have been updated,
   and adding the IR of new modules.
   """
   @spec patch_ir_plt(PLT.t(), map, PLT.t()) :: PLT.t()
-  def patch_ir_plt(ir_plt, diff, module_beam_path_plt) do
-    delete_tasks = TaskUtils.async_many(diff.removed_modules, &PLT.delete(ir_plt, &1))
+  def patch_ir_plt(ir_plt, module_digests_diff, module_beam_path_plt) do
+    delete_tasks =
+      TaskUtils.async_many(module_digests_diff.removed_modules, &PLT.delete(ir_plt, &1))
 
     rebuild_tasks =
       TaskUtils.async_many(
-        diff.updated_modules ++ diff.added_modules,
+        module_digests_diff.updated_modules ++ module_digests_diff.added_modules,
         &rebuild_ir_plt_entry(ir_plt, &1, module_beam_path_plt)
       )
 
@@ -192,6 +240,33 @@ defmodule Hologram.Compiler do
     Task.await_many(rebuild_tasks, :infinity)
 
     ir_plt
+  end
+
+  @doc """
+  Keeps only those IR expressions that are function definitions of the given reachable MFAs.
+  """
+  @spec prune_module_def(IR.ModuleDefinition.t(), list(mfa)) :: IR.ModuleDefinition.t()
+  def prune_module_def(module_def_ir, reachable_mfas) do
+    module = module_def_ir.module.value
+
+    module_reachable_mfas =
+      reachable_mfas
+      |> Enum.filter(fn {reachable_module, _function, _arity} -> reachable_module == module end)
+      |> MapSet.new()
+
+    function_defs =
+      Enum.filter(module_def_ir.body.expressions, fn
+        %IR.FunctionDefinition{name: function, arity: arity} ->
+          MapSet.member?(module_reachable_mfas, {module, function, arity})
+
+        _fallback ->
+          false
+      end)
+
+    %IR.ModuleDefinition{
+      module: module_def_ir.module,
+      body: %IR.Block{expressions: function_defs}
+    }
   end
 
   # Add call graph edges for Erlang functions depending on other Erlang functions.
@@ -212,6 +287,14 @@ defmodule Hologram.Compiler do
       {{:unicode, :characters_to_binary, 1}, {:unicode, :characters_to_binary, 3}},
       {{:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1}}
     ])
+  end
+
+  defp filter_elixir_mfas(mfas) do
+    Enum.filter(mfas, fn {module, _function, _arity} -> Reflection.alias?(module) end)
+  end
+
+  defp filter_erlang_mfas(mfas) do
+    Enum.filter(mfas, fn {module, _function, _arity} -> !Reflection.alias?(module) end)
   end
 
   defp get_package_json_digest(assets_dir) do
@@ -324,6 +407,37 @@ defmodule Hologram.Compiler do
       {Kernel, :inspect, 2}
     ])
   end
+
+  defp render_block(str) do
+    str = String.trim(str)
+
+    if str != "" do
+      "\n\n" <> str
+    else
+      ""
+    end
+  end
+
+  defp render_elixir_function_defs(mfas, ir_plt) do
+    mfas
+    |> filter_elixir_mfas()
+    |> group_mfas_by_module()
+    |> Enum.sort()
+    |> Enum.map_join("\n\n", fn {module, module_mfas} ->
+      ir_plt
+      |> PLT.get!(module)
+      |> prune_module_def(module_mfas)
+      |> Encoder.encode_ir(%Context{module: module})
+    end)
+  end
+
+  defp render_erlang_function_defs(mfas, erlang_source_dir) do
+    mfas
+    |> filter_erlang_mfas()
+    |> Enum.map_join("\n\n", fn {module, function, arity} ->
+      Encoder.encode_erlang_function(module, function, arity, erlang_source_dir)
+    end)
+  end
 end
 
 # defmodule Hologram.Compiler do
@@ -331,8 +445,6 @@ end
 #   alias Hologram.Commons.PLT
 #   alias Hologram.Commons.Reflection
 #   alias Hologram.Commons.TaskUtils
-#   alias Hologram.Compiler.Context
-#   alias Hologram.Compiler.Encoder
 
 #   @doc """
 #   Builds JavaScript code for the given Hologram page.
@@ -369,43 +481,6 @@ end
 
 #     window.__hologramPageScriptLoaded__ = true;
 #     document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));\
-#     """
-#   end
-
-#   @doc """
-#   Builds Hologram runtime JavaScript source code.
-#   """
-#   @spec build_runtime_js(String.t(), CallGraph.t(), PLT.t()) :: String.t()
-#   def build_runtime_js(source_dir, call_graph, ir_plt) do
-#     mfas = list_runtime_mfas(call_graph)
-
-#     erlang_function_defs =
-#       mfas
-#       |> render_erlang_function_defs("#{source_dir}/erlang")
-#       |> render_block()
-
-#     elixir_function_defs =
-#       mfas
-#       |> render_elixir_function_defs(ir_plt)
-#       |> render_block()
-
-#     """
-#     "use strict";
-
-#     import Bitstring from "#{source_dir}/bitstring.mjs";
-#     import Hologram from "#{source_dir}/hologram.mjs";
-#     import HologramBoxedError from "#{source_dir}/errors/boxed_error.mjs";
-#     import HologramInterpreterError from "#{source_dir}/errors/interpreter_error.mjs";
-#     import Interpreter from "#{source_dir}/interpreter.mjs";
-#     import MemoryStorage from "#{source_dir}/memory_storage.mjs";
-#     import Type from "#{source_dir}/type.mjs";
-#     import Utils from "#{source_dir}/utils.mjs";#{erlang_function_defs}#{elixir_function_defs}
-
-#     document.addEventListener("hologram:pageScriptLoaded", () => Hologram.run());
-
-#     if (window.__hologramPageScriptLoaded__) {
-#       document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));
-#     }\
 #     """
 #   end
 
@@ -480,14 +555,6 @@ end
 #   end
 
 #   @doc """
-#   Groups the given MFAs by module.
-#   """
-#   @spec group_mfas_by_module(list(mfa)) :: %{module => mfa}
-#   def group_mfas_by_module(mfas) do
-#     Enum.group_by(mfas, fn {module, _function, _arity} -> module end)
-#   end
-
-#   @doc """
 #   Returns the list of MFAs that are reachable by the given page.
 #   Functions required by the runtime as well as manually ported Elixir functions are excluded.
 #   """
@@ -510,71 +577,5 @@ end
 #     |> CallGraph.reachable(page_module)
 #     |> Enum.filter(&is_tuple/1)
 #     |> Kernel.--(runtime_mfas)
-#   end
-
-#   @doc """
-#   Keeps only those IR expressions that are function definitions of the given reachable MFAs.
-#   """
-#   @spec prune_module_def(IR.ModuleDefinition.t(), list(mfa)) :: IR.ModuleDefinition.t()
-#   def prune_module_def(module_def_ir, reachable_mfas) do
-#     module = module_def_ir.module.value
-
-#     module_reachable_mfas =
-#       reachable_mfas
-#       |> Enum.filter(fn {reachable_module, _function, _arity} -> reachable_module == module end)
-#       |> MapSet.new()
-
-#     function_defs =
-#       Enum.filter(module_def_ir.body.expressions, fn
-#         %IR.FunctionDefinition{name: function, arity: arity} ->
-#           MapSet.member?(module_reachable_mfas, {module, function, arity})
-
-#         _fallback ->
-#           false
-#       end)
-
-#     %IR.ModuleDefinition{
-#       module: module_def_ir.module,
-#       body: %IR.Block{expressions: function_defs}
-#     }
-#   end
-
-#   defp filter_elixir_mfas(mfas) do
-#     Enum.filter(mfas, fn {module, _function, _arity} -> Reflection.alias?(module) end)
-#   end
-
-#   defp filter_erlang_mfas(mfas) do
-#     Enum.filter(mfas, fn {module, _function, _arity} -> !Reflection.alias?(module) end)
-#   end
-
-#   defp render_block(str) do
-#     str = String.trim(str)
-
-#     if str != "" do
-#       "\n\n" <> str
-#     else
-#       ""
-#     end
-#   end
-
-#   defp render_elixir_function_defs(mfas, ir_plt) do
-#     mfas
-#     |> filter_elixir_mfas()
-#     |> group_mfas_by_module()
-#     |> Enum.sort()
-#     |> Enum.map_join("\n\n", fn {module, module_mfas} ->
-#       ir_plt
-#       |> PLT.get!(module)
-#       |> prune_module_def(module_mfas)
-#       |> Encoder.encode_ir(%Context{module: module})
-#     end)
-#   end
-
-#   defp render_erlang_function_defs(mfas, erlang_source_dir) do
-#     mfas
-#     |> filter_erlang_mfas()
-#     |> Enum.map_join("\n\n", fn {module, function, arity} ->
-#       Encoder.encode_erlang_function(module, function, arity, erlang_source_dir)
-#     end)
 #   end
 # end
