@@ -114,6 +114,80 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  describe "list_runtime_mfas/1" do
+    setup %{module_beam_path_plt: module_beam_path_plt} do
+      module_digests_diff = %{
+        added_modules: Reflection.list_std_lib_elixir_modules(),
+        removed_modules: [],
+        updated_modules: []
+      }
+
+      ir_plt = PLT.start()
+      patch_ir_plt(ir_plt, module_digests_diff, module_beam_path_plt)
+
+      call_graph = CallGraph.start()
+      CallGraph.patch(call_graph, ir_plt, module_digests_diff)
+
+      [call_graph: call_graph, mfas: list_runtime_mfas(call_graph)]
+    end
+
+    test "doesn't mutate the call graph given in the argument", %{call_graph: call_graph} do
+      assert CallGraph.has_vertex?(call_graph, {Kernel, :inspect, 1})
+    end
+
+    test "includes MFAs that are reachable by Elixir functions used by the runtime", %{mfas: mfas} do
+      assert {Enum, :into, 2} in mfas
+      assert {Enum, :into_protocol, 2} in mfas
+      assert {:lists, :foldl, 3} in mfas
+
+      assert {Enum, :to_list, 1} in mfas
+      assert {Enum, :reverse, 1} in mfas
+      assert {:lists, :reverse, 1} in mfas
+    end
+
+    test "includes MFAs that are reachable by Erlang functions used by the runtime", %{mfas: mfas} do
+      assert {:erlang, :==, 2} in mfas
+      assert {:erlang, :error, 2} in mfas
+    end
+
+    test "removes duplicates", %{mfas: mfas} do
+      count = Enum.count(mfas, &(&1 == {Access, :get, 2}))
+      assert count == 1
+    end
+
+    test "excludes MFAs with non-existing modules", %{call_graph: call_graph} do
+      call_graph
+      |> CallGraph.add_edge({Enum, :into, 2}, {Calendar.ISO, :dummy_function_1, 1})
+      |> CallGraph.add_edge({Enum, :into, 2}, {NonExistingModuleFixture, :dummy_function_2, 2})
+      |> CallGraph.add_edge({Enum, :into, 2}, {:maps, :dummy_function_3, 3})
+      |> CallGraph.add_edge(
+        {Enum, :into, 2},
+        {:non_existing_module_fixture, :dummy_function_4, 4}
+      )
+
+      mfas = list_runtime_mfas(call_graph)
+
+      assert {Calendar.ISO, :dummy_function_1, 1} in mfas
+      refute {NonExistingModuleFixture, :dummy_function_2, 2} in mfas
+      assert {:maps, :dummy_function_3, 3} in mfas
+      refute {:non_existing_module_fixture, :dummy_function_4, 4} in mfas
+    end
+
+    test "excludes Elixir MFAs which are transpiled manually", %{mfas: mfas} do
+      refute {Kernel, :inspect, 1} in mfas
+    end
+
+    test "excludes MFAs which are reachable only from manually transpiled Elixir MFAs", %{
+      mfas: mfas
+    } do
+      refute {Inspect.Algebra, :group, 1} in mfas
+    end
+
+    test "sorts results", %{mfas: mfas} do
+      assert hd(mfas) == {Access, :get, 2}
+    end
+  end
+
   describe "maybe_install_js_deps/1" do
     setup do
       setup_js_deps_test("test_maybe_install_js_deps_1")
@@ -584,80 +658,6 @@ end
 #                {Module6, :template, 0},
 #                {Module7, :my_fun_7a, 2}
 #              ]
-#     end
-#   end
-
-#   describe "list_runtime_mfas/1" do
-#     setup %{module_beam_path_plt: module_beam_path_plt} do
-#       diff = %{
-#         added_modules: Reflection.list_std_lib_elixir_modules(),
-#         removed_modules: [],
-#         updated_modules: []
-#       }
-
-#       ir_plt = PLT.start()
-#       patch_ir_plt(ir_plt, diff, module_beam_path_plt)
-
-#       call_graph = CallGraph.start()
-#       CallGraph.patch(call_graph, ir_plt, diff)
-
-#       [call_graph: call_graph, mfas: list_runtime_mfas(call_graph)]
-#     end
-
-#     test "doesn't mutate the call graph given in the argument", %{call_graph: call_graph} do
-#       assert CallGraph.has_vertex?(call_graph, {Kernel, :inspect, 1})
-#     end
-
-#     test "includes MFAs that are reachable by Elixir functions used by the runtime", %{mfas: mfas} do
-#       assert {Enum, :into, 2} in mfas
-#       assert {Enum, :into_protocol, 2} in mfas
-#       assert {:lists, :foldl, 3} in mfas
-
-#       assert {Enum, :to_list, 1} in mfas
-#       assert {Enum, :reverse, 1} in mfas
-#       assert {:lists, :reverse, 1} in mfas
-#     end
-
-#     test "includes MFAs that are reachable by Erlang functions used by the runtime", %{mfas: mfas} do
-#       assert {:erlang, :==, 2} in mfas
-#       assert {:erlang, :error, 2} in mfas
-#     end
-
-#     test "removes duplicates", %{mfas: mfas} do
-#       count = Enum.count(mfas, &(&1 == {Access, :get, 2}))
-#       assert count == 1
-#     end
-
-#     test "excludes MFAs with non-existing modules", %{call_graph: call_graph} do
-#       call_graph
-#       |> CallGraph.add_edge({Enum, :into, 2}, {Calendar.ISO, :dummy_function_1, 1})
-#       |> CallGraph.add_edge({Enum, :into, 2}, {NonExistingModuleFixture, :dummy_function_2, 2})
-#       |> CallGraph.add_edge({Enum, :into, 2}, {:maps, :dummy_function_3, 3})
-#       |> CallGraph.add_edge(
-#         {Enum, :into, 2},
-#         {:non_existing_module_fixture, :dummy_function_4, 4}
-#       )
-
-#       mfas = list_runtime_mfas(call_graph)
-
-#       assert {Calendar.ISO, :dummy_function_1, 1} in mfas
-#       refute {NonExistingModuleFixture, :dummy_function_2, 2} in mfas
-#       assert {:maps, :dummy_function_3, 3} in mfas
-#       refute {:non_existing_module_fixture, :dummy_function_4, 4} in mfas
-#     end
-
-#     test "excludes Elixir MFAs which are transpiled manually", %{mfas: mfas} do
-#       refute {Kernel, :inspect, 1} in mfas
-#     end
-
-#     test "excludes MFAs which are reachable only from manually transpiled Elixir MFAs", %{
-#       mfas: mfas
-#     } do
-#       refute {Inspect.Algebra, :group, 1} in mfas
-#     end
-
-#     test "sorts results", %{mfas: mfas} do
-#       assert hd(mfas) == {Access, :get, 2}
 #     end
 #   end
 
