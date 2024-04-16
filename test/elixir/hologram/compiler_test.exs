@@ -392,7 +392,7 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "maybe_load_module_digest_plt/1" do
-    setup %{module_digest_plt: module_digest_plt} do
+    setup do
       subdir = "test_maybe_load_module_digest_plt_1"
 
       build_dir = Path.join(@tmp_dir, subdir)
@@ -400,11 +400,7 @@ defmodule Hologram.CompilerTest do
 
       dump_path = Path.join([@tmp_dir, subdir, "module_digest.plt"])
 
-      [
-        build_dir: build_dir,
-        dump_path: dump_path,
-        module_digest_plt: PLT.clone(module_digest_plt)
-      ]
+      [build_dir: build_dir, dump_path: dump_path]
     end
 
     test "dump file doesn't exist", %{build_dir: build_dir, dump_path: dump_path} do
@@ -412,15 +408,14 @@ defmodule Hologram.CompilerTest do
       assert PLT.get_all(plt) == %{}
     end
 
-    test "dump file exists", %{
-      build_dir: build_dir,
-      dump_path: dump_path,
-      module_digest_plt: module_digest_plt
-    } do
-      PLT.dump(module_digest_plt, dump_path)
+    test "dump file exists", %{build_dir: build_dir, dump_path: dump_path} do
+      PLT.start()
+      |> PLT.put(:a, 1)
+      |> PLT.put(:b, 2)
+      |> PLT.dump(dump_path)
 
       assert {plt = %PLT{}, ^dump_path} = maybe_load_module_digest_plt(build_dir)
-      assert PLT.get_all(plt) == PLT.get_all(module_digest_plt)
+      assert PLT.get_all(plt) == %{a: 1, b: 2}
     end
   end
 
