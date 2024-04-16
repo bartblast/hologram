@@ -15,6 +15,19 @@ defmodule Hologram.Commons.PLT do
   @type t :: %PLT{pid: pid | nil, table_ref: ETS.tid() | nil, table_name: atom | nil}
 
   @doc """
+  Returns a clone of the given PLT.
+  """
+  @spec clone(PLT.t()) :: PLT.t()
+  def clone(plt) do
+    items =
+      plt
+      |> get_all()
+      |> Map.to_list()
+
+    put(start(), items)
+  end
+
+  @doc """
   Deletes a key-value pair from the underlying ETS table.
   """
   @spec delete(PLT.t(), any) :: PLT.t()

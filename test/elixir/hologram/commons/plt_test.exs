@@ -26,6 +26,13 @@ defmodule Hologram.Commons.PLTTest do
     assert ETS.get(table_ref, :my_key_2) == :error
   end
 
+  test "clone/1", %{plt: plt} do
+    assert %PLT{} = plt_clone = clone(plt)
+
+    refute plt_clone == plt
+    assert get_all(plt_clone) == get_all(plt)
+  end
+
   describe "dump/2" do
     test "creates nested path dirs if they don't exist", %{plt: plt} do
       dump_dir = "#{@tmp_dir}/nested_1/nested_2/nested_3"

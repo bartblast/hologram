@@ -676,7 +676,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert %CallGraph{} = call_graph_clone = clone(call_graph)
 
     refute call_graph_clone == call_graph
-    assert get_graph(call_graph) == get_graph(call_graph_clone)
+    assert get_graph(call_graph_clone) == get_graph(call_graph)
   end
 
   describe "dump/2" do
