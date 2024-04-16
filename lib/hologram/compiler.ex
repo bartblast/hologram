@@ -289,6 +289,13 @@ defmodule Hologram.Compiler do
     ])
   end
 
+  def create_entry_file(js, entry_name, dir) do
+    entry_file_path = Path.join(dir, "#{entry_name}.entry.js")
+    File.write!(entry_file_path, js)
+
+    entry_file_path
+  end
+
   defp filter_elixir_mfas(mfas) do
     Enum.filter(mfas, fn {module, _function, _arity} -> Reflection.alias?(module) end)
   end
@@ -543,15 +550,6 @@ end
 #     File.write!(static_bundle_path_with_digest, js_with_replaced_source_map_url)
 
 #     {entry_name, digest}
-#   end
-
-#   def create_entry_file(js, entry_name, tmp_dir) do
-#     File.mkdir_p!(tmp_dir)
-
-#     entry_file_path = Path.join(tmp_dir, "#{entry_name}.entry.js")
-#     File.write!(entry_file_path, js)
-
-#     entry_file_path
 #   end
 
 #   @doc """

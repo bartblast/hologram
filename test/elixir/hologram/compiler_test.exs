@@ -95,6 +95,16 @@ defmodule Hologram.CompilerTest do
            )
   end
 
+  test "create_entry_file/3" do
+    dir = Path.join(@tmp_dir, "test_create_entry_file_3")
+    clean_dir(dir)
+
+    entry_file_path = create_entry_file("my_js", "my_entry", dir)
+
+    assert entry_file_path == Path.join(dir, "my_entry.entry.js")
+    assert File.read!(entry_file_path) == "my_js"
+  end
+
   test "diff_module_digest_plts/2" do
     old_plt =
       PLT.start()
