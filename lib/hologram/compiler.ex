@@ -220,7 +220,7 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Given a module digests diff of changes, updates the IR persistent lookup table (PLT)
+  Given a module digests diff, updates the IR persistent lookup table (PLT)
   by deleting entries for modules that have been removed,
   rebuilding the IR of modules that have been updated,
   and adding the IR of new modules.
