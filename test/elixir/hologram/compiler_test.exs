@@ -35,16 +35,32 @@ defmodule Hologram.CompilerTest do
   end
 
   setup_all do
-    module_beam_path_plt = PLT.start()
+    modules = Reflection.list_elixir_modules()
 
-    Reflection.list_elixir_modules()
-    |> TaskUtils.async_many(&PLT.put(module_beam_path_plt, &1, :code.which(&1)))
+    module_beam_path_plt = PLT.start()
+    ir_plt = PLT.start()
+    call_graph = CallGraph.start()
+
+    modules
+    |> TaskUtils.async_many(fn module ->
+      beam_path = :code.which(module)
+      PLT.put(module_beam_path_plt, module, beam_path)
+
+      ir = IR.for_module(beam_path)
+      PLT.put(ir_plt, module, ir)
+
+      CallGraph.build(call_graph, ir)
+    end)
     |> Task.await_many(:infinity)
 
-    [module_beam_path_plt: module_beam_path_plt]
+    [call_graph: call_graph, ir_plt: ir_plt, module_beam_path_plt: module_beam_path_plt]
   end
 
   describe "build_module_digest_plt/0" do
+    setup %{module_beam_path_plt: module_beam_path_plt} do
+      [module_beam_path_plt: PLT.clone(module_beam_path_plt)]
+    end
+
     test "builds module digest PLT", %{module_beam_path_plt: module_beam_path_plt} do
       assert plt = %PLT{} = build_module_digest_plt(module_beam_path_plt)
 
@@ -56,26 +72,18 @@ defmodule Hologram.CompilerTest do
       module_beam_path_plt: module_beam_path_plt
     } do
       PLT.delete(module_beam_path_plt, Hologram.Compiler)
-
       build_module_digest_plt(module_beam_path_plt)
 
-      assert PLT.get!(module_beam_path_plt, Hologram.Compiler) == :code.which(Hologram.Compiler)
+      assert PLT.get!(module_beam_path_plt, Hologram.Compiler) ==
+               :code.which(Hologram.Compiler)
     end
   end
 
-  test "build_runtime_js/3" do
-    call_graph = CallGraph.start()
-    ir_plt = PLT.start()
-    modules = Reflection.list_elixir_modules()
+  test "build_runtime_js/3", %{call_graph: call_graph, ir_plt: ir_plt} do
+    call_graph_clone = CallGraph.clone(call_graph)
+    ir_plt_clone = PLT.clone(ir_plt)
 
-    Enum.each(modules, fn module ->
-      ir = IR.for_module(module)
-      PLT.put(ir_plt, module, ir)
-
-      CallGraph.build(call_graph, ir)
-    end)
-
-    js = build_runtime_js(@js_dir, call_graph, ir_plt)
+    js = build_runtime_js(@js_dir, call_graph_clone, ir_plt_clone)
 
     assert String.contains?(
              js,
@@ -93,16 +101,6 @@ defmodule Hologram.CompilerTest do
              js,
              ~s/Interpreter.defineNotImplementedErlangFunction("erpc", "call", 4/
            )
-  end
-
-  test "create_entry_file/3" do
-    dir = Path.join(@tmp_dir, "test_create_entry_file_3")
-    clean_dir(dir)
-
-    entry_file_path = create_entry_file("my_js", "my_entry", dir)
-
-    assert entry_file_path == Path.join(dir, "my_entry.entry.js")
-    assert File.read!(entry_file_path) == "my_js"
   end
 
   test "diff_module_digest_plts/2" do
@@ -176,20 +174,9 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "list_runtime_mfas/1" do
-    setup %{module_beam_path_plt: module_beam_path_plt} do
-      module_digests_diff = %{
-        added_modules: Reflection.list_std_lib_elixir_modules(),
-        removed_modules: [],
-        updated_modules: []
-      }
-
-      ir_plt = PLT.start()
-      patch_ir_plt(ir_plt, module_digests_diff, module_beam_path_plt)
-
-      call_graph = CallGraph.start()
-      CallGraph.patch(call_graph, ir_plt, module_digests_diff)
-
-      [call_graph: call_graph, mfas: list_runtime_mfas(call_graph)]
+    setup %{call_graph: call_graph} do
+      call_graph_clone = CallGraph.clone(call_graph)
+      [call_graph: call_graph_clone, mfas: list_runtime_mfas(call_graph_clone)]
     end
 
     test "doesn't mutate the call graph given in the argument", %{call_graph: call_graph} do
@@ -302,7 +289,7 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "maybe_load_call_graph/1" do
-    setup do
+    setup %{call_graph: call_graph} do
       subdir = "test_maybe_load_call_graph_1"
 
       build_dir = Path.join(@tmp_dir, subdir)
@@ -310,7 +297,7 @@ defmodule Hologram.CompilerTest do
 
       dump_path = Path.join([@tmp_dir, subdir, "call_graph.bin"])
 
-      [build_dir: build_dir, dump_path: dump_path]
+      [build_dir: build_dir, call_graph: CallGraph.clone(call_graph), dump_path: dump_path]
     end
 
     test "dump file doesn't exist", %{build_dir: build_dir, dump_path: dump_path} do
@@ -318,19 +305,16 @@ defmodule Hologram.CompilerTest do
       assert CallGraph.get_graph(call_graph) == Graph.new()
     end
 
-    test "dump file exists", %{build_dir: build_dir, dump_path: dump_path} do
-      CallGraph.start()
-      |> CallGraph.add_vertex(:a)
-      |> CallGraph.add_vertex(:b)
-      |> CallGraph.dump(dump_path)
+    test "dump file exists", %{build_dir: build_dir, call_graph: call_graph, dump_path: dump_path} do
+      CallGraph.dump(call_graph, dump_path)
 
-      assert {call_graph = %CallGraph{}, ^dump_path} = maybe_load_call_graph(build_dir)
-      assert CallGraph.get_graph(call_graph) == Graph.add_vertices(Graph.new(), [:a, :b])
+      assert {loaded_call_graph = %CallGraph{}, ^dump_path} = maybe_load_call_graph(build_dir)
+      assert CallGraph.get_graph(loaded_call_graph) == CallGraph.get_graph(call_graph)
     end
   end
 
   describe "maybe_load_ir_plt/1" do
-    setup do
+    setup %{ir_plt: ir_plt} do
       subdir = "test_maybe_load_ir_plt_1"
 
       build_dir = Path.join(@tmp_dir, subdir)
@@ -338,7 +322,7 @@ defmodule Hologram.CompilerTest do
 
       dump_path = Path.join([@tmp_dir, subdir, "ir.plt"])
 
-      [build_dir: build_dir, dump_path: dump_path]
+      [build_dir: build_dir, dump_path: dump_path, ir_plt: PLT.clone(ir_plt)]
     end
 
     test "dump file doesn't exist", %{build_dir: build_dir, dump_path: dump_path} do
@@ -346,19 +330,16 @@ defmodule Hologram.CompilerTest do
       assert PLT.get_all(plt) == %{}
     end
 
-    test "dump file exists", %{build_dir: build_dir, dump_path: dump_path} do
-      PLT.start()
-      |> PLT.put(:a, 1)
-      |> PLT.put(:b, 2)
-      |> PLT.dump(dump_path)
+    test "dump file exists", %{build_dir: build_dir, dump_path: dump_path, ir_plt: ir_plt} do
+      PLT.dump(ir_plt, dump_path)
 
       assert {plt = %PLT{}, ^dump_path} = maybe_load_ir_plt(build_dir)
-      assert PLT.get_all(plt) == %{a: 1, b: 2}
+      assert PLT.get_all(plt) == PLT.get_all(ir_plt)
     end
   end
 
   describe "maybe_load_module_beam_path_plt/1" do
-    setup do
+    setup %{module_beam_path_plt: module_beam_path_plt} do
       subdir = "test_maybe_load_module_beam_path_plt_1"
 
       build_dir = Path.join(@tmp_dir, subdir)
@@ -366,7 +347,11 @@ defmodule Hologram.CompilerTest do
 
       dump_path = Path.join([@tmp_dir, subdir, "module_beam_path.plt"])
 
-      [build_dir: build_dir, dump_path: dump_path]
+      [
+        build_dir: build_dir,
+        dump_path: dump_path,
+        module_beam_path_plt: PLT.clone(module_beam_path_plt)
+      ]
     end
 
     test "dump file doesn't exist", %{build_dir: build_dir, dump_path: dump_path} do
@@ -374,19 +359,20 @@ defmodule Hologram.CompilerTest do
       assert PLT.get_all(plt) == %{}
     end
 
-    test "dump file exists", %{build_dir: build_dir, dump_path: dump_path} do
-      PLT.start()
-      |> PLT.put(:a, 1)
-      |> PLT.put(:b, 2)
-      |> PLT.dump(dump_path)
+    test "dump file exists", %{
+      build_dir: build_dir,
+      dump_path: dump_path,
+      module_beam_path_plt: module_beam_path_plt
+    } do
+      PLT.dump(module_beam_path_plt, dump_path)
 
       assert {plt = %PLT{}, ^dump_path} = maybe_load_module_beam_path_plt(build_dir)
-      assert PLT.get_all(plt) == %{a: 1, b: 2}
+      assert PLT.get_all(plt) == PLT.get_all(module_beam_path_plt)
     end
   end
 
   describe "maybe_load_module_digest_plt/1" do
-    setup do
+    setup %{module_digest_plt: module_digest_plt} do
       subdir = "test_maybe_load_module_digest_plt_1"
 
       build_dir = Path.join(@tmp_dir, subdir)
@@ -394,7 +380,11 @@ defmodule Hologram.CompilerTest do
 
       dump_path = Path.join([@tmp_dir, subdir, "module_digest.plt"])
 
-      [build_dir: build_dir, dump_path: dump_path]
+      [
+        build_dir: build_dir,
+        dump_path: dump_path,
+        module_digest_plt: PLT.clone(module_digest_plt)
+      ]
     end
 
     test "dump file doesn't exist", %{build_dir: build_dir, dump_path: dump_path} do
@@ -402,19 +392,22 @@ defmodule Hologram.CompilerTest do
       assert PLT.get_all(plt) == %{}
     end
 
-    test "dump file exists", %{build_dir: build_dir, dump_path: dump_path} do
-      PLT.start()
-      |> PLT.put(:a, 1)
-      |> PLT.put(:b, 2)
-      |> PLT.dump(dump_path)
+    test "dump file exists", %{
+      build_dir: build_dir,
+      dump_path: dump_path,
+      module_digest_plt: module_digest_plt
+    } do
+      PLT.dump(module_digest_plt, dump_path)
 
       assert {plt = %PLT{}, ^dump_path} = maybe_load_module_digest_plt(build_dir)
-      assert PLT.get_all(plt) == %{a: 1, b: 2}
+      assert PLT.get_all(plt) == PLT.get_all(module_digest_plt)
     end
   end
 
   describe "patch_ir_plt/2" do
     setup %{module_beam_path_plt: module_beam_path_plt} do
+      module_beam_path_plt_clone = PLT.clone(module_beam_path_plt)
+
       ir_plt =
         PLT.start()
         |> PLT.put(:module_5, :ir_5)
@@ -424,13 +417,13 @@ defmodule Hologram.CompilerTest do
         |> PLT.put(:module_8, :ir_8)
         |> PLT.put(Module4, :ir_4)
 
-      diff = %{
+      module_digests_diff = %{
         added_modules: [Module1, Module2],
         removed_modules: [:module_5, :module_7],
         updated_modules: [Module3, Module4]
       }
 
-      patch_ir_plt(ir_plt, diff, module_beam_path_plt)
+      patch_ir_plt(ir_plt, module_digests_diff, module_beam_path_plt_clone)
 
       [ir_plt: ir_plt]
     end
