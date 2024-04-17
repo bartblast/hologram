@@ -212,7 +212,7 @@ defmodule Hologram.CompilerTest do
         |> CallGraph.build(module_6_ir)
         |> CallGraph.build(module_7_ir)
 
-      [call_graph: call_graph, mfas: list_page_mfas(call_graph, Module5)]
+      [call_graph: call_graph, result: list_page_mfas(call_graph, Module5)]
     end
 
     test "doesn't mutate the call graph given in the argument", %{call_graph: call_graph} do
@@ -220,9 +220,9 @@ defmodule Hologram.CompilerTest do
     end
 
     test "lists MFAs used by the page module which are not included in runtime MFAs", %{
-      mfas: mfas
+      result: result
     } do
-      sorted_mfas = Enum.sort(mfas)
+      sorted_mfas = Enum.sort(result)
 
       assert sorted_mfas == [
                {Module5, :__layout_module__, 0},
@@ -243,29 +243,33 @@ defmodule Hologram.CompilerTest do
   describe "list_runtime_mfas/1" do
     setup %{call_graph: call_graph} do
       call_graph_clone = CallGraph.clone(call_graph)
-      [call_graph: call_graph_clone, mfas: list_runtime_mfas(call_graph_clone)]
+      [call_graph: call_graph_clone, result: list_runtime_mfas(call_graph_clone)]
     end
 
     test "doesn't mutate the call graph given in the argument", %{call_graph: call_graph} do
       assert CallGraph.has_vertex?(call_graph, {Kernel, :inspect, 1})
     end
 
-    test "includes MFAs that are reachable by Elixir functions used by the runtime", %{mfas: mfas} do
-      assert {Enum, :into, 2} in mfas
-      assert {Enum, :into_protocol, 2} in mfas
-      assert {:lists, :foldl, 3} in mfas
+    test "includes MFAs that are reachable by Elixir functions used by the runtime", %{
+      result: result
+    } do
+      assert {Enum, :into, 2} in result
+      assert {Enum, :into_protocol, 2} in result
+      assert {:lists, :foldl, 3} in result
 
-      assert {Enum, :to_list, 1} in mfas
-      assert {Enum, :reverse, 1} in mfas
-      assert {:lists, :reverse, 1} in mfas
+      assert {Enum, :to_list, 1} in result
+      assert {Enum, :reverse, 1} in result
+      assert {:lists, :reverse, 1} in result
     end
 
-    test "includes MFAs that are reachable by Erlang functions used by the runtime", %{mfas: mfas} do
-      assert {:erlang, :==, 2} in mfas
-      assert {:erlang, :error, 2} in mfas
+    test "includes MFAs that are reachable by Erlang functions used by the runtime", %{
+      result: result
+    } do
+      assert {:erlang, :==, 2} in result
+      assert {:erlang, :error, 2} in result
     end
 
-    test "removes duplicates", %{mfas: mfas} do
+    test "removes duplicates", %{mfas: result} do
       count = Enum.count(mfas, &(&1 == {Access, :get, 2}))
       assert count == 1
     end
@@ -288,18 +292,18 @@ defmodule Hologram.CompilerTest do
       refute {:non_existing_module_fixture, :dummy_function_4, 4} in mfas
     end
 
-    test "excludes Elixir MFAs which are transpiled manually", %{mfas: mfas} do
-      refute {Kernel, :inspect, 1} in mfas
+    test "excludes Elixir MFAs which are transpiled manually", %{result: result} do
+      refute {Kernel, :inspect, 1} in result
     end
 
     test "excludes MFAs which are reachable only from manually transpiled Elixir MFAs", %{
-      mfas: mfas
+      result: result
     } do
-      refute {Inspect.Algebra, :group, 1} in mfas
+      refute {Inspect.Algebra, :group, 1} in result
     end
 
-    test "sorts results", %{mfas: mfas} do
-      assert hd(mfas) == {Access, :get, 2}
+    test "sorts results", %{result: result} do
+      assert hd(result) == {Access, :get, 2}
     end
   end
 
