@@ -45,6 +45,8 @@ defmodule Mix.Tasks.Compile.Hologram do
     File.mkdir_p!(opts[:static_dir])
     File.mkdir_p!(opts[:tmp_dir])
 
+    Compiler.maybe_install_js_deps(assets_dir, build_dir)
+
     {module_beam_path_plt, module_beam_path_plt_dump_path} =
       Compiler.maybe_load_module_beam_path_plt(build_dir)
 
@@ -60,14 +62,14 @@ defmodule Mix.Tasks.Compile.Hologram do
     Compiler.patch_ir_plt!(ir_plt, module_digests_diff, module_beam_path_plt)
 
     {call_graph, call_graph_dump_path} = Compiler.maybe_load_call_graph(build_dir)
+    CallGraph.patch(call_graph, ir_plt, module_digests_diff)
 
-    call_graph
-    |> CallGraph.patch(ir_plt, module_digests_diff)
-    |> Compiler.remove_call_graph_vertices_of_manually_ported_elixir_functions()
+    call_graph_without_manually_ported_elixir_functions =
+      call_graph
+      |> CallGraph.clone()
+      |> Compiler.remove_call_graph_vertices_of_manually_ported_elixir_functions()
 
-    Compiler.maybe_install_js_deps(assets_dir, build_dir)
-
-    runtime_mfas = Compiler.list_runtime_mfas(call_graph)
+    runtime_mfas = Compiler.list_runtime_mfas(call_graph_without_manually_ported_elixir_functions)
 
     _runtime_entry_file_path = Compiler.create_runtime_entry_file(runtime_mfas, ir_plt, opts)
 

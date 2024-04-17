@@ -133,10 +133,9 @@ defmodule Hologram.Compiler do
 
   @doc """
   Returns the list of MFAs that are reachable by the given page.
-  Functions required by the runtime as well as manually ported Elixir functions are excluded.
   """
-  @spec list_page_mfas(module, CallGraph.t(), list(mfa)) :: list(mfa)
-  def list_page_mfas(page_module, call_graph, runtime_mfas) do
+  @spec list_page_mfas(module, CallGraph.t()) :: list(mfa)
+  def list_page_mfas(page_module, call_graph) do
     layout_module = page_module.__layout_module__()
 
     call_graph
@@ -153,12 +152,10 @@ defmodule Hologram.Compiler do
     ])
     |> CallGraph.reachable(page_module)
     |> Enum.filter(&is_tuple/1)
-    |> Kernel.--(runtime_mfas)
   end
 
   @doc """
   Lists MFAs required by the runtime JS script.
-  Manually ported Elixir functions are excluded.
   """
   @spec list_runtime_mfas(CallGraph.t()) :: list(mfa)
   def list_runtime_mfas(call_graph) do

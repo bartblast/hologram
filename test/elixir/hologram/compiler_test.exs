@@ -197,24 +197,25 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  test "list_page_mfas/2", %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
-    call_graph_clone = CallGraph.clone(call_graph)
-
+  test "list_page_mfas/2" do
     module_5_ir = IR.for_module(Module5)
     module_6_ir = IR.for_module(Module6)
     module_7_ir = IR.for_module(Module7)
 
-    call_graph_clone
-    |> CallGraph.build(module_5_ir)
-    |> CallGraph.build(module_6_ir)
-    |> CallGraph.build(module_7_ir)
+    call_graph =
+      CallGraph.start()
+      |> CallGraph.build(module_5_ir)
+      |> CallGraph.build(module_6_ir)
+      |> CallGraph.build(module_7_ir)
 
     sorted_result =
       Module5
-      |> list_page_mfas(call_graph_clone, runtime_mfas)
+      |> list_page_mfas(call_graph)
       |> Enum.sort()
 
     assert sorted_result == [
+             {Enum, :reverse, 1},
+             {Enum, :to_list, 1},
              {Module5, :__layout_module__, 0},
              {Module5, :__layout_props__, 0},
              {Module5, :__props__, 0},
@@ -225,7 +226,9 @@ defmodule Hologram.CompilerTest do
              {Module6, :action, 3},
              {Module6, :init, 2},
              {Module6, :template, 0},
-             {Module7, :my_fun_7a, 2}
+             {Module7, :my_fun_7a, 2},
+             {Kernel, :inspect, 1},
+             {:erlang, :hd, 1}
            ]
   end
 
