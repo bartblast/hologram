@@ -18,8 +18,8 @@ defmodule Hologram.CompilerTest do
   @js_dir Path.join(@assets_dir, "js")
   @tmp_dir Reflection.tmp_dir()
 
-  defp setup_js_deps_test(subdir) do
-    tmp_dir = Path.join(@tmp_dir, subdir)
+  defp setup_js_deps_test(test_tmp_subdir) do
+    tmp_dir = Path.join(@tmp_dir, test_tmp_subdir)
     assets_dir = Path.join(tmp_dir, "assets")
     build_dir = Path.join(tmp_dir, "build")
 
@@ -310,12 +310,12 @@ defmodule Hologram.CompilerTest do
 
   describe "maybe_load_call_graph/1" do
     setup %{call_graph: call_graph} do
-      subdir = "test_maybe_load_call_graph_1"
+      test_tmp_subdir = "test_maybe_load_call_graph_1"
 
-      build_dir = Path.join(@tmp_dir, subdir)
+      build_dir = Path.join(@tmp_dir, test_tmp_subdir)
       clean_dir(build_dir)
 
-      dump_path = Path.join([@tmp_dir, subdir, "call_graph.bin"])
+      dump_path = Path.join([@tmp_dir, test_tmp_subdir, "call_graph.bin"])
 
       [build_dir: build_dir, call_graph: CallGraph.clone(call_graph), dump_path: dump_path]
     end
@@ -335,12 +335,12 @@ defmodule Hologram.CompilerTest do
 
   describe "maybe_load_ir_plt/1" do
     setup %{ir_plt: ir_plt} do
-      subdir = "test_maybe_load_ir_plt_1"
+      test_tmp_subdir = "test_maybe_load_ir_plt_1"
 
-      build_dir = Path.join(@tmp_dir, subdir)
+      build_dir = Path.join(@tmp_dir, test_tmp_subdir)
       clean_dir(build_dir)
 
-      dump_path = Path.join([@tmp_dir, subdir, "ir.plt"])
+      dump_path = Path.join([@tmp_dir, test_tmp_subdir, "ir.plt"])
 
       [build_dir: build_dir, dump_path: dump_path, ir_plt: PLT.clone(ir_plt)]
     end
@@ -360,12 +360,12 @@ defmodule Hologram.CompilerTest do
 
   describe "maybe_load_module_beam_path_plt/1" do
     setup %{module_beam_path_plt: module_beam_path_plt} do
-      subdir = "test_maybe_load_module_beam_path_plt_1"
+      test_tmp_subdir = "test_maybe_load_module_beam_path_plt_1"
 
-      build_dir = Path.join(@tmp_dir, subdir)
+      build_dir = Path.join(@tmp_dir, test_tmp_subdir)
       clean_dir(build_dir)
 
-      dump_path = Path.join([@tmp_dir, subdir, "module_beam_path.plt"])
+      dump_path = Path.join([@tmp_dir, test_tmp_subdir, "module_beam_path.plt"])
 
       [
         build_dir: build_dir,
@@ -393,12 +393,12 @@ defmodule Hologram.CompilerTest do
 
   describe "maybe_load_module_digest_plt/1" do
     setup do
-      subdir = "test_maybe_load_module_digest_plt_1"
+      test_tmp_subdir = "test_maybe_load_module_digest_plt_1"
 
-      build_dir = Path.join(@tmp_dir, subdir)
+      build_dir = Path.join(@tmp_dir, test_tmp_subdir)
       clean_dir(build_dir)
 
-      dump_path = Path.join([@tmp_dir, subdir, "module_digest.plt"])
+      dump_path = Path.join([@tmp_dir, test_tmp_subdir, "module_digest.plt"])
 
       [build_dir: build_dir, dump_path: dump_path]
     end
