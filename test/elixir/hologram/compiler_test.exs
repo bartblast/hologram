@@ -92,9 +92,7 @@ defmodule Hologram.CompilerTest do
   end
 
   test "build_runtime_js/3", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
-    ir_plt_clone = PLT.clone(ir_plt)
-
-    js = build_runtime_js(runtime_mfas, ir_plt_clone, @js_dir)
+    js = build_runtime_js(runtime_mfas, ir_plt, @js_dir)
 
     assert String.contains?(
              js,
@@ -115,8 +113,6 @@ defmodule Hologram.CompilerTest do
   end
 
   test "create_runtime_entry_file/3", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
-    ir_plt_clone = PLT.clone(ir_plt)
-
     test_tmp_subdir = "test_create_runtime_entry_file_3"
 
     opts = [
@@ -126,7 +122,7 @@ defmodule Hologram.CompilerTest do
 
     clean_dir(opts[:tmp_dir])
 
-    entry_file_path = create_runtime_entry_file(runtime_mfas, ir_plt_clone, opts)
+    entry_file_path = create_runtime_entry_file(runtime_mfas, ir_plt, opts)
 
     assert entry_file_path
            |> File.read!()
@@ -203,52 +199,38 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "list_page_mfas/2" do
-    setup do
-      module_5_ir = IR.for_module(Module5)
-      module_6_ir = IR.for_module(Module6)
-      module_7_ir = IR.for_module(Module7)
+  test "list_page_mfas/2" do
+    module_5_ir = IR.for_module(Module5)
+    module_6_ir = IR.for_module(Module6)
+    module_7_ir = IR.for_module(Module7)
 
-      call_graph =
-        CallGraph.start()
-        |> CallGraph.build(module_5_ir)
-        |> CallGraph.build(module_6_ir)
-        |> CallGraph.build(module_7_ir)
+    call_graph =
+      CallGraph.start()
+      |> CallGraph.build(module_5_ir)
+      |> CallGraph.build(module_6_ir)
+      |> CallGraph.build(module_7_ir)
 
-      [call_graph: call_graph, result: list_page_mfas(call_graph, Module5)]
-    end
+    sorted_result =
+      call_graph
+      |> list_page_mfas(Module5)
+      |> Enum.sort()
 
-    test "doesn't mutate the call graph given in the argument", %{call_graph: call_graph} do
-      refute CallGraph.has_edge?(call_graph, Module5, {Module5, :action, 3})
-    end
-
-    test "lists MFAs used by the page module which are not included in runtime MFAs", %{
-      result: result
-    } do
-      sorted_mfas = Enum.sort(result)
-
-      assert sorted_mfas == [
-               {Module5, :__layout_module__, 0},
-               {Module5, :__layout_props__, 0},
-               {Module5, :__props__, 0},
-               {Module5, :__route__, 0},
-               {Module5, :action, 3},
-               {Module5, :template, 0},
-               {Module6, :__props__, 0},
-               {Module6, :action, 3},
-               {Module6, :init, 2},
-               {Module6, :template, 0},
-               {Module7, :my_fun_7a, 2}
-             ]
-    end
+    assert sorted_result == [
+             {Module5, :__layout_module__, 0},
+             {Module5, :__layout_props__, 0},
+             {Module5, :__props__, 0},
+             {Module5, :__route__, 0},
+             {Module5, :action, 3},
+             {Module5, :template, 0},
+             {Module6, :__props__, 0},
+             {Module6, :action, 3},
+             {Module6, :init, 2},
+             {Module6, :template, 0},
+             {Module7, :my_fun_7a, 2}
+           ]
   end
 
   describe "list_runtime_mfas/1" do
-    setup %{call_graph: call_graph} do
-      call_graph_clone = CallGraph.clone(call_graph)
-      [call_graph: call_graph_clone]
-    end
-
     test "doesn't mutate the call graph given in the argument", %{call_graph: call_graph} do
       assert CallGraph.has_vertex?(call_graph, {Kernel, :inspect, 1})
     end
@@ -278,7 +260,9 @@ defmodule Hologram.CompilerTest do
     end
 
     test "excludes MFAs with non-existing modules", %{call_graph: call_graph} do
-      call_graph
+      call_graph_clone = CallGraph.clone(call_graph)
+
+      call_graph_clone
       |> CallGraph.add_edge({Enum, :into, 2}, {Calendar.ISO, :dummy_function_1, 1})
       |> CallGraph.add_edge({Enum, :into, 2}, {NonExistingModuleFixture, :dummy_function_2, 2})
       |> CallGraph.add_edge({Enum, :into, 2}, {:maps, :dummy_function_3, 3})
@@ -287,7 +271,7 @@ defmodule Hologram.CompilerTest do
         {:non_existing_module_fixture, :dummy_function_4, 4}
       )
 
-      result = list_runtime_mfas(call_graph)
+      result = list_runtime_mfas(call_graph_clone)
 
       assert {Calendar.ISO, :dummy_function_1, 1} in result
       refute {NonExistingModuleFixture, :dummy_function_2, 2} in result
@@ -363,7 +347,7 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "maybe_load_call_graph/1" do
-    setup %{call_graph: call_graph} do
+    setup do
       test_tmp_subdir = "test_maybe_load_call_graph_1"
 
       build_dir = Path.join(@tmp_dir, test_tmp_subdir)
@@ -371,7 +355,7 @@ defmodule Hologram.CompilerTest do
 
       dump_path = Path.join([@tmp_dir, test_tmp_subdir, "call_graph.bin"])
 
-      [build_dir: build_dir, call_graph: CallGraph.clone(call_graph), dump_path: dump_path]
+      [build_dir: build_dir, dump_path: dump_path]
     end
 
     test "dump file doesn't exist", %{build_dir: build_dir, dump_path: dump_path} do
@@ -388,7 +372,7 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "maybe_load_ir_plt/1" do
-    setup %{ir_plt: ir_plt} do
+    setup do
       test_tmp_subdir = "test_maybe_load_ir_plt_1"
 
       build_dir = Path.join(@tmp_dir, test_tmp_subdir)
@@ -396,7 +380,7 @@ defmodule Hologram.CompilerTest do
 
       dump_path = Path.join([@tmp_dir, test_tmp_subdir, "ir.plt"])
 
-      [build_dir: build_dir, dump_path: dump_path, ir_plt: PLT.clone(ir_plt)]
+      [build_dir: build_dir, dump_path: dump_path]
     end
 
     test "dump file doesn't exist", %{build_dir: build_dir, dump_path: dump_path} do
@@ -413,7 +397,7 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "maybe_load_module_beam_path_plt/1" do
-    setup %{module_beam_path_plt: module_beam_path_plt} do
+    setup do
       test_tmp_subdir = "test_maybe_load_module_beam_path_plt_1"
 
       build_dir = Path.join(@tmp_dir, test_tmp_subdir)
@@ -421,11 +405,7 @@ defmodule Hologram.CompilerTest do
 
       dump_path = Path.join([@tmp_dir, test_tmp_subdir, "module_beam_path.plt"])
 
-      [
-        build_dir: build_dir,
-        dump_path: dump_path,
-        module_beam_path_plt: PLT.clone(module_beam_path_plt)
-      ]
+      [build_dir: build_dir, dump_path: dump_path]
     end
 
     test "dump file doesn't exist", %{build_dir: build_dir, dump_path: dump_path} do
