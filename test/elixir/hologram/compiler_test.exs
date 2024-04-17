@@ -197,20 +197,21 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  test "list_page_mfas/2" do
+  test "list_page_mfas/2", %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
+    call_graph_clone = CallGraph.clone(call_graph)
+
     module_5_ir = IR.for_module(Module5)
     module_6_ir = IR.for_module(Module6)
     module_7_ir = IR.for_module(Module7)
 
-    call_graph =
-      CallGraph.start()
-      |> CallGraph.build(module_5_ir)
-      |> CallGraph.build(module_6_ir)
-      |> CallGraph.build(module_7_ir)
+    call_graph_clone
+    |> CallGraph.build(module_5_ir)
+    |> CallGraph.build(module_6_ir)
+    |> CallGraph.build(module_7_ir)
 
     sorted_result =
-      call_graph
-      |> list_page_mfas(Module5)
+      Module5
+      |> list_page_mfas(call_graph_clone, runtime_mfas)
       |> Enum.sort()
 
     assert sorted_result == [

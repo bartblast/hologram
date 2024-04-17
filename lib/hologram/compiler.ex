@@ -135,10 +135,9 @@ defmodule Hologram.Compiler do
   Returns the list of MFAs that are reachable by the given page.
   Functions required by the runtime as well as manually ported Elixir functions are excluded.
   """
-  @spec list_page_mfas(CallGraph.t(), module) :: list(mfa)
-  def list_page_mfas(call_graph, page_module) do
+  @spec list_page_mfas(module, CallGraph.t(), list(mfa)) :: list(mfa)
+  def list_page_mfas(page_module, call_graph, runtime_mfas) do
     layout_module = page_module.__layout_module__()
-    runtime_mfas = list_runtime_mfas(call_graph)
 
     call_graph
     |> CallGraph.get_graph()
