@@ -143,14 +143,16 @@ defmodule Hologram.Compiler do
 
     call_graph
     |> CallGraph.get_graph()
-    |> Graph.add_edge(page_module, {page_module, :__layout_module__, 0})
-    |> Graph.add_edge(page_module, {page_module, :__layout_props__, 0})
-    |> Graph.add_edge(page_module, {page_module, :__props__, 0})
-    |> Graph.add_edge(page_module, {page_module, :action, 3})
-    |> Graph.add_edge(page_module, {page_module, :template, 0})
-    |> Graph.add_edge(page_module, {layout_module, :__props__, 0})
-    |> Graph.add_edge(page_module, {layout_module, :action, 3})
-    |> Graph.add_edge(page_module, {layout_module, :template, 0})
+    |> Graph.add_edges([
+      {page_module, {page_module, :__layout_module__, 0}},
+      {page_module, {page_module, :__layout_props__, 0}},
+      {page_module, {page_module, :__props__, 0}},
+      {page_module, {page_module, :action, 3}},
+      {page_module, {page_module, :template, 0}},
+      {page_module, {layout_module, :__props__, 0}},
+      {page_module, {layout_module, :action, 3}},
+      {page_module, {layout_module, :template, 0}}
+    ])
     |> remove_call_graph_vertices_of_manually_ported_elixir_functions()
     |> CallGraph.reachable(page_module)
     |> Enum.filter(&is_tuple/1)
