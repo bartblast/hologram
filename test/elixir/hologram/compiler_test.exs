@@ -68,13 +68,13 @@ defmodule Hologram.CompilerTest do
     ]
   end
 
-  describe "build_module_digest_plt/0" do
+  describe "build_module_digest_plt!/0" do
     setup %{module_beam_path_plt: module_beam_path_plt} do
       [module_beam_path_plt: PLT.clone(module_beam_path_plt)]
     end
 
     test "builds module digest PLT", %{module_beam_path_plt: module_beam_path_plt} do
-      assert plt = %PLT{} = build_module_digest_plt(module_beam_path_plt)
+      assert plt = %PLT{} = build_module_digest_plt!(module_beam_path_plt)
 
       assert <<_digest::256>> = PLT.get!(plt, Hologram.Commons.Reflection)
       assert <<_digest::256>> = PLT.get!(plt, Hologram.Compiler)
@@ -84,7 +84,7 @@ defmodule Hologram.CompilerTest do
       module_beam_path_plt: module_beam_path_plt
     } do
       PLT.delete(module_beam_path_plt, Hologram.Compiler)
-      build_module_digest_plt(module_beam_path_plt)
+      build_module_digest_plt!(module_beam_path_plt)
 
       assert PLT.get!(module_beam_path_plt, Hologram.Compiler) ==
                :code.which(Hologram.Compiler)

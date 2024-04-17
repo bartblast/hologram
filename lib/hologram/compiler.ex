@@ -13,14 +13,15 @@ defmodule Hologram.Compiler do
 
   @doc """
   Builds a persistent lookup table (PLT) containing the BEAM defs digests for all the modules in the project.
+  Mutates module BEAM path PLT.
   """
-  @spec build_module_digest_plt(PLT.t()) :: PLT.t()
-  def build_module_digest_plt(module_beam_path_plt) do
+  @spec build_module_digest_plt!(PLT.t()) :: PLT.t()
+  def build_module_digest_plt!(module_beam_path_plt) do
     module_digest_plt = PLT.start()
 
     Reflection.list_elixir_modules()
     |> TaskUtils.async_many(
-      &rebuild_module_digest_plt_entry(&1, module_digest_plt, module_beam_path_plt)
+      &rebuild_module_digest_plt_entry!(&1, module_digest_plt, module_beam_path_plt)
     )
     |> Task.await_many(:infinity)
 
@@ -444,7 +445,7 @@ defmodule Hologram.Compiler do
     PLT.put(ir_plt, module, IR.for_module(beam_path))
   end
 
-  defp rebuild_module_digest_plt_entry(module, module_digest_plt, module_beam_path_plt) do
+  defp rebuild_module_digest_plt_entry!(module, module_digest_plt, module_beam_path_plt) do
     module_beam_path =
       case PLT.get(module_beam_path_plt, module) do
         {:ok, path} ->
