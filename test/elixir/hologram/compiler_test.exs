@@ -90,7 +90,9 @@ defmodule Hologram.CompilerTest do
     call_graph_clone = CallGraph.clone(call_graph)
     ir_plt_clone = PLT.clone(ir_plt)
 
-    js = build_runtime_js(@js_dir, call_graph_clone, ir_plt_clone)
+    runtime_mfas = list_runtime_mfas(call_graph_clone)
+
+    js = build_runtime_js(@js_dir, ir_plt_clone, runtime_mfas)
 
     assert String.contains?(
              js,

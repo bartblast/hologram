@@ -30,17 +30,15 @@ defmodule Hologram.Compiler do
   @doc """
   Builds Hologram runtime JavaScript source code.
   """
-  @spec build_runtime_js(file_path, CallGraph.t(), PLT.t()) :: String.t()
-  def build_runtime_js(js_dir, call_graph, ir_plt) do
-    mfas = list_runtime_mfas(call_graph)
-
+  @spec build_runtime_js(file_path, PLT.t(), list(mfa)) :: String.t()
+  def build_runtime_js(js_dir, ir_plt, runtime_mfas) do
     erlang_function_defs =
-      mfas
+      runtime_mfas
       |> render_erlang_function_defs("#{js_dir}/erlang")
       |> render_block()
 
     elixir_function_defs =
-      mfas
+      runtime_mfas
       |> render_elixir_function_defs(ir_plt)
       |> render_block()
 
