@@ -19,6 +19,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module6
   alias Hologram.Test.Fixtures.Compiler.Module7
   alias Hologram.Test.Fixtures.Compiler.Module8
+  alias Hologram.Test.Fixtures.Compiler.Module9
 
   @assets_dir Path.join(Reflection.root_dir(), "assets")
   @js_dir Path.join(@assets_dir, "js")
@@ -609,6 +610,10 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "validate_page_modules/1" do
+    test "doesn't raise any error if all pages have a route and a layout specified" do
+      assert validate_page_modules([Module9, Module11]) == :ok
+    end
+
     test "raises error if any of the pages doesn't have a route specified" do
       expected_msg =
         "page 'Hologram.Test.Fixtures.Compiler.Module12' doesn't have a route specified (use the route/1 macro to fix it)"
@@ -636,7 +641,6 @@ end
 
 #   alias Hologram.Test.Fixtures.Compiler.Module10
 #   alias Hologram.Test.Fixtures.Compiler.Module11
-#   alias Hologram.Test.Fixtures.Compiler.Module9
 
 #   setup_all do
 #     opts = [

@@ -304,6 +304,10 @@ defmodule Hologram.Compiler do
     }
   end
 
+  @doc """
+  Raises compile error if any page module doesn't have a route or layout specified.
+  """
+  @spec validate_page_modules(list(module)) :: :ok
   def validate_page_modules(page_modules) do
     Enum.each(page_modules, fn page_module ->
       if !Reflection.has_function?(page_module, :__route__, 0) do
