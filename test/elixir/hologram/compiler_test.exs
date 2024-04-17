@@ -9,6 +9,9 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Compiler.IR
 
   alias Hologram.Test.Fixtures.Compiler.Module1
+  alias Hologram.Test.Fixtures.Compiler.Module11
+  alias Hologram.Test.Fixtures.Compiler.Module12
+  alias Hologram.Test.Fixtures.Compiler.Module13
   alias Hologram.Test.Fixtures.Compiler.Module2
   alias Hologram.Test.Fixtures.Compiler.Module3
   alias Hologram.Test.Fixtures.Compiler.Module4
@@ -560,6 +563,26 @@ defmodule Hologram.CompilerTest do
                ]
              }
            }
+  end
+
+  describe "validate_page_modules/1" do
+    test "raises error if any of the pages doesn't have a route specified" do
+      expected_msg =
+        "page 'Hologram.Test.Fixtures.Compiler.Module12' doesn't have a route specified (use the route/1 macro to fix it)"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_page_modules([Module11, Module12])
+      end
+    end
+
+    test "raises error if any of the pages doesn't have a layout specified" do
+      expected_msg =
+        "page 'Hologram.Test.Fixtures.Compiler.Module13' doesn't have a layout module specified (use the layout/1 macro to fix it)"
+
+      assert_raise Hologram.CompileError, expected_msg, fn ->
+        validate_page_modules([Module11, Module13])
+      end
+    end
   end
 end
 

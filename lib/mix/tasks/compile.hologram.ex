@@ -64,6 +64,12 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     Compiler.maybe_install_js_deps(assets_dir, build_dir)
 
+    _runtime_entry_file_path = Compiler.create_runtime_entry_file(call_graph, ir_plt, opts)
+
+    page_modules = Reflection.list_pages()
+
+    Compiler.validate_page_modules(page_modules)
+
     CallGraph.dump(call_graph, call_graph_dump_path)
     PLT.dump(ir_plt, ir_plt_dump_path)
     PLT.dump(new_module_digest_plt, module_digest_plt_dump_path)
@@ -80,12 +86,6 @@ end
 #   alias Hologram.Commons.TaskUtils
 
 #   def compile(opts) do
-#     runtime_entry_file_path = create_runtime_entry_file(call_graph, ir_plt, opts)
-
-#     page_modules = Reflection.list_pages()
-
-#     validate_page_modules(page_modules)
-
 #     page_entry_files_info =
 #       create_page_entry_files(page_modules, call_graph, ir_plt, opts[:js_source_dir])
 
@@ -142,22 +142,6 @@ end
 #         ]
 
 #     System.cmd(opts[:js_formatter_bin_path], cmd, env: [], parallelism: true)
-#   end
-
-#   defp validate_page_modules(page_modules) do
-#     Enum.each(page_modules, fn page_module ->
-#       if !Reflection.has_function?(page_module, :__route__, 0) do
-#         raise Hologram.CompileError,
-#           message:
-#             "Page '#{page_module}' doesn't have a route specified (use the route/1 macro to fix the issue)."
-#       end
-
-#       if !Reflection.has_function?(page_module, :__layout_module__, 0) do
-#         raise Hologram.CompileError,
-#           message:
-#             "Page '#{page_module}' doesn't have a layout module specified (use the layout/1 macro to fix the issue)."
-#       end
-#     end)
 #   end
 
 #   defp create_page_entry_files(page_modules, call_graph, ir_plt, js_source_dir) do

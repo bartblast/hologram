@@ -279,6 +279,26 @@ defmodule Hologram.Compiler do
     }
   end
 
+  def validate_page_modules(page_modules) do
+    Enum.each(page_modules, fn page_module ->
+      if !Reflection.has_function?(page_module, :__route__, 0) do
+        module_name = Reflection.module_name(page_module)
+
+        raise Hologram.CompileError,
+          message:
+            "page '#{module_name}' doesn't have a route specified (use the route/1 macro to fix it)"
+      end
+
+      if !Reflection.has_function?(page_module, :__layout_module__, 0) do
+        module_name = Reflection.module_name(page_module)
+
+        raise Hologram.CompileError,
+          message:
+            "page '#{module_name}' doesn't have a layout module specified (use the layout/1 macro to fix it)"
+      end
+    end)
+  end
+
   # Add call graph edges for Erlang functions depending on other Erlang functions.
   # credo:disable-for-next-line Credo.Check.Refactor.ABCSize
   defp add_call_graph_edges_for_erlang_functions(graph) do
