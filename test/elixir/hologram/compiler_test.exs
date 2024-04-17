@@ -10,8 +10,6 @@ defmodule Hologram.CompilerTest do
 
   alias Hologram.Test.Fixtures.Compiler.Module1
   alias Hologram.Test.Fixtures.Compiler.Module11
-  alias Hologram.Test.Fixtures.Compiler.Module12
-  alias Hologram.Test.Fixtures.Compiler.Module13
   alias Hologram.Test.Fixtures.Compiler.Module2
   alias Hologram.Test.Fixtures.Compiler.Module3
   alias Hologram.Test.Fixtures.Compiler.Module4
@@ -602,20 +600,44 @@ defmodule Hologram.CompilerTest do
     end
 
     test "raises error if any of the pages doesn't have a route specified" do
+      # Inline fixture used, because file fixture would raise error in compile.hologram Mix task tests.
+      defmodule InlinePageModuleFixture1 do
+        use Hologram.Page
+
+        layout Hologram.Test.Fixtures.LayoutFixture
+
+        @impl Page
+        def template do
+          ~H""
+        end
+      end
+
       expected_msg =
-        "page 'Hologram.Test.Fixtures.Compiler.Module12' doesn't have a route specified (use the route/1 macro to fix it)"
+        "page 'Hologram.CompilerTest.InlinePageModuleFixture1' doesn't have a route specified (use the route/1 macro to fix it)"
 
       assert_raise Hologram.CompileError, expected_msg, fn ->
-        validate_page_modules([Module11, Module12])
+        validate_page_modules([Module11, InlinePageModuleFixture1])
       end
     end
 
     test "raises error if any of the pages doesn't have a layout specified" do
+      # Inline fixture used, because file fixture would raise error in compile.hologram Mix task tests.
+      defmodule InlinePageModuleFixture2 do
+        use Hologram.Page
+
+        route "/hologram-compilertest-inline-page-module-fixture-2"
+
+        @impl Page
+        def template do
+          ~H""
+        end
+      end
+
       expected_msg =
-        "page 'Hologram.Test.Fixtures.Compiler.Module13' doesn't have a layout module specified (use the layout/1 macro to fix it)"
+        "page 'Hologram.CompilerTest.InlinePageModuleFixture2' doesn't have a layout module specified (use the layout/1 macro to fix it)"
 
       assert_raise Hologram.CompileError, expected_msg, fn ->
-        validate_page_modules([Module11, Module13])
+        validate_page_modules([Module11, InlinePageModuleFixture2])
       end
     end
   end
