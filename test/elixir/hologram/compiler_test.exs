@@ -230,10 +230,6 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "list_runtime_mfas/1" do
-    test "doesn't mutate the call graph given in the argument", %{call_graph: call_graph} do
-      assert CallGraph.has_vertex?(call_graph, {Kernel, :inspect, 1})
-    end
-
     test "includes MFAs that are reachable by Elixir functions used by the runtime", %{
       runtime_mfas: result
     } do
@@ -276,16 +272,6 @@ defmodule Hologram.CompilerTest do
       refute {NonExistingModuleFixture, :dummy_function_2, 2} in result
       assert {:maps, :dummy_function_3, 3} in result
       refute {:non_existing_module_fixture, :dummy_function_4, 4} in result
-    end
-
-    test "excludes Elixir MFAs which are transpiled manually", %{runtime_mfas: result} do
-      refute {Kernel, :inspect, 1} in result
-    end
-
-    test "excludes MFAs which are reachable only from manually transpiled Elixir MFAs", %{
-      runtime_mfas: result
-    } do
-      refute {Inspect.Algebra, :group, 1} in result
     end
 
     test "sorts results", %{runtime_mfas: result} do
@@ -593,6 +579,23 @@ defmodule Hologram.CompilerTest do
                ]
              }
            }
+  end
+
+  describe "remove_call_graph_vertices_of_manually_ported_elixir_functions/1" do
+    setup %{call_graph: call_graph} do
+      call_graph_clone = CallGraph.clone(call_graph)
+      remove_call_graph_vertices_of_manually_ported_elixir_functions(call_graph_clone)
+
+      [call_graph: call_graph_clone]
+    end
+
+    test "excludes Elixir MFAs which are transpiled manually", %{call_graph: call_graph} do
+      refute CallGraph.has_vertex?(call_graph, {Kernel, :inspect, 1})
+    end
+
+    test "includes MFAs which are not transpiled manually", %{call_graph: call_graph} do
+      assert CallGraph.has_vertex?(call_graph, {Kernel, :hd, 1})
+    end
   end
 
   describe "validate_page_modules/1" do

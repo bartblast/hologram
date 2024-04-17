@@ -151,7 +151,6 @@ defmodule Hologram.Compiler do
       {page_module, {layout_module, :action, 3}},
       {page_module, {layout_module, :template, 0}}
     ])
-    |> remove_call_graph_vertices_of_manually_ported_elixir_functions()
     |> CallGraph.reachable(page_module)
     |> Enum.filter(&is_tuple/1)
     |> Kernel.--(runtime_mfas)
@@ -178,7 +177,6 @@ defmodule Hologram.Compiler do
     call_graph
     |> CallGraph.get_graph()
     |> add_call_graph_edges_for_erlang_functions()
-    |> remove_call_graph_vertices_of_manually_ported_elixir_functions()
     |> CallGraph.reachable_mfas(entry_mfas)
     # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
     |> Enum.reject(fn {module, _function, _arity} -> !Reflection.module?(module) end)
@@ -302,6 +300,20 @@ defmodule Hologram.Compiler do
       module: module_def_ir.module,
       body: %IR.Block{expressions: function_defs}
     }
+  end
+
+  @doc """
+  Removes call graph vertices for Elixir functions ported manually.
+  """
+  @spec remove_call_graph_vertices_of_manually_ported_elixir_functions(CallGraph.t()) ::
+          CallGraph.t()
+  def remove_call_graph_vertices_of_manually_ported_elixir_functions(call_graph) do
+    CallGraph.remove_vertices(call_graph, [
+      {Code, :ensure_loaded, 1},
+      {Hologram.Router.Helpers, :asset_path, 1},
+      {Kernel, :inspect, 1},
+      {Kernel, :inspect, 2}
+    ])
   end
 
   @doc """
@@ -463,15 +475,6 @@ defmodule Hologram.Compiler do
 
     digest = CryptographicUtils.digest(data, :sha256, :binary)
     PLT.put(module_digest_plt, module, digest)
-  end
-
-  defp remove_call_graph_vertices_of_manually_ported_elixir_functions(graph) do
-    Graph.delete_vertices(graph, [
-      {Code, :ensure_loaded, 1},
-      {Hologram.Router.Helpers, :asset_path, 1},
-      {Kernel, :inspect, 1},
-      {Kernel, :inspect, 2}
-    ])
   end
 
   defp render_block(str) do
