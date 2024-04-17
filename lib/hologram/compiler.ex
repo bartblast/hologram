@@ -305,7 +305,7 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Raises compile error if any page module doesn't have a route or layout specified.
+  Raises a compilation error if any page module lacks a specified route or layout.
   """
   @spec validate_page_modules(list(module)) :: :ok
   def validate_page_modules(page_modules) do
