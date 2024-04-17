@@ -589,11 +589,11 @@ defmodule Hologram.CompilerTest do
       [call_graph: call_graph_clone]
     end
 
-    test "excludes Elixir MFAs which are transpiled manually", %{call_graph: call_graph} do
+    test "excludes Elixir functions which are ported manually", %{call_graph: call_graph} do
       refute CallGraph.has_vertex?(call_graph, {Kernel, :inspect, 1})
     end
 
-    test "includes MFAs which are not transpiled manually", %{call_graph: call_graph} do
+    test "includes functions which are not ported manually", %{call_graph: call_graph} do
       assert CallGraph.has_vertex?(call_graph, {Kernel, :hd, 1})
     end
   end
