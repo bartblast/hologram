@@ -473,7 +473,7 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "patch_ir_plt!/2" do
+  describe "patch_ir_plt!/3" do
     setup %{module_beam_path_plt: module_beam_path_plt} do
       module_beam_path_plt_clone = PLT.clone(module_beam_path_plt)
 
