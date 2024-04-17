@@ -57,7 +57,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
 
     {ir_plt, ir_plt_dump_path} = Compiler.maybe_load_ir_plt(build_dir)
-    Compiler.patch_ir_plt(ir_plt, module_digests_diff, module_beam_path_plt)
+    Compiler.patch_ir_plt!(ir_plt, module_digests_diff, module_beam_path_plt)
 
     {call_graph, call_graph_dump_path} = Compiler.maybe_load_call_graph(build_dir)
     CallGraph.patch(call_graph, ir_plt, module_digests_diff)
