@@ -64,7 +64,9 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     Compiler.maybe_install_js_deps(assets_dir, build_dir)
 
-    _runtime_entry_file_path = Compiler.create_runtime_entry_file(call_graph, ir_plt, opts)
+    runtime_mfas = Compiler.list_runtime_mfas(call_graph)
+
+    _runtime_entry_file_path = Compiler.create_runtime_entry_file(runtime_mfas, ir_plt, opts)
 
     page_modules = Reflection.list_pages()
 

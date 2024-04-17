@@ -60,7 +60,12 @@ defmodule Hologram.CompilerTest do
     end)
     |> Task.await_many(:infinity)
 
-    [call_graph: call_graph, ir_plt: ir_plt, module_beam_path_plt: module_beam_path_plt]
+    [
+      call_graph: call_graph,
+      ir_plt: ir_plt,
+      module_beam_path_plt: module_beam_path_plt,
+      runtime_mfas: list_runtime_mfas(call_graph)
+    ]
   end
 
   describe "build_module_digest_plt/0" do
@@ -86,13 +91,10 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  test "build_runtime_js/3", %{call_graph: call_graph, ir_plt: ir_plt} do
-    call_graph_clone = CallGraph.clone(call_graph)
+  test "build_runtime_js/3", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
     ir_plt_clone = PLT.clone(ir_plt)
 
-    runtime_mfas = list_runtime_mfas(call_graph_clone)
-
-    js = build_runtime_js(@js_dir, ir_plt_clone, runtime_mfas)
+    js = build_runtime_js(runtime_mfas, ir_plt_clone, @js_dir)
 
     assert String.contains?(
              js,
@@ -112,8 +114,7 @@ defmodule Hologram.CompilerTest do
            )
   end
 
-  test "create_runtime_entry_file/3", %{call_graph: call_graph, ir_plt: ir_plt} do
-    call_graph_clone = CallGraph.clone(call_graph)
+  test "create_runtime_entry_file/3", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
     ir_plt_clone = PLT.clone(ir_plt)
 
     test_tmp_subdir = "test_create_runtime_entry_file_3"
@@ -125,7 +126,7 @@ defmodule Hologram.CompilerTest do
 
     clean_dir(opts[:tmp_dir])
 
-    entry_file_path = create_runtime_entry_file(call_graph_clone, ir_plt_clone, opts)
+    entry_file_path = create_runtime_entry_file(runtime_mfas, ir_plt_clone, opts)
 
     assert entry_file_path
            |> File.read!()
@@ -245,7 +246,7 @@ defmodule Hologram.CompilerTest do
   describe "list_runtime_mfas/1" do
     setup %{call_graph: call_graph} do
       call_graph_clone = CallGraph.clone(call_graph)
-      [call_graph: call_graph_clone, result: list_runtime_mfas(call_graph_clone)]
+      [call_graph: call_graph_clone]
     end
 
     test "doesn't mutate the call graph given in the argument", %{call_graph: call_graph} do
@@ -253,7 +254,7 @@ defmodule Hologram.CompilerTest do
     end
 
     test "includes MFAs that are reachable by Elixir functions used by the runtime", %{
-      result: result
+      runtime_mfas: result
     } do
       assert {Enum, :into, 2} in result
       assert {Enum, :into_protocol, 2} in result
@@ -265,14 +266,14 @@ defmodule Hologram.CompilerTest do
     end
 
     test "includes MFAs that are reachable by Erlang functions used by the runtime", %{
-      result: result
+      runtime_mfas: result
     } do
       assert {:erlang, :==, 2} in result
       assert {:erlang, :error, 2} in result
     end
 
-    test "removes duplicates", %{mfas: result} do
-      count = Enum.count(mfas, &(&1 == {Access, :get, 2}))
+    test "removes duplicates", %{runtime_mfas: result} do
+      count = Enum.count(result, &(&1 == {Access, :get, 2}))
       assert count == 1
     end
 
@@ -286,25 +287,25 @@ defmodule Hologram.CompilerTest do
         {:non_existing_module_fixture, :dummy_function_4, 4}
       )
 
-      mfas = list_runtime_mfas(call_graph)
+      result = list_runtime_mfas(call_graph)
 
-      assert {Calendar.ISO, :dummy_function_1, 1} in mfas
-      refute {NonExistingModuleFixture, :dummy_function_2, 2} in mfas
-      assert {:maps, :dummy_function_3, 3} in mfas
-      refute {:non_existing_module_fixture, :dummy_function_4, 4} in mfas
+      assert {Calendar.ISO, :dummy_function_1, 1} in result
+      refute {NonExistingModuleFixture, :dummy_function_2, 2} in result
+      assert {:maps, :dummy_function_3, 3} in result
+      refute {:non_existing_module_fixture, :dummy_function_4, 4} in result
     end
 
-    test "excludes Elixir MFAs which are transpiled manually", %{result: result} do
+    test "excludes Elixir MFAs which are transpiled manually", %{runtime_mfas: result} do
       refute {Kernel, :inspect, 1} in result
     end
 
     test "excludes MFAs which are reachable only from manually transpiled Elixir MFAs", %{
-      result: result
+      runtime_mfas: result
     } do
       refute {Inspect.Algebra, :group, 1} in result
     end
 
-    test "sorts results", %{result: result} do
+    test "sorts results", %{runtime_mfas: result} do
       assert hd(result) == {Access, :get, 2}
     end
   end

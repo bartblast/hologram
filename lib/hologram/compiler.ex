@@ -30,8 +30,8 @@ defmodule Hologram.Compiler do
   @doc """
   Builds Hologram runtime JavaScript source code.
   """
-  @spec build_runtime_js(file_path, PLT.t(), list(mfa)) :: String.t()
-  def build_runtime_js(js_dir, ir_plt, runtime_mfas) do
+  @spec build_runtime_js(list(mfa), PLT.t(), file_path) :: String.t()
+  def build_runtime_js(runtime_mfas, ir_plt, js_dir) do
     erlang_function_defs =
       runtime_mfas
       |> render_erlang_function_defs("#{js_dir}/erlang")
@@ -65,10 +65,10 @@ defmodule Hologram.Compiler do
   @doc """
   Creates runtime bundle entry file.
   """
-  @spec create_runtime_entry_file(CallGraph.t(), PLT.t(), opts) :: String.t()
-  def create_runtime_entry_file(call_graph, ir_plt, opts) do
-    opts[:js_dir]
-    |> build_runtime_js(call_graph, ir_plt)
+  @spec create_runtime_entry_file(list(mfa), PLT.t(), opts) :: String.t()
+  def create_runtime_entry_file(runtime_mfas, ir_plt, opts) do
+    runtime_mfas
+    |> build_runtime_js(ir_plt, opts[:js_dir])
     |> create_entry_file("runtime", opts[:tmp_dir])
   end
 
