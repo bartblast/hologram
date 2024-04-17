@@ -133,6 +133,31 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Returns the list of MFAs that are reachable by the given page.
+  Functions required by the runtime as well as manually ported Elixir functions are excluded.
+  """
+  @spec list_page_mfas(CallGraph.t(), module) :: list(mfa)
+  def list_page_mfas(call_graph, page_module) do
+    layout_module = page_module.__layout_module__()
+    runtime_mfas = list_runtime_mfas(call_graph)
+
+    call_graph
+    |> CallGraph.get_graph()
+    |> Graph.add_edge(page_module, {page_module, :__layout_module__, 0})
+    |> Graph.add_edge(page_module, {page_module, :__layout_props__, 0})
+    |> Graph.add_edge(page_module, {page_module, :__props__, 0})
+    |> Graph.add_edge(page_module, {page_module, :action, 3})
+    |> Graph.add_edge(page_module, {page_module, :template, 0})
+    |> Graph.add_edge(page_module, {layout_module, :__props__, 0})
+    |> Graph.add_edge(page_module, {layout_module, :action, 3})
+    |> Graph.add_edge(page_module, {layout_module, :template, 0})
+    |> remove_call_graph_vertices_of_manually_ported_elixir_functions()
+    |> CallGraph.reachable(page_module)
+    |> Enum.filter(&is_tuple/1)
+    |> Kernel.--(runtime_mfas)
+  end
+
+  @doc """
   Lists MFAs required by the runtime JS script.
   Manually ported Elixir functions are excluded.
   """
@@ -580,30 +605,5 @@ end
 #     File.write!(static_bundle_path_with_digest, js_with_replaced_source_map_url)
 
 #     {entry_name, digest}
-#   end
-
-#   @doc """
-#   Returns the list of MFAs that are reachable by the given page.
-#   Functions required by the runtime as well as manually ported Elixir functions are excluded.
-#   """
-#   @spec list_page_mfas(CallGraph.t(), module) :: list(mfa)
-#   def list_page_mfas(call_graph, page_module) do
-#     layout_module = page_module.__layout_module__()
-#     runtime_mfas = list_runtime_mfas(call_graph)
-
-#     call_graph
-#     |> CallGraph.get_graph()
-#     |> Graph.add_edge(page_module, {page_module, :__layout_module__, 0})
-#     |> Graph.add_edge(page_module, {page_module, :__layout_props__, 0})
-#     |> Graph.add_edge(page_module, {page_module, :__props__, 0})
-#     |> Graph.add_edge(page_module, {page_module, :action, 3})
-#     |> Graph.add_edge(page_module, {page_module, :template, 0})
-#     |> Graph.add_edge(page_module, {layout_module, :__props__, 0})
-#     |> Graph.add_edge(page_module, {layout_module, :action, 3})
-#     |> Graph.add_edge(page_module, {layout_module, :template, 0})
-#     |> remove_call_graph_vertices_of_manually_ported_elixir_functions()
-#     |> CallGraph.reachable(page_module)
-#     |> Enum.filter(&is_tuple/1)
-#     |> Kernel.--(runtime_mfas)
 #   end
 # end
