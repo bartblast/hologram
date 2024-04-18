@@ -1,4 +1,6 @@
 defmodule Hologram.Commons.FileUtils do
+  @type file_path :: String.t()
+
   @doc """
   Lists files nested in the given path or paths. The results are sorted in ascending order.
   The result doesn't include directories.
@@ -38,5 +40,16 @@ defmodule Hologram.Commons.FileUtils do
       true ->
         raise ArgumentError, ~s(Invalid path: "#{path}")
     end
+  end
+
+  @doc """
+  Removes the given dir (including all its contents) and creates an empty dir with the same name and path.
+  """
+  @spec recreate_dir(file_path) :: :ok
+  def recreate_dir(dir_path) do
+    File.rm_rf!(dir_path)
+    File.mkdir_p!(dir_path)
+
+    :ok
   end
 end
