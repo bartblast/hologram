@@ -149,8 +149,9 @@ defmodule Hologram.Commons.PLTTest do
       assert %PLT{pid: pid, table_ref: table_ref, table_name: nil} = start()
 
       assert is_pid(pid)
-      assert is_reference(table_ref)
+      assert Process.alive?(pid)
 
+      assert is_reference(table_ref)
       assert ets_table_exists?(table_ref)
     end
 
@@ -161,8 +162,9 @@ defmodule Hologram.Commons.PLTTest do
                start(table_name: table_name)
 
       assert is_pid(pid)
-      assert is_reference(table_ref)
+      assert Process.alive?(pid)
 
+      assert is_reference(table_ref)
       assert ets_table_exists?(table_ref)
       assert ets_table_exists?(table_name)
       assert ets_table_name_registered?(table_name)
