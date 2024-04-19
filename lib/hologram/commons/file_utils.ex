@@ -13,7 +13,7 @@ defmodule Hologram.Commons.FileUtils do
        "test/elixir/fixtures/commons/file_utils/list_files_recursively/dir_1/file_3.txt",
        "test/elixir/fixtures/commons/file_utils/list_files_recursively/dir_1/file_4.txt"]
   """
-  @spec list_files_recursively(binary | list(binary)) :: list(binary)
+  @spec list_files_recursively(file_path | list(file_path)) :: list(file_path)
   def list_files_recursively(path_or_paths)
 
   def list_files_recursively(paths) when is_list(paths) do
