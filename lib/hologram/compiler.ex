@@ -227,6 +227,7 @@ defmodule Hologram.Compiler do
 
   @doc """
   Loads module BEAM path PLT from a dump file if the file exists or creates an empty PLT.
+  Benchmarks: https://github.com/bartblast/hologram/tree/master/benchmarks/compiler/maybe_load_module_beam_path_plt
   """
   @spec maybe_load_module_beam_path_plt(file_path) :: {PLT.t(), String.t()}
   def maybe_load_module_beam_path_plt(build_dir) do
