@@ -2,45 +2,50 @@ alias Hologram.Commons.FileUtils
 alias Hologram.Commons.Reflection
 alias Hologram.Compiler
 
-without_cache_tmp_dir =
-  Path.join([Reflection.tmp_dir(), "compiler", "maybe_install_js_deps_without_cache"])
-
-without_cache_assets_dir = Path.join(without_cache_tmp_dir, "assets")
-without_cache_build_dir = Path.join(without_cache_tmp_dir, "build")
-
-with_cache_tmp_dir =
-  Path.join([Reflection.tmp_dir(), "compiler", "maybe_install_js_deps_with_cache"])
-
-with_cache_assets_dir = Path.join(with_cache_tmp_dir, "assets")
-with_cache_build_dir = Path.join(with_cache_tmp_dir, "build")
-
 lib_package_json_path = Path.join([Reflection.root_dir(), "assets", "package.json"])
-without_cache_package_json_path = Path.join(without_cache_assets_dir, "package.json")
-with_cache_package_json_path = Path.join(with_cache_assets_dir, "package.json")
 
-# Setup "with cache" case
-FileUtils.recreate_dir(with_cache_tmp_dir)
-File.mkdir!(with_cache_assets_dir)
-File.mkdir!(with_cache_build_dir)
-File.cp!(lib_package_json_path, with_cache_package_json_path)
-Compiler.maybe_install_js_deps(with_cache_assets_dir, with_cache_build_dir)
+# Setup "no install" case
+
+no_install_tmp_dir =
+  Path.join([Reflection.tmp_dir(), "compiler", "maybe_install_js_deps_no_install"])
+
+no_install_assets_dir = Path.join(no_install_tmp_dir, "assets")
+no_install_build_dir = Path.join(no_install_tmp_dir, "build")
+no_install_package_json_path = Path.join(no_install_assets_dir, "package.json")
+
+FileUtils.recreate_dir(no_install_tmp_dir)
+File.mkdir!(no_install_assets_dir)
+File.mkdir!(no_install_build_dir)
+
+File.cp!(lib_package_json_path, no_install_package_json_path)
+
+Compiler.maybe_install_js_deps(no_install_assets_dir, no_install_build_dir)
+
+# Setup "do install" case
+
+do_install_tmp_dir =
+  Path.join([Reflection.tmp_dir(), "compiler", "maybe_install_js_deps_do_install"])
+
+do_install_assets_dir = Path.join(do_install_tmp_dir, "assets")
+do_install_build_dir = Path.join(do_install_tmp_dir, "build")
+do_install_package_json_path = Path.join(do_install_assets_dir, "package.json")
 
 Benchee.run(
   %{
-    "without cache" => fn _input ->
-      Compiler.maybe_install_js_deps(without_cache_assets_dir, without_cache_build_dir)
+    "no install" => fn _input ->
+      Compiler.maybe_install_js_deps(no_install_assets_dir, no_install_build_dir)
     end,
-    "with cache" => fn _input ->
-      Compiler.maybe_install_js_deps(with_cache_assets_dir, with_cache_build_dir)
+    "do install" => fn _input ->
+      Compiler.maybe_install_js_deps(do_install_assets_dir, do_install_build_dir)
     end
   },
+  # Can't add a separate before_each hook for each case.
   before_each: fn _input ->
-    # Setup "without cache" case
-    FileUtils.recreate_dir(without_cache_tmp_dir)
-    File.mkdir!(without_cache_assets_dir)
-    File.mkdir!(without_cache_build_dir)
+    FileUtils.recreate_dir(do_install_tmp_dir)
+    File.mkdir!(do_install_assets_dir)
+    File.mkdir!(do_install_build_dir)
 
-    File.cp!(lib_package_json_path, without_cache_package_json_path)
+    File.cp!(lib_package_json_path, do_install_package_json_path)
 
     System.cmd("npm", ["cache", "clean", "--force"])
   end,
