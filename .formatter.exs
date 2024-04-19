@@ -18,7 +18,7 @@ test_locals_without_parens = [
   export: [locals_without_parens: exported_locals_without_parens],
   inputs: [
     "*.{ex,exs}",
-    "{config,lib}/**/*.{ex,exs}",
+    "{benchmarks,config,lib}/**/*.{ex,exs}",
     "test/elixir/**/*.{ex,exs}"
   ],
   locals_without_parens: exported_locals_without_parens ++ test_locals_without_parens
