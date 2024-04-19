@@ -165,4 +165,12 @@ defmodule Hologram.Commons.PLT do
 
     %PLT{pid: pid, table_ref: table_ref, table_name: opts[:table_name]}
   end
+
+  @doc """
+  Stops the underlying GenServer process.
+  """
+  @spec stop(PLT.t()) :: :ok
+  def stop(%PLT{pid: pid}) do
+    GenServer.stop(pid)
+  end
 end

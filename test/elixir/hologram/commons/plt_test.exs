@@ -170,4 +170,11 @@ defmodule Hologram.Commons.PLTTest do
       assert ets_table_name_registered?(table_name)
     end
   end
+
+  test "stop/1" do
+    %{pid: pid} = plt = start()
+
+    assert stop(plt) == :ok
+    refute Process.alive?(pid)
+  end
 end
