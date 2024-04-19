@@ -183,6 +183,7 @@ defmodule Hologram.Compiler do
 
   @doc """
   Installs JavaScript deps if package.json has changed or if the deps haven't been installed yet.
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_install_js_deps/README.md
   """
   @spec maybe_install_js_deps(file_path, file_path) :: :ok | nil
   def maybe_install_js_deps(assets_dir, build_dir) do
