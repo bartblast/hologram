@@ -1,6 +1,6 @@
 Benchmark
 
-maybe_load_module_beam_path_plt/1
+build_module_digest_plt!/1
 
 ## System
 

@@ -34,7 +34,7 @@ Benchee.run(
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
-     description: "maybe_load_module_beam_path_plt/1", file: Path.join(__DIR__, "README.md")}
+     description: "build_module_digest_plt!/1", file: Path.join(__DIR__, "README.md")}
   ],
   time: 60
 )
