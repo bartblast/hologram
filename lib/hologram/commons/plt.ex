@@ -15,7 +15,7 @@ defmodule Hologram.Commons.PLT do
   @type t :: %PLT{pid: pid | nil, table_ref: ETS.tid() | nil, table_name: atom | nil}
 
   @doc """
-  Returns a clone of the given PLT.
+  Returns a clone of the PLT.
   """
   @spec clone(PLT.t()) :: PLT.t()
   def clone(plt) do
@@ -28,7 +28,7 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
-  Deletes a key-value pair from the underlying ETS table.
+  Deletes a key-value pair from the PLT.
   """
   @spec delete(PLT.t(), any) :: PLT.t()
   def delete(%{table_ref: table_ref} = plt, key) do
@@ -37,7 +37,7 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
-  Serializes the contents of the given PLT's ETS table and writes it to a file.
+  Serializes the contents of the PLT and writes it to a file.
   """
   @spec dump(PLT.t(), String.t()) :: PLT.t()
   def dump(plt, path) do
@@ -56,7 +56,7 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
-  Returns the value stored in the underlying ETS table under the given key.
+  Returns the value stored in the PLT under the given key.
   If the key doesn't exist the :error :atom is returned.
   """
   @spec get(PLT.t(), any) :: {:ok, term} | :error
@@ -65,7 +65,7 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
-  Returns the value stored in the underlying ETS table under the given key.
+  Returns the value stored in the PLT under the given key.
   If the key doesn't exist a KeyError is raised.
   """
   @spec get!(PLT.t(), any) :: term
@@ -77,7 +77,7 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
-  Returns all items stored in the underlying ETS table.
+  Returns all items stored in the PLT.
   """
   @spec get_all(PLT.t()) :: map
   def get_all(%{table_ref: table_ref}) do
@@ -110,7 +110,7 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
-  Populates the underlying ETS table of the given PLT with items dumped to the given file.
+  Populates the PLT with items dumped to the given file.
   """
   @spec load(PLT.t(), String.t()) :: PLT.t()
   def load(plt, dump_path) do
@@ -124,7 +124,7 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
-  Populates the underlying ETS table of the given PLT with items dumped to the given file if the file exists.
+  Populates the PLT with items dumped to the given file if the file exists.
   """
   @spec maybe_load(PLT.t(), String.t()) :: PLT.t()
   def maybe_load(plt, dump_path) do
@@ -136,7 +136,7 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
-  Puts multiple items into the underlying ETS table.
+  Puts multiple items into the PLT.
   """
   @spec put(PLT.t(), list({any, any})) :: PLT.t()
   def put(%{table_ref: table_ref} = plt, items) do
@@ -145,7 +145,7 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
-  Puts the given item into the underlying ETS table.
+  Puts the given item into the PLT.
   """
   @spec put(PLT.t(), any, any) :: PLT.t()
   def put(%PLT{table_ref: table_ref} = plt, key, value) do
