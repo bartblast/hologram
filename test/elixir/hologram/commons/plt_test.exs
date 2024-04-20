@@ -144,6 +144,11 @@ defmodule Hologram.Commons.PLTTest do
     assert ETS.get!(table_ref, :my_key_3) == :my_value_3
   end
 
+  test "reset/1", %{plt: %{table_ref: table_ref} = plt} do
+    assert reset(plt) == plt
+    assert ETS.get_all(table_ref) == %{}
+  end
+
   describe "start/1" do
     test "unnamed table" do
       assert %PLT{pid: pid, table_ref: table_ref, table_name: nil} = start()

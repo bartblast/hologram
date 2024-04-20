@@ -154,6 +154,15 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
+  Removes all items from the PLT.
+  """
+  @spec reset(PLT.t()) :: PLT.t()
+  def reset(%PLT{table_ref: table_ref} = plt) do
+    ETS.reset(table_ref)
+    plt
+  end
+
+  @doc """
   Starts the underlying GenServer process.
   """
   @spec start(keyword) :: PLT.t()
