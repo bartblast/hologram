@@ -95,4 +95,9 @@ defmodule Hologram.Commons.ETSTest do
     assert put(table_ref, :my_key_3, :my_value_3) == true
     assert :ets.lookup(table_ref, :my_key_3) == [{:my_key_3, :my_value_3}]
   end
+
+  test "reset/1", %{table_ref: table_ref} do
+    assert reset(table_ref) == true
+    assert get_all(table_ref) == %{}
+  end
 end

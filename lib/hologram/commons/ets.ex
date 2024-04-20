@@ -79,4 +79,12 @@ defmodule Hologram.Commons.ETS do
   def put(table_name_or_ref, key, value) do
     :ets.insert(table_name_or_ref, {key, value})
   end
+
+  @doc """
+  Removes all items from the ETS table.
+  """
+  @spec reset(tid) :: true
+  def reset(table_name_or_ref) do
+    :ets.delete_all_objects(table_name_or_ref)
+  end
 end
