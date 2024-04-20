@@ -195,6 +195,8 @@ defmodule Hologram.Commons.Reflection do
   Lists Elixir modules belonging to any of the loaded OTP applications used by the project (except :hex).
   Elixir modules listed in @ignored_modules module attribute, Elixir modules without a BEAM file, and Erlang modules are filtered out.
   The project OTP application is included.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/reflection/list_elixir_modules/README.md
   """
   @spec list_elixir_modules() :: list(module)
   def list_elixir_modules do

@@ -14,6 +14,8 @@ defmodule Hologram.Compiler do
   @doc """
   Builds a persistent lookup table (PLT) containing the BEAM defs digests for all the modules in the project.
   Mutates module BEAM path PLT.
+
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_module_digest_plt!/README.md
   """
   @spec build_module_digest_plt!(PLT.t()) :: PLT.t()
   def build_module_digest_plt!(module_beam_path_plt) do
@@ -183,6 +185,7 @@ defmodule Hologram.Compiler do
 
   @doc """
   Installs JavaScript deps if package.json has changed or if the deps haven't been installed yet.
+
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_install_js_deps/README.md
   """
   @spec maybe_install_js_deps(file_path, file_path) :: :ok | nil
@@ -228,7 +231,8 @@ defmodule Hologram.Compiler do
 
   @doc """
   Loads module BEAM path PLT from a dump file if the file exists or creates an empty PLT.
-  Benchmarks: https://github.com/bartblast/hologram/tree/master/benchmarks/compiler/maybe_load_module_beam_path_plt
+
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_module_beam_path_plt/README.md
   """
   @spec maybe_load_module_beam_path_plt(file_path) :: {PLT.t(), String.t()}
   def maybe_load_module_beam_path_plt(build_dir) do
