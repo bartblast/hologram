@@ -32,23 +32,23 @@ do_install_package_json_path = Path.join(do_install_assets_dir, "package.json")
 
 Benchee.run(
   %{
-    "no install" => fn _input ->
+    "no install" => fn ->
       Compiler.maybe_install_js_deps(no_install_assets_dir, no_install_build_dir)
     end,
-    "do install" => fn _input ->
-      Compiler.maybe_install_js_deps(do_install_assets_dir, do_install_build_dir)
-    end
+    "do install" =>
+      {fn _input ->
+         Compiler.maybe_install_js_deps(do_install_assets_dir, do_install_build_dir)
+       end,
+       before_each: fn _input ->
+         FileUtils.recreate_dir(do_install_tmp_dir)
+         File.mkdir!(do_install_assets_dir)
+         File.mkdir!(do_install_build_dir)
+
+         File.cp!(lib_package_json_path, do_install_package_json_path)
+
+         System.cmd("npm", ["cache", "clean", "--force"])
+       end}
   },
-  # Can't add a separate before_each hook for each case.
-  before_each: fn _input ->
-    FileUtils.recreate_dir(do_install_tmp_dir)
-    File.mkdir!(do_install_assets_dir)
-    File.mkdir!(do_install_build_dir)
-
-    File.cp!(lib_package_json_path, do_install_package_json_path)
-
-    System.cmd("npm", ["cache", "clean", "--force"])
-  end,
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
