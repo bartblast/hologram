@@ -1,35 +1,30 @@
+alias Hologram.Benchmarks
 alias Hologram.Commons.PLT
-alias Hologram.Commons.Reflection
-alias Hologram.Commons.TaskUtils
 alias Hologram.Compiler
-
-# Setup "no cache" case
-
-no_cache_module_beam_path_plt = PLT.start()
-
-# Setup "has cache" case
-
-has_cache_module_beam_path_plt = PLT.start()
-
-Reflection.list_elixir_modules()
-|> TaskUtils.async_many(fn module ->
-  beam_path = :code.which(module)
-  PLT.put(has_cache_module_beam_path_plt, module, beam_path)
-end)
-|> Task.await_many(:infinity)
 
 Benchee.run(
   %{
     "no cache" =>
-      {fn ->
-         Compiler.build_module_digest_plt!(no_cache_module_beam_path_plt)
+      {fn module_beam_path_plt ->
+         {module_beam_path_plt, Compiler.build_module_digest_plt!(module_beam_path_plt)}
        end,
-       after_each: fn _module_digest_plt ->
-         PLT.reset(no_cache_module_beam_path_plt)
+       before_each: fn _input ->
+         PLT.start()
+       end,
+       after_each: fn {module_beam_path_plt, module_digest_plt} ->
+         PLT.stop(module_beam_path_plt)
+         PLT.stop(module_digest_plt)
        end},
-    "has cache" => fn ->
-      Compiler.build_module_digest_plt!(has_cache_module_beam_path_plt)
-    end
+    "has cache" =>
+      {fn module_beam_path_plt ->
+         Compiler.build_module_digest_plt!(module_beam_path_plt)
+       end,
+       before_scenario: fn _input ->
+         Benchmarks.build_module_beam_path_plt()
+       end,
+       after_each: fn module_digest_plt ->
+         PLT.stop(module_digest_plt)
+       end}
   },
   formatters: [
     Benchee.Formatters.Console,
