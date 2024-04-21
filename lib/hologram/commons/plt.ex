@@ -172,7 +172,11 @@ defmodule Hologram.Commons.PLT do
     {:ok, pid} = GenServer.start_link(PLT, opts[:table_name], genserver_opts)
     table_ref = GenServer.call(pid, :get_table_ref)
 
-    %PLT{pid: pid, table_ref: table_ref, table_name: opts[:table_name]}
+    plt = %PLT{pid: pid, table_ref: table_ref, table_name: opts[:table_name]}
+
+    if opts[:items], do: PLT.put(plt, opts[:items])
+
+    plt
   end
 
   @doc """

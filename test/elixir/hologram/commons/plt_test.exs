@@ -174,6 +174,11 @@ defmodule Hologram.Commons.PLTTest do
       assert ets_table_exists?(table_name)
       assert ets_table_name_registered?(table_name)
     end
+
+    test "with items" do
+      assert %PLT{} = plt = start(items: @items)
+      assert get_all(plt) == Enum.into(@items, %{})
+    end
   end
 
   test "stop/1" do
