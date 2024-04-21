@@ -43,8 +43,8 @@ Benchee.run(
          PLT.start(items: all_updated_module_digest_plt_items)
        end},
     "1/3 added, 1/3 removed, 1/3 updated" => {
-      fn {old_module_digests_plt, new_module_digests_plt} ->
-        Compiler.diff_module_digest_plts(old_module_digests_plt, new_module_digests_plt)
+      fn {old_module_digest_plt, new_module_digest_plt} ->
+        Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
       end,
       before_scenario: fn _input ->
         module_digests = PLT.get_all(module_digest_plt)
@@ -65,7 +65,7 @@ Benchee.run(
           |> Map.drop(Enum.map(added_module_digests, fn {key, _value} -> key end))
           |> Map.to_list()
 
-        old_module_digests_plt = PLT.start(items: old_module_digests)
+        old_module_digest_plt = PLT.start(items: old_module_digests)
 
         new_module_digests =
           updated_module_digests
@@ -74,9 +74,9 @@ Benchee.run(
           end)
           |> Kernel.++(added_module_digests)
 
-        new_module_digests_plt = PLT.start(items: new_module_digests)
+        new_module_digest_plt = PLT.start(items: new_module_digests)
 
-        {old_module_digests_plt, new_module_digests_plt}
+        {old_module_digest_plt, new_module_digest_plt}
       end
     }
   },
