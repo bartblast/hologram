@@ -77,6 +77,8 @@ defmodule Hologram.Compiler do
 
   @doc """
   Compares two module digest PLTs and returns the added, removed, and updated modules lists.
+
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/diff_module_digest_plts/README.md
   """
   @spec diff_module_digest_plts(PLT.t(), PLT.t()) :: %{
           added_modules: list(module),
