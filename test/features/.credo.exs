@@ -88,7 +88,6 @@
           {Credo.Check.Warning.IExPry, []},
           {Credo.Check.Warning.IoInspect, []},
           {Credo.Check.Warning.LazyLogging, []},
-          {Credo.Check.Warning.LeakyEnvironment, []},
           {Credo.Check.Warning.MapGetUnsafePass, []},
           {Credo.Check.Warning.MissedMetadataKeyInLoggerConfig, []},
           {Credo.Check.Warning.MixEnv, []},
@@ -114,7 +113,8 @@
           {Credo.Check.Readability.ModuleDoc, []},
           {Credo.Check.Readability.Specs, []},
           {Credo.Check.Refactor.MapMap, []},
-          {Credo.Check.Refactor.ModuleDependencies, []}
+          {Credo.Check.Refactor.ModuleDependencies, []},
+          {Credo.Check.Warning.LeakyEnvironment, []}
         ]
       }
     }
