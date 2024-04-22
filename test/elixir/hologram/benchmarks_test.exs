@@ -1,7 +1,14 @@
 defmodule Hologram.BenchmarksTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Benchmarks
+
   alias Hologram.Commons.PLT
+  alias Hologram.Compiler.IR
+
+  test "build_ir_plt/0" do
+    assert %PLT{} = plt = build_ir_plt()
+    assert %IR.ModuleDefinition{} = PLT.get!(plt, Hologram.Benchmarks)
+  end
 
   test "build_module_beam_path_plt/0" do
     assert %PLT{} = plt = build_module_beam_path_plt()
