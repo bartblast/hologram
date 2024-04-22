@@ -1,6 +1,6 @@
 defmodule Hologram.Benchmarks do
-  alias Hologram.Commons.PLT
   alias Hologram.Commons.CryptographicUtils
+  alias Hologram.Commons.PLT
   alias Hologram.Compiler
 
   @doc """
