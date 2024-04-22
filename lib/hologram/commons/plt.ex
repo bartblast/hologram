@@ -163,6 +163,16 @@ defmodule Hologram.Commons.PLT do
   end
 
   @doc """
+  Returns the number of items in the PLT.
+  """
+  @spec size(PLT.t()) :: integer
+  def size(plt) do
+    plt
+    |> get_all()
+    |> Enum.count()
+  end
+
+  @doc """
   Starts the underlying GenServer process.
   """
   @spec start(keyword) :: PLT.t()

@@ -181,6 +181,11 @@ defmodule Hologram.Commons.PLTTest do
     end
   end
 
+  test "size/1" do
+    plt = start(items: @items)
+    assert size(plt) == 2
+  end
+
   test "stop/1" do
     %{pid: pid} = plt = start()
 
