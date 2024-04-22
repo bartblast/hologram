@@ -66,6 +66,11 @@ defmodule Hologram.CompilerTest do
     ]
   end
 
+  test "build_ir_plt/1", %{module_beam_path_plt: module_beam_path_plt} do
+    assert %PLT{} = plt = build_ir_plt(module_beam_path_plt)
+    assert %IR.ModuleDefinition{} = PLT.get!(plt, Hologram.Benchmarks)
+  end
+
   describe "build_module_digest_plt!/0" do
     setup %{module_beam_path_plt: module_beam_path_plt} do
       [module_beam_path_plt: PLT.clone(module_beam_path_plt)]
