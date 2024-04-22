@@ -40,20 +40,15 @@ defmodule Hologram.CompilerTest do
   end
 
   setup_all do
-    modules = Reflection.list_elixir_modules()
+    module_beam_path_plt = build_module_beam_path_plt()
+    ir_plt = build_ir_plt(module_beam_path_plt)
 
-    module_beam_path_plt = PLT.start()
-    ir_plt = PLT.start()
     call_graph = CallGraph.start()
 
-    modules
+    Reflection.list_elixir_modules()
     |> TaskUtils.async_many(fn module ->
-      beam_path = :code.which(module)
-      PLT.put(module_beam_path_plt, module, beam_path)
-
+      beam_path = PLT.get!(module_beam_path_plt, module)
       ir = IR.for_module(beam_path)
-      PLT.put(ir_plt, module, ir)
-
       CallGraph.build(call_graph, ir)
     end)
     |> Task.await_many(:infinity)
@@ -66,9 +61,16 @@ defmodule Hologram.CompilerTest do
     ]
   end
 
-  test "build_ir_plt/1", %{module_beam_path_plt: module_beam_path_plt} do
-    assert %PLT{} = plt = build_ir_plt(module_beam_path_plt)
-    assert %IR.ModuleDefinition{} = PLT.get!(plt, Hologram.Benchmarks)
+  test "build_ir_plt/1", %{ir_plt: ir_plt} do
+    assert %PLT{} = ir_plt
+
+    assert %IR.ModuleDefinition{module: %IR.AtomType{value: Hologram.Compiler}} =
+             PLT.get!(ir_plt, Hologram.Compiler)
+  end
+
+  test "build_module_beam_path_plt/0", %{module_beam_path_plt: module_beam_path_plt} do
+    assert %PLT{} = module_beam_path_plt
+    assert PLT.get!(module_beam_path_plt, Hologram.Compiler) == :code.which(Hologram.Compiler)
   end
 
   describe "build_module_digest_plt!/0" do

@@ -47,7 +47,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     ir_plt = PLT.start()
     PLT.load(ir_plt, ir_plt_dump_path)
-    assert %IR.ModuleDefinition{} = PLT.get!(ir_plt, Module2)
+
+    assert %IR.ModuleDefinition{module: %IR.AtomType{value: Module2}} = PLT.get!(ir_plt, Module2)
   end
 
   defp test_js_deps do
