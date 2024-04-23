@@ -148,6 +148,8 @@ defmodule Hologram.Compiler.CallGraph do
 
   @doc """
   Builds the call graph of all modules in the given IR PLT.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/call_graph/build_from_ir_plt/README.md
   """
   @spec build_from_ir_plt(PLT.t()) :: CallGraph.t()
   def build_from_ir_plt(ir_plt) do
