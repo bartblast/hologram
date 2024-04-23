@@ -10,7 +10,8 @@ Benchee.run(
          Compiler.maybe_load_ir_plt(build_dir)
        end,
        before_scenario: fn _input ->
-         build_dir = Path.join([Reflection.tmp_dir(), "compiler", "maybe_load_ir_plt_no_load"])
+         build_dir =
+           Path.join([Reflection.tmp_dir(), "benchmarks", "compiler", "maybe_load_ir_plt_no_load"])
 
          FileUtils.recreate_dir(build_dir)
 
@@ -21,7 +22,8 @@ Benchee.run(
          Compiler.maybe_load_ir_plt(build_dir)
        end,
        before_scenario: fn _input ->
-         build_dir = Path.join([Reflection.tmp_dir(), "compiler", "maybe_load_ir_plt_do_load"])
+         build_dir =
+           Path.join([Reflection.tmp_dir(), "benchmarks", "compiler", "maybe_load_ir_plt_do_load"])
 
          plt = Compiler.build_ir_plt()
 

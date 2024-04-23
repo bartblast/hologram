@@ -12,7 +12,12 @@ Benchee.run(
        end,
        before_scenario: fn _input ->
          tmp_dir =
-           Path.join([Reflection.tmp_dir(), "compiler", "maybe_install_js_deps_no_install"])
+           Path.join([
+             Reflection.tmp_dir(),
+             "benchmarks",
+             "compiler",
+             "maybe_install_js_deps_no_install"
+           ])
 
          assets_dir = Path.join(tmp_dir, "assets")
          build_dir = Path.join(tmp_dir, "build")
@@ -33,7 +38,12 @@ Benchee.run(
        end,
        before_scenario: fn _input ->
          tmp_dir =
-           Path.join([Reflection.tmp_dir(), "compiler", "maybe_install_js_deps_do_install"])
+           Path.join([
+             Reflection.tmp_dir(),
+             "benchmarks",
+             "compiler",
+             "maybe_install_js_deps_do_install"
+           ])
 
          assets_dir = Path.join(tmp_dir, "assets")
          build_dir = Path.join(tmp_dir, "build")
