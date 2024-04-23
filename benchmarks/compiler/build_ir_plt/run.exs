@@ -1,4 +1,3 @@
-alias Hologram.Benchmarks
 alias Hologram.Commons.PLT
 alias Hologram.Compiler
 
@@ -9,7 +8,7 @@ Benchee.run(
          Compiler.build_ir_plt(module_beam_path_plt)
        end,
        before_scenario: fn _input ->
-         Benchmarks.build_module_beam_path_plt()
+         Compiler.build_module_beam_path_plt()
        end,
        after_each: fn ir_plt ->
          PLT.stop(ir_plt)

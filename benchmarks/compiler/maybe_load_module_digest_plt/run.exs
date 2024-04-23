@@ -1,4 +1,3 @@
-alias Hologram.Benchmarks
 alias Hologram.Commons.FileUtils
 alias Hologram.Commons.PLT
 alias Hologram.Commons.Reflection
@@ -26,7 +25,7 @@ Benchee.run(
          build_dir =
            Path.join([Reflection.tmp_dir(), "compiler", "maybe_load_module_digest_plt_do_load"])
 
-         module_beam_path_plt = Benchmarks.build_module_beam_path_plt()
+         module_beam_path_plt = Compiler.build_module_beam_path_plt()
          module_digest_plt = Compiler.build_module_digest_plt!(module_beam_path_plt)
 
          module_digest_plt_dump_path = Path.join(build_dir, "module_digest.plt")
