@@ -379,6 +379,14 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Stops the CallGraph agent.
+  """
+  @spec stop(CallGraph.t()) :: :ok
+  def stop(%CallGraph{pid: pid}) do
+    Agent.stop(pid)
+  end
+
+  @doc """
   Returns graph vertices.
   """
   @spec vertices(CallGraph.t()) :: list(vertex)

@@ -1183,6 +1183,13 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert Agent.get(pid, & &1) == Graph.new()
   end
 
+  test "stop/1" do
+    %{pid: pid} = call_graph = start()
+
+    assert stop(call_graph) == :ok
+    refute Process.alive?(pid)
+  end
+
   test "vertices/1", %{call_graph: call_graph} do
     call_graph
     |> add_edge(:vertex_4, :vertex_5)
