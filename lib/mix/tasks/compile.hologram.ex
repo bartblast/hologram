@@ -79,7 +79,6 @@ defmodule Mix.Tasks.Compile.Hologram do
     Compiler.validate_page_modules(page_modules)
 
     CallGraph.dump(call_graph, call_graph_dump_path)
-    PLT.dump(ir_plt, ir_plt_dump_path)
     PLT.dump(new_module_digest_plt, module_digest_plt_dump_path)
     PLT.dump(module_beam_path_plt, module_beam_path_plt_dump_path)
 
