@@ -1,4 +1,3 @@
-alias Hologram.Benchmarks
 alias Hologram.Commons.FileUtils
 alias Hologram.Commons.PLT
 alias Hologram.Commons.Reflection
@@ -24,7 +23,7 @@ Benchee.run(
        before_scenario: fn _input ->
          build_dir = Path.join([Reflection.tmp_dir(), "compiler", "maybe_load_ir_plt_do_load"])
 
-         plt = Benchmarks.build_ir_plt()
+         plt = Compiler.build_ir_plt()
 
          dump_path = Path.join(build_dir, "ir.plt")
          PLT.dump(plt, dump_path)
