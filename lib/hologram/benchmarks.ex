@@ -8,6 +8,7 @@ defmodule Hologram.Benchmarks do
   The fourth argument is implicit: untouched_modules_perc = 100 - added_modules_perc - removed_modules_perc - updated_modules_perc.
   """
   @spec generate_module_digest_plts(integer, integer, integer) :: {PLT.t(), PLT.t()}
+  # credo:disable-for-lines:53 Credo.Check.Refactor.ABCSize
   def generate_module_digest_plts(added_modules_perc, removed_modules_perc, updated_modules_perc) do
     if added_modules_perc + removed_modules_perc + updated_modules_perc > 100 do
       raise ArgumentError, message: "the sum of the arguments must be less than or equal to 100"
