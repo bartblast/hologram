@@ -18,11 +18,11 @@ defmodule Hologram.BenchmarksTest do
   end
 
   describe "generate_module_digest_plts/2" do
-    test "100% added modules, 0% removed modules, 0% updated modules", %{
+    test "100% added modules, 0% removed modules, 0% updated modules, 0% untouched modules", %{
       module_digest_plt: module_digest_plt,
       num_modules: num_modules
     } do
-      {old_module_digest_plt, new_module_digest_plt} = generate_module_digest_plts(100, 0)
+      {old_module_digest_plt, new_module_digest_plt} = generate_module_digest_plts(100, 0, 0)
 
       assert PLT.size(old_module_digest_plt) == 0
       assert PLT.size(new_module_digest_plt) == num_modules
@@ -30,11 +30,11 @@ defmodule Hologram.BenchmarksTest do
       assert PLT.get_all(new_module_digest_plt) == PLT.get_all(module_digest_plt)
     end
 
-    test "0% added modules, 100% removed modules, 0% updated modules", %{
+    test "0% added modules, 100% removed modules, 0% updated modules, 0% untouched modules", %{
       module_digest_plt: module_digest_plt,
       num_modules: num_modules
     } do
-      {old_module_digest_plt, new_module_digest_plt} = generate_module_digest_plts(0, 100)
+      {old_module_digest_plt, new_module_digest_plt} = generate_module_digest_plts(0, 100, 0)
 
       assert PLT.size(old_module_digest_plt) == num_modules
       assert PLT.size(new_module_digest_plt) == 0
@@ -42,12 +42,12 @@ defmodule Hologram.BenchmarksTest do
       assert PLT.get_all(old_module_digest_plt) == PLT.get_all(module_digest_plt)
     end
 
-    test "0% added modules, 0% removed modules, 100% updated modules", %{
+    test "0% added modules, 0% removed modules, 100% updated modules, 0% untouched modules", %{
       module_digest_plt: module_digest_plt,
       modules: modules,
       num_modules: num_modules
     } do
-      {old_module_digest_plt, new_module_digest_plt} = generate_module_digest_plts(0, 0)
+      {old_module_digest_plt, new_module_digest_plt} = generate_module_digest_plts(0, 0, 100)
 
       assert PLT.size(old_module_digest_plt) == num_modules
       assert PLT.size(new_module_digest_plt) == num_modules
@@ -59,17 +59,36 @@ defmodule Hologram.BenchmarksTest do
       end)
     end
 
-    test "20% added modules, 30% removed modules, 50% updated modules", %{
+    test "0% added modules, 0% removed modules, 0% updated modules, 100% untouched modules", %{
+      module_digest_plt: module_digest_plt,
       modules: modules,
       num_modules: num_modules
     } do
-      {old_module_digest_plt, new_module_digest_plt} = generate_module_digest_plts(20, 30)
+      {old_module_digest_plt, new_module_digest_plt} = generate_module_digest_plts(0, 0, 0)
 
-      expected_num_added_modules = Integer.floor_div(20 * num_modules, 100)
-      expected_num_removed_modules = Integer.floor_div(30 * num_modules, 100)
+      assert PLT.size(old_module_digest_plt) == num_modules
+      assert PLT.size(new_module_digest_plt) == num_modules
 
-      expected_num_updated_modules =
-        num_modules - expected_num_added_modules - expected_num_removed_modules
+      assert PLT.get_all(old_module_digest_plt) == PLT.get_all(module_digest_plt)
+
+      Enum.each(modules, fn module ->
+        assert PLT.get!(old_module_digest_plt, module) == PLT.get!(new_module_digest_plt, module)
+      end)
+    end
+
+    test "10% added modules, 20% removed modules, 30% updated modules, 40% untouched modules", %{
+      modules: modules,
+      num_modules: num_modules
+    } do
+      {old_module_digest_plt, new_module_digest_plt} = generate_module_digest_plts(10, 20, 30)
+
+      expected_num_added_modules = Integer.floor_div(10 * num_modules, 100)
+      expected_num_removed_modules = Integer.floor_div(20 * num_modules, 100)
+      expected_num_updated_modules = Integer.floor_div(30 * num_modules, 100)
+
+      expected_num_untouched_modules =
+        num_modules - expected_num_added_modules - expected_num_removed_modules -
+          expected_num_updated_modules
 
       assert PLT.size(old_module_digest_plt) == num_modules - expected_num_added_modules
       assert PLT.size(new_module_digest_plt) == num_modules - expected_num_removed_modules
@@ -104,6 +123,17 @@ defmodule Hologram.BenchmarksTest do
         end)
 
       assert num_updated_modules == expected_num_updated_modules
+
+      num_untouched_modules =
+        Enum.reduce(modules, 0, fn module, acc ->
+          case {PLT.get(old_module_digest_plt, module), PLT.get(new_module_digest_plt, module)} do
+            {{:ok, digest}, {:ok, digest}} -> acc + 1
+            {{:ok, _digest_1}, {:ok, _digest_2}} -> acc
+            _fallback -> acc
+          end
+        end)
+
+      assert num_untouched_modules == expected_num_untouched_modules
     end
   end
 end
