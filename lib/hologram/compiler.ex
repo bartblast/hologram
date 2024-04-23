@@ -246,6 +246,8 @@ defmodule Hologram.Compiler do
 
   @doc """
   Loads call graph from a dump file if the file exists or creates an empty call graph.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_call_graph/README.md
   """
   @spec maybe_load_call_graph(file_path) :: {CallGraph.t(), String.t()}
   def maybe_load_call_graph(build_dir) do
