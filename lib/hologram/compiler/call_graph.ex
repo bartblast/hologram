@@ -147,6 +147,20 @@ defmodule Hologram.Compiler.CallGraph do
   def build(call_graph, _ir, _from_vertex), do: call_graph
 
   @doc """
+  Builds the call graph of all modules in the given IR PLT.
+  """
+  @spec build_from_ir_plt(PLT.t()) :: CallGraph.t()
+  def build_from_ir_plt(ir_plt) do
+    call_graph = start()
+
+    Reflection.list_elixir_modules()
+    |> TaskUtils.async_many(&build_for_module(call_graph, ir_plt, &1))
+    |> Task.await_many(:infinity)
+
+    call_graph
+  end
+
+  @doc """
   Returns a clone of the given call graph.
   """
   @spec clone(CallGraph.t()) :: CallGraph.t()

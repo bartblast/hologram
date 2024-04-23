@@ -5,6 +5,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
   alias Hologram.Commons.SerializationUtils
+  alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
 
@@ -670,6 +671,14 @@ defmodule Hologram.Compiler.CallGraphTest do
                {String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, :to_string, 1}
              )
     end
+  end
+
+  test "build_from_ir_plt/1" do
+    module_beam_path_plt = Compiler.build_module_beam_path_plt()
+    ir_plt = Compiler.build_ir_plt(module_beam_path_plt)
+
+    assert %CallGraph{} = call_graph = build_from_ir_plt(ir_plt)
+    assert has_vertex?(call_graph, {CallGraph, :build_from_ir_plt, 1})
   end
 
   test "clone/1", %{call_graph: call_graph} do
