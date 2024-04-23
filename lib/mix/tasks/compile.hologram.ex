@@ -58,8 +58,9 @@ defmodule Mix.Tasks.Compile.Hologram do
     module_digests_diff =
       Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
 
-    {ir_plt, ir_plt_dump_path} = Compiler.maybe_load_ir_plt(build_dir)
-    Compiler.patch_ir_plt!(ir_plt, module_digests_diff, module_beam_path_plt)
+    # Building IR PLT from scratch is almost x2 faster than loading IR PLT from a dump file,
+    # so Compiler.build_ir_plt/1 is used instead of Compiler.maybe_load_ir_plt/1 + Compiler.patch_ir_plt!/3.
+    ir_plt = Compiler.build_ir_plt(module_beam_path_plt)
 
     {call_graph, call_graph_dump_path} = Compiler.maybe_load_call_graph(build_dir)
     CallGraph.patch(call_graph, ir_plt, module_digests_diff)
