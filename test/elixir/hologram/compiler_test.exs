@@ -47,9 +47,7 @@ defmodule Hologram.CompilerTest do
 
     Reflection.list_elixir_modules()
     |> TaskUtils.async_many(fn module ->
-      beam_path = PLT.get!(module_beam_path_plt, module)
-      ir = IR.for_module(beam_path)
-      CallGraph.build(call_graph, ir)
+      CallGraph.build(call_graph, PLT.get!(ir_plt, module))
     end)
     |> Task.await_many(:infinity)
 
