@@ -5,9 +5,14 @@ defmodule Hologram.Benchmarks do
 
   @doc """
   Generates 2 module digest PLTs that fullfill the conditions given in the arguments.
+  The fourth argument is implicit: untouched_modules_perc = 100 - added_modules_perc - removed_modules_perc - updated_modules_perc.
   """
   @spec generate_module_digest_plts(integer, integer, integer) :: {PLT.t(), PLT.t()}
   def generate_module_digest_plts(added_modules_perc, removed_modules_perc, updated_modules_perc) do
+    if added_modules_perc + removed_modules_perc + updated_modules_perc > 100 do
+      raise ArgumentError, message: "the sum of the arguments must be less than or equal to 100"
+    end
+
     module_digests =
       Compiler.build_module_beam_path_plt()
       |> Compiler.build_module_digest_plt!()

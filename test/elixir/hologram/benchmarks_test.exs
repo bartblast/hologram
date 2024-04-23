@@ -135,5 +135,15 @@ defmodule Hologram.BenchmarksTest do
 
       assert num_untouched_modules == expected_num_untouched_modules
     end
+
+    test "invalid arguments" do
+      assert {%PLT{}, %PLT{}} = generate_module_digest_plts(20, 30, 50)
+
+      assert_raise ArgumentError,
+                   "the sum of the arguments must be less than or equal to 100",
+                   fn ->
+                     generate_module_digest_plts(20, 30, 50.1)
+                   end
+    end
   end
 end
