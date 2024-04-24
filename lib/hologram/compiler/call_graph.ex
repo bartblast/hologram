@@ -16,7 +16,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec add_edge(CallGraph.t(), vertex, vertex) :: CallGraph.t()
   def add_edge(%{pid: pid} = call_graph, from_vertex, to_vertex) do
-    Agent.update(pid, &Graph.add_edge(&1, from_vertex, to_vertex))
+    Agent.update(pid, &Graph.add_edge(&1, from_vertex, to_vertex), :infinity)
     call_graph
   end
 
@@ -34,7 +34,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec add_vertex(CallGraph.t(), vertex) :: CallGraph.t()
   def add_vertex(%{pid: pid} = call_graph, vertex) do
-    Agent.update(pid, &Graph.add_vertex(&1, vertex))
+    Agent.update(pid, &Graph.add_vertex(&1, vertex), :infinity)
     call_graph
   end
 
@@ -361,7 +361,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec remove_vertices(CallGraph.t(), list(vertex)) :: CallGraph.t()
   def remove_vertices(%{pid: pid} = call_graph, vertices) do
-    Agent.update(pid, &Graph.delete_vertices(&1, vertices))
+    Agent.update(pid, &Graph.delete_vertices(&1, vertices), :infinity)
     call_graph
   end
 
@@ -407,7 +407,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec vertices(CallGraph.t()) :: list(vertex)
   def vertices(%{pid: pid}) do
-    Agent.get(pid, &Graph.vertices/1)
+    Agent.get(pid, &Graph.vertices/1, :infinity)
   end
 
   # A component module can be passed as a prop to another component, allowing dynamic usage.
@@ -445,7 +445,7 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   defp inbound_edges(%{pid: pid}, vertex) do
-    Agent.get(pid, &Graph.in_edges(&1, vertex))
+    Agent.get(pid, &Graph.in_edges(&1, vertex), :infinity)
   end
 
   defp maybe_add_protocol_call_graph_edges(call_graph, module) do
