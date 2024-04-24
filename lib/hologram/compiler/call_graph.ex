@@ -360,6 +360,8 @@ defmodule Hologram.Compiler.CallGraph do
 
   @doc """
   Removes call graph vertices for Elixir functions ported manually.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/call_graph/remove_manually_ported_mfas/README.md
   """
   @spec remove_manually_ported_mfas(CallGraph.t()) :: CallGraph.t()
   def remove_manually_ported_mfas(call_graph) do
