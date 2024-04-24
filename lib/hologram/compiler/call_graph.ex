@@ -25,7 +25,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec add_edges(CallGraph.t(), list(Graph.Edge.t())) :: CallGraph.t()
   def add_edges(%{pid: pid} = call_graph, edges) do
-    Agent.update(pid, &Graph.add_edges(&1, edges))
+    Agent.update(pid, &Graph.add_edges(&1, edges), :infinity)
     call_graph
   end
 
@@ -204,7 +204,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec edges(CallGraph.t()) :: list(Graph.Edge.t())
   def edges(%{pid: pid}) do
-    Agent.get(pid, &Graph.edges/1)
+    Agent.get(pid, &Graph.edges/1, :infinity)
   end
 
   @doc """
@@ -212,7 +212,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec get_graph(CallGraph.t()) :: Graph.t()
   def get_graph(%{pid: pid}) do
-    Agent.get(pid, & &1)
+    Agent.get(pid, & &1, :infinity)
   end
 
   @doc """
@@ -231,7 +231,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec has_vertex?(CallGraph.t(), vertex) :: boolean
   def has_vertex?(%{pid: pid}, vertex) do
-    Agent.get(pid, &Graph.has_vertex?(&1, vertex))
+    Agent.get(pid, &Graph.has_vertex?(&1, vertex), :infinity)
   end
 
   @doc """
@@ -326,7 +326,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec put_graph(CallGraph.t(), Graph.t()) :: CallGraph.t()
   def put_graph(%{pid: pid} = call_graph, graph) do
-    Agent.update(pid, fn _state -> graph end)
+    Agent.update(pid, fn _state -> graph end, :infinity)
     call_graph
   end
 
@@ -402,7 +402,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec remove_vertex(CallGraph.t(), vertex) :: CallGraph.t()
   def remove_vertex(%{pid: pid} = call_graph, vertex) do
-    Agent.update(pid, &Graph.delete_vertex(&1, vertex))
+    Agent.update(pid, &Graph.delete_vertex(&1, vertex), :infinity)
     call_graph
   end
 
