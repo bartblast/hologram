@@ -1,6 +1,6 @@
 Benchmark
 
-diff_module_digest_plts/2
+patch/3
 
 ## System
 

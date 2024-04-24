@@ -188,8 +188,7 @@ Benchee.run(
   end,
   formatters: [
     Benchee.Formatters.Console,
-    {Benchee.Formatters.Markdown,
-     description: "diff_module_digest_plts/2", file: Path.join(__DIR__, "README.md")}
+    {Benchee.Formatters.Markdown, description: "patch/3", file: Path.join(__DIR__, "README.md")}
   ],
   time: 60
 )
