@@ -357,6 +357,32 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Removes call graph vertices and edges related to MFAs used by the runtime.
+
+  remove_vertices/2 is very slow on large graphs -
+  for a base case it would take over 7 seconds to remove runtime MFAs that way.
+  """
+  @spec remove_runtime_mfas(CallGraph.t(), list(mfa)) :: CallGraph.t()
+  def remove_runtime_mfas(call_graph, runtime_mfas) do
+    vertices = vertices(call_graph)
+    edges = edges(call_graph)
+
+    new_vertices = vertices -- runtime_mfas
+
+    new_edges =
+      Enum.reject(edges, fn %Graph.Edge{v1: from_vertex, v2: to_vertex} ->
+        to_vertex in runtime_mfas or from_vertex in runtime_mfas
+      end)
+
+    new_graph =
+      Graph.new()
+      |> Graph.add_vertices(new_vertices)
+      |> Graph.add_edges(new_edges)
+
+    put_graph(call_graph, new_graph)
+  end
+
+  @doc """
   Removes the vertex from the call graph.
   """
   @spec remove_vertex(CallGraph.t(), vertex) :: CallGraph.t()

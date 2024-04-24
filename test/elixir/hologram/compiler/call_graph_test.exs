@@ -28,7 +28,14 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   setup do
     clean_dir(@dump_dir)
-    [call_graph: start()]
+
+    module_beam_path_plt = Compiler.build_module_beam_path_plt()
+
+    [
+      call_graph: start(),
+      ir_plt: Compiler.build_ir_plt(module_beam_path_plt),
+      module_beam_path_plt: module_beam_path_plt
+    ]
   end
 
   test "add_edge/3", %{call_graph: call_graph} do
@@ -1164,6 +1171,21 @@ defmodule Hologram.Compiler.CallGraphTest do
                {:m5, :f5, 5}
              ]
     end
+  end
+
+  test "remove_runtime_mfas/2", %{ir_plt: ir_plt} do
+    call_graph = CallGraph.build_from_ir_plt(ir_plt)
+    runtime_mfas = Compiler.list_runtime_mfas(call_graph)
+
+    CallGraph.add_edge(call_graph, :my_vertex_1, :my_vertex_2)
+
+    CallGraph.remove_runtime_mfas(call_graph, runtime_mfas)
+
+    assert CallGraph.has_edge?(call_graph, :my_vertex_1, :my_vertex_2)
+
+    Enum.each(runtime_mfas, fn mfa ->
+      refute CallGraph.has_vertex?(call_graph, mfa)
+    end)
   end
 
   test "remove_vertex/2", %{call_graph: call_graph} do
