@@ -4,7 +4,7 @@ alias Hologram.Compiler.CallGraph
 Benchee.run(
   %{
     "build_call_graph/1" => fn ir_plt ->
-      CallGraph.build_call_graph(ir_plt)
+      Compiler.build_call_graph(ir_plt)
     end
   },
   before_scenario: fn _input ->
