@@ -357,6 +357,19 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Removes call graph vertices for Elixir functions ported manually.
+  """
+  @spec remove_manually_ported_mfas(CallGraph.t()) :: CallGraph.t()
+  def remove_manually_ported_mfas(call_graph) do
+    CallGraph.remove_vertices(call_graph, [
+      {Code, :ensure_loaded, 1},
+      {Hologram.Router.Helpers, :asset_path, 1},
+      {Kernel, :inspect, 1},
+      {Kernel, :inspect, 2}
+    ])
+  end
+
+  @doc """
   Removes call graph vertices and edges related to MFAs used by the runtime.
 
   remove_vertices/2 is very slow on large graphs -

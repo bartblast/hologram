@@ -65,12 +65,12 @@ defmodule Mix.Tasks.Compile.Hologram do
     {call_graph, call_graph_dump_path} = Compiler.maybe_load_call_graph(build_dir)
     CallGraph.patch(call_graph, ir_plt, module_digests_diff)
 
-    call_graph_without_manually_ported_elixir_functions =
+    call_graph_without_manually_ported_mfas =
       call_graph
       |> CallGraph.clone()
-      |> Compiler.remove_call_graph_vertices_of_manually_ported_elixir_functions()
+      |> CallGraph.remove_manually_ported_mfas()
 
-    runtime_mfas = Compiler.list_runtime_mfas(call_graph_without_manually_ported_elixir_functions)
+    runtime_mfas = Compiler.list_runtime_mfas(call_graph_without_manually_ported_mfas)
 
     _runtime_entry_file_path = Compiler.create_runtime_entry_file(runtime_mfas, ir_plt, opts)
 

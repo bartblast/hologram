@@ -30,10 +30,12 @@ defmodule Hologram.Compiler.CallGraphTest do
     clean_dir(@dump_dir)
 
     module_beam_path_plt = Compiler.build_module_beam_path_plt()
+    ir_plt = Compiler.build_ir_plt(module_beam_path_plt)
 
     [
       call_graph: start(),
-      ir_plt: Compiler.build_ir_plt(module_beam_path_plt),
+      full_call_graph: build_from_ir_plt(ir_plt),
+      ir_plt: ir_plt,
       module_beam_path_plt: module_beam_path_plt
     ]
   end
@@ -1170,6 +1172,25 @@ defmodule Hologram.Compiler.CallGraphTest do
                {:m3, :f3, 3},
                {:m5, :f5, 5}
              ]
+    end
+  end
+
+  describe "remove_manually_ported_mfas/1" do
+    setup %{full_call_graph: call_graph} do
+      call_graph_clone =
+        call_graph
+        |> CallGraph.clone()
+        |> remove_manually_ported_mfas()
+
+      [call_graph: call_graph_clone]
+    end
+
+    test "excludes Elixir functions which are ported manually", %{call_graph: call_graph} do
+      refute CallGraph.has_vertex?(call_graph, {Kernel, :inspect, 1})
+    end
+
+    test "includes functions which are not ported manually", %{call_graph: call_graph} do
+      assert CallGraph.has_vertex?(call_graph, {Kernel, :hd, 1})
     end
   end
 

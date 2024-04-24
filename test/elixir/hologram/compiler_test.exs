@@ -589,23 +589,6 @@ defmodule Hologram.CompilerTest do
            }
   end
 
-  describe "remove_call_graph_vertices_of_manually_ported_elixir_functions/1" do
-    setup %{call_graph: call_graph} do
-      call_graph_clone = CallGraph.clone(call_graph)
-      remove_call_graph_vertices_of_manually_ported_elixir_functions(call_graph_clone)
-
-      [call_graph: call_graph_clone]
-    end
-
-    test "excludes Elixir functions which are ported manually", %{call_graph: call_graph} do
-      refute CallGraph.has_vertex?(call_graph, {Kernel, :inspect, 1})
-    end
-
-    test "includes functions which are not ported manually", %{call_graph: call_graph} do
-      assert CallGraph.has_vertex?(call_graph, {Kernel, :hd, 1})
-    end
-  end
-
   describe "validate_page_modules/1" do
     test "doesn't raise any error if all pages have a route and a layout specified" do
       assert validate_page_modules([Module9, Module11]) == :ok

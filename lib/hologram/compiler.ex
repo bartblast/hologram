@@ -347,20 +347,6 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Removes call graph vertices for Elixir functions ported manually.
-  """
-  @spec remove_call_graph_vertices_of_manually_ported_elixir_functions(CallGraph.t()) ::
-          CallGraph.t()
-  def remove_call_graph_vertices_of_manually_ported_elixir_functions(call_graph) do
-    CallGraph.remove_vertices(call_graph, [
-      {Code, :ensure_loaded, 1},
-      {Hologram.Router.Helpers, :asset_path, 1},
-      {Kernel, :inspect, 1},
-      {Kernel, :inspect, 2}
-    ])
-  end
-
-  @doc """
   Raises a compilation error if any page module lacks a specified route or layout.
   """
   @spec validate_page_modules(list(module)) :: :ok
