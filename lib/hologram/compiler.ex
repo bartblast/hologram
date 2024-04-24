@@ -12,6 +12,14 @@ defmodule Hologram.Compiler do
   @type opts :: keyword
 
   @doc """
+  Builds the call graph of all modules in the project.
+  """
+  @spec build_call_graph :: CallGraph.t()
+  def build_call_graph do
+    build_call_graph(build_ir_plt())
+  end
+
+  @doc """
   Builds the call graph of all modules in the given IR PLT.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_call_graph/README.md

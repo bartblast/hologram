@@ -52,6 +52,11 @@ defmodule Hologram.CompilerTest do
     ]
   end
 
+  test "build_call_graph/0" do
+    assert %CallGraph{} = call_graph = build_call_graph()
+    assert CallGraph.has_vertex?(call_graph, {Compiler, :build_call_graph, 1})
+  end
+
   test "build_call_graph/1", %{ir_plt: ir_plt} do
     assert %CallGraph{} = call_graph = build_call_graph(ir_plt)
     assert CallGraph.has_vertex?(call_graph, {Compiler, :build_call_graph, 1})
