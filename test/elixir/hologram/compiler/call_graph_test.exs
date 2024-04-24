@@ -681,6 +681,50 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert has_vertex?(call_graph, {CallGraph, :build_from_ir_plt, 1})
   end
 
+  test "build_for_module/3", %{call_graph: call_graph} do
+    ir = %IR.ModuleDefinition{
+      module: %IR.AtomType{value: Module11},
+      body: %IR.Block{
+        expressions: [
+          %IR.AtomType{value: Module5},
+          %IR.AtomType{value: Module6}
+        ]
+      }
+    }
+
+    ir_plt = PLT.start(items: [{Module11, ir}])
+
+    assert build_for_module(call_graph, ir_plt, Module11) == call_graph
+
+    assert sorted_vertices(call_graph) == [
+             Module11,
+             Module5,
+             Module6,
+             {Module11, :__route__, 0}
+           ]
+
+    assert sorted_edges(call_graph) == [
+             %Graph.Edge{
+               v1: Module11,
+               v2: Module5,
+               weight: 1,
+               label: nil
+             },
+             %Graph.Edge{
+               v1: Module11,
+               v2: Module6,
+               weight: 1,
+               label: nil
+             },
+             %Graph.Edge{
+               v1: Module11,
+               v2: {Module11, :__route__, 0},
+               weight: 1,
+               label: nil
+             }
+           ]
+  end
+
   test "clone/1", %{call_graph: call_graph} do
     assert %CallGraph{} = call_graph_clone = clone(call_graph)
 

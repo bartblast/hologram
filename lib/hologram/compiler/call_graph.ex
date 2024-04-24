@@ -163,6 +163,15 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Builds a call graph from a module definition IR located in the given IR PLT.
+  """
+  @spec build(CallGraph.t(), PLT.t(), module) :: CallGraph.t()
+  def build_for_module(call_graph, ir_plt, module) do
+    module_def = PLT.get!(ir_plt, module)
+    build(call_graph, module_def)
+  end
+
+  @doc """
   Returns a clone of the given call graph.
   """
   @spec clone(CallGraph.t()) :: CallGraph.t()
@@ -437,11 +446,6 @@ defmodule Hologram.Compiler.CallGraph do
         add_edge(call_graph, {module, name, arity}, {impl, name, arity})
       end)
     end)
-  end
-
-  defp build_for_module(call_graph, ir_plt, module) do
-    module_def = PLT.get!(ir_plt, module)
-    build(call_graph, module_def)
   end
 
   defp inbound_edges(%{pid: pid}, vertex) do
