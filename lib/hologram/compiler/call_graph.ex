@@ -297,6 +297,8 @@ defmodule Hologram.Compiler.CallGraph do
   by deleting the graph paths of modules that have been removed,
   rebuilding the graph paths of modules that have been updated,
   and adding the graph paths of modules that have been added.
+
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/call_graph/patch/README.md
   """
   @spec patch(CallGraph.t(), PLT.t(), map) :: CallGraph.t()
   def patch(call_graph, ir_plt, diff) do
