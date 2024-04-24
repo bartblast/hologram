@@ -59,6 +59,13 @@ defmodule Hologram.CompilerTest do
     ]
   end
 
+  test "build_ir_plt/0" do
+    assert %PLT{} = ir_plt = build_ir_plt()
+
+    assert %IR.ModuleDefinition{module: %IR.AtomType{value: Hologram.Compiler}} =
+             PLT.get!(ir_plt, Hologram.Compiler)
+  end
+
   test "build_ir_plt/1", %{ir_plt: ir_plt} do
     assert %PLT{} = ir_plt
 

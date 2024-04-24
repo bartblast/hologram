@@ -13,10 +13,17 @@ defmodule Hologram.Compiler do
 
   @doc """
   Builds IR persistent lookup table (PLT).
+  """
+  @spec build_ir_plt :: PLT.t()
+  def build_ir_plt do
+    build_ir_plt(build_module_beam_path_plt())
+  end
+
+  @doc """
+  Builds IR persistent lookup table (PLT) using the given module BEAM path PLT.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_ir_plt/README.md
   """
-  @spec build_ir_plt(PLT.t()) :: PLT.t()
   def build_ir_plt(module_beam_path_plt) do
     ir_plt = PLT.start()
 
