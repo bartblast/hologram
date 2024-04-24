@@ -37,7 +37,7 @@ Benchee.run(
 
          module_beam_path_plt = Compiler.build_module_beam_path_plt()
          ir_plt = Compiler.build_ir_plt(module_beam_path_plt)
-         call_graph = CallGraph.build_from_ir_plt(ir_plt)
+         call_graph = Compiler.build_call_graph(ir_plt)
 
          call_graph_dump_path = Path.join(build_dir, "call_graph.bin")
          CallGraph.dump(call_graph, call_graph_dump_path)

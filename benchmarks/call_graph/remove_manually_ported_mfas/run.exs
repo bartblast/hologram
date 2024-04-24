@@ -11,7 +11,7 @@ Benchee.run(
          module_beam_path_plt = Compiler.build_module_beam_path_plt()
          ir_plt = Compiler.build_ir_plt(module_beam_path_plt)
 
-         CallGraph.build_from_ir_plt(ir_plt)
+         Compiler.build_call_graph(ir_plt)
        end,
        before_each: fn call_graph ->
          CallGraph.clone(call_graph)

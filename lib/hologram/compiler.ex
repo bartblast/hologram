@@ -12,6 +12,23 @@ defmodule Hologram.Compiler do
   @type opts :: keyword
 
   @doc """
+  Builds the call graph of all modules in the given IR PLT.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_call_graph/README.md
+  """
+  @spec build_call_graph(PLT.t()) :: CallGraph.t()
+  def build_call_graph(ir_plt) do
+    call_graph = CallGraph.start()
+
+    ir_plt
+    |> PLT.get_all()
+    |> TaskUtils.async_many(fn {_module, ir} -> CallGraph.build(call_graph, ir) end)
+    |> Task.await_many(:infinity)
+
+    call_graph
+  end
+
+  @doc """
   Builds IR persistent lookup table (PLT).
   """
   @spec build_ir_plt :: PLT.t()

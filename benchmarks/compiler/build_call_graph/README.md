@@ -1,6 +1,6 @@
 Benchmark
 
-build_from_ir_plt/1
+build_call_graph/1
 
 ## System
 
@@ -62,7 +62,7 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">build_from_ir_plt/1</td>
+    <td style="white-space: nowrap">build_call_graph/1</td>
     <td style="white-space: nowrap; text-align: right">1.77</td>
     <td style="white-space: nowrap; text-align: right">563.45 ms</td>
     <td style="white-space: nowrap; text-align: right">&plusmn;6.32%</td>

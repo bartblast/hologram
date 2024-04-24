@@ -4,7 +4,7 @@ defmodule Hologram.CompilerTest do
 
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
-  alias Hologram.Commons.TaskUtils
+  alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
 
@@ -42,14 +42,7 @@ defmodule Hologram.CompilerTest do
   setup_all do
     module_beam_path_plt = build_module_beam_path_plt()
     ir_plt = build_ir_plt(module_beam_path_plt)
-
-    call_graph = CallGraph.start()
-
-    Reflection.list_elixir_modules()
-    |> TaskUtils.async_many(fn module ->
-      CallGraph.build(call_graph, PLT.get!(ir_plt, module))
-    end)
-    |> Task.await_many(:infinity)
+    call_graph = build_call_graph(ir_plt)
 
     [
       call_graph: call_graph,
@@ -57,6 +50,11 @@ defmodule Hologram.CompilerTest do
       module_beam_path_plt: module_beam_path_plt,
       runtime_mfas: list_runtime_mfas(call_graph)
     ]
+  end
+
+  test "build_call_graph/1", %{ir_plt: ir_plt} do
+    assert %CallGraph{} = call_graph = build_call_graph(ir_plt)
+    assert CallGraph.has_vertex?(call_graph, {Compiler, :build_call_graph, 1})
   end
 
   test "build_ir_plt/0" do

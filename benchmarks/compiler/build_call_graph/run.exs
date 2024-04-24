@@ -3,8 +3,8 @@ alias Hologram.Compiler.CallGraph
 
 Benchee.run(
   %{
-    "build_from_ir_plt/1" => fn ir_plt ->
-      CallGraph.build_from_ir_plt(ir_plt)
+    "build_call_graph/1" => fn ir_plt ->
+      CallGraph.build_call_graph(ir_plt)
     end
   },
   before_scenario: fn _input ->
@@ -16,7 +16,7 @@ Benchee.run(
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
-     description: "build_from_ir_plt/1", file: Path.join(__DIR__, "README.md")}
+     description: "build_call_graph/1", file: Path.join(__DIR__, "README.md")}
   ],
   time: 60
 )
