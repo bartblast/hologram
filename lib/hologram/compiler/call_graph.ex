@@ -165,7 +165,7 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Builds a call graph from a module definition IR located in the given IR PLT.
   """
-  @spec build(CallGraph.t(), PLT.t(), module) :: CallGraph.t()
+  @spec build_for_module(CallGraph.t(), PLT.t(), module) :: CallGraph.t()
   def build_for_module(call_graph, ir_plt, module) do
     module_def = PLT.get!(ir_plt, module)
     build(call_graph, module_def)
