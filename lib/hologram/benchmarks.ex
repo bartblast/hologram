@@ -5,14 +5,14 @@ defmodule Hologram.Benchmarks do
 
   @doc """
   Generates 2 module digest PLTs that fullfill the conditions given in the arguments.
-  The fourth argument is implicit: untouched_modules_perc = 100 - added_modules_perc - removed_modules_perc - updated_modules_perc.
+
+  If the arguments are floats they are treated as percentage (0.2 == 20%),
+  otherwise they are treated as (literal) number of modules.
   """
   @spec generate_module_digest_plts(integer, integer, integer) :: {PLT.t(), PLT.t()}
   # credo:disable-for-lines:53 Credo.Check.Refactor.ABCSize
-  def generate_module_digest_plts(added_modules_perc, removed_modules_perc, updated_modules_perc) do
-    if added_modules_perc + removed_modules_perc + updated_modules_perc > 100 do
-      raise ArgumentError, message: "the sum of the arguments must be less than or equal to 100"
-    end
+  def generate_module_digest_plts(added_modules_spec, removed_modules_spec, updated_modules_spec) do
+    validate_args(added_modules_spec, removed_modules_spec, updated_modules_spec)
 
     module_digests =
       Compiler.build_module_beam_path_plt()
@@ -22,9 +22,13 @@ defmodule Hologram.Benchmarks do
 
     num_modules = Enum.count(module_digests)
 
-    num_added_modules = Integer.floor_div(added_modules_perc * num_modules, 100)
-    num_removed_modules = Integer.floor_div(removed_modules_perc * num_modules, 100)
-    num_updated_modules = Integer.floor_div(updated_modules_perc * num_modules, 100)
+    {num_added_modules, num_removed_modules, num_updated_modules} =
+      calculate_num_modules(
+        num_modules,
+        added_modules_spec,
+        removed_modules_spec,
+        updated_modules_spec
+      )
 
     num_untouched_modules =
       num_modules - num_added_modules - num_removed_modules - num_updated_modules
@@ -61,5 +65,55 @@ defmodule Hologram.Benchmarks do
       )
 
     {old_module_digest_plt, new_module_digest_plt}
+  end
+
+  # Only one guard for one argument is needed, because the arguments are validated.
+  defp calculate_num_modules(
+         num_modules,
+         added_modules_spec,
+         removed_modules_spec,
+         updated_modules_spec
+       )
+       when is_float(added_modules_spec) do
+    {trunc(added_modules_spec * num_modules), trunc(removed_modules_spec * num_modules),
+     trunc(updated_modules_spec * num_modules)}
+  end
+
+  # No guards are needed in the fallback, because the arguments are validated.
+  defp calculate_num_modules(
+         _num_modules,
+         added_modules_spec,
+         removed_modules_spec,
+         updated_modules_spec
+       ) do
+    {added_modules_spec, removed_modules_spec, updated_modules_spec}
+  end
+
+  defp validate_args(added_modules_spec, removed_modules_spec, updated_modules_spec)
+       when is_float(added_modules_spec) and added_modules_spec >= 0.0 and
+              is_float(removed_modules_spec) and
+              removed_modules_spec >= 0.0 and is_float(updated_modules_spec) and
+              updated_modules_spec >= 0.0 do
+    if added_modules_spec + removed_modules_spec + updated_modules_spec > 1.0 do
+      raise ArgumentError,
+        message:
+          "the sum of the arguments in case they are floats must be less than or equal to 1.0"
+    end
+
+    true
+  end
+
+  defp validate_args(added_modules_spec, removed_modules_spec, updated_modules_spec)
+       when is_integer(added_modules_spec) and added_modules_spec >= 0 and
+              is_integer(removed_modules_spec) and
+              removed_modules_spec >= 0 and is_integer(updated_modules_spec) and
+              updated_modules_spec >= 0 do
+    true
+  end
+
+  defp validate_args(added_modules_spec, removed_modules_spec, updated_modules_spec) do
+    raise ArgumentError,
+      message:
+        "invalid arguments: added_modules_spec = #{inspect(added_modules_spec)}, removed_modules_spec = #{inspect(removed_modules_spec)}, updated_modules_spec = #{inspect(updated_modules_spec)}"
   end
 end
