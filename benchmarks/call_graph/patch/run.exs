@@ -66,7 +66,7 @@ Benchee.run(
       end,
       before_scenario: fn {modules, ir_plt} ->
         {old_module_digest_plt, new_module_digest_plt} =
-          Benchmarks.generate_module_digest_plts(100, 0, 0)
+          Benchmarks.generate_module_digest_plts(1.0, 0.0, 0.0)
 
         diff = Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
 
@@ -79,7 +79,7 @@ Benchee.run(
       end,
       before_scenario: fn {modules, ir_plt} ->
         {old_module_digest_plt, new_module_digest_plt} =
-          Benchmarks.generate_module_digest_plts(0, 100, 0)
+          Benchmarks.generate_module_digest_plts(0.0, 1.0, 0.0)
 
         diff = Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
 
@@ -92,7 +92,7 @@ Benchee.run(
       end,
       before_scenario: fn {modules, ir_plt} ->
         {old_module_digest_plt, new_module_digest_plt} =
-          Benchmarks.generate_module_digest_plts(0, 0, 100)
+          Benchmarks.generate_module_digest_plts(0.0, 0.0, 1.0)
 
         diff = Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
 
@@ -105,7 +105,7 @@ Benchee.run(
       end,
       before_scenario: fn {modules, ir_plt} ->
         {old_module_digest_plt, new_module_digest_plt} =
-          Benchmarks.generate_module_digest_plts(33, 33, 34)
+          Benchmarks.generate_module_digest_plts(0.33, 0.33, 0.34)
 
         diff = Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
 
@@ -118,7 +118,7 @@ Benchee.run(
       end,
       before_scenario: fn {modules, ir_plt} ->
         {old_module_digest_plt, new_module_digest_plt} =
-          Benchmarks.generate_module_digest_plts(1, 1, 1)
+          Benchmarks.generate_module_digest_plts(0.01, 0.01, 0.01)
 
         diff = Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
 
