@@ -13,9 +13,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module2
   alias Hologram.Test.Fixtures.Compiler.Module3
   alias Hologram.Test.Fixtures.Compiler.Module4
-  alias Hologram.Test.Fixtures.Compiler.Module5
   alias Hologram.Test.Fixtures.Compiler.Module6
-  alias Hologram.Test.Fixtures.Compiler.Module7
   alias Hologram.Test.Fixtures.Compiler.Module8
   alias Hologram.Test.Fixtures.Compiler.Module9
 
@@ -210,41 +208,6 @@ defmodule Hologram.CompilerTest do
       package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
       assert File.exists?(package_json_digest_path)
     end
-  end
-
-  test "list_page_mfas/2" do
-    module_5_ir = IR.for_module(Module5)
-    module_6_ir = IR.for_module(Module6)
-    module_7_ir = IR.for_module(Module7)
-
-    call_graph =
-      CallGraph.start()
-      |> CallGraph.build(module_5_ir)
-      |> CallGraph.build(module_6_ir)
-      |> CallGraph.build(module_7_ir)
-
-    sorted_result =
-      Module5
-      |> list_page_mfas(call_graph)
-      |> Enum.sort()
-
-    assert sorted_result == [
-             {Enum, :reverse, 1},
-             {Enum, :to_list, 1},
-             {Module5, :__layout_module__, 0},
-             {Module5, :__layout_props__, 0},
-             {Module5, :__props__, 0},
-             {Module5, :__route__, 0},
-             {Module5, :action, 3},
-             {Module5, :template, 0},
-             {Module6, :__props__, 0},
-             {Module6, :action, 3},
-             {Module6, :init, 2},
-             {Module6, :template, 0},
-             {Module7, :my_fun_7a, 2},
-             {Kernel, :inspect, 1},
-             {:erlang, :hd, 1}
-           ]
   end
 
   describe "list_runtime_mfas/1" do

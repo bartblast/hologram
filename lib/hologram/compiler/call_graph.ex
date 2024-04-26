@@ -240,6 +240,29 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns the list of MFAs that are reachable by the given page.
+  """
+  @spec list_page_mfas(CallGraph.t(), module) :: list(mfa)
+  def list_page_mfas(call_graph, page_module) do
+    layout_module = page_module.__layout_module__()
+
+    call_graph
+    |> get_graph()
+    |> Graph.add_edges([
+      {page_module, {page_module, :__layout_module__, 0}},
+      {page_module, {page_module, :__layout_props__, 0}},
+      {page_module, {page_module, :__props__, 0}},
+      {page_module, {page_module, :action, 3}},
+      {page_module, {page_module, :template, 0}},
+      {page_module, {layout_module, :__props__, 0}},
+      {page_module, {layout_module, :action, 3}},
+      {page_module, {layout_module, :template, 0}}
+    ])
+    |> reachable(page_module)
+    |> Enum.filter(&is_tuple/1)
+  end
+
+  @doc """
   Loads the graph from the given dump file.
   """
   @spec load(CallGraph.t(), String.t()) :: CallGraph.t()

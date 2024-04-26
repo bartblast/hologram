@@ -206,29 +206,6 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Returns the list of MFAs that are reachable by the given page.
-  """
-  @spec list_page_mfas(module, CallGraph.t()) :: list(mfa)
-  def list_page_mfas(page_module, call_graph) do
-    layout_module = page_module.__layout_module__()
-
-    call_graph
-    |> CallGraph.get_graph()
-    |> Graph.add_edges([
-      {page_module, {page_module, :__layout_module__, 0}},
-      {page_module, {page_module, :__layout_props__, 0}},
-      {page_module, {page_module, :__props__, 0}},
-      {page_module, {page_module, :action, 3}},
-      {page_module, {page_module, :template, 0}},
-      {page_module, {layout_module, :__props__, 0}},
-      {page_module, {layout_module, :action, 3}},
-      {page_module, {layout_module, :template, 0}}
-    ])
-    |> CallGraph.reachable(page_module)
-    |> Enum.filter(&is_tuple/1)
-  end
-
-  @doc """
   Lists MFAs required by the runtime JS script.
   """
   @spec list_runtime_mfas(CallGraph.t()) :: list(mfa)
@@ -583,7 +560,7 @@ end
 #   """
 #   @spec build_page_js(module, CallGraph.t(), PLT.t(), String.t()) :: String.t()
 #   def build_page_js(page_module, call_graph, ir_plt, source_dir) do
-#     mfas = list_page_mfas(call_graph, page_module)
+#     mfas = CallGraph.list_page_mfas(call_graph, page_module)
 #     erlang_source_dir = source_dir <> "/erlang"
 
 #     erlang_function_defs =

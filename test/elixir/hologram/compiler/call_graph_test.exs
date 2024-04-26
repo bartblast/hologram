@@ -13,6 +13,9 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module10
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module11
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module13
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module14
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module15
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module16
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module2
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module3
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
@@ -835,6 +838,38 @@ defmodule Hologram.Compiler.CallGraphTest do
                weight: 1,
                label: nil
              }
+           ]
+  end
+
+  test "list_page_mfas/2" do
+    module_14_ir = IR.for_module(Module14)
+    module_15_ir = IR.for_module(Module15)
+    module_16_ir = IR.for_module(Module16)
+
+    sorted_result =
+      start()
+      |> build(module_14_ir)
+      |> build(module_15_ir)
+      |> build(module_16_ir)
+      |> list_page_mfas(Module14)
+      |> Enum.sort()
+
+    assert sorted_result == [
+             {Enum, :reverse, 1},
+             {Enum, :to_list, 1},
+             {Module14, :__layout_module__, 0},
+             {Module14, :__layout_props__, 0},
+             {Module14, :__props__, 0},
+             {Module14, :__route__, 0},
+             {Module14, :action, 3},
+             {Module14, :template, 0},
+             {Module15, :__props__, 0},
+             {Module15, :action, 3},
+             {Module15, :init, 2},
+             {Module15, :template, 0},
+             {Module16, :my_fun_16a, 2},
+             {Kernel, :inspect, 1},
+             {:erlang, :hd, 1}
            ]
   end
 
