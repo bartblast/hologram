@@ -157,6 +157,8 @@ defmodule Hologram.Compiler.CallGraph do
 
   @doc """
   Returns a clone of the given call graph.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/call_graph/clone/README.md
   """
   @spec clone(CallGraph.t()) :: CallGraph.t()
   def clone(call_graph) do
