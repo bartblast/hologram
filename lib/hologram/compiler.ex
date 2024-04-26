@@ -137,6 +137,8 @@ defmodule Hologram.Compiler do
 
   @doc """
   Creates runtime bundle entry file.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/create_runtime_entry_file/README.md
   """
   @spec create_runtime_entry_file(list(mfa), PLT.t(), opts) :: String.t()
   def create_runtime_entry_file(runtime_mfas, ir_plt, opts) do
