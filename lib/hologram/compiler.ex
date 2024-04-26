@@ -206,33 +206,6 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Lists MFAs required by the runtime JS script.
-  """
-  @spec list_runtime_mfas(CallGraph.t()) :: list(mfa)
-  def list_runtime_mfas(call_graph) do
-    entry_mfas =
-      []
-      |> include_mfas_used_by_asset_path_registry_class()
-      |> include_mfas_used_by_component_registry_class()
-      |> include_mfas_used_frequently_on_the_client()
-      |> include_mfas_used_by_interpreter_class()
-      |> include_mfas_used_by_manually_ported_code_module()
-      |> include_mfas_used_by_operation_class()
-      |> include_mfas_used_by_renderer_class()
-      |> include_mfas_used_by_type_class()
-      |> Enum.uniq()
-
-    call_graph
-    |> CallGraph.get_graph()
-    |> add_call_graph_edges_for_erlang_functions()
-    |> CallGraph.reachable_mfas(entry_mfas)
-    # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
-    |> Enum.reject(fn {module, _function, _arity} -> !Reflection.module?(module) end)
-    |> Enum.uniq()
-    |> Enum.sort()
-  end
-
-  @doc """
   Installs JavaScript deps if package.json has changed or if the deps haven't been installed yet.
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_install_js_deps/README.md
@@ -380,26 +353,6 @@ defmodule Hologram.Compiler do
     end)
   end
 
-  # Add call graph edges for Erlang functions depending on other Erlang functions.
-  # credo:disable-for-next-line Credo.Check.Refactor.ABCSize
-  defp add_call_graph_edges_for_erlang_functions(graph) do
-    Graph.add_edges(graph, [
-      {{:erlang, :"=<", 2}, {:erlang, :<, 2}},
-      {{:erlang, :"=<", 2}, {:erlang, :==, 2}},
-      {{:erlang, :>=, 2}, {:erlang, :==, 2}},
-      {{:erlang, :>=, 2}, {:erlang, :>, 2}},
-      {{:erlang, :binary_to_atom, 1}, {:erlang, :binary_to_atom, 2}},
-      {{:erlang, :binary_to_existing_atom, 1}, {:erlang, :binary_to_atom, 1}},
-      {{:erlang, :binary_to_existing_atom, 2}, {:erlang, :binary_to_atom, 2}},
-      {{:erlang, :error, 1}, {:erlang, :error, 2}},
-      {{:erlang, :integer_to_binary, 1}, {:erlang, :integer_to_binary, 2}},
-      {{:lists, :keymember, 3}, {:lists, :keyfind, 3}},
-      {{:maps, :get, 2}, {:maps, :get, 3}},
-      {{:unicode, :characters_to_binary, 1}, {:unicode, :characters_to_binary, 3}},
-      {{:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1}}
-    ])
-  end
-
   defp create_entry_file(js, entry_name, dir) do
     entry_file_path = Path.join(dir, "#{entry_name}.entry.js")
     File.write!(entry_file_path, js)
@@ -420,68 +373,6 @@ defmodule Hologram.Compiler do
     |> Path.join("package.json")
     |> File.read!()
     |> CryptographicUtils.digest(:sha256, :binary)
-  end
-
-  defp include_mfas_used_by_asset_path_registry_class(mfas) do
-    [
-      {:maps, :get, 3},
-      {:maps, :put, 3} | mfas
-    ]
-  end
-
-  defp include_mfas_used_by_component_registry_class(mfas) do
-    [
-      {:maps, :get, 2},
-      {:maps, :get, 3} | mfas
-    ]
-  end
-
-  defp include_mfas_used_frequently_on_the_client(mfas) do
-    [
-      # Used by __props__/0 function injected into component and page modules.
-      {Enum, :reverse, 1},
-      {Hologram.Router.Helpers, :page_path, 1},
-      {Hologram.Router.Helpers, :page_path, 2} | mfas
-    ]
-  end
-
-  defp include_mfas_used_by_interpreter_class(mfas) do
-    [
-      {Enum, :into, 2},
-      {Enum, :to_list, 1},
-      {:erlang, :error, 1},
-      {:erlang, :hd, 1},
-      {:erlang, :tl, 1},
-      {:lists, :keyfind, 3},
-      {:maps, :get, 2} | mfas
-    ]
-  end
-
-  defp include_mfas_used_by_manually_ported_code_module(mfas) do
-    [{:code, :ensure_loaded, 1} | mfas]
-  end
-
-  defp include_mfas_used_by_operation_class(mfas) do
-    [
-      {:maps, :from_list, 1},
-      {:maps, :put, 3} | mfas
-    ]
-  end
-
-  defp include_mfas_used_by_renderer_class(mfas) do
-    [
-      {Hologram.Component, :__struct__, 0},
-      {String.Chars, :to_string, 1},
-      {:erlang, :binary_to_atom, 1},
-      {:lists, :flatten, 1},
-      {:maps, :from_list, 1},
-      {:maps, :get, 2},
-      {:maps, :merge, 2} | mfas
-    ]
-  end
-
-  defp include_mfas_used_by_type_class(mfas) do
-    [{:maps, :get, 3} | mfas]
   end
 
   defp mapset_from_plt_keys(plt) do

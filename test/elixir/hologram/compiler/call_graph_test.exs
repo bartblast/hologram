@@ -34,12 +34,14 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     module_beam_path_plt = Compiler.build_module_beam_path_plt()
     ir_plt = Compiler.build_ir_plt(module_beam_path_plt)
+    full_call_graph = Compiler.build_call_graph(ir_plt)
 
     [
       call_graph: start(),
-      full_call_graph: Compiler.build_call_graph(ir_plt),
+      full_call_graph: full_call_graph,
       ir_plt: ir_plt,
-      module_beam_path_plt: module_beam_path_plt
+      module_beam_path_plt: module_beam_path_plt,
+      runtime_mfas: list_runtime_mfas(full_call_graph)
     ]
   end
 
@@ -873,6 +875,53 @@ defmodule Hologram.Compiler.CallGraphTest do
            ]
   end
 
+  describe "list_runtime_mfas/1" do
+    test "includes MFAs that are reachable by Elixir functions used by the runtime", %{
+      runtime_mfas: result
+    } do
+      assert {Enum, :into, 2} in result
+      assert {Enum, :into_protocol, 2} in result
+      assert {:lists, :foldl, 3} in result
+
+      assert {Enum, :to_list, 1} in result
+      assert {Enum, :reverse, 1} in result
+      assert {:lists, :reverse, 1} in result
+    end
+
+    test "includes MFAs that are reachable by Erlang functions used by the runtime", %{
+      runtime_mfas: result
+    } do
+      assert {:erlang, :==, 2} in result
+      assert {:erlang, :error, 2} in result
+    end
+
+    test "removes duplicates", %{runtime_mfas: result} do
+      count = Enum.count(result, &(&1 == {Access, :get, 2}))
+      assert count == 1
+    end
+
+    test "excludes MFAs with non-existing modules", %{full_call_graph: call_graph} do
+      call_graph_clone = CallGraph.clone(call_graph)
+
+      call_graph_clone
+      |> add_edge({Enum, :into, 2}, {Calendar.ISO, :dummy_function_1, 1})
+      |> add_edge({Enum, :into, 2}, {NonExistingModuleFixture, :dummy_function_2, 2})
+      |> add_edge({Enum, :into, 2}, {:maps, :dummy_function_3, 3})
+      |> add_edge({Enum, :into, 2}, {:non_existing_module_fixture, :dummy_function_4, 4})
+
+      result = list_runtime_mfas(call_graph_clone)
+
+      assert {Calendar.ISO, :dummy_function_1, 1} in result
+      refute {NonExistingModuleFixture, :dummy_function_2, 2} in result
+      assert {:maps, :dummy_function_3, 3} in result
+      refute {:non_existing_module_fixture, :dummy_function_4, 4} in result
+    end
+
+    test "sorts results", %{runtime_mfas: result} do
+      assert hd(result) == {Access, :get, 2}
+    end
+  end
+
   test "load/2", %{call_graph: call_graph} do
     add_edge(call_graph, :vertex_1, :vertex_2)
     dump(call_graph, @dump_path)
@@ -1223,7 +1272,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   test "remove_runtime_mfas/2", %{ir_plt: ir_plt} do
     call_graph = Compiler.build_call_graph(ir_plt)
-    runtime_mfas = Compiler.list_runtime_mfas(call_graph)
+    runtime_mfas = list_runtime_mfas(call_graph)
 
     CallGraph.add_edge(call_graph, :my_vertex_1, :my_vertex_2)
 

@@ -46,7 +46,7 @@ defmodule Hologram.CompilerTest do
       call_graph: call_graph,
       ir_plt: ir_plt,
       module_beam_path_plt: module_beam_path_plt,
-      runtime_mfas: list_runtime_mfas(call_graph)
+      runtime_mfas: CallGraph.list_runtime_mfas(call_graph)
     ]
   end
 
@@ -207,56 +207,6 @@ defmodule Hologram.CompilerTest do
 
       package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
       assert File.exists?(package_json_digest_path)
-    end
-  end
-
-  describe "list_runtime_mfas/1" do
-    test "includes MFAs that are reachable by Elixir functions used by the runtime", %{
-      runtime_mfas: result
-    } do
-      assert {Enum, :into, 2} in result
-      assert {Enum, :into_protocol, 2} in result
-      assert {:lists, :foldl, 3} in result
-
-      assert {Enum, :to_list, 1} in result
-      assert {Enum, :reverse, 1} in result
-      assert {:lists, :reverse, 1} in result
-    end
-
-    test "includes MFAs that are reachable by Erlang functions used by the runtime", %{
-      runtime_mfas: result
-    } do
-      assert {:erlang, :==, 2} in result
-      assert {:erlang, :error, 2} in result
-    end
-
-    test "removes duplicates", %{runtime_mfas: result} do
-      count = Enum.count(result, &(&1 == {Access, :get, 2}))
-      assert count == 1
-    end
-
-    test "excludes MFAs with non-existing modules", %{call_graph: call_graph} do
-      call_graph_clone = CallGraph.clone(call_graph)
-
-      call_graph_clone
-      |> CallGraph.add_edge({Enum, :into, 2}, {Calendar.ISO, :dummy_function_1, 1})
-      |> CallGraph.add_edge({Enum, :into, 2}, {NonExistingModuleFixture, :dummy_function_2, 2})
-      |> CallGraph.add_edge({Enum, :into, 2}, {:maps, :dummy_function_3, 3})
-      |> CallGraph.add_edge(
-        {Enum, :into, 2},
-        {:non_existing_module_fixture, :dummy_function_4, 4}
-      )
-
-      result = list_runtime_mfas(call_graph_clone)
-
-      assert {Calendar.ISO, :dummy_function_1, 1} in result
-      refute {NonExistingModuleFixture, :dummy_function_2, 2} in result
-      assert {:maps, :dummy_function_3, 3} in result
-      refute {:non_existing_module_fixture, :dummy_function_4, 4} in result
-    end
-
-    test "sorts results", %{runtime_mfas: result} do
-      assert hd(result) == {Access, :get, 2}
     end
   end
 

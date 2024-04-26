@@ -73,7 +73,7 @@ defmodule Mix.Tasks.Compile.Hologram do
       # e.g. implement opts param for CallGraph.remove_vertices/2 to allow rebuilding the graph.
       |> CallGraph.remove_manually_ported_mfas()
 
-    runtime_mfas = Compiler.list_runtime_mfas(call_graph_without_manually_ported_mfas)
+    runtime_mfas = CallGraph.list_runtime_mfas(call_graph_without_manually_ported_mfas)
 
     _runtime_entry_file_path = Compiler.create_runtime_entry_file(runtime_mfas, ir_plt, opts)
 
