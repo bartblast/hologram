@@ -421,6 +421,8 @@ defmodule Hologram.Compiler.CallGraph do
 
   @doc """
   Removes the vertices from the call graph.
+
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/call_graph/remove_vertices/README.md
   """
   @spec remove_vertices(CallGraph.t(), list(vertex)) :: CallGraph.t()
   def remove_vertices(%{pid: pid} = call_graph, vertices) do
