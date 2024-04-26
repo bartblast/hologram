@@ -434,9 +434,11 @@ defmodule Hologram.Compiler do
   defp render_erlang_function_defs(mfas, erlang_source_dir) do
     mfas
     |> filter_erlang_mfas()
-    |> Enum.map_join("\n\n", fn {module, function, arity} ->
+    |> TaskUtils.async_many(fn {module, function, arity} ->
       Encoder.encode_erlang_function(module, function, arity, erlang_source_dir)
     end)
+    |> Task.await_many(:infinity)
+    |> Enum.join("\n\n")
   end
 end
 
