@@ -423,12 +423,14 @@ defmodule Hologram.Compiler do
     |> filter_elixir_mfas()
     |> group_mfas_by_module()
     |> Enum.sort()
-    |> Enum.map_join("\n\n", fn {module, module_mfas} ->
+    |> TaskUtils.async_many(fn {module, module_mfas} ->
       ir_plt
       |> PLT.get!(module)
       |> prune_module_def(module_mfas)
       |> Encoder.encode_ir(%Context{module: module})
     end)
+    |> Task.await_many(:infinity)
+    |> Enum.join("\n\n")
   end
 
   defp render_erlang_function_defs(mfas, erlang_source_dir) do
