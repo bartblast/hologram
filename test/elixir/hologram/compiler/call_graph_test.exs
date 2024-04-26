@@ -34,7 +34,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     [
       call_graph: start(),
-      full_call_graph: build_from_ir_plt(ir_plt),
+      full_call_graph: Compiler.build_call_graph(ir_plt),
       ir_plt: ir_plt,
       module_beam_path_plt: module_beam_path_plt
     ]
@@ -682,14 +682,6 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  test "build_from_ir_plt/1" do
-    module_beam_path_plt = Compiler.build_module_beam_path_plt()
-    ir_plt = Compiler.build_ir_plt(module_beam_path_plt)
-
-    assert %CallGraph{} = call_graph = build_from_ir_plt(ir_plt)
-    assert has_vertex?(call_graph, {CallGraph, :build_from_ir_plt, 1})
-  end
-
   test "build_for_module/3", %{call_graph: call_graph} do
     ir = %IR.ModuleDefinition{
       module: %IR.AtomType{value: Module11},
@@ -1195,7 +1187,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   test "remove_runtime_mfas/2", %{ir_plt: ir_plt} do
-    call_graph = CallGraph.build_from_ir_plt(ir_plt)
+    call_graph = Compiler.build_call_graph(ir_plt)
     runtime_mfas = Compiler.list_runtime_mfas(call_graph)
 
     CallGraph.add_edge(call_graph, :my_vertex_1, :my_vertex_2)
