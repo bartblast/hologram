@@ -264,6 +264,8 @@ defmodule Hologram.Compiler.CallGraph do
 
   @doc """
   Lists MFAs required by the runtime JS script.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/call_graph/list_runtime_mfas/README.md
   """
   @spec list_runtime_mfas(CallGraph.t()) :: list(mfa)
   def list_runtime_mfas(call_graph) do
