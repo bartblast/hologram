@@ -333,6 +333,8 @@ defmodule Hologram.Compiler do
 
   @doc """
   Raises a compilation error if any page module lacks a specified route or layout.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/validate_page_modules/README.md
   """
   @spec validate_page_modules(list(module)) :: :ok
   def validate_page_modules(page_modules) do
