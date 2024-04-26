@@ -161,7 +161,7 @@ defmodule Hologram.Compiler.CallGraph do
   @spec clone(CallGraph.t()) :: CallGraph.t()
   def clone(call_graph) do
     graph = get_graph(call_graph)
-    put_graph(start(), graph)
+    start(graph)
   end
 
   @doc """
@@ -424,11 +424,11 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Starts a new CallGraph agent with an initial empty graph.
+  Starts a new CallGraph agent with (optional) initial graph.
   """
-  @spec start() :: CallGraph.t()
-  def start do
-    {:ok, pid} = Agent.start_link(fn -> Graph.new() end)
+  @spec start(Graph.t()) :: CallGraph.t()
+  def start(graph \\ Graph.new()) do
+    {:ok, pid} = Agent.start_link(fn -> graph end)
     %CallGraph{pid: pid}
   end
 

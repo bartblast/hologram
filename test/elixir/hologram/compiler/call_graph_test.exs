@@ -1264,11 +1264,20 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert sorted_vertices(call_graph) == [:vertex_1, :vertex_2, :vertex_3, :vertex_4, :vertex_5]
   end
 
-  test "start/0" do
-    assert %CallGraph{pid: pid} = start()
+  describe "start/1" do
+    test "default graph param" do
+      assert %CallGraph{pid: pid} = start()
+      assert is_pid(pid)
+      assert Agent.get(pid, & &1) == Graph.new()
+    end
 
-    assert is_pid(pid)
-    assert Agent.get(pid, & &1) == Graph.new()
+    test "graph param specified" do
+      graph = Graph.add_vertex(Graph.new(), :my_vertex)
+
+      assert %CallGraph{pid: pid} = start(graph)
+      assert is_pid(pid)
+      assert Agent.get(pid, & &1) == graph
+    end
   end
 
   test "stop/1" do
