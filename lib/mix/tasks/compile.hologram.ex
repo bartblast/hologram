@@ -50,14 +50,6 @@ defmodule Mix.Tasks.Compile.Hologram do
     {module_beam_path_plt, module_beam_path_plt_dump_path} =
       Compiler.maybe_load_module_beam_path_plt(build_dir)
 
-    new_module_digest_plt = Compiler.build_module_digest_plt!(module_beam_path_plt)
-
-    {old_module_digest_plt, module_digest_plt_dump_path} =
-      Compiler.maybe_load_module_digest_plt(build_dir)
-
-    module_digests_diff =
-      Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
-
     # Building IR PLT from scratch is almost x2 faster than loading IR PLT from a dump file,
     # so Compiler.build_ir_plt/1 is used instead of Compiler.maybe_load_ir_plt/1 + Compiler.patch_ir_plt!/3.
     ir_plt = Compiler.build_ir_plt(module_beam_path_plt)
@@ -65,17 +57,15 @@ defmodule Mix.Tasks.Compile.Hologram do
     # Patching call graph for 1 updated module takes ~100-400 ms, so it's too long if there are multiple updates
     # (and one needs to take into account that the graph has to be loaded first and dumped at the end).
     # Building call graph from scratch is more predictable as it takes ~563 ms for ~1300 modules.
-    call_graph = Compiler.build_call_graph(ir_plt)
-
-    call_graph_without_manually_ported_mfas =
-      call_graph
-      |> CallGraph.clone()
+    call_graph =
+      ir_plt
+      |> Compiler.build_call_graph()
       # DEFER: In case the list of manually ported MFAs grows to ~32 vertices, 
       # consider using similar strategy to CallGraph.remove_runtime_mfas/2,
       # e.g. implement opts param for CallGraph.remove_vertices/2 to allow rebuilding the graph.
       |> CallGraph.remove_manually_ported_mfas()
 
-    runtime_mfas = CallGraph.list_runtime_mfas(call_graph_without_manually_ported_mfas)
+    runtime_mfas = CallGraph.list_runtime_mfas(call_graph)
 
     _runtime_entry_file_path = Compiler.create_runtime_entry_file(runtime_mfas, ir_plt, opts)
 
@@ -83,7 +73,6 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     Compiler.validate_page_modules(page_modules)
 
-    PLT.dump(new_module_digest_plt, module_digest_plt_dump_path)
     PLT.dump(module_beam_path_plt, module_beam_path_plt_dump_path)
 
     Logger.info("Hologram: compiler finished")
