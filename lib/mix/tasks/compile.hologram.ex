@@ -86,6 +86,8 @@ end
 #   alias Hologram.Commons.TaskUtils
 
 #   def compile(opts) do
+#     TODO: remove runtime mfas from call graph before using it for pages
+
 #     page_entry_files_info =
 #       create_page_entry_files(page_modules, call_graph, ir_plt, opts[:js_source_dir])
 
