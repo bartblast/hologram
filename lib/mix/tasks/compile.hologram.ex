@@ -60,7 +60,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     call_graph =
       ir_plt
       |> Compiler.build_call_graph()
-      # DEFER: In case the list of manually ported MFAs grows to ~32 vertices, 
+      # DEFER: In case the list of manually ported MFAs grows to ~32 vertices,
       # consider using similar strategy to CallGraph.remove_runtime_mfas/2,
       # e.g. implement opts param for CallGraph.remove_vertices/2 to allow rebuilding the graph.
       |> CallGraph.remove_manually_ported_mfas()
