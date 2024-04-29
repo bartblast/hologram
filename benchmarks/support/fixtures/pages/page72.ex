@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Benchmarks.Fixtures.Page72 do
   use Hologram.Page
 

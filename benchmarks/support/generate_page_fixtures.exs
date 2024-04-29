@@ -2,6 +2,7 @@ alias Hologram.Commons.Reflection
 
 Enum.each(1..100, fn i ->
   content = """
+  # credo:disable-for-this-file Credo.Check.Readability.Specs
   defmodule Hologram.Benchmarks.Fixtures.Page#{i} do
     use Hologram.Page
 
