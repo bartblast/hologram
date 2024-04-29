@@ -168,6 +168,8 @@ defmodule Hologram.Compiler.CallGraph do
 
   @doc """
   Serializes the call graph and writes it to a file.
+
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/call_graph/dump/README.md
   """
   @spec dump(CallGraph.t(), String.t()) :: CallGraph.t()
   def dump(call_graph, path) do
