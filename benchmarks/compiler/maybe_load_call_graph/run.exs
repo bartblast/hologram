@@ -51,7 +51,7 @@ Benchee.run(
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
-     description: "maybe_load_call_graph/1", file: Path.join(__DIR__, "README.md")}
+     description: "Compiler.maybe_load_call_graph/1", file: Path.join(__DIR__, "README.md")}
   ],
   time: 60
 )
