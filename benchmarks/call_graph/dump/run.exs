@@ -5,7 +5,7 @@ alias Hologram.Compiler.CallGraph
 
 Benchee.run(
   %{
-    "dump dir exists, dump file exist" =>
+    "dump dir exists, dump file exists" =>
       {fn {call_graph, dump_path} ->
          CallGraph.dump(call_graph, dump_path)
        end,
