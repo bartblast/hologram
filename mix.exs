@@ -51,6 +51,7 @@ defmodule Hologram.MixProject do
     ]
   end
 
+  defp elixirc_paths(:dev), do: ["benchmarks/support", "lib"]
   defp elixirc_paths(:test), do: ["lib", "test/elixir/fixtures", "test/elixir/support"]
   defp elixirc_paths(_env), do: ["lib"]
 
