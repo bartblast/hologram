@@ -13,7 +13,7 @@ defmodule Hologram.Test.Fixtures.Compiler.Module9 do
   end
 
   def action(:action_9a, params, component) do
-    fun_9a(params.my_key, component + 1)
+    fun_9a(params.my_key, component.state -- [1])
   end
 
   def fun_9a(map, key), do: Map.get(map, key)

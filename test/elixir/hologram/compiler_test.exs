@@ -13,7 +13,6 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module2
   alias Hologram.Test.Fixtures.Compiler.Module3
   alias Hologram.Test.Fixtures.Compiler.Module4
-  alias Hologram.Test.Fixtures.Compiler.Module6
   alias Hologram.Test.Fixtures.Compiler.Module8
   alias Hologram.Test.Fixtures.Compiler.Module9
 
@@ -48,6 +47,41 @@ defmodule Hologram.CompilerTest do
       module_beam_path_plt: module_beam_path_plt,
       runtime_mfas: CallGraph.list_runtime_mfas(call_graph)
     ]
+  end
+
+  describe "build_page_js/3" do
+    setup %{call_graph: call_graph, runtime_mfas: runtime_mfas} do
+      call_graph_without_runtime_mfas =
+        call_graph
+        |> CallGraph.clone()
+        |> CallGraph.remove_runtime_mfas(runtime_mfas)
+
+      [call_graph: call_graph_without_runtime_mfas]
+    end
+
+    test "has both Erlang and Elixir function defs", %{call_graph: call_graph, ir_plt: ir_plt} do
+      result = build_page_js(Module9, call_graph, ir_plt, @js_dir)
+
+      js_fragment_1 = ~s/window.__hologramPageReachableFunctionDefs__/
+      js_fragment_2 = ~s/Interpreter.defineElixirFunction/
+      js_fragment_3 = ~s/Interpreter.defineErlangFunction/
+
+      assert String.contains?(result, js_fragment_1)
+      assert String.contains?(result, js_fragment_2)
+      assert String.contains?(result, js_fragment_3)
+    end
+
+    test "has only Elixir defs", %{call_graph: call_graph, ir_plt: ir_plt} do
+      result = build_page_js(Module11, call_graph, ir_plt, @js_dir)
+
+      js_fragment_1 = ~s/window.__hologramPageReachableFunctionDefs__/
+      js_fragment_2 = ~s/Interpreter.defineElixirFunction/
+      js_fragment_3 = ~s/Interpreter.defineErlangFunction/
+
+      assert String.contains?(result, js_fragment_1)
+      assert String.contains?(result, js_fragment_2)
+      refute String.contains?(result, js_fragment_3)
+    end
   end
 
   test "build_call_graph/0" do
@@ -566,9 +600,6 @@ end
 #   alias Hologram.Commons.Reflection
 #   alias Hologram.Commons.TaskUtils
 
-#   alias Hologram.Test.Fixtures.Compiler.Module10
-#   alias Hologram.Test.Fixtures.Compiler.Module11
-
 #   setup_all do
 #     opts = [
 #       assets_dir: @assets_dir,
@@ -576,64 +607,6 @@ end
 #     ]
 
 #     maybe_install_js_deps(opts)
-#   end
-
-#   describe "build_page_js/3" do
-#     test "has both Erlang and Elixir function defs" do
-#       module_8_ir = IR.for_module(Module8)
-#       module_9_ir = IR.for_module(Module9)
-#       module_10_ir = IR.for_module(Module10)
-#       map_ir = IR.for_module(Map)
-
-#       call_graph =
-#         CallGraph.start()
-#         |> CallGraph.build(module_8_ir)
-#         |> CallGraph.build(module_9_ir)
-#         |> CallGraph.build(module_10_ir)
-#         |> CallGraph.build(map_ir)
-
-#       ir_plt =
-#         PLT.start()
-#         |> PLT.put(Module8, module_8_ir)
-#         |> PLT.put(Module9, module_9_ir)
-#         |> PLT.put(Module10, module_10_ir)
-#         |> PLT.put(Map, map_ir)
-
-#       result = build_page_js(Module9, call_graph, ir_plt, @js_dir)
-
-#       js_fragment_1 = ~s/window.__hologramPageReachableFunctionDefs__/
-#       js_fragment_2 = ~s/Interpreter.defineElixirFunction/
-#       js_fragment_3 = ~s/Interpreter.defineErlangFunction/
-
-#       assert String.contains?(result, js_fragment_1)
-#       assert String.contains?(result, js_fragment_2)
-#       assert String.contains?(result, js_fragment_3)
-#     end
-
-#     test "has only Elixir defs" do
-#       module_6_ir = IR.for_module(Module6)
-#       module_11_ir = IR.for_module(Module11)
-
-#       call_graph =
-#         CallGraph.start()
-#         |> CallGraph.build(module_6_ir)
-#         |> CallGraph.build(module_11_ir)
-
-#       ir_plt =
-#         PLT.start()
-#         |> PLT.put(Module6, module_6_ir)
-#         |> PLT.put(Module11, module_11_ir)
-
-#       result = build_page_js(Module11, call_graph, ir_plt, @js_dir)
-
-#       js_fragment_1 = ~s/window.__hologramPageReachableFunctionDefs__/
-#       js_fragment_2 = ~s/Interpreter.defineElixirFunction/
-#       js_fragment_3 = ~s/Interpreter.defineErlangFunction/
-
-#       assert String.contains?(result, js_fragment_1)
-#       assert String.contains?(result, js_fragment_2)
-#       refute String.contains?(result, js_fragment_3)
-#     end
 #   end
 
 #   describe "bundle/4" do

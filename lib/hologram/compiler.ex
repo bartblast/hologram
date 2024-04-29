@@ -101,6 +101,44 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Builds JavaScript code for the given Hologram page.
+  """
+  @spec build_page_js(module, CallGraph.t(), PLT.t(), file_path) :: String.t()
+  def build_page_js(page_module, call_graph, ir_plt, js_dir) do
+    mfas = CallGraph.list_page_mfas(call_graph, page_module)
+    erlang_js_dir = Path.join(js_dir, "erlang")
+
+    erlang_function_defs =
+      mfas
+      |> render_erlang_function_defs(erlang_js_dir)
+      |> render_block()
+
+    elixir_function_defs =
+      mfas
+      |> render_elixir_function_defs(ir_plt)
+      |> render_block()
+
+    """
+    "use strict";
+
+    window.__hologramPageReachableFunctionDefs__ = (deps) => {
+      const {
+        Bitstring,
+        HologramBoxedError,
+        HologramInterpreterError,
+        Interpreter,
+        MemoryStorage,
+        Type,
+        Utils,
+      } = deps;#{erlang_function_defs}#{elixir_function_defs}
+    }
+
+    window.__hologramPageScriptLoaded__ = true;
+    document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));\
+    """
+  end
+
+  @doc """
   Builds Hologram runtime JavaScript source code.
   """
   @spec build_runtime_js(list(mfa), PLT.t(), file_path) :: String.t()
@@ -453,44 +491,6 @@ end
 #   alias Hologram.Commons.PLT
 #   alias Hologram.Commons.Reflection
 #   alias Hologram.Commons.TaskUtils
-
-#   @doc """
-#   Builds JavaScript code for the given Hologram page.
-#   """
-#   @spec build_page_js(module, CallGraph.t(), PLT.t(), String.t()) :: String.t()
-#   def build_page_js(page_module, call_graph, ir_plt, source_dir) do
-#     mfas = CallGraph.list_page_mfas(call_graph, page_module)
-#     erlang_source_dir = source_dir <> "/erlang"
-
-#     erlang_function_defs =
-#       mfas
-#       |> render_erlang_function_defs(erlang_source_dir)
-#       |> render_block()
-
-#     elixir_function_defs =
-#       mfas
-#       |> render_elixir_function_defs(ir_plt)
-#       |> render_block()
-
-#     """
-#     "use strict";
-
-#     window.__hologramPageReachableFunctionDefs__ = (deps) => {
-#       const {
-#         Bitstring,
-#         HologramBoxedError,
-#         HologramInterpreterError,
-#         Interpreter,
-#         MemoryStorage,
-#         Type,
-#         Utils,
-#       } = deps;#{erlang_function_defs}#{elixir_function_defs}
-#     }
-
-#     window.__hologramPageScriptLoaded__ = true;
-#     document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));\
-#     """
-#   end
 
 #   @doc """
 #   Bundles the given JavaScript code into a JavaScript file and its source map.
