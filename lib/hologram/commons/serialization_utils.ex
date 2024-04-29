@@ -24,6 +24,6 @@ defmodule Hologram.Commons.SerializationUtils do
   """
   @spec serialize(term) :: binary
   def serialize(term) do
-    :erlang.term_to_binary(term, compressed: 9)
+    :erlang.term_to_binary(term)
   end
 end
