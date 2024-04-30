@@ -176,7 +176,8 @@ defmodule Hologram.Compiler do
   @doc """
   Creates page bundle entry file.
   """
-  @spec create_page_entry_files(module, CallGraph.t(), PLT.t(), opts) :: list({module, file_path})
+  @spec create_page_entry_files(list(module), CallGraph.t(), PLT.t(), opts) ::
+          list({module, file_path})
   def create_page_entry_files(page_modules, call_graph, ir_plt, opts) do
     page_modules
     |> TaskUtils.async_many(fn page_module ->
