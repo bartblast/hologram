@@ -248,6 +248,8 @@ defmodule Hologram.Compiler do
 
   @doc """
   Formats the given JavaScript files with Biome.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/format_files_2/README.md
   """
   @spec format_files(list(file_path), opts) :: {Collectable.t(), exit_status :: non_neg_integer()}
   # sobelow_skip ["CI.System"]
