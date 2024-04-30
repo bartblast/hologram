@@ -157,6 +157,51 @@ defmodule Hologram.CompilerTest do
            )
   end
 
+  test "bundle/3" do
+    tmp_dir = Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_3"])
+
+    opts = [
+      bundle_name: "my_bundle_name",
+      esbuild_path:
+        Path.join([Reflection.root_dir(), "assets", "node_modules", ".bin", "esbuild"]),
+      static_dir: Path.join(tmp_dir, "static"),
+      tmp_dir: tmp_dir
+    ]
+
+    clean_dir(tmp_dir)
+    File.mkdir!(opts[:static_dir])
+
+    entry_file_path = Path.join(tmp_dir, "MyPage.entry.js")
+    File.write(entry_file_path, "export const myVar = 123;\n")
+
+    assert bundle(MyPage, entry_file_path, opts) == {MyPage, "76f1f092f95a34da067e35caad5e3317"}
+
+    expected_bundle_js = """
+    (()=>{var o=123;})();
+    //# sourceMappingURL=my_bundle_name-76f1f092f95a34da067e35caad5e3317.js.map
+    """
+
+    static_bundle_path =
+      Path.join(opts[:static_dir], "my_bundle_name-76f1f092f95a34da067e35caad5e3317.js")
+
+    assert File.read!(static_bundle_path) == expected_bundle_js
+
+    expected_source_map_js = """
+    {
+      "version": 3,
+      "sources": ["MyPage.entry.js"],
+      "sourcesContent": ["export const myVar = 123;\\n"],
+      "mappings": "MAAO,IAAMA,EAAQ",
+      "names": ["myVar"]
+    }
+    """
+
+    static_source_map_path =
+      Path.join(opts[:static_dir], "my_bundle_name-76f1f092f95a34da067e35caad5e3317.js.map")
+
+    assert File.read!(static_source_map_path) == expected_source_map_js
+  end
+
   test "create_page_entry_files/4", %{call_graph: call_graph, ir_plt: ir_plt} do
     test_tmp_subdir = "test_create_page_entry_files_4"
 
@@ -645,83 +690,3 @@ defmodule Hologram.CompilerTest do
     end
   end
 end
-
-# defmodule Hologram.CompilerTest do
-#   alias Hologram.Commons.PLT
-#   alias Hologram.Commons.Reflection
-#   alias Hologram.Commons.TaskUtils
-
-#   setup_all do
-#     opts = [
-#       assets_dir: @assets_dir,
-#       build_dir: Reflection.build_dir()
-#     ]
-
-#     maybe_install_js_deps(opts)
-#   end
-
-#   describe "bundle/4" do
-#     @esbuild_path Reflection.root_dir() <> "/assets/node_modules/.bin/esbuild"
-#     @js_formatter_bin_path Reflection.root_dir() <> "/assets/node_modules/.bin/prettier"
-#     @js_formatter_config_path Reflection.root_dir() <> "/assets/.prettierrc.json"
-#     @js_code "const myVar  =  123"
-#     @entry_name "my_entry"
-#     @tmp_dir "#{Reflection.tmp_dir()}/#{__MODULE__}/build_4"
-#     @bundle_name "my_bundle"
-
-#     @opts [
-#       entry_name: @entry_name,
-#       esbuild_path: @esbuild_path,
-#       js_formatter_bin_path: @js_formatter_bin_path,
-#       js_formatter_config_path: @js_formatter_config_path,
-#       tmp_dir: @tmp_dir,
-#       static_dir: @tmp_dir,
-#       bundle_name: @bundle_name
-#     ]
-
-#     setup do
-#       clean_dir(@tmp_dir)
-#       :ok
-#     end
-
-#     test "creates tmp and bundle nested path dirs if they don't exist" do
-#       opts =
-#         @opts
-#         |> Keyword.put(:tmp_dir, "#{@tmp_dir}/nested_1/nested_2/nested_3")
-#         |> Keyword.put(:static_dir, "#{@tmp_dir}/nested_4/nested_5/nested_6")
-
-#       assert bundle(@js_code, opts)
-#       assert File.exists?(opts[:tmp_dir])
-#       assert File.exists?(opts[:static_dir])
-#     end
-
-#     test "formats entry file" do
-#       bundle(@js_code, @opts)
-
-#       entry_file_path = "#{@tmp_dir}/#{@entry_name}.entry.js"
-#       assert File.read!(entry_file_path) == "const myVar = 123;\n"
-#     end
-
-#     test "bundles files" do
-#       assert bundle(@js_code, @opts) ==
-#                {"f499a92d06ea057f92198bef2cba2822",
-#                 bundle_path = "#{@tmp_dir}/my_bundle-f499a92d06ea057f92198bef2cba2822.js",
-#                 source_map_path = "#{@tmp_dir}/my_bundle-f499a92d06ea057f92198bef2cba2822.js.map"}
-
-#       assert File.read!(bundle_path) == """
-#              (()=>{})();
-#              //# sourceMappingURL=my_bundle-f499a92d06ea057f92198bef2cba2822.js.map
-#              """
-
-#       assert File.read!(source_map_path) == """
-#              {
-#                "version": 3,
-#                "sources": [],
-#                "sourcesContent": [],
-#                "mappings": "",
-#                "names": []
-#              }
-#              """
-#     end
-#   end
-# end

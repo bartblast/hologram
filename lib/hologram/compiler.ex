@@ -176,6 +176,59 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Bundles the given entry file.
+  The output file names contain hex digest.
+
+  ## Examples
+
+      iex> bundle(MyPage, "/my_tmp_dir/MyPage.entry.js", opts)
+      {MyPage, "caf8f4e27584852044eb27a37c5eddfd"}
+  """
+  @spec bundle(term, file_path, opts) :: {String.t(), String.t()}
+  # sobelow_skip ["CI.System"]
+  def bundle(entry_name, entry_file_path, opts) do
+    output_bundle_path = Path.join(opts[:tmp_dir], "#{entry_name}.output.js")
+
+    esbuild_cmd = [
+      entry_file_path,
+      "--bundle",
+      "--log-level=warning",
+      "--minify",
+      "--outfile=#{output_bundle_path}",
+      "--sourcemap",
+      "--target=es2020"
+    ]
+
+    System.cmd(opts[:esbuild_path], esbuild_cmd, parallelism: true)
+
+    digest =
+      output_bundle_path
+      |> File.read!()
+      |> CryptographicUtils.digest(:md5, :hex)
+
+    static_bundle_path_with_digest =
+      Path.join(opts[:static_dir], "#{opts[:bundle_name]}-#{digest}.js")
+
+    output_source_map_path = output_bundle_path <> ".map"
+    static_source_map_path_with_digest = static_bundle_path_with_digest <> ".map"
+
+    File.rename!(output_bundle_path, static_bundle_path_with_digest)
+    File.rename!(output_source_map_path, static_source_map_path_with_digest)
+
+    js_with_replaced_source_map_url =
+      static_bundle_path_with_digest
+      |> File.read!()
+      |> String.replace(
+        "//# sourceMappingURL=#{entry_name}.output.js.map",
+        "//# sourceMappingURL=#{opts[:bundle_name]}-#{digest}.js.map"
+      )
+
+    File.write!(static_bundle_path_with_digest, js_with_replaced_source_map_url)
+
+    {entry_name, digest}
+  end
+
+  @doc """
   Creates page bundle entry file.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/create_page_entry_files/README.md
@@ -521,71 +574,3 @@ defmodule Hologram.Compiler do
     |> Enum.join("\n\n")
   end
 end
-
-# defmodule Hologram.Compiler do
-#   alias Hologram.Commons.CryptographicUtils
-#   alias Hologram.Commons.PLT
-#   alias Hologram.Commons.Reflection
-#   alias Hologram.Commons.TaskUtils
-
-#   @doc """
-#   Bundles the given JavaScript code into a JavaScript file and its source map.
-#   The generated file names contain the hex digest of the bundled JavaScript file content.
-
-#   ## Examples
-
-#       iex> bundle(js, opts)
-#       {"caf8f4e27584852044eb27a37c5eddfd",
-#        "priv/static/my_script-caf8f4e27584852044eb27a37c5eddfd.js",
-#        "priv/static/my_script-caf8f4e27584852044eb27a37c5eddfd.js.map"}
-#   """
-#   @spec bundle(term, String.t(), keyword) :: {String.t(), String.t(), String.t()}
-#   # sobelow_skip ["CI.System"]
-#   def bundle(entry_name, entry_file_path, opts) do
-#     bundle_name = opts[:bundle_name]
-#     esbuild_path = opts[:esbuild_path]
-#     static_dir = opts[:static_dir]
-#     tmp_dir = opts[:tmp_dir]
-
-#     File.mkdir_p!(static_dir)
-
-#     output_bundle_path = tmp_dir <> "/#{entry_name}.output.js"
-
-#     esbuild_cmd = [
-#       entry_file_path,
-#       "--bundle",
-#       "--log-level=warning",
-#       "--minify",
-#       "--outfile=#{output_bundle_path}",
-#       "--sourcemap",
-#       "--target=es2020"
-#     ]
-
-#     System.cmd(esbuild_path, esbuild_cmd, env: [], parallelism: true)
-
-#     digest =
-#       output_bundle_path
-#       |> File.read!()
-#       |> CryptographicUtils.digest(:md5, :hex)
-
-#     static_bundle_path_with_digest = "#{static_dir}/#{bundle_name}-#{digest}.js"
-
-#     output_source_map_path = output_bundle_path <> ".map"
-#     static_source_map_path_with_digest = static_bundle_path_with_digest <> ".map"
-
-#     File.rename!(output_bundle_path, static_bundle_path_with_digest)
-#     File.rename!(output_source_map_path, static_source_map_path_with_digest)
-
-#     js_with_replaced_source_map_url =
-#       static_bundle_path_with_digest
-#       |> File.read!()
-#       |> String.replace(
-#         "//# sourceMappingURL=#{entry_name}.output.js.map",
-#         "//# sourceMappingURL=#{bundle_name}-#{digest}.js.map"
-#       )
-
-#     File.write!(static_bundle_path_with_digest, js_with_replaced_source_map_url)
-
-#     {entry_name, digest}
-#   end
-# end
