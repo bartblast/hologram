@@ -1270,13 +1270,13 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  test "remove_runtime_mfas/2", %{ir_plt: ir_plt} do
+  test "remove_runtime_mfas!/2", %{ir_plt: ir_plt} do
     call_graph = Compiler.build_call_graph(ir_plt)
     runtime_mfas = list_runtime_mfas(call_graph)
 
     CallGraph.add_edge(call_graph, :my_vertex_1, :my_vertex_2)
 
-    CallGraph.remove_runtime_mfas(call_graph, runtime_mfas)
+    CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas)
 
     assert CallGraph.has_edge?(call_graph, :my_vertex_1, :my_vertex_2)
 

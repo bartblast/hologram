@@ -1,6 +1,6 @@
 Benchmark
 
-remove_runtime_mfas/2
+CallGraph.remove_runtime_mfas!/2
 
 ## System
 
@@ -62,7 +62,7 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">remove_runtime_mfas/2</td>
+    <td style="white-space: nowrap">remove_runtime_mfas!/2</td>
     <td style="white-space: nowrap; text-align: right">2.57</td>
     <td style="white-space: nowrap; text-align: right">388.90 ms</td>
     <td style="white-space: nowrap; text-align: right">&plusmn;2.38%</td>

@@ -54,7 +54,7 @@ defmodule Hologram.CompilerTest do
       call_graph_without_runtime_mfas =
         call_graph
         |> CallGraph.clone()
-        |> CallGraph.remove_runtime_mfas(runtime_mfas)
+        |> CallGraph.remove_runtime_mfas!(runtime_mfas)
 
       [call_graph: call_graph_without_runtime_mfas]
     end

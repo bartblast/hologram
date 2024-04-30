@@ -419,10 +419,10 @@ defmodule Hologram.Compiler.CallGraph do
   remove_vertices/2 is very slow on large graphs -
   for a base case it would take over 7 seconds to remove runtime MFAs that way.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/call_graph/remove_runtime_mfas/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/call_graph/remove_runtime_mfas!/README.md
   """
-  @spec remove_runtime_mfas(CallGraph.t(), list(mfa)) :: CallGraph.t()
-  def remove_runtime_mfas(call_graph, runtime_mfas) do
+  @spec remove_runtime_mfas!(CallGraph.t(), list(mfa)) :: CallGraph.t()
+  def remove_runtime_mfas!(call_graph, runtime_mfas) do
     vertices = vertices(call_graph)
     edges = edges(call_graph)
 
