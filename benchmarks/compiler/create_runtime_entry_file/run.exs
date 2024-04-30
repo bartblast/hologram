@@ -9,10 +9,6 @@ Benchee.run(
       Compiler.create_runtime_entry_file(runtime_mfas, ir_plt, opts)
     end
   },
-  before_each: fn {runtime_mfas, ir_plt, opts} ->
-    FileUtils.recreate_dir(opts[:tmp_dir])
-    {runtime_mfas, ir_plt, opts}
-  end,
   before_scenario: fn _input ->
     ir_plt = Compiler.build_ir_plt()
     call_graph = Compiler.build_call_graph(ir_plt)
@@ -24,6 +20,10 @@ Benchee.run(
         Path.join([Reflection.tmp_dir(), "benchmarks", "compiler", "create_runtime_entry_file"])
     ]
 
+    {runtime_mfas, ir_plt, opts}
+  end,
+  before_each: fn {runtime_mfas, ir_plt, opts} ->
+    FileUtils.recreate_dir(opts[:tmp_dir])
     {runtime_mfas, ir_plt, opts}
   end,
   formatters: [
