@@ -177,7 +177,8 @@ defmodule Hologram.Compiler do
 
   @doc """
   Bundles the given entry file.
-  The output file names contain hex digest.
+  Includes the source map of the output file.
+  The output file and source map file names contain hex digest.
 
   ## Examples
 
