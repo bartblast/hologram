@@ -24,8 +24,8 @@ defmodule Mix.Tasks.Compile.Hologram do
       assets_dir: assets_dir,
       build_dir: build_dir,
       esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
-      formatter_bin_path: Path.join([node_modules_path, ".bin", "prettier"]),
-      formatter_config_path: Path.join(assets_dir, ".prettierrc.json"),
+      # Biome is almost x20 faster than Prettier in Hologram benchmarks
+      formatter_bin_path: Path.join([node_modules_path, ".bin", "biome"]),
       js_dir: Path.join(assets_dir, "js"),
       static_dir: Path.join([root_dir, "priv", "static", "hologram"]),
       tmp_dir: Path.join(build_dir, "tmp")
@@ -67,7 +67,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     runtime_mfas = CallGraph.list_runtime_mfas(call_graph_for_runtime)
 
-    _runtime_entry_file_path = Compiler.create_runtime_entry_file(runtime_mfas, ir_plt, opts)
+    runtime_entry_file_path = Compiler.create_runtime_entry_file(runtime_mfas, ir_plt, opts)
 
     page_modules = Reflection.list_pages()
 
@@ -75,8 +75,13 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
 
-    _page_entry_files_info =
+    page_entry_files_info =
       Compiler.create_page_entry_files(page_modules, call_graph_for_pages, ir_plt, opts)
+
+    page_entry_file_paths =
+      Enum.map(page_entry_files_info, fn {_entry_name, entry_file_path} -> entry_file_path end)
+
+    Compiler.format_files([runtime_entry_file_path | page_entry_file_paths], opts)
 
     PLT.dump(module_beam_path_plt, module_beam_path_plt_dump_path)
 
@@ -91,10 +96,6 @@ end
 #   alias Hologram.Commons.TaskUtils
 
 #   def compile(opts) do
-#     page_entry_file_paths =
-#       Enum.map(page_entry_files_info, fn {_entry_name, entry_file_path} -> entry_file_path end)
-
-#     format_files([runtime_entry_file_path | page_entry_file_paths], opts)
 
 #     entry_files_info = [{"runtime", runtime_entry_file_path} | page_entry_files_info]
 
@@ -128,22 +129,6 @@ end
 #       Compiler.bundle(entry_name, entry_file_path, opts)
 #     end)
 #     |> Task.await_many(:infinity)
-#   end
-
-#   # sobelow_skip ["CI.System"]
-#   defp format_files(file_paths, opts) do
-#     cmd =
-#       file_paths ++
-#         [
-#           "--config=#{opts[:js_formatter_config_path]}",
-#           # "none" is not a valid path or a flag value,
-#           # any non-existing path would work the same here, i.e. disable "ignore" functionality.
-#           "--ignore-path=none",
-#           "--no-error-on-unmatched-pattern",
-#           "--write"
-#         ]
-
-#     System.cmd(opts[:js_formatter_bin_path], cmd, env: [], parallelism: true)
 #   end
 
 #   defp maybe_load_module_beam_path_plt(opts) do
