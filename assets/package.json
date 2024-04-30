@@ -5,6 +5,7 @@
     "snabbdom": "^3"
   },
   "devDependencies": {
+    "@biomejs/biome": "^1",
     "chai": "^5",
     "eslint": "^8",
     "jsdom": "^24",
