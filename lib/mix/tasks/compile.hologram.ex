@@ -146,19 +146,6 @@ end
 #     System.cmd(opts[:js_formatter_bin_path], cmd, env: [], parallelism: true)
 #   end
 
-#   defp create_page_entry_files(page_modules, call_graph, ir_plt, js_source_dir) do
-#     page_modules
-#     |> TaskUtils.async_many(fn page_module ->
-#       entry_file_path =
-#         page_module
-#         |> Compiler.build_page_js(call_graph, ir_plt, js_source_dir)
-#         |> Compiler.create_entry_file(page_module, js_source_dir)
-
-#       {page_module, entry_file_path}
-#     end)
-#     |> Task.await_many(:infinity)
-#   end
-
 #   defp maybe_load_module_beam_path_plt(opts) do
 #     module_beam_path_plt = PLT.start()
 #     module_beam_path_plt_dump_path = opts[:build_dir] <> "/module_beam_path.plt"

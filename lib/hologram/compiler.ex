@@ -174,11 +174,30 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Creates page bundle entry file.
+  """
+  @spec create_page_entry_files(module, CallGraph.t(), PLT.t(), opts) :: list({module, file_path})
+  def create_page_entry_files(page_modules, call_graph, ir_plt, opts) do
+    page_modules
+    |> TaskUtils.async_many(fn page_module ->
+      entry_name = Reflection.module_name(page_module)
+
+      entry_file_path =
+        page_module
+        |> build_page_js(call_graph, ir_plt, opts[:js_dir])
+        |> create_entry_file(entry_name, opts[:tmp_dir])
+
+      {page_module, entry_file_path}
+    end)
+    |> Task.await_many(:infinity)
+  end
+
+  @doc """
   Creates runtime bundle entry file.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/create_runtime_entry_file/README.md
   """
-  @spec create_runtime_entry_file(list(mfa), PLT.t(), opts) :: String.t()
+  @spec create_runtime_entry_file(list(mfa), PLT.t(), opts) :: file_path
   def create_runtime_entry_file(runtime_mfas, ir_plt, opts) do
     runtime_mfas
     |> build_runtime_js(ir_plt, opts[:js_dir])
@@ -395,8 +414,8 @@ defmodule Hologram.Compiler do
     end)
   end
 
-  defp create_entry_file(js, entry_name, dir) do
-    entry_file_path = Path.join(dir, "#{entry_name}.entry.js")
+  defp create_entry_file(js, entry_name, tmp_dir) do
+    entry_file_path = Path.join(tmp_dir, "#{entry_name}.entry.js")
     File.write!(entry_file_path, js)
 
     entry_file_path

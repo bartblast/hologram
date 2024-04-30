@@ -157,6 +157,34 @@ defmodule Hologram.CompilerTest do
            )
   end
 
+  test "create_page_entry_files/4", %{call_graph: call_graph, ir_plt: ir_plt} do
+    test_tmp_subdir = "test_create_page_entry_files_4"
+
+    opts = [
+      js_dir: @js_dir,
+      tmp_dir: Path.join(@tmp_dir, test_tmp_subdir)
+    ]
+
+    clean_dir(opts[:tmp_dir])
+
+    page_modules = Reflection.list_pages()
+
+    result = create_page_entry_files(page_modules, call_graph, ir_plt, opts)
+
+    assert Enum.count(result) == Enum.count(page_modules)
+
+    Enum.each(result, fn {page_module, entry_file_path} ->
+      assert page_module in page_modules
+
+      module_name = Reflection.module_name(page_module)
+      assert entry_file_path == Path.join(opts[:tmp_dir], "#{module_name}.entry.js")
+
+      assert entry_file_path
+             |> File.read!()
+             |> String.contains?("Interpreter.defineElixirFunction")
+    end)
+  end
+
   test "create_runtime_entry_file/3", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
     test_tmp_subdir = "test_create_runtime_entry_file_3"
 
@@ -168,6 +196,8 @@ defmodule Hologram.CompilerTest do
     clean_dir(opts[:tmp_dir])
 
     entry_file_path = create_runtime_entry_file(runtime_mfas, ir_plt, opts)
+
+    assert entry_file_path == Path.join(opts[:tmp_dir], "runtime.entry.js")
 
     assert entry_file_path
            |> File.read!()
