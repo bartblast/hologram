@@ -241,10 +241,7 @@ defmodule Hologram.CompilerTest do
     file_path_2 = Path.join(test_tmp_dir, "file_2.js")
     File.write!(file_path_2, unformatted_js_code)
 
-    opts = [
-      formatter_bin_path: Path.join([@assets_dir, "node_modules", ".bin", "prettier"]),
-      formatter_config_path: Path.join(@assets_dir, ".prettierrc.json")
-    ]
+    opts = [formatter_bin_path: Path.join([@assets_dir, "node_modules", ".bin", "biome"])]
 
     Compiler.format_files([file_path_1, file_path_2], opts)
 
