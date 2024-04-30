@@ -102,6 +102,8 @@ defmodule Hologram.Compiler do
 
   @doc """
   Builds JavaScript code for the given Hologram page.
+
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_page_js/README.md
   """
   @spec build_page_js(module, CallGraph.t(), PLT.t(), file_path) :: String.t()
   def build_page_js(page_module, call_graph, ir_plt, js_dir) do
