@@ -57,7 +57,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     # Patching call graph for 1 updated module takes ~100-400 ms, so it's too long if there are multiple updates
     # (and one needs to take into account that the graph has to be loaded first and dumped at the end).
     # Building call graph from scratch is more predictable as it takes ~563 ms for ~1300 modules.
-    call_graph =
+    call_graph_for_runtime =
       ir_plt
       |> Compiler.build_call_graph()
       # DEFER: In case the list of manually ported MFAs grows to ~32 vertices,
@@ -65,13 +65,18 @@ defmodule Mix.Tasks.Compile.Hologram do
       # e.g. implement opts param for CallGraph.remove_vertices/2 to allow rebuilding the graph.
       |> CallGraph.remove_manually_ported_mfas()
 
-    runtime_mfas = CallGraph.list_runtime_mfas(call_graph)
+    runtime_mfas = CallGraph.list_runtime_mfas(call_graph_for_runtime)
 
     _runtime_entry_file_path = Compiler.create_runtime_entry_file(runtime_mfas, ir_plt, opts)
 
     page_modules = Reflection.list_pages()
 
     Compiler.validate_page_modules(page_modules)
+
+    call_graph_for_pages = CallGraph.remove_runtime_mfas(call_graph_for_runtime, runtime_mfas)
+
+    _page_entry_files_info =
+      Compiler.create_page_entry_files(page_modules, call_graph_for_pages, ir_plt, opts)
 
     PLT.dump(module_beam_path_plt, module_beam_path_plt_dump_path)
 
@@ -86,11 +91,6 @@ end
 #   alias Hologram.Commons.TaskUtils
 
 #   def compile(opts) do
-#     TODO: remove runtime mfas from call graph before using it for pages
-
-#     page_entry_files_info =
-#       create_page_entry_files(page_modules, call_graph, ir_plt, opts[:js_source_dir])
-
 #     page_entry_file_paths =
 #       Enum.map(page_entry_files_info, fn {_entry_name, entry_file_path} -> entry_file_path end)
 
