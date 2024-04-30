@@ -228,6 +228,30 @@ defmodule Hologram.CompilerTest do
            }
   end
 
+  test "format_files/2" do
+    test_tmp_dir = Path.join(@tmp_dir, "test_format_files_2")
+    clean_dir(test_tmp_dir)
+
+    unformatted_js_code = "const myVar  =  123"
+    formatted_js_code = "const myVar = 123;\n"
+
+    file_path_1 = Path.join(test_tmp_dir, "file_1.js")
+    File.write!(file_path_1, unformatted_js_code)
+
+    file_path_2 = Path.join(test_tmp_dir, "file_2.js")
+    File.write!(file_path_2, unformatted_js_code)
+
+    opts = [
+      formatter_bin_path: Path.join([@assets_dir, "node_modules", ".bin", "prettier"]),
+      formatter_config_path: Path.join(@assets_dir, ".prettierrc.json")
+    ]
+
+    Compiler.format_files([file_path_1, file_path_2], opts)
+
+    assert File.read!(file_path_1) == formatted_js_code
+    assert File.read!(file_path_2) == formatted_js_code
+  end
+
   test "group_mfas_by_module/1" do
     mfas = [
       {:module_1, :fun_a, 1},

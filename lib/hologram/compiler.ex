@@ -247,6 +247,26 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Formats the given JavaScript files.
+  """
+  @spec format_files(list(file_path), opts) :: {Collectable.t(), exit_status :: non_neg_integer()}
+  # sobelow_skip ["CI.System"]
+  def format_files(file_paths, opts) do
+    cmd =
+      file_paths ++
+        [
+          "--config=#{opts[:formatter_config_path]}",
+          # "none" is not a valid path or a flag value,
+          # any non-existing path would work the same here, i.e. disable "ignore" functionality.
+          "--ignore-path=none",
+          "--no-error-on-unmatched-pattern",
+          "--write"
+        ]
+
+    System.cmd(opts[:formatter_bin_path], cmd, parallelism: true)
+  end
+
+  @doc """
   Groups the given MFAs by module.
   """
   @spec group_mfas_by_module(list(mfa)) :: %{module => mfa}
