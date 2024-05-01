@@ -209,7 +209,7 @@ defmodule Hologram.Compiler do
       "--target=es2020"
     ]
 
-    System.cmd(opts[:esbuild_path], esbuild_cmd, parallelism: true)
+    System.cmd(opts[:esbuild_bin_path], esbuild_cmd, parallelism: true)
 
     digest =
       output_bundle_path

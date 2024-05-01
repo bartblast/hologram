@@ -161,7 +161,7 @@ defmodule Hologram.CompilerTest do
     tmp_dir = Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_2"])
 
     opts = [
-      esbuild_path:
+      esbuild_bin_path:
         Path.join([Reflection.root_dir(), "assets", "node_modules", ".bin", "esbuild"]),
       static_dir: Path.join(tmp_dir, "static"),
       tmp_dir: tmp_dir
@@ -251,7 +251,7 @@ defmodule Hologram.CompilerTest do
     tmp_dir = Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4"])
 
     opts = [
-      esbuild_path:
+      esbuild_bin_path:
         Path.join([Reflection.root_dir(), "assets", "node_modules", ".bin", "esbuild"]),
       static_dir: Path.join(tmp_dir, "static"),
       tmp_dir: tmp_dir
