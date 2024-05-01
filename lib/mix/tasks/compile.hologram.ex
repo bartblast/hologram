@@ -76,12 +76,22 @@ defmodule Mix.Tasks.Compile.Hologram do
     call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
 
     page_entry_files_info =
-      Compiler.create_page_entry_files(page_modules, call_graph_for_pages, ir_plt, opts)
+      page_modules
+      |> Compiler.create_page_entry_files(call_graph_for_pages, ir_plt, opts)
+      |> Enum.map(fn {entry_name, entry_file_path} ->
+        {entry_name, entry_file_path, "page"}
+      end)
 
     page_entry_file_paths =
-      Enum.map(page_entry_files_info, fn {_entry_name, entry_file_path} -> entry_file_path end)
+      Enum.map(page_entry_files_info, fn {_entry_name, entry_file_path, _bundle_name} ->
+        entry_file_path
+      end)
 
     Compiler.format_files([runtime_entry_file_path | page_entry_file_paths], opts)
+
+    entry_files_info = [{"runtime", runtime_entry_file_path, "runtime"} | page_entry_files_info]
+
+    _bundle_info = Compiler.bundle(entry_files_info, opts)
 
     PLT.dump(module_beam_path_plt, module_beam_path_plt_dump_path)
 
@@ -96,10 +106,6 @@ end
 #   alias Hologram.Commons.TaskUtils
 
 #   def compile(opts) do
-
-#     entry_files_info = [{"runtime", runtime_entry_file_path} | page_entry_files_info]
-
-#     bundle_info = bundle_entry_files(entry_files_info, opts)
 
 #     Logger.debug("Hologram: finished runtime & pages bundling")
 
@@ -121,14 +127,6 @@ end
 #       Path.join([opts[:build_dir], Reflection.page_digest_plt_dump_file_name()])
 
 #     {page_digest_plt, page_digest_plt_dump_path}
-#   end
-
-#   defp bundle_entry_files(entry_files_info, opts) do
-#     entry_files_info
-#     |> TaskUtils.async_many(fn {entry_name, entry_file_path} ->
-#       Compiler.bundle(entry_name, entry_file_path, opts)
-#     end)
-#     |> Task.await_many(:infinity)
 #   end
 
 #   defp maybe_load_module_beam_path_plt(opts) do
