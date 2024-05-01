@@ -55,7 +55,7 @@ defmodule Hologram.Compiler do
 
     Reflection.list_elixir_modules()
     |> TaskUtils.async_many(fn module ->
-      beam_path = PLT.get!(module_beam_path_plt, module)
+      beam_path = get_module_beam_path(module_beam_path_plt, module)
       ir = IR.for_module(beam_path)
       PLT.put(ir_plt, module, ir)
     end)
@@ -536,6 +536,18 @@ defmodule Hologram.Compiler do
     Enum.filter(mfas, fn {module, _function, _arity} -> !Reflection.alias?(module) end)
   end
 
+  defp get_module_beam_path(module_beam_path_plt, module) do
+    case PLT.get(module_beam_path_plt, module) do
+      {:ok, path} ->
+        path
+
+      :error ->
+        path = :code.which(module)
+        PLT.put(module_beam_path_plt, module, path)
+        path
+    end
+  end
+
   defp get_package_json_digest(assets_dir) do
     assets_dir
     |> Path.join("package.json")
@@ -556,19 +568,10 @@ defmodule Hologram.Compiler do
   end
 
   defp rebuild_module_digest_plt_entry!(module, module_digest_plt, module_beam_path_plt) do
-    module_beam_path =
-      case PLT.get(module_beam_path_plt, module) do
-        {:ok, path} ->
-          path
-
-        :error ->
-          path = :code.which(module)
-          PLT.put(module_beam_path_plt, module, path)
-          path
-      end
+    beam_path = get_module_beam_path(module_beam_path_plt, module)
 
     data =
-      module_beam_path
+      beam_path
       |> Reflection.beam_defs()
       |> :erlang.term_to_binary(compressed: 0)
 
