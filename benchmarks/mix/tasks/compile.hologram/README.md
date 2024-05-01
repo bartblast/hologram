@@ -1,6 +1,6 @@
 Benchmark
 
-Compiler.bundle/2
+compile.hologram
 
 ## System
 
