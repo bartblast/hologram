@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Refactor.ABCSize
 defmodule Mix.Tasks.Compile.Hologram do
   @moduledoc """
   Builds Hologram project JavaScript bundles, the call graph of the code,
@@ -91,8 +92,12 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     entry_files_info = [{"runtime", runtime_entry_file_path, "runtime"} | page_entry_files_info]
 
-    _bundle_info = Compiler.bundle(entry_files_info, opts)
+    bundle_info = Compiler.bundle(entry_files_info, opts)
 
+    {page_digest_plt, page_digest_plt_dump_path} =
+      Compiler.build_page_digest_plt(bundle_info, opts)
+
+    PLT.dump(page_digest_plt, page_digest_plt_dump_path)
     PLT.dump(module_beam_path_plt, module_beam_path_plt_dump_path)
 
     Logger.info("Hologram: compiler finished")
@@ -100,27 +105,3 @@ defmodule Mix.Tasks.Compile.Hologram do
     :ok
   end
 end
-
-# # credo:disable-for-this-file Credo.Check.Refactor.ABCSize
-# defmodule Mix.Tasks.Compile.Hologram do
-#   alias Hologram.Commons.TaskUtils
-
-#   def compile(opts) do
-
-#     Logger.debug("Hologram: finished runtime & pages bundling")
-
-#     {page_digest_plt, page_digest_plt_dump_path} = build_page_digest_plt(bundle_info, opts)
-
-#     PLT.dump(page_digest_plt, page_digest_plt_dump_path)
-
-#     :ok
-#   end
-
-#   defp maybe_load_module_beam_path_plt(opts) do
-#     module_beam_path_plt = PLT.start()
-#     module_beam_path_plt_dump_path = opts[:build_dir] <> "/module_beam_path.plt"
-#     PLT.maybe_load(module_beam_path_plt, module_beam_path_plt_dump_path)
-
-#     {module_beam_path_plt, module_beam_path_plt_dump_path}
-#   end
-# end
