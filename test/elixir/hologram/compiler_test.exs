@@ -157,6 +157,96 @@ defmodule Hologram.CompilerTest do
            )
   end
 
+  test "bundle/2" do
+    tmp_dir = Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_2"])
+
+    opts = [
+      esbuild_path:
+        Path.join([Reflection.root_dir(), "assets", "node_modules", ".bin", "esbuild"]),
+      static_dir: Path.join(tmp_dir, "static"),
+      tmp_dir: tmp_dir
+    ]
+
+    clean_dir(tmp_dir)
+    File.mkdir!(opts[:static_dir])
+
+    entry_file_path_1 = Path.join(tmp_dir, "MyPage.entry.js")
+    File.write(entry_file_path_1, "export const myVar = 111;\n")
+
+    entry_file_path_2 = Path.join(tmp_dir, "runtime.entry.js")
+    File.write(entry_file_path_2, "export const myVar = 222;\n")
+
+    entry_files_info = [
+      {MyPage, entry_file_path_1, "page"},
+      {"runtime", entry_file_path_2, "runtime"}
+    ]
+
+    expected_static_bundle_path_1 =
+      Path.join(opts[:static_dir], "page-936cdd48d87d4ecd5720ad33b7fb4b7c.js")
+
+    expected_static_source_map_path_1 = "#{expected_static_bundle_path_1}.map"
+
+    expected_static_bundle_path_2 =
+      Path.join(opts[:static_dir], "runtime-52169d07278b312ea39145c3b94c0203.js")
+
+    expected_static_source_map_path_2 = "#{expected_static_bundle_path_2}.map"
+
+    assert bundle(entry_files_info, opts) == [
+             %{
+               digest: "936cdd48d87d4ecd5720ad33b7fb4b7c",
+               entry_name: MyPage,
+               bundle_name: "page",
+               static_bundle_path: expected_static_bundle_path_1,
+               static_source_map_path: expected_static_source_map_path_1
+             },
+             %{
+               digest: "52169d07278b312ea39145c3b94c0203",
+               entry_name: "runtime",
+               bundle_name: "runtime",
+               static_bundle_path: expected_static_bundle_path_2,
+               static_source_map_path: expected_static_source_map_path_2
+             }
+           ]
+
+    expected_bundle_js_1 = """
+    (()=>{var o=111;})();
+    //# sourceMappingURL=page-936cdd48d87d4ecd5720ad33b7fb4b7c.js.map
+    """
+
+    assert File.read!(expected_static_bundle_path_1) == expected_bundle_js_1
+
+    expected_bundle_js_2 = """
+    (()=>{var o=222;})();
+    //# sourceMappingURL=runtime-52169d07278b312ea39145c3b94c0203.js.map
+    """
+
+    assert File.read!(expected_static_bundle_path_2) == expected_bundle_js_2
+
+    expected_source_map_js_1 = """
+    {
+      "version": 3,
+      "sources": ["MyPage.entry.js"],
+      "sourcesContent": ["export const myVar = 111;\\n"],
+      "mappings": "MAAO,IAAMA,EAAQ",
+      "names": ["myVar"]
+    }
+    """
+
+    assert File.read!(expected_static_source_map_path_1) == expected_source_map_js_1
+
+    expected_source_map_js_2 = """
+    {
+      "version": 3,
+      "sources": ["runtime.entry.js"],
+      "sourcesContent": ["export const myVar = 222;\\n"],
+      "mappings": "MAAO,IAAMA,EAAQ",
+      "names": ["myVar"]
+    }
+    """
+
+    assert File.read!(expected_static_source_map_path_2) == expected_source_map_js_2
+  end
+
   test "bundle/4" do
     tmp_dir = Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4"])
 

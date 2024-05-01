@@ -176,6 +176,20 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Bundles multiple entry files.
+  Includes the source maps of the output files.
+  The output files' and source maps' file names contain hex digest.
+  """
+  @spec bundle(list({term, file_path, String.t()}), opts) :: list(map)
+  def bundle(entry_files_info, opts) do
+    entry_files_info
+    |> TaskUtils.async_many(fn {entry_name, entry_file_path, bundle_name} ->
+      bundle(entry_name, entry_file_path, bundle_name, opts)
+    end)
+    |> Task.await_many(:infinity)
+  end
+
+  @doc """
   Bundles the given entry file.
   Includes the source map of the output file.
   The output file and source map file names contain hex digest.
