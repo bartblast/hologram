@@ -35,6 +35,9 @@ defmodule Mix.Tasks.Compile.Hologram do
     run(opts)
   end
 
+  @doc """
+  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/mix/tasks/compile.hologram/README.md
+  """
   @impl Mix.Task.Compiler
   def run(opts) do
     Logger.info("Hologram: compiler started")
