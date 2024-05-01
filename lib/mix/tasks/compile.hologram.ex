@@ -116,19 +116,6 @@ end
 #     :ok
 #   end
 
-#   defp build_page_digest_plt(bundle_info, opts) do
-#     page_digest_plt = PLT.start()
-
-#     bundle_info
-#     |> Enum.reject(fn {entry_name, _digest} -> entry_name == "runtime" end)
-#     |> Enum.each(fn {page_module, digest} -> PLT.put(page_digest_plt, page_module, digest) end)
-
-#     page_digest_plt_dump_path =
-#       Path.join([opts[:build_dir], Reflection.page_digest_plt_dump_file_name()])
-
-#     {page_digest_plt, page_digest_plt_dump_path}
-#   end
-
 #   defp maybe_load_module_beam_path_plt(opts) do
 #     module_beam_path_plt = PLT.start()
 #     module_beam_path_plt_dump_path = opts[:build_dir] <> "/module_beam_path.plt"

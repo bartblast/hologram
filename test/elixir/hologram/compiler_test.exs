@@ -136,6 +136,30 @@ defmodule Hologram.CompilerTest do
     end
   end
 
+  test "build_page_digest_plt/2" do
+    opts = [build_dir: "/my_build_dir"]
+
+    bundle_info = [
+      %{
+        digest: "my-digest-1",
+        entry_name: MyPage1
+      },
+      %{
+        digest: "my-digest-2",
+        entry_name: "runtime"
+      },
+      %{
+        digest: "my-digest-3",
+        entry_name: MyPage2
+      }
+    ]
+
+    assert {%PLT{} = plt, "/my_build_dir/page_digest.plt"} =
+             build_page_digest_plt(bundle_info, opts)
+
+    assert PLT.get_all(plt) == %{MyPage1 => "my-digest-1", MyPage2 => "my-digest-3"}
+  end
+
   test "build_runtime_js/3", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
     js = build_runtime_js(runtime_mfas, ir_plt, @js_dir)
 

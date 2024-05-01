@@ -101,6 +101,27 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Builds page digest PLT, where the keys represent page modules,
+  and the values are hex digests of their corresponding JavaScript bundles.
+  """
+  @spec build_page_digest_plt(list(map), opts) :: {PLT.t(), file_path}
+  def build_page_digest_plt(bundle_info, opts) do
+    page_digest_plt_items =
+      bundle_info
+      |> Enum.reject(fn %{entry_name: entry_name} -> entry_name == "runtime" end)
+      |> Enum.reduce([], fn %{entry_name: page_module, digest: digest}, acc ->
+        [{page_module, digest} | acc]
+      end)
+
+    page_digest_plt = PLT.start(items: page_digest_plt_items)
+
+    page_digest_plt_dump_path =
+      Path.join([opts[:build_dir], Reflection.page_digest_plt_dump_file_name()])
+
+    {page_digest_plt, page_digest_plt_dump_path}
+  end
+
+  @doc """
   Builds JavaScript code for the given Hologram page.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_page_js/README.md
