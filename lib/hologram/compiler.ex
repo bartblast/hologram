@@ -179,15 +179,10 @@ defmodule Hologram.Compiler do
   Bundles the given entry file.
   Includes the source map of the output file.
   The output file and source map file names contain hex digest.
-
-  ## Examples
-
-      iex> bundle(MyPage, "/my_tmp_dir/MyPage.entry.js", opts)
-      {MyPage, "caf8f4e27584852044eb27a37c5eddfd"}
   """
-  @spec bundle(term, file_path, opts) :: {String.t(), String.t()}
+  @spec bundle(term, file_path, String.t(), opts) :: map
   # sobelow_skip ["CI.System"]
-  def bundle(entry_name, entry_file_path, opts) do
+  def bundle(entry_name, entry_file_path, bundle_name, opts) do
     output_bundle_path = Path.join(opts[:tmp_dir], "#{entry_name}.output.js")
 
     esbuild_cmd = [
@@ -208,7 +203,7 @@ defmodule Hologram.Compiler do
       |> CryptographicUtils.digest(:md5, :hex)
 
     static_bundle_path_with_digest =
-      Path.join(opts[:static_dir], "#{opts[:bundle_name]}-#{digest}.js")
+      Path.join(opts[:static_dir], "#{bundle_name}-#{digest}.js")
 
     output_source_map_path = output_bundle_path <> ".map"
     static_source_map_path_with_digest = static_bundle_path_with_digest <> ".map"
@@ -221,12 +216,18 @@ defmodule Hologram.Compiler do
       |> File.read!()
       |> String.replace(
         "//# sourceMappingURL=#{entry_name}.output.js.map",
-        "//# sourceMappingURL=#{opts[:bundle_name]}-#{digest}.js.map"
+        "//# sourceMappingURL=#{bundle_name}-#{digest}.js.map"
       )
 
     File.write!(static_bundle_path_with_digest, js_with_replaced_source_map_url)
 
-    {entry_name, digest}
+    %{
+      bundle_name: bundle_name,
+      digest: digest,
+      entry_name: entry_name,
+      static_bundle_path: static_bundle_path_with_digest,
+      static_source_map_path: static_source_map_path_with_digest
+    }
   end
 
   @doc """

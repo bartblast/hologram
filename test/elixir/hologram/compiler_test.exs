@@ -157,11 +157,10 @@ defmodule Hologram.CompilerTest do
            )
   end
 
-  test "bundle/3" do
-    tmp_dir = Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_3"])
+  test "bundle/4" do
+    tmp_dir = Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4"])
 
     opts = [
-      bundle_name: "my_bundle_name",
       esbuild_path:
         Path.join([Reflection.root_dir(), "assets", "node_modules", ".bin", "esbuild"]),
       static_dir: Path.join(tmp_dir, "static"),
@@ -174,17 +173,25 @@ defmodule Hologram.CompilerTest do
     entry_file_path = Path.join(tmp_dir, "MyPage.entry.js")
     File.write(entry_file_path, "export const myVar = 123;\n")
 
-    assert bundle(MyPage, entry_file_path, opts) == {MyPage, "76f1f092f95a34da067e35caad5e3317"}
+    expected_static_bundle_path =
+      Path.join(opts[:static_dir], "my_bundle_name-76f1f092f95a34da067e35caad5e3317.js")
+
+    expected_static_source_map_path = "#{expected_static_bundle_path}.map"
+
+    assert bundle(MyPage, entry_file_path, "my_bundle_name", opts) == %{
+             bundle_name: "my_bundle_name",
+             digest: "76f1f092f95a34da067e35caad5e3317",
+             entry_name: MyPage,
+             static_bundle_path: expected_static_bundle_path,
+             static_source_map_path: expected_static_source_map_path
+           }
 
     expected_bundle_js = """
     (()=>{var o=123;})();
     //# sourceMappingURL=my_bundle_name-76f1f092f95a34da067e35caad5e3317.js.map
     """
 
-    static_bundle_path =
-      Path.join(opts[:static_dir], "my_bundle_name-76f1f092f95a34da067e35caad5e3317.js")
-
-    assert File.read!(static_bundle_path) == expected_bundle_js
+    assert File.read!(expected_static_bundle_path) == expected_bundle_js
 
     expected_source_map_js = """
     {
@@ -196,10 +203,7 @@ defmodule Hologram.CompilerTest do
     }
     """
 
-    static_source_map_path =
-      Path.join(opts[:static_dir], "my_bundle_name-76f1f092f95a34da067e35caad5e3317.js.map")
-
-    assert File.read!(static_source_map_path) == expected_source_map_js
+    assert File.read!(expected_static_source_map_path) == expected_source_map_js
   end
 
   test "create_page_entry_files/4", %{call_graph: call_graph, ir_plt: ir_plt} do
