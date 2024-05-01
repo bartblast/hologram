@@ -1,6 +1,6 @@
 Benchmark
 
-compile.hologram
+mix compile.hologram
 
 ## System
 
