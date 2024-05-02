@@ -53,7 +53,7 @@ Benchee.run(
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
-     description: "Compiler.bundle/2", file: Path.join(__DIR__, "README.md")}
+     description: "Hologram.Compiler.bundle/2", file: Path.join(__DIR__, "README.md")}
   ],
   time: 60
 )

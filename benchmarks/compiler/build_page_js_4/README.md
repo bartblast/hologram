@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.bundle/2
+Hologram.Compiler.build_page_js/4
 
 ## System
 
@@ -62,12 +62,12 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">bundle/2</td>
-    <td style="white-space: nowrap; text-align: right">5.14</td>
-    <td style="white-space: nowrap; text-align: right">194.37 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;9.30%</td>
-    <td style="white-space: nowrap; text-align: right">189.02 ms</td>
-    <td style="white-space: nowrap; text-align: right">261.78 ms</td>
+    <td style="white-space: nowrap">build_page_js/4</td>
+    <td style="white-space: nowrap; text-align: right">122.17</td>
+    <td style="white-space: nowrap; text-align: right">8.19 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;20.89%</td>
+    <td style="white-space: nowrap; text-align: right">9.17 ms</td>
+    <td style="white-space: nowrap; text-align: right">10.28 ms</td>
   </tr>
 
 </table>

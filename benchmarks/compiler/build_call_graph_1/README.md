@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.bundle/2
+Hologram.Compiler.build_call_graph/1
 
 ## System
 
@@ -62,12 +62,12 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">bundle/2</td>
-    <td style="white-space: nowrap; text-align: right">5.14</td>
-    <td style="white-space: nowrap; text-align: right">194.37 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;9.30%</td>
-    <td style="white-space: nowrap; text-align: right">189.02 ms</td>
-    <td style="white-space: nowrap; text-align: right">261.78 ms</td>
+    <td style="white-space: nowrap">build_call_graph/1</td>
+    <td style="white-space: nowrap; text-align: right">1.77</td>
+    <td style="white-space: nowrap; text-align: right">563.45 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;6.32%</td>
+    <td style="white-space: nowrap; text-align: right">553.21 ms</td>
+    <td style="white-space: nowrap; text-align: right">738.10 ms</td>
   </tr>
 
 </table>

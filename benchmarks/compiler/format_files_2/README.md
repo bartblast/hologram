@@ -1,6 +1,6 @@
 Benchmark
 
-Compiler.format_files/2
+Hologram.Compiler.format_files/2
 
 ## System
 

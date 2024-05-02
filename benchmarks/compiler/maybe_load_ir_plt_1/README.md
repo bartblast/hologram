@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.bundle/2
+Hologram.Compiler.maybe_load_ir_plt/1
 
 ## System
 
@@ -62,12 +62,43 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">bundle/2</td>
-    <td style="white-space: nowrap; text-align: right">5.14</td>
-    <td style="white-space: nowrap; text-align: right">194.37 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;9.30%</td>
-    <td style="white-space: nowrap; text-align: right">189.02 ms</td>
-    <td style="white-space: nowrap; text-align: right">261.78 ms</td>
+    <td style="white-space: nowrap">no load</td>
+    <td style="white-space: nowrap; text-align: right">150.52 K</td>
+    <td style="white-space: nowrap; text-align: right">0.00664 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;444.62%</td>
+    <td style="white-space: nowrap; text-align: right">0.00588 ms</td>
+    <td style="white-space: nowrap; text-align: right">0.0140 ms</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">do load</td>
+    <td style="white-space: nowrap; text-align: right">0.00319 K</td>
+    <td style="white-space: nowrap; text-align: right">313.64 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;2.09%</td>
+    <td style="white-space: nowrap; text-align: right">311.79 ms</td>
+    <td style="white-space: nowrap; text-align: right">331.41 ms</td>
+  </tr>
+
+</table>
+
+
+Run Time Comparison
+
+<table style="width: 1%">
+  <tr>
+    <th>Name</th>
+    <th style="text-align: right">IPS</th>
+    <th style="text-align: right">Slower</th>
+  <tr>
+    <td style="white-space: nowrap">no load</td>
+    <td style="white-space: nowrap;text-align: right">150.52 K</td>
+    <td>&nbsp;</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">do load</td>
+    <td style="white-space: nowrap; text-align: right">0.00319 K</td>
+    <td style="white-space: nowrap; text-align: right">47209.08x</td>
   </tr>
 
 </table>

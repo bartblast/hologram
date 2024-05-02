@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.bundle/2
+Hologram.Compiler.maybe_install_js_deps/2
 
 ## System
 
@@ -62,12 +62,43 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">bundle/2</td>
-    <td style="white-space: nowrap; text-align: right">5.14</td>
-    <td style="white-space: nowrap; text-align: right">194.37 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;9.30%</td>
-    <td style="white-space: nowrap; text-align: right">189.02 ms</td>
-    <td style="white-space: nowrap; text-align: right">261.78 ms</td>
+    <td style="white-space: nowrap">no install</td>
+    <td style="white-space: nowrap; text-align: right">11.38 K</td>
+    <td style="white-space: nowrap; text-align: right">0.00009 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;66.96%</td>
+    <td style="white-space: nowrap; text-align: right">0.00009 s</td>
+    <td style="white-space: nowrap; text-align: right">0.00018 s</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">do install</td>
+    <td style="white-space: nowrap; text-align: right">0.00008 K</td>
+    <td style="white-space: nowrap; text-align: right">13.26 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;73.88%</td>
+    <td style="white-space: nowrap; text-align: right">9.83 s</td>
+    <td style="white-space: nowrap; text-align: right">33.10 s</td>
+  </tr>
+
+</table>
+
+
+Run Time Comparison
+
+<table style="width: 1%">
+  <tr>
+    <th>Name</th>
+    <th style="text-align: right">IPS</th>
+    <th style="text-align: right">Slower</th>
+  <tr>
+    <td style="white-space: nowrap">no install</td>
+    <td style="white-space: nowrap;text-align: right">11.38 K</td>
+    <td>&nbsp;</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">do install</td>
+    <td style="white-space: nowrap; text-align: right">0.00008 K</td>
+    <td style="white-space: nowrap; text-align: right">150895.75x</td>
   </tr>
 
 </table>

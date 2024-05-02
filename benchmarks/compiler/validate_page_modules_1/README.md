@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.bundle/2
+Hologram.Compiler.validate_page_modules/1
 
 ## System
 
@@ -62,12 +62,12 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">bundle/2</td>
-    <td style="white-space: nowrap; text-align: right">5.14</td>
-    <td style="white-space: nowrap; text-align: right">194.37 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;9.30%</td>
-    <td style="white-space: nowrap; text-align: right">189.02 ms</td>
-    <td style="white-space: nowrap; text-align: right">261.78 ms</td>
+    <td style="white-space: nowrap">validate_page_modules/1</td>
+    <td style="white-space: nowrap; text-align: right">107.96</td>
+    <td style="white-space: nowrap; text-align: right">9.26 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;12.34%</td>
+    <td style="white-space: nowrap; text-align: right">9.05 ms</td>
+    <td style="white-space: nowrap; text-align: right">11.87 ms</td>
   </tr>
 
 </table>
