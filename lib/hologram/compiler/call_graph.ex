@@ -9,7 +9,7 @@ defmodule Hologram.Compiler.CallGraph do
   defstruct pid: nil
   @type t :: %CallGraph{pid: pid}
 
-  @type vertex :: module | {module, atom, integer}
+  @type vertex :: module | mfa
 
   @doc """
   Adds an edge between two vertices in the call graph.
@@ -260,8 +260,7 @@ defmodule Hologram.Compiler.CallGraph do
       {page_module, {layout_module, :action, 3}},
       {page_module, {layout_module, :template, 0}}
     ])
-    |> reachable(page_module)
-    |> Enum.filter(&is_tuple/1)
+    |> sorted_reachable_mfas(page_module)
   end
 
   @doc """
@@ -286,11 +285,7 @@ defmodule Hologram.Compiler.CallGraph do
     call_graph
     |> get_graph()
     |> add_edges_for_erlang_functions()
-    |> reachable_mfas(entry_mfas)
-    # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
-    |> Enum.reject(fn {module, _function, _arity} -> !Reflection.module?(module) end)
-    |> Enum.uniq()
-    |> Enum.sort()
+    |> sorted_reachable_mfas(entry_mfas)
   end
 
   @doc """
@@ -389,16 +384,6 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Lists MFAs that are reachable from the given entry MFA or MFAs.
-  """
-  @spec reachable_mfas(Graph.t(), mfa | list(mfa)) :: list(mfa)
-  def reachable_mfas(graph, entry_mfa_or_mfas) do
-    graph
-    |> reachable(entry_mfa_or_mfas)
-    |> Enum.filter(&is_tuple/1)
-  end
-
-  @doc """
   Removes call graph vertices for Elixir functions ported manually.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/call_graph/remove_manually_ported_mfas/README.md
@@ -468,6 +453,21 @@ defmodule Hologram.Compiler.CallGraph do
   def sorted_edges(call_graph) do
     call_graph
     |> edges()
+    |> Enum.sort()
+  end
+
+  @doc """
+  Lists MFAs that are reachable from the given call graph vertex or vertices.
+  Unimplemented protocol implentations are excluded.
+  The MFAs returned are sorted.
+  """
+  @spec sorted_reachable_mfas(Graph.t(), vertex | list(vertex)) :: list(mfa)
+  def sorted_reachable_mfas(graph, vertex_or_vertices) do
+    graph
+    |> reachable(vertex_or_vertices)
+    |> Enum.filter(&is_tuple/1)
+    # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
+    |> Enum.reject(fn {module, _function, _arity} -> !Reflection.module?(module) end)
     |> Enum.sort()
   end
 

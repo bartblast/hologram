@@ -895,11 +895,6 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {:erlang, :error, 2} in result
     end
 
-    test "removes duplicates", %{runtime_mfas: result} do
-      count = Enum.count(result, &(&1 == {Access, :get, 2}))
-      assert count == 1
-    end
-
     test "excludes MFAs with non-existing modules", %{full_call_graph: call_graph} do
       call_graph_clone = CallGraph.clone(call_graph)
 
@@ -1193,64 +1188,6 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  describe "reachable_mfas/2" do
-    setup do
-      # 1
-      # ├─ {:m2, :f2, 2}
-      # │  ├─ 4
-      # │  │  ├─ {:m8, :f8, 8}
-      # │  │  ├─ 9
-      # │  ├─ {:m5, :f5, 5}
-      # │  │  ├─ 10
-      # │  │  ├─ 11
-      # ├─ {:m3, :f3, 3}
-      # │  ├─ 6
-      # │  │  ├─ {:m12, :f12, 12}
-      # │  │  ├─ 13
-      # │  ├─ {:m7, :f7, 7}
-      # │  │  ├─ 14
-      # │  │  ├─ {:m15, :f15, 15}
-
-      graph =
-        Graph.new()
-        |> Graph.add_edge(:vertex_1, {:m2, :f2, 2})
-        |> Graph.add_edge(:vertex_1, {:m3, :f3, 3})
-        |> Graph.add_edge({:m2, :f2, 2}, :vertex_4)
-        |> Graph.add_edge({:m2, :f2, 2}, {:m5, :f5, 5})
-        |> Graph.add_edge({:m3, :f3, 3}, :vertex_6)
-        |> Graph.add_edge({:m3, :f3, 3}, {:m7, :f7, 7})
-        |> Graph.add_edge(:vertex_4, {:m8, :f8, 8})
-        |> Graph.add_edge(:vertex_4, :vertex_9)
-        |> Graph.add_edge({:m5, :f5, 5}, :vertex_10)
-        |> Graph.add_edge({:m5, :f5, 5}, :vertex_11)
-        |> Graph.add_edge(:vertex_6, {:m12, :f12, 12})
-        |> Graph.add_edge(:vertex_6, :vertex_13)
-        |> Graph.add_edge({:m7, :f7, 7}, :vertex_14)
-        |> Graph.add_edge({:m7, :f7, 7}, {:m15, :f15, 15})
-
-      [graph: graph]
-    end
-
-    test "single MFA argument", %{graph: graph} do
-      assert reachable_mfas(graph, {:m3, :f3, 3}) == [
-               {:m15, :f15, 15},
-               {:m7, :f7, 7},
-               {:m12, :f12, 12},
-               {:m3, :f3, 3}
-             ]
-    end
-
-    test "multiple MFAs argument", %{graph: graph} do
-      assert reachable_mfas(graph, [{:m5, :f5, 5}, {:m3, :f3, 3}]) == [
-               {:m15, :f15, 15},
-               {:m7, :f7, 7},
-               {:m12, :f12, 12},
-               {:m3, :f3, 3},
-               {:m5, :f5, 5}
-             ]
-    end
-  end
-
   describe "remove_manually_ported_mfas/1" do
     setup %{full_call_graph: call_graph} do
       call_graph_clone =
@@ -1337,6 +1274,66 @@ defmodule Hologram.Compiler.CallGraphTest do
              %Graph.Edge{v1: :vertex_2, v2: :vertex_3, weight: 1, label: nil},
              %Graph.Edge{v1: :vertex_4, v2: :vertex_5, weight: 1, label: nil}
            ]
+  end
+
+  describe "sorted_reachable_mfas/2" do
+    setup do
+      # 1
+      # ├─ {Module2, :f2, 2}
+      # │  ├─ 4
+      # │  │  ├─ {Module8, :f8, 8}
+      # │  │  ├─ 9
+      # │  ├─ {Module5, :f5, 5}
+      # │  │  ├─ 10
+      # │  │  ├─ 11
+      # ├─ {Module3, :f3, 3}
+      # │  ├─ 6
+      # │  │  ├─ {Module11, :f12, 12}
+      # │  │  ├─ 13
+      # │  ├─ {Module7, :f7, 7}
+      # │  │  ├─ 14
+      # │  │  ├─ {Module15, :f15, 15}
+      # |  |  |- {Collectable.Atom, :fca, 123}
+
+      graph =
+        Graph.new()
+        |> Graph.add_edge(:vertex_1, {Module2, :f2, 2})
+        |> Graph.add_edge(:vertex_1, {Module3, :f3, 3})
+        |> Graph.add_edge({Module2, :f2, 2}, :vertex_4)
+        |> Graph.add_edge({Module2, :f2, 2}, {Module5, :f5, 5})
+        |> Graph.add_edge({Module3, :f3, 3}, :vertex_6)
+        |> Graph.add_edge({Module3, :f3, 3}, {Module7, :f7, 7})
+        |> Graph.add_edge(:vertex_4, {Module8, :f8, 8})
+        |> Graph.add_edge(:vertex_4, :vertex_9)
+        |> Graph.add_edge({Module5, :f5, 5}, :vertex_10)
+        |> Graph.add_edge({Module5, :f5, 5}, :vertex_11)
+        |> Graph.add_edge(:vertex_6, {Module11, :f12, 12})
+        |> Graph.add_edge(:vertex_6, :vertex_13)
+        |> Graph.add_edge({Module7, :f7, 7}, :vertex_14)
+        |> Graph.add_edge({Module7, :f7, 7}, {Module15, :f15, 15})
+        |> Graph.add_edge({Module7, :f7, 7}, {Collectable.Atom, :fca, 123})
+
+      [graph: graph]
+    end
+
+    test "single MFA argument", %{graph: graph} do
+      assert sorted_reachable_mfas(graph, {Module3, :f3, 3}) == [
+               {Module11, :f12, 12},
+               {Module15, :f15, 15},
+               {Module3, :f3, 3},
+               {Module7, :f7, 7}
+             ]
+    end
+
+    test "multiple MFAs argument", %{graph: graph} do
+      assert sorted_reachable_mfas(graph, [{Module5, :f5, 5}, {Module3, :f3, 3}]) == [
+               {Module11, :f12, 12},
+               {Module15, :f15, 15},
+               {Module3, :f3, 3},
+               {Module5, :f5, 5},
+               {Module7, :f7, 7}
+             ]
+    end
   end
 
   test "sorted_vertices/1", %{call_graph: call_graph} do
