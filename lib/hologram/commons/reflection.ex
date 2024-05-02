@@ -398,7 +398,7 @@ defmodule Hologram.Commons.Reflection do
   end
 
   @doc """
-  Returns the absolute path of the project priv subdir for Hologram.
+  Returns the absolute path of the project priv dir for Hologram.
 
   ## Examples
 
