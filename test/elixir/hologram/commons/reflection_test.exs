@@ -170,9 +170,9 @@ defmodule Hologram.Commons.ReflectionTest do
   test "list_pages/0" do
     result = list_pages()
 
-    assert Hologram.Test.Fixtures.Compiler.Module5 in result
     assert Hologram.Test.Fixtures.Compiler.CallGraph.Module11 in result
     assert Hologram.Test.Fixtures.Commons.Reflection.Module2 in result
+    assert Hologram.Test.Fixtures.Commons.Reflection.Module6 in result
     assert Hologram.Test.Fixtures.Page.Module1 in result
 
     refute Hologram.Test.Fixtures.Compiler.Module6 in result
