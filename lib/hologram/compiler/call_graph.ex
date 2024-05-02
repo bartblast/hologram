@@ -11,6 +11,22 @@ defmodule Hologram.Compiler.CallGraph do
 
   @type vertex :: module | mfa
 
+  @erlang_mfa_edges [
+    {{:erlang, :"=<", 2}, {:erlang, :<, 2}},
+    {{:erlang, :"=<", 2}, {:erlang, :==, 2}},
+    {{:erlang, :>=, 2}, {:erlang, :==, 2}},
+    {{:erlang, :>=, 2}, {:erlang, :>, 2}},
+    {{:erlang, :binary_to_atom, 1}, {:erlang, :binary_to_atom, 2}},
+    {{:erlang, :binary_to_existing_atom, 1}, {:erlang, :binary_to_atom, 1}},
+    {{:erlang, :binary_to_existing_atom, 2}, {:erlang, :binary_to_atom, 2}},
+    {{:erlang, :error, 1}, {:erlang, :error, 2}},
+    {{:erlang, :integer_to_binary, 1}, {:erlang, :integer_to_binary, 2}},
+    {{:lists, :keymember, 3}, {:lists, :keyfind, 3}},
+    {{:maps, :get, 2}, {:maps, :get, 3}},
+    {{:unicode, :characters_to_binary, 1}, {:unicode, :characters_to_binary, 3}},
+    {{:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1}}
+  ]
+
   @manually_ported_mfas [
     {Code, :ensure_loaded, 1},
     {Hologram.Router.Helpers, :asset_path, 1},
@@ -554,21 +570,7 @@ defmodule Hologram.Compiler.CallGraph do
   # Add call graph edges for Erlang functions depending on other Erlang functions.
   # credo:disable-for-next-line Credo.Check.Refactor.ABCSize
   defp add_edges_for_erlang_functions(graph) do
-    Graph.add_edges(graph, [
-      {{:erlang, :"=<", 2}, {:erlang, :<, 2}},
-      {{:erlang, :"=<", 2}, {:erlang, :==, 2}},
-      {{:erlang, :>=, 2}, {:erlang, :==, 2}},
-      {{:erlang, :>=, 2}, {:erlang, :>, 2}},
-      {{:erlang, :binary_to_atom, 1}, {:erlang, :binary_to_atom, 2}},
-      {{:erlang, :binary_to_existing_atom, 1}, {:erlang, :binary_to_atom, 1}},
-      {{:erlang, :binary_to_existing_atom, 2}, {:erlang, :binary_to_atom, 2}},
-      {{:erlang, :error, 1}, {:erlang, :error, 2}},
-      {{:erlang, :integer_to_binary, 1}, {:erlang, :integer_to_binary, 2}},
-      {{:lists, :keymember, 3}, {:lists, :keyfind, 3}},
-      {{:maps, :get, 2}, {:maps, :get, 3}},
-      {{:unicode, :characters_to_binary, 1}, {:unicode, :characters_to_binary, 3}},
-      {{:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1}}
-    ])
+    Graph.add_edges(graph, @erlang_mfa_edges)
   end
 
   # A component module can be passed as a prop to another component, allowing dynamic usage.
