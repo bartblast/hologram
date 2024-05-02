@@ -11,6 +11,13 @@ defmodule Hologram.Compiler.CallGraph do
 
   @type vertex :: module | mfa
 
+  @manually_ported_mfas [
+    {Code, :ensure_loaded, 1},
+    {Hologram.Router.Helpers, :asset_path, 1},
+    {Kernel, :inspect, 1},
+    {Kernel, :inspect, 2}
+  ]
+
   @mfas_used_by_all_pages_and_components [
     # Used by __props__/0 function injected into component and page modules.
     {Enum, :reverse, 1},
@@ -431,12 +438,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec remove_manually_ported_mfas(CallGraph.t()) :: CallGraph.t()
   def remove_manually_ported_mfas(call_graph) do
-    CallGraph.remove_vertices(call_graph, [
-      {Code, :ensure_loaded, 1},
-      {Hologram.Router.Helpers, :asset_path, 1},
-      {Kernel, :inspect, 1},
-      {Kernel, :inspect, 2}
-    ])
+    CallGraph.remove_vertices(call_graph, @manually_ported_mfas)
   end
 
   @doc """
