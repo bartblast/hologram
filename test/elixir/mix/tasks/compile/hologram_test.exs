@@ -63,7 +63,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert num_page_source_maps == @num_pages
   end
 
-  defp test_page_digest_plt() do
+  defp test_page_digest_plt do
     page_digest_dump_path = Path.join(@build_dir, Reflection.page_digest_plt_dump_file_name())
     assert File.exists?(page_digest_dump_path)
 
