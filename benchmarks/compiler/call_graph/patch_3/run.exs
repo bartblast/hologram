@@ -169,8 +169,7 @@ Benchee.run(
     }
   },
   before_scenario: fn _input ->
-    module_beam_path_plt = Compiler.build_module_beam_path_plt()
-    ir_plt = Compiler.build_ir_plt(module_beam_path_plt)
+    ir_plt = Compiler.build_ir_plt()
     modules = Reflection.list_elixir_modules()
 
     {modules, ir_plt}
@@ -188,7 +187,8 @@ Benchee.run(
   end,
   formatters: [
     Benchee.Formatters.Console,
-    {Benchee.Formatters.Markdown, description: "patch/3", file: Path.join(__DIR__, "README.md")}
+    {Benchee.Formatters.Markdown,
+     description: "Hologram.Compiler.CallGraph.patch/3", file: Path.join(__DIR__, "README.md")}
   ],
   time: 60
 )

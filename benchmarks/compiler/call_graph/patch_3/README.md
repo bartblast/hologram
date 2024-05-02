@@ -1,6 +1,6 @@
 Benchmark
 
-patch/3
+Hologram.Compiler.CallGraph.patch/3
 
 ## System
 

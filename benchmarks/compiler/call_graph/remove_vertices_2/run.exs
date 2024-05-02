@@ -72,7 +72,8 @@ Benchee.run(
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
-     description: "CallGraph.remove_vertices/2", file: Path.join(__DIR__, "README.md")}
+     description: "Hologram.Compiler.CallGraph.remove_vertices/2",
+     file: Path.join(__DIR__, "README.md")}
   ],
   time: 60
 )

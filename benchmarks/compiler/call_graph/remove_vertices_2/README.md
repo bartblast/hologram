@@ -1,6 +1,6 @@
 Benchmark
 
-CallGraph.remove_vertices/2
+Hologram.Compiler.CallGraph.remove_vertices/2
 
 ## System
 

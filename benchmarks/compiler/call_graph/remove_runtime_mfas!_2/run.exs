@@ -8,9 +8,7 @@ Benchee.run(
          CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas)
        end,
        before_scenario: fn _input ->
-         module_beam_path_plt = Compiler.build_module_beam_path_plt()
-         ir_plt = Compiler.build_ir_plt(module_beam_path_plt)
-         call_graph = Compiler.build_call_graph(ir_plt)
+         call_graph = Compiler.build_call_graph()
          runtime_mfas = CallGraph.list_runtime_mfas(call_graph)
 
          {call_graph, runtime_mfas}
@@ -25,7 +23,8 @@ Benchee.run(
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
-     description: "remove_runtime_mfas!/2", file: Path.join(__DIR__, "README.md")}
+     description: "Hologram.Compiler.CallGraph.remove_runtime_mfas!/2",
+     file: Path.join(__DIR__, "README.md")}
   ],
   time: 60
 )

@@ -1,6 +1,6 @@
 Benchmark
 
-clone/1
+Hologram.Compiler.CallGraph.remove_runtime_mfas!/2
 
 ## System
 
@@ -62,12 +62,12 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">clone/1</td>
-    <td style="white-space: nowrap; text-align: right">55.62</td>
-    <td style="white-space: nowrap; text-align: right">17.98 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;15.48%</td>
-    <td style="white-space: nowrap; text-align: right">16.25 ms</td>
-    <td style="white-space: nowrap; text-align: right">23.13 ms</td>
+    <td style="white-space: nowrap">remove_runtime_mfas!/2</td>
+    <td style="white-space: nowrap; text-align: right">2.57</td>
+    <td style="white-space: nowrap; text-align: right">388.90 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;2.38%</td>
+    <td style="white-space: nowrap; text-align: right">389.58 ms</td>
+    <td style="white-space: nowrap; text-align: right">422.16 ms</td>
   </tr>
 
 </table>

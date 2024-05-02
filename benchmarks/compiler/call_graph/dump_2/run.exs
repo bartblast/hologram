@@ -37,7 +37,7 @@ Benchee.run(
   before_scenario: fn _input ->
     call_graph = Compiler.build_call_graph()
 
-    dump_dir = Path.join([Reflection.tmp_dir(), "benchmarks", "call_graph", "dump"])
+    dump_dir = Path.join([Reflection.tmp_dir(), "benchmarks", "compiler", "call_graph", "dump_2"])
     dump_path = Path.join(dump_dir, "call_graph.bin")
 
     {call_graph, dump_dir, dump_path}
@@ -45,7 +45,7 @@ Benchee.run(
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
-     description: "CallGraph.dump/2", file: Path.join(__DIR__, "README.md")}
+     description: "Hologram.Compiler.CallGraph.dump/2", file: Path.join(__DIR__, "README.md")}
   ],
   time: 60
 )

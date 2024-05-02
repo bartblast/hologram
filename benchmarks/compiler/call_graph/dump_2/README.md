@@ -1,6 +1,6 @@
 Benchmark
 
-CallGraph.dump/2
+Hologram.Compiler.CallGraph.dump/2
 
 ## System
 

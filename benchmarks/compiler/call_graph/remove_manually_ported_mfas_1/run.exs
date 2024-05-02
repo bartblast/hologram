@@ -8,10 +8,7 @@ Benchee.run(
          CallGraph.remove_manually_ported_mfas(call_graph)
        end,
        before_scenario: fn _input ->
-         module_beam_path_plt = Compiler.build_module_beam_path_plt()
-         ir_plt = Compiler.build_ir_plt(module_beam_path_plt)
-
-         Compiler.build_call_graph(ir_plt)
+         Compiler.build_call_graph()
        end,
        before_each: fn call_graph ->
          CallGraph.clone(call_graph)
@@ -23,7 +20,8 @@ Benchee.run(
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
-     description: "remove_manually_ported_mfas/1", file: Path.join(__DIR__, "README.md")}
+     description: "Hologram.Compiler.CallGraph.remove_manually_ported_mfas/1",
+     file: Path.join(__DIR__, "README.md")}
   ],
   time: 60
 )

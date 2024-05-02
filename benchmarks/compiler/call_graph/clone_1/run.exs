@@ -16,7 +16,8 @@ Benchee.run(
   end,
   formatters: [
     Benchee.Formatters.Console,
-    {Benchee.Formatters.Markdown, description: "clone/1", file: Path.join(__DIR__, "README.md")}
+    {Benchee.Formatters.Markdown,
+     description: "Hologram.Compiler.CallGraph.clone/1", file: Path.join(__DIR__, "README.md")}
   ],
   time: 60
 )

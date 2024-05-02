@@ -1,5 +1,5 @@
 alias Hologram.Compiler
-alias Hologram.CallGraph
+alias Hologram.Compiler.CallGraph
 
 Benchee.run(
   %{
@@ -13,7 +13,8 @@ Benchee.run(
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
-     description: "list_runtime_mfas/1", file: Path.join(__DIR__, "README.md")}
+     description: "Hologram.Compiler.CallGraph.list_runtime_mfas/1",
+     file: Path.join(__DIR__, "README.md")}
   ],
   time: 60
 )

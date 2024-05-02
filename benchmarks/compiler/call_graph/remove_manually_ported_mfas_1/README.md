@@ -1,6 +1,6 @@
 Benchmark
 
-list_runtime_mfas/1
+Hologram.Compiler.CallGraph.remove_manually_ported_mfas/1
 
 ## System
 
@@ -62,12 +62,12 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">list_runtime_mfas/1</td>
-    <td style="white-space: nowrap; text-align: right">85.87</td>
-    <td style="white-space: nowrap; text-align: right">11.65 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;23.01%</td>
-    <td style="white-space: nowrap; text-align: right">10.12 ms</td>
-    <td style="white-space: nowrap; text-align: right">16.93 ms</td>
+    <td style="white-space: nowrap">remove_manually_ported_mfas/1</td>
+    <td style="white-space: nowrap; text-align: right">18.31</td>
+    <td style="white-space: nowrap; text-align: right">54.61 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;6.35%</td>
+    <td style="white-space: nowrap; text-align: right">53.80 ms</td>
+    <td style="white-space: nowrap; text-align: right">65.90 ms</td>
   </tr>
 
 </table>
