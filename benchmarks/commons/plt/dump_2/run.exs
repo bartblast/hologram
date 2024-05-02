@@ -17,7 +17,7 @@ Benchee.run(
              "benchmarks",
              "commons",
              "plt",
-             "dump",
+             "dump_2",
              "module_beam_path.plt"
            ])
 
@@ -29,7 +29,7 @@ Benchee.run(
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
-     description: "PLT.dump/2", file: Path.join(__DIR__, "README.md")}
+     description: "Hologram.Commons.PLT.dump/2", file: Path.join(__DIR__, "README.md")}
   ],
   time: 60
 )

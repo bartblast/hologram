@@ -1,6 +1,6 @@
 Benchmark
 
-PLT.dump/2
+Hologram.Commons.PLT.dump/2
 
 ## System
 
