@@ -848,15 +848,14 @@ defmodule Hologram.Compiler.CallGraphTest do
     module_15_ir = IR.for_module(Module15)
     module_16_ir = IR.for_module(Module16)
 
-    sorted_result =
+    result =
       start()
       |> build(module_14_ir)
       |> build(module_15_ir)
       |> build(module_16_ir)
       |> list_page_mfas(Module14)
-      |> Enum.sort()
 
-    assert sorted_result == [
+    assert result == [
              {Enum, :reverse, 1},
              {Enum, :to_list, 1},
              {Module14, :__layout_module__, 0},
