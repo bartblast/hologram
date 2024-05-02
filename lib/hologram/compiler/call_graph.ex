@@ -11,6 +11,13 @@ defmodule Hologram.Compiler.CallGraph do
 
   @type vertex :: module | mfa
 
+  @mfas_used_by_all_pages_and_components [
+    # Used by __props__/0 function injected into component and page modules.
+    {Enum, :reverse, 1},
+    {Hologram.Router.Helpers, :page_path, 1},
+    {Hologram.Router.Helpers, :page_path, 2}
+  ]
+
   @mfas_used_by_client_runtime [
     asset_path_registry_class: [
       {:maps, :get, 3},
@@ -48,13 +55,6 @@ defmodule Hologram.Compiler.CallGraph do
     type_class: [
       {:maps, :get, 3}
     ]
-  ]
-
-  @mfas_used_by_all_pages_and_components [
-    # Used by __props__/0 function injected into component and page modules.
-    {Enum, :reverse, 1},
-    {Hologram.Router.Helpers, :page_path, 1},
-    {Hologram.Router.Helpers, :page_path, 2}
   ]
 
   @doc """
