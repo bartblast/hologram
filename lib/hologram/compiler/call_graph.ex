@@ -11,6 +11,52 @@ defmodule Hologram.Compiler.CallGraph do
 
   @type vertex :: module | mfa
 
+  @mfas_used_by_client_runtime [
+    asset_path_registry_class: [
+      {:maps, :get, 3},
+      {:maps, :put, 3}
+    ],
+    component_registry_class: [
+      {:maps, :get, 2},
+      {:maps, :get, 3}
+    ],
+    interpreter_class: [
+      {Enum, :into, 2},
+      {Enum, :to_list, 1},
+      {:erlang, :error, 1},
+      {:erlang, :hd, 1},
+      {:erlang, :tl, 1},
+      {:lists, :keyfind, 3},
+      {:maps, :get, 2}
+    ],
+    manually_ported_code_module: [
+      {:code, :ensure_loaded, 1}
+    ],
+    operation_class: [
+      {:maps, :from_list, 1},
+      {:maps, :put, 3}
+    ],
+    renderer_class: [
+      {Hologram.Component, :__struct__, 0},
+      {String.Chars, :to_string, 1},
+      {:erlang, :binary_to_atom, 1},
+      {:lists, :flatten, 1},
+      {:maps, :from_list, 1},
+      {:maps, :get, 2},
+      {:maps, :merge, 2}
+    ],
+    type_class: [
+      {:maps, :get, 3}
+    ]
+  ]
+
+  @mfas_used_by_all_pages_and_components [
+    # Used by __props__/0 function injected into component and page modules.
+    {Enum, :reverse, 1},
+    {Hologram.Router.Helpers, :page_path, 1},
+    {Hologram.Router.Helpers, :page_path, 2}
+  ]
+
   @doc """
   Adds an edge between two vertices in the call graph.
   """
@@ -271,15 +317,10 @@ defmodule Hologram.Compiler.CallGraph do
   @spec list_runtime_mfas(CallGraph.t()) :: list(mfa)
   def list_runtime_mfas(call_graph) do
     entry_mfas =
-      []
-      |> include_mfas_used_by_asset_path_registry_class()
-      |> include_mfas_used_by_component_registry_class()
-      |> include_mfas_used_frequently_on_the_client()
-      |> include_mfas_used_by_interpreter_class()
-      |> include_mfas_used_by_manually_ported_code_module()
-      |> include_mfas_used_by_operation_class()
-      |> include_mfas_used_by_renderer_class()
-      |> include_mfas_used_by_type_class()
+      @mfas_used_by_client_runtime
+      |> Enum.reduce(@mfas_used_by_all_pages_and_components, fn {_key, mfas}, acc ->
+        mfas ++ acc
+      end)
       |> Enum.uniq()
 
     call_graph
@@ -559,68 +600,6 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp inbound_edges(%{pid: pid}, vertex) do
     Agent.get(pid, &Graph.in_edges(&1, vertex), :infinity)
-  end
-
-  defp include_mfas_used_by_asset_path_registry_class(mfas) do
-    [
-      {:maps, :get, 3},
-      {:maps, :put, 3} | mfas
-    ]
-  end
-
-  defp include_mfas_used_by_component_registry_class(mfas) do
-    [
-      {:maps, :get, 2},
-      {:maps, :get, 3} | mfas
-    ]
-  end
-
-  defp include_mfas_used_frequently_on_the_client(mfas) do
-    [
-      # Used by __props__/0 function injected into component and page modules.
-      {Enum, :reverse, 1},
-      {Hologram.Router.Helpers, :page_path, 1},
-      {Hologram.Router.Helpers, :page_path, 2} | mfas
-    ]
-  end
-
-  defp include_mfas_used_by_interpreter_class(mfas) do
-    [
-      {Enum, :into, 2},
-      {Enum, :to_list, 1},
-      {:erlang, :error, 1},
-      {:erlang, :hd, 1},
-      {:erlang, :tl, 1},
-      {:lists, :keyfind, 3},
-      {:maps, :get, 2} | mfas
-    ]
-  end
-
-  defp include_mfas_used_by_manually_ported_code_module(mfas) do
-    [{:code, :ensure_loaded, 1} | mfas]
-  end
-
-  defp include_mfas_used_by_operation_class(mfas) do
-    [
-      {:maps, :from_list, 1},
-      {:maps, :put, 3} | mfas
-    ]
-  end
-
-  defp include_mfas_used_by_renderer_class(mfas) do
-    [
-      {Hologram.Component, :__struct__, 0},
-      {String.Chars, :to_string, 1},
-      {:erlang, :binary_to_atom, 1},
-      {:lists, :flatten, 1},
-      {:maps, :from_list, 1},
-      {:maps, :get, 2},
-      {:maps, :merge, 2} | mfas
-    ]
-  end
-
-  defp include_mfas_used_by_type_class(mfas) do
-    [{:maps, :get, 3} | mfas]
   end
 
   defp maybe_add_protocol_call_graph_edges(call_graph, module) do
