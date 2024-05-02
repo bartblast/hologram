@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.Compiler.maybe_load_call_graph/1
+Hologram.Compiler.maybe_load_call_graph/1
 
 ## System
 
