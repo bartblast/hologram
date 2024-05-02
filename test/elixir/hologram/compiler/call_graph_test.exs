@@ -26,26 +26,22 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module9
 
   @tmp_dir Reflection.tmp_dir()
-  @dump_dir "#{@tmp_dir}/#{__MODULE__}"
-  @dump_path "#{@dump_dir}/test.bin"
 
-  setup do
-    clean_dir(@dump_dir)
-
-    module_beam_path_plt = Compiler.build_module_beam_path_plt()
-    ir_plt = Compiler.build_ir_plt(module_beam_path_plt)
+  setup_all do
+    ir_plt = Compiler.build_ir_plt()
     full_call_graph = Compiler.build_call_graph(ir_plt)
 
     [
-      call_graph: start(),
       full_call_graph: full_call_graph,
-      ir_plt: ir_plt,
-      module_beam_path_plt: module_beam_path_plt,
-      runtime_mfas: list_runtime_mfas(full_call_graph)
+      ir_plt: ir_plt
     ]
   end
 
-  test "add_edge/3", %{call_graph: call_graph} do
+  setup do
+    [empty_call_graph: start()]
+  end
+
+  test "add_edge/3", %{empty_call_graph: call_graph} do
     assert add_edge(call_graph, :vertex_1, :vertex_2) == call_graph
 
     graph = get_graph(call_graph)
@@ -58,14 +54,14 @@ defmodule Hologram.Compiler.CallGraphTest do
            }
   end
 
-  test "add_edges/2", %{call_graph: call_graph} do
+  test "add_edges/2", %{empty_call_graph: call_graph} do
     edges = [Graph.Edge.new(:a, :b), Graph.Edge.new(:c, :d)]
 
     assert add_edges(call_graph, edges) == call_graph
     assert edges(call_graph) == edges
   end
 
-  test "add_vertex/2", %{call_graph: call_graph} do
+  test "add_vertex/2", %{empty_call_graph: call_graph} do
     assert add_vertex(call_graph, :vertex_3) == call_graph
 
     graph = get_graph(call_graph)
@@ -73,7 +69,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   describe "build/3" do
-    test "atom type ir, which is not an alias", %{call_graph: call_graph} do
+    test "atom type ir, which is not an alias", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: :abc}
       assert build(call_graph, ir, :vertex_1) == call_graph
 
@@ -81,7 +77,9 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert edges(call_graph) == []
     end
 
-    test "atom type ir, which as an alias of a non-existing module", %{call_graph: call_graph} do
+    test "atom type ir, which as an alias of a non-existing module", %{
+      empty_call_graph: call_graph
+    } do
       ir = %IR.AtomType{value: Aaa.Bbb}
       assert build(call_graph, ir, :vertex_1) == call_graph
 
@@ -90,7 +88,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
 
     test "atom type ir, which is an alias of an existing non-templatable module", %{
-      call_graph: call_graph
+      empty_call_graph: call_graph
     } do
       ir = %IR.AtomType{value: Module1}
       assert build(call_graph, ir, :vertex_1) == call_graph
@@ -107,7 +105,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "atom type ir, which is an alias of a page module", %{call_graph: call_graph} do
+    test "atom type ir, which is an alias of a page module", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: Module2}
       assert build(call_graph, ir, :vertex_1) == call_graph
 
@@ -133,7 +131,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "atom type ir, which is an alias of a layout module", %{call_graph: call_graph} do
+    test "atom type ir, which is an alias of a layout module", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: Module3}
       assert build(call_graph, ir, :vertex_1) == call_graph
 
@@ -155,7 +153,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "atom type ir, which is an alias of a component module", %{call_graph: call_graph} do
+    test "atom type ir, which is an alias of a component module", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: Module4}
       assert build(call_graph, ir, :vertex_1) == call_graph
 
@@ -202,7 +200,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "function definition ir, with outbound vertices", %{call_graph: call_graph} do
+    test "function definition ir, with outbound vertices", %{empty_call_graph: call_graph} do
       ir = %IR.FunctionDefinition{
         name: :my_fun,
         arity: 2,
@@ -250,7 +248,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "function definition ir, without outbound vertices", %{call_graph: call_graph} do
+    test "function definition ir, without outbound vertices", %{empty_call_graph: call_graph} do
       ir = %IR.FunctionDefinition{
         name: :my_fun,
         arity: 2,
@@ -273,7 +271,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_edges(call_graph) == []
     end
 
-    test "list", %{call_graph: call_graph} do
+    test "list", %{empty_call_graph: call_graph} do
       list = [%IR.AtomType{value: Module1}, %IR.AtomType{value: Module5}]
       assert build(call_graph, list, :vertex_1) == call_graph
 
@@ -295,7 +293,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "local function call ir", %{call_graph: call_graph} do
+    test "local function call ir", %{empty_call_graph: call_graph} do
       ir = %IR.LocalFunctionCall{
         function: :my_fun_2,
         args: [
@@ -343,7 +341,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "map", %{call_graph: call_graph} do
+    test "map", %{empty_call_graph: call_graph} do
       map = %{
         %IR.AtomType{value: Module1} => %IR.AtomType{value: Module5},
         %IR.AtomType{value: Module6} => %IR.AtomType{value: Module7}
@@ -381,7 +379,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "module definition ir", %{call_graph: call_graph} do
+    test "module definition ir", %{empty_call_graph: call_graph} do
       ir = %IR.ModuleDefinition{
         module: %IR.AtomType{value: Module11},
         body: %IR.Block{
@@ -423,7 +421,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "remote function call ir, module field as an atom", %{call_graph: call_graph} do
+    test "remote function call ir, module field as an atom", %{empty_call_graph: call_graph} do
       ir = %IR.RemoteFunctionCall{
         module: %IR.AtomType{value: Module5},
         function: :my_fun_2,
@@ -472,7 +470,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "remote function call ir, module field is a variable", %{call_graph: call_graph} do
+    test "remote function call ir, module field is a variable", %{empty_call_graph: call_graph} do
       ir = %IR.RemoteFunctionCall{
         module: %IR.Variable{name: :my_var},
         function: :my_fun_2,
@@ -516,7 +514,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "remote function call using Kernel.apply/3, module and function fields are both atoms",
          %{
-           call_graph: call_graph
+           empty_call_graph: call_graph
          } do
       ir = %IR.RemoteFunctionCall{
         module: %IR.AtomType{value: :erlang},
@@ -556,7 +554,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "remote function call using Kernel.apply/3, module field is an atom, function field is not an atom",
          %{
-           call_graph: call_graph
+           empty_call_graph: call_graph
          } do
       ir = %IR.RemoteFunctionCall{
         module: %IR.AtomType{value: :erlang},
@@ -603,7 +601,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "remote function call using Kernel.apply/3, module field is not an atom, function field is an atom",
          %{
-           call_graph: call_graph
+           empty_call_graph: call_graph
          } do
       ir = %IR.RemoteFunctionCall{
         module: %IR.AtomType{value: :erlang},
@@ -641,7 +639,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "tuple", %{call_graph: call_graph} do
+    test "tuple", %{empty_call_graph: call_graph} do
       tuple = {%IR.AtomType{value: Module1}, %IR.AtomType{value: Module5}}
       assert build(call_graph, tuple, :vertex_1) == call_graph
 
@@ -663,7 +661,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "protocol (implementation edges are added)", %{call_graph: call_graph} do
+    test "protocol (implementation edges are added)", %{empty_call_graph: call_graph} do
       ir = IR.for_module(String.Chars)
       build(call_graph, ir)
 
@@ -687,7 +685,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  test "build_for_module/3", %{call_graph: call_graph} do
+  test "build_for_module/3", %{empty_call_graph: call_graph} do
     ir = %IR.ModuleDefinition{
       module: %IR.AtomType{value: Module11},
       body: %IR.Block{
@@ -731,38 +729,45 @@ defmodule Hologram.Compiler.CallGraphTest do
            ]
   end
 
-  test "clone/1", %{call_graph: call_graph} do
+  test "clone/1", %{full_call_graph: call_graph} do
     assert %CallGraph{} = call_graph_clone = clone(call_graph)
 
     refute call_graph_clone == call_graph
     assert get_graph(call_graph_clone) == get_graph(call_graph)
   end
 
-  describe "dump/2" do
-    test "creates nested path dirs if they don't exist", %{call_graph: call_graph} do
-      dump_dir = "#{@dump_dir}/nested_1/_nested_2/nested_3"
-      dump_path = "#{dump_dir}/test.bin"
+  test "dump/2", %{empty_call_graph: call_graph} do
+    dump_dir =
+      Path.join([
+        @tmp_dir,
+        "tests",
+        "compiler",
+        "call_graph",
+        "dump_2",
+        "nested_a",
+        "nested_b"
+      ])
 
-      assert dump(call_graph, dump_path) == call_graph
-      assert File.exists?(dump_dir)
-    end
+    clean_dir(dump_dir)
 
-    test "writes serialized graph to the given file", %{call_graph: call_graph} do
-      add_edge(call_graph, :vertex_1, :vertex_2)
-      graph = get_graph(call_graph)
+    dump_path = Path.join(dump_dir, "call_graph.bin")
 
-      assert dump(call_graph, @dump_path) == call_graph
+    graph =
+      call_graph
+      |> add_edge(:vertex_1, :vertex_2)
+      |> get_graph()
 
-      deserialized_graph =
-        @dump_path
-        |> File.read!()
-        |> SerializationUtils.deserialize()
+    assert dump(call_graph, dump_path) == call_graph
 
-      assert deserialized_graph == graph
-    end
+    deserialized_graph =
+      dump_path
+      |> File.read!()
+      |> SerializationUtils.deserialize()
+
+    assert deserialized_graph == graph
   end
 
-  test "edges/1", %{call_graph: call_graph} do
+  test "edges/1", %{empty_call_graph: call_graph} do
     call_graph
     |> add_edge(:vertex_4, :vertex_5)
     |> add_vertex(:vertex_1)
@@ -775,33 +780,33 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert %Graph.Edge{v1: :vertex_4, v2: :vertex_5, weight: 1, label: nil} in result
   end
 
-  test "get_graph/1", %{call_graph: call_graph} do
+  test "get_graph/1", %{empty_call_graph: call_graph} do
     assert %Graph{} = get_graph(call_graph)
   end
 
   describe "has_edge?/3" do
-    test "has the given edge", %{call_graph: call_graph} do
+    test "has the given edge", %{empty_call_graph: call_graph} do
       add_edge(call_graph, :vertex_1, :vertex_2)
       assert has_edge?(call_graph, :vertex_1, :vertex_2)
     end
 
-    test "doesn't have the given edge", %{call_graph: call_graph} do
+    test "doesn't have the given edge", %{empty_call_graph: call_graph} do
       refute has_edge?(call_graph, :vertex_1, :vertex_2)
     end
   end
 
   describe "has_vertex?/2" do
-    test "has the given vertex", %{call_graph: call_graph} do
+    test "has the given vertex", %{empty_call_graph: call_graph} do
       add_vertex(call_graph, :vertex)
       assert has_vertex?(call_graph, :vertex)
     end
 
-    test "doesn't have the given vertex", %{call_graph: call_graph} do
+    test "doesn't have the given vertex", %{empty_call_graph: call_graph} do
       refute has_vertex?(call_graph, :vertex)
     end
   end
 
-  test "inbound_remote_edges/2", %{call_graph: call_graph} do
+  test "inbound_remote_edges/2", %{empty_call_graph: call_graph} do
     call_graph
     |> add_edge({:module_1, :fun_a, :arity_a}, {:module_2, :fun_b, :arity_b})
     |> add_edge({:module_3, :fun_c, :arity_c}, {:module_2, :fun_d, :arity_d})
@@ -875,6 +880,10 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   describe "list_runtime_mfas/1" do
+    setup %{full_call_graph: call_graph} do
+      [runtime_mfas: list_runtime_mfas(call_graph)]
+    end
+
     test "includes MFAs that are reachable by Elixir functions used by the runtime", %{
       runtime_mfas: result
     } do
@@ -916,46 +925,57 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  test "load/2", %{call_graph: call_graph} do
+  test "load/2", %{empty_call_graph: call_graph} do
     add_edge(call_graph, :vertex_1, :vertex_2)
-    dump(call_graph, @dump_path)
+
+    dump_dir = Path.join([@tmp_dir, "tests", "compiler", "call_graph", "load_2"])
+    clean_dir(dump_dir)
+
+    dump_path = Path.join(dump_dir, "call_graph.bin")
+    dump(call_graph, dump_path)
 
     call_graph_2 = start()
 
-    assert load(call_graph_2, @dump_path) == call_graph_2
+    assert load(call_graph_2, dump_path) == call_graph_2
     assert get_graph(call_graph_2) == get_graph(call_graph)
   end
 
   describe "maybe_load/2" do
-    test "dump file exists" do
+    setup do
+      dump_dir = Path.join([@tmp_dir, "tests", "compiler", "call_graph", "maybe_load_2"])
+      clean_dir(dump_dir)
+
+      [dump_path: Path.join(dump_dir, "call_graph.bin")]
+    end
+
+    test "dump file exists", %{dump_path: dump_path} do
       graph = Graph.add_edge(Graph.new(), :vertex_1, :vertex_2)
 
       data = SerializationUtils.serialize(graph)
-      File.write!(@dump_path, data)
+      File.write!(dump_path, data)
 
       call_graph = start()
 
-      assert maybe_load(call_graph, @dump_path) == call_graph
+      assert maybe_load(call_graph, dump_path) == call_graph
       assert get_graph(call_graph) == graph
     end
 
-    test "dump file doesn't exist" do
+    test "dump file doesn't exist", %{dump_path: dump_path} do
       call_graph = start()
 
-      assert maybe_load(call_graph, @dump_path) == call_graph
+      assert maybe_load(call_graph, dump_path) == call_graph
       assert get_graph(call_graph) == Graph.new()
     end
   end
 
-  test "module_vertices/2", %{call_graph: call_graph} do
+  test "module_vertices/2", %{empty_call_graph: call_graph} do
     ir = IR.for_module(Module13)
 
-    call_graph =
-      call_graph
-      |> add_vertex({:module_1, :fun_a, 1})
-      |> add_vertex({:module_3, :fun_b, 2})
-      |> build(ir)
-      |> add_vertex(:module_4)
+    call_graph
+    |> add_vertex({:module_1, :fun_a, 1})
+    |> add_vertex({:module_3, :fun_b, 2})
+    |> build(ir)
+    |> add_vertex(:module_4)
 
     assert module_vertices(call_graph, Module13) == [
              {Module13, :fun_b, 2},
@@ -965,7 +985,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   describe "patch/3" do
-    test "adds modules", %{call_graph: call_graph} do
+    test "adds modules", %{empty_call_graph: call_graph_1} do
       module_9_ir = IR.for_module(Module9)
       module_10_ir = IR.for_module(Module10)
 
@@ -985,12 +1005,12 @@ defmodule Hologram.Compiler.CallGraphTest do
         updated_modules: []
       }
 
-      patch(call_graph, ir_plt, diff)
+      patch(call_graph_1, ir_plt, diff)
 
-      assert get_graph(call_graph) == get_graph(call_graph_2)
+      assert get_graph(call_graph_1) == get_graph(call_graph_2)
     end
 
-    test "removes modules", %{call_graph: call_graph} do
+    test "removes modules", %{empty_call_graph: call_graph} do
       call_graph
       |> add_edge({:module_1, :fun_a, :arity_a}, {:module_2, :fun_b, :arity_b})
       |> add_edge({:module_2, :fun_c, :arity_c}, {:module_3, :fun_d, :arity_d})
@@ -1026,7 +1046,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    test "updates modules", %{call_graph: call_graph} do
+    test "updates modules", %{empty_call_graph: call_graph} do
       module_9_ir = IR.for_module(Module9)
       module_10_ir = IR.for_module(Module10)
 
@@ -1106,7 +1126,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  test "put_graph", %{call_graph: call_graph} do
+  test "put_graph", %{empty_call_graph: call_graph} do
     graph = Graph.add_edge(Graph.new(), :vertex_3, :vertex_4)
 
     assert put_graph(call_graph, graph) == call_graph
@@ -1221,7 +1241,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     end)
   end
 
-  test "remove_vertex/2", %{call_graph: call_graph} do
+  test "remove_vertex/2", %{empty_call_graph: call_graph} do
     call_graph
     |> add_vertex(:vertex_1)
     |> add_vertex(:vertex_2)
@@ -1240,7 +1260,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert has_edge?(call_graph, :vertex_3, :vertex_1)
   end
 
-  test "remove_vertices/2", %{call_graph: call_graph} do
+  test "remove_vertices/2", %{empty_call_graph: call_graph} do
     call_graph
     |> add_vertex(:vertex_1)
     |> add_vertex(:vertex_2)
@@ -1263,7 +1283,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert has_edge?(call_graph, :vertex_4, :vertex_1)
   end
 
-  test "sorted_edges/1", %{call_graph: call_graph} do
+  test "sorted_edges/1", %{empty_call_graph: call_graph} do
     call_graph
     |> add_edge(:vertex_4, :vertex_5)
     |> add_vertex(:vertex_1)
@@ -1335,7 +1355,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
-  test "sorted_vertices/1", %{call_graph: call_graph} do
+  test "sorted_vertices/1", %{empty_call_graph: call_graph} do
     call_graph
     |> add_edge(:vertex_4, :vertex_5)
     |> add_vertex(:vertex_1)
@@ -1367,7 +1387,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     refute Process.alive?(pid)
   end
 
-  test "vertices/1", %{call_graph: call_graph} do
+  test "vertices/1", %{empty_call_graph: call_graph} do
     call_graph
     |> add_edge(:vertex_4, :vertex_5)
     |> add_vertex(:vertex_1)
