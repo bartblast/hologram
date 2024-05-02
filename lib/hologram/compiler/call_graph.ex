@@ -465,9 +465,11 @@ defmodule Hologram.Compiler.CallGraph do
   def sorted_reachable_mfas(graph, vertex_or_vertices) do
     graph
     |> reachable(vertex_or_vertices)
-    |> Enum.filter(&is_tuple/1)
-    # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
-    |> Enum.reject(fn {module, _function, _arity} -> !Reflection.module?(module) end)
+    |> Enum.filter(fn
+      # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
+      {module, _function, _arity} -> Reflection.module?(module)
+      _module -> false
+    end)
     |> Enum.sort()
   end
 
