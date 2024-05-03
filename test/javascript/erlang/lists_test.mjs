@@ -172,6 +172,23 @@ describe("Erlang_Lists", () => {
         "no case clause matching: :abc",
       );
     });
+
+    it("raises FunctionClauseError if the third argument is an improper list", () => {
+      assertBoxedError(
+        () =>
+          Erlang_Lists["foldl/3"](
+            fun,
+            acc,
+            Type.improperList([
+              Type.integer(1),
+              Type.integer(2),
+              Type.integer(3),
+            ]),
+          ),
+        "FunctionClauseError",
+        "no function clause matching in :lists.foldl_1/3",
+      );
+    });
   });
 
   describe("keyfind/3", () => {

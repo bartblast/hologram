@@ -48,6 +48,12 @@ const Erlang_Lists = {
       Interpreter.raiseCaseClauseError(list);
     }
 
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        "no function clause matching in :lists.foldl_1/3",
+      );
+    }
+
     return list.data.reduce(
       (acc, elem) => Interpreter.callAnonymousFunction(fun, [elem, acc]),
       initialAcc,

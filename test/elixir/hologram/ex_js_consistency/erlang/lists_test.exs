@@ -65,6 +65,14 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
         :lists.foldl(fun, 0, :abc)
       end
     end
+
+    test "raises FunctionClauseError if the third argument is an improper list", %{fun: fun} do
+      assert_raise FunctionClauseError,
+                   "no function clause matching in :lists.foldl_1/3",
+                   fn ->
+                     :lists.foldl(fun, 0, [1, 2 | 3])
+                   end
+    end
   end
 
   describe "keyfind/3" do
