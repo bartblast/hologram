@@ -29,7 +29,16 @@ defmodule Hologram.Test.Stubs do
       defmodule alias!(unquote(random_module).AssetPathRegistryStub) do
         @behaviour AssetPathRegistry
 
-        def static_dir, do: "#{Reflection.tmp_dir()}/#{unquote(random_string())}"
+        def static_dir do
+          Path.join([
+            Reflection.tmp_dir(),
+            "tests",
+            "stubs",
+            "asset_path_registry",
+            "static_dir_0",
+            random_string()
+          ])
+        end
 
         def ets_table_name, do: unquote(random_atom())
 
@@ -47,7 +56,16 @@ defmodule Hologram.Test.Stubs do
       defmodule alias!(unquote(random_module).PageDigestRegistryStub) do
         @behaviour PageDigestRegistry
 
-        def dump_path, do: "#{Reflection.tmp_dir()}/#{unquote(random_string())}.plt"
+        def dump_path do
+          Path.join([
+            Reflection.tmp_dir(),
+            "tests",
+            "stubs",
+            "page_digest_registry",
+            "dump_path_0",
+            "#{random_string()}.plt"
+          ])
+        end
 
         def ets_table_name, do: unquote(random_atom())
       end
