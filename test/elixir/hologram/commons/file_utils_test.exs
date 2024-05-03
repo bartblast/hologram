@@ -57,7 +57,8 @@ defmodule Hologram.Commons.FileUtilsTest do
   end
 
   test "recreate_dir/1" do
-    dir_path = Path.join(Reflection.tmp_dir(), "tests", "commons", "file_utils", "recreate_dir_1")
+    dir_path =
+      Path.join([Reflection.tmp_dir(), "tests", "commons", "file_utils", "recreate_dir_1"])
 
     File.rm_rf!(dir_path)
     File.mkdir_p!(dir_path)
