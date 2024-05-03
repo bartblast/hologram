@@ -126,8 +126,12 @@ defmodule Hologram.Test.Helpers do
   """
   @spec random_atom() :: atom
   def random_atom do
+    make_ref()
+    |> inspect()
+    |> String.replace(["#", "<", ".", ">"], "")
+    |> String.replace("Reference", "a")
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-    :"#{inspect(make_ref())}"
+    |> String.to_atom()
   end
 
   @doc """
@@ -135,8 +139,10 @@ defmodule Hologram.Test.Helpers do
   """
   @spec random_module() :: module
   def random_module do
-    random_string()
+    make_ref()
+    |> inspect()
     |> String.replace(["#", "<", ".", ">"], "")
+    |> String.replace("Reference", "M")
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     |> String.to_atom()
   end
@@ -146,7 +152,10 @@ defmodule Hologram.Test.Helpers do
   """
   @spec random_string() :: String.t()
   def random_string do
-    "#{inspect(make_ref())}"
+    make_ref()
+    |> inspect()
+    |> String.replace(["#", "<", ".", ">"], "")
+    |> String.replace("Reference", "s")
   end
 
   @doc """
