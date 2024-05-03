@@ -16,12 +16,12 @@ export function defineModule23Fixture() {
         body: (_context) => {
           return Type.list([
             Type.tuple([
-              Type.atom("key_2"),
+              Type.atom("key_1"),
               Type.atom("string"),
               Type.list([]),
             ]),
             Type.tuple([
-              Type.atom("key_1"),
+              Type.atom("key_2"),
               Type.atom("string"),
               Type.list([]),
             ]),

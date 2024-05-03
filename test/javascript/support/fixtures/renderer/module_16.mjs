@@ -16,7 +16,7 @@ export function defineModule16Fixture() {
         body: (_context) => {
           return Type.list([
             Type.tuple([
-              Type.atom("prop_3"),
+              Type.atom("prop_1"),
               Type.atom("string"),
               Type.list([]),
             ]),
@@ -26,7 +26,7 @@ export function defineModule16Fixture() {
               Type.list([]),
             ]),
             Type.tuple([
-              Type.atom("prop_1"),
+              Type.atom("prop_3"),
               Type.atom("string"),
               Type.list([]),
             ]),

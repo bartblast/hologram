@@ -15,9 +15,9 @@ export function defineModule2Fixture() {
         guards: [],
         body: (_context) => {
           return Type.list([
-            Type.tuple([Type.atom("c"), Type.atom("string"), Type.list([])]),
-            Type.tuple([Type.atom("b"), Type.atom("integer"), Type.list([])]),
             Type.tuple([Type.atom("a"), Type.atom("string"), Type.list([])]),
+            Type.tuple([Type.atom("b"), Type.atom("integer"), Type.list([])]),
+            Type.tuple([Type.atom("c"), Type.atom("string"), Type.list([])]),
           ]);
         },
       },
