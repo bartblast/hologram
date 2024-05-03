@@ -71,25 +71,25 @@ export default class Type {
     return {type: "cons_pattern", head: head, tail: tail};
   }
 
-  static encodeMapKey(boxed) {
-    switch (boxed.type) {
+  static encodeMapKey(term) {
+    switch (term.type) {
       case "anonymous_function":
-        return Type.#encodeAnonymousFunctionTypeMapKey(boxed);
+        return Type.#encodeAnonymousFunctionTypeMapKey(term);
 
       case "atom":
       case "float":
       case "integer":
-        return Type.#encodePrimitiveTypeMapKey(boxed);
+        return Type.#encodePrimitiveTypeMapKey(term);
 
       case "bitstring":
-        return Type.#encodeBitstringTypeMapKey(boxed);
+        return Type.#encodeBitstringTypeMapKey(term);
 
       case "list":
       case "tuple":
-        return Type.#encodeEnumTypeMapKey(boxed);
+        return Type.#encodeEnumTypeMapKey(term);
 
       case "map":
-        return Type.#encodeMapTypeMapKey(boxed);
+        return Type.#encodeMapTypeMapKey(term);
     }
   }
 
@@ -125,59 +125,58 @@ export default class Type {
     return {type: "integer", value: value};
   }
 
-  static isAnonymousFunction(boxed) {
-    return boxed.type === "anonymous_function";
+  static isAnonymousFunction(term) {
+    return term.type === "anonymous_function";
   }
 
-  static isAtom(boxed) {
-    return boxed.type === "atom";
+  static isAtom(term) {
+    return term.type === "atom";
   }
 
-  static isBinary(boxed) {
-    return Type.isBitstring(boxed) && boxed.bits.length % 8 === 0;
+  static isBinary(term) {
+    return Type.isBitstring(term) && term.bits.length % 8 === 0;
   }
 
-  static isBitstring(boxed) {
-    return boxed.type === "bitstring";
+  static isBitstring(term) {
+    return term.type === "bitstring";
   }
 
-  static isBitstringPattern(boxed) {
-    return boxed.type === "bitstring_pattern";
+  static isBitstringPattern(term) {
+    return term.type === "bitstring_pattern";
   }
 
-  static isBoolean(boxed) {
+  static isBoolean(term) {
     return (
-      boxed.type === "atom" &&
-      (boxed.value === "false" || boxed.value === "true")
+      term.type === "atom" && (term.value === "false" || term.value === "true")
     );
   }
 
-  static isConsPattern(boxed) {
-    return boxed.type === "cons_pattern";
+  static isConsPattern(term) {
+    return term.type === "cons_pattern";
   }
 
-  static isFalse(boxed) {
-    return Type.isAtom(boxed) && boxed.value === "false";
+  static isFalse(term) {
+    return Type.isAtom(term) && term.value === "false";
   }
 
-  static isFalsy(boxed) {
-    return Type.isFalse(boxed) || Type.isNil(boxed);
+  static isFalsy(term) {
+    return Type.isFalse(term) || Type.isNil(term);
   }
 
-  static isFloat(boxed) {
-    return boxed.type === "float";
+  static isFloat(term) {
+    return term.type === "float";
   }
 
-  static isInteger(boxed) {
-    return boxed.type === "integer";
+  static isInteger(term) {
+    return term.type === "integer";
   }
 
-  static isKeywordList(boxed) {
-    if (!Type.isList(boxed)) {
+  static isKeywordList(term) {
+    if (!Type.isList(term)) {
       return false;
     }
 
-    return boxed.data.every(
+    return term.data.every(
       (item) =>
         Type.isTuple(item) &&
         item.data.length === 2 &&
@@ -185,67 +184,67 @@ export default class Type {
     );
   }
 
-  static isList(boxed) {
-    return boxed.type === "list";
+  static isList(term) {
+    return term.type === "list";
   }
 
-  static isMap(boxed) {
-    return boxed.type === "map";
+  static isMap(term) {
+    return term.type === "map";
   }
 
-  static isMatchPlaceholder(boxed) {
-    return boxed.type === "match_placeholder";
+  static isMatchPlaceholder(term) {
+    return term.type === "match_placeholder";
   }
 
-  static isNil(boxed) {
-    return boxed.type === "atom" && boxed.value === "nil";
+  static isNil(term) {
+    return term.type === "atom" && term.value === "nil";
   }
 
-  static isNumber(boxed) {
-    return Type.isInteger(boxed) || Type.isFloat(boxed);
+  static isNumber(term) {
+    return Type.isInteger(term) || Type.isFloat(term);
   }
 
-  static isPid(boxed) {
-    return boxed.type === "pid";
+  static isPid(term) {
+    return term.type === "pid";
   }
 
-  static isPort(boxed) {
-    return boxed.type === "port";
+  static isPort(term) {
+    return term.type === "port";
   }
 
-  static isProperList(boxed) {
-    return Type.isList(boxed) && boxed.isProper === true;
+  static isProperList(term) {
+    return Type.isList(term) && term.isProper === true;
   }
 
   // Deps: [:maps.get/3]
-  static isRange(boxed) {
+  static isRange(term) {
     return (
-      Type.isMap(boxed) &&
+      Type.isMap(term) &&
       Interpreter.isEqual(
-        Erlang_Maps["get/3"](Type.atom("__struct__"), boxed, Type.nil()),
+        Erlang_Maps["get/3"](Type.atom("__struct__"), term, Type.nil()),
         Type.alias("Range"),
       )
     );
   }
 
-  static isReference(boxed) {
-    return boxed.type === "reference";
+  static isReference(term) {
+    return term.type === "reference";
   }
 
-  static isTrue(boxed) {
-    return Type.isAtom(boxed) && boxed.value === "true";
+  static isTrue(term) {
+    return Type.isAtom(term) && term.value === "true";
   }
 
-  static isTruthy(boxed) {
-    return !Type.isFalsy(boxed);
+  static isTruthy(term) {
+    return !Type.isFalsy(term);
   }
 
-  static isTuple(boxed) {
-    return boxed.type === "tuple";
+  static isTuple(term) {
+    return term.type === "tuple";
   }
 
-  static isVariablePattern(boxed) {
-    return boxed.type === "variable_pattern";
+  static isVariablePattern(term) {
+    return term.type === "variable_pattern";
   }
 
   static list(data) {
@@ -257,8 +256,8 @@ export default class Type {
   }
 
   static map(data) {
-    const hashTableWithMetadata = data.reduce((acc, [boxedKey, boxedValue]) => {
-      acc[Type.encodeMapKey(boxedKey)] = [boxedKey, boxedValue];
+    const hashTableWithMetadata = data.reduce((acc, [key, value]) => {
+      acc[Type.encodeMapKey(key)] = [key, value];
       return acc;
     }, {});
 
@@ -333,33 +332,31 @@ export default class Type {
     return {type: "variable_pattern", name: name};
   }
 
-  static #encodeAnonymousFunctionTypeMapKey(boxed) {
-    return "anonymous_function(" + boxed.uniqueId + ")";
+  static #encodeAnonymousFunctionTypeMapKey(anonymousFunction) {
+    return "anonymous_function(" + anonymousFunction.uniqueId + ")";
   }
 
-  static #encodeBitstringTypeMapKey(boxed) {
-    return "bitstring(" + boxed.bits.join("") + ")";
+  static #encodeBitstringTypeMapKey(bitstring) {
+    return "bitstring(" + bitstring.bits.join("") + ")";
   }
 
-  static #encodeEnumTypeMapKey(boxed) {
-    const itemsStr = boxed.data
-      .map((item) => Type.encodeMapKey(item))
-      .join(",");
+  static #encodeEnumTypeMapKey(term) {
+    const itemsStr = term.data.map((item) => Type.encodeMapKey(item)).join(",");
 
-    return boxed.type + "(" + itemsStr + ")";
+    return term.type + "(" + itemsStr + ")";
   }
 
-  static #encodeMapTypeMapKey(boxed) {
-    const itemsStr = Object.keys(boxed.data)
+  static #encodeMapTypeMapKey(map) {
+    const itemsStr = Object.keys(map.data)
       .sort()
-      .map((key) => key + ":" + Type.encodeMapKey(boxed.data[key][1]))
+      .map((key) => key + ":" + Type.encodeMapKey(map.data[key][1]))
       .join(",");
 
     return "map(" + itemsStr + ")";
   }
 
-  static #encodePrimitiveTypeMapKey(boxed) {
-    return `${boxed.type}(${boxed.value})`;
+  static #encodePrimitiveTypeMapKey(term) {
+    return `${term.type}(${term.value})`;
   }
 
   static #getOption(options, key) {

@@ -216,20 +216,20 @@ describe("Type", () => {
 
   describe("encodeMapKey()", () => {
     it("encodes boxed anonymous function value as map key", () => {
-      const boxed = Type.anonymousFunction(
+      const anonymousFunction = Type.anonymousFunction(
         "dummyArity",
         "dummyClauses",
         "dummyContext",
       );
 
-      const result = Type.encodeMapKey(boxed);
+      const result = Type.encodeMapKey(anonymousFunction);
 
       assert.equal(result, "anonymous_function(" + (Sequence.next() - 1) + ")");
     });
 
     it("encodes boxed atom value as map key", () => {
-      const boxed = Type.atom("abc");
-      const result = Type.encodeMapKey(boxed);
+      const atom = Type.atom("abc");
+      const result = Type.encodeMapKey(atom);
 
       assert.equal(result, "atom(abc)");
     });
@@ -239,8 +239,8 @@ describe("Type", () => {
         size: Type.integer(0),
         type: "integer",
       });
-      const boxed = Type.bitstring([segment]);
-      const result = Type.encodeMapKey(boxed);
+      const bitstring = Type.bitstring([segment]);
+      const result = Type.encodeMapKey(bitstring);
 
       assert.equal(result, "bitstring()");
     });
@@ -251,22 +251,22 @@ describe("Type", () => {
       const segment = Type.bitstringSegment(Type.integer(170), {
         type: "integer",
       });
-      const boxed = Type.bitstring([segment]);
-      const result = Type.encodeMapKey(boxed);
+      const bitstring = Type.bitstring([segment]);
+      const result = Type.encodeMapKey(bitstring);
 
       assert.equal(result, "bitstring(10101010)");
     });
 
     it("encodes boxed float value as map key", () => {
-      const boxed = Type.float(1.23);
-      const result = Type.encodeMapKey(boxed);
+      const float = Type.float(1.23);
+      const result = Type.encodeMapKey(float);
 
       assert.equal(result, "float(1.23)");
     });
 
     it("encodes boxed integer value as map key", () => {
-      const boxed = Type.integer(123);
-      const result = Type.encodeMapKey(boxed);
+      const integer = Type.integer(123);
+      const result = Type.encodeMapKey(integer);
 
       assert.equal(result, "integer(123)");
     });
@@ -278,8 +278,8 @@ describe("Type", () => {
     });
 
     it("encodes non-empty boxed list value as map key", () => {
-      const boxed = Type.list([Type.integer(1), Type.atom("b")]);
-      const result = Type.encodeMapKey(boxed);
+      const list = Type.list([Type.integer(1), Type.atom("b")]);
+      const result = Type.encodeMapKey(list);
 
       assert.equal(result, "list(integer(1),atom(b))");
     });
@@ -291,12 +291,12 @@ describe("Type", () => {
     });
 
     it("encodes non-empty boxed map value as map key", () => {
-      const boxed = Type.map([
+      const map = Type.map([
         [Type.atom("b"), Type.integer(2)],
         [Type.atom("a"), Type.integer(1)],
       ]);
 
-      const result = Type.encodeMapKey(boxed);
+      const result = Type.encodeMapKey(map);
 
       assert.equal(result, "map(atom(a):integer(1),atom(b):integer(2))");
     });
@@ -308,8 +308,8 @@ describe("Type", () => {
     });
 
     it("encodes non-empty boxed tuple value as map key", () => {
-      const boxed = Type.tuple([Type.integer(1), Type.atom("b")]);
-      const result = Type.encodeMapKey(boxed);
+      const tuple = Type.tuple([Type.integer(1), Type.atom("b")]);
+      const result = Type.encodeMapKey(tuple);
 
       assert.equal(result, "tuple(integer(1),atom(b))");
     });
