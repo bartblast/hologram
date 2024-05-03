@@ -95,7 +95,7 @@ export default class Interpreter {
       !Interpreter.isEqual(module, context.module)
     ) {
       Interpreter.raiseUndefinedFunctionError(
-        moduleRef.__exName__,
+        Interpreter.inspect(moduleRef.__exModule__),
         functionName,
         arity,
       );
@@ -251,7 +251,7 @@ export default class Interpreter {
           const [functionName, arity] = functionArityStr.split("/");
 
           Interpreter.raiseUndefinedFunctionError(
-            moduleExName,
+            Interpreter.inspect(moduleRef.__exModule__),
             functionName,
             arity,
           );
@@ -260,7 +260,6 @@ export default class Interpreter {
 
       globalThis[moduleJsName] = new Proxy({}, handler);
       globalThis[moduleJsName].__exModule__ = Type.alias(moduleExName);
-      globalThis[moduleJsName].__exName__ = moduleExName;
       globalThis[moduleJsName].__exports__ = new Set();
       globalThis[moduleJsName].__jsName__ = moduleJsName;
     }

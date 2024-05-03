@@ -1873,7 +1873,6 @@ describe("defineElixirFunction()", () => {
       Type.alias("Ddd"),
     );
 
-    assert.equal(globalThis.Elixir_Ddd.__exName__, "Ddd");
     assert.equal(globalThis.Elixir_Ddd.__jsName__, "Elixir_Ddd");
 
     // cleanup
@@ -1883,7 +1882,6 @@ describe("defineElixirFunction()", () => {
   it("appends to the module global var if it is already initiated", () => {
     globalThis.Elixir_Eee = {
       __exModule__: Type.alias("Eee"),
-      __exName__: "Eee",
       __exports__: new Set(),
       __jsName__: "Elixir_Eee",
       "dummy/1": "dummy_body",
