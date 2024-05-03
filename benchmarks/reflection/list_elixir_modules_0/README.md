@@ -1,6 +1,6 @@
 Benchmark
 
-list_elixir_modules/0
+Hologram.Commons.Reflection.list_elixir_modules/0
 
 ## System
 
