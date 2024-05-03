@@ -4,10 +4,10 @@ import {assert, linkModules, unlinkModules} from "./support/helpers.mjs";
 
 import MemoryStorage from "../../assets/js/memory_storage.mjs";
 
-before(() => linkModules());
-after(() => unlinkModules());
-
 describe("MemoryStorage", () => {
+  before(() => linkModules());
+  after(() => unlinkModules());
+
   beforeEach(() => {
     MemoryStorage.data = {};
   });

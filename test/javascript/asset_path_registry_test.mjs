@@ -5,9 +5,6 @@ import {assert, linkModules, unlinkModules} from "./support/helpers.mjs";
 import AssetPathRegistry from "../../assets/js/asset_path_registry.mjs";
 import Type from "../../assets/js/type.mjs";
 
-before(() => linkModules());
-after(() => unlinkModules());
-
 const assetManifest = {
   "static-path-1": "/asset-path-1",
   "static-path-2": "/asset-path-2",
@@ -15,6 +12,9 @@ const assetManifest = {
 };
 
 describe("AssetPathRegistry", () => {
+  before(() => linkModules());
+  after(() => unlinkModules());
+
   beforeEach(() => {
     AssetPathRegistry.hydrate(assetManifest);
   });

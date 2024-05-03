@@ -4,10 +4,10 @@ import {assert, linkModules, unlinkModules} from "./support/helpers.mjs";
 
 import Sequence from "../../assets/js/sequence.mjs";
 
-before(() => linkModules());
-after(() => unlinkModules());
-
 describe("Sequence", () => {
+  before(() => linkModules());
+  after(() => unlinkModules());
+
   beforeEach(() => {
     Sequence.value = 0;
   });

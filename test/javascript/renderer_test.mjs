@@ -67,62 +67,62 @@ import Hologram from "../../assets/js/hologram.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
 
-before(() => {
-  linkModules();
-
-  defineLayoutFixture();
-  defineModule1Fixture();
-  defineModule10Fixture();
-  defineModule11Fixture();
-  defineModule12Fixture();
-  defineModule14Fixture();
-  defineModule15Fixture();
-  defineModule16Fixture();
-  defineModule17Fixture();
-  defineModule18Fixture();
-  defineModule2Fixture();
-  defineModule21Fixture();
-  defineModule23Fixture();
-  defineModule24Fixture();
-  defineModule25Fixture();
-  defineModule26Fixture();
-  defineModule27Fixture();
-  defineModule3Fixture();
-  defineModule31Fixture();
-  defineModule32Fixture();
-  defineModule33Fixture();
-  defineModule34Fixture();
-  defineModule35Fixture();
-  defineModule36Fixture();
-  defineModule37Fixture();
-  defineModule38Fixture();
-  defineModule39Fixture();
-  defineModule4Fixture();
-  defineModule40Fixture();
-  defineModule41Fixture();
-  defineModule42Fixture();
-  defineModule43Fixture();
-  defineModule44Fixture();
-  defineModule45Fixture();
-  defineModule46Fixture();
-  defineModule47Fixture();
-  defineModule51Fixture();
-  defineModule52Fixture();
-  defineModule55Fixture();
-  defineModule56Fixture();
-  defineModule57Fixture();
-  defineModule58Fixture();
-  defineModule59Fixture();
-  defineModule60Fixture();
-  defineModule61Fixture();
-  defineModule7Fixture();
-  defineModule8Fixture();
-  defineModule9Fixture();
-});
-
-after(() => unlinkModules());
-
 describe("Renderer", () => {
+  before(() => {
+    linkModules();
+
+    defineLayoutFixture();
+    defineModule1Fixture();
+    defineModule10Fixture();
+    defineModule11Fixture();
+    defineModule12Fixture();
+    defineModule14Fixture();
+    defineModule15Fixture();
+    defineModule16Fixture();
+    defineModule17Fixture();
+    defineModule18Fixture();
+    defineModule2Fixture();
+    defineModule21Fixture();
+    defineModule23Fixture();
+    defineModule24Fixture();
+    defineModule25Fixture();
+    defineModule26Fixture();
+    defineModule27Fixture();
+    defineModule3Fixture();
+    defineModule31Fixture();
+    defineModule32Fixture();
+    defineModule33Fixture();
+    defineModule34Fixture();
+    defineModule35Fixture();
+    defineModule36Fixture();
+    defineModule37Fixture();
+    defineModule38Fixture();
+    defineModule39Fixture();
+    defineModule4Fixture();
+    defineModule40Fixture();
+    defineModule41Fixture();
+    defineModule42Fixture();
+    defineModule43Fixture();
+    defineModule44Fixture();
+    defineModule45Fixture();
+    defineModule46Fixture();
+    defineModule47Fixture();
+    defineModule51Fixture();
+    defineModule52Fixture();
+    defineModule55Fixture();
+    defineModule56Fixture();
+    defineModule57Fixture();
+    defineModule58Fixture();
+    defineModule59Fixture();
+    defineModule60Fixture();
+    defineModule61Fixture();
+    defineModule7Fixture();
+    defineModule8Fixture();
+    defineModule9Fixture();
+  });
+
+  after(() => unlinkModules());
+
   beforeEach(() => {
     ComponentRegistry.entries = Type.map([]);
   });

@@ -6,14 +6,14 @@ import Erlang_Persistent_Term from "../../../assets/js/erlang/persistent_term.mj
 import MemoryStorage from "../../../assets/js/memory_storage.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-before(() => linkModules());
-after(() => unlinkModules());
-
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/persistent_term_test.exs
 // Always update both together.
 
 describe("Erlang_Persistent_Term", () => {
+  before(() => linkModules());
+  after(() => unlinkModules());
+
   beforeEach(() => {
     MemoryStorage.data = {};
   });

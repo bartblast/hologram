@@ -14,14 +14,14 @@ import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import Type from "../../assets/js/type.mjs";
 
-before(() => {
-  linkModules();
-  defineModule1Fixture();
-});
-
-after(() => unlinkModules());
-
 describe("Hologram", () => {
+  before(() => {
+    linkModules();
+    defineModule1Fixture();
+  });
+
+  after(() => unlinkModules());
+
   describe("handleEvent()", () => {
     const cid = Type.bitstring("my_component");
     const defaultTarget = cid;
