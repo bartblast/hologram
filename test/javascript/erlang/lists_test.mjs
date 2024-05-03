@@ -74,6 +74,27 @@ describe("Erlang_Lists", () => {
         "no function clause matching in :lists.flatten/1",
       );
     });
+
+    it("raises FunctionClauseError if the argument (or any nested item) is an improper list", () => {
+      assertBoxedError(
+        () =>
+          Erlang_Lists["flatten/1"](
+            Type.list([
+              Type.integer(1),
+              Type.integer(2),
+              Type.improperList([
+                Type.integer(3),
+                Type.integer(4),
+                Type.integer(5),
+              ]),
+              Type.integer(6),
+              Type.integer(7),
+            ]),
+          ),
+        "FunctionClauseError",
+        "no function clause matching in :lists.do_flatten/2",
+      );
+    });
   });
 
   describe("foldl/3", () => {

@@ -25,6 +25,14 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
         :lists.flatten(:abc)
       end
     end
+
+    test "raises FunctionClauseError if the argument (or any nested item) is an improper list" do
+      assert_raise FunctionClauseError,
+                   "no function clause matching in :lists.do_flatten/2",
+                   fn ->
+                     :lists.flatten([1, 2, [3, 4 | 5], 6, 7])
+                   end
+    end
   end
 
   describe "foldl/3" do

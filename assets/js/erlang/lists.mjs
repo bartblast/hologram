@@ -16,6 +16,12 @@ const Erlang_Lists = {
       );
     }
 
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        "no function clause matching in :lists.do_flatten/2",
+      );
+    }
+
     const data = list.data.reduce((acc, elem) => {
       if (Type.isList(elem)) {
         elem = Erlang_Lists["flatten/1"](elem);
