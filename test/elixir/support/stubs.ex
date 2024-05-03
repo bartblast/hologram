@@ -36,7 +36,7 @@ defmodule Hologram.Test.Stubs do
             "stubs",
             "asset_path_registry",
             "static_dir_0",
-            random_string()
+            unquote(random_string())
           ])
         end
 
@@ -63,7 +63,7 @@ defmodule Hologram.Test.Stubs do
             "stubs",
             "page_digest_registry",
             "dump_path_0",
-            "#{random_string()}.plt"
+            "#{unquote(random_string())}.plt"
           ])
         end
 
