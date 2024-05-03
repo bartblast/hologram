@@ -15,7 +15,8 @@ defmodule Mix.Tasks.Compile.Hologram do
   require Logger
 
   @impl Mix.Task.Compiler
-  def run([]) do
+  # If the options are strings, it means that the task was executed directly by the Elixir compiler.
+  def run([hd | _tail]) when is_binary(hd) do
     root_dir = Reflection.root_dir()
     assets_dir = Path.join([root_dir, "deps", "hologram", "assets"])
     build_dir = Reflection.build_dir()
