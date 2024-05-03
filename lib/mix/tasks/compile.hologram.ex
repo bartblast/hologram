@@ -17,23 +17,12 @@ defmodule Mix.Tasks.Compile.Hologram do
   @impl Mix.Task.Compiler
   # If the options are strings, it means that the task was executed directly by the Elixir compiler.
   def run([hd | _tail]) when is_binary(hd) do
-    root_dir = Reflection.root_dir()
-    assets_dir = Path.join([root_dir, "deps", "hologram", "assets"])
-    build_dir = Reflection.build_dir()
-    node_modules_path = Path.join(assets_dir, "node_modules")
+    run(build_default_opts())
+  end
 
-    opts = [
-      assets_dir: assets_dir,
-      build_dir: build_dir,
-      esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
-      # Biome is almost x20 faster than Prettier in Hologram benchmarks
-      formatter_bin_path: Path.join([node_modules_path, ".bin", "biome"]),
-      js_dir: Path.join(assets_dir, "js"),
-      static_dir: Path.join([root_dir, "priv", "static", "hologram"]),
-      tmp_dir: Path.join(build_dir, "tmp")
-    ]
-
-    run(opts)
+  @impl Mix.Task.Compiler
+  def run([]) do
+    run(build_default_opts())
   end
 
   @doc """
@@ -107,5 +96,23 @@ defmodule Mix.Tasks.Compile.Hologram do
     Logger.info("Hologram: compiler finished")
 
     :ok
+  end
+
+  defp build_default_opts do
+    root_dir = Reflection.root_dir()
+    assets_dir = Path.join([root_dir, "deps", "hologram", "assets"])
+    build_dir = Reflection.build_dir()
+    node_modules_path = Path.join(assets_dir, "node_modules")
+
+    [
+      assets_dir: assets_dir,
+      build_dir: build_dir,
+      esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
+      # Biome is almost x20 faster than Prettier in Hologram benchmarks
+      formatter_bin_path: Path.join([node_modules_path, ".bin", "biome"]),
+      js_dir: Path.join(assets_dir, "js"),
+      static_dir: Path.join([root_dir, "priv", "static", "hologram"]),
+      tmp_dir: Path.join(build_dir, "tmp")
+    ]
   end
 end
