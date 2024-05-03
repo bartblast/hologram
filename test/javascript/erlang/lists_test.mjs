@@ -433,6 +433,22 @@ describe("Erlang_Lists", () => {
         "no case clause matching: :abc",
       );
     });
+
+    it("raises FunctionClauseError if the second argument is an improper list", () => {
+      assertBoxedError(
+        () =>
+          Erlang_Lists["map/2"](
+            fun,
+            Type.improperList([
+              Type.integer(1),
+              Type.integer(2),
+              Type.integer(3),
+            ]),
+          ),
+        "FunctionClauseError",
+        "no function clause matching in :lists.map_1/2",
+      );
+    });
   });
 
   describe("member/2", () => {

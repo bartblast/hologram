@@ -125,6 +125,12 @@ const Erlang_Lists = {
       Interpreter.raiseCaseClauseError(list);
     }
 
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        "no function clause matching in :lists.map_1/2",
+      );
+    }
+
     return Type.list(
       list.data.map((elem) => Interpreter.callAnonymousFunction(fun, [elem])),
     );

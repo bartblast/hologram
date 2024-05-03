@@ -189,6 +189,12 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
         :lists.map(fun, :abc)
       end
     end
+
+    test "raises FunctionClauseError if the second argument is an improper list", %{fun: fun} do
+      assert_raise FunctionClauseError, "no function clause matching in :lists.map_1/2", fn ->
+        :lists.map(fun, [1, 2 | 3])
+      end
+    end
   end
 
   describe "member/2" do
