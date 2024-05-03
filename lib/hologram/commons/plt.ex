@@ -39,7 +39,7 @@ defmodule Hologram.Commons.PLT do
   @doc """
   Serializes the contents of the PLT and writes it to a file.
 
-  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/commons/plt/dump/README.md
+  Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/commons/plt/dump_2/README.md
   """
   @spec dump(PLT.t(), String.t()) :: PLT.t()
   def dump(plt, path) do
