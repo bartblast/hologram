@@ -82,6 +82,12 @@ const Erlang_Lists = {
       );
     }
 
+    if (!Type.isProperList(tuples)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildErrorsFoundMsg(3, "not a proper list"),
+      );
+    }
+
     for (const tuple of tuples.data) {
       if (Type.isTuple(tuple)) {
         if (

@@ -262,6 +262,23 @@ describe("Erlang_Lists", () => {
         Interpreter.buildErrorsFoundMsg(3, "not a list"),
       );
     });
+
+    it("raises ArgumentError if the third argument (tuples) is an improper list", () => {
+      assertBoxedError(
+        () =>
+          Erlang_Lists["keyfind/3"](
+            Type.integer(7),
+            Type.integer(4),
+            Type.improperList([
+              Type.integer(1),
+              Type.integer(2),
+              Type.integer(3),
+            ]),
+          ),
+        "ArgumentError",
+        Interpreter.buildErrorsFoundMsg(3, "not a proper list"),
+      );
+    });
   });
 
   describe("keymember/3", () => {

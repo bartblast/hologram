@@ -107,6 +107,14 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
                      :lists.keyfind(:abc, 1, :xyz)
                    end
     end
+
+    test "raises ArgumentError if the third argument (tuples) is an improper list" do
+      assert_raise ArgumentError,
+                   build_errors_found_msg(3, "not a proper list"),
+                   fn ->
+                     :lists.keyfind(7, 4, [1, 2 | 3])
+                   end
+    end
   end
 
   describe "keymember/3" do
