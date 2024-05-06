@@ -19,15 +19,14 @@ describe("Erlang_Persistent_Term", () => {
   });
 
   describe("get/2", () => {
+    const get = Erlang_Persistent_Term["get/2"];
+
     it("key exists", () => {
       const encodedKey = "tuple(atom(persistent_term),atom(my_key))";
       const value = Type.integer(123);
       MemoryStorage.put(encodedKey, value);
 
-      const result = Erlang_Persistent_Term["get/2"](
-        Type.atom("my_key"),
-        Type.integer(234),
-      );
+      const result = get(Type.atom("my_key"), Type.integer(234));
 
       assert.deepStrictEqual(result, value);
     });
@@ -35,10 +34,7 @@ describe("Erlang_Persistent_Term", () => {
     it("key doesn't exist", () => {
       const defaultValue = Type.integer(234);
 
-      const result = Erlang_Persistent_Term["get/2"](
-        Type.atom("my_key"),
-        defaultValue,
-      );
+      const result = get(Type.atom("my_key"), defaultValue);
 
       assert.deepStrictEqual(result, defaultValue);
     });
