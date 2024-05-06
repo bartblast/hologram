@@ -38,14 +38,11 @@ describe("Erlang_Unicode", () => {
   });
 
   describe("characters_to_binary/3", () => {
+    const characters_to_binary = Erlang_Unicode["characters_to_binary/3"];
     const utf8Atom = Type.atom("utf8");
 
     it("input is an empty list", () => {
-      const result = Erlang_Unicode["characters_to_binary/3"](
-        Type.list([]),
-        utf8Atom,
-        utf8Atom,
-      );
+      const result = characters_to_binary(Type.list([]), utf8Atom, utf8Atom);
 
       assert.deepStrictEqual(result, Type.bitstring(""));
     });
@@ -57,11 +54,7 @@ describe("Erlang_Unicode", () => {
         Type.integer(99), // c
       ]);
 
-      const result = Erlang_Unicode["characters_to_binary/3"](
-        input,
-        utf8Atom,
-        utf8Atom,
-      );
+      const result = characters_to_binary(input, utf8Atom, utf8Atom);
 
       const expected = {
         type: "bitstring",
@@ -83,11 +76,7 @@ describe("Erlang_Unicode", () => {
         Type.integer(22270), // 图
       ]);
 
-      const result = Erlang_Unicode["characters_to_binary/3"](
-        input,
-        utf8Atom,
-        utf8Atom,
-      );
+      const result = characters_to_binary(input, utf8Atom, utf8Atom);
 
       const expected = {
         type: "bitstring",
@@ -111,11 +100,7 @@ describe("Erlang_Unicode", () => {
     it("input is a binary bitstring", () => {
       const input = Type.bitstring("abc");
 
-      const result = Erlang_Unicode["characters_to_binary/3"](
-        input,
-        utf8Atom,
-        utf8Atom,
-      );
+      const result = characters_to_binary(input, utf8Atom, utf8Atom);
 
       assert.deepStrictEqual(result, input);
     });
@@ -123,11 +108,7 @@ describe("Erlang_Unicode", () => {
     it("input is a non-binary bitstring", () => {
       assertBoxedError(
         () =>
-          Erlang_Unicode["characters_to_binary/3"](
-            Type.bitstring([1, 0, 1]),
-            utf8Atom,
-            utf8Atom,
-          ),
+          characters_to_binary(Type.bitstring([1, 0, 1]), utf8Atom, utf8Atom),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(
           1,
@@ -143,11 +124,7 @@ describe("Erlang_Unicode", () => {
         Type.bitstring("ghi"),
       ]);
 
-      const result = Erlang_Unicode["characters_to_binary/3"](
-        input,
-        utf8Atom,
-        utf8Atom,
-      );
+      const result = characters_to_binary(input, utf8Atom, utf8Atom);
 
       const expected = Type.bitstring("abcdefghi");
 
@@ -162,8 +139,7 @@ describe("Erlang_Unicode", () => {
       ]);
 
       assertBoxedError(
-        () =>
-          Erlang_Unicode["characters_to_binary/3"](input, utf8Atom, utf8Atom),
+        () => characters_to_binary(input, utf8Atom, utf8Atom),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(
           1,
@@ -181,11 +157,7 @@ describe("Erlang_Unicode", () => {
         Type.integer(105), // i
       ]);
 
-      const result = Erlang_Unicode["characters_to_binary/3"](
-        input,
-        utf8Atom,
-        utf8Atom,
-      );
+      const result = characters_to_binary(input, utf8Atom, utf8Atom);
 
       const expected = Type.bitstring("abcdefghi");
 
@@ -196,8 +168,7 @@ describe("Erlang_Unicode", () => {
       const input = Type.list([Type.float(123.45), Type.atom("abc")]);
 
       assertBoxedError(
-        () =>
-          Erlang_Unicode["characters_to_binary/3"](input, utf8Atom, utf8Atom),
+        () => characters_to_binary(input, utf8Atom, utf8Atom),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(
           1,
@@ -208,12 +179,7 @@ describe("Erlang_Unicode", () => {
 
     it("input is not a list or a bitstring", () => {
       assertBoxedError(
-        () =>
-          Erlang_Unicode["characters_to_binary/3"](
-            Type.atom("abc"),
-            utf8Atom,
-            utf8Atom,
-          ),
+        () => characters_to_binary(Type.atom("abc"), utf8Atom, utf8Atom),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(
           1,
@@ -237,11 +203,7 @@ describe("Erlang_Unicode", () => {
         Type.integer(105), // i
       ]);
 
-      const result = Erlang_Unicode["characters_to_binary/3"](
-        input,
-        utf8Atom,
-        utf8Atom,
-      );
+      const result = characters_to_binary(input, utf8Atom, utf8Atom);
 
       const expected = Type.bitstring("abcdefghi");
 
@@ -257,11 +219,7 @@ describe("Erlang_Unicode", () => {
         Type.bitstring("efg"),
       ]);
 
-      const result = Erlang_Unicode["characters_to_binary/3"](
-        input,
-        utf8Atom,
-        utf8Atom,
-      );
+      const result = characters_to_binary(input, utf8Atom, utf8Atom);
 
       const expected = Type.tuple([
         Type.atom("error"),
@@ -275,12 +233,7 @@ describe("Erlang_Unicode", () => {
     // This is temporary, until the related TODO is implemented.
     it("input encoding is different than :utf8", () => {
       assert.throw(
-        () =>
-          Erlang_Unicode["characters_to_binary/3"](
-            Type.list([]),
-            Type.atom("utf16"),
-            utf8Atom,
-          ),
+        () => characters_to_binary(Type.list([]), Type.atom("utf16"), utf8Atom),
         HologramInterpreterError,
         "encodings other than utf8 are not yet implemented in Hologram",
       );
@@ -289,12 +242,7 @@ describe("Erlang_Unicode", () => {
     // This is temporary, until the related TODO is implemented.
     it("output encoding is different than :utf8", () => {
       assert.throw(
-        () =>
-          Erlang_Unicode["characters_to_binary/3"](
-            Type.list([]),
-            utf8Atom,
-            Type.atom("utf16"),
-          ),
+        () => characters_to_binary(Type.list([]), utf8Atom, Type.atom("utf16")),
         HologramInterpreterError,
         "encodings other than utf8 are not yet implemented in Hologram",
       );
