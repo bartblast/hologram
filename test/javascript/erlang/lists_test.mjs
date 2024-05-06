@@ -14,6 +14,18 @@ import Erlang_Lists from "../../../assets/js/erlang/lists.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
+const improperList = Type.improperList([
+  Type.integer(1),
+  Type.integer(2),
+  Type.integer(3),
+]);
+
+const properList = Type.list([
+  Type.integer(1),
+  Type.integer(2),
+  Type.integer(3),
+]);
+
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/lists_test.exs
 // Always update both together.
@@ -452,26 +464,35 @@ describe("Erlang_Lists", () => {
   });
 
   describe("member/2", () => {
-    it("is a member", () => {
-      const list = Type.list([
-        Type.integer(1),
-        Type.integer(2),
-        Type.integer(3),
-      ]);
-      const result = Erlang_Lists["member/2"](Type.integer(2), list);
-
+    it("is a member of a proper list", () => {
+      const result = Erlang_Lists["member/2"](Type.integer(2), properList);
       assertBoxedTrue(result);
     });
 
-    it("is not a member", () => {
-      const list = Type.list([
-        Type.integer(1),
-        Type.integer(2),
-        Type.integer(3),
-      ]);
-      const result = Erlang_Lists["member/2"](Type.integer(4), list);
+    it("is a non-last member of an improper list", () => {
+      const result = Erlang_Lists["member/2"](Type.integer(2), improperList);
+      assertBoxedTrue(result);
+    });
 
+    it("is the last member of an improper list", () => {
+      assertBoxedError(
+        () => Erlang_Lists["member/2"](Type.integer(3), improperList),
+        "ArgumentError",
+        Interpreter.buildErrorsFoundMsg(2, "not a proper list"),
+      );
+    });
+
+    it("is not a member of a proper list", () => {
+      const result = Erlang_Lists["member/2"](Type.integer(4), properList);
       assertBoxedFalse(result);
+    });
+
+    it("is not a member of an improper list", () => {
+      assertBoxedError(
+        () => Erlang_Lists["member/2"](Type.integer(4), improperList),
+        "ArgumentError",
+        Interpreter.buildErrorsFoundMsg(2, "not a proper list"),
+      );
     });
 
     it("uses strict equality", () => {

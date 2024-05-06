@@ -198,12 +198,28 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
   end
 
   describe "member/2" do
-    test "is a member" do
+    test "is a member of a proper list" do
       assert :lists.member(2, [1, 2, 3]) == true
     end
 
-    test "is not a member" do
+    test "is a non-last member of an improper list" do
+      assert :lists.member(2, [1, 2 | 3]) == true
+    end
+
+    test "is the last member of an improper list" do
+      assert_raise ArgumentError, build_errors_found_msg(2, "not a proper list"), fn ->
+        :lists.member(3, [1, 2 | 3])
+      end
+    end
+
+    test "is not a member of a proper list" do
       assert :lists.member(4, [1, 2, 3]) == false
+    end
+
+    test "is not a member of an improper list" do
+      assert_raise ArgumentError, build_errors_found_msg(2, "not a proper list"), fn ->
+        :lists.member(4, [1, 2 | 3])
+      end
     end
 
     test "uses strict equality" do

@@ -146,10 +146,24 @@ const Erlang_Lists = {
       );
     }
 
-    for (const listElem of list.data) {
-      if (Interpreter.isStrictlyEqual(listElem, elem)) {
-        return Type.boolean(true);
+    const isProperList = Type.isProperList(list);
+
+    for (let i = 0; i < list.data.length; ++i) {
+      if (Interpreter.isStrictlyEqual(list.data[i], elem)) {
+        if (i < list.data.length - 1 || isProperList) {
+          return Type.boolean(true);
+        } else {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildErrorsFoundMsg(2, "not a proper list"),
+          );
+        }
       }
+    }
+
+    if (!isProperList) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildErrorsFoundMsg(2, "not a proper list"),
+      );
     }
 
     return Type.boolean(false);
