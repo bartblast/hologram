@@ -14,6 +14,8 @@ import Erlang_Lists from "../../../assets/js/erlang/lists.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
+const emptyList = Type.list([]);
+
 const improperList = Type.improperList([
   Type.integer(1),
   Type.integer(2),
@@ -35,10 +37,10 @@ describe("Erlang_Lists", () => {
   after(() => unlinkModules());
 
   describe("flatten/1", () => {
-    it("works with empty list", () => {
-      const emptyList = Type.list([]);
-      const result = Erlang_Lists["flatten/1"](emptyList);
+    const flatten = Erlang_Lists["flatten/1"];
 
+    it("works with empty list", () => {
+      const result = flatten(emptyList);
       assert.deepStrictEqual(result, emptyList);
     });
 
@@ -48,7 +50,7 @@ describe("Erlang_Lists", () => {
         Type.integer(2),
         Type.integer(3),
       ]);
-      const result = Erlang_Lists["flatten/1"](list);
+      const result = flatten(list);
 
       assert.deepStrictEqual(result, list);
     });
@@ -64,7 +66,7 @@ describe("Erlang_Lists", () => {
         Type.integer(7),
       ]);
 
-      const result = Erlang_Lists["flatten/1"](list);
+      const result = flatten(list);
 
       const expected = Type.list([
         Type.integer(1),
@@ -81,7 +83,7 @@ describe("Erlang_Lists", () => {
 
     it("raises FunctionClauseError if the argument is not a list", () => {
       assertBoxedError(
-        () => Erlang_Lists["flatten/1"](Type.atom("abc")),
+        () => flatten(Type.atom("abc")),
         "FunctionClauseError",
         "no function clause matching in :lists.flatten/1",
       );
@@ -90,7 +92,7 @@ describe("Erlang_Lists", () => {
     it("raises FunctionClauseError if the argument (or any nested item) is an improper list", () => {
       assertBoxedError(
         () =>
-          Erlang_Lists["flatten/1"](
+          flatten(
             Type.list([
               Type.integer(1),
               Type.integer(2),
@@ -110,6 +112,8 @@ describe("Erlang_Lists", () => {
   });
 
   describe("foldl/3", () => {
+    const foldl = Erlang_Lists["foldl/3"];
+
     const fun = Type.anonymousFunction(
       2,
       [
@@ -128,11 +132,9 @@ describe("Erlang_Lists", () => {
     );
 
     const acc = Type.integer(0);
-    const emptyList = Type.list([]);
 
     it("reduces empty list", () => {
-      const result = Erlang_Lists["foldl/3"](fun, acc, emptyList);
-
+      const result = foldl(fun, acc, emptyList);
       assert.deepStrictEqual(result, acc);
     });
 
@@ -142,14 +144,14 @@ describe("Erlang_Lists", () => {
         Type.integer(2),
         Type.integer(3),
       ]);
-      const result = Erlang_Lists["foldl/3"](fun, acc, list);
+      const result = foldl(fun, acc, list);
 
       assert.deepStrictEqual(result, Type.integer(6));
     });
 
     it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
       assertBoxedError(
-        () => Erlang_Lists["foldl/3"](Type.atom("abc"), acc, emptyList),
+        () => foldl(Type.atom("abc"), acc, emptyList),
         "FunctionClauseError",
         "no function clause matching in :lists.foldl/3",
       );
@@ -171,7 +173,7 @@ describe("Erlang_Lists", () => {
       );
 
       assertBoxedError(
-        () => Erlang_Lists["foldl/3"](fun, acc, emptyList),
+        () => foldl(fun, acc, emptyList),
         "FunctionClauseError",
         "no function clause matching in :lists.foldl/3",
       );
@@ -179,7 +181,7 @@ describe("Erlang_Lists", () => {
 
     it("raises CaseClauseError if the third argument is not a list", () => {
       assertBoxedError(
-        () => Erlang_Lists["foldl/3"](fun, acc, Type.atom("abc")),
+        () => foldl(fun, acc, Type.atom("abc")),
         "CaseClauseError",
         "no case clause matching: :abc",
       );
@@ -188,7 +190,7 @@ describe("Erlang_Lists", () => {
     it("raises FunctionClauseError if the third argument is an improper list", () => {
       assertBoxedError(
         () =>
-          Erlang_Lists["foldl/3"](
+          foldl(
             fun,
             acc,
             Type.improperList([
@@ -204,6 +206,8 @@ describe("Erlang_Lists", () => {
   });
 
   describe("keyfind/3", () => {
+    const keyfind = Erlang_Lists["keyfind/3"];
+
     it("returns the tuple that contains the given value at the given one-based index", () => {
       const tuple = Type.tuple([
         Type.integer(5),
@@ -217,17 +221,13 @@ describe("Erlang_Lists", () => {
         tuple,
       ]);
 
-      const result = Erlang_Lists["keyfind/3"](
-        Type.integer(7),
-        Type.integer(3),
-        tuples,
-      );
+      const result = keyfind(Type.integer(7), Type.integer(3), tuples);
 
       assert.deepStrictEqual(result, tuple);
     });
 
     it("returns false if there is no tuple that fulfills the given conditions", () => {
-      const result = Erlang_Lists["keyfind/3"](
+      const result = keyfind(
         Type.integer(7),
         Type.integer(3),
         Type.list([Type.atom("abc")]),
@@ -238,12 +238,7 @@ describe("Erlang_Lists", () => {
 
     it("raises ArgumentError if the second argument (index) is not an integer", () => {
       assertBoxedError(
-        () =>
-          Erlang_Lists["keyfind/3"](
-            Type.atom("abc"),
-            Type.atom("xyz"),
-            Type.list([]),
-          ),
+        () => keyfind(Type.atom("abc"), Type.atom("xyz"), Type.list([])),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(2, "not an integer"),
       );
@@ -251,12 +246,7 @@ describe("Erlang_Lists", () => {
 
     it("raises ArgumentError if the second argument (index) is smaller than 1", () => {
       assertBoxedError(
-        () =>
-          Erlang_Lists["keyfind/3"](
-            Type.atom("abc"),
-            Type.integer(0),
-            Type.list([]),
-          ),
+        () => keyfind(Type.atom("abc"), Type.integer(0), Type.list([])),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(2, "out of range"),
       );
@@ -264,12 +254,7 @@ describe("Erlang_Lists", () => {
 
     it("raises ArgumentError if the third argument (tuples) is not a list", () => {
       assertBoxedError(
-        () =>
-          Erlang_Lists["keyfind/3"](
-            Type.atom("abc"),
-            Type.integer(1),
-            Type.atom("xyz"),
-          ),
+        () => keyfind(Type.atom("abc"), Type.integer(1), Type.atom("xyz")),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(3, "not a list"),
       );
@@ -278,7 +263,7 @@ describe("Erlang_Lists", () => {
     it("raises ArgumentError if the third argument (tuples) is an improper list", () => {
       assertBoxedError(
         () =>
-          Erlang_Lists["keyfind/3"](
+          keyfind(
             Type.integer(7),
             Type.integer(4),
             Type.improperList([
@@ -294,7 +279,7 @@ describe("Erlang_Lists", () => {
   });
 
   describe("keymember/3", () => {
-    const fun = Erlang_Lists["keymember/3"];
+    const keymember = Erlang_Lists["keymember/3"];
 
     it("returns true if there is a tuple that fulfills the given conditions", () => {
       const tuple = Type.tuple([
@@ -309,13 +294,13 @@ describe("Erlang_Lists", () => {
         tuple,
       ]);
 
-      const result = fun(Type.integer(7), Type.integer(3), tuples);
+      const result = keymember(Type.integer(7), Type.integer(3), tuples);
 
       assertBoxedTrue(result);
     });
 
     it("returns false if there is no tuple that fulfills the given conditions", () => {
-      const result = fun(
+      const result = keymember(
         Type.integer(7),
         Type.integer(3),
         Type.list([Type.atom("abc")]),
@@ -326,7 +311,7 @@ describe("Erlang_Lists", () => {
 
     it("raises ArgumentError if the second argument (index) is not an integer", () => {
       assertBoxedError(
-        () => fun(Type.atom("abc"), Type.atom("xyz"), Type.list([])),
+        () => keymember(Type.atom("abc"), Type.atom("xyz"), Type.list([])),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(2, "not an integer"),
       );
@@ -334,7 +319,7 @@ describe("Erlang_Lists", () => {
 
     it("raises ArgumentError if the second argument (index) is smaller than 1", () => {
       assertBoxedError(
-        () => fun(Type.atom("abc"), Type.integer(0), Type.list([])),
+        () => keymember(Type.atom("abc"), Type.integer(0), Type.list([])),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(2, "out of range"),
       );
@@ -342,7 +327,7 @@ describe("Erlang_Lists", () => {
 
     it("raises ArgumentError if the third argument (tuples) is not a list", () => {
       assertBoxedError(
-        () => fun(Type.atom("abc"), Type.integer(1), Type.atom("xyz")),
+        () => keymember(Type.atom("abc"), Type.integer(1), Type.atom("xyz")),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(3, "not a list"),
       );
@@ -351,7 +336,7 @@ describe("Erlang_Lists", () => {
     it("raises ArgumentError if the third argument (tuples) is an improper list", () => {
       assertBoxedError(
         () =>
-          fun(
+          keymember(
             Type.integer(7),
             Type.integer(4),
             Type.improperList([
@@ -381,10 +366,10 @@ describe("Erlang_Lists", () => {
       contextFixture(),
     );
 
-    const emptyList = Type.list([]);
+    const map = Erlang_Lists["map/2"];
 
     it("maps empty list", () => {
-      const result = Erlang_Lists["map/2"](fun, emptyList);
+      const result = map(fun, emptyList);
       assert.deepStrictEqual(result, emptyList);
     });
 
@@ -394,7 +379,7 @@ describe("Erlang_Lists", () => {
         Type.integer(2),
         Type.integer(3),
       ]);
-      const result = Erlang_Lists["map/2"](fun, list);
+      const result = map(fun, list);
 
       const expected = Type.list([
         Type.integer(10),
@@ -407,7 +392,7 @@ describe("Erlang_Lists", () => {
 
     it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
       assertBoxedError(
-        () => Erlang_Lists["map/2"](Type.atom("abc"), emptyList),
+        () => map(Type.atom("abc"), emptyList),
         "FunctionClauseError",
         "no function clause matching in :lists.map/2",
       );
@@ -432,7 +417,7 @@ describe("Erlang_Lists", () => {
       );
 
       assertBoxedError(
-        () => Erlang_Lists["map/2"](fun, emptyList),
+        () => map(fun, emptyList),
         "FunctionClauseError",
         "no function clause matching in :lists.map/2",
       );
@@ -440,7 +425,7 @@ describe("Erlang_Lists", () => {
 
     it("raises CaseClauseError if the second argument is not a list", () => {
       assertBoxedError(
-        () => Erlang_Lists["map/2"](fun, Type.atom("abc")),
+        () => map(fun, Type.atom("abc")),
         "CaseClauseError",
         "no case clause matching: :abc",
       );
@@ -449,7 +434,7 @@ describe("Erlang_Lists", () => {
     it("raises FunctionClauseError if the second argument is an improper list", () => {
       assertBoxedError(
         () =>
-          Erlang_Lists["map/2"](
+          map(
             fun,
             Type.improperList([
               Type.integer(1),
@@ -464,32 +449,34 @@ describe("Erlang_Lists", () => {
   });
 
   describe("member/2", () => {
+    const member = Erlang_Lists["member/2"];
+
     it("is a member of a proper list", () => {
-      const result = Erlang_Lists["member/2"](Type.integer(2), properList);
+      const result = member(Type.integer(2), properList);
       assertBoxedTrue(result);
     });
 
     it("is a non-last member of an improper list", () => {
-      const result = Erlang_Lists["member/2"](Type.integer(2), improperList);
+      const result = member(Type.integer(2), improperList);
       assertBoxedTrue(result);
     });
 
     it("is the last member of an improper list", () => {
       assertBoxedError(
-        () => Erlang_Lists["member/2"](Type.integer(3), improperList),
+        () => member(Type.integer(3), improperList),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(2, "not a proper list"),
       );
     });
 
     it("is not a member of a proper list", () => {
-      const result = Erlang_Lists["member/2"](Type.integer(4), properList);
+      const result = member(Type.integer(4), properList);
       assertBoxedFalse(result);
     });
 
     it("is not a member of an improper list", () => {
       assertBoxedError(
-        () => Erlang_Lists["member/2"](Type.integer(4), improperList),
+        () => member(Type.integer(4), improperList),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(2, "not a proper list"),
       );
@@ -501,14 +488,14 @@ describe("Erlang_Lists", () => {
         Type.float(2.0),
         Type.integer(3),
       ]);
-      const result = Erlang_Lists["member/2"](Type.integer(2), list);
+      const result = member(Type.integer(2), list);
 
       assertBoxedFalse(result);
     });
 
     it("raises ArgumentError if the second argument is not a list", () => {
       assertBoxedError(
-        () => Erlang_Lists["member/2"](Type.integer(2), Type.atom("abc")),
+        () => member(Type.integer(2), Type.atom("abc")),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(2, "not a list"),
       );
@@ -516,13 +503,16 @@ describe("Erlang_Lists", () => {
   });
 
   describe("reverse/1", () => {
+    const reverse = Erlang_Lists["reverse/1"];
+
     it("returns a list with the elements in the argument in reverse order", () => {
       const arg = Type.list([
         Type.integer(1),
         Type.integer(2),
         Type.integer(3),
       ]);
-      const result = Erlang_Lists["reverse/1"](arg);
+
+      const result = reverse(arg);
 
       const expected = Type.list([
         Type.integer(3),
@@ -535,7 +525,7 @@ describe("Erlang_Lists", () => {
 
     it("raises FunctionClauseError if the argument is not a list", () => {
       assertBoxedError(
-        () => Erlang_Lists["reverse/1"](Type.atom("abc")),
+        () => reverse(Type.atom("abc")),
         "FunctionClauseError",
         "no function clause matching in :lists.reverse/1",
       );
@@ -543,15 +533,13 @@ describe("Erlang_Lists", () => {
   });
 
   describe("reverse/2", () => {
-    const fun = Erlang_Lists["reverse/2"];
+    const reverse = Erlang_Lists["reverse/2"];
 
     const integer1 = Type.integer(1);
     const integer2 = Type.integer(2);
     const integer3 = Type.integer(3);
     const integer4 = Type.integer(4);
     const integer5 = Type.integer(5);
-
-    const emptyList = Type.list([]);
 
     const list12 = Type.list([integer1, integer2]);
     const list34 = Type.list([integer3, integer4]);
@@ -562,7 +550,7 @@ describe("Erlang_Lists", () => {
     describe("1st arg = [1, 2]", () => {
       it("2nd arg = [3, 4]", () => {
         const expected = Type.list([integer2, integer1, integer3, integer4]);
-        assert.deepStrictEqual(fun(list12, list34), expected);
+        assert.deepStrictEqual(reverse(list12, list34), expected);
       });
 
       it("2nd arg = [3 | 4]", () => {
@@ -572,23 +560,23 @@ describe("Erlang_Lists", () => {
           integer3,
           integer4,
         ]);
-        assert.deepStrictEqual(fun(list12, improperList34), expected);
+        assert.deepStrictEqual(reverse(list12, improperList34), expected);
       });
 
       it("2nd arg = []", () => {
         const expected = Type.list([integer2, integer1]);
-        assert.deepStrictEqual(fun(list12, emptyList), expected);
+        assert.deepStrictEqual(reverse(list12, emptyList), expected);
       });
 
       it("2nd arg = 5", () => {
         const expected = Type.improperList([integer2, integer1, integer5]);
-        assert.deepStrictEqual(fun(list12, integer5), expected);
+        assert.deepStrictEqual(reverse(list12, integer5), expected);
       });
     });
 
     it("1st arg is an improper list", () => {
       assertBoxedError(
-        () => fun(improperList12, list34),
+        () => reverse(improperList12, list34),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(1, "not a proper list"),
       );
@@ -596,25 +584,28 @@ describe("Erlang_Lists", () => {
 
     describe("1st arg = []", () => {
       it("2nd arg = [3, 4]", () => {
-        assert.deepStrictEqual(fun(emptyList, list34), list34);
+        assert.deepStrictEqual(reverse(emptyList, list34), list34);
       });
 
       it("2nd arg = [3 | 4]", () => {
-        assert.deepStrictEqual(fun(emptyList, improperList34), improperList34);
+        assert.deepStrictEqual(
+          reverse(emptyList, improperList34),
+          improperList34,
+        );
       });
 
       it("2nd arg = []", () => {
-        assert.deepStrictEqual(fun(emptyList, emptyList), emptyList);
+        assert.deepStrictEqual(reverse(emptyList, emptyList), emptyList);
       });
 
       it("2nd arg = 5", () => {
-        assert.deepStrictEqual(fun(emptyList, integer5), integer5);
+        assert.deepStrictEqual(reverse(emptyList, integer5), integer5);
       });
     });
 
     it("1st arg is not a list", () => {
       assertBoxedError(
-        () => fun(integer5, list34),
+        () => reverse(integer5, list34),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(1, "not a list"),
       );
@@ -622,7 +613,7 @@ describe("Erlang_Lists", () => {
   });
 
   describe("sort/1", () => {
-    const fun = Erlang_Lists["sort/1"];
+    const sort = Erlang_Lists["sort/1"];
 
     it("sorts items in the list", () => {
       const list = Type.list([
@@ -635,7 +626,7 @@ describe("Erlang_Lists", () => {
       ]);
 
       assert.deepStrictEqual(
-        fun(list),
+        sort(list),
         Type.list([
           Type.integer(1),
           Type.float(2.0),
@@ -649,7 +640,7 @@ describe("Erlang_Lists", () => {
 
     it("raises FunctionClauseError if the argument is not a list", () => {
       assertBoxedError(
-        () => fun(Type.atom("abc")),
+        () => sort(Type.atom("abc")),
         "FunctionClauseError",
         "no function clause matching in :lists.sort/1",
       );
