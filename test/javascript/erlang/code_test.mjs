@@ -19,11 +19,11 @@ describe("Erlang_Code", () => {
   after(() => unlinkModules());
 
   describe("ensure_loaded/1", () => {
-    const fun = Erlang_Code["ensure_loaded/1"];
+    const ensure_loaded = Erlang_Code["ensure_loaded/1"];
 
     it("loaded module", () => {
       const module = Type.alias("String.Chars");
-      const result = fun(module);
+      const result = ensure_loaded(module);
       const expected = Type.tuple([Type.atom("module"), module]);
 
       assert.deepStrictEqual(result, expected);
@@ -31,7 +31,7 @@ describe("Erlang_Code", () => {
 
     it("not loaded, non-existing module", () => {
       const module = Type.alias("MyModule");
-      const result = fun(module);
+      const result = ensure_loaded(module);
       const expected = Type.tuple([Type.atom("error"), Type.atom("nofile")]);
 
       assert.deepStrictEqual(result, expected);
@@ -39,7 +39,7 @@ describe("Erlang_Code", () => {
 
     it("raises FunctionClauseError if the argument is not an atom", () => {
       assertBoxedError(
-        () => fun(Type.integer(1)),
+        () => ensure_loaded(Type.integer(1)),
         "FunctionClauseError",
         "no function clause matching in :code.ensure_loaded/1",
       );

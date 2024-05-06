@@ -19,6 +19,7 @@ describe("Erlang_Elixir_Aliases", () => {
   after(() => unlinkModules());
 
   describe("concat/1", () => {
+    const concat = Erlang_Elixir_Aliases["concat/1"];
     const expectedAlias = Type.alias("Aaa.Bbb.Ccc");
 
     it("works with atom segments which are Elixir module aliases", () => {
@@ -28,7 +29,7 @@ describe("Erlang_Elixir_Aliases", () => {
         Type.alias("Ccc"),
       ]);
 
-      const result = Erlang_Elixir_Aliases["concat/1"](segments);
+      const result = concat(segments);
 
       assert.deepStrictEqual(result, expectedAlias);
     });
@@ -40,7 +41,7 @@ describe("Erlang_Elixir_Aliases", () => {
         Type.atom("Ccc"),
       ]);
 
-      const result = Erlang_Elixir_Aliases["concat/1"](segments);
+      const result = concat(segments);
 
       assert.deepStrictEqual(result, expectedAlias);
     });
@@ -52,7 +53,7 @@ describe("Erlang_Elixir_Aliases", () => {
         Type.bitstring("Ccc"),
       ]);
 
-      const result = Erlang_Elixir_Aliases["concat/1"](segments);
+      const result = concat(segments);
 
       assert.deepStrictEqual(result, expectedAlias);
     });
@@ -64,7 +65,7 @@ describe("Erlang_Elixir_Aliases", () => {
         Type.alias("Ccc"),
       ]);
 
-      const result = Erlang_Elixir_Aliases["concat/1"](segments);
+      const result = concat(segments);
       const expectedAlias = Type.alias("Aaa.Ccc");
 
       assert.deepStrictEqual(result, expectedAlias);
@@ -77,7 +78,7 @@ describe("Erlang_Elixir_Aliases", () => {
         Type.bitstring("...Ccc"),
       ]);
 
-      const result = Erlang_Elixir_Aliases["concat/1"](segments);
+      const result = concat(segments);
       const expectedAlias = Type.alias("..Aaa...Bbb...Ccc");
 
       assert.deepStrictEqual(result, expectedAlias);
@@ -91,14 +92,14 @@ describe("Erlang_Elixir_Aliases", () => {
         Type.alias("Ccc"),
       ]);
 
-      const result = Erlang_Elixir_Aliases["concat/1"](segments);
+      const result = concat(segments);
 
       assert.deepStrictEqual(result, expectedAlias);
     });
 
     it("raises FunctionClauseError if the argument is not a list", () => {
       assertBoxedError(
-        () => Erlang_Elixir_Aliases["concat/1"](Type.atom("abc")),
+        () => concat(Type.atom("abc")),
         "FunctionClauseError",
         "no function clause matching in :elixir_aliases.do_concat/2",
       );
@@ -117,7 +118,7 @@ describe("Erlang_Elixir_Aliases", () => {
       ]);
 
       assertBoxedError(
-        () => Erlang_Elixir_Aliases["concat/1"](segments),
+        () => concat(segments),
         "FunctionClauseError",
         "no function clause matching in :elixir_aliases.do_concat/2",
       );
@@ -131,7 +132,7 @@ describe("Erlang_Elixir_Aliases", () => {
       ]);
 
       assertBoxedError(
-        () => Erlang_Elixir_Aliases["concat/1"](segments),
+        () => concat(segments),
         "FunctionClauseError",
         "no function clause matching in :elixir_aliases.do_concat/2",
       );
