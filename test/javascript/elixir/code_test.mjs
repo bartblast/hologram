@@ -17,11 +17,11 @@ describe("Elixir_Code", () => {
   after(() => unlinkModules());
 
   describe("ensure_compiled/1", () => {
-    const fun = Elixir_Code["ensure_compiled/1"];
+    const ensure_compiled = Elixir_Code["ensure_compiled/1"];
 
     it("compiled module", () => {
       const module = Type.alias("String.Chars");
-      const result = fun(module);
+      const result = ensure_compiled(module);
       const expected = Type.tuple([Type.atom("module"), module]);
 
       assert.deepStrictEqual(result, expected);
@@ -29,7 +29,7 @@ describe("Elixir_Code", () => {
 
     it("not compiled, non-existing module", () => {
       const module = Type.alias("MyModule");
-      const result = fun(module);
+      const result = ensure_compiled(module);
       const expected = Type.tuple([Type.atom("error"), Type.atom("nofile")]);
 
       assert.deepStrictEqual(result, expected);
@@ -37,7 +37,7 @@ describe("Elixir_Code", () => {
 
     it("raises FunctionClauseError if the argument is not an atom", () => {
       assertBoxedError(
-        () => fun(Type.integer(1)),
+        () => ensure_compiled(Type.integer(1)),
         "FunctionClauseError",
         "no function clause matching in Code.ensure_compiled/1",
       );

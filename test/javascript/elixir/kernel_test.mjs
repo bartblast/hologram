@@ -12,16 +12,20 @@ describe("Elixir_Kernel", () => {
   after(() => unlinkModules());
 
   describe("inspect/1", () => {
+    const inspect = Elixir_Kernel["inspect/1"];
+
     it("delegates to inspect/2", () => {
-      const result = Elixir_Kernel["inspect/1"](Type.boolean(true));
+      const result = inspect(Type.boolean(true));
       assert.deepStrictEqual(result, Type.bitstring("true"));
     });
   });
 
   // Important: keep Interpreter.inspect() consistency tests in sync.
   describe("inspect/2", () => {
+    const inspect = Elixir_Kernel["inspect/2"];
+
     it("delegates to Interpreter.inspect()", () => {
-      const result = Elixir_Kernel["inspect/2"](Type.integer(123));
+      const result = inspect(Type.integer(123));
       assert.deepStrictEqual(result, Type.bitstring("123"));
     });
   });
