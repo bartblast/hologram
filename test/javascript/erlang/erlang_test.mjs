@@ -40,27 +40,27 @@ describe("Erlang", () => {
   after(() => unlinkModules());
 
   describe("*/2", () => {
-    const fun = Erlang["*/2"];
+    const testedFun = Erlang["*/2"];
 
     it("float * float", () => {
-      assert.deepStrictEqual(fun(float2, float3), float6);
+      assert.deepStrictEqual(testedFun(float2, float3), float6);
     });
 
     it("float * integer", () => {
-      assert.deepStrictEqual(fun(float3, integer2), float6);
+      assert.deepStrictEqual(testedFun(float3, integer2), float6);
     });
 
     it("integer * float", () => {
-      assert.deepStrictEqual(fun(integer2, float3), float6);
+      assert.deepStrictEqual(testedFun(integer2, float3), float6);
     });
 
     it("integer * integer", () => {
-      assert.deepStrictEqual(fun(integer2, integer3), integer6);
+      assert.deepStrictEqual(testedFun(integer2, integer3), integer6);
     });
 
     it("raises ArithmeticError if the first argument is not a number", () => {
       assertBoxedError(
-        () => fun(atomA, integer1),
+        () => testedFun(atomA, integer1),
         "ArithmeticError",
         "bad argument in arithmetic expression",
       );
@@ -68,7 +68,7 @@ describe("Erlang", () => {
 
     it("raises ArithmeticError if the second argument is not a number", () => {
       assertBoxedError(
-        () => fun(integer1, atomA),
+        () => testedFun(integer1, atomA),
         "ArithmeticError",
         "bad argument in arithmetic expression",
       );
@@ -76,35 +76,35 @@ describe("Erlang", () => {
   });
 
   describe("+/1", () => {
-    const fun = Erlang["+/1"];
+    const testedFun = Erlang["+/1"];
 
     it("positive float", () => {
-      assert.deepStrictEqual(fun(Type.float(1.23)), Type.float(1.23));
+      assert.deepStrictEqual(testedFun(Type.float(1.23)), Type.float(1.23));
     });
 
     it("positive integer", () => {
-      assert.deepStrictEqual(fun(Type.integer(123)), Type.integer(123));
+      assert.deepStrictEqual(testedFun(Type.integer(123)), Type.integer(123));
     });
 
     it("negative float", () => {
-      assert.deepStrictEqual(fun(Type.float(-1.23)), Type.float(-1.23));
+      assert.deepStrictEqual(testedFun(Type.float(-1.23)), Type.float(-1.23));
     });
 
     it("negative integer", () => {
-      assert.deepStrictEqual(fun(Type.integer(-123)), Type.integer(-123));
+      assert.deepStrictEqual(testedFun(Type.integer(-123)), Type.integer(-123));
     });
 
     it("0.0 (float)", () => {
-      assert.deepStrictEqual(fun(Type.float(0.0)), Type.float(0.0));
+      assert.deepStrictEqual(testedFun(Type.float(0.0)), Type.float(0.0));
     });
 
     it("0 (integer)", () => {
-      assert.deepStrictEqual(fun(Type.integer(0)), Type.integer(0));
+      assert.deepStrictEqual(testedFun(Type.integer(0)), Type.integer(0));
     });
 
     it("non-number", () => {
       assertBoxedError(
-        () => fun(atomAbc),
+        () => testedFun(atomAbc),
         "ArithmeticError",
         "bad argument in arithmetic expression",
       );
@@ -112,27 +112,27 @@ describe("Erlang", () => {
   });
 
   describe("+/2", () => {
-    const fun = Erlang["+/2"];
+    const testedFun = Erlang["+/2"];
 
     it("float + float", () => {
-      assert.deepStrictEqual(fun(float1, float2), float3);
+      assert.deepStrictEqual(testedFun(float1, float2), float3);
     });
 
     it("float + integer", () => {
-      assert.deepStrictEqual(fun(float1, integer2), float3);
+      assert.deepStrictEqual(testedFun(float1, integer2), float3);
     });
 
     it("integer + float", () => {
-      assert.deepStrictEqual(fun(integer1, float2), float3);
+      assert.deepStrictEqual(testedFun(integer1, float2), float3);
     });
 
     it("integer + integer", () => {
-      assert.deepStrictEqual(fun(integer1, integer2), integer3);
+      assert.deepStrictEqual(testedFun(integer1, integer2), integer3);
     });
 
     it("raises ArithmeticError if the first argument is not a number", () => {
       assertBoxedError(
-        () => fun(atomA, integer1),
+        () => testedFun(atomA, integer1),
         "ArithmeticError",
         "bad argument in arithmetic expression",
       );
@@ -140,7 +140,7 @@ describe("Erlang", () => {
 
     it("raises ArithmeticError if the second argument is not a number", () => {
       assertBoxedError(
-        () => fun(integer1, atomA),
+        () => testedFun(integer1, atomA),
         "ArithmeticError",
         "bad argument in arithmetic expression",
       );
@@ -148,13 +148,13 @@ describe("Erlang", () => {
   });
 
   describe("++/2", () => {
-    const fun = Erlang["++/2"];
+    const testedFun = Erlang["++/2"];
 
     it("concatenates a proper non-empty list and another proper non-empty list", () => {
       const left = Type.list([Type.integer(1), Type.integer(2)]);
       const right = Type.list([Type.integer(3), Type.integer(4)]);
 
-      const result = fun(left, right);
+      const result = testedFun(left, right);
 
       const expected = Type.list([
         Type.integer(1),
@@ -170,7 +170,7 @@ describe("Erlang", () => {
       const left = Type.list([Type.integer(1), Type.integer(2)]);
       const right = Type.improperList([Type.integer(3), Type.integer(4)]);
 
-      const result = fun(left, right);
+      const result = testedFun(left, right);
 
       const expected = Type.improperList([
         Type.integer(1),
@@ -186,7 +186,7 @@ describe("Erlang", () => {
       const left = Type.list([Type.integer(1), Type.integer(2)]);
       const right = Type.integer(3);
 
-      const result = fun(left, right);
+      const result = testedFun(left, right);
 
       const expected = Type.improperList([
         Type.integer(1),
@@ -201,7 +201,7 @@ describe("Erlang", () => {
       const left = Type.list([]);
       const right = Type.list([Type.integer(1), Type.integer(2)]);
 
-      const result = fun(left, right);
+      const result = testedFun(left, right);
       const expected = Type.list([Type.integer(1), Type.integer(2)]);
 
       assert.deepStrictEqual(result, expected);
@@ -211,7 +211,7 @@ describe("Erlang", () => {
       const left = Type.list([Type.integer(1), Type.integer(2)]);
       const right = Type.list([]);
 
-      const result = fun(left, right);
+      const result = testedFun(left, right);
       const expected = Type.list([Type.integer(1), Type.integer(2)]);
 
       assert.deepStrictEqual(result, expected);
@@ -219,7 +219,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the first argument is not a list", () => {
       assertBoxedError(
-        () => fun(atomAbc, Type.list([])),
+        () => testedFun(atomAbc, Type.list([])),
         "ArgumentError",
         "argument error",
       );
@@ -228,7 +228,7 @@ describe("Erlang", () => {
     it("raises ArgumentError if the first argument is an improper list", () => {
       assertBoxedError(
         () =>
-          fun(
+          testedFun(
             Type.improperList([Type.integer(1), Type.integer(2)]),
             Type.list([]),
           ),
@@ -239,35 +239,35 @@ describe("Erlang", () => {
   });
 
   describe("-/1", () => {
-    const fun = Erlang["-/1"];
+    const testedFun = Erlang["-/1"];
 
     it("positive float", () => {
-      assert.deepStrictEqual(fun(Type.float(1.23)), Type.float(-1.23));
+      assert.deepStrictEqual(testedFun(Type.float(1.23)), Type.float(-1.23));
     });
 
     it("positive integer", () => {
-      assert.deepStrictEqual(fun(Type.integer(123)), Type.integer(-123));
+      assert.deepStrictEqual(testedFun(Type.integer(123)), Type.integer(-123));
     });
 
     it("negative float", () => {
-      assert.deepStrictEqual(fun(Type.float(-1.23)), Type.float(1.23));
+      assert.deepStrictEqual(testedFun(Type.float(-1.23)), Type.float(1.23));
     });
 
     it("negative integer", () => {
-      assert.deepStrictEqual(fun(Type.integer(-123)), Type.integer(123));
+      assert.deepStrictEqual(testedFun(Type.integer(-123)), Type.integer(123));
     });
 
     it("0.0 (float)", () => {
-      assert.deepStrictEqual(fun(Type.float(0.0)), Type.float(0.0));
+      assert.deepStrictEqual(testedFun(Type.float(0.0)), Type.float(0.0));
     });
 
     it("0 (integer)", () => {
-      assert.deepStrictEqual(fun(Type.integer(0)), Type.integer(0));
+      assert.deepStrictEqual(testedFun(Type.integer(0)), Type.integer(0));
     });
 
     it("non-number", () => {
       assertBoxedError(
-        () => fun(atomAbc),
+        () => testedFun(atomAbc),
         "ArithmeticError",
         "bad argument in arithmetic expression",
       );
@@ -275,27 +275,27 @@ describe("Erlang", () => {
   });
 
   describe("-/2", () => {
-    const fun = Erlang["-/2"];
+    const testedFun = Erlang["-/2"];
 
     it("float - float", () => {
-      assert.deepStrictEqual(fun(float3, float2), float1);
+      assert.deepStrictEqual(testedFun(float3, float2), float1);
     });
 
     it("float - integer", () => {
-      assert.deepStrictEqual(fun(float3, integer2), float1);
+      assert.deepStrictEqual(testedFun(float3, integer2), float1);
     });
 
     it("integer - float", () => {
-      assert.deepStrictEqual(fun(integer3, float2), float1);
+      assert.deepStrictEqual(testedFun(integer3, float2), float1);
     });
 
     it("integer - integer", () => {
-      assert.deepStrictEqual(fun(integer3, integer2), integer1);
+      assert.deepStrictEqual(testedFun(integer3, integer2), integer1);
     });
 
     it("raises ArithmeticError if the first argument is not a number", () => {
       assertBoxedError(
-        () => fun(atomA, integer1),
+        () => testedFun(atomA, integer1),
         "ArithmeticError",
         "bad argument in arithmetic expression",
       );
@@ -303,7 +303,7 @@ describe("Erlang", () => {
 
     it("raises ArithmeticError if the second argument is not a number", () => {
       assertBoxedError(
-        () => fun(integer1, atomA),
+        () => testedFun(integer1, atomA),
         "ArithmeticError",
         "bad argument in arithmetic expression",
       );
@@ -311,13 +311,13 @@ describe("Erlang", () => {
   });
 
   describe("--/2", () => {
-    const fun = Erlang["--/2"];
+    const testedFun = Erlang["--/2"];
 
     it("there are no matching elems", () => {
       const left = Type.list([Type.integer(1), Type.integer(2)]);
       const right = Type.list([Type.integer(3), Type.integer(4)]);
 
-      assert.deepStrictEqual(fun(left, right), left);
+      assert.deepStrictEqual(testedFun(left, right), left);
     });
 
     it("removes the first occurrence of an element in the left list for each element in the right list", () => {
@@ -345,27 +345,30 @@ describe("Erlang", () => {
         Type.integer(1),
       ]);
 
-      assert.deepStrictEqual(fun(left, right), expected);
+      assert.deepStrictEqual(testedFun(left, right), expected);
     });
 
     it("first list is empty", () => {
       const left = Type.list([]);
       const right = Type.list([Type.integer(1), Type.integer(2)]);
 
-      assert.deepStrictEqual(fun(left, right), left);
+      assert.deepStrictEqual(testedFun(left, right), left);
     });
 
     it("second list is empty", () => {
       const left = Type.list([Type.integer(1), Type.integer(2)]);
       const right = Type.list([]);
 
-      assert.deepStrictEqual(fun(left, right), left);
+      assert.deepStrictEqual(testedFun(left, right), left);
     });
 
     it("first arg is not a list", () => {
       assertBoxedError(
         () =>
-          fun(Type.atom("abc"), Type.list([Type.integer(1), Type.integer(2)])),
+          testedFun(
+            Type.atom("abc"),
+            Type.list([Type.integer(1), Type.integer(2)]),
+          ),
         "ArgumentError",
         "argument error",
       );
@@ -374,7 +377,10 @@ describe("Erlang", () => {
     it("second arg is not a list", () => {
       assertBoxedError(
         () =>
-          fun(Type.list([Type.integer(1), Type.integer(2)]), Type.atom("abc")),
+          testedFun(
+            Type.list([Type.integer(1), Type.integer(2)]),
+            Type.atom("abc"),
+          ),
         "ArgumentError",
         "argument error",
       );
@@ -382,25 +388,25 @@ describe("Erlang", () => {
   });
 
   describe("//2", () => {
-    const fun = Erlang["//2"];
+    const testedFun = Erlang["//2"];
 
     it("divides float by float", () => {
       assert.deepStrictEqual(
-        fun(Type.float(3.0), Type.float(2.0)),
+        testedFun(Type.float(3.0), Type.float(2.0)),
         Type.float(1.5),
       );
     });
 
     it("divides integer by integer", () => {
       assert.deepStrictEqual(
-        fun(Type.integer(3), Type.integer(2)),
+        testedFun(Type.integer(3), Type.integer(2)),
         Type.float(1.5),
       );
     });
 
     it("first arg is not a number", () => {
       assertBoxedError(
-        () => fun(Type.atom("abc"), Type.integer(3)),
+        () => testedFun(Type.atom("abc"), Type.integer(3)),
         "ArithmeticError",
         "bad argument in arithmetic expression",
       );
@@ -408,7 +414,7 @@ describe("Erlang", () => {
 
     it("second arg is not a number", () => {
       assertBoxedError(
-        () => fun(Type.integer(3), Type.atom("abc")),
+        () => testedFun(Type.integer(3), Type.atom("abc")),
         "ArithmeticError",
         "bad argument in arithmetic expression",
       );
@@ -416,7 +422,7 @@ describe("Erlang", () => {
 
     it("second arg is equal to (float) 0.0", () => {
       assertBoxedError(
-        () => fun(Type.integer(1), Type.float(0.0)),
+        () => testedFun(Type.integer(1), Type.float(0.0)),
         "ArithmeticError",
         "bad argument in arithmetic expression",
       );
@@ -424,7 +430,7 @@ describe("Erlang", () => {
 
     it("second arg is equal to (integer) 0", () => {
       assertBoxedError(
-        () => fun(Type.integer(1), Type.integer(0)),
+        () => testedFun(Type.integer(1), Type.integer(0)),
         "ArithmeticError",
         "bad argument in arithmetic expression",
       );
@@ -432,204 +438,204 @@ describe("Erlang", () => {
   });
 
   describe("/=/2", () => {
-    const fun = Erlang["/=/2"];
+    const testedFun = Erlang["/=/2"];
 
     it("atom == atom", () => {
-      assertBoxedFalse(fun(atomA, atomA));
+      assertBoxedFalse(testedFun(atomA, atomA));
     });
 
     it("float == float", () => {
-      assertBoxedFalse(fun(float1, float1));
+      assertBoxedFalse(testedFun(float1, float1));
     });
 
     it("float == integer", () => {
-      assertBoxedFalse(fun(float1, integer1));
+      assertBoxedFalse(testedFun(float1, integer1));
     });
 
     it("integer == float", () => {
-      assertBoxedFalse(fun(integer1, float1));
+      assertBoxedFalse(testedFun(integer1, float1));
     });
 
     it("integer == integer", () => {
-      assertBoxedFalse(fun(integer1, integer1));
+      assertBoxedFalse(testedFun(integer1, integer1));
     });
 
     it("pid == pid", () => {
-      assertBoxedFalse(fun(pid1, pid1));
+      assertBoxedFalse(testedFun(pid1, pid1));
     });
 
     it("tuple == tuple", () => {
-      assertBoxedFalse(fun(tuple3, tuple3));
+      assertBoxedFalse(testedFun(tuple3, tuple3));
     });
 
     it("atom < atom", () => {
-      assertBoxedTrue(fun(atomA, atomB));
+      assertBoxedTrue(testedFun(atomA, atomB));
     });
 
     it("float < atom (always)", () => {
-      assertBoxedTrue(fun(float1, atomA));
+      assertBoxedTrue(testedFun(float1, atomA));
     });
 
     it("float < float", () => {
-      assertBoxedTrue(fun(float1, float2));
+      assertBoxedTrue(testedFun(float1, float2));
     });
 
     it("float < integer", () => {
-      assertBoxedTrue(fun(float1, integer2));
+      assertBoxedTrue(testedFun(float1, integer2));
     });
 
     it("integer < atom (always)", () => {
-      assertBoxedTrue(fun(integer1, atomA));
+      assertBoxedTrue(testedFun(integer1, atomA));
     });
 
     it("integer < float", () => {
-      assertBoxedTrue(fun(integer1, float2));
+      assertBoxedTrue(testedFun(integer1, float2));
     });
 
     it("integer < integer", () => {
-      assertBoxedTrue(fun(integer1, integer2));
+      assertBoxedTrue(testedFun(integer1, integer2));
     });
 
     it("pid < pid", () => {
-      assertBoxedTrue(fun(pid1, pid2));
+      assertBoxedTrue(testedFun(pid1, pid2));
     });
 
     it("pid < tuple (always)", () => {
-      assertBoxedTrue(fun(pid1, tuple2));
+      assertBoxedTrue(testedFun(pid1, tuple2));
     });
 
     it("tuple < tuple", () => {
-      assertBoxedTrue(fun(tuple2, tuple3));
+      assertBoxedTrue(testedFun(tuple2, tuple3));
     });
 
     it("atom > atom", () => {
-      assertBoxedTrue(fun(atomB, atomA));
+      assertBoxedTrue(testedFun(atomB, atomA));
     });
 
     it("float > float", () => {
-      assertBoxedTrue(fun(float2, float1));
+      assertBoxedTrue(testedFun(float2, float1));
     });
 
     it("float > integer", () => {
-      assertBoxedTrue(fun(float2, integer1));
+      assertBoxedTrue(testedFun(float2, integer1));
     });
 
     it("integer > float", () => {
-      assertBoxedTrue(fun(integer2, float1));
+      assertBoxedTrue(testedFun(integer2, float1));
     });
 
     it("integer > integer", () => {
-      assertBoxedTrue(fun(integer2, integer1));
+      assertBoxedTrue(testedFun(integer2, integer1));
     });
 
     it("pid > pid", () => {
-      assertBoxedTrue(fun(pid2, pid1));
+      assertBoxedTrue(testedFun(pid2, pid1));
     });
 
     it("tuple > tuple", () => {
-      assertBoxedTrue(fun(tuple3, tuple2));
+      assertBoxedTrue(testedFun(tuple3, tuple2));
     });
 
     // TODO: reference, function, port, map, list, bitstring
   });
 
   describe("</2", () => {
-    const fun = Erlang["</2"];
+    const testedFun = Erlang["</2"];
 
     it("atom == atom", () => {
-      assertBoxedFalse(fun(atomA, atomA));
+      assertBoxedFalse(testedFun(atomA, atomA));
     });
 
     it("float == float", () => {
-      assertBoxedFalse(fun(float1, float1));
+      assertBoxedFalse(testedFun(float1, float1));
     });
 
     it("float == integer", () => {
-      assertBoxedFalse(fun(float1, integer1));
+      assertBoxedFalse(testedFun(float1, integer1));
     });
 
     it("integer == float", () => {
-      assertBoxedFalse(fun(integer1, float1));
+      assertBoxedFalse(testedFun(integer1, float1));
     });
 
     it("integer == integer", () => {
-      assertBoxedFalse(fun(integer1, integer1));
+      assertBoxedFalse(testedFun(integer1, integer1));
     });
 
     it("pid == pid", () => {
-      assertBoxedFalse(fun(pid1, pid1));
+      assertBoxedFalse(testedFun(pid1, pid1));
     });
 
     it("tuple == tuple", () => {
-      assertBoxedFalse(fun(tuple3, tuple3));
+      assertBoxedFalse(testedFun(tuple3, tuple3));
     });
 
     it("atom < atom", () => {
-      assertBoxedTrue(fun(atomA, atomB));
+      assertBoxedTrue(testedFun(atomA, atomB));
     });
 
     it("float < atom (always)", () => {
-      assertBoxedTrue(fun(float1, atomA));
+      assertBoxedTrue(testedFun(float1, atomA));
     });
 
     it("float < float", () => {
-      assertBoxedTrue(fun(float1, float2));
+      assertBoxedTrue(testedFun(float1, float2));
     });
 
     it("float < integer", () => {
-      assertBoxedTrue(fun(float1, integer2));
+      assertBoxedTrue(testedFun(float1, integer2));
     });
 
     it("integer < atom (always)", () => {
-      assertBoxedTrue(fun(integer1, atomA));
+      assertBoxedTrue(testedFun(integer1, atomA));
     });
 
     it("integer < float", () => {
-      assertBoxedTrue(fun(integer1, float2));
+      assertBoxedTrue(testedFun(integer1, float2));
     });
 
     it("integer < integer", () => {
-      assertBoxedTrue(fun(integer1, integer2));
+      assertBoxedTrue(testedFun(integer1, integer2));
     });
 
     it("pid < pid", () => {
-      assertBoxedTrue(fun(pid1, pid2));
+      assertBoxedTrue(testedFun(pid1, pid2));
     });
 
     it("pid < tuple (always)", () => {
-      assertBoxedTrue(fun(pid1, tuple3));
+      assertBoxedTrue(testedFun(pid1, tuple3));
     });
 
     it("tuple < tuple", () => {
-      assertBoxedTrue(fun(tuple2, tuple3));
+      assertBoxedTrue(testedFun(tuple2, tuple3));
     });
 
     it("atom > atom", () => {
-      assertBoxedFalse(fun(atomB, atomA));
+      assertBoxedFalse(testedFun(atomB, atomA));
     });
 
     it("float > float", () => {
-      assertBoxedFalse(fun(float2, float1));
+      assertBoxedFalse(testedFun(float2, float1));
     });
 
     it("float > integer", () => {
-      assertBoxedFalse(fun(float2, integer1));
+      assertBoxedFalse(testedFun(float2, integer1));
     });
 
     it("integer > float", () => {
-      assertBoxedFalse(fun(integer2, float1));
+      assertBoxedFalse(testedFun(integer2, float1));
     });
 
     it("integer > integer", () => {
-      assertBoxedFalse(fun(integer2, integer1));
+      assertBoxedFalse(testedFun(integer2, integer1));
     });
 
     it("pid > pid", () => {
-      assertBoxedFalse(fun(pid2, pid1));
+      assertBoxedFalse(testedFun(pid2, pid1));
     });
 
     it("tuple > tuple", () => {
-      assertBoxedFalse(fun(tuple3, tuple2));
+      assertBoxedFalse(testedFun(tuple3, tuple2));
     });
 
     it("throws a not yet implemented error when the left argument type is not yet supported", () => {
@@ -637,7 +643,7 @@ describe("Erlang", () => {
         'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
 
       assert.throw(
-        () => fun(Type.bitstring("abc"), integer1),
+        () => testedFun(Type.bitstring("abc"), integer1),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -648,7 +654,7 @@ describe("Erlang", () => {
         'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
 
       assert.throw(
-        () => fun(integer1, Type.bitstring("abc")),
+        () => testedFun(integer1, Type.bitstring("abc")),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -658,306 +664,306 @@ describe("Erlang", () => {
   });
 
   describe("=/=/2", () => {
-    const fun = Erlang["=/=/2"];
+    const testedFun = Erlang["=/=/2"];
 
     it("atom == atom", () => {
-      assertBoxedFalse(fun(atomA, atomA));
+      assertBoxedFalse(testedFun(atomA, atomA));
     });
 
     it("float == float", () => {
-      assertBoxedFalse(fun(float1, float1));
+      assertBoxedFalse(testedFun(float1, float1));
     });
 
     it("float == integer", () => {
-      assertBoxedTrue(fun(float1, integer1));
+      assertBoxedTrue(testedFun(float1, integer1));
     });
 
     it("integer == float", () => {
-      assertBoxedTrue(fun(integer1, float1));
+      assertBoxedTrue(testedFun(integer1, float1));
     });
 
     it("integer == integer", () => {
-      assertBoxedFalse(fun(integer1, integer1));
+      assertBoxedFalse(testedFun(integer1, integer1));
     });
 
     it("pid == pid", () => {
-      assertBoxedFalse(fun(pid1, pid1));
+      assertBoxedFalse(testedFun(pid1, pid1));
     });
 
     it("tuple == tuple", () => {
-      assertBoxedFalse(fun(tuple3, tuple3));
+      assertBoxedFalse(testedFun(tuple3, tuple3));
     });
 
     it("atom < atom", () => {
-      assertBoxedTrue(fun(atomA, atomB));
+      assertBoxedTrue(testedFun(atomA, atomB));
     });
 
     it("float < atom (always)", () => {
-      assertBoxedTrue(fun(float1, atomA));
+      assertBoxedTrue(testedFun(float1, atomA));
     });
 
     it("float < float", () => {
-      assertBoxedTrue(fun(float1, float2));
+      assertBoxedTrue(testedFun(float1, float2));
     });
 
     it("float < integer", () => {
-      assertBoxedTrue(fun(float1, integer2));
+      assertBoxedTrue(testedFun(float1, integer2));
     });
 
     it("integer < atom (always)", () => {
-      assertBoxedTrue(fun(integer1, atomA));
+      assertBoxedTrue(testedFun(integer1, atomA));
     });
 
     it("integer < float", () => {
-      assertBoxedTrue(fun(integer1, float2));
+      assertBoxedTrue(testedFun(integer1, float2));
     });
 
     it("integer < integer", () => {
-      assertBoxedTrue(fun(integer1, integer2));
+      assertBoxedTrue(testedFun(integer1, integer2));
     });
 
     it("pid < pid", () => {
-      assertBoxedTrue(fun(pid1, pid2));
+      assertBoxedTrue(testedFun(pid1, pid2));
     });
 
     it("pid < tuple (always)", () => {
-      assertBoxedTrue(fun(pid1, tuple3));
+      assertBoxedTrue(testedFun(pid1, tuple3));
     });
 
     it("tuple < tuple", () => {
-      assertBoxedTrue(fun(tuple2, tuple3));
+      assertBoxedTrue(testedFun(tuple2, tuple3));
     });
 
     it("atom > atom", () => {
-      assertBoxedTrue(fun(atomB, atomA));
+      assertBoxedTrue(testedFun(atomB, atomA));
     });
 
     it("float > float", () => {
-      assertBoxedTrue(fun(float2, float1));
+      assertBoxedTrue(testedFun(float2, float1));
     });
 
     it("float > integer", () => {
-      assertBoxedTrue(fun(float2, integer1));
+      assertBoxedTrue(testedFun(float2, integer1));
     });
 
     it("integer > float", () => {
-      assertBoxedTrue(fun(integer2, float1));
+      assertBoxedTrue(testedFun(integer2, float1));
     });
 
     it("integer > integer", () => {
-      assertBoxedTrue(fun(integer2, integer1));
+      assertBoxedTrue(testedFun(integer2, integer1));
     });
 
     it("pid > pid", () => {
-      assertBoxedTrue(fun(pid2, pid1));
+      assertBoxedTrue(testedFun(pid2, pid1));
     });
 
     it("tuple > tuple", () => {
-      assertBoxedTrue(fun(tuple3, tuple2));
+      assertBoxedTrue(testedFun(tuple3, tuple2));
     });
 
     // TODO: reference, function, port, map, list, bitstring
   });
 
   describe("=:=/2", () => {
-    const fun = Erlang["=:=/2"];
+    const testedFun = Erlang["=:=/2"];
 
     it("atom == atom", () => {
-      assertBoxedTrue(fun(atomA, atomA));
+      assertBoxedTrue(testedFun(atomA, atomA));
     });
 
     it("float == float", () => {
-      assertBoxedTrue(fun(float1, float1));
+      assertBoxedTrue(testedFun(float1, float1));
     });
 
     it("float == integer", () => {
-      assertBoxedFalse(fun(float1, integer1));
+      assertBoxedFalse(testedFun(float1, integer1));
     });
 
     it("integer == float", () => {
-      assertBoxedFalse(fun(integer1, float1));
+      assertBoxedFalse(testedFun(integer1, float1));
     });
 
     it("integer == integer", () => {
-      assertBoxedTrue(fun(integer1, integer1));
+      assertBoxedTrue(testedFun(integer1, integer1));
     });
 
     it("pid == pid", () => {
-      assertBoxedTrue(fun(pid1, pid1));
+      assertBoxedTrue(testedFun(pid1, pid1));
     });
 
     it("tuple == tuple", () => {
-      assertBoxedTrue(fun(tuple3, tuple3));
+      assertBoxedTrue(testedFun(tuple3, tuple3));
     });
 
     it("atom < atom", () => {
-      assertBoxedFalse(fun(atomA, atomB));
+      assertBoxedFalse(testedFun(atomA, atomB));
     });
 
     it("float < atom (always)", () => {
-      assertBoxedFalse(fun(float1, atomA));
+      assertBoxedFalse(testedFun(float1, atomA));
     });
 
     it("float < float", () => {
-      assertBoxedFalse(fun(float1, float2));
+      assertBoxedFalse(testedFun(float1, float2));
     });
 
     it("float < integer", () => {
-      assertBoxedFalse(fun(float1, integer2));
+      assertBoxedFalse(testedFun(float1, integer2));
     });
 
     it("integer < atom (always)", () => {
-      assertBoxedFalse(fun(integer1, atomA));
+      assertBoxedFalse(testedFun(integer1, atomA));
     });
 
     it("integer < float", () => {
-      assertBoxedFalse(fun(integer1, float2));
+      assertBoxedFalse(testedFun(integer1, float2));
     });
 
     it("integer < integer", () => {
-      assertBoxedFalse(fun(integer1, integer2));
+      assertBoxedFalse(testedFun(integer1, integer2));
     });
 
     it("pid < pid", () => {
-      assertBoxedFalse(fun(pid1, pid2));
+      assertBoxedFalse(testedFun(pid1, pid2));
     });
 
     it("pid < tuple (always)", () => {
-      assertBoxedFalse(fun(pid1, tuple3));
+      assertBoxedFalse(testedFun(pid1, tuple3));
     });
 
     it("tuple < tuple", () => {
-      assertBoxedFalse(fun(tuple2, tuple3));
+      assertBoxedFalse(testedFun(tuple2, tuple3));
     });
 
     it("atom > atom", () => {
-      assertBoxedFalse(fun(atomB, atomA));
+      assertBoxedFalse(testedFun(atomB, atomA));
     });
 
     it("float > float", () => {
-      assertBoxedFalse(fun(float2, float1));
+      assertBoxedFalse(testedFun(float2, float1));
     });
 
     it("float > integer", () => {
-      assertBoxedFalse(fun(float2, integer1));
+      assertBoxedFalse(testedFun(float2, integer1));
     });
 
     it("integer > float", () => {
-      assertBoxedFalse(fun(integer2, float1));
+      assertBoxedFalse(testedFun(integer2, float1));
     });
 
     it("integer > integer", () => {
-      assertBoxedFalse(fun(integer2, integer1));
+      assertBoxedFalse(testedFun(integer2, integer1));
     });
 
     it("pid > pid", () => {
-      assertBoxedFalse(fun(pid2, pid1));
+      assertBoxedFalse(testedFun(pid2, pid1));
     });
 
     it("tuple > tuple", () => {
-      assertBoxedFalse(fun(tuple3, tuple2));
+      assertBoxedFalse(testedFun(tuple3, tuple2));
     });
 
     // TODO: reference, function, port, map, list, bitstring
   });
 
   describe("=</2", () => {
-    const fun = Erlang["=</2"];
+    const testedFun = Erlang["=</2"];
 
     it("atom == atom", () => {
-      assertBoxedTrue(fun(atomA, atomA));
+      assertBoxedTrue(testedFun(atomA, atomA));
     });
 
     it("float == float", () => {
-      assertBoxedTrue(fun(float1, float1));
+      assertBoxedTrue(testedFun(float1, float1));
     });
 
     it("float == integer", () => {
-      assertBoxedTrue(fun(float1, integer1));
+      assertBoxedTrue(testedFun(float1, integer1));
     });
 
     it("integer == float", () => {
-      assertBoxedTrue(fun(integer1, float1));
+      assertBoxedTrue(testedFun(integer1, float1));
     });
 
     it("integer == integer", () => {
-      assertBoxedTrue(fun(integer1, integer1));
+      assertBoxedTrue(testedFun(integer1, integer1));
     });
 
     it("pid == pid", () => {
-      assertBoxedTrue(fun(pid1, pid1));
+      assertBoxedTrue(testedFun(pid1, pid1));
     });
 
     it("tuple == tuple", () => {
-      assertBoxedTrue(fun(tuple3, tuple3));
+      assertBoxedTrue(testedFun(tuple3, tuple3));
     });
 
     it("atom < atom", () => {
-      assertBoxedTrue(fun(atomA, atomB));
+      assertBoxedTrue(testedFun(atomA, atomB));
     });
 
     it("float < atom (always)", () => {
-      assertBoxedTrue(fun(float1, atomA));
+      assertBoxedTrue(testedFun(float1, atomA));
     });
 
     it("float < float", () => {
-      assertBoxedTrue(fun(float1, float2));
+      assertBoxedTrue(testedFun(float1, float2));
     });
 
     it("float < integer", () => {
-      assertBoxedTrue(fun(float1, integer2));
+      assertBoxedTrue(testedFun(float1, integer2));
     });
 
     it("integer < atom (always)", () => {
-      assertBoxedTrue(fun(integer1, atomA));
+      assertBoxedTrue(testedFun(integer1, atomA));
     });
 
     it("integer < float", () => {
-      assertBoxedTrue(fun(integer1, float2));
+      assertBoxedTrue(testedFun(integer1, float2));
     });
 
     it("integer < integer", () => {
-      assertBoxedTrue(fun(integer1, integer2));
+      assertBoxedTrue(testedFun(integer1, integer2));
     });
 
     it("pid < pid", () => {
-      assertBoxedTrue(fun(pid1, pid2));
+      assertBoxedTrue(testedFun(pid1, pid2));
     });
 
     it("pid < tuple (always)", () => {
-      assertBoxedTrue(fun(pid1, tuple3));
+      assertBoxedTrue(testedFun(pid1, tuple3));
     });
 
     it("tuple < tuple", () => {
-      assertBoxedTrue(fun(tuple2, tuple3));
+      assertBoxedTrue(testedFun(tuple2, tuple3));
     });
 
     it("atom > atom", () => {
-      assertBoxedFalse(fun(atomB, atomA));
+      assertBoxedFalse(testedFun(atomB, atomA));
     });
 
     it("float > float", () => {
-      assertBoxedFalse(fun(float2, float1));
+      assertBoxedFalse(testedFun(float2, float1));
     });
 
     it("float > integer", () => {
-      assertBoxedFalse(fun(float2, integer1));
+      assertBoxedFalse(testedFun(float2, integer1));
     });
 
     it("integer > float", () => {
-      assertBoxedFalse(fun(integer2, float1));
+      assertBoxedFalse(testedFun(integer2, float1));
     });
 
     it("integer > integer", () => {
-      assertBoxedFalse(fun(integer2, integer1));
+      assertBoxedFalse(testedFun(integer2, integer1));
     });
 
     it("pid > pid", () => {
-      assertBoxedFalse(fun(pid2, pid1));
+      assertBoxedFalse(testedFun(pid2, pid1));
     });
 
     it("tuple > tuple", () => {
-      assertBoxedFalse(fun(tuple3, tuple2));
+      assertBoxedFalse(testedFun(tuple3, tuple2));
     });
 
     it("throws a not yet implemented error when the left argument type is not yet supported", () => {
@@ -965,7 +971,7 @@ describe("Erlang", () => {
         'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
 
       assert.throw(
-        () => fun(Type.bitstring("abc"), integer1),
+        () => testedFun(Type.bitstring("abc"), integer1),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -976,7 +982,7 @@ describe("Erlang", () => {
         'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
 
       assert.throw(
-        () => fun(integer1, Type.bitstring("abc")),
+        () => testedFun(integer1, Type.bitstring("abc")),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -986,204 +992,204 @@ describe("Erlang", () => {
   });
 
   describe("==/2", () => {
-    const fun = Erlang["==/2"];
+    const testedFun = Erlang["==/2"];
 
     it("atom == atom", () => {
-      assertBoxedTrue(fun(atomA, atomA));
+      assertBoxedTrue(testedFun(atomA, atomA));
     });
 
     it("float == float", () => {
-      assertBoxedTrue(fun(float1, float1));
+      assertBoxedTrue(testedFun(float1, float1));
     });
 
     it("float == integer", () => {
-      assertBoxedTrue(fun(float1, integer1));
+      assertBoxedTrue(testedFun(float1, integer1));
     });
 
     it("integer == float", () => {
-      assertBoxedTrue(fun(integer1, float1));
+      assertBoxedTrue(testedFun(integer1, float1));
     });
 
     it("integer == integer", () => {
-      assertBoxedTrue(fun(integer1, integer1));
+      assertBoxedTrue(testedFun(integer1, integer1));
     });
 
     it("pid == pid", () => {
-      assertBoxedTrue(fun(pid1, pid1));
+      assertBoxedTrue(testedFun(pid1, pid1));
     });
 
     it("tuple == tuple", () => {
-      assertBoxedTrue(fun(tuple3, tuple3));
+      assertBoxedTrue(testedFun(tuple3, tuple3));
     });
 
     it("atom < atom", () => {
-      assertBoxedFalse(fun(atomA, atomB));
+      assertBoxedFalse(testedFun(atomA, atomB));
     });
 
     it("float < atom (always)", () => {
-      assertBoxedFalse(fun(float1, atomA));
+      assertBoxedFalse(testedFun(float1, atomA));
     });
 
     it("float < float", () => {
-      assertBoxedFalse(fun(float1, float2));
+      assertBoxedFalse(testedFun(float1, float2));
     });
 
     it("float < integer", () => {
-      assertBoxedFalse(fun(float1, integer2));
+      assertBoxedFalse(testedFun(float1, integer2));
     });
 
     it("integer < atom (always)", () => {
-      assertBoxedFalse(fun(integer1, atomA));
+      assertBoxedFalse(testedFun(integer1, atomA));
     });
 
     it("integer < float", () => {
-      assertBoxedFalse(fun(integer1, float2));
+      assertBoxedFalse(testedFun(integer1, float2));
     });
 
     it("integer < integer", () => {
-      assertBoxedFalse(fun(integer1, integer2));
+      assertBoxedFalse(testedFun(integer1, integer2));
     });
 
     it("pid < pid", () => {
-      assertBoxedFalse(fun(pid1, pid2));
+      assertBoxedFalse(testedFun(pid1, pid2));
     });
 
     it("pid < tuple (always)", () => {
-      assertBoxedFalse(fun(pid1, tuple3));
+      assertBoxedFalse(testedFun(pid1, tuple3));
     });
 
     it("tuple < tuple", () => {
-      assertBoxedFalse(fun(tuple2, tuple3));
+      assertBoxedFalse(testedFun(tuple2, tuple3));
     });
 
     it("atom > atom", () => {
-      assertBoxedFalse(fun(atomB, atomA));
+      assertBoxedFalse(testedFun(atomB, atomA));
     });
 
     it("float > float", () => {
-      assertBoxedFalse(fun(float2, float1));
+      assertBoxedFalse(testedFun(float2, float1));
     });
 
     it("float > integer", () => {
-      assertBoxedFalse(fun(float2, integer1));
+      assertBoxedFalse(testedFun(float2, integer1));
     });
 
     it("integer > float", () => {
-      assertBoxedFalse(fun(integer2, float1));
+      assertBoxedFalse(testedFun(integer2, float1));
     });
 
     it("integer > integer", () => {
-      assertBoxedFalse(fun(integer2, integer1));
+      assertBoxedFalse(testedFun(integer2, integer1));
     });
 
     it("pid > pid", () => {
-      assertBoxedFalse(fun(pid2, pid1));
+      assertBoxedFalse(testedFun(pid2, pid1));
     });
 
     it("tuple > tuple", () => {
-      assertBoxedFalse(fun(tuple3, tuple2));
+      assertBoxedFalse(testedFun(tuple3, tuple2));
     });
 
     // TODO: reference, function, port, map, list, bitstring
   });
 
   describe(">/2", () => {
-    const fun = Erlang[">/2"];
+    const testedFun = Erlang[">/2"];
 
     it("atom == atom", () => {
-      assertBoxedFalse(fun(atomA, atomA));
+      assertBoxedFalse(testedFun(atomA, atomA));
     });
 
     it("float == float", () => {
-      assertBoxedFalse(fun(float1, float1));
+      assertBoxedFalse(testedFun(float1, float1));
     });
 
     it("float == integer", () => {
-      assertBoxedFalse(fun(float1, integer1));
+      assertBoxedFalse(testedFun(float1, integer1));
     });
 
     it("integer == float", () => {
-      assertBoxedFalse(fun(integer1, float1));
+      assertBoxedFalse(testedFun(integer1, float1));
     });
 
     it("integer == integer", () => {
-      assertBoxedFalse(fun(integer1, integer1));
+      assertBoxedFalse(testedFun(integer1, integer1));
     });
 
     it("pid == pid", () => {
-      assertBoxedFalse(fun(pid1, pid1));
+      assertBoxedFalse(testedFun(pid1, pid1));
     });
 
     it("tuple == tuple", () => {
-      assertBoxedFalse(fun(tuple3, tuple3));
+      assertBoxedFalse(testedFun(tuple3, tuple3));
     });
 
     it("atom < atom", () => {
-      assertBoxedFalse(fun(atomA, atomB));
+      assertBoxedFalse(testedFun(atomA, atomB));
     });
 
     it("float < atom (always)", () => {
-      assertBoxedFalse(fun(float1, atomA));
+      assertBoxedFalse(testedFun(float1, atomA));
     });
 
     it("float < float", () => {
-      assertBoxedFalse(fun(float1, float2));
+      assertBoxedFalse(testedFun(float1, float2));
     });
 
     it("float < integer", () => {
-      assertBoxedFalse(fun(float1, integer2));
+      assertBoxedFalse(testedFun(float1, integer2));
     });
 
     it("integer < atom (always)", () => {
-      assertBoxedFalse(fun(integer1, atomA));
+      assertBoxedFalse(testedFun(integer1, atomA));
     });
 
     it("integer < float", () => {
-      assertBoxedFalse(fun(integer1, float2));
+      assertBoxedFalse(testedFun(integer1, float2));
     });
 
     it("integer < integer", () => {
-      assertBoxedFalse(fun(integer1, integer2));
+      assertBoxedFalse(testedFun(integer1, integer2));
     });
 
     it("pid < pid", () => {
-      assertBoxedFalse(fun(pid1, pid2));
+      assertBoxedFalse(testedFun(pid1, pid2));
     });
 
     it("pid < tuple (always)", () => {
-      assertBoxedFalse(fun(pid1, tuple3));
+      assertBoxedFalse(testedFun(pid1, tuple3));
     });
 
     it("tuple < tuple", () => {
-      assertBoxedFalse(fun(tuple2, tuple3));
+      assertBoxedFalse(testedFun(tuple2, tuple3));
     });
 
     it("atom > atom", () => {
-      assertBoxedTrue(fun(atomB, atomA));
+      assertBoxedTrue(testedFun(atomB, atomA));
     });
 
     it("float > float", () => {
-      assertBoxedTrue(fun(float2, float1));
+      assertBoxedTrue(testedFun(float2, float1));
     });
 
     it("float > integer", () => {
-      assertBoxedTrue(fun(float2, integer1));
+      assertBoxedTrue(testedFun(float2, integer1));
     });
 
     it("integer > float", () => {
-      assertBoxedTrue(fun(integer2, float1));
+      assertBoxedTrue(testedFun(integer2, float1));
     });
 
     it("integer > integer", () => {
-      assertBoxedTrue(fun(integer2, integer1));
+      assertBoxedTrue(testedFun(integer2, integer1));
     });
 
     it("pid > pid", () => {
-      assertBoxedTrue(fun(pid2, pid1));
+      assertBoxedTrue(testedFun(pid2, pid1));
     });
 
     it("tuple > tuple", () => {
-      assertBoxedTrue(fun(tuple3, tuple2));
+      assertBoxedTrue(testedFun(tuple3, tuple2));
     });
 
     it("throws a not yet implemented error when the left argument type is not yet supported", () => {
@@ -1191,7 +1197,7 @@ describe("Erlang", () => {
         'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
 
       assert.throw(
-        () => fun(Type.bitstring("abc"), integer1),
+        () => testedFun(Type.bitstring("abc"), integer1),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -1202,7 +1208,7 @@ describe("Erlang", () => {
         'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
 
       assert.throw(
-        () => fun(integer1, Type.bitstring("abc")),
+        () => testedFun(integer1, Type.bitstring("abc")),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -1212,102 +1218,102 @@ describe("Erlang", () => {
   });
 
   describe(">=/2", () => {
-    const fun = Erlang[">=/2"];
+    const testedFun = Erlang[">=/2"];
 
     it("atom == atom", () => {
-      assertBoxedTrue(fun(atomA, atomA));
+      assertBoxedTrue(testedFun(atomA, atomA));
     });
 
     it("float == float", () => {
-      assertBoxedTrue(fun(float1, float1));
+      assertBoxedTrue(testedFun(float1, float1));
     });
 
     it("float == integer", () => {
-      assertBoxedTrue(fun(float1, integer1));
+      assertBoxedTrue(testedFun(float1, integer1));
     });
 
     it("integer == float", () => {
-      assertBoxedTrue(fun(integer1, float1));
+      assertBoxedTrue(testedFun(integer1, float1));
     });
 
     it("integer == integer", () => {
-      assertBoxedTrue(fun(integer1, integer1));
+      assertBoxedTrue(testedFun(integer1, integer1));
     });
 
     it("pid == pid", () => {
-      assertBoxedTrue(fun(pid1, pid1));
+      assertBoxedTrue(testedFun(pid1, pid1));
     });
 
     it("tuple == tuple", () => {
-      assertBoxedTrue(fun(tuple3, tuple3));
+      assertBoxedTrue(testedFun(tuple3, tuple3));
     });
 
     it("atom < atom", () => {
-      assertBoxedFalse(fun(atomA, atomB));
+      assertBoxedFalse(testedFun(atomA, atomB));
     });
 
     it("float < atom (always)", () => {
-      assertBoxedFalse(fun(float1, atomA));
+      assertBoxedFalse(testedFun(float1, atomA));
     });
 
     it("float < float", () => {
-      assertBoxedFalse(fun(float1, float2));
+      assertBoxedFalse(testedFun(float1, float2));
     });
 
     it("float < integer", () => {
-      assertBoxedFalse(fun(float1, integer2));
+      assertBoxedFalse(testedFun(float1, integer2));
     });
 
     it("integer < atom (always)", () => {
-      assertBoxedFalse(fun(integer1, atomA));
+      assertBoxedFalse(testedFun(integer1, atomA));
     });
 
     it("integer < float", () => {
-      assertBoxedFalse(fun(integer1, float2));
+      assertBoxedFalse(testedFun(integer1, float2));
     });
 
     it("integer < integer", () => {
-      assertBoxedFalse(fun(integer1, integer2));
+      assertBoxedFalse(testedFun(integer1, integer2));
     });
 
     it("pid < pid", () => {
-      assertBoxedFalse(fun(pid1, pid2));
+      assertBoxedFalse(testedFun(pid1, pid2));
     });
 
     it("pid < tuple (always)", () => {
-      assertBoxedFalse(fun(pid1, tuple3));
+      assertBoxedFalse(testedFun(pid1, tuple3));
     });
 
     it("tuple < tuple", () => {
-      assertBoxedFalse(fun(tuple2, tuple3));
+      assertBoxedFalse(testedFun(tuple2, tuple3));
     });
 
     it("atom > atom", () => {
-      assertBoxedTrue(fun(atomB, atomA));
+      assertBoxedTrue(testedFun(atomB, atomA));
     });
 
     it("float > float", () => {
-      assertBoxedTrue(fun(float2, float1));
+      assertBoxedTrue(testedFun(float2, float1));
     });
 
     it("float > integer", () => {
-      assertBoxedTrue(fun(float2, integer1));
+      assertBoxedTrue(testedFun(float2, integer1));
     });
 
     it("integer > float", () => {
-      assertBoxedTrue(fun(integer2, float1));
+      assertBoxedTrue(testedFun(integer2, float1));
     });
 
     it("integer > integer", () => {
-      assertBoxedTrue(fun(integer2, integer1));
+      assertBoxedTrue(testedFun(integer2, integer1));
     });
 
     it("pid > pid", () => {
-      assertBoxedTrue(fun(pid2, pid1));
+      assertBoxedTrue(testedFun(pid2, pid1));
     });
 
     it("tuple > tuple", () => {
-      assertBoxedTrue(fun(tuple3, tuple2));
+      assertBoxedTrue(testedFun(tuple3, tuple2));
     });
 
     it("throws a not yet implemented error when the left argument type is not yet supported", () => {
@@ -1315,7 +1321,7 @@ describe("Erlang", () => {
         'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
 
       assert.throw(
-        () => fun(Type.bitstring("abc"), integer1),
+        () => testedFun(Type.bitstring("abc"), integer1),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -1326,7 +1332,7 @@ describe("Erlang", () => {
         'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
 
       assert.throw(
-        () => fun(integer1, Type.bitstring("abc")),
+        () => testedFun(integer1, Type.bitstring("abc")),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -1336,12 +1342,14 @@ describe("Erlang", () => {
   });
 
   describe("andalso/2", () => {
+    const andalso = Erlang["andalso/2"];
+
     it("returns false if the first argument is false", () => {
       const context = contextFixture({
         vars: {left: Type.boolean(false), right: Type.atom("abc")},
       });
 
-      const result = Erlang["andalso/2"](
+      const result = andalso(
         (context) => context.vars.left,
         (context) => context.vars.right,
         context,
@@ -1355,7 +1363,7 @@ describe("Erlang", () => {
         vars: {left: Type.boolean(true), right: Type.atom("abc")},
       });
 
-      const result = Erlang["andalso/2"](
+      const result = andalso(
         (context) => context.vars.left,
         (context) => context.vars.right,
         context,
@@ -1365,7 +1373,7 @@ describe("Erlang", () => {
     });
 
     it("doesn't evaluate the second argument if the first argument is false", () => {
-      const result = Erlang["andalso/2"](
+      const result = andalso(
         (_context) => Type.boolean(false),
         (_context) => {
           throw new Error("impossible");
@@ -1383,7 +1391,7 @@ describe("Erlang", () => {
 
       assertBoxedError(
         () =>
-          Erlang["andalso/2"](
+          andalso(
             (context) => context.vars.left,
             (context) => context.vars.right,
             context,
@@ -1395,15 +1403,17 @@ describe("Erlang", () => {
   });
 
   describe("atom_to_binary/1", () => {
+    const atom_to_binary = Erlang["atom_to_binary/1"];
+
     it("converts atom to (binary) bitstring", () => {
-      const result = Erlang["atom_to_binary/1"](Type.atom("abc"));
+      const result = atom_to_binary(Type.atom("abc"));
 
       assert.deepStrictEqual(result, Type.bitstring("abc"));
     });
 
     it("raises ArgumentError if the argument is not an atom", () => {
       assertBoxedError(
-        () => Erlang["atom_to_binary/1"](Type.integer(123)),
+        () => atom_to_binary(Type.integer(123)),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(1, "not an atom"),
       );
@@ -1411,13 +1421,15 @@ describe("Erlang", () => {
   });
 
   describe("atom_to_list/1", () => {
+    const atom_to_list = Erlang["atom_to_list/1"];
+
     it("empty atom", () => {
-      const result = Erlang["atom_to_list/1"](Type.atom(""));
+      const result = atom_to_list(Type.atom(""));
       assert.deepStrictEqual(result, Type.list([]));
     });
 
     it("ASCII atom", () => {
-      const result = Erlang["atom_to_list/1"](Type.atom("abc"));
+      const result = atom_to_list(Type.atom("abc"));
 
       assert.deepStrictEqual(
         result,
@@ -1426,7 +1438,7 @@ describe("Erlang", () => {
     });
 
     it("Unicode atom", () => {
-      const result = Erlang["atom_to_list/1"](Type.atom("全息图"));
+      const result = atom_to_list(Type.atom("全息图"));
 
       assert.deepStrictEqual(
         result,
@@ -1440,7 +1452,7 @@ describe("Erlang", () => {
 
     it("not an atom", () => {
       assertBoxedError(
-        () => Erlang["atom_to_list/1"](Type.integer(123)),
+        () => atom_to_list(Type.integer(123)),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(1, "not an atom"),
       );
@@ -1458,11 +1470,12 @@ describe("Erlang", () => {
   });
 
   describe("binary_to_atom/2", () => {
+    const binary_to_atom = Erlang["binary_to_atom/2"];
     const encoding = Type.atom("utf8");
 
     it("converts a binary bitstring to an already existing atom", () => {
       const binary = Type.bitstring("Elixir.Kernel");
-      const result = Erlang["binary_to_atom/2"](binary, encoding);
+      const result = binary_to_atom(binary, encoding);
 
       assert.deepStrictEqual(result, Type.alias("Kernel"));
     });
@@ -1470,14 +1483,14 @@ describe("Erlang", () => {
     it("converts a binary bitstring to a not existing yet atom", () => {
       const randomStr = `${Math.random()}`;
       const binary = Type.bitstring(randomStr);
-      const result = Erlang["binary_to_atom/2"](binary, encoding);
+      const result = binary_to_atom(binary, encoding);
 
       assert.deepStrictEqual(result, Type.atom(randomStr));
     });
 
     it("raises ArgumentError if the first argument is a non-binary bitstring", () => {
       assertBoxedError(
-        () => Erlang["binary_to_atom/2"](Type.bitstring([1, 0, 1]), encoding),
+        () => binary_to_atom(Type.bitstring([1, 0, 1]), encoding),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(1, "not a binary"),
       );
@@ -1485,7 +1498,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentErorr if the first argument is not a bitstring", () => {
       assertBoxedError(
-        () => Erlang["binary_to_atom/2"](Type.atom("abc"), encoding),
+        () => binary_to_atom(Type.atom("abc"), encoding),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(1, "not a binary"),
       );
@@ -1518,6 +1531,8 @@ describe("Erlang", () => {
   });
 
   describe("bit_size/1", () => {
+    const bit_size = Erlang["bit_size/1"];
+
     it("bitstring", () => {
       const myBitstring = Type.bitstring([
         Type.bitstringSegment(Type.integer(2), {
@@ -1526,7 +1541,7 @@ describe("Erlang", () => {
         }),
       ]);
 
-      const result = Erlang["bit_size/1"](myBitstring);
+      const result = bit_size(myBitstring);
 
       assert.deepStrictEqual(result, Type.integer(7));
     });
@@ -1535,7 +1550,7 @@ describe("Erlang", () => {
       const myAtom = Type.atom("abc");
 
       assertBoxedError(
-        () => Erlang["bit_size/1"](myAtom),
+        () => bit_size(myAtom),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(1, "not a bitstring"),
       );
@@ -1543,6 +1558,8 @@ describe("Erlang", () => {
   });
 
   describe("element/2", () => {
+    const element = Erlang["element/2"];
+
     const tuple = Type.tuple([
       Type.integer(5),
       Type.integer(6),
@@ -1550,13 +1567,13 @@ describe("Erlang", () => {
     ]);
 
     it("returns the element at the one-based index in the tuple", () => {
-      const result = Erlang["element/2"](Type.integer(2), tuple);
+      const result = element(Type.integer(2), tuple);
       assert.deepStrictEqual(result, Type.integer(6));
     });
 
     it("raises ArgumentError if the first argument is not an integer", () => {
       assertBoxedError(
-        () => Erlang["element/2"](Type.atom("abc"), tuple),
+        () => element(Type.atom("abc"), tuple),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(1, "not an integer"),
       );
@@ -1564,7 +1581,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the second argument is not a tuple", () => {
       assertBoxedError(
-        () => Erlang["element/2"](Type.integer(1), Type.atom("abc")),
+        () => element(Type.integer(1), Type.atom("abc")),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(2, "not a tuple"),
       );
@@ -1572,7 +1589,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the given index is greater than the number of elements in the tuple", () => {
       assertBoxedError(
-        () => Erlang["element/2"](Type.integer(10), tuple),
+        () => element(Type.integer(10), tuple),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(1, "out of range"),
       );
@@ -1580,7 +1597,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the given index is smaller than 1", () => {
       assertBoxedError(
-        () => Erlang["element/2"](Type.integer(0), tuple),
+        () => element(Type.integer(0), tuple),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(1, "out of range"),
       );
@@ -1588,37 +1605,37 @@ describe("Erlang", () => {
   });
 
   it("error/1", () => {
+    const error = Erlang["error/1"];
     const reason = Type.errorStruct("MyError", "my message");
 
-    assertBoxedError(() => Erlang["error/1"](reason), "MyError", "my message");
+    assertBoxedError(() => error(reason), "MyError", "my message");
   });
 
   it("error/2", () => {
+    const error = Erlang["error/2"];
     const reason = Type.errorStruct("MyError", "my message");
     const args = Type.list([Type.integer(1, Type.integer(2))]);
 
-    assertBoxedError(
-      () => Erlang["error/2"](reason, args),
-      "MyError",
-      "my message",
-    );
+    assertBoxedError(() => error(reason, args), "MyError", "my message");
   });
 
   describe("hd/1", () => {
+    const hd = Erlang["hd/1"];
+
     it("returns the first item in the list", () => {
       const list = Type.list([
         Type.integer(1),
         Type.integer(2),
         Type.integer(3),
       ]);
-      const result = Erlang["hd/1"](list);
+      const result = hd(list);
 
       assert.deepStrictEqual(result, Type.integer(1));
     });
 
     it("raises ArgumentError if the argument is an empty list", () => {
       assertBoxedError(
-        () => Erlang["hd/1"](Type.list([])),
+        () => hd(Type.list([])),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(1, "not a nonempty list"),
       );
@@ -1626,7 +1643,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the argument is not a list", () => {
       assertBoxedError(
-        () => Erlang["hd/1"](Type.integer(123)),
+        () => hd(Type.integer(123)),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(1, "not a nonempty list"),
       );
@@ -1644,14 +1661,12 @@ describe("Erlang", () => {
   });
 
   describe("integer_to_binary/2", () => {
+    const integer_to_binary = Erlang["integer_to_binary/2"];
+
     describe("positive integer", () => {
       it("base = 1", () => {
         assertBoxedError(
-          () =>
-            Erlang["integer_to_binary/2"](
-              Type.integer(123123),
-              Type.integer(1),
-            ),
+          () => integer_to_binary(Type.integer(123123), Type.integer(1)),
           "ArgumentError",
           Interpreter.buildErrorsFoundMsg(
             2,
@@ -1661,10 +1676,7 @@ describe("Erlang", () => {
       });
 
       it("base = 2", () => {
-        const result = Erlang["integer_to_binary/2"](
-          Type.integer(123123),
-          Type.integer(2),
-        );
+        const result = integer_to_binary(Type.integer(123123), Type.integer(2));
 
         const expected = Type.bitstring("11110000011110011");
 
@@ -1672,7 +1684,7 @@ describe("Erlang", () => {
       });
 
       it("base = 16", () => {
-        const result = Erlang["integer_to_binary/2"](
+        const result = integer_to_binary(
           Type.integer(123123),
           Type.integer(16),
         );
@@ -1683,7 +1695,7 @@ describe("Erlang", () => {
       });
 
       it("base = 36", () => {
-        const result = Erlang["integer_to_binary/2"](
+        const result = integer_to_binary(
           Type.integer(123123),
           Type.integer(36),
         );
@@ -1695,11 +1707,7 @@ describe("Erlang", () => {
 
       it("base = 37", () => {
         assertBoxedError(
-          () =>
-            Erlang["integer_to_binary/2"](
-              Type.integer(123123),
-              Type.integer(37),
-            ),
+          () => integer_to_binary(Type.integer(123123), Type.integer(37)),
           "ArgumentError",
           Interpreter.buildErrorsFoundMsg(
             2,
@@ -1710,10 +1718,7 @@ describe("Erlang", () => {
     });
 
     it("negative integer", () => {
-      const result = Erlang["integer_to_binary/2"](
-        Type.integer(-123123),
-        Type.integer(16),
-      );
+      const result = integer_to_binary(Type.integer(-123123), Type.integer(16));
 
       const expected = Type.bitstring("-1E0F3");
 
@@ -1722,7 +1727,7 @@ describe("Erlang", () => {
 
     it("1st argument (integer) is not an integer", () => {
       assertBoxedError(
-        () => Erlang["integer_to_binary/2"](Type.atom("abc"), Type.integer(16)),
+        () => integer_to_binary(Type.atom("abc"), Type.integer(16)),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(1, "not an integer"),
       );
@@ -1730,8 +1735,7 @@ describe("Erlang", () => {
 
     it("2nd argument (base) is not an integer", () => {
       assertBoxedError(
-        () =>
-          Erlang["integer_to_binary/2"](Type.integer(123123), Type.atom("abc")),
+        () => integer_to_binary(Type.integer(123123), Type.atom("abc")),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(
           2,
@@ -1742,59 +1746,59 @@ describe("Erlang", () => {
   });
 
   describe("is_atom/1", () => {
-    const fun = Erlang["is_atom/1"];
+    const is_atom = Erlang["is_atom/1"];
 
     it("atom", () => {
-      assertBoxedTrue(fun(Type.atom("abc")));
+      assertBoxedTrue(is_atom(Type.atom("abc")));
     });
 
     it("non-atom", () => {
-      assertBoxedFalse(fun(Type.integer(123)));
+      assertBoxedFalse(is_atom(Type.integer(123)));
     });
   });
 
   describe("is_binary/1", () => {
-    const fun = Erlang["is_binary/1"];
+    const is_binary = Erlang["is_binary/1"];
 
     it("binary bitsting", () => {
-      assertBoxedTrue(fun(Type.bitstring("abc")));
+      assertBoxedTrue(is_binary(Type.bitstring("abc")));
     });
 
     it("non-binary bitstring", () => {
-      assertBoxedFalse(fun(Type.bitstring([0, 1, 0])));
+      assertBoxedFalse(is_binary(Type.bitstring([0, 1, 0])));
     });
 
     it("non-bitstring", () => {
-      assertBoxedFalse(fun(Type.atom("abc")));
+      assertBoxedFalse(is_binary(Type.atom("abc")));
     });
   });
 
   describe("is_bitstring/1", () => {
-    const fun = Erlang["is_bitstring/1"];
+    const is_bitstring = Erlang["is_bitstring/1"];
 
     it("bitstring", () => {
-      assertBoxedTrue(fun(Type.bitstring([0, 1, 0])));
+      assertBoxedTrue(is_bitstring(Type.bitstring([0, 1, 0])));
     });
 
     it("non-bitstring", () => {
-      assertBoxedFalse(fun(Type.atom("abc")));
+      assertBoxedFalse(is_bitstring(Type.atom("abc")));
     });
   });
 
   describe("is_float/1", () => {
-    const fun = Erlang["is_float/1"];
+    const is_float = Erlang["is_float/1"];
 
     it("float", () => {
-      assertBoxedTrue(fun(Type.float(1.0)));
+      assertBoxedTrue(is_float(Type.float(1.0)));
     });
 
     it("non-float", () => {
-      assertBoxedFalse(fun(Type.atom("abc")));
+      assertBoxedFalse(is_float(Type.atom("abc")));
     });
   });
 
   describe("is_function/1", () => {
-    const fun = Erlang["is_function/1"];
+    const is_function = Erlang["is_function/1"];
 
     it("function", () => {
       const term = Type.anonymousFunction(
@@ -1803,61 +1807,61 @@ describe("Erlang", () => {
         "dummyContext",
       );
 
-      assertBoxedTrue(fun(term));
+      assertBoxedTrue(is_function(term));
     });
 
     it("non-function", () => {
-      assertBoxedFalse(fun(Type.atom("abc")));
+      assertBoxedFalse(is_function(Type.atom("abc")));
     });
   });
 
   describe("is_function/2", () => {
-    const fun = Erlang["is_function/2"];
+    const is_function = Erlang["is_function/2"];
 
     it("function with the given arity", () => {
       const term = Type.anonymousFunction(3, "dummyClauses", "dummyContext");
 
-      assertBoxedTrue(fun(term, Type.integer(3)));
+      assertBoxedTrue(is_function(term, Type.integer(3)));
     });
 
     it("function with a different arity", () => {
       const term = Type.anonymousFunction(3, "dummyClauses", "dummyContext");
 
-      assertBoxedFalse(fun(term, Type.integer(4)));
+      assertBoxedFalse(is_function(term, Type.integer(4)));
     });
 
     it("non-function", () => {
-      assertBoxedFalse(fun(Type.atom("abc")));
+      assertBoxedFalse(is_function(Type.atom("abc")));
     });
   });
 
   describe("is_integer/1", () => {
-    const fun = Erlang["is_integer/1"];
+    const is_integer = Erlang["is_integer/1"];
 
     it("integer", () => {
-      assertBoxedTrue(fun(Type.integer(1)));
+      assertBoxedTrue(is_integer(Type.integer(1)));
     });
 
     it("non-integer", () => {
-      assertBoxedFalse(fun(Type.atom("abc")));
+      assertBoxedFalse(is_integer(Type.atom("abc")));
     });
   });
 
   describe("is_list/1", () => {
-    const fun = Erlang["is_list/1"];
+    const is_list = Erlang["is_list/1"];
 
     it("list", () => {
       const term = Type.list([Type.integer(1), Type.integer(2)]);
-      assertBoxedTrue(fun(term));
+      assertBoxedTrue(is_list(term));
     });
 
     it("non-list", () => {
-      assertBoxedFalse(fun(Type.atom("abc")));
+      assertBoxedFalse(is_list(Type.atom("abc")));
     });
   });
 
   describe("is_map/1", () => {
-    const fun = Erlang["is_map/1"];
+    const is_map = Erlang["is_map/1"];
 
     it("map", () => {
       const term = Type.map([
@@ -1865,90 +1869,90 @@ describe("Erlang", () => {
         [Type.atom("b"), Type.integer(2)],
       ]);
 
-      assertBoxedTrue(fun(term));
+      assertBoxedTrue(is_map(term));
     });
 
     it("non-map", () => {
-      assertBoxedFalse(fun(Type.atom("abc")));
+      assertBoxedFalse(is_map(Type.atom("abc")));
     });
   });
 
   describe("is_number/1", () => {
-    const fun = Erlang["is_number/1"];
+    const is_number = Erlang["is_number/1"];
 
     it("float", () => {
-      assertBoxedTrue(fun(Type.float(1.0)));
+      assertBoxedTrue(is_number(Type.float(1.0)));
     });
 
     it("integer", () => {
-      assertBoxedTrue(fun(Type.integer(1)));
+      assertBoxedTrue(is_number(Type.integer(1)));
     });
 
     it("non-number", () => {
-      assertBoxedFalse(fun(Type.atom("abc")));
+      assertBoxedFalse(is_number(Type.atom("abc")));
     });
   });
 
   describe("is_pid/1", () => {
-    const fun = Erlang["is_pid/1"];
+    const is_pid = Erlang["is_pid/1"];
 
     it("pid", () => {
-      assertBoxedTrue(fun(Type.pid("my_node@my_host", [0, 11, 222])));
+      assertBoxedTrue(is_pid(Type.pid("my_node@my_host", [0, 11, 222])));
     });
 
     it("non-pid", () => {
-      assertBoxedFalse(fun(Type.atom("abc")));
+      assertBoxedFalse(is_pid(Type.atom("abc")));
     });
   });
 
   describe("is_port/1", () => {
-    const fun = Erlang["is_port/1"];
+    const is_port = Erlang["is_port/1"];
 
     it("port", () => {
-      assertBoxedTrue(fun(Type.port("0.11")));
+      assertBoxedTrue(is_port(Type.port("0.11")));
     });
 
     it("non-port", () => {
-      assertBoxedFalse(fun(Type.atom("abc")));
+      assertBoxedFalse(is_port(Type.atom("abc")));
     });
   });
 
   describe("is_reference/1", () => {
-    const fun = Erlang["is_reference/1"];
+    const is_reference = Erlang["is_reference/1"];
 
     it("reference", () => {
-      assertBoxedTrue(fun(Type.reference("0.1.2.3")));
+      assertBoxedTrue(is_reference(Type.reference("0.1.2.3")));
     });
 
     it("non-reference", () => {
-      assertBoxedFalse(fun(Type.atom("abc")));
+      assertBoxedFalse(is_reference(Type.atom("abc")));
     });
   });
 
   describe("is_tuple/1", () => {
-    const fun = Erlang["is_tuple/1"];
+    const is_tuple = Erlang["is_tuple/1"];
 
     it("tuple", () => {
       const term = Type.tuple([Type.integer(1), Type.integer(2)]);
-      assertBoxedTrue(fun(term));
+      assertBoxedTrue(is_tuple(term));
     });
 
     it("non-tuple", () => {
-      assertBoxedFalse(fun(Type.atom("abc")));
+      assertBoxedFalse(is_tuple(Type.atom("abc")));
     });
   });
 
   describe("length/1", () => {
-    const fun = Erlang["length/1"];
+    const length = Erlang["length/1"];
 
     it("returns the number of items in the list", () => {
       const term = Type.list([Type.integer(1), Type.integer(2)]);
-      assert.deepStrictEqual(fun(term), Type.integer(2));
+      assert.deepStrictEqual(length(term), Type.integer(2));
     });
 
     it("raises ArgumentError if the argument is not a list", () => {
       assertBoxedError(
-        () => fun(Type.atom("abc")),
+        () => length(Type.atom("abc")),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(1, "not a list"),
       );
@@ -1956,7 +1960,7 @@ describe("Erlang", () => {
   });
 
   describe("map_size/1", () => {
-    const fun = Erlang["map_size/1"];
+    const map_size = Erlang["map_size/1"];
 
     it("returns the number of items in the map", () => {
       const term = Type.map([
@@ -1964,12 +1968,12 @@ describe("Erlang", () => {
         [Type.atom("b"), Type.integer(2)],
       ]);
 
-      assert.deepStrictEqual(fun(term), Type.integer(2));
+      assert.deepStrictEqual(map_size(term), Type.integer(2));
     });
 
     it("raises BadMapError if the argument is not a map", () => {
       assertBoxedError(
-        () => fun(Type.atom("abc")),
+        () => map_size(Type.atom("abc")),
         "BadMapError",
         "expected a map, got: :abc",
       );
@@ -1977,28 +1981,30 @@ describe("Erlang", () => {
   });
 
   describe("not/1", () => {
-    const fun = Erlang["not/1"];
+    const not = Erlang["not/1"];
 
     it("true", () => {
-      assert.deepStrictEqual(fun(Type.boolean(true)), Type.boolean(false));
+      assert.deepStrictEqual(not(Type.boolean(true)), Type.boolean(false));
     });
 
     it("false", () => {
-      assert.deepStrictEqual(fun(Type.boolean(false)), Type.boolean(true));
+      assert.deepStrictEqual(not(Type.boolean(false)), Type.boolean(true));
     });
 
     it("not boolean", () => {
-      assertBoxedError(() => fun(atomAbc), "ArgumentError", "argument error");
+      assertBoxedError(() => not(atomAbc), "ArgumentError", "argument error");
     });
   });
 
   describe("orelse/2", () => {
+    const orelse = Erlang["orelse/2"];
+
     it("returns true if the first argument is true", () => {
       const context = contextFixture({
         vars: {left: Type.boolean(true), right: Type.atom("abc")},
       });
 
-      const result = Erlang["orelse/2"](
+      const result = orelse(
         (context) => context.vars.left,
         (context) => context.vars.right,
         context,
@@ -2012,7 +2018,7 @@ describe("Erlang", () => {
         vars: {left: Type.boolean(false), right: Type.atom("abc")},
       });
 
-      const result = Erlang["orelse/2"](
+      const result = orelse(
         (context) => context.vars.left,
         (context) => context.vars.right,
         context,
@@ -2022,7 +2028,7 @@ describe("Erlang", () => {
     });
 
     it("doesn't evaluate the second argument if the first argument is true", () => {
-      const result = Erlang["orelse/2"](
+      const result = orelse(
         (_context) => Type.boolean(true),
         (_context) => {
           throw new Error("impossible");
@@ -2040,7 +2046,7 @@ describe("Erlang", () => {
 
       assertBoxedError(
         () =>
-          Erlang["orelse/2"](
+          orelse(
             (context) => context.vars.left,
             (context) => context.vars.right,
             context,
@@ -2052,10 +2058,12 @@ describe("Erlang", () => {
   });
 
   describe("tl/1", () => {
+    const tl = Erlang["tl/1"];
+
     describe("proper list", () => {
       it("1 item", () => {
         const list = Type.list([Type.integer(1)]);
-        const result = Erlang["tl/1"](list);
+        const result = tl(list);
         const expected = Type.list([]);
 
         assert.deepStrictEqual(result, expected);
@@ -2063,7 +2071,7 @@ describe("Erlang", () => {
 
       it("2 items", () => {
         const list = Type.list([Type.integer(1), Type.integer(2)]);
-        const result = Erlang["tl/1"](list);
+        const result = tl(list);
         const expected = Type.list([Type.integer(2)]);
 
         assert.deepStrictEqual(result, expected);
@@ -2076,7 +2084,7 @@ describe("Erlang", () => {
           Type.integer(3),
         ]);
 
-        const result = Erlang["tl/1"](list);
+        const result = tl(list);
         const expected = Type.list([Type.integer(2), Type.integer(3)]);
 
         assert.deepStrictEqual(result, expected);
@@ -2086,7 +2094,7 @@ describe("Erlang", () => {
     describe("improper list", () => {
       it("2 items", () => {
         const list = Type.improperList([Type.integer(1), Type.integer(2)]);
-        const result = Erlang["tl/1"](list);
+        const result = tl(list);
         const expected = Type.integer(2);
 
         assert.deepStrictEqual(result, expected);
@@ -2099,7 +2107,7 @@ describe("Erlang", () => {
           Type.integer(3),
         ]);
 
-        const result = Erlang["tl/1"](list);
+        const result = tl(list);
         const expected = Type.improperList([Type.integer(2), Type.integer(3)]);
 
         assert.deepStrictEqual(result, expected);
@@ -2109,7 +2117,7 @@ describe("Erlang", () => {
     describe("errors", () => {
       it("raises ArgumentError if the argument is an empty boxed list", () => {
         assertBoxedError(
-          () => Erlang["tl/1"](Type.list([])),
+          () => tl(Type.list([])),
           "ArgumentError",
           Interpreter.buildErrorsFoundMsg(1, "not a nonempty list"),
         );
@@ -2117,7 +2125,7 @@ describe("Erlang", () => {
 
       it("raises ArgumentError if the argument is not a boxed list", () => {
         assertBoxedError(
-          () => Erlang["tl/1"](Type.integer(123)),
+          () => tl(Type.integer(123)),
           "ArgumentError",
           Interpreter.buildErrorsFoundMsg(1, "not a nonempty list"),
         );
@@ -2126,11 +2134,13 @@ describe("Erlang", () => {
   });
 
   describe("tuple_to_list/1", () => {
+    const tuple_to_list = Erlang["tuple_to_list/1"];
+
     it("returns a list corresponding to the given tuple", () => {
       const data = [Type.integer(1), Type.integer(2), Type.integer(3)];
       const tuple = Type.tuple(data);
 
-      const result = Erlang["tuple_to_list/1"](tuple);
+      const result = tuple_to_list(tuple);
       const expected = Type.list(data);
 
       assert.deepStrictEqual(result, expected);
@@ -2138,7 +2148,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the argument is not a tuple", () => {
       assertBoxedError(
-        () => Erlang["tuple_to_list/1"](Type.atom("abc")),
+        () => tuple_to_list(Type.atom("abc")),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(1, "not a tuple"),
       );
