@@ -245,6 +245,14 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
         :lists.reverse(:abc)
       end
     end
+
+    test "raises ArgumentError if the argument is not a proper list" do
+      assert_raise ArgumentError,
+                   build_errors_found_msg(1, "not a list"),
+                   fn ->
+                     :lists.reverse([1, 2 | 3])
+                   end
+    end
   end
 
   describe "reverse/2" do

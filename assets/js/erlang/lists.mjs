@@ -179,6 +179,12 @@ const Erlang_Lists = {
       );
     }
 
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildErrorsFoundMsg(1, "not a list"),
+      );
+    }
+
     return Type.list(list.data.toReversed());
   },
   // End reverse/1

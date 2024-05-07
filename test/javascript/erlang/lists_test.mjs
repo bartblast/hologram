@@ -506,13 +506,7 @@ describe("Erlang_Lists", () => {
     const reverse = Erlang_Lists["reverse/1"];
 
     it("returns a list with the elements in the argument in reverse order", () => {
-      const arg = Type.list([
-        Type.integer(1),
-        Type.integer(2),
-        Type.integer(3),
-      ]);
-
-      const result = reverse(arg);
+      const result = reverse(properList);
 
       const expected = Type.list([
         Type.integer(3),
@@ -528,6 +522,14 @@ describe("Erlang_Lists", () => {
         () => reverse(Type.atom("abc")),
         "FunctionClauseError",
         "no function clause matching in :lists.reverse/1",
+      );
+    });
+
+    it("raises ArgumentError if the argument is not a proper list", () => {
+      assertBoxedError(
+        () => reverse(improperList),
+        "ArgumentError",
+        Interpreter.buildErrorsFoundMsg(1, "not a list"),
       );
     });
   });
