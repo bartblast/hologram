@@ -81,7 +81,7 @@ defmodule Hologram.Commons.Reflection do
   """
   @spec component?(term) :: boolean
   def component?(term) do
-    module?(term) && {:__is_hologram_component__, 0} in term.__info__(:functions)
+    elixir_module?(term) && {:__is_hologram_component__, 0} in term.__info__(:functions)
   end
 
   @doc """
@@ -220,7 +220,7 @@ defmodule Hologram.Commons.Reflection do
       |> Keyword.fetch!(:modules)
       |> Kernel.++(acc)
     end)
-    |> Enum.filter(&module?/1)
+    |> Enum.filter(&elixir_module?/1)
     |> Kernel.--(@ignored_modules)
   end
 
@@ -347,7 +347,7 @@ defmodule Hologram.Commons.Reflection do
   """
   @spec page?(term) :: boolean
   def page?(term) do
-    module?(term) && {:__is_hologram_page__, 0} in term.__info__(:functions)
+    elixir_module?(term) && {:__is_hologram_page__, 0} in term.__info__(:functions)
   end
 
   @doc """
@@ -363,7 +363,7 @@ defmodule Hologram.Commons.Reflection do
   """
   @spec protocol?(any) :: boolean
   def protocol?(term) do
-    module?(term) && has_function?(term, :__protocol__, 1)
+    elixir_module?(term) && has_function?(term, :__protocol__, 1)
   end
 
   @doc """
