@@ -31,22 +31,35 @@ defmodule Hologram.Template.TokenizerTest do
 
   describe "angle brackets" do
     test "opening" do
-      assert tokenize("</.<./") == [
+      assert tokenize("</.<!--.<./.!.--.!--") == [
                symbol: "</",
+               string: ".",
+               symbol: "<!--",
                string: ".",
                symbol: "<",
                string: ".",
-               symbol: "/"
+               symbol: "/",
+               string: ".!.",
+               symbol: "-",
+               symbol: "-",
+               string: ".!",
+               symbol: "-",
+               symbol: "-"
              ]
     end
 
     test "closing" do
-      assert tokenize("/>.>./") == [
+      assert tokenize("/>.-->.>./.--") == [
                symbol: "/>",
+               string: ".",
+               symbol: "-->",
                string: ".",
                symbol: ">",
                string: ".",
-               symbol: "/"
+               symbol: "/",
+               string: ".",
+               symbol: "-",
+               symbol: "-"
              ]
     end
   end
@@ -238,6 +251,10 @@ defmodule Hologram.Template.TokenizerTest do
       assert tokenize("=") == [symbol: "="]
     end
 
+    test "hyphen" do
+      assert tokenize("-") == [symbol: "-"]
+    end
+
     test "percentage sign" do
       assert tokenize("%") == [symbol: "%"]
     end
@@ -269,7 +286,7 @@ defmodule Hologram.Template.TokenizerTest do
     end
 
     test "special characters" do
-      markup = "§£@^&*()-_+[];:|~,.?"
+      markup = "§£@^&*()_+[];:|~,.?"
       assert tokenize(markup) == [string: markup]
     end
   end
