@@ -225,6 +225,12 @@ const Erlang_Lists = {
       );
     }
 
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        "no function clause matching in :lists.split_1/5",
+      );
+    }
+
     return Type.list(list.data.sort(Interpreter.compareTerms));
   },
   // End sort/1

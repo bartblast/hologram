@@ -311,5 +311,11 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
         :lists.sort(:abc)
       end
     end
+
+    test "raises FunctionClauseError if the argument is an improper list" do
+      assert_raise FunctionClauseError, "no function clause matching in :lists.split_1/5", fn ->
+        :lists.sort([1, 2 | 3])
+      end
+    end
   end
 end

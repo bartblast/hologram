@@ -647,5 +647,13 @@ describe("Erlang_Lists", () => {
         "no function clause matching in :lists.sort/1",
       );
     });
+
+    it("raises FunctionClauseError if the argument is an improper list", () => {
+      assertBoxedError(
+        () => sort(improperList),
+        "FunctionClauseError",
+        "no function clause matching in :lists.split_1/5",
+      );
+    });
   });
 });
