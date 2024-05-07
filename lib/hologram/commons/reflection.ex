@@ -105,7 +105,7 @@ defmodule Hologram.Commons.Reflection do
   def elixir_module?(term)
 
   def elixir_module?(term) when is_atom(term) do
-    if ga(alias?(term)) do
+    if alias?(term) do
       case Code.ensure_loaded(term) do
         {:module, ^term} ->
           true
