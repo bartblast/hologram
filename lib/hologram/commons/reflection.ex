@@ -81,7 +81,7 @@ defmodule Hologram.Commons.Reflection do
   """
   @spec component?(term) :: boolean
   def component?(term) do
-    alias?(term) && {:__is_hologram_component__, 0} in term.__info__(:functions)
+    module?(term) && {:__is_hologram_component__, 0} in term.__info__(:functions)
   end
 
   @doc """
@@ -105,7 +105,7 @@ defmodule Hologram.Commons.Reflection do
   def elixir_module?(term)
 
   def elixir_module?(term) when is_atom(term) do
-    if alias?(term) do
+    if ga(alias?(term)) do
       case Code.ensure_loaded(term) do
         {:module, ^term} ->
           true
@@ -220,7 +220,7 @@ defmodule Hologram.Commons.Reflection do
       |> Keyword.fetch!(:modules)
       |> Kernel.++(acc)
     end)
-    |> Enum.filter(&alias?/1)
+    |> Enum.filter(&module?/1)
     |> Kernel.--(@ignored_modules)
   end
 
@@ -347,7 +347,7 @@ defmodule Hologram.Commons.Reflection do
   """
   @spec page?(term) :: boolean
   def page?(term) do
-    alias?(term) && {:__is_hologram_page__, 0} in term.__info__(:functions)
+    module?(term) && {:__is_hologram_page__, 0} in term.__info__(:functions)
   end
 
   @doc """
@@ -363,7 +363,7 @@ defmodule Hologram.Commons.Reflection do
   """
   @spec protocol?(any) :: boolean
   def protocol?(term) do
-    alias?(term) && has_function?(term, :__protocol__, 1)
+    module?(term) && has_function?(term, :__protocol__, 1)
   end
 
   @doc """

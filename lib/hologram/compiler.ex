@@ -538,11 +538,11 @@ defmodule Hologram.Compiler do
   end
 
   defp filter_elixir_mfas(mfas) do
-    Enum.filter(mfas, fn {module, _function, _arity} -> Reflection.alias?(module) end)
+    Enum.filter(mfas, fn {module, _function, _arity} -> Reflection.module?(module) end)
   end
 
   defp filter_erlang_mfas(mfas) do
-    Enum.filter(mfas, fn {module, _function, _arity} -> !Reflection.alias?(module) end)
+    Enum.filter(mfas, fn {module, _function, _arity} -> !Reflection.module?(module) end)
   end
 
   defp get_module_beam_path(module_beam_path_plt, module) do
