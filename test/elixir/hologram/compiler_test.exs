@@ -101,11 +101,21 @@ defmodule Hologram.CompilerTest do
              PLT.get!(ir_plt, Hologram.Compiler)
   end
 
-  test "build_ir_plt/1", %{module_beam_path_plt: module_beam_path_plt} do
-    assert %PLT{} = ir_plt = build_ir_plt(module_beam_path_plt)
+  describe "build_ir_plt/1" do
+    test "module has BEAM path", %{module_beam_path_plt: module_beam_path_plt} do
+      assert %PLT{} = ir_plt = build_ir_plt(module_beam_path_plt)
 
-    assert %IR.ModuleDefinition{module: %IR.AtomType{value: Hologram.Compiler}} =
-             PLT.get!(ir_plt, Hologram.Compiler)
+      assert %IR.ModuleDefinition{module: %IR.AtomType{value: Hologram.Compiler}} =
+               PLT.get!(ir_plt, Hologram.Compiler)
+    end
+
+    test "module doesn't have BEAM path", %{module_beam_path_plt: module_beam_path_plt} do
+      module_beam_path_plt_clone = PLT.clone(module_beam_path_plt)
+      PLT.put(module_beam_path_plt_clone, MyModule, :non_existing)
+
+      assert %PLT{} = ir_plt = build_ir_plt(module_beam_path_plt)
+      assert PLT.get(ir_plt, MyModule) == :error
+    end
   end
 
   test "build_module_beam_path_plt/0" do
@@ -118,11 +128,23 @@ defmodule Hologram.CompilerTest do
       [module_beam_path_plt: PLT.clone(module_beam_path_plt)]
     end
 
-    test "builds module digest PLT", %{module_beam_path_plt: module_beam_path_plt} do
-      assert plt = %PLT{} = build_module_digest_plt!(module_beam_path_plt)
+    test "adds module digest entries for modules that have a BEAM path", %{
+      module_beam_path_plt: module_beam_path_plt
+    } do
+      assert %PLT{} = plt = build_module_digest_plt!(module_beam_path_plt)
 
       assert <<_digest::256>> = PLT.get!(plt, Hologram.Commons.Reflection)
       assert <<_digest::256>> = PLT.get!(plt, Hologram.Compiler)
+    end
+
+    test "doesn't add module digest entries for modules that don't have a BEAM path", %{
+      module_beam_path_plt: module_beam_path_plt
+    } do
+      module_beam_path_plt_clone = PLT.clone(module_beam_path_plt)
+      PLT.put(module_beam_path_plt_clone, MyModule, :non_existing)
+
+      assert %PLT{} = plt = build_module_digest_plt!(module_beam_path_plt)
+      assert PLT.get(plt, MyModule) == :error
     end
 
     test "adds missing module BEAM path PLT entries", %{

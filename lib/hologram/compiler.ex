@@ -56,8 +56,11 @@ defmodule Hologram.Compiler do
     Reflection.list_elixir_modules()
     |> TaskUtils.async_many(fn module ->
       beam_path = get_module_beam_path(module_beam_path_plt, module)
-      ir = IR.for_module(beam_path)
-      PLT.put(ir_plt, module, ir)
+
+      if beam_path != :non_existing do
+        ir = IR.for_module(beam_path)
+        PLT.put(ir_plt, module, ir)
+      end
     end)
     |> Task.await_many(:infinity)
 
@@ -576,13 +579,15 @@ defmodule Hologram.Compiler do
   defp rebuild_module_digest_plt_entry!(module, module_digest_plt, module_beam_path_plt) do
     beam_path = get_module_beam_path(module_beam_path_plt, module)
 
-    data =
-      beam_path
-      |> Reflection.beam_defs()
-      |> :erlang.term_to_binary(compressed: 0)
+    if beam_path != :non_existing do
+      data =
+        beam_path
+        |> Reflection.beam_defs()
+        |> :erlang.term_to_binary(compressed: 0)
 
-    digest = CryptographicUtils.digest(data, :sha256, :binary)
-    PLT.put(module_digest_plt, module, digest)
+      digest = CryptographicUtils.digest(data, :sha256, :binary)
+      PLT.put(module_digest_plt, module, digest)
+    end
   end
 
   defp render_block(str) do
