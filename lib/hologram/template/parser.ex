@@ -28,6 +28,8 @@ defmodule Hologram.Template.Parser do
            | :block_start
            | :end_tag
            | :expression
+           | :public_comment_end
+           | :public_comment_start
            | :self_closing_tag
            | :start_tag
            | :text, any}
@@ -521,6 +523,24 @@ defmodule Hologram.Template.Parser do
     parse_text(context, {:symbol, "{"}, rest)
   end
 
+  def parse_tokens(%{script?: false} = context, :text, [{:symbol, "<!--"} = token | rest]) do
+    context
+    |> maybe_add_text_tag()
+    |> reset_token_buffer()
+    |> add_public_comment_start_tag()
+    |> add_processed_token(token)
+    |> parse_tokens(:text, rest)
+  end
+
+  def parse_tokens(%{script?: false} = context, :text, [{:symbol, "-->"} = token | rest]) do
+    context
+    |> maybe_add_text_tag()
+    |> reset_token_buffer()
+    |> add_public_comment_end_tag()
+    |> add_processed_token(token)
+    |> parse_tokens(:text, rest)
+  end
+
   def parse_tokens(%{raw?: false} = context, :text, [{:symbol, "{%raw}"} = token | rest]) do
     context
     |> add_processed_token(token)
@@ -703,6 +723,14 @@ defmodule Hologram.Template.Parser do
 
   defp add_processed_token(%{processed_tokens: processed_tokens} = context, token) do
     %{context | processed_tokens: [token | processed_tokens]}
+  end
+
+  defp add_public_comment_end_tag(context) do
+    add_processed_tag(context, :public_comment_end)
+  end
+
+  defp add_public_comment_start_tag(context) do
+    add_processed_tag(context, :public_comment_start)
   end
 
   defp add_self_closing_tag(context) do

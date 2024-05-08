@@ -231,6 +231,16 @@ defmodule Hologram.Template.ParserTest do
     )
   end
 
+  describe "public comment" do
+    test "start" do
+      assert parse_markup("<!--") == [:public_comment_start]
+    end
+
+    test "end" do
+      assert parse_markup("-->") == [:public_comment_end]
+    end
+  end
+
   describe "for block" do
     test "start" do
       assert parse_markup("{%for item <- @items}") == [
@@ -322,7 +332,9 @@ defmodule Hologram.Template.ParserTest do
       {"element start tag", "<div>", start_tag: {"div", []}},
       {"element end tag", "</div>", end_tag: "div"},
       {"component start tag", "<Aaa.Bbb>", start_tag: {"Aaa.Bbb", []}},
-      {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"}
+      {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"},
+      {"public comment start", "<!--", [:public_comment_start]},
+      {"public comment end", "-->", [:public_comment_end]}
     ]
 
     Enum.each(tags, fn {name, markup, expected} ->
@@ -387,12 +399,14 @@ defmodule Hologram.Template.ParserTest do
     end
   end
 
-  describe "row block after" do
+  describe "raw block after" do
     tags = [
       {"element start tag", "<div>", start_tag: {"div", []}},
       {"element end tag", "</div>", end_tag: "div"},
       {"component start tag", "<Aaa.Bbb>", start_tag: {"Aaa.Bbb", []}},
       {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"},
+      {"public comment start", "<!--", [:public_comment_start]},
+      {"public comment end", "-->", [:public_comment_end]},
       {"else subblock", "{%else}", block_start: "else"},
       {"expression", "{@abc}", expression: "{@abc}"},
       {"for block start", "{%for item <- @items}", block_start: {"for", "{ item <- @items}"}},
@@ -424,6 +438,8 @@ defmodule Hologram.Template.ParserTest do
       {"element end tag", "</div>", end_tag: "div"},
       {"component start tag", "<Aaa.Bbb>", start_tag: {"Aaa.Bbb", []}},
       {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"},
+      {"public comment start", "<!--", [:public_comment_start]},
+      {"public comment end", "-->", [:public_comment_end]},
       {"else subblock", "{%else}", block_start: "else"},
       {"expression", "{@abc}", expression: "{@abc}"},
       {"for block start", "{%for item <- @items}", block_start: {"for", "{ item <- @items}"}},
@@ -451,7 +467,18 @@ defmodule Hologram.Template.ParserTest do
   describe "special characters nested in various markup" do
     Enum.each(@special_chars, fn char ->
       test "'#{char}' character in text" do
-        assert parse_markup(unquote(char)) == [text: unquote(char)]
+        markup = "aaa#{unquote(char)}bbb"
+        assert parse_markup(markup) == [text: markup]
+      end
+
+      test "'#{char}' character in public comment" do
+        markup = "<!--#{unquote(char)}-->"
+
+        assert parse_markup(markup) == [
+                 :public_comment_start,
+                 {:text, unquote(char)},
+                 :public_comment_end
+               ]
       end
 
       test "'#{char}' character in text interpolated expression" do
@@ -545,7 +572,9 @@ defmodule Hologram.Template.ParserTest do
       {"element start tag", "<div>", start_tag: {"div", []}},
       {"element end tag", "</div>", end_tag: "div"},
       {"component start tag", "<Aaa.Bbb>", start_tag: {"Aaa.Bbb", []}},
-      {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"}
+      {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"},
+      {"public comment start", "<!--", [:public_comment_start]},
+      {"public comment end", "-->", [:public_comment_end]}
     ]
 
     Enum.each(tags, fn {name, markup, [expected]} ->
@@ -1068,9 +1097,20 @@ defmodule Hologram.Template.ParserTest do
       assert parse_markup(markup) == [text: markup]
     end
 
+    test "in public comment" do
+      markup = "<!--\#{@abc}-->"
+
+      assert parse_markup(markup) == [
+               :public_comment_start,
+               {:text, "\#{@abc}"},
+               :public_comment_end
+             ]
+    end
+
     test "in expression, inside double quotes" do
       markup = "{\"aaa\#{123}bbb\"}"
       assert parse_markup(markup) == [expression: markup]
+      parse_markup(markup) |> IO.inspect()
     end
 
     test "in expression, inside single quotes" do
