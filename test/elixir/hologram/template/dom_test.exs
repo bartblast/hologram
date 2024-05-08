@@ -12,6 +12,210 @@ defmodule Hologram.Template.DOMTest do
     end
   end
 
+  describe "build_ast/1, public comment node" do
+    test "empty" do
+      # "<!---->"
+      tags = [:public_comment_start, :public_comment_end]
+
+      assert build_ast(tags) == [public_comment: []]
+    end
+
+    test "with text child" do
+      # <!--abc-->
+      tags = [:public_comment_start, {:text, "abc"}, :public_comment_end]
+
+      assert build_ast(tags) == [public_comment: [{:text, "abc"}]]
+    end
+
+    test "with element child" do
+      # <!--<div></div>-->
+      tags = [
+        :public_comment_start,
+        {:start_tag, {"div", []}},
+        {:end_tag, "div"},
+        :public_comment_end
+      ]
+
+      assert build_ast(tags) == [public_comment: [{:{}, [line: 1], [:element, "div", [], []]}]]
+    end
+
+    test "with component child" do
+      # <!--<MyComponent></MyComponent>-->
+      tags = [
+        :public_comment_start,
+        {:start_tag, {"MyComponent", []}},
+        {:end_tag, "MyComponent"},
+        :public_comment_end
+      ]
+
+      assert build_ast(tags) == [
+               public_comment: [
+                 {:{}, [line: 1],
+                  [
+                    :component,
+                    {:alias!, [line: 1], [{:__aliases__, [line: 1], [:MyComponent]}]},
+                    [],
+                    []
+                  ]}
+               ]
+             ]
+    end
+
+    test "with multiple children" do
+      # <!--abc<div></div>-->
+      tags = [
+        :public_comment_start,
+        {:text, "abc"},
+        {:start_tag, {"div", []}},
+        {:end_tag, "div"},
+        :public_comment_end
+      ]
+
+      assert build_ast(tags) == [
+               public_comment: [{:text, "abc"}, {:{}, [line: 1], [:element, "div", [], []]}]
+             ]
+    end
+
+    test "inside text node" do
+      # aaa<!--bbb-->ccc
+      tags = [
+        {:text, "aaa"},
+        :public_comment_start,
+        {:text, "bbb"},
+        :public_comment_end,
+        {:text, "ccc"}
+      ]
+
+      assert build_ast(tags) == [text: "aaa", public_comment: [text: "bbb"], text: "ccc"]
+    end
+
+    test "inside element node" do
+      # <div><!--abc--></div>
+      tags = [
+        {:start_tag, {"div", []}},
+        :public_comment_start,
+        {:text, "abc"},
+        :public_comment_end,
+        {:end_tag, "div"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1], [:element, "div", [], [public_comment: [text: "abc"]]]}
+             ]
+    end
+
+    test "inside component node" do
+      # <MyComponent><!--abc--></MyComponent>
+      tags = [
+        {:start_tag, {"MyComponent", []}},
+        :public_comment_start,
+        {:text, "abc"},
+        :public_comment_end,
+        {:end_tag, "MyComponent"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :component,
+                  {:alias!, [line: 1], [{:__aliases__, [line: 1], [:MyComponent]}]},
+                  [],
+                  [public_comment: [text: "abc"]]
+                ]}
+             ]
+    end
+
+    test "after text node" do
+      # aaa<!--bbb-->
+      tags = [{:text, "aaa"}, :public_comment_start, {:text, "bbb"}, :public_comment_end]
+
+      assert build_ast(tags) == [text: "aaa", public_comment: [text: "bbb"]]
+    end
+
+    test "after element node" do
+      # <div></div><!--abc-->
+      tags = [
+        {:start_tag, {"div", []}},
+        {:end_tag, "div"},
+        :public_comment_start,
+        {:text, "abc"},
+        :public_comment_end
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1], [:element, "div", [], []]},
+               {:public_comment, [text: "abc"]}
+             ]
+    end
+
+    test "after component node" do
+      # <MyComponent></MyComponent><!--abc-->
+      tags = [
+        {:start_tag, {"MyComponent", []}},
+        {:end_tag, "MyComponent"},
+        :public_comment_start,
+        {:text, "abc"},
+        :public_comment_end
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :component,
+                  {:alias!, [line: 1], [{:__aliases__, [line: 1], [:MyComponent]}]},
+                  [],
+                  []
+                ]},
+               {:public_comment, [text: "abc"]}
+             ]
+    end
+
+    test "before text node" do
+      # <!--aaa-->bbb
+      tags = [:public_comment_start, {:text, "aaa"}, :public_comment_end, {:text, "bbb"}]
+
+      assert build_ast(tags) == [public_comment: [text: "aaa"], text: "bbb"]
+    end
+
+    test "before element node" do
+      # <!--aaa--><div></div>
+      tags = [
+        :public_comment_start,
+        {:text, "aaa"},
+        :public_comment_end,
+        {:start_tag, {"div", []}},
+        {:end_tag, "div"}
+      ]
+
+      assert build_ast(tags) == [
+               {:public_comment, [text: "aaa"]},
+               {:{}, [line: 1], [:element, "div", [], []]}
+             ]
+    end
+
+    test "before component node" do
+      # <!--abc--><MyComponent></MyComponent>
+      tags = [
+        :public_comment_start,
+        {:text, "abc"},
+        :public_comment_end,
+        {:start_tag, {"MyComponent", []}},
+        {:end_tag, "MyComponent"}
+      ]
+
+      assert build_ast(tags) == [
+               {:public_comment, [text: "abc"]},
+               {:{}, [line: 1],
+                [
+                  :component,
+                  {:alias!, [line: 1], [{:__aliases__, [line: 1], [:MyComponent]}]},
+                  [],
+                  []
+                ]}
+             ]
+    end
+  end
+
   describe "build_ast/1, element node & component node" do
     nodes = [
       {:element, "attribute", "div", "div"},

@@ -9,6 +9,7 @@ defmodule Hologram.Template.DOM do
           | {:element, String.t(), list({String.t(), t}), t}
           | {:expression, {any}}
           | {:page, module, list({String.t(), t}), []}
+          | {:public_comment, t}
           | {:text, String.t()}
 
   @type t :: dom_node | list(dom_node())
@@ -26,7 +27,7 @@ defmodule Hologram.Template.DOM do
   def build_ast(tags) do
     {code, _last_tag_type} =
       Enum.reduce(tags, {"", nil}, fn tag, {code_acc, last_tag_type} ->
-        current_tag_type = elem(tag, 0)
+        current_tag_type = if is_tuple(tag), do: elem(tag, 0), else: tag
         current_tag_code = render_code(tag)
         new_code_acc = append_code(code_acc, current_tag_code, last_tag_type)
 
@@ -39,7 +40,14 @@ defmodule Hologram.Template.DOM do
   end
 
   defp append_code(code_acc, code, last_tag_type)
-       when last_tag_type in [:block_end, :end_tag, :expression, :self_closing_tag, :text] do
+       when last_tag_type in [
+              :block_end,
+              :end_tag,
+              :expression,
+              :public_comment_end,
+              :self_closing_tag,
+              :text
+            ] do
     code_acc <> ", " <> code
   end
 
@@ -79,6 +87,14 @@ defmodule Hologram.Template.DOM do
 
   defp render_code({:expression, expr_str}) do
     "{:expression, #{expr_str}}"
+  end
+
+  defp render_code(:public_comment_end) do
+    "]}"
+  end
+
+  defp render_code(:public_comment_start) do
+    "{:public_comment, ["
   end
 
   defp render_code({:self_closing_tag, {tag_name, attributes}}) do
