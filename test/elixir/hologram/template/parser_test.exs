@@ -1110,7 +1110,6 @@ defmodule Hologram.Template.ParserTest do
     test "in expression, inside double quotes" do
       markup = "{\"aaa\#{123}bbb\"}"
       assert parse_markup(markup) == [expression: markup]
-      parse_markup(markup) |> IO.inspect()
     end
 
     test "in expression, inside single quotes" do
