@@ -14,13 +14,6 @@ defmodule Hologram.TemplateTest do
       assert dom_ast("<!DoCtYpE html test_1 test_2>content") == [{:text, "content"}]
     end
 
-    test "remove comments" do
-      special_chars = "abc \n \r \t < > / = \" { } ! -"
-      markup = "aaa<!-- #{special_chars} -->bbb<!-- #{special_chars} -->ccc"
-
-      assert dom_ast(markup) == [{:text, "aaabbbccc"}]
-    end
-
     test "trim leading and trailing whitespaces" do
       assert dom_ast("\n\t content \t\n") == [{:text, "content"}]
     end

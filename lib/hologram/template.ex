@@ -16,7 +16,6 @@ defmodule Hologram.Template do
   def dom_ast(markup) do
     markup
     |> remove_doctype()
-    |> remove_comments()
     |> String.trim()
     |> Tokenizer.tokenize()
     |> Parser.parse_tokens()
@@ -40,10 +39,6 @@ defmodule Hologram.Template do
         unquote(dom_ast(markup))
       end
     end
-  end
-
-  defp remove_comments(markup) do
-    Regex.replace(~r/<!\-\-.*\-\->/sU, markup, "")
   end
 
   defp remove_doctype(markup) do
