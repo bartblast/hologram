@@ -561,21 +561,22 @@ defmodule Hologram.Template.Parser do
     parse_text(context, {:symbol, "{"}, rest)
   end
 
-  def parse_tokens(%{script?: false} = context, :text, [{:symbol, "<!"} = token | rest_1]) do
+  def parse_tokens(%{script?: false} = context, :text, [{:symbol, "<!"} = token_1 | rest_1]) do
     case rest_1 do
-      [{:string, str} | rest_2] ->
+      [{:string, str} = token_2 | rest_2] ->
         if String.downcase(str) == "doctype" do
           context
           |> maybe_add_text_tag()
           |> reset_token_buffer()
-          |> add_processed_token(token)
+          |> add_processed_token(token_1)
+          |> add_processed_token(token_2)
           |> parse_tokens(:doctype, rest_2)
         else
-          raise_error(@unescaped_lt_char_details, context, :text, token, rest_1)
+          raise_error(@unescaped_lt_char_details, context, :text, token_1, rest_1)
         end
 
       _fallback ->
-        raise_error(@unescaped_lt_char_details, context, :text, token, rest_1)
+        raise_error(@unescaped_lt_char_details, context, :text, token_1, rest_1)
     end
   end
 

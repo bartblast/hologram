@@ -1394,6 +1394,51 @@ defmodule Hologram.Template.ParserTest do
       test_syntax_error_msg("<div", msg)
     end
 
+    test "unclosed DOCTYPE declaration" do
+      msg = """
+      Reason:
+      Unclosed DOCTYPE declaration.
+
+      Hint:
+      Close the DOCTYPE declaration with '>' character.
+
+      <!DOCTYPE html
+                    ^
+      """
+
+      test_syntax_error_msg("<!DOCTYPE html", msg)
+    end
+
+    test "'<!' symbol followed by a string other than 'DOCTYPE' (case insensitive)" do
+      msg = """
+      Reason:
+      Unescaped '<' character inside text node.
+
+      Hint:
+      To escape use HTML entity: '&lt;'.
+
+      <!abc html>
+      ^
+      """
+
+      test_syntax_error_msg("<!abc html>", msg)
+    end
+
+    test "'<!' symbol followed by a whitespace" do
+      msg = """
+      Reason:
+      Unescaped '<' character inside text node.
+
+      Hint:
+      To escape use HTML entity: '&lt;'.
+
+      <! DOCTYPE html>
+      ^
+      """
+
+      test_syntax_error_msg("<! DOCTYPE html>", msg)
+    end
+
     test "missing attribute name" do
       msg = """
       Reason:
