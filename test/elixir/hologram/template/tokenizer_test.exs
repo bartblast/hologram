@@ -31,7 +31,7 @@ defmodule Hologram.Template.TokenizerTest do
 
   describe "angle brackets" do
     test "opening" do
-      assert tokenize("</.<!--.<./.!.--.!--") == [
+      assert tokenize("</.<!--.<./.<!.!.--.!--") == [
                symbol: "</",
                string: ".",
                symbol: "<!--",
@@ -39,6 +39,8 @@ defmodule Hologram.Template.TokenizerTest do
                symbol: "<",
                string: ".",
                symbol: "/",
+               string: ".",
+               symbol: "<!",
                string: ".!.",
                symbol: "-",
                symbol: "-",
