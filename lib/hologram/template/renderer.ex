@@ -64,6 +64,13 @@ defmodule Hologram.Template.Renderer do
     {to_string(value), %{}}
   end
 
+  def render_dom({:public_comment, children_dom}, context, slots) do
+    {children_html, component_registry} = render_dom(children_dom, context, slots)
+    html = "<!--#{children_html}-->"
+
+    {html, component_registry}
+  end
+
   def render_dom({:text, text}, _context, _slots) do
     {text, %{}}
   end

@@ -68,6 +68,59 @@ defmodule Hologram.Template.RendererTest do
     assert render_dom(node, %{}, []) == {"abc", %{}}
   end
 
+  describe "public comment node" do
+    test "empty" do
+      # <!---->
+      node = {:public_comment, []}
+
+      assert render_dom(node, %{}, []) == {"<!---->", %{}}
+    end
+
+    test "with single child" do
+      # <!--<div></div>-->
+      node = {:public_comment, [{:element, "div", [], []}]}
+
+      assert render_dom(node, %{}, []) == {"<!--<div></div>-->", %{}}
+    end
+
+    test "with multiple children" do
+      # <!--abc<div></div>-->
+      node = {:public_comment, [{:text, "abc"}, {:element, "div", [], []}]}
+
+      assert render_dom(node, %{}, []) == {"<!--abc<div></div>-->", %{}}
+    end
+
+    test "with nested stateful components" do
+      # <!--<div attr="value"><Module3 /><Module7 /></div>-->
+      node =
+        {:public_comment,
+         [
+           {:element, "div", [{"attr", [text: "value"]}],
+            [
+              {:component, Module3, [{"cid", [text: "component_3"]}], []},
+              {:component, Module7, [{"cid", [text: "component_7"]}], []}
+            ]}
+         ]}
+
+      assert render_dom(node, %{}, []) ==
+               {~s(<!--<div attr="value"><div>state_a = 1, state_b = 2</div><div>state_c = 3, state_d = 4</div></div>-->),
+                %{
+                  "component_3" => %{
+                    module: Module3,
+                    struct: %Component{
+                      state: %{a: 1, b: 2}
+                    }
+                  },
+                  "component_7" => %{
+                    module: Module7,
+                    struct: %Component{
+                      state: %{c: 3, d: 4}
+                    }
+                  }
+                }}
+    end
+  end
+
   test "expression node" do
     node = {:expression, {123}}
     assert render_dom(node, %{}, []) == {"123", %{}}
