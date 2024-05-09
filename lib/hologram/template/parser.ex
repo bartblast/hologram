@@ -23,9 +23,18 @@ defmodule Hologram.Template.Parser do
   and include a markup snippet that will allow us to reproduce the issue.
   """
 
+  @unescaped_lt_char_details """
+  Reason:
+  Unescaped '<' character inside text node.
+
+  Hint:
+  To escape use HTML entity: '&lt;'.
+  """
+
   @type parsed_tag ::
           {:block_end
            | :block_start
+           | :doctype
            | :end_tag
            | :expression
            | :public_comment_end
@@ -197,6 +206,35 @@ defmodule Hologram.Template.Parser do
     |> add_processed_token(token)
     |> set_prev_status(:start_tag)
     |> parse_tokens(:attribute_name, rest)
+  end
+
+  # --- DOCTYPE ---
+
+  def parse_tokens(context, :doctype, []) do
+    details = """
+    Reason:
+    Unclosed DOCTYPE declaration.
+
+    Hint:
+    Close the DOCTYPE declaration with '>' character.
+    """
+
+    raise_error(details, context, :doctype, nil, [])
+  end
+
+  def parse_tokens(context, :doctype, [{:symbol, ">"} = token | rest]) do
+    context
+    |> add_doctype_declaration()
+    |> reset_token_buffer()
+    |> add_processed_token(token)
+    |> parse_tokens(:text, rest)
+  end
+
+  def parse_tokens(context, :doctype, [token | rest]) do
+    context
+    |> buffer_token(token)
+    |> add_processed_token(token)
+    |> parse_tokens(:doctype, rest)
   end
 
   # --- END TAG NAME ---
@@ -523,6 +561,24 @@ defmodule Hologram.Template.Parser do
     parse_text(context, {:symbol, "{"}, rest)
   end
 
+  def parse_tokens(%{script?: false} = context, :text, [{:symbol, "<!"} = token | rest_1]) do
+    case rest_1 do
+      [{:string, str} | rest_2] ->
+        if String.downcase(str) == "doctype" do
+          context
+          |> maybe_add_text_tag()
+          |> reset_token_buffer()
+          |> add_processed_token(token)
+          |> parse_tokens(:doctype, rest_2)
+        else
+          raise_error(@unescaped_lt_char_details, context, :text, token, rest_1)
+        end
+
+      _fallback ->
+        raise_error(@unescaped_lt_char_details, context, :text, token, rest_1)
+    end
+  end
+
   def parse_tokens(%{script?: false} = context, :text, [{:symbol, "<!--"} = token | rest]) do
     context
     |> maybe_add_text_tag()
@@ -633,15 +689,7 @@ defmodule Hologram.Template.Parser do
   end
 
   def parse_tokens(%{script?: false} = context, :text, [{:symbol, "<"} = token | rest]) do
-    details = """
-    Reason:
-    Unescaped '<' character inside text node.
-
-    Hint:
-    To escape use HTML entity: '&lt;'.
-    """
-
-    raise_error(details, context, :text, token, rest)
+    raise_error(@unescaped_lt_char_details, context, :text, token, rest)
   end
 
   def parse_tokens(%{script?: false} = context, :text, [{:symbol, ">"} = token | rest]) do
@@ -704,6 +752,11 @@ defmodule Hologram.Template.Parser do
 
   defp add_block_end_tag(context, block_name) do
     new_tag = {:block_end, block_name}
+    add_processed_tag(context, new_tag)
+  end
+
+  defp add_doctype_declaration(%{token_buffer: token_buffer} = context) do
+    new_tag = {:doctype, encode_tokens(token_buffer)}
     add_processed_tag(context, new_tag)
   end
 
