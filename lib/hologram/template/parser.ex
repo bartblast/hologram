@@ -48,6 +48,7 @@ defmodule Hologram.Template.Parser do
           | :attribute_name
           | :block_end
           | :block_start
+          | :doctype
           | :end_tag
           | :end_tag_name
           | :expression
