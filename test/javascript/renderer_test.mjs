@@ -13,8 +13,6 @@ import {
   vnode,
 } from "./support/helpers.mjs";
 
-import vdomToHtml from "../../assets/node_modules/snabbdom-to-html/index.js";
-
 import {defineLayoutFixture} from "./support/fixtures/layout_fixture.mjs";
 import {defineModule1Fixture} from "./support/fixtures/renderer/module_1.mjs";
 import {defineModule10Fixture} from "./support/fixtures/renderer/module_10.mjs";

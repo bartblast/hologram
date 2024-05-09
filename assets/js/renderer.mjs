@@ -10,7 +10,7 @@ import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 
 import {h as vnode} from "snabbdom";
-import vdomToHtml from "snabbdom-to-html";
+import vnodeToHtml from "snabbdom-to-html";
 
 // Deps: [String.Chars.to_string/1]
 export default class Renderer {
@@ -501,7 +501,7 @@ export default class Renderer {
     );
 
     const commentContent = childrenVdom
-      .map((child) => (typeof child === "string" ? child : vdomToHtml(child)))
+      .map((child) => (typeof child === "string" ? child : vnodeToHtml(child)))
       .join("");
 
     return vnode("!", commentContent);
