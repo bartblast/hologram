@@ -758,7 +758,13 @@ defmodule Hologram.Template.Parser do
   end
 
   defp add_doctype_declaration(%{token_buffer: token_buffer} = context) do
-    new_tag = {:doctype, encode_tokens(token_buffer)}
+    content =
+      token_buffer
+      |> encode_tokens()
+      |> String.trim()
+
+    new_tag = {:doctype, content}
+
     add_processed_tag(context, new_tag)
   end
 

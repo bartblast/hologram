@@ -242,7 +242,7 @@ defmodule Hologram.Template.ParserTest do
   end
 
   test "DOCTYPE" do
-    assert parse_markup("<!DoCtYpE html test_1 test_2>") == [{:doctype, " html test_1 test_2"}]
+    assert parse_markup("<!DoCtYpE html test_1 test_2 >") == [{:doctype, "html test_1 test_2"}]
   end
 
   describe "for block" do
@@ -339,7 +339,7 @@ defmodule Hologram.Template.ParserTest do
       {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"},
       {"public comment start", "<!--", [:public_comment_start]},
       {"public comment end", "-->", [:public_comment_end]},
-      {"DOCTYPE", "<!DOCTYPE html>", doctype: " html"}
+      {"DOCTYPE", "<!DOCTYPE html>", doctype: "html"}
     ]
 
     Enum.each(tags, fn {name, markup, expected} ->
@@ -412,7 +412,7 @@ defmodule Hologram.Template.ParserTest do
       {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"},
       {"public comment start", "<!--", [:public_comment_start]},
       {"public comment end", "-->", [:public_comment_end]},
-      {"DOCTYPE", "<!DOCTYPE html>", doctype: " html"},
+      {"DOCTYPE", "<!DOCTYPE html>", doctype: "html"},
       {"else subblock", "{%else}", block_start: "else"},
       {"expression", "{@abc}", expression: "{@abc}"},
       {"for block start", "{%for item <- @items}", block_start: {"for", "{ item <- @items}"}},
@@ -446,7 +446,7 @@ defmodule Hologram.Template.ParserTest do
       {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"},
       {"public comment start", "<!--", [:public_comment_start]},
       {"public comment end", "-->", [:public_comment_end]},
-      {"DOCTYPE", "<!DOCTYPE html>", doctype: " html"},
+      {"DOCTYPE", "<!DOCTYPE html>", doctype: "html"},
       {"else subblock", "{%else}", block_start: "else"},
       {"expression", "{@abc}", expression: "{@abc}"},
       {"for block start", "{%for item <- @items}", block_start: {"for", "{ item <- @items}"}},
@@ -489,8 +489,8 @@ defmodule Hologram.Template.ParserTest do
       end
 
       test "'#{char}' character in DOCTYPE" do
-        markup = "<!DOCTYPE #{unquote(char)} >"
-        assert parse_markup(markup) == [{:doctype, " #{unquote(char)} "}]
+        markup = "<!DOCTYPE a#{unquote(char)}b >"
+        assert parse_markup(markup) == [{:doctype, "a#{unquote(char)}b"}]
       end
 
       test "'#{char}' character in text interpolated expression" do
@@ -587,7 +587,7 @@ defmodule Hologram.Template.ParserTest do
       {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"},
       {"public comment start", "<!--", [:public_comment_start]},
       {"public comment end", "-->", [:public_comment_end]},
-      {"DOCTYPE", "<!DOCTYPE html>", doctype: " html"}
+      {"DOCTYPE", "<!DOCTYPE html>", doctype: "html"}
     ]
 
     Enum.each(tags, fn {name, markup, [expected]} ->
@@ -1122,7 +1122,7 @@ defmodule Hologram.Template.ParserTest do
 
     test "in DOCTYPE" do
       markup = "<!DOCTYPE \#{@abc}>"
-      assert parse_markup(markup) == [{:doctype, " \#{@abc}"}]
+      assert parse_markup(markup) == [{:doctype, "\#{@abc}"}]
     end
 
     test "in expression, inside double quotes" do
