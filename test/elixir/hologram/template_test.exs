@@ -10,10 +10,6 @@ defmodule Hologram.TemplateTest do
              ]
     end
 
-    test "remove doctype" do
-      assert dom_ast("<!DoCtYpE html test_1 test_2>content") == [{:text, "content"}]
-    end
-
     test "trim leading and trailing whitespaces" do
       assert dom_ast("\n\t content \t\n") == [{:text, "content"}]
     end
