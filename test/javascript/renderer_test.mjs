@@ -13,6 +13,8 @@ import {
   vnode,
 } from "./support/helpers.mjs";
 
+import vdomToHtml from "../../assets/node_modules/snabbdom-to-html/index.js";
+
 import {defineLayoutFixture} from "./support/fixtures/layout_fixture.mjs";
 import {defineModule1Fixture} from "./support/fixtures/renderer/module_1.mjs";
 import {defineModule10Fixture} from "./support/fixtures/renderer/module_10.mjs";
@@ -137,6 +139,134 @@ describe("Renderer", () => {
     const result = Renderer.renderDom(node, context, slots, defaultTarget);
 
     assert.equal(result, "abc");
+  });
+
+  describe("public comment node", () => {
+    it("empty", () => {
+      // <!---->
+      const node = Type.tuple([Type.atom("public_comment"), Type.list([])]);
+
+      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const expected = vnode("!", "");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("with single child", () => {
+      // <!--<div></div>-->
+      const node = Type.tuple([
+        Type.atom("public_comment"),
+        Type.list([
+          Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("div"),
+            Type.list([]),
+            Type.list([]),
+          ]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const expected = vnode("!", "<div></div>");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("with multiple children", () => {
+      // <!--abc<div></div>-->
+      const node = Type.tuple([
+        Type.atom("public_comment"),
+        Type.list([
+          Type.tuple([Type.atom("text"), Type.bitstring("abc")]),
+          Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("div"),
+            Type.list([]),
+            Type.list([]),
+          ]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const expected = vnode("!", "abc<div></div>");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("with nested stateful components", () => {
+      const cid3 = Type.bitstring("component_3");
+      const cid7 = Type.bitstring("component_7");
+
+      // <!--<div attr="value"><Module3 /><Module7 /></div>-->
+      const node = Type.tuple([
+        Type.atom("public_comment"),
+        Type.list([
+          Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("div"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("attr"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("value")],
+                ]),
+              ]),
+            ]),
+            Type.list([
+              Type.tuple([
+                Type.atom("component"),
+                Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module3"),
+                Type.list([
+                  Type.tuple([
+                    Type.bitstring("cid"),
+                    Type.keywordList([[Type.atom("text"), cid3]]),
+                  ]),
+                ]),
+                Type.list([]),
+              ]),
+              Type.tuple([
+                Type.atom("component"),
+                Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module7"),
+                Type.list([
+                  Type.tuple([
+                    Type.bitstring("cid"),
+                    Type.keywordList([[Type.atom("text"), cid7]]),
+                  ]),
+                ]),
+                Type.list([]),
+              ]),
+            ]),
+          ]),
+        ]),
+      ]);
+
+      const entry3 = componentRegistryEntryFixture({
+        state: Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.atom("b"), Type.integer(2)],
+        ]),
+      });
+
+      ComponentRegistry.putEntry(cid3, entry3);
+
+      const entry7 = componentRegistryEntryFixture({
+        state: Type.map([
+          [Type.atom("c"), Type.integer(3)],
+          [Type.atom("d"), Type.integer(4)],
+        ]),
+      });
+
+      ComponentRegistry.putEntry(cid7, entry7);
+
+      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+
+      const expected = vnode(
+        "!",
+        '<div attr="value"><div>state_a = 1, state_b = 2</div><div>state_c = 3, state_d = 4</div></div>',
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
   });
 
   it("expression node", () => {

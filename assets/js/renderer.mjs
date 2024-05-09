@@ -10,6 +10,7 @@ import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 
 import {h as vnode} from "snabbdom";
+import vdomToHtml from "snabbdom-to-html";
 
 // Deps: [String.Chars.to_string/1]
 export default class Renderer {
@@ -39,6 +40,14 @@ export default class Renderer {
           context,
           slots,
           Type.bitstring("page"),
+        );
+
+      case "public_comment":
+        return Renderer.#renderPublicComment(
+          dom,
+          context,
+          slots,
+          defaultTarget,
         );
 
       case "text":
@@ -394,6 +403,7 @@ export default class Renderer {
     );
 
     const childrenDom = dom.data[3];
+
     const childrenVdom = Renderer.renderDom(
       childrenDom,
       context,
@@ -477,6 +487,24 @@ export default class Renderer {
       Type.keywordList([]),
       Type.bitstring("layout"),
     );
+  }
+
+  // Based on render_dom/3 (public comment case)
+  static #renderPublicComment(dom, context, slots, defaultTarget) {
+    const childrenDom = dom.data[1];
+
+    let childrenVdom = Renderer.renderDom(
+      childrenDom,
+      context,
+      slots,
+      defaultTarget,
+    );
+
+    const commentContent = childrenVdom
+      .map((child) => (typeof child === "string" ? child : vdomToHtml(child)))
+      .join("");
+
+    return vnode("!", commentContent);
   }
 
   // Based on render_dom/3 (slot case)
