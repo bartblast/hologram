@@ -121,6 +121,11 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  test "DOCTYPE node" do
+    node = {:doctype, "html"}
+    assert render_dom(node, %{}, []) == {"<!DOCTYPE html>", %{}}
+  end
+
   test "expression node" do
     node = {:expression, {123}}
     assert render_dom(node, %{}, []) == {"123", %{}}

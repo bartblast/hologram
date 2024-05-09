@@ -41,6 +41,10 @@ defmodule Hologram.Template.Renderer do
     end
   end
 
+  def render_dom({:doctype, content}, _context, _slots) do
+    {"<!DOCTYPE #{content}>", %{}}
+  end
+
   def render_dom({:element, "slot", _attrs_dom, []}, context, slots) do
     render_dom(slots[:default], context, [])
   end
