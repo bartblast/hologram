@@ -42,6 +42,7 @@ defmodule Hologram.Template.DOM do
   defp append_code(code_acc, code, last_tag_type)
        when last_tag_type in [
               :block_end,
+              :doctype,
               :end_tag,
               :expression,
               :public_comment_end,
@@ -79,6 +80,10 @@ defmodule Hologram.Template.DOM do
 
   defp render_code({:block_end, "if"}) do
     "] end)"
+  end
+
+  defp render_code({:doctype, content}) do
+    "{:doctype, \"#{content}\"}"
   end
 
   defp render_code({:end_tag, _tag_name}) do

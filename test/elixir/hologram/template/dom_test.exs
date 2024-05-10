@@ -216,6 +216,82 @@ defmodule Hologram.Template.DOMTest do
     end
   end
 
+  describe "build_ast/1, DOCTYPE node" do
+    test "empty" do
+      # "<!DOCTYPE>"
+      tags = [doctype: "html"]
+
+      assert build_ast(tags) == [doctype: "html"]
+    end
+
+    test "inside component node" do
+      # <MyComponent><!DOCTYPE html></MyComponent>
+      tags = [
+        {:start_tag, {"MyComponent", []}},
+        {:doctype, "html"},
+        {:end_tag, "MyComponent"}
+      ]
+
+      assert build_ast(tags) == [
+               {:{}, [line: 1],
+                [
+                  :component,
+                  {:alias!, [line: 1], [{:__aliases__, [line: 1], [:MyComponent]}]},
+                  [],
+                  [doctype: "html"]
+                ]}
+             ]
+    end
+
+    test "after text node with whitespaces" do
+      # \r\n <!DOCTYPE html>
+      tags = [text: "\r\n ", doctype: "html"]
+
+      assert build_ast(tags) == [text: "\r\n ", doctype: "html"]
+    end
+
+    test "before text node with whitespaces" do
+      # <!DOCTYPE html> \r\n
+      tags = [doctype: "html", text: " \r\n"]
+
+      assert build_ast(tags) == [doctype: "html", text: " \r\n"]
+    end
+
+    test "before element node" do
+      # <!DOCTYPE html><div></div>
+      tags = [
+        {:doctype, "html"},
+        {:start_tag, {"div", []}},
+        {:end_tag, "div"}
+      ]
+
+      assert build_ast(tags) == [
+               {:doctype, "html"},
+               {:{}, [line: 1], [:element, "div", [], []]}
+             ]
+    end
+
+    test "before component node" do
+      # <!DOCTYPE html><MyComponent></MyComponent>
+      tags = [
+        {:doctype, "html"},
+        {:start_tag, {"MyComponent", []}},
+        {:end_tag, "MyComponent"}
+      ]
+
+      assert build_ast(tags) == [
+               {:doctype, "html"},
+               {:{}, [line: 1],
+                [
+                  :component,
+                  {:alias!, [line: 1], [{:__aliases__, [line: 1], [:MyComponent]}]},
+                  [],
+                  []
+                ]}
+             ]
+    end
+  end
+
   describe "build_ast/1, element node & component node" do
     nodes = [
       {:element, "attribute", "div", "div"},
