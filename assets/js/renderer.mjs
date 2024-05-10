@@ -65,11 +65,18 @@ export default class Renderer {
     const cid = Type.bitstring("page");
     const pageComponentStruct = ComponentRegistry.getComponentStruct(cid);
 
-    return Renderer.#renderPageInsideLayout(
+    const pageVdom = Renderer.#renderPageInsideLayout(
       pageModuleRef,
       pageParams,
       pageComponentStruct,
     );
+
+    // DOCTYPE node is converted to boxed nil, because it can't be represented as vnode
+    if (Type.isNil(pageVdom[0])) {
+      pageVdom.shift();
+    }
+
+    return pageVdom;
   }
 
   // Deps: [String.Chars.to_string/1]

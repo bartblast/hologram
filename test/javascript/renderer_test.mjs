@@ -58,6 +58,7 @@ import {defineModule58Fixture} from "./support/fixtures/renderer/module_58.mjs";
 import {defineModule59Fixture} from "./support/fixtures/renderer/module_59.mjs";
 import {defineModule60Fixture} from "./support/fixtures/renderer/module_60.mjs";
 import {defineModule61Fixture} from "./support/fixtures/renderer/module_61.mjs";
+import {defineModule62Fixture} from "./support/fixtures/renderer/module_62.mjs";
 import {defineModule7Fixture} from "./support/fixtures/renderer/module_7.mjs";
 import {defineModule8Fixture} from "./support/fixtures/renderer/module_8.mjs";
 import {defineModule9Fixture} from "./support/fixtures/renderer/module_9.mjs";
@@ -116,6 +117,7 @@ describe("Renderer", () => {
     defineModule59Fixture();
     defineModule60Fixture();
     defineModule61Fixture();
+    defineModule62Fixture();
     defineModule7Fixture();
     defineModule8Fixture();
     defineModule9Fixture();
@@ -1874,6 +1876,27 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, [
         'layout vars = [cid: "layout", key_1: "prop_value_1", key_2: "state_value_2", key_3: "state_value_3"]',
       ]);
+    });
+
+    it("with DOCTYPE", () => {
+      initComponentRegistryEntry(Type.bitstring("page"));
+      initComponentRegistryEntry(Type.bitstring("layout"));
+
+      const result = Renderer.renderPage(
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module62"),
+        Type.map([]),
+      );
+
+      const expected = [
+        "\n",
+        vnode("html", {attrs: {}, on: {}}, [
+          "\n  ",
+          vnode("body", {attrs: {}, on: {}}, ["\n    Module62\n  "]),
+          "\n",
+        ]),
+      ];
+
+      assert.deepStrictEqual(result, expected);
     });
   });
 
