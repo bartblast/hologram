@@ -50,6 +50,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module52
   alias Hologram.Test.Fixtures.Template.Renderer.Module53
   alias Hologram.Test.Fixtures.Template.Renderer.Module6
+  alias Hologram.Test.Fixtures.Template.Renderer.Module62
   alias Hologram.Test.Fixtures.Template.Renderer.Module7
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
@@ -827,6 +828,25 @@ defmodule Hologram.Template.RendererTest do
         ~s/pageParams: Type.map([[Type.atom("key_1"), Type.integer(123n)], [Type.atom("key_2"), Type.bitstring("value_2")]])/
 
       assert String.contains?(html, expected)
+    end
+
+    test "with DOCTYPE" do
+      ETS.put(
+        PageDigestRegistryStub.ets_table_name(),
+        Module62,
+        "102790adb6c3b1956db310be523a7693"
+      )
+
+      assert {html, _} = render_page(Module62, @params_dom, @opts)
+
+      assert html == """
+             <!DOCTYPE html>
+             <html>
+               <body>
+                 Module62
+               </body>
+             </html>\
+             """
     end
   end
 end
