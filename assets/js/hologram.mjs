@@ -68,7 +68,7 @@ export default class Hologram {
     const newVirtualDocument = Renderer.renderPage(
       Hologram.#pageModule,
       Hologram.#pageParams,
-    )[0];
+    );
 
     patch(Hologram.#virtualDocument, newVirtualDocument);
 

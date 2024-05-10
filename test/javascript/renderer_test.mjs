@@ -59,12 +59,14 @@ import {defineModule59Fixture} from "./support/fixtures/renderer/module_59.mjs";
 import {defineModule60Fixture} from "./support/fixtures/renderer/module_60.mjs";
 import {defineModule61Fixture} from "./support/fixtures/renderer/module_61.mjs";
 import {defineModule62Fixture} from "./support/fixtures/renderer/module_62.mjs";
+import {defineModule63Fixture} from "./support/fixtures/renderer/module_63.mjs";
 import {defineModule7Fixture} from "./support/fixtures/renderer/module_7.mjs";
 import {defineModule8Fixture} from "./support/fixtures/renderer/module_8.mjs";
 import {defineModule9Fixture} from "./support/fixtures/renderer/module_9.mjs";
 
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
+import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -118,6 +120,7 @@ describe("Renderer", () => {
     defineModule60Fixture();
     defineModule61Fixture();
     defineModule62Fixture();
+    defineModule63Fixture();
     defineModule7Fixture();
     defineModule8Fixture();
     defineModule9Fixture();
@@ -1887,16 +1890,28 @@ describe("Renderer", () => {
         Type.map([]),
       );
 
-      const expected = [
+      const expected = vnode("html", {attrs: {}, on: {}}, [
+        "\n  ",
+        vnode("body", {attrs: {}, on: {}}, ["\n    Module62\n  "]),
         "\n",
-        vnode("html", {attrs: {}, on: {}}, [
-          "\n  ",
-          vnode("body", {attrs: {}, on: {}}, ["\n    Module62\n  "]),
-          "\n",
-        ]),
-      ];
+      ]);
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("without the root <html> element", () => {
+      initComponentRegistryEntry(Type.bitstring("page"));
+      initComponentRegistryEntry(Type.bitstring("layout"));
+
+      assert.throw(
+        () =>
+          Renderer.renderPage(
+            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module63"),
+            Type.map([]),
+          ),
+        HologramInterpreterError,
+        "couldn't find the root <html> element",
+      );
     });
   });
 

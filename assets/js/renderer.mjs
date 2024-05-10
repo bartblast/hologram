@@ -71,12 +71,15 @@ export default class Renderer {
       pageComponentStruct,
     );
 
-    // DOCTYPE node is converted to boxed nil, because it can't be represented as vnode
-    if (Type.isNil(pageVdom[0])) {
-      pageVdom.shift();
+    const htmlVnode = pageVdom.find((vnode) => vnode.sel === "html");
+
+    if (typeof htmlVnode === "undefined") {
+      throw new HologramInterpreterError(
+        "couldn't find the root <html> element",
+      );
     }
 
-    return pageVdom;
+    return htmlVnode;
   }
 
   // Deps: [String.Chars.to_string/1]
