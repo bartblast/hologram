@@ -267,6 +267,13 @@ describe("Renderer", () => {
     });
   });
 
+  it("DOCTYPE node", () => {
+    const node = Type.tuple([Type.atom("doctype"), Type.bitstring("html")]);
+    const result = Renderer.renderDom(node, context, slots, defaultTarget);
+
+    assert.deepStrictEqual(result, Type.nil());
+  });
+
   it("expression node", () => {
     const node = Type.tuple([
       Type.atom("expression"),

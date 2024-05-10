@@ -26,6 +26,9 @@ export default class Renderer {
       case "component":
         return Renderer.#renderComponent(dom, context, slots, defaultTarget);
 
+      case "doctype":
+        return Type.nil();
+
       case "element":
         return Renderer.#renderElement(dom, context, slots, defaultTarget);
 
@@ -438,7 +441,7 @@ export default class Renderer {
   static #renderNodes(nodes, context, slots, defaultTarget) {
     return Renderer.#mergeNeighbouringTextNodes(
       nodes.data
-        // There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if}
+        // There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if} or DOCTYPE
         .filter((node) => !Type.isNil(node))
         .map((node) => Renderer.renderDom(node, context, slots, defaultTarget))
         .flat(),
