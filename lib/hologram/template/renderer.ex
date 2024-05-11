@@ -76,7 +76,7 @@ defmodule Hologram.Template.Renderer do
   end
 
   def render_dom({:text, text}, _context, _slots) do
-    {text, %{}}
+    {HtmlEntities.encode(text), %{}}
   end
 
   def render_dom(nodes, context, slots) when is_list(nodes) do

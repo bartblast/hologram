@@ -65,8 +65,8 @@ defmodule Hologram.Template.RendererTest do
   setup :set_mox_global
 
   test "text node" do
-    node = {:text, "abc"}
-    assert render_dom(node, %{}, []) == {"abc", %{}}
+    node = {:text, "Tom & Jerry"}
+    assert render_dom(node, %{}, []) == {"Tom &amp; Jerry", %{}}
   end
 
   describe "public comment node" do

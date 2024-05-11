@@ -10,6 +10,10 @@ defmodule Hologram.Template.DOMTest do
     test "with double quotes" do
       assert build_ast([{:text, "aaa\"bbb\"ccc"}]) == [text: "aaa\"bbb\"ccc"]
     end
+
+    test "with HTML entities" do
+      assert build_ast([{:text, "Tom &amp; Jerry"}]) == [{:text, "Tom & Jerry"}]
+    end
   end
 
   describe "build_ast/1, public comment node" do
