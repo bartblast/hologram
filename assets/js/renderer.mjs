@@ -74,9 +74,9 @@ export default class Renderer {
     const htmlVnode = pageVdom.find((vnode) => vnode.sel === "html");
 
     if (typeof htmlVnode === "undefined") {
-      throw new HologramInterpreterError(
-        "couldn't find the root <html> element",
-      );
+      return vnode("html", {attrs: {}, on: {}}, [
+        vnode("body", {attrs: {}, on: {}}, pageVdom),
+      ]);
     }
 
     return htmlVnode;

@@ -66,7 +66,6 @@ import {defineModule9Fixture} from "./support/fixtures/renderer/module_9.mjs";
 
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
-import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -779,7 +778,7 @@ describe("Renderer", () => {
               (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
             );
 
-          vdom[0].children[1].data.on.click("dummyEvent");
+          vdom.children[0].children[0].children[1].data.on.click("dummyEvent");
 
           sinon.assert.calledWith(
             stub,
@@ -809,7 +808,7 @@ describe("Renderer", () => {
               (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
             );
 
-          vdom[0].children[1].data.on.click("dummyEvent");
+          vdom.children[0].children[0].children[1].data.on.click("dummyEvent");
 
           sinon.assert.calledWith(
             stub,
@@ -1656,7 +1655,11 @@ describe("Renderer", () => {
         Type.map([]),
       );
 
-      assert.deepStrictEqual(result, ["prop_aaa = 123"]);
+      const expected = vnode("html", {attrs: {}, on: {}}, [
+        vnode("body", {attrs: {}, on: {}}, ["prop_aaa = 123"]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
     });
 
     it("emitted in page, accessed in component nested in layout", () => {
@@ -1678,7 +1681,11 @@ describe("Renderer", () => {
         Type.map([]),
       );
 
-      assert.deepStrictEqual(result, ["prop_aaa = 123"]);
+      const expected = vnode("html", {attrs: {}, on: {}}, [
+        vnode("body", {attrs: {}, on: {}}, ["prop_aaa = 123"]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
     });
 
     it("emitted in page, accessed in layout", () => {
@@ -1700,7 +1707,11 @@ describe("Renderer", () => {
         Type.map([]),
       );
 
-      assert.deepStrictEqual(result, ["prop_aaa = 123"]);
+      const expected = vnode("html", {attrs: {}, on: {}}, [
+        vnode("body", {attrs: {}, on: {}}, ["prop_aaa = 123"]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
     });
 
     it("emmited in layout, accessed in component nested in page", () => {
@@ -1722,7 +1733,11 @@ describe("Renderer", () => {
         Type.map([]),
       );
 
-      assert.deepStrictEqual(result, ["prop_aaa = 123"]);
+      const expected = vnode("html", {attrs: {}, on: {}}, [
+        vnode("body", {attrs: {}, on: {}}, ["prop_aaa = 123"]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
     });
 
     it("emitted in layout, accessed in component nested in layout", () => {
@@ -1744,7 +1759,11 @@ describe("Renderer", () => {
         Type.map([]),
       );
 
-      assert.deepStrictEqual(result, ["prop_aaa = 123"]);
+      const expected = vnode("html", {attrs: {}, on: {}}, [
+        vnode("body", {attrs: {}, on: {}}, ["prop_aaa = 123"]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
     });
 
     it("emitted in component, accessed in component", () => {
@@ -1789,9 +1808,13 @@ describe("Renderer", () => {
         Type.map([]),
       );
 
-      assert.deepStrictEqual(result, [
-        "layout template start, page template, layout template end",
+      const expected = vnode("html", {attrs: {}, on: {}}, [
+        vnode("body", {attrs: {}, on: {}}, [
+          "layout template start, page template, layout template end",
+        ]),
       ]);
+
+      assert.deepStrictEqual(result, expected);
     });
 
     // This test case doesn't apply to the client renderer, because the client renderer receives already casted page params.
@@ -1806,9 +1829,13 @@ describe("Renderer", () => {
         Type.map([]),
       );
 
-      assert.deepStrictEqual(result, [
-        'layout vars = [cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"]',
+      const expected = vnode("html", {attrs: {}, on: {}}, [
+        vnode("body", {attrs: {}, on: {}}, [
+          'layout vars = [cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"]',
+        ]),
       ]);
+
+      assert.deepStrictEqual(result, expected);
     });
 
     it("cast layout props passed implicitely from page state", () => {
@@ -1829,9 +1856,13 @@ describe("Renderer", () => {
         Type.map([]),
       );
 
-      assert.deepStrictEqual(result, [
-        'layout vars = [cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"]',
+      const expected = vnode("html", {attrs: {}, on: {}}, [
+        vnode("body", {attrs: {}, on: {}}, [
+          'layout vars = [cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"]',
+        ]),
       ]);
+
+      assert.deepStrictEqual(result, expected);
     });
 
     it("aggregate page vars, giving state vars priority over param vars when there are name conflicts", () => {
@@ -1854,9 +1885,13 @@ describe("Renderer", () => {
         ]),
       );
 
-      assert.deepStrictEqual(result, [
-        'page vars = [key_1: "param_value_1", key_2: "state_value_2", key_3: "state_value_3"]',
+      const expected = vnode("html", {attrs: {}, on: {}}, [
+        vnode("body", {attrs: {}, on: {}}, [
+          'page vars = [key_1: "param_value_1", key_2: "state_value_2", key_3: "state_value_3"]',
+        ]),
       ]);
+
+      assert.deepStrictEqual(result, expected);
     });
 
     it("aggregate layout vars, giving state vars priority over prop vars when there are name conflicts", () => {
@@ -1876,9 +1911,13 @@ describe("Renderer", () => {
         Type.map([]),
       );
 
-      assert.deepStrictEqual(result, [
-        'layout vars = [cid: "layout", key_1: "prop_value_1", key_2: "state_value_2", key_3: "state_value_3"]',
+      const expected = vnode("html", {attrs: {}, on: {}}, [
+        vnode("body", {attrs: {}, on: {}}, [
+          'layout vars = [cid: "layout", key_1: "prop_value_1", key_2: "state_value_2", key_3: "state_value_3"]',
+        ]),
       ]);
+
+      assert.deepStrictEqual(result, expected);
     });
 
     it("with DOCTYPE", () => {
@@ -1903,15 +1942,16 @@ describe("Renderer", () => {
       initComponentRegistryEntry(Type.bitstring("page"));
       initComponentRegistryEntry(Type.bitstring("layout"));
 
-      assert.throw(
-        () =>
-          Renderer.renderPage(
-            Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module63"),
-            Type.map([]),
-          ),
-        HologramInterpreterError,
-        "couldn't find the root <html> element",
+      const result = Renderer.renderPage(
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module63"),
+        Type.map([]),
       );
+
+      const expected = vnode("html", {attrs: {}, on: {}}, [
+        vnode("body", {attrs: {}, on: {}}, ["abc"]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
     });
   });
 
