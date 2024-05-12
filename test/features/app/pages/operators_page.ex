@@ -31,7 +31,7 @@ defmodule HologramFeatureTests.OperatorsPage do
       <button id="++" $click={:++, left: @list_a, right: @list_b}> ++ </button>
       <button id="--" $click={:--, left: @list_a, right: @list_b}> -- </button>
       <button id="and" $click={:and, left: @boolean_a, right: @boolean_b}> and </button>
-      <button id="&&" $click={:&&, left: @boolean_a, right: @boolean_b}> &amp;&amp; </button>
+      <button id="&amp;&amp;" $click={:&&, left: @boolean_a, right: @boolean_b}> &amp;&amp; </button>
       <button id="or" $click={:or, left: @boolean_a, right: @boolean_b}> or </button>
       <button id="||" $click={:||, left: @boolean_a, right: @boolean_b}> || </button>
       <button id="not" $click={:not, value: @boolean_a}> not </button>
