@@ -9,6 +9,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
   alias Hologram.Component
+  alias Hologram.Template.Renderer
   alias Hologram.Test.Fixtures.LayoutFixture
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
   alias Hologram.Test.Fixtures.Template.Renderer.Module10
@@ -55,6 +56,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
 
+  @env %Renderer.Env{}
   @opts [initial_page?: true]
   @params_dom []
 
@@ -66,7 +68,7 @@ defmodule Hologram.Template.RendererTest do
 
   test "text node" do
     node = {:text, "Tom & Jerry"}
-    assert render_dom(node, %{}, []) == {"Tom &amp; Jerry", %{}}
+    assert render_dom(node, @env) == {"Tom &amp; Jerry", %{}}
   end
 
   describe "public comment node" do
@@ -74,21 +76,21 @@ defmodule Hologram.Template.RendererTest do
       # <!---->
       node = {:public_comment, []}
 
-      assert render_dom(node, %{}, []) == {"<!---->", %{}}
+      assert render_dom(node, @env) == {"<!---->", %{}}
     end
 
     test "with single child" do
       # <!--<div></div>-->
       node = {:public_comment, [{:element, "div", [], []}]}
 
-      assert render_dom(node, %{}, []) == {"<!--<div></div>-->", %{}}
+      assert render_dom(node, @env) == {"<!--<div></div>-->", %{}}
     end
 
     test "with multiple children" do
       # <!--abc<div></div>-->
       node = {:public_comment, [{:text, "abc"}, {:element, "div", [], []}]}
 
-      assert render_dom(node, %{}, []) == {"<!--abc<div></div>-->", %{}}
+      assert render_dom(node, @env) == {"<!--abc<div></div>-->", %{}}
     end
 
     test "with nested stateful components" do
@@ -103,7 +105,7 @@ defmodule Hologram.Template.RendererTest do
             ]}
          ]}
 
-      assert render_dom(node, %{}, []) ==
+      assert render_dom(node, @env) ==
                {~s(<!--<div attr="value"><div>state_a = 1, state_b = 2</div><div>state_c = 3, state_d = 4</div></div>-->),
                 %{
                   "component_3" => %{
@@ -120,22 +122,29 @@ defmodule Hologram.Template.RendererTest do
                   }
                 }}
     end
+
+    test "HTML entities inside public comments are not escaped" do
+      # <!-- abc < xyz -->
+      node = {:public_comment, [text: " abc < xyz "]}
+
+      assert render_dom(node, @env) == {"<!-- abc < xyz -->", %{}}
+    end
   end
 
   test "DOCTYPE node" do
     node = {:doctype, "html"}
-    assert render_dom(node, %{}, []) == {"<!DOCTYPE html>", %{}}
+    assert render_dom(node, @env) == {"<!DOCTYPE html>", %{}}
   end
 
   test "expression node" do
     node = {:expression, {123}}
-    assert render_dom(node, %{}, []) == {"123", %{}}
+    assert render_dom(node, @env) == {"123", %{}}
   end
 
   describe "element node" do
     test "non-void element, without attributes or children" do
       node = {:element, "div", [], []}
-      assert render_dom(node, %{}, []) == {"<div></div>", %{}}
+      assert render_dom(node, @env) == {"<div></div>", %{}}
     end
 
     test "non-void element, with attributes" do
@@ -147,18 +156,18 @@ defmodule Hologram.Template.RendererTest do
            {"attr_3", [text: "ccc", expression: {987}, text: "eee"]}
          ], []}
 
-      assert render_dom(node, %{}, []) ==
+      assert render_dom(node, @env) ==
                {~s(<div attr_1="aaa" attr_2="123" attr_3="ccc987eee"></div>), %{}}
     end
 
     test "non-void element, with children" do
       node = {:element, "div", [], [{:element, "span", [], [text: "abc"]}, {:text, "xyz"}]}
-      assert render_dom(node, %{}, []) == {"<div><span>abc</span>xyz</div>", %{}}
+      assert render_dom(node, @env) == {"<div><span>abc</span>xyz</div>", %{}}
     end
 
     test "void element, without attributes" do
       node = {:element, "img", [], []}
-      assert render_dom(node, %{}, []) == {"<img />", %{}}
+      assert render_dom(node, @env) == {"<img />", %{}}
     end
 
     test "void element, with attributes" do
@@ -170,13 +179,13 @@ defmodule Hologram.Template.RendererTest do
            {"attr_3", [text: "ccc", expression: {987}, text: "eee"]}
          ], []}
 
-      assert render_dom(node, %{}, []) ==
+      assert render_dom(node, @env) ==
                {~s(<img attr_1="aaa" attr_2="123" attr_3="ccc987eee" />), %{}}
     end
 
     test "boolean attributes" do
       node = {:element, "img", [{"attr_1", []}, {"attr_2", []}], []}
-      assert render_dom(node, %{}, []) == {~s(<img attr_1 attr_2 />), %{}}
+      assert render_dom(node, @env) == {~s(<img attr_1 attr_2 />), %{}}
     end
 
     test "filters out attributes that specify event handlers (starting with '$' character)" do
@@ -193,7 +202,7 @@ defmodule Hologram.Template.RendererTest do
            {"$attr_8", []}
          ], []}
 
-      assert render_dom(node, %{}, []) ==
+      assert render_dom(node, @env) ==
                {~s(<div attr_1="aaa" attr_3="111" attr_5="ccc999ddd" attr_7></div>), %{}}
     end
 
@@ -205,7 +214,7 @@ defmodule Hologram.Template.RendererTest do
            {:component, Module7, [{"cid", [text: "component_7"]}], []}
          ]}
 
-      assert render_dom(node, %{}, []) ==
+      assert render_dom(node, @env) ==
                {~s(<div attr="value"><div>state_a = 1, state_b = 2</div><div>state_c = 3, state_d = 4</div></div>),
                 %{
                   "component_3" => %{
@@ -222,6 +231,13 @@ defmodule Hologram.Template.RendererTest do
                   }
                 }}
     end
+
+    test "HTML entities inside script tags are not escaped" do
+      # <script>abc < xyz</script>
+      node = {:element, "script", [], [text: "abc < xyz"]}
+
+      assert render_dom(node, @env) == {"<script>abc < xyz</script>", %{}}
+    end
   end
 
   # Some client tests are different than server tests.
@@ -234,7 +250,7 @@ defmodule Hologram.Template.RendererTest do
         {:expression, {222}}
       ]
 
-      assert render_dom(nodes, %{}, []) == {"aaa111bbb222", %{}}
+      assert render_dom(nodes, @env) == {"aaa111bbb222", %{}}
     end
 
     test "nil nodes" do
@@ -245,7 +261,7 @@ defmodule Hologram.Template.RendererTest do
         nil
       ]
 
-      assert render_dom(nodes, %{}, []) == {"abcxyz", %{}}
+      assert render_dom(nodes, @env) == {"abcxyz", %{}}
     end
 
     test "with components having a root node" do
@@ -256,7 +272,7 @@ defmodule Hologram.Template.RendererTest do
         {:component, Module7, [{"cid", [text: "component_7"]}], []}
       ]
 
-      assert render_dom(nodes, %{}, []) ==
+      assert render_dom(nodes, @env) ==
                {"abc<div>state_a = 1, state_b = 2</div>xyz<div>state_c = 3, state_d = 4</div>",
                 %{
                   "component_3" => %{module: Module3, struct: %Component{state: %{a: 1, b: 2}}},
@@ -272,7 +288,7 @@ defmodule Hologram.Template.RendererTest do
         {:component, Module52, [{"cid", [text: "component_52"]}], []}
       ]
 
-      assert render_dom(nodes, %{}, []) ==
+      assert render_dom(nodes, @env) ==
                {"abc<div>state_a = 1</div><div>state_b = 2</div>xyz<div>state_c = 3</div><div>state_d = 4</div>",
                 %{
                   "component_51" => %{module: Module51, struct: %Component{state: %{a: 1, b: 2}}},
@@ -284,7 +300,7 @@ defmodule Hologram.Template.RendererTest do
   describe "stateless component" do
     test "without props" do
       node = {:component, Module1, [], []}
-      assert render_dom(node, %{}, []) == {"<div>abc</div>", %{}}
+      assert render_dom(node, @env) == {"<div>abc</div>", %{}}
     end
 
     test "with props" do
@@ -296,7 +312,7 @@ defmodule Hologram.Template.RendererTest do
            {"c", [text: "fff", expression: {333}, text: "hhh"]}
          ], []}
 
-      assert render_dom(node, %{}, []) ==
+      assert render_dom(node, @env) ==
                {"<div>prop_a = ddd, prop_b = 222, prop_c = fff333hhh</div>", %{}}
     end
 
@@ -304,7 +320,7 @@ defmodule Hologram.Template.RendererTest do
       node = {:component, Module17, [{"a", [text: "111"]}, {"b", [text: "222"]}], []}
 
       assert_raise KeyError, "key :b not found in: %{a: \"111\"}", fn ->
-        render_dom(node, %{}, [])
+        render_dom(node, @env)
       end
     end
   end
@@ -314,7 +330,7 @@ defmodule Hologram.Template.RendererTest do
     test "without props or state" do
       node = {:component, Module1, [{"cid", [text: "my_component"]}], []}
 
-      assert render_dom(node, %{}, []) ==
+      assert render_dom(node, @env) ==
                {"<div>abc</div>",
                 %{"my_component" => %{module: Module1, struct: %Component{state: %{}}}}}
     end
@@ -329,7 +345,7 @@ defmodule Hologram.Template.RendererTest do
            {"c", [text: "fff", expression: {333}, text: "hhh"]}
          ], []}
 
-      assert render_dom(node, %{}, []) ==
+      assert render_dom(node, @env) ==
                {"<div>prop_a = ddd, prop_b = 222, prop_c = fff333hhh</div>",
                 %{"my_component" => %{module: Module2, struct: %Component{state: %{}}}}}
     end
@@ -337,7 +353,7 @@ defmodule Hologram.Template.RendererTest do
     test "with state / only component struct returned from init/3" do
       node = {:component, Module3, [{"cid", [text: "my_component"]}], []}
 
-      assert render_dom(node, %{}, []) ==
+      assert render_dom(node, @env) ==
                {"<div>state_a = 1, state_b = 2</div>",
                 %{"my_component" => %{module: Module3, struct: %Component{state: %{a: 1, b: 2}}}}}
     end
@@ -351,7 +367,7 @@ defmodule Hologram.Template.RendererTest do
            {"c", [text: "prop_c"]}
          ], []}
 
-      assert render_dom(node, %{}, []) ==
+      assert render_dom(node, @env) ==
                {"<div>var_a = state_a, var_b = state_b, var_c = prop_c</div>",
                 %{
                   "my_component" => %{
@@ -370,7 +386,7 @@ defmodule Hologram.Template.RendererTest do
            {"b", [text: "bbb"]}
          ], []}
 
-      assert render_dom(node, %{}, []) ==
+      assert render_dom(node, @env) ==
                {"<div>prop_a = aaa, prop_b = bbb</div>",
                 %{"my_component" => %{module: Module5, struct: %Component{state: %{}}}}}
     end
@@ -378,7 +394,7 @@ defmodule Hologram.Template.RendererTest do
     test "with component and server structs returned from init/3" do
       node = {:component, Module6, [{"cid", [text: "my_component"]}], []}
 
-      assert render_dom(node, %{}, []) ==
+      assert render_dom(node, @env) ==
                {"<div>state_a = 1, state_b = 2</div>",
                 %{"my_component" => %{module: Module6, struct: %Component{state: %{a: 1, b: 2}}}}}
     end
@@ -395,7 +411,7 @@ defmodule Hologram.Template.RendererTest do
          ], []}
 
       assert {~s'component vars = [cid: "my_component", prop_1: "value_1", prop_2: 2, prop_3: "aaa2bbb"]',
-              _} = render_dom(node, %{}, [])
+              _} = render_dom(node, @env)
     end
 
     test "with unregistered var used" do
@@ -406,7 +422,7 @@ defmodule Hologram.Template.RendererTest do
       assert_raise KeyError,
                    ~r/key :c not found in:/,
                    fn ->
-                     render_dom(node, %{}, [])
+                     render_dom(node, @env)
                    end
     end
   end
@@ -414,23 +430,23 @@ defmodule Hologram.Template.RendererTest do
   describe "default slot" do
     test "with single node" do
       node = {:component, Module8, [], [text: "123"]}
-      assert render_dom(node, %{}, []) == {"abc123xyz", %{}}
+      assert render_dom(node, @env) == {"abc123xyz", %{}}
     end
 
     test "with multiple nodes" do
       node = {:component, Module8, [], [text: "123", expression: {456}]}
-      assert render_dom(node, %{}, []) == {"abc123456xyz", %{}}
+      assert render_dom(node, @env) == {"abc123456xyz", %{}}
     end
 
     test "nested components with slots, no slot tag in the top component template, not using vars" do
       node = {:component, Module8, [], [{:component, Module9, [], [text: "789"]}]}
-      assert render_dom(node, %{}, []) == {"abcdef789uvwxyz", %{}}
+      assert render_dom(node, @env) == {"abcdef789uvwxyz", %{}}
     end
 
     test "nested components with slots, no slot tag in the top component template, using vars" do
       node = {:component, Module10, [{"cid", [text: "component_10"]}], []}
 
-      assert render_dom(node, %{}, []) ==
+      assert render_dom(node, @env) ==
                {"10,11,10,12,10",
                 %{
                   "component_10" => %{module: Module10, struct: %Component{state: %{a: 10}}},
@@ -442,7 +458,7 @@ defmodule Hologram.Template.RendererTest do
     test "nested components with slots, slot tag in the top component template, not using vars" do
       node = {:component, Module31, [], [text: "abc"]}
 
-      assert render_dom(node, %{}, []) == {"31a,32a,31b,33a,31c,abc,31x,33z,31y,32z,31z", %{}}
+      assert render_dom(node, @env) == {"31a,32a,31b,33a,31c,abc,31x,33z,31y,32z,31z", %{}}
     end
 
     test "nested components with slots, slot tag in the top component template, using vars" do
@@ -450,7 +466,7 @@ defmodule Hologram.Template.RendererTest do
         {:component, Module34, [{"cid", [text: "component_34"]}, {"a", [text: "34a_prop"]}],
          [text: "abc"]}
 
-      assert render_dom(node, %{}, []) ==
+      assert render_dom(node, @env) ==
                {"34a_prop,35a_prop,34b_state,36a_prop,34c_state,abc,34x_state,36z_state,34y_state,35z_state,34z_state",
                 %{
                   "component_34" => %{
@@ -627,7 +643,7 @@ defmodule Hologram.Template.RendererTest do
     test "emitted in component, accessed in component" do
       node = {:component, Module37, [{"cid", [text: "component_37"]}], []}
 
-      assert render_dom(node, %{}, []) ==
+      assert render_dom(node, @env) ==
                {"prop_aaa = 123",
                 %{
                   "component_37" => %{

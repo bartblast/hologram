@@ -10,49 +10,61 @@ defmodule Hologram.Template.Renderer do
   # https://html.spec.whatwg.org/multipage/syntax.html#void-elements
   @void_elems ~w(area base br col embed hr img input link meta param source track wbr)
 
+  defmodule Env do
+    defstruct context: %{}, node_type: nil, slots: [], tag_name: nil
+
+    @type t :: %__MODULE__{
+            context: %{(atom | {any, atom}) => any},
+            node_type: :attribute | :element | :property | :public_comment | nil,
+            slots: keyword(DOM.t()),
+            tag_name: String.t() | nil
+          }
+  end
+
   @doc """
   Renders the given DOM.
 
   ## Examples
 
       iex> dom = {:component, MyModule, [{"cid", [text: "my_component"]}], []}
-      iex> render_dom(dom, %{}, [])
+      iex> render_dom(dom, %Env{})
       {
         "<div>state_a = 1, state_b = 2</div>",
         %{"my_component" => %{module: MyModule, struct: %Component{state: %{a: 1, b: 2}}}}
       }
   """
-  @spec render_dom(DOM.t(), %{(atom | {any, atom}) => any}, keyword(DOM.t())) ::
+  @spec render_dom(DOM.t(), Env.t()) ::
           {String.t(), %{String.t() => %{module: module, struct: Component.t()}}}
-  def render_dom(dom, context, slots)
+  def render_dom(dom, env)
 
-  def render_dom({:component, module, props_dom, children_dom}, context, slots) do
-    expanded_children_dom = expand_slots(children_dom, slots)
+  def render_dom({:component, module, props_dom, children_dom}, env) do
+    expanded_children_dom = expand_slots(children_dom, env.slots)
 
     props =
       props_dom
       |> cast_props(module)
-      |> inject_props_from_context(module, context)
+      |> inject_props_from_context(module, env.context)
 
     if has_cid_prop?(props) do
-      render_stateful_component(module, props, expanded_children_dom, context)
+      render_stateful_component(module, props, expanded_children_dom, env.context)
     else
-      render_template(module, props, expanded_children_dom, context)
+      render_template(module, props, expanded_children_dom, env.context)
     end
   end
 
-  def render_dom({:doctype, content}, _context, _slots) do
+  def render_dom({:doctype, content}, _env) do
     {"<!DOCTYPE #{content}>", %{}}
   end
 
-  def render_dom({:element, "slot", _attrs_dom, []}, context, slots) do
-    render_dom(slots[:default], context, [])
+  def render_dom({:element, "slot", _attrs_dom, []}, env) do
+    render_dom(env.slots[:default], %Env{env | slots: []})
   end
 
-  def render_dom({:element, tag_name, attrs_dom, children_dom}, context, slots) do
+  def render_dom({:element, tag_name, attrs_dom, children_dom}, env) do
     attrs_html = render_attributes(attrs_dom)
 
-    {children_html, component_registry} = render_dom(children_dom, context, slots)
+    children_env = %Env{env | node_type: :element, tag_name: tag_name}
+    {children_html, component_registry} = render_dom(children_dom, children_env)
 
     html =
       if tag_name in @void_elems do
@@ -64,27 +76,36 @@ defmodule Hologram.Template.Renderer do
     {html, component_registry}
   end
 
-  def render_dom({:expression, {value}}, _context, _slots) do
+  def render_dom({:expression, {value}}, _env) do
     {to_string(value), %{}}
   end
 
-  def render_dom({:public_comment, children_dom}, context, slots) do
-    {children_html, component_registry} = render_dom(children_dom, context, slots)
+  def render_dom({:public_comment, children_dom}, env) do
+    children_env = %Env{env | node_type: :public_comment}
+    {children_html, component_registry} = render_dom(children_dom, children_env)
     html = "<!--#{children_html}-->"
 
     {html, component_registry}
   end
 
-  def render_dom({:text, text}, _context, _slots) do
+  def render_dom({:text, text}, %Env{node_type: :element, tag_name: "script"}) do
+    {text, %{}}
+  end
+
+  def render_dom({:text, text}, %Env{node_type: :public_comment}) do
+    {text, %{}}
+  end
+
+  def render_dom({:text, text}, _env) do
     {HtmlEntities.encode(text), %{}}
   end
 
-  def render_dom(nodes, context, slots) when is_list(nodes) do
+  def render_dom(nodes, env) when is_list(nodes) do
     nodes
     # There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if}
     |> Enum.filter(& &1)
     |> Enum.reduce({"", %{}}, fn node, {acc_html, acc_component_registry} ->
-      {html, component_registry} = render_dom(node, context, slots)
+      {html, component_registry} = render_dom(node, env)
       {acc_html <> html, Map.merge(acc_component_registry, component_registry)}
     end)
   end
@@ -165,7 +186,7 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp evaluate_prop_value({name, value_dom}) do
-    {value_str, %{}} = render_dom(value_dom, %{}, [])
+    {value_str, %{}} = render_dom(value_dom, %Env{node_type: :property})
     {name, value_str}
   end
 
@@ -284,7 +305,7 @@ defmodule Hologram.Template.Renderer do
   defp render_attribute(name, []), do: name
 
   defp render_attribute(name, value_dom) do
-    {value_str, %{}} = render_dom(value_dom, %{}, [])
+    {value_str, %{}} = render_dom(value_dom, %Env{node_type: :attribute})
     ~s(#{name}="#{value_str}")
   end
 
@@ -312,7 +333,7 @@ defmodule Hologram.Template.Renderer do
     layout_props_dom = build_layout_props_dom(page_module, page_state)
     layout_node = {:component, layout_module, layout_props_dom, page_dom}
 
-    render_dom(layout_node, page_emitted_context, [])
+    render_dom(layout_node, %Env{context: page_emitted_context})
   end
 
   defp render_stateful_component(module, props, children_dom, context) do
@@ -332,6 +353,6 @@ defmodule Hologram.Template.Renderer do
   defp render_template(module, vars, children_dom, context) do
     vars
     |> module.template().()
-    |> render_dom(context, default: children_dom)
+    |> render_dom(%Env{context: context, slots: [default: children_dom]})
   end
 end
