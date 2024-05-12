@@ -480,6 +480,8 @@ defmodule Hologram.Template.ParserTest do
     Enum.each(tags, fn {name, markup, expected} ->
       test "#{name}" do
         markup = "#{unquote(markup)}{%raw}{@abc}{/raw}"
+
+        # credo:disable-for-next-line Credo.Check.Refactor.AppendSingleItem
         assert parse_markup(markup) == unquote(expected) ++ [{:text, "{@abc}"}]
       end
     end)
@@ -641,12 +643,15 @@ defmodule Hologram.Template.ParserTest do
     Enum.each(tags, fn {name, markup, expected} ->
       test "#{name} inside text" do
         markup = "abc#{unquote(markup)}xyz"
+
+        # credo:disable-for-next-line Credo.Check.Refactor.AppendSingleItem
         assert parse_markup(markup) == [{:text, "abc"}] ++ unquote(expected) ++ [{:text, "xyz"}]
       end
 
       test "#{name} inside else subblock" do
         markup = "{%else}#{unquote(markup)}{/if}"
 
+        # credo:disable-for-lines:2 Credo.Check.Refactor.AppendSingleItem
         assert parse_markup(markup) ==
                  [{:block_start, "else"}] ++ unquote(expected) ++ [{:block_end, "if"}]
       end
@@ -654,6 +659,7 @@ defmodule Hologram.Template.ParserTest do
       test "#{name} inside for block" do
         markup = "{%for item <- @items}#{unquote(markup)}{/for}"
 
+        # credo:disable-for-lines:3 Credo.Check.Refactor.AppendSingleItem
         assert parse_markup(markup) ==
                  [{:block_start, {"for", "{ item <- @items}"}}] ++
                    unquote(expected) ++ [{:block_end, "for"}]
@@ -662,6 +668,7 @@ defmodule Hologram.Template.ParserTest do
       test "#{name} inside if block" do
         markup = "{%if true}#{unquote(markup)}{/if}"
 
+        # credo:disable-for-lines:2 Credo.Check.Refactor.AppendSingleItem
         assert parse_markup(markup) ==
                  [{:block_start, {"if", "{ true}"}}] ++ unquote(expected) ++ [{:block_end, "if"}]
       end
