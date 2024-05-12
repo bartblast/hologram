@@ -155,6 +155,16 @@ defmodule Hologram.Template.ParserTest do
       markup = "{abc}"
       assert parse_markup(markup) == [expression: markup]
     end
+
+    test "with expression" do
+      markup = "<!--{@abc}-->"
+
+      assert parse_markup(markup) == [
+               :public_comment_start,
+               {:expression, "{@abc}"},
+               :public_comment_end
+             ]
+    end
   end
 
   describe "attributes and properties" do
@@ -629,7 +639,7 @@ defmodule Hologram.Template.ParserTest do
     end)
   end
 
-  describe "start and end tags nested in various markup" do
+  describe "tags nested in various markup" do
     tags = [
       {"element start tag", "<div>", start_tag: {"div", []}},
       {"element end tag", "</div>", end_tag: "div"},

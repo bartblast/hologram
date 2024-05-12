@@ -383,12 +383,13 @@ defmodule Hologram.Template.Parser do
   end
 
   def parse_tokens(
-        %{delimiter_stack: [:expression | _tail], node_type: :text} = context,
+        %{delimiter_stack: [:expression | _tail], node_type: node_type} = context,
         :expression,
         [
           {:symbol, "}"} = token | rest
         ]
-      ) do
+      )
+      when node_type == :text or node_type == :public_comment do
     context
     |> buffer_token(token)
     |> add_expression_tag()
