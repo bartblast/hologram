@@ -87,7 +87,7 @@ defmodule Hologram.Template.Parser do
             attributes: list({String.t(), list(attribute_value_part())}),
             block_name: String.t() | nil,
             delimiter_stack: list(delimiter),
-            node_type: :attribute | :block | :tag | :text,
+            node_type: :attribute | :block | :public_comment | :tag | :text,
             prev_status: Parser.status() | nil,
             processed_tags: [],
             processed_tokens: list(Tokenizer.token()),
@@ -493,6 +493,18 @@ defmodule Hologram.Template.Parser do
 
   # --- TEXT ---
 
+  def parse_tokens(%{node_type: :public_comment} = context, :text, []) do
+    details = """
+    Reason:
+    Unclosed public comment.
+
+    Hint:
+    Close the public comment with '-->' marker.
+    """
+
+    raise_error(details, context, :text, nil, [])
+  end
+
   def parse_tokens(context, :text, []) do
     context
     |> maybe_add_text_tag()
@@ -562,7 +574,33 @@ defmodule Hologram.Template.Parser do
     parse_text(context, {:symbol, "{"}, rest)
   end
 
-  def parse_tokens(%{script?: false} = context, :text, [{:symbol, "<!"} = token_1 | rest_1]) do
+  def parse_tokens(%{node_type: :text, script?: false} = context, :text, [
+        {:symbol, "<!--"} = token | rest
+      ]) do
+    context
+    |> maybe_add_text_tag()
+    |> reset_token_buffer()
+    |> add_public_comment_start_tag()
+    |> add_processed_token(token)
+    |> set_node_type(:public_comment)
+    |> parse_tokens(:text, rest)
+  end
+
+  def parse_tokens(%{node_type: :public_comment} = context, :text, [
+        {:symbol, "<!--"} | [{:symbol, ">"} | rest]
+      ]) do
+    parse_tokens(context, :text, [{:symbol, "<!"} | [{:symbol, "-->"} | rest]])
+  end
+
+  def parse_tokens(%{node_type: :public_comment} = context, :text, [
+        {:symbol, "<!--"} = token | rest
+      ]) do
+    parse_text(context, token, rest)
+  end
+
+  def parse_tokens(%{node_type: :text, script?: false} = context, :text, [
+        {:symbol, "<!"} = token_1 | rest_1
+      ]) do
     case rest_1 do
       [{:string, str} = token_2 | rest_2] ->
         if String.downcase(str) == "doctype" do
@@ -581,21 +619,15 @@ defmodule Hologram.Template.Parser do
     end
   end
 
-  def parse_tokens(%{script?: false} = context, :text, [{:symbol, "<!--"} = token | rest]) do
-    context
-    |> maybe_add_text_tag()
-    |> reset_token_buffer()
-    |> add_public_comment_start_tag()
-    |> add_processed_token(token)
-    |> parse_tokens(:text, rest)
-  end
-
-  def parse_tokens(%{script?: false} = context, :text, [{:symbol, "-->"} = token | rest]) do
+  def parse_tokens(%{node_type: :public_comment} = context, :text, [
+        {:symbol, "-->"} = token | rest
+      ]) do
     context
     |> maybe_add_text_tag()
     |> reset_token_buffer()
     |> add_public_comment_end_tag()
     |> add_processed_token(token)
+    |> set_node_type(:text)
     |> parse_tokens(:text, rest)
   end
 
@@ -669,7 +701,7 @@ defmodule Hologram.Template.Parser do
     parse_text(context, token, rest)
   end
 
-  def parse_tokens(context, :text, [{:symbol, "</"} = token | rest]) do
+  def parse_tokens(%{node_type: :text} = context, :text, [{:symbol, "</"} = token | rest]) do
     context
     |> maybe_add_text_tag()
     |> reset_token_buffer()
@@ -678,7 +710,7 @@ defmodule Hologram.Template.Parser do
     |> parse_tokens(:end_tag_name, rest)
   end
 
-  def parse_tokens(%{script?: false} = context, :text, [
+  def parse_tokens(%{node_type: :text, script?: false} = context, :text, [
         {:symbol, "<"} = token | [{:string, _value} | _tokens] = rest
       ]) do
     context
@@ -690,11 +722,15 @@ defmodule Hologram.Template.Parser do
     |> parse_tokens(:start_tag_name, rest)
   end
 
-  def parse_tokens(%{script?: false} = context, :text, [{:symbol, "<"} = token | rest]) do
+  def parse_tokens(%{node_type: :text, script?: false} = context, :text, [
+        {:symbol, "<"} = token | rest
+      ]) do
     raise_error(@unescaped_lt_char_details, context, :text, token, rest)
   end
 
-  def parse_tokens(%{script?: false} = context, :text, [{:symbol, ">"} = token | rest]) do
+  def parse_tokens(%{node_type: :text, script?: false} = context, :text, [
+        {:symbol, ">"} = token | rest
+      ]) do
     details = """
     Reason:
     Unescaped '>' character inside text node.

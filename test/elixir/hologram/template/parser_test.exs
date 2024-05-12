@@ -232,12 +232,68 @@ defmodule Hologram.Template.ParserTest do
   end
 
   describe "public comment" do
-    test "start" do
-      assert parse_markup("<!--") == [:public_comment_start]
+    test "with text" do
+      assert parse_markup("<!--abc-->") == [
+               :public_comment_start,
+               {:text, "abc"},
+               :public_comment_end
+             ]
     end
 
-    test "end" do
-      assert parse_markup("-->") == [:public_comment_end]
+    test "with '<!--' symbol not followed by '>' symbol" do
+      assert parse_markup("<!--<!--abc-->") == [
+               :public_comment_start,
+               {:text, "<!--abc"},
+               :public_comment_end
+             ]
+    end
+
+    test "with '<!--' symbol followed by '>' symbol" do
+      assert parse_markup("<!--<!-->") == [
+               :public_comment_start,
+               {:text, "<!"},
+               :public_comment_end
+             ]
+    end
+
+    test "with DOCTYPE" do
+      assert parse_markup("<!--<!DOCTYPE html>-->") == [
+               :public_comment_start,
+               {:text, "<!DOCTYPE html>"},
+               :public_comment_end
+             ]
+    end
+
+    test "with '<!' symbol" do
+      assert parse_markup("<!--<!abc-->") == [
+               :public_comment_start,
+               {:text, "<!abc"},
+               :public_comment_end
+             ]
+    end
+
+    test "with '</' symbol" do
+      assert parse_markup("<!--</-->") == [
+               :public_comment_start,
+               {:text, "</"},
+               :public_comment_end
+             ]
+    end
+
+    test "with '<' symbol" do
+      assert parse_markup("<!--<-->") == [
+               :public_comment_start,
+               {:text, "<"},
+               :public_comment_end
+             ]
+    end
+
+    test "with '>' symbol" do
+      assert parse_markup("<!-->-->") == [
+               :public_comment_start,
+               {:text, ">"},
+               :public_comment_end
+             ]
     end
   end
 
@@ -337,8 +393,8 @@ defmodule Hologram.Template.ParserTest do
       {"element end tag", "</div>", end_tag: "div"},
       {"component start tag", "<Aaa.Bbb>", start_tag: {"Aaa.Bbb", []}},
       {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"},
-      {"public comment start", "<!--", [:public_comment_start]},
-      {"public comment end", "-->", [:public_comment_end]},
+      {"public comment", "<!--abc-->",
+       [:public_comment_start, {:text, "abc"}, :public_comment_end]},
       {"DOCTYPE", "<!DOCTYPE html>", doctype: "html"}
     ]
 
@@ -410,8 +466,8 @@ defmodule Hologram.Template.ParserTest do
       {"element end tag", "</div>", end_tag: "div"},
       {"component start tag", "<Aaa.Bbb>", start_tag: {"Aaa.Bbb", []}},
       {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"},
-      {"public comment start", "<!--", [:public_comment_start]},
-      {"public comment end", "-->", [:public_comment_end]},
+      {"public comment", "<!--abc-->",
+       [:public_comment_start, {:text, "abc"}, :public_comment_end]},
       {"DOCTYPE", "<!DOCTYPE html>", doctype: "html"},
       {"else subblock", "{%else}", block_start: "else"},
       {"expression", "{@abc}", expression: "{@abc}"},
@@ -421,14 +477,10 @@ defmodule Hologram.Template.ParserTest do
       {"if block end", "{/if}", block_end: "if"}
     ]
 
-    Enum.each(tags, fn {name, markup, [expected]} ->
+    Enum.each(tags, fn {name, markup, expected} ->
       test "#{name}" do
         markup = "#{unquote(markup)}{%raw}{@abc}{/raw}"
-
-        assert parse_markup(markup) == [
-                 unquote(expected),
-                 {:text, "{@abc}"}
-               ]
+        assert parse_markup(markup) == unquote(expected) ++ [{:text, "{@abc}"}]
       end
     end)
 
@@ -444,8 +496,8 @@ defmodule Hologram.Template.ParserTest do
       {"element end tag", "</div>", end_tag: "div"},
       {"component start tag", "<Aaa.Bbb>", start_tag: {"Aaa.Bbb", []}},
       {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"},
-      {"public comment start", "<!--", [:public_comment_start]},
-      {"public comment end", "-->", [:public_comment_end]},
+      {"public comment", "<!--abc-->",
+       [:public_comment_start, {:text, "abc"}, :public_comment_end]},
       {"DOCTYPE", "<!DOCTYPE html>", doctype: "html"},
       {"else subblock", "{%else}", block_start: "else"},
       {"expression", "{@abc}", expression: "{@abc}"},
@@ -456,17 +508,13 @@ defmodule Hologram.Template.ParserTest do
     ]
 
     for(tag_1 <- tags, tag_2 <- tags, do: {tag_1, tag_2})
-    |> Enum.reject(fn {{name_1, _markup_1, [_expected_1]}, {name_2, _markup_2, [_expected_2]}} ->
+    |> Enum.reject(fn {{name_1, _markup_1, _expected_1}, {name_2, _markup_2, _expected_2}} ->
       name_1 == "text" && name_2 == "text"
     end)
-    |> Enum.each(fn {{name_1, markup_1, [expected_1]}, {name_2, markup_2, [expected_2]}} ->
+    |> Enum.each(fn {{name_1, markup_1, expected_1}, {name_2, markup_2, expected_2}} ->
       test "#{name_1}, #{name_2}" do
         markup = "#{unquote(markup_1)}#{unquote(markup_2)}"
-
-        assert parse_markup(markup) == [
-                 unquote(expected_1),
-                 unquote(expected_2)
-               ]
+        assert parse_markup(markup) == unquote(expected_1) ++ unquote(expected_2)
       end
     end)
   end
@@ -585,50 +633,37 @@ defmodule Hologram.Template.ParserTest do
       {"element end tag", "</div>", end_tag: "div"},
       {"component start tag", "<Aaa.Bbb>", start_tag: {"Aaa.Bbb", []}},
       {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"},
-      {"public comment start", "<!--", [:public_comment_start]},
-      {"public comment end", "-->", [:public_comment_end]},
+      {"public comment", "<!--abc-->",
+       [:public_comment_start, {:text, "abc"}, :public_comment_end]},
       {"DOCTYPE", "<!DOCTYPE html>", doctype: "html"}
     ]
 
-    Enum.each(tags, fn {name, markup, [expected]} ->
+    Enum.each(tags, fn {name, markup, expected} ->
       test "#{name} inside text" do
         markup = "abc#{unquote(markup)}xyz"
-
-        assert parse_markup(markup) == [
-                 {:text, "abc"},
-                 unquote(expected),
-                 {:text, "xyz"}
-               ]
+        assert parse_markup(markup) == [{:text, "abc"}] ++ unquote(expected) ++ [{:text, "xyz"}]
       end
 
       test "#{name} inside else subblock" do
         markup = "{%else}#{unquote(markup)}{/if}"
 
-        assert parse_markup(markup) == [
-                 {:block_start, "else"},
-                 unquote(expected),
-                 {:block_end, "if"}
-               ]
+        assert parse_markup(markup) ==
+                 [{:block_start, "else"}] ++ unquote(expected) ++ [{:block_end, "if"}]
       end
 
       test "#{name} inside for block" do
         markup = "{%for item <- @items}#{unquote(markup)}{/for}"
 
-        assert parse_markup(markup) == [
-                 {:block_start, {"for", "{ item <- @items}"}},
-                 unquote(expected),
-                 {:block_end, "for"}
-               ]
+        assert parse_markup(markup) ==
+                 [{:block_start, {"for", "{ item <- @items}"}}] ++
+                   unquote(expected) ++ [{:block_end, "for"}]
       end
 
       test "#{name} inside if block" do
         markup = "{%if true}#{unquote(markup)}{/if}"
 
-        assert parse_markup(markup) == [
-                 {:block_start, {"if", "{ true}"}},
-                 unquote(expected),
-                 {:block_end, "if"}
-               ]
+        assert parse_markup(markup) ==
+                 [{:block_start, {"if", "{ true}"}}] ++ unquote(expected) ++ [{:block_end, "if"}]
       end
 
       test "#{name} inside elixir expression double quoted string" do
@@ -1392,6 +1427,21 @@ defmodule Hologram.Template.ParserTest do
       """
 
       test_syntax_error_msg("<div", msg)
+    end
+
+    test "unclosed public comment" do
+      msg = """
+      Reason:
+      Unclosed public comment.
+
+      Hint:
+      Close the public comment with '-->' marker.
+
+      <!--
+          ^
+      """
+
+      test_syntax_error_msg("<!--", msg)
     end
 
     test "unclosed DOCTYPE declaration" do
