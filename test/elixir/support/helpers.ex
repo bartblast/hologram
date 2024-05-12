@@ -167,7 +167,7 @@ defmodule Hologram.Test.Helpers do
       Enum.map(props, fn {name, value} -> {to_string(name), [expression: {value}]} end)
 
     node = {:component, module, props_dom, []}
-    {html, _component_structs} = Renderer.render_dom(node, context, [])
+    {html, _component_structs} = Renderer.render_dom(node, %Renderer.Env{context: context})
 
     html
   end
