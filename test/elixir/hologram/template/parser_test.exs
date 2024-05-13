@@ -1107,13 +1107,13 @@ defmodule Hologram.Template.ParserTest do
     test "escaping closing curly bracket in text" do
       assert parse_markup("abc\\}xyz") == [text: "abc}xyz"]
     end
-    
-    test "escaped curly brackets' processed tokens are accumulated in escaped form" do      
+
+    test "escaped curly brackets' processed tokens are accumulated in escaped form" do
       msg = """
       aaa\\{bbb\\}ccc<div
                        ^\
       """
-      
+
       assert_raise TemplateSyntaxError, ~r/.+#{Regex.escape(msg)}.+/s, fn ->
         parse_markup("aaa\\{bbb\\}ccc<div")
       end
@@ -1456,7 +1456,7 @@ defmodule Hologram.Template.ParserTest do
 
       test_syntax_error_msg("<div", msg)
     end
-  
+
     test "unclosed public comment" do
       msg = """
       Reason:

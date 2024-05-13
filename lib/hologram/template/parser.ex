@@ -571,7 +571,7 @@ defmodule Hologram.Template.Parser do
     |> parse_text(token, rest)
   end
 
-  def parse_tokens(context, :text, [{:symbol, "\\{"} = token | rest]) do    
+  def parse_tokens(context, :text, [{:symbol, "\\{"} = token | rest]) do
     context
     |> buffer_token({:symbol, "{"})
     |> add_processed_token(token)
