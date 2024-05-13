@@ -1,7 +1,7 @@
 {
   "dependencies": {
     "@biomejs/biome": "^1",
-    "esbuild": "^0.20",
+    "esbuild": "^0.21",
     "lodash": "^4",
     "snabbdom": "^3",
     "snabbdom-to-html": "^7"
