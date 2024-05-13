@@ -160,7 +160,8 @@ defmodule Hologram.CompilerTest do
   end
 
   test "build_page_digest_plt/2" do
-    opts = [build_dir: "/my_build_dir"]
+    build_dir = Path.join("/", "my_build_dir")
+    opts = [build_dir: build_dir]
 
     bundle_info = [
       %{
@@ -177,7 +178,10 @@ defmodule Hologram.CompilerTest do
       }
     ]
 
-    assert {%PLT{} = plt, "/my_build_dir/page_digest.plt"} =
+    expected_page_digest_plt_dump_path =
+      Path.join(build_dir, Reflection.page_digest_plt_dump_file_name())
+
+    assert {%PLT{} = plt, ^expected_page_digest_plt_dump_path} =
              build_page_digest_plt(bundle_info, opts)
 
     assert PLT.get_all(plt) == %{MyPage1 => "my-digest-1", MyPage2 => "my-digest-3"}
