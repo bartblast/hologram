@@ -231,6 +231,10 @@ defmodule Hologram.Commons.ReflectionTest do
     end
   end
 
+  test "module_beam_path_plt_dump_file_name/0" do
+    assert module_beam_path_plt_dump_file_name() == "module_beam_path.plt"
+  end
+
   test "module_name/1" do
     assert module_name(Aaa.Bbb) == "Aaa.Bbb"
   end

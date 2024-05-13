@@ -311,6 +311,14 @@ defmodule Hologram.Commons.Reflection do
   end
 
   @doc """
+  Returns the module BEAM path PLT dump file name.
+  """
+  @spec module_beam_path_plt_dump_file_name() :: String.t()
+  def module_beam_path_plt_dump_file_name do
+    "module_beam_path.plt"
+  end
+
+  @doc """
   Returns the module name without "Elixir" prefix at the beginning.
 
   ## Examples
