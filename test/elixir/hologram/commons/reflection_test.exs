@@ -122,6 +122,10 @@ defmodule Hologram.Commons.ReflectionTest do
     end
   end
 
+  test "ir_plt_dump_file_name/0" do
+    assert ir_plt_dump_file_name() == "ir.plt"
+  end
+
   test "list_all_otp_apps/0" do
     assert Enum.sort(list_all_otp_apps()) == Enum.sort(list_all_otp_apps())
   end

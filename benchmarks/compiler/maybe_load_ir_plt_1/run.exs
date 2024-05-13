@@ -27,7 +27,7 @@ Benchee.run(
 
          plt = Compiler.build_ir_plt()
 
-         dump_path = Path.join(build_dir, "ir.plt")
+         dump_path = Path.join(build_dir, Reflection.ir_plt_dump_file_name())
          PLT.dump(plt, dump_path)
 
          build_dir

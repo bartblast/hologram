@@ -2,6 +2,7 @@ defmodule Hologram.Commons.Reflection do
   alias Hologram.Commons.StringUtils
 
   @ignored_modules [Kernel.SpecialForms]
+  @ir_plt_dump_file_name "ir.plt"
   @module_beam_path_plt_dump_file_name "module_beam_path.plt"
   @module_digest_plt_dump_file_name "module_digest.plt"
   @page_digest_plt_dump_file_name "page_digest.plt"
@@ -176,6 +177,14 @@ defmodule Hologram.Commons.Reflection do
     |> module.module_info()
     |> Keyword.get_values(function)
     |> Enum.member?(arity)
+  end
+
+  @doc """
+  Returns the IR PLT dump file name.
+  """
+  @spec ir_plt_dump_file_name() :: String.t()
+  def ir_plt_dump_file_name do
+    @ir_plt_dump_file_name
   end
 
   @doc """

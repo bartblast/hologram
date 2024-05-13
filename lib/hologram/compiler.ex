@@ -420,7 +420,7 @@ defmodule Hologram.Compiler do
   @spec maybe_load_ir_plt(file_path) :: {PLT.t(), String.t()}
   def maybe_load_ir_plt(build_dir) do
     ir_plt = PLT.start()
-    ir_plt_dump_path = Path.join(build_dir, "ir.plt")
+    ir_plt_dump_path = Path.join(build_dir, Reflection.ir_plt_dump_file_name())
     PLT.maybe_load(ir_plt, ir_plt_dump_path)
 
     {ir_plt, ir_plt_dump_path}
