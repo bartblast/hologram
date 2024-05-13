@@ -76,6 +76,10 @@ defmodule Hologram.Template.Renderer do
     {html, component_registry}
   end
 
+  def render_dom({:expression, {value}}, %Env{node_type: :element, tag_name: "script"}) do
+    {to_string(value), %{}}
+  end
+
   def render_dom({:expression, {value}}, _env) do
     html =
       value

@@ -138,13 +138,24 @@ defmodule Hologram.Template.RendererTest do
 
   describe "expression node" do
     test "expression value is converted to string" do
+      # {123}
       node = {:expression, {123}}
+
       assert render_dom(node, @env) == {"123", %{}}
     end
 
-    test "HTML entities are escaped" do
-      node = {:expression, {"abc < xyz"}}
-      assert render_dom(node, @env) == {"abc &lt; xyz", %{}}
+    test "HTML entities inside script elements are not escaped" do
+      # <script>{"abc < xyz"}</script>
+      node = {:element, "script", [], [expression: {"abc < xyz"}]}
+
+      assert render_dom(node, @env) == {"<script>abc < xyz</script>", %{}}
+    end
+
+    test "HTML entities inside non-script elements are escaped" do
+      # <div>{"abc < xyz"}</div>
+      node = {:element, "div", [], [expression: {"abc < xyz"}]}
+
+      assert render_dom(node, @env) == {"<div>abc &lt; xyz</div>", %{}}
     end
   end
 
