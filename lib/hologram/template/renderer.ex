@@ -77,7 +77,12 @@ defmodule Hologram.Template.Renderer do
   end
 
   def render_dom({:expression, {value}}, _env) do
-    {to_string(value), %{}}
+    html =
+      value
+      |> to_string()
+      |> HtmlEntities.encode()
+
+    {html, %{}}
   end
 
   def render_dom({:public_comment, children_dom}, env) do

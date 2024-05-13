@@ -136,9 +136,16 @@ defmodule Hologram.Template.RendererTest do
     assert render_dom(node, @env) == {"<!DOCTYPE html>", %{}}
   end
 
-  test "expression node" do
-    node = {:expression, {123}}
-    assert render_dom(node, @env) == {"123", %{}}
+  describe "expression node" do
+    test "expression value is converted to string" do
+      node = {:expression, {123}}
+      assert render_dom(node, @env) == {"123", %{}}
+    end
+
+    test "HTML entities are escaped" do
+      node = {:expression, {"abc < xyz"}}
+      assert render_dom(node, @env) == {"abc &lt; xyz", %{}}
+    end
   end
 
   describe "element node" do
