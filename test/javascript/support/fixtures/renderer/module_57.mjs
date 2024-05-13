@@ -1,8 +1,24 @@
+// Fixture used only in client tests.
+
 "use strict";
 
 import Interpreter from "../../../../../assets/js/interpreter.mjs";
 import Type from "../../../../../assets/js/type.mjs";
 
+/*
+defmodule Hologram.Test.Fixtures.Template.Renderer.Module57 do
+  use Hologram.Page
+
+  route "/hologram-test-fixtures-template-renderer-module57"
+
+  layout Hologram.Test.Fixtures.Template.Renderer.Module58
+
+  @impl Page
+  def template do
+    ~H""
+  end
+end
+*/
 export function defineModule57Fixture() {
   Interpreter.defineElixirFunction(
     "Hologram.Test.Fixtures.Template.Renderer.Module57",
