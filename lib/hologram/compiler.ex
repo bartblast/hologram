@@ -9,8 +9,6 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
 
-  @type file_path :: String.t()
-
   @doc """
   Builds the call graph of all modules in the project.
   """
@@ -107,7 +105,7 @@ defmodule Hologram.Compiler do
   Builds page digest PLT, where the keys represent page modules,
   and the values are hex digests of their corresponding JavaScript bundles.
   """
-  @spec build_page_digest_plt(list(map), T.opts()) :: {PLT.t(), file_path}
+  @spec build_page_digest_plt(list(map), T.opts()) :: {PLT.t(), T.file_path()}
   def build_page_digest_plt(bundle_info, opts) do
     page_digest_plt_items =
       bundle_info
@@ -129,7 +127,7 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_page_js_4/README.md
   """
-  @spec build_page_js(module, CallGraph.t(), PLT.t(), file_path) :: String.t()
+  @spec build_page_js(module, CallGraph.t(), PLT.t(), T.file_path()) :: String.t()
   def build_page_js(page_module, call_graph, ir_plt, js_dir) do
     mfas = CallGraph.list_page_mfas(call_graph, page_module)
     erlang_js_dir = Path.join(js_dir, "erlang")
@@ -167,7 +165,7 @@ defmodule Hologram.Compiler do
   @doc """
   Builds Hologram runtime JavaScript source code.
   """
-  @spec build_runtime_js(list(mfa), PLT.t(), file_path) :: String.t()
+  @spec build_runtime_js(list(mfa), PLT.t(), T.file_path()) :: String.t()
   def build_runtime_js(runtime_mfas, ir_plt, js_dir) do
     erlang_function_defs =
       runtime_mfas
@@ -206,7 +204,7 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/bundle_2/README.md
   """
-  @spec bundle(list({term, file_path, String.t()}), T.opts()) :: list(map)
+  @spec bundle(list({term, T.file_path(), String.t()}), T.opts()) :: list(map)
   def bundle(entry_files_info, opts) do
     entry_files_info
     |> TaskUtils.async_many(fn {entry_name, entry_file_path, bundle_name} ->
@@ -220,7 +218,7 @@ defmodule Hologram.Compiler do
   Includes the source map of the output file.
   The output file and source map file names contain hex digest.
   """
-  @spec bundle(term, file_path, String.t(), T.opts()) :: map
+  @spec bundle(term, T.file_path(), String.t(), T.opts()) :: map
   # sobelow_skip ["CI.System"]
   def bundle(entry_name, entry_file_path, bundle_name, opts) do
     output_bundle_path = Path.join(opts[:tmp_dir], "#{entry_name}.output.js")
@@ -276,7 +274,7 @@ defmodule Hologram.Compiler do
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/create_page_entry_files_4/README.md
   """
   @spec create_page_entry_files(list(module), CallGraph.t(), PLT.t(), T.opts()) ::
-          list({module, file_path})
+          list({module, T.file_path()})
   def create_page_entry_files(page_modules, call_graph, ir_plt, opts) do
     page_modules
     |> TaskUtils.async_many(fn page_module ->
@@ -297,7 +295,7 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/create_runtime_entry_file_3/README.md
   """
-  @spec create_runtime_entry_file(list(mfa), PLT.t(), T.opts()) :: file_path
+  @spec create_runtime_entry_file(list(mfa), PLT.t(), T.opts()) :: T.file_path()
   def create_runtime_entry_file(runtime_mfas, ir_plt, opts) do
     runtime_mfas
     |> build_runtime_js(ir_plt, opts[:js_dir])
@@ -346,7 +344,7 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/format_files_2/README.md
   """
-  @spec format_files(list(file_path), T.opts()) ::
+  @spec format_files(list(T.file_path()), T.opts()) ::
           {Collectable.t(), exit_status :: non_neg_integer()}
   # sobelow_skip ["CI.System"]
   def format_files(file_paths, opts) do
@@ -366,7 +364,7 @@ defmodule Hologram.Compiler do
   Installs JavaScript deps which are specified in package.json located in assets_dir.
   Saves the package.json digest to package_json_digest.bin file in build_dir.
   """
-  @spec install_js_deps(file_path, file_path) :: :ok
+  @spec install_js_deps(T.file_path(), T.file_path()) :: :ok
   def install_js_deps(assets_dir, build_dir) do
     opts = [cd: assets_dir, into: IO.stream(:stdio, :line)]
     System.cmd("npm", ["install", "--no-progress", "--silent"], opts)
@@ -382,7 +380,7 @@ defmodule Hologram.Compiler do
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_install_js_deps_2/README.md
   """
-  @spec maybe_install_js_deps(file_path, file_path) :: :ok | nil
+  @spec maybe_install_js_deps(T.file_path(), T.file_path()) :: :ok | nil
   def maybe_install_js_deps(assets_dir, build_dir) do
     package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
     package_json_lock_path = Path.join(assets_dir, "package-lock.json")
@@ -404,7 +402,7 @@ defmodule Hologram.Compiler do
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_call_graph_1/README.md
   """
-  @spec maybe_load_call_graph(file_path) :: {CallGraph.t(), String.t()}
+  @spec maybe_load_call_graph(T.file_path()) :: {CallGraph.t(), String.t()}
   def maybe_load_call_graph(build_dir) do
     call_graph = CallGraph.start()
     call_graph_dump_path = Path.join(build_dir, Reflection.call_graph_dump_file_name())
@@ -418,7 +416,7 @@ defmodule Hologram.Compiler do
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_ir_plt_1/README.md
   """
-  @spec maybe_load_ir_plt(file_path) :: {PLT.t(), String.t()}
+  @spec maybe_load_ir_plt(T.file_path()) :: {PLT.t(), String.t()}
   def maybe_load_ir_plt(build_dir) do
     ir_plt = PLT.start()
     ir_plt_dump_path = Path.join(build_dir, Reflection.ir_plt_dump_file_name())
@@ -432,7 +430,7 @@ defmodule Hologram.Compiler do
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_module_beam_path_plt_1/README.md
   """
-  @spec maybe_load_module_beam_path_plt(file_path) :: {PLT.t(), String.t()}
+  @spec maybe_load_module_beam_path_plt(T.file_path()) :: {PLT.t(), String.t()}
   def maybe_load_module_beam_path_plt(build_dir) do
     module_beam_path_plt = PLT.start()
 
@@ -449,7 +447,7 @@ defmodule Hologram.Compiler do
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_module_digest_plt_1/README.md
   """
-  @spec maybe_load_module_digest_plt(file_path) :: {PLT.t(), String.t()}
+  @spec maybe_load_module_digest_plt(T.file_path()) :: {PLT.t(), String.t()}
   def maybe_load_module_digest_plt(build_dir) do
     module_digest_plt = PLT.start()
 

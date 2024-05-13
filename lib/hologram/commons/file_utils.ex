@@ -1,5 +1,5 @@
 defmodule Hologram.Commons.FileUtils do
-  @type file_path :: String.t()
+  alias Hologram.Commons.Types, as: T
 
   @doc """
   Lists files nested in the given path or paths. The results are sorted in ascending order.
@@ -13,7 +13,7 @@ defmodule Hologram.Commons.FileUtils do
        "test/elixir/fixtures/commons/file_utils/list_files_recursively/dir_1/file_3.txt",
        "test/elixir/fixtures/commons/file_utils/list_files_recursively/dir_1/file_4.txt"]
   """
-  @spec list_files_recursively(file_path | list(file_path)) :: list(file_path)
+  @spec list_files_recursively(T.file_path() | list(T.file_path())) :: list(T.file_path())
   def list_files_recursively(path_or_paths)
 
   def list_files_recursively(paths) when is_list(paths) do
@@ -45,7 +45,7 @@ defmodule Hologram.Commons.FileUtils do
   @doc """
   Removes the given dir (including all its contents) and creates an empty dir with the same name and path.
   """
-  @spec recreate_dir(file_path) :: :ok
+  @spec recreate_dir(T.file_path()) :: :ok
   def recreate_dir(dir_path) do
     File.rm_rf!(dir_path)
     File.mkdir_p!(dir_path)
