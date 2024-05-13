@@ -18,7 +18,7 @@ Benchee.run(
              "commons",
              "plt",
              "dump_2",
-             "module_beam_path.plt"
+             Reflection.module_beam_path_plt_dump_file_name()
            ])
 
          PLT.dump(module_beam_path_plt, dump_path)

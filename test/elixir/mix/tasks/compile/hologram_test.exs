@@ -37,7 +37,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   defp test_module_beam_path_plt do
-    module_beam_path_plt_dump_path = Path.join(@build_dir, "module_beam_path.plt")
+    module_beam_path_plt_dump_path =
+      Path.join(@build_dir, Reflection.module_beam_path_plt_dump_file_name())
+
     assert File.exists?(module_beam_path_plt_dump_path)
 
     module_beam_path_plt = PLT.start()
