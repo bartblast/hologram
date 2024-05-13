@@ -2,7 +2,9 @@ defmodule Hologram.Commons.Reflection do
   alias Hologram.Commons.StringUtils
 
   @ignored_modules [Kernel.SpecialForms]
+  @module_beam_path_plt_dump_file_name "module_beam_path.plt"
   @module_digest_plt_dump_file_name "module_digest.plt"
+  @page_digest_plt_dump_file_name "page_digest.plt"
 
   @doc """
   Determines whether the given term is an alias.
@@ -316,7 +318,7 @@ defmodule Hologram.Commons.Reflection do
   """
   @spec module_beam_path_plt_dump_file_name() :: String.t()
   def module_beam_path_plt_dump_file_name do
-    "module_beam_path.plt"
+    @module_beam_path_plt_dump_file_name
   end
 
   @doc """
@@ -372,7 +374,7 @@ defmodule Hologram.Commons.Reflection do
   """
   @spec page_digest_plt_dump_file_name() :: String.t()
   def page_digest_plt_dump_file_name do
-    "page_digest.plt"
+    @page_digest_plt_dump_file_name
   end
 
   @doc """
