@@ -38,7 +38,9 @@ Benchee.run(
          module_beam_path_plt = Compiler.build_module_beam_path_plt()
          module_digest_plt = Compiler.build_module_digest_plt!(module_beam_path_plt)
 
-         module_digest_plt_dump_path = Path.join(build_dir, "module_digest.plt")
+         module_digest_plt_dump_path =
+           Path.join(build_dir, Reflection.module_digest_plt_dump_file_name())
+
          PLT.dump(module_digest_plt, module_digest_plt_dump_path)
 
          build_dir

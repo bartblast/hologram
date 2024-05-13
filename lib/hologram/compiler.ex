@@ -451,7 +451,10 @@ defmodule Hologram.Compiler do
   @spec maybe_load_module_digest_plt(file_path) :: {PLT.t(), String.t()}
   def maybe_load_module_digest_plt(build_dir) do
     module_digest_plt = PLT.start()
-    module_digest_plt_dump_path = Path.join(build_dir, "module_digest.plt")
+
+    module_digest_plt_dump_path =
+      Path.join(build_dir, Reflection.module_digest_plt_dump_file_name())
+
     PLT.maybe_load(module_digest_plt, module_digest_plt_dump_path)
 
     {module_digest_plt, module_digest_plt_dump_path}
