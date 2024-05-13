@@ -38,7 +38,7 @@ Benchee.run(
     call_graph = Compiler.build_call_graph()
 
     dump_dir = Path.join([Reflection.tmp_dir(), "benchmarks", "compiler", "call_graph", "dump_2"])
-    dump_path = Path.join(dump_dir, "call_graph.bin")
+    dump_path = Path.join(dump_dir, Reflection.call_graph_dump_file_name())
 
     {call_graph, dump_dir, dump_path}
   end,

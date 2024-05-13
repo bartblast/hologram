@@ -750,7 +750,7 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     clean_dir(dump_dir)
 
-    dump_path = Path.join(dump_dir, "call_graph.bin")
+    dump_path = Path.join(dump_dir, Reflection.call_graph_dump_file_name())
 
     graph =
       call_graph
@@ -931,7 +931,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     dump_dir = Path.join([@tmp_dir, "tests", "compiler", "call_graph", "load_2"])
     clean_dir(dump_dir)
 
-    dump_path = Path.join(dump_dir, "call_graph.bin")
+    dump_path = Path.join(dump_dir, Reflection.call_graph_dump_file_name())
     dump(call_graph, dump_path)
 
     call_graph_2 = start()
@@ -945,7 +945,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       dump_dir = Path.join([@tmp_dir, "tests", "compiler", "call_graph", "maybe_load_2"])
       clean_dir(dump_dir)
 
-      [dump_path: Path.join(dump_dir, "call_graph.bin")]
+      [dump_path: Path.join(dump_dir, Reflection.call_graph_dump_file_name())]
     end
 
     test "dump file exists", %{dump_path: dump_path} do

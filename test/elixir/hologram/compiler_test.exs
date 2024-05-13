@@ -538,7 +538,7 @@ defmodule Hologram.CompilerTest do
       build_dir = Path.join(test_tmp_dir, "build")
       clean_dir(build_dir)
 
-      dump_path = Path.join(build_dir, "call_graph.bin")
+      dump_path = Path.join(build_dir, Reflection.call_graph_dump_file_name())
 
       [build_dir: build_dir, dump_path: dump_path]
     end

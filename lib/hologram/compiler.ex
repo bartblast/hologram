@@ -406,7 +406,7 @@ defmodule Hologram.Compiler do
   @spec maybe_load_call_graph(file_path) :: {CallGraph.t(), String.t()}
   def maybe_load_call_graph(build_dir) do
     call_graph = CallGraph.start()
-    call_graph_dump_path = Path.join(build_dir, "call_graph.bin")
+    call_graph_dump_path = Path.join(build_dir, Reflection.call_graph_dump_file_name())
     CallGraph.maybe_load(call_graph, call_graph_dump_path)
 
     {call_graph, call_graph_dump_path}

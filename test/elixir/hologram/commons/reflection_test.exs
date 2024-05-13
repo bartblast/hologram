@@ -46,6 +46,10 @@ defmodule Hologram.Commons.ReflectionTest do
     assert build_dir() == "#{File.cwd!()}/_build/test/lib/hologram/priv"
   end
 
+  test "call_graph_dump_file_name/0" do
+    assert call_graph_dump_file_name() == "call_graph.bin"
+  end
+
   describe "component?" do
     test "is a component module" do
       assert component?(Module3)

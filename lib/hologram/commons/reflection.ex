@@ -1,6 +1,7 @@
 defmodule Hologram.Commons.Reflection do
   alias Hologram.Commons.StringUtils
 
+  @call_graph_dump_file_name "call_graph.bin"
   @ignored_modules [Kernel.SpecialForms]
   @ir_plt_dump_file_name "ir.plt"
   @module_beam_path_plt_dump_file_name "module_beam_path.plt"
@@ -69,6 +70,14 @@ defmodule Hologram.Commons.Reflection do
     :hologram
     |> :code.priv_dir()
     |> to_string()
+  end
+
+  @doc """
+  Returns the call graph dump file name.
+  """
+  @spec call_graph_dump_file_name() :: String.t()
+  def call_graph_dump_file_name do
+    @call_graph_dump_file_name
   end
 
   @doc """
