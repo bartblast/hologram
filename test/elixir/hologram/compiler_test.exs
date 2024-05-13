@@ -16,7 +16,8 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Test.Fixtures.Compiler.Module8
   alias Hologram.Test.Fixtures.Compiler.Module9
 
-  @assets_dir Path.join(Reflection.root_dir(), "assets")
+  @root_dir Reflection.root_dir()
+  @assets_dir Path.join(@root_dir, "assets")
   @js_dir Path.join(@assets_dir, "js")
   @tmp_dir Reflection.tmp_dir()
 
@@ -207,8 +208,7 @@ defmodule Hologram.CompilerTest do
     tmp_dir = Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_2"])
 
     opts = [
-      esbuild_bin_path:
-        Path.join([Reflection.root_dir(), "assets", "node_modules", ".bin", "esbuild"]),
+      esbuild_bin_path: Path.join([@root_dir, "assets", "node_modules", ".bin", "esbuild"]),
       static_dir: Path.join(tmp_dir, "static"),
       tmp_dir: tmp_dir
     ]
@@ -297,8 +297,7 @@ defmodule Hologram.CompilerTest do
     tmp_dir = Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4"])
 
     opts = [
-      esbuild_bin_path:
-        Path.join([Reflection.root_dir(), "assets", "node_modules", ".bin", "esbuild"]),
+      esbuild_bin_path: Path.join([@root_dir, "assets", "node_modules", ".bin", "esbuild"]),
       static_dir: Path.join(tmp_dir, "static"),
       tmp_dir: tmp_dir
     ]
