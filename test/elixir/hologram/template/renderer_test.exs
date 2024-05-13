@@ -428,7 +428,7 @@ defmodule Hologram.Template.RendererTest do
            {"prop_4", [text: "value_4"]}
          ], []}
 
-      assert {~s'component vars = [cid: "my_component", prop_1: "value_1", prop_2: 2, prop_3: "aaa2bbb"]',
+      assert {~s'component vars = [cid: &quot;my_component&quot;, prop_1: &quot;value_1&quot;, prop_2: 2, prop_3: &quot;aaa2bbb&quot;]',
               _} = render_dom(node, @env)
     end
 
@@ -710,14 +710,14 @@ defmodule Hologram.Template.RendererTest do
           {"param_3", [text: "value_3"]}
         ]
 
-      assert {~s'page vars = [param_1: "value_1", param_3: "value_3"]', _} =
+      assert {~s'page vars = [param_1: &quot;value_1&quot;, param_3: &quot;value_3&quot;]', _} =
                render_page(Module19, params_dom, @opts)
     end
 
     test "cast layout explicit static props" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module25, :dummy_module_25_digest)
 
-      assert {~s'layout vars = [cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"]',
+      assert {~s'layout vars = [cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;]',
               _} =
                render_page(Module25, @params_dom, @opts)
     end
@@ -725,7 +725,7 @@ defmodule Hologram.Template.RendererTest do
     test "cast layout props passed implicitely from page state" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module27, :dummy_module_27_digest)
 
-      assert {~s'layout vars = [cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"]',
+      assert {~s'layout vars = [cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;]',
               _} =
                render_page(Module27, @params_dom, @opts)
     end
@@ -739,7 +739,7 @@ defmodule Hologram.Template.RendererTest do
           {"key_2", [text: "param_value_2"]}
         ]
 
-      assert {~s'page vars = [key_1: "param_value_1", key_2: "state_value_2", key_3: "state_value_3"]',
+      assert {~s'page vars = [key_1: &quot;param_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;]',
               _} =
                render_page(Module21, params_dom, @opts)
     end
@@ -747,7 +747,7 @@ defmodule Hologram.Template.RendererTest do
     test "aggregate layout vars, giving state vars priority over prop vars when there are name conflicts" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module24, :dummy_module_24_digest)
 
-      assert {~s'layout vars = [cid: "layout", key_1: "prop_value_1", key_2: "state_value_2", key_3: "state_value_3"]',
+      assert {~s'layout vars = [cid: &quot;layout&quot;, key_1: &quot;prop_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;]',
               _} = render_page(Module24, @params_dom, @opts)
     end
 
