@@ -3,13 +3,13 @@ defmodule Hologram.Compiler do
   alias Hologram.Commons.PLT
   alias Hologram.Commons.Reflection
   alias Hologram.Commons.TaskUtils
+  alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
 
   @type file_path :: String.t()
-  @type opts :: keyword
 
   @doc """
   Builds the call graph of all modules in the project.
@@ -107,7 +107,7 @@ defmodule Hologram.Compiler do
   Builds page digest PLT, where the keys represent page modules,
   and the values are hex digests of their corresponding JavaScript bundles.
   """
-  @spec build_page_digest_plt(list(map), opts) :: {PLT.t(), file_path}
+  @spec build_page_digest_plt(list(map), T.opts()) :: {PLT.t(), file_path}
   def build_page_digest_plt(bundle_info, opts) do
     page_digest_plt_items =
       bundle_info
@@ -206,7 +206,7 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/bundle_2/README.md
   """
-  @spec bundle(list({term, file_path, String.t()}), opts) :: list(map)
+  @spec bundle(list({term, file_path, String.t()}), T.opts()) :: list(map)
   def bundle(entry_files_info, opts) do
     entry_files_info
     |> TaskUtils.async_many(fn {entry_name, entry_file_path, bundle_name} ->
@@ -220,7 +220,7 @@ defmodule Hologram.Compiler do
   Includes the source map of the output file.
   The output file and source map file names contain hex digest.
   """
-  @spec bundle(term, file_path, String.t(), opts) :: map
+  @spec bundle(term, file_path, String.t(), T.opts()) :: map
   # sobelow_skip ["CI.System"]
   def bundle(entry_name, entry_file_path, bundle_name, opts) do
     output_bundle_path = Path.join(opts[:tmp_dir], "#{entry_name}.output.js")
@@ -275,7 +275,7 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/create_page_entry_files_4/README.md
   """
-  @spec create_page_entry_files(list(module), CallGraph.t(), PLT.t(), opts) ::
+  @spec create_page_entry_files(list(module), CallGraph.t(), PLT.t(), T.opts()) ::
           list({module, file_path})
   def create_page_entry_files(page_modules, call_graph, ir_plt, opts) do
     page_modules
@@ -297,7 +297,7 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/create_runtime_entry_file_3/README.md
   """
-  @spec create_runtime_entry_file(list(mfa), PLT.t(), opts) :: file_path
+  @spec create_runtime_entry_file(list(mfa), PLT.t(), T.opts()) :: file_path
   def create_runtime_entry_file(runtime_mfas, ir_plt, opts) do
     runtime_mfas
     |> build_runtime_js(ir_plt, opts[:js_dir])
@@ -346,7 +346,8 @@ defmodule Hologram.Compiler do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/format_files_2/README.md
   """
-  @spec format_files(list(file_path), opts) :: {Collectable.t(), exit_status :: non_neg_integer()}
+  @spec format_files(list(file_path), T.opts()) ::
+          {Collectable.t(), exit_status :: non_neg_integer()}
   # sobelow_skip ["CI.System"]
   def format_files(file_paths, opts) do
     cmd = ["format", "--write" | file_paths]

@@ -1,4 +1,5 @@
 defmodule Hologram.Component do
+  alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.AST
   alias Hologram.Component
   alias Hologram.Operation
@@ -103,7 +104,7 @@ defmodule Hologram.Component do
   @doc """
   Accumulates the given property definition in __props__ module attribute.
   """
-  @spec prop(atom, atom, keyword) :: Macro.t()
+  @spec prop(atom, atom, T.opts()) :: Macro.t()
   defmacro prop(name, type, opts \\ []) do
     quote do
       Module.put_attribute(__MODULE__, :__props__, {unquote(name), unquote(type), unquote(opts)})

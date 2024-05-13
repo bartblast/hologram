@@ -2,6 +2,7 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Commons.Reflection
   alias Hologram.Commons.StringUtils
+  alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.Encoder
   alias Hologram.Component
   alias Hologram.Server
@@ -132,7 +133,7 @@ defmodule Hologram.Template.Renderer do
         %{"page" => %{module: MyPage, struct: %Component{state: %{a: 1, b: 2}}}}
       }
   """
-  @spec render_page(module, DOM.t(), keyword()) ::
+  @spec render_page(module, DOM.t(), T.opts()) ::
           {String.t(), %{String.t() => %{module: module, struct: Component.t()}}}
   def render_page(page_module, params_dom, opts) do
     initial_page? = opts[:initial_page?] || false

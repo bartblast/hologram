@@ -10,6 +10,7 @@ defmodule Hologram.Commons.PLT do
   alias Hologram.Commons.ETS
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
+  alias Hologram.Commons.Types, as: T
 
   defstruct pid: nil, table_ref: nil, table_name: nil
   @type t :: %PLT{pid: pid | nil, table_ref: ETS.tid() | nil, table_name: atom | nil}
@@ -177,7 +178,7 @@ defmodule Hologram.Commons.PLT do
   @doc """
   Starts the underlying GenServer process.
   """
-  @spec start(keyword) :: PLT.t()
+  @spec start(T.opts()) :: PLT.t()
   def start(opts \\ []) do
     genserver_opts = Keyword.delete(opts, :table_name)
 
