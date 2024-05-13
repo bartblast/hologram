@@ -602,7 +602,7 @@ defmodule Hologram.Compiler.CallGraph do
     end)
   end
 
-  defp inbound_edges(%{pid: pid}, vertex) do
+  defp inbound_edges(%CallGraph{pid: pid}, vertex) do
     Agent.get(pid, &Graph.in_edges(&1, vertex), :infinity)
   end
 
