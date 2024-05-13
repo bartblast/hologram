@@ -1099,12 +1099,14 @@ defmodule Hologram.Template.ParserTest do
       markup = "{'123}'}"
       assert parse_markup(markup) == [expression: markup]
     end
+  end
 
-    test "escaping opening curly bracket in text" do
+  describe "escaping curly brackets in text" do
+    test "opening curly bracket" do
       assert parse_markup("abc\\{xyz") == [text: "abc{xyz"]
     end
 
-    test "escaping closing curly bracket in text" do
+    test "closing curly bracket" do
       assert parse_markup("abc\\}xyz") == [text: "abc}xyz"]
     end
 
