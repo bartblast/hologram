@@ -2,6 +2,7 @@
 
 import AssetPathRegistry from "./asset_path_registry.mjs";
 import Bitstring from "./bitstring.mjs";
+import Client from "./client.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Elixir_Code from "./elixir/code.mjs";
 import Elixir_Hologram_Router_Helpers from "./elixir/hologram/router/helpers.mjs";
@@ -149,6 +150,8 @@ export default class Hologram {
   }
 
   static #init() {
+    Client.connect();
+
     Hologram.#defineManuallyPortedFunctions();
 
     window.console.inspect = (term) =>
