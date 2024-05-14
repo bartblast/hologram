@@ -2,15 +2,26 @@ defmodule Hologram.Component do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.AST
   alias Hologram.Component
-  alias Hologram.Operation
   alias Hologram.Server
 
   defstruct emitted_context: %{}, next_action: nil, next_command: nil, state: %{}
 
+  defmodule Action do
+    defstruct name: nil, params: [], target: nil
+
+    @type t :: %__MODULE__{name: :atom, params: keyword, target: String.t() | nil}
+  end
+
+  defmodule Command do
+    defstruct name: nil, params: [], target: nil
+
+    @type t :: %__MODULE__{name: :atom, params: keyword, target: String.t() | nil}
+  end
+
   @type t :: %__MODULE__{
           emitted_context: %{atom => any} | %{{module, atom} => any},
-          next_action: Operation.t() | nil,
-          next_command: Operation.t() | nil,
+          next_action: Action.t() | nil,
+          next_command: Command.t() | nil,
           state: %{atom => any}
         }
 
