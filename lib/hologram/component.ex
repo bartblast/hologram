@@ -112,7 +112,8 @@ defmodule Hologram.Component do
   end
 
   @doc """
-  Puts the given key-value pair to the component emitted context.
+  Puts the given key-value pair to the component's emitted_context field.
+  Context emitted by a component is available to all of its child nodes.
   """
   @spec put_context(Component.t(), any, any) :: Component.t()
   def put_context(%{emitted_context: context} = component, key, value) do
