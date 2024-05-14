@@ -11,11 +11,11 @@ export default class Client {
     socket
       .channel("hologram")
       .join()
-      .receive("ok", (resp) => {
-        console.debug("Joined Hologram channel", resp);
+      .receive("ok", (_resp) => {
+        console.debug("Joined Hologram channel");
       })
-      .receive("error", (resp) => {
-        console.error("Unable to join Hologram channel", resp);
+      .receive("error", (_resp) => {
+        console.error("Unable to join Hologram channel");
       });
   }
 }
