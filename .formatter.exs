@@ -16,6 +16,7 @@ test_locals_without_parens = [
 
 [
   export: [locals_without_parens: exported_locals_without_parens],
+  import_deps: [:phoenix],
   inputs: [
     "*.{ex,exs}",
     "{benchmarks,config,lib}/**/*.{ex,exs}",
