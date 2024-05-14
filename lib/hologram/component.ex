@@ -123,6 +123,34 @@ defmodule Hologram.Component do
   end
 
   @doc """
+  Puts the given action spec to the component's next_action field.
+  Next action will be executed by the runtime directly after the current action has completed its execution.
+  """
+  @spec put_action(Component.t(), atom | keyword) :: Component.t()
+  def put_action(component, name_or_spec)
+
+  def put_action(%Component{} = component, name) when is_atom(name) do
+    %{component | next_action: %Action{name: name}}
+  end
+
+  def put_action(%Component{} = component, spec) when is_list(spec) do
+    name = spec[:name]
+    params = spec[:params] || []
+    target = spec[:target]
+
+    %{component | next_action: %Action{name: name, params: params, target: target}}
+  end
+
+  @doc """
+  Puts the given action spec to the component's next_action field.
+  Next action will be executed by the runtime directly after the current action has completed its execution.
+  """
+  @spec put_action(Component.t(), atom, keyword) :: Component.t()
+  def put_action(%Component{} = component, name, params) do
+    %{component | next_action: %Action{name: name, params: params}}
+  end
+
+  @doc """
   Puts the given key-value pair to the component's emitted_context field.
   Context emitted by a component is available to all of its child nodes.
   """

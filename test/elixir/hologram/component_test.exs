@@ -4,6 +4,7 @@ defmodule Hologram.ComponentTest do
 
   alias Hologram.Commons.Reflection
   alias Hologram.Component
+  alias Hologram.Component.Action
   alias Hologram.Server
   alias Hologram.Test.Fixtures.Component.Module1
   alias Hologram.Test.Fixtures.Component.Module2
@@ -66,6 +67,38 @@ defmodule Hologram.ComponentTest do
     test "invalid template path" do
       refute maybe_define_template_fun("/my_invalid_template_path.holo", Component)
     end
+  end
+
+  describe "put_action/2" do
+    test "name" do
+      assert put_action(%Component{}, :my_action) == %Component{
+               next_action: %Action{name: :my_action, params: [], target: nil}
+             }
+    end
+
+    test "spec: name" do
+      assert put_action(%Component{}, name: :my_action) == %Component{
+               next_action: %Action{name: :my_action, params: [], target: nil}
+             }
+    end
+
+    test "spec: params" do
+      assert put_action(%Component{}, params: [a: 1, b: 2]) == %Component{
+               next_action: %Action{name: nil, params: [a: 1, b: 2], target: nil}
+             }
+    end
+
+    test "spec: target" do
+      assert put_action(%Component{}, target: "my_target") == %Component{
+               next_action: %Action{name: nil, target: "my_target", params: []}
+             }
+    end
+  end
+
+  test "put_action/3" do
+    assert put_action(%Component{}, :my_action, a: 1, b: 2) == %Component{
+             next_action: %Action{name: :my_action, params: [a: 1, b: 2], target: nil}
+           }
   end
 
   test "put_context/3" do
