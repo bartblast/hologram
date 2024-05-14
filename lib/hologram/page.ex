@@ -19,7 +19,9 @@ defmodule Hologram.Page do
 
     [
       quote do
-        import Hologram.Component, only: [put_context: 3, put_state: 2, put_state: 3]
+        import Hologram.Component,
+          only: [put_action: 2, put_action: 3, put_context: 3, put_state: 2, put_state: 3]
+
         import Hologram.Page, only: [layout: 1, layout: 2, param: 1, route: 1]
         import Hologram.Router.Helpers, only: [asset_path: 1]
         import Hologram.Template, only: [sigil_H: 2]
