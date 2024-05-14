@@ -5,10 +5,6 @@ defmodule Hologram.Runtime.Channel do
   alias Hologram.Conn
   alias Hologram.Template.Renderer
 
-  def join("hologram", _, socket) do
-    {:ok, socket}
-  end
-
   def handle_in(
         "command",
         %{"target_module" => target_module, "target_id" => target_id} = payload,
