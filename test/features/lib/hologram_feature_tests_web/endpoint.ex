@@ -11,7 +11,7 @@ defmodule HologramFeatureTestsWeb.Endpoint do
     same_site: "Lax"
   ]
 
-  # socket "/live", Phoenix.LiveView.Socket, websocket: [connect_info: [session: @session_options]]
+  socket "/hologram", Hologram.Socket
 
   # Serve at "/" the static files from "priv/static" directory.
   #
