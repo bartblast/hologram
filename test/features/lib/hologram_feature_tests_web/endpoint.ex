@@ -1,5 +1,6 @@
 defmodule HologramFeatureTestsWeb.Endpoint do
   use Phoenix.Endpoint, otp_app: :hologram_feature_tests
+  use Hologram.Endpoint
 
   # The session will be stored in the cookie and signed,
   # this means its contents can be read but not tampered with.
@@ -11,7 +12,7 @@ defmodule HologramFeatureTestsWeb.Endpoint do
     same_site: "Lax"
   ]
 
-  socket "/hologram", Hologram.Socket
+  hologram_socket
 
   # Serve at "/" the static files from "priv/static" directory.
   #
