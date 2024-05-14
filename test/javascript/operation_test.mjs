@@ -15,6 +15,7 @@ describe("Operation", () => {
 
   describe("constructor()", () => {
     it("single text chunk", () => {
+      // "my_action"
       const specDom = Type.keywordList([
         [Type.atom("text"), Type.bitstring("my_action")],
       ]);
@@ -22,15 +23,18 @@ describe("Operation", () => {
       const operation = new Operation(specDom, defaultTarget, eventParam);
 
       assert.deepStrictEqual(operation.name, Type.atom("my_action"));
+
       assert.deepStrictEqual(
         operation.params,
         Type.map([[Type.atom("event"), eventParam]]),
       );
+
       assert.deepStrictEqual(operation.target, defaultTarget);
-      assert.deepStrictEqual(operation.type, "action");
+      assert.deepStrictEqual(operation.type, Type.atom("action"));
     });
 
     it("single expression chunk, shorthand syntax, no params", () => {
+      // {:my_action}
       const specDom = Type.keywordList([
         [Type.atom("expression"), Type.tuple([Type.atom("my_action")])],
       ]);
@@ -38,15 +42,18 @@ describe("Operation", () => {
       const operation = new Operation(specDom, defaultTarget, eventParam);
 
       assert.deepStrictEqual(operation.name, Type.atom("my_action"));
+
       assert.deepStrictEqual(
         operation.params,
         Type.map([[Type.atom("event"), eventParam]]),
       );
+
       assert.deepStrictEqual(operation.target, defaultTarget);
-      assert.deepStrictEqual(operation.type, "action");
+      assert.deepStrictEqual(operation.type, Type.atom("action"));
     });
 
     it("single expression chunk, shorthand syntax, with params", () => {
+      // {:my_action, a: 1, b: 2}
       const specDom = Type.keywordList([
         [
           Type.atom("expression"),
@@ -64,7 +71,7 @@ describe("Operation", () => {
 
       assert.deepStrictEqual(operation.name, Type.atom("my_action"));
       assert.deepStrictEqual(operation.target, defaultTarget);
-      assert.deepStrictEqual(operation.type, "action");
+      assert.deepStrictEqual(operation.type, Type.atom("action"));
 
       assert.deepStrictEqual(
         operation.params,
@@ -76,12 +83,13 @@ describe("Operation", () => {
       );
     });
 
-    it("single expression chunk, longhand syntax, action, no params, default target", () => {
+    it("single expression chunk, longhand syntax, action (by default), no params, default target", () => {
+      // {name: :my_action}
       const specDom = Type.keywordList([
         [
           Type.atom("expression"),
           Type.tuple([
-            Type.keywordList([[Type.atom("action"), Type.atom("my_action")]]),
+            Type.keywordList([[Type.atom("name"), Type.atom("my_action")]]),
           ]),
         ],
       ]);
@@ -89,20 +97,26 @@ describe("Operation", () => {
       const operation = new Operation(specDom, defaultTarget, eventParam);
 
       assert.deepStrictEqual(operation.name, Type.atom("my_action"));
+
       assert.deepStrictEqual(
         operation.params,
         Type.map([[Type.atom("event"), eventParam]]),
       );
+
       assert.deepStrictEqual(operation.target, defaultTarget);
-      assert.deepStrictEqual(operation.type, "action");
+      assert.deepStrictEqual(operation.type, Type.atom("action"));
     });
 
     it("single expression chunk, longhand syntax, command, no params, default target", () => {
+      // {name: :my_command, type: :command}
       const specDom = Type.keywordList([
         [
           Type.atom("expression"),
           Type.tuple([
-            Type.keywordList([[Type.atom("command"), Type.atom("my_command")]]),
+            Type.keywordList([
+              [Type.atom("name"), Type.atom("my_command")],
+              [Type.atom("type"), Type.atom("command")],
+            ]),
           ]),
         ],
       ]);
@@ -110,23 +124,26 @@ describe("Operation", () => {
       const operation = new Operation(specDom, defaultTarget, eventParam);
 
       assert.deepStrictEqual(operation.name, Type.atom("my_command"));
+
       assert.deepStrictEqual(
         operation.params,
         Type.map([[Type.atom("event"), eventParam]]),
       );
+
       assert.deepStrictEqual(operation.target, defaultTarget);
-      assert.deepStrictEqual(operation.type, "command");
+      assert.deepStrictEqual(operation.type, Type.atom("command"));
     });
 
     it("single expression chunk, longhand syntax, target specified", () => {
       const target = Type.bitstring("my_target");
 
+      // {name: :my_action, target: "my_target"}
       const specDom = Type.keywordList([
         [
           Type.atom("expression"),
           Type.tuple([
             Type.keywordList([
-              [Type.atom("action"), Type.atom("my_action")],
+              [Type.atom("name"), Type.atom("my_action")],
               [Type.atom("target"), target],
             ]),
           ]),
@@ -139,12 +156,13 @@ describe("Operation", () => {
     });
 
     it("single expression chunk, longhand syntax, with params", () => {
+      // {name: :my_action, params: [a: 1, b: 2]}
       const specDom = Type.keywordList([
         [
           Type.atom("expression"),
           Type.tuple([
             Type.keywordList([
-              [Type.atom("action"), Type.atom("my_action")],
+              [Type.atom("name"), Type.atom("my_action")],
               [
                 Type.atom("params"),
                 Type.keywordList([
@@ -170,6 +188,7 @@ describe("Operation", () => {
     });
 
     it("multiple chunks", () => {
+      "aaa{123}bbb";
       const specDom = Type.keywordList([
         [Type.atom("text"), Type.bitstring("aaa")],
         [Type.atom("expression"), Type.tuple([Type.integer(123)])],
@@ -179,15 +198,18 @@ describe("Operation", () => {
       const operation = new Operation(specDom, defaultTarget, eventParam);
 
       assert.deepStrictEqual(operation.name, Type.atom("aaa123bbb"));
+
       assert.deepStrictEqual(
         operation.params,
         Type.map([[Type.atom("event"), eventParam]]),
       );
+
       assert.deepStrictEqual(operation.target, defaultTarget);
-      assert.deepStrictEqual(operation.type, "action");
+      assert.deepStrictEqual(operation.type, Type.atom("action"));
     });
 
     it("invalid operation spec", () => {
+      // {params: [a: 1, b: 2]}
       const specDom = Type.keywordList([
         [
           Type.atom("expression"),

@@ -53,7 +53,7 @@ export default class Hologram {
         eventParam,
       );
 
-      operation.type === "action"
+      operation.type.value === "action"
         ? Hologram.#executeAction(operation)
         : Hologram.#executeCommand(operation);
     }

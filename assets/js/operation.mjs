@@ -37,14 +37,16 @@ export default class Operation {
   }
 
   #constructFromExpressionLonghandSyntaxSpec() {
-    const target = Interpreter.accessKeywordListElement(
+    this.name = Interpreter.accessKeywordListElement(
       this.#specDom.data[0].data[1].data[0],
-      Type.atom("target"),
+      Type.atom("name"),
     );
 
-    this.target = target ? target : this.#defaultTarget;
-
-    this.#resolveNameAndType();
+    if (this.name === null) {
+      throw new HologramInterpreterError(
+        `Operation spec is invalid: "${Interpreter.inspect(this.#specDom.data[0].data[1])}". See what to do here: https://www.hologram.page/TODO`,
+      );
+    }
 
     const paramsKeywordList =
       Interpreter.accessKeywordListElement(
@@ -53,12 +55,30 @@ export default class Operation {
       ) || Type.keywordList([]);
 
     this.#buildParamsMap(paramsKeywordList);
+
+    const target = Interpreter.accessKeywordListElement(
+      this.#specDom.data[0].data[1].data[0],
+      Type.atom("target"),
+    );
+
+    this.target = target ? target : this.#defaultTarget;
+
+    const type = Interpreter.accessKeywordListElement(
+      this.#specDom.data[0].data[1].data[0],
+      Type.atom("type"),
+    );
+
+    if (type) {
+      this.type = type;
+    } else {
+      this.type = Type.atom("action");
+    }
   }
 
   #constructFromExpressionShorthandSyntaxSpec() {
     this.name = this.#specDom.data[0].data[1].data[0];
     this.target = this.#defaultTarget;
-    this.type = "action";
+    this.type = Type.atom("action");
 
     const paramsKeywordList =
       this.#specDom.data[0].data[1].data[1] || Type.keywordList([]);
@@ -74,7 +94,7 @@ export default class Operation {
     this.name = Type.atom(nameText);
     this.params = Type.map([[Type.atom("event"), this.#eventParam]]);
     this.target = this.#defaultTarget;
-    this.type = "action";
+    this.type = Type.atom("action");
   }
 
   #constructFromTextSyntaxSpec() {
@@ -84,38 +104,10 @@ export default class Operation {
     this.name = Type.atom(nameText);
     this.params = Type.map([[Type.atom("event"), this.#eventParam]]);
     this.target = this.#defaultTarget;
-    this.type = "action";
+    this.type = Type.atom("action");
   }
 
-  #resolveNameAndType() {
-    const action = Interpreter.accessKeywordListElement(
-      this.#specDom.data[0].data[1].data[0],
-      Type.atom("action"),
-    );
-
-    if (action) {
-      this.name = action;
-      this.type = "action";
-      return;
-    }
-
-    const command = Interpreter.accessKeywordListElement(
-      this.#specDom.data[0].data[1].data[0],
-      Type.atom("command"),
-    );
-
-    if (command) {
-      this.name = command;
-      this.type = "command";
-      return;
-    }
-
-    throw new HologramInterpreterError(
-      `Operation spec is invalid: "${Interpreter.inspect(this.#specDom.data[0].data[1])}". See what to do here: https://www.hologram.page/TODO`,
-    );
-  }
-
-  // Example: $click={action: :my_action, params: [a: 1, b: 2]}
+  // Example: $click={name: :my_action, params: [a: 1, b: 2]}
   static #isExpressionLonghandSyntax(specDom) {
     return (
       specDom.data.length === 1 &&
