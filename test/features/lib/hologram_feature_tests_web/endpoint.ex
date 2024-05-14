@@ -12,7 +12,7 @@ defmodule HologramFeatureTestsWeb.Endpoint do
     same_site: "Lax"
   ]
 
-  hologram_socket
+  hologram_socket()
 
   # Serve at "/" the static files from "priv/static" directory.
   #
