@@ -2,7 +2,6 @@
   "devDependencies": {
     "jsdom": "^21",
     "morphdom": "^2",
-    "phoenix": "^1.6",
     "prettier": "^2",
     "snabbdom": "^3"
   }
