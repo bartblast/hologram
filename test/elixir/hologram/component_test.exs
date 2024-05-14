@@ -76,7 +76,7 @@ defmodule Hologram.ComponentTest do
            }
   end
 
-  describe "put_state/3" do
+  describe "put_state/2" do
     test "keyword" do
       component = %Component{state: %{a: 1}}
 
