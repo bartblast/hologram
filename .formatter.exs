@@ -3,6 +3,9 @@ exported_locals_without_parens = [
   prop: 2,
   prop: 3,
 
+  # Hologram.Endpoint
+  hologram_socket: 0,
+
   # Hologram.Page
   layout: 1,
   layout: 2,
