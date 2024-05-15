@@ -40,6 +40,13 @@ export default class Operation {
     ]);
   }
 
+  static isAction(operation) {
+    return (
+      Erlang_Maps["get/2"](Type.atom("__struct__"), operation).value ===
+      "Elixir.Hologram.Component.Action"
+    );
+  }
+
   // Deps: [:maps.from_list/1, :maps.put/3]
   #buildParamsMap(paramsKeywordList) {
     this.params = Erlang_Maps["put/3"](

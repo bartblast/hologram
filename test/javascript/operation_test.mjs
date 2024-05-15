@@ -2,6 +2,7 @@
 
 import {assert, linkModules, unlinkModules} from "./support/helpers.mjs";
 
+import Erlang_Maps from "../../assets/js/erlang/maps.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Operation from "../../assets/js/operation.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -272,6 +273,28 @@ describe("Operation", () => {
         HologramInterpreterError,
         `Operation spec is invalid: "{[params: [a: 1, b: 2]]}". See what to do here: https://www.hologram.page/TODO`,
       );
+    });
+  });
+
+  describe("isAction()", () => {
+    it("action", () => {
+      const action = Type.struct("Hologram.Component.Action", [
+        [Type.atom("name"), Type.atom("my_action")],
+        [Type.atom("params"), Type.map([])],
+        [Type.atom("target"), Type.bitstring("my_target")],
+      ]);
+
+      assert.isTrue(Operation.isAction(action));
+    });
+
+    it("command", () => {
+      const command = Type.struct("Hologram.Component.Command", [
+        [Type.atom("name"), Type.atom("my_command")],
+        [Type.atom("params"), Type.map([])],
+        [Type.atom("target"), Type.bitstring("my_target")],
+      ]);
+
+      assert.isFalse(Operation.isAction(command));
     });
   });
 });

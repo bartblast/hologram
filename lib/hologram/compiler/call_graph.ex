@@ -64,6 +64,7 @@ defmodule Hologram.Compiler.CallGraph do
     ],
     operation_class: [
       {:maps, :from_list, 1},
+      {:maps, :get, 2},
       {:maps, :put, 3}
     ],
     renderer_class: [
