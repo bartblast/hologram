@@ -139,6 +139,23 @@ export default class Hologram {
       resultComponentStruct,
     );
 
+    let nextCommand = Erlang_Maps["get/2"](
+      Type.atom("next_command"),
+      resultComponentStruct,
+    );
+
+    if (!Type.isNil(nextCommand)) {
+      if (Type.isNil(Erlang_Maps["get/2"](Type.atom("target"), nextCommand))) {
+        nextCommand = Erlang_Maps["put/3"](
+          Type.atom("target"),
+          target,
+          nextCommand,
+        );
+      }
+
+      Hologram.commandQueue.push(nextCommand);
+    }
+
     let savedComponentStruct = Erlang_Maps["put/3"](
       Type.atom("next_action"),
       Type.nil(),
