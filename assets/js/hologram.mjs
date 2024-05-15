@@ -51,7 +51,7 @@ export default class Hologram {
 
       const eventParam = eventImpl.buildOperationParam(event);
 
-      const operation = new Operation(
+      const operation = Operation.fromSpecDom(
         operationSpecDom,
         defaultTarget,
         eventParam,

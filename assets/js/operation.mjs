@@ -11,20 +11,33 @@ export default class Operation {
   #eventParam;
   #specDom;
 
-  constructor(specDom, defaultTarget, eventParam) {
-    this.#defaultTarget = defaultTarget;
-    this.#eventParam = eventParam;
-    this.#specDom = specDom;
+  static fromSpecDom(specDom, defaultTarget, eventParam) {
+    const operation = new Operation();
+
+    operation.#defaultTarget = defaultTarget;
+    operation.#eventParam = eventParam;
+    operation.#specDom = specDom;
 
     if (Operation.#isTextSyntax(specDom)) {
-      this.#constructFromTextSyntaxSpec();
+      operation.#constructFromTextSyntaxSpec();
     } else if (Operation.#isExpressionShorthandSyntax(specDom)) {
-      this.#constructFromExpressionShorthandSyntaxSpec();
+      operation.#constructFromExpressionShorthandSyntaxSpec();
     } else if (Operation.#isExpressionLonghandSyntax(specDom)) {
-      this.#constructFromExpressionLonghandSyntaxSpec();
+      operation.#constructFromExpressionLonghandSyntaxSpec();
     } else {
-      this.#constructFromMultiChunkSyntaxSpec();
+      operation.#constructFromMultiChunkSyntaxSpec();
     }
+
+    const structAliasString =
+      operation.type.value === "action"
+        ? "Hologram.Component.Action"
+        : "Hologram.Component.Command";
+
+    return Type.struct(structAliasString, [
+      [Type.atom("name"), operation.name],
+      [Type.atom("params"), operation.params],
+      [Type.atom("target"), operation.target],
+    ]);
   }
 
   // Deps: [:maps.from_list/1, :maps.put/3]

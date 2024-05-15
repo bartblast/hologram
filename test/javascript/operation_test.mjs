@@ -13,24 +13,27 @@ describe("Operation", () => {
   before(() => linkModules());
   after(() => unlinkModules());
 
-  describe("constructor()", () => {
+  describe("fromSpecDom()", () => {
     it("single text chunk", () => {
       // "my_action"
       const specDom = Type.keywordList([
         [Type.atom("text"), Type.bitstring("my_action")],
       ]);
 
-      const operation = new Operation(specDom, defaultTarget, eventParam);
-
-      assert.deepStrictEqual(operation.name, Type.atom("my_action"));
-
-      assert.deepStrictEqual(
-        operation.params,
-        Type.map([[Type.atom("event"), eventParam]]),
+      const operation = Operation.fromSpecDom(
+        specDom,
+        defaultTarget,
+        eventParam,
       );
 
-      assert.deepStrictEqual(operation.target, defaultTarget);
-      assert.deepStrictEqual(operation.type, Type.atom("action"));
+      assert.deepStrictEqual(
+        operation,
+        Type.struct("Hologram.Component.Action", [
+          [Type.atom("name"), Type.atom("my_action")],
+          [Type.atom("params"), Type.map([[Type.atom("event"), eventParam]])],
+          [Type.atom("target"), defaultTarget],
+        ]),
+      );
     });
 
     it("single expression chunk, shorthand syntax, no params", () => {
@@ -39,17 +42,20 @@ describe("Operation", () => {
         [Type.atom("expression"), Type.tuple([Type.atom("my_action")])],
       ]);
 
-      const operation = new Operation(specDom, defaultTarget, eventParam);
-
-      assert.deepStrictEqual(operation.name, Type.atom("my_action"));
-
-      assert.deepStrictEqual(
-        operation.params,
-        Type.map([[Type.atom("event"), eventParam]]),
+      const operation = Operation.fromSpecDom(
+        specDom,
+        defaultTarget,
+        eventParam,
       );
 
-      assert.deepStrictEqual(operation.target, defaultTarget);
-      assert.deepStrictEqual(operation.type, Type.atom("action"));
+      assert.deepStrictEqual(
+        operation,
+        Type.struct("Hologram.Component.Action", [
+          [Type.atom("name"), Type.atom("my_action")],
+          [Type.atom("params"), Type.map([[Type.atom("event"), eventParam]])],
+          [Type.atom("target"), defaultTarget],
+        ]),
+      );
     });
 
     it("single expression chunk, shorthand syntax, with params", () => {
@@ -67,18 +73,25 @@ describe("Operation", () => {
         ],
       ]);
 
-      const operation = new Operation(specDom, defaultTarget, eventParam);
-
-      assert.deepStrictEqual(operation.name, Type.atom("my_action"));
-      assert.deepStrictEqual(operation.target, defaultTarget);
-      assert.deepStrictEqual(operation.type, Type.atom("action"));
+      const operation = Operation.fromSpecDom(
+        specDom,
+        defaultTarget,
+        eventParam,
+      );
 
       assert.deepStrictEqual(
-        operation.params,
-        Type.map([
-          [Type.atom("a"), Type.integer(1)],
-          [Type.atom("b"), Type.integer(2)],
-          [Type.atom("event"), eventParam],
+        operation,
+        Type.struct("Hologram.Component.Action", [
+          [Type.atom("name"), Type.atom("my_action")],
+          [
+            Type.atom("params"),
+            Type.map([
+              [Type.atom("a"), Type.integer(1)],
+              [Type.atom("b"), Type.integer(2)],
+              [Type.atom("event"), eventParam],
+            ]),
+          ],
+          [Type.atom("target"), defaultTarget],
         ]),
       );
     });
@@ -94,17 +107,20 @@ describe("Operation", () => {
         ],
       ]);
 
-      const operation = new Operation(specDom, defaultTarget, eventParam);
-
-      assert.deepStrictEqual(operation.name, Type.atom("my_action"));
-
-      assert.deepStrictEqual(
-        operation.params,
-        Type.map([[Type.atom("event"), eventParam]]),
+      const operation = Operation.fromSpecDom(
+        specDom,
+        defaultTarget,
+        eventParam,
       );
 
-      assert.deepStrictEqual(operation.target, defaultTarget);
-      assert.deepStrictEqual(operation.type, Type.atom("action"));
+      assert.deepStrictEqual(
+        operation,
+        Type.struct("Hologram.Component.Action", [
+          [Type.atom("name"), Type.atom("my_action")],
+          [Type.atom("params"), Type.map([[Type.atom("event"), eventParam]])],
+          [Type.atom("target"), defaultTarget],
+        ]),
+      );
     });
 
     it("single expression chunk, longhand syntax, command, no params, default target", () => {
@@ -121,17 +137,20 @@ describe("Operation", () => {
         ],
       ]);
 
-      const operation = new Operation(specDom, defaultTarget, eventParam);
-
-      assert.deepStrictEqual(operation.name, Type.atom("my_command"));
-
-      assert.deepStrictEqual(
-        operation.params,
-        Type.map([[Type.atom("event"), eventParam]]),
+      const operation = Operation.fromSpecDom(
+        specDom,
+        defaultTarget,
+        eventParam,
       );
 
-      assert.deepStrictEqual(operation.target, defaultTarget);
-      assert.deepStrictEqual(operation.type, Type.atom("command"));
+      assert.deepStrictEqual(
+        operation,
+        Type.struct("Hologram.Component.Command", [
+          [Type.atom("name"), Type.atom("my_command")],
+          [Type.atom("params"), Type.map([[Type.atom("event"), eventParam]])],
+          [Type.atom("target"), defaultTarget],
+        ]),
+      );
     });
 
     it("single expression chunk, longhand syntax, target specified", () => {
@@ -150,9 +169,16 @@ describe("Operation", () => {
         ],
       ]);
 
-      const operation = new Operation(specDom, target, eventParam);
+      const operation = Operation.fromSpecDom(specDom, target, eventParam);
 
-      assert.deepStrictEqual(operation.target, target);
+      assert.deepStrictEqual(
+        operation,
+        Type.struct("Hologram.Component.Action", [
+          [Type.atom("name"), Type.atom("my_action")],
+          [Type.atom("params"), Type.map([[Type.atom("event"), eventParam]])],
+          [Type.atom("target"), target],
+        ]),
+      );
     });
 
     it("single expression chunk, longhand syntax, with params", () => {
@@ -175,37 +201,51 @@ describe("Operation", () => {
         ],
       ]);
 
-      const operation = new Operation(specDom, defaultTarget, eventParam);
+      const operation = Operation.fromSpecDom(
+        specDom,
+        defaultTarget,
+        eventParam,
+      );
 
       assert.deepStrictEqual(
-        operation.params,
-        Type.map([
-          [Type.atom("a"), Type.integer(1)],
-          [Type.atom("b"), Type.integer(2)],
-          [Type.atom("event"), eventParam],
+        operation,
+        Type.struct("Hologram.Component.Action", [
+          [Type.atom("name"), Type.atom("my_action")],
+          [
+            Type.atom("params"),
+            Type.map([
+              [Type.atom("a"), Type.integer(1)],
+              [Type.atom("b"), Type.integer(2)],
+              [Type.atom("event"), eventParam],
+            ]),
+          ],
+          [Type.atom("target"), defaultTarget],
         ]),
       );
     });
 
     it("multiple chunks", () => {
-      "aaa{123}bbb";
+      // "aaa{123}bbb";
       const specDom = Type.keywordList([
         [Type.atom("text"), Type.bitstring("aaa")],
         [Type.atom("expression"), Type.tuple([Type.integer(123)])],
         [Type.atom("text"), Type.bitstring("bbb")],
       ]);
 
-      const operation = new Operation(specDom, defaultTarget, eventParam);
-
-      assert.deepStrictEqual(operation.name, Type.atom("aaa123bbb"));
-
-      assert.deepStrictEqual(
-        operation.params,
-        Type.map([[Type.atom("event"), eventParam]]),
+      const operation = Operation.fromSpecDom(
+        specDom,
+        defaultTarget,
+        eventParam,
       );
 
-      assert.deepStrictEqual(operation.target, defaultTarget);
-      assert.deepStrictEqual(operation.type, Type.atom("action"));
+      assert.deepStrictEqual(
+        operation,
+        Type.struct("Hologram.Component.Action", [
+          [Type.atom("name"), Type.atom("aaa123bbb")],
+          [Type.atom("params"), Type.map([[Type.atom("event"), eventParam]])],
+          [Type.atom("target"), defaultTarget],
+        ]),
+      );
     });
 
     it("invalid operation spec", () => {
@@ -228,7 +268,7 @@ describe("Operation", () => {
       ]);
 
       assert.throw(
-        () => new Operation(specDom, defaultTarget, eventParam),
+        () => Operation.fromSpecDom(specDom, defaultTarget, eventParam),
         HologramInterpreterError,
         `Operation spec is invalid: "{[params: [a: 1, b: 2]]}". See what to do here: https://www.hologram.page/TODO`,
       );
