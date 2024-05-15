@@ -40,6 +40,7 @@ export default class Operation {
     ]);
   }
 
+  // Deps: [:maps.get/2]
   static isAction(operation) {
     return (
       Erlang_Maps["get/2"](Type.atom("__struct__"), operation).value ===
