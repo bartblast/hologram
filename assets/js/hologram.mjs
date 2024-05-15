@@ -111,7 +111,7 @@ export default class Hologram {
     window.Elixir_Kernel["inspect/2"] = Elixir_Kernel["inspect/2"];
   }
 
-  // Deps: [:maps.get/2]
+  // Deps: [:maps.get/2, :maps.put/3]
   static #executeAction(operation) {
     const name = Erlang_Maps["get/2"](Type.atom("name"), operation);
     const params = Erlang_Maps["get/2"](Type.atom("params"), operation);
@@ -126,7 +126,7 @@ export default class Hologram {
       vars: {},
     });
 
-    const newComponentStruct = Interpreter.callNamedFunction(
+    const resultComponentStruct = Interpreter.callNamedFunction(
       componentModule,
       "action",
       3,
@@ -134,9 +134,38 @@ export default class Hologram {
       context,
     );
 
-    ComponentRegistry.putComponentStruct(target, newComponentStruct);
+    let nextAction = Erlang_Maps["get/2"](
+      Type.atom("next_action"),
+      resultComponentStruct,
+    );
 
-    Hologram.render();
+    let savedComponentStruct = Erlang_Maps["put/3"](
+      Type.atom("next_action"),
+      Type.nil(),
+      resultComponentStruct,
+    );
+
+    savedComponentStruct = Erlang_Maps["put/3"](
+      Type.atom("next_command"),
+      Type.nil(),
+      resultComponentStruct,
+    );
+
+    ComponentRegistry.putComponentStruct(target, savedComponentStruct);
+
+    if (!Type.isNil(nextAction)) {
+      if (Type.isNil(Erlang_Maps["get/2"](Type.atom("target"), nextAction))) {
+        nextAction = Erlang_Maps["put/3"](
+          Type.atom("target"),
+          target,
+          nextAction,
+        );
+      }
+
+      Hologram.#executeAction(nextAction);
+    } else {
+      Hologram.render();
+    }
   }
 
   static #getEventImplementation(eventType) {

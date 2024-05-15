@@ -51,7 +51,8 @@ defmodule Hologram.Compiler.CallGraph do
       {:maps, :get, 3}
     ],
     hologram_class: [
-      {:maps, :get, 2}
+      {:maps, :get, 2},
+      {:maps, :put, 3}
     ],
     interpreter_class: [
       {Enum, :into, 2},
