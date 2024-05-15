@@ -24,6 +24,9 @@ const patch = init([attributesModule, eventListenersModule]);
 
 // TODO: test
 export default class Hologram {
+  // Made public only to make commands easier to test
+  static commandQueue = [];
+
   static #deps = {
     Bitstring: Bitstring,
     HologramBoxedError: HologramBoxedError,
@@ -56,11 +59,11 @@ export default class Hologram {
 
       operation.type.value === "action"
         ? Hologram.#executeAction(operation)
-        : Hologram.#executeCommand(operation);
+        : Hologram.commandQueue.push(operation);
     }
   }
 
-  // FIXME: Made public only to make it stubable in tests
+  // Made public only to make it stubable in tests
   static render() {
     if (!Hologram.#virtualDocument) {
       Hologram.#virtualDocument = toVNode(window.document.documentElement);
@@ -108,7 +111,6 @@ export default class Hologram {
     window.Elixir_Kernel["inspect/2"] = Elixir_Kernel["inspect/2"];
   }
 
-  // Already tested
   static #executeAction(operation) {
     const componentModule = ComponentRegistry.getComponentModule(
       operation.target,
@@ -136,10 +138,6 @@ export default class Hologram {
     ComponentRegistry.putComponentStruct(operation.target, newComponentStruct);
 
     Hologram.render();
-  }
-
-  static #executeCommand(_operation) {
-    // TODO: implement
   }
 
   static #getEventImplementation(eventType) {

@@ -99,5 +99,42 @@ describe("Hologram", () => {
         sinon.assert.notCalled(stub);
       });
     });
+
+    it("command", () => {
+      Hologram.commandQueue = [];
+
+      const operationSpecDom = Type.keywordList([
+        [
+          Type.atom("expression"),
+          Type.tuple([
+            Type.keywordList([
+              [Type.atom("name"), Type.atom("my_command")],
+              [Type.atom("type"), Type.atom("command")],
+            ]),
+          ]),
+        ],
+      ]);
+
+      const event = {pageX: 1, pageY: 2, preventDefault: () => null};
+
+      Hologram.handleEvent(event, eventType, operationSpecDom, defaultTarget);
+
+      assert.deepStrictEqual(Hologram.commandQueue, [
+        {
+          name: Type.atom("my_command"),
+          params: Type.map([
+            [
+              Type.atom("event"),
+              Type.map([
+                [Type.atom("page_x"), Type.integer(1)],
+                [Type.atom("page_y"), Type.integer(2)],
+              ]),
+            ],
+          ]),
+          target: defaultTarget,
+          type: Type.atom("command"),
+        },
+      ]);
+    });
   });
 });
