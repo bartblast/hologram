@@ -50,6 +50,9 @@ defmodule Hologram.Compiler.CallGraph do
       {:maps, :get, 2},
       {:maps, :get, 3}
     ],
+    hologram_class: [
+      {:maps, :get, 2}
+    ],
     interpreter_class: [
       {Enum, :into, 2},
       {Enum, :to_list, 1},

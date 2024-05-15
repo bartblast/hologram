@@ -120,20 +120,22 @@ describe("Hologram", () => {
       Hologram.handleEvent(event, eventType, operationSpecDom, defaultTarget);
 
       assert.deepStrictEqual(Hologram.commandQueue, [
-        {
-          name: Type.atom("my_command"),
-          params: Type.map([
-            [
-              Type.atom("event"),
-              Type.map([
-                [Type.atom("page_x"), Type.integer(1)],
-                [Type.atom("page_y"), Type.integer(2)],
-              ]),
-            ],
-          ]),
-          target: defaultTarget,
-          type: Type.atom("command"),
-        },
+        Type.struct("Hologram.Component.Command", [
+          [Type.atom("name"), Type.atom("my_command")],
+          [
+            Type.atom("params"),
+            Type.map([
+              [
+                Type.atom("event"),
+                Type.map([
+                  [Type.atom("page_x"), Type.integer(1)],
+                  [Type.atom("page_y"), Type.integer(2)],
+                ]),
+              ],
+            ]),
+          ],
+          [Type.atom("target"), defaultTarget],
+        ]),
       ]);
     });
   });

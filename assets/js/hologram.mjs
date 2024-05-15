@@ -57,7 +57,7 @@ export default class Hologram {
         eventParam,
       );
 
-      operation.type.value === "action"
+      Operation.isAction(operation)
         ? Hologram.#executeAction(operation)
         : Hologram.commandQueue.push(operation);
     }
@@ -111,16 +111,15 @@ export default class Hologram {
     window.Elixir_Kernel["inspect/2"] = Elixir_Kernel["inspect/2"];
   }
 
+  // Deps: [:maps.get/2]
   static #executeAction(operation) {
-    const componentModule = ComponentRegistry.getComponentModule(
-      operation.target,
-    );
+    const name = Erlang_Maps["get/2"](Type.atom("name"), operation);
+    const params = Erlang_Maps["get/2"](Type.atom("params"), operation);
+    const target = Erlang_Maps["get/2"](Type.atom("target"), operation);
 
-    const componentStruct = ComponentRegistry.getComponentStruct(
-      operation.target,
-    );
-
-    const args = [operation.name, operation.params, componentStruct];
+    const componentModule = ComponentRegistry.getComponentModule(target);
+    const componentStruct = ComponentRegistry.getComponentStruct(target);
+    const args = [name, params, componentStruct];
 
     const context = Interpreter.buildContext({
       module: componentModule,
@@ -135,7 +134,7 @@ export default class Hologram {
       context,
     );
 
-    ComponentRegistry.putComponentStruct(operation.target, newComponentStruct);
+    ComponentRegistry.putComponentStruct(target, newComponentStruct);
 
     Hologram.render();
   }
