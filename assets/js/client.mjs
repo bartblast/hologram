@@ -4,7 +4,7 @@ import {Socket} from "phoenix";
 
 // TODO: test
 export default class Client {
-  static channel = null;
+  static #channel = null;
 
   // Made public to make tests easier
   static socket = null;
@@ -13,9 +13,9 @@ export default class Client {
     const socket = new Socket("/hologram");
     socket.connect();
 
-    Client.channel = socket.channel("hologram");
+    Client.#channel = socket.channel("hologram");
 
-    Client.channel
+    Client.#channel
       .join()
       .receive("ok", (_resp) => {
         console.debug("Joined Hologram channel");
@@ -30,7 +30,7 @@ export default class Client {
   }
 
   static async push(event, payload, callback) {
-    Client.channel
+    Client.#channel
       .push(event, payload)
       .receive("ok", callback)
       .receive("error", (_resp) => {
