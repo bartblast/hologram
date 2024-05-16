@@ -72,32 +72,32 @@ defmodule Hologram.ComponentTest do
   describe "put_action/2" do
     test "name" do
       assert put_action(%Component{}, :my_action) == %Component{
-               next_action: %Action{name: :my_action, params: [], target: nil}
+               next_action: %Action{name: :my_action, params: %{}, target: nil}
              }
     end
 
     test "spec: name" do
       assert put_action(%Component{}, name: :my_action) == %Component{
-               next_action: %Action{name: :my_action, params: [], target: nil}
+               next_action: %Action{name: :my_action, params: %{}, target: nil}
              }
     end
 
     test "spec: params" do
       assert put_action(%Component{}, params: [a: 1, b: 2]) == %Component{
-               next_action: %Action{name: nil, params: [a: 1, b: 2], target: nil}
+               next_action: %Action{name: nil, params: %{a: 1, b: 2}, target: nil}
              }
     end
 
     test "spec: target" do
       assert put_action(%Component{}, target: "my_target") == %Component{
-               next_action: %Action{name: nil, target: "my_target", params: []}
+               next_action: %Action{name: nil, target: "my_target", params: %{}}
              }
     end
   end
 
   test "put_action/3" do
     assert put_action(%Component{}, :my_action, a: 1, b: 2) == %Component{
-             next_action: %Action{name: :my_action, params: [a: 1, b: 2], target: nil}
+             next_action: %Action{name: :my_action, params: %{a: 1, b: 2}, target: nil}
            }
   end
 

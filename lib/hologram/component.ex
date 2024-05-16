@@ -7,15 +7,15 @@ defmodule Hologram.Component do
   defstruct emitted_context: %{}, next_action: nil, next_command: nil, state: %{}
 
   defmodule Action do
-    defstruct name: nil, params: [], target: nil
+    defstruct name: nil, params: %{}, target: nil
 
-    @type t :: %__MODULE__{name: :atom, params: keyword, target: String.t() | nil}
+    @type t :: %__MODULE__{name: :atom, params: %{atom => any}, target: String.t() | nil}
   end
 
   defmodule Command do
-    defstruct name: nil, params: [], target: nil
+    defstruct name: nil, params: %{}, target: nil
 
-    @type t :: %__MODULE__{name: :atom, params: keyword, target: String.t() | nil}
+    @type t :: %__MODULE__{name: :atom, params: %{atom => any}, target: String.t() | nil}
   end
 
   @type t :: %__MODULE__{
@@ -143,7 +143,7 @@ defmodule Hologram.Component do
 
   def put_action(%Component{} = component, spec) when is_list(spec) do
     name = spec[:name]
-    params = spec[:params] || []
+    params = Map.new(spec[:params] || [])
     target = spec[:target]
 
     %{component | next_action: %Action{name: name, params: params, target: target}}
@@ -155,7 +155,7 @@ defmodule Hologram.Component do
   """
   @spec put_action(Component.t(), atom, keyword) :: Component.t()
   def put_action(%Component{} = component, name, params) do
-    %{component | next_action: %Action{name: name, params: params}}
+    %{component | next_action: %Action{name: name, params: Map.new(params)}}
   end
 
   @doc """
