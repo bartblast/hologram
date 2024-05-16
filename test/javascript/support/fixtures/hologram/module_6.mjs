@@ -1,11 +1,6 @@
 "use strict";
 
-import {
-  actionFixture,
-  putAction,
-  putContext,
-  putState,
-} from "../../helpers.mjs";
+import {putContext, putState} from "../../helpers.mjs";
 
 import Interpreter from "../../../../../assets/js/interpreter.mjs";
 import Type from "../../../../../assets/js/type.mjs";
