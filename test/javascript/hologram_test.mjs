@@ -1,109 +1,75 @@
 "use strict";
 
-import {
-  assert,
-  componentRegistryEntryFixture,
-  linkModules,
-  sinon,
-  unlinkModules,
-} from "./support/helpers.mjs";
+import {linkModules, sinon, unlinkModules} from "./support/helpers.mjs";
 
-import {defineModule1Fixture} from "./support/fixtures/hologram/module_1.mjs";
-
-import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import Type from "../../assets/js/type.mjs";
 
-describe("Hologram", () => {
-  before(() => {
-    linkModules();
-    defineModule1Fixture();
-  });
+const cid1 = Type.bitstring("my_component_1");
 
+describe("Hologram", () => {
+  before(() => linkModules());
   after(() => unlinkModules());
 
   describe("handleEvent()", () => {
-    const cid = Type.bitstring("my_component");
-    const defaultTarget = cid;
+    let enqueueCommandStub, executeActionStub;
+
+    const actionSpecDom = Type.keywordList([
+      [Type.atom("text"), Type.bitstring("my_action")],
+    ]);
+
+    const defaultTarget = cid1;
     const eventType = "click";
-    const module = Type.alias("Module1");
+    const notIgnoredEvent = {pageX: 1, pageY: 2, preventDefault: () => null};
 
-    describe("action", () => {
-      const operationSpecDom = Type.keywordList([
-        [
-          Type.atom("expression"),
-          Type.tuple([
-            Type.atom("my_action"),
-            Type.keywordList([
-              [Type.atom("a"), Type.integer(1)],
-              [Type.atom("b"), Type.integer(2)],
-            ]),
-          ]),
-        ],
-      ]);
+    beforeEach(() => {
+      enqueueCommandStub = sinon
+        .stub(Hologram, "enqueueCommand")
+        .callsFake(() => null);
 
-      let stub;
+      executeActionStub = sinon
+        .stub(Hologram, "executeAction")
+        .callsFake(() => null);
+    });
 
-      beforeEach(() => {
-        ComponentRegistry.entries = Type.map([
-          [cid, componentRegistryEntryFixture({module: module})],
-        ]);
+    afterEach(() => {
+      Hologram.enqueueCommand.restore();
+      Hologram.executeAction.restore();
+    });
 
-        stub = sinon.stub(Hologram, "render").callsFake(() => null);
-      });
+    it("event is ignored", () => {
+      const ignoredEvent = {
+        ctrlKey: true,
+        pageX: 1,
+        pageY: 2,
+        preventDefault: () => null,
+      };
 
-      afterEach(() => {
-        Hologram.render.restore();
-      });
+      Hologram.handleEvent(
+        ignoredEvent,
+        eventType,
+        actionSpecDom,
+        defaultTarget,
+      );
 
-      it("event is not ignored", () => {
-        const event = {pageX: 1, pageY: 2, preventDefault: () => null};
+      sinon.assert.notCalled(enqueueCommandStub);
+      sinon.assert.notCalled(executeActionStub);
+    });
 
-        Hologram.handleEvent(event, eventType, operationSpecDom, defaultTarget);
+    it("action", () => {
+      Hologram.handleEvent(
+        notIgnoredEvent,
+        eventType,
+        actionSpecDom,
+        defaultTarget,
+      );
 
-        assert.deepStrictEqual(
-          ComponentRegistry.getEntry(cid),
-          componentRegistryEntryFixture({
-            emittedContext: Type.map([
-              [
-                Type.atom("event"),
-                Type.map([
-                  [Type.atom("page_x"), Type.integer(1)],
-                  [Type.atom("page_y"), Type.integer(2)],
-                ]),
-              ],
-            ]),
-            module: module,
-            state: Type.map([[Type.atom("c"), Type.integer(3)]]),
-          }),
-        );
-
-        sinon.assert.calledOnce(stub);
-      });
-
-      it("event is ignored", () => {
-        const event = {
-          ctrlKey: true,
-          pageX: 1,
-          pageY: 2,
-          preventDefault: () => null,
-        };
-
-        Hologram.handleEvent(event, eventType, operationSpecDom, defaultTarget);
-
-        assert.deepStrictEqual(
-          ComponentRegistry.getEntry(cid),
-          componentRegistryEntryFixture({module: module}),
-        );
-
-        sinon.assert.notCalled(stub);
-      });
+      sinon.assert.notCalled(enqueueCommandStub);
+      sinon.assert.calledOnce(executeActionStub);
     });
 
     it("command", () => {
-      Hologram.commandQueue = [];
-
-      const operationSpecDom = Type.keywordList([
+      const commandSpecDom = Type.keywordList([
         [
           Type.atom("expression"),
           Type.tuple([
@@ -115,28 +81,15 @@ describe("Hologram", () => {
         ],
       ]);
 
-      const event = {pageX: 1, pageY: 2, preventDefault: () => null};
+      Hologram.handleEvent(
+        notIgnoredEvent,
+        eventType,
+        commandSpecDom,
+        defaultTarget,
+      );
 
-      Hologram.handleEvent(event, eventType, operationSpecDom, defaultTarget);
-
-      assert.deepStrictEqual(Hologram.commandQueue, [
-        Type.struct("Hologram.Component.Command", [
-          [Type.atom("name"), Type.atom("my_command")],
-          [
-            Type.atom("params"),
-            Type.map([
-              [
-                Type.atom("event"),
-                Type.map([
-                  [Type.atom("page_x"), Type.integer(1)],
-                  [Type.atom("page_y"), Type.integer(2)],
-                ]),
-              ],
-            ]),
-          ],
-          [Type.atom("target"), defaultTarget],
-        ]),
-      ]);
+      sinon.assert.calledOnce(enqueueCommandStub);
+      sinon.assert.notCalled(executeActionStub);
     });
   });
 });

@@ -43,79 +43,17 @@ export default class Hologram {
   static #pageParams = null;
   static #virtualDocument = null;
 
-  static handleEvent(event, eventType, operationSpecDom, defaultTarget) {
-    const eventImpl = Hologram.#getEventImplementation(eventType);
-
-    if (!eventImpl.isEventIgnored(event)) {
-      event.preventDefault();
-
-      const eventParam = eventImpl.buildOperationParam(event);
-
-      const operation = Operation.fromSpecDom(
-        operationSpecDom,
-        defaultTarget,
-        eventParam,
-      );
-
-      Operation.isAction(operation)
-        ? Hologram.#executeAction(operation)
-        : Hologram.commandQueue.push(operation);
-    }
+  // Made public only to make commands easier to test
+  static enqueueCommand(command) {
+    commandQueue.push(command);
   }
 
-  // Made public only to make it stubable in tests
-  static render() {
-    if (!Hologram.#virtualDocument) {
-      Hologram.#virtualDocument = toVNode(window.document.documentElement);
-    }
-
-    const newVirtualDocument = Renderer.renderPage(
-      Hologram.#pageModule,
-      Hologram.#pageParams,
-    );
-
-    patch(Hologram.#virtualDocument, newVirtualDocument);
-
-    Hologram.#virtualDocument = newVirtualDocument;
-  }
-
-  static run() {
-    Hologram.#onReady(() => {
-      if (!Hologram.#isInitiated) {
-        Hologram.#init();
-      }
-
-      try {
-        Hologram.#mountPage();
-      } catch (error) {
-        if (error instanceof HologramBoxedError) {
-          error.name = Interpreter.getErrorType(error);
-          error.message = Interpreter.getErrorMessage(error);
-        }
-
-        throw error;
-      }
-    });
-  }
-
-  static #defineManuallyPortedFunctions() {
-    window.Elixir_Code = {};
-    window.Elixir_Code["ensure_compiled/1"] = Elixir_Code["ensure_compiled/1"];
-
-    window.Elixir_Hologram_Router_Helpers = {};
-    window.Elixir_Hologram_Router_Helpers["asset_path/1"] =
-      Elixir_Hologram_Router_Helpers["asset_path/1"];
-
-    window.Elixir_Kernel = {};
-    window.Elixir_Kernel["inspect/1"] = Elixir_Kernel["inspect/1"];
-    window.Elixir_Kernel["inspect/2"] = Elixir_Kernel["inspect/2"];
-  }
-
+  // Made public only to make actions easier to test
   // Deps: [:maps.get/2, :maps.put/3]
-  static #executeAction(operation) {
-    const name = Erlang_Maps["get/2"](Type.atom("name"), operation);
-    const params = Erlang_Maps["get/2"](Type.atom("params"), operation);
-    const target = Erlang_Maps["get/2"](Type.atom("target"), operation);
+  static executeAction(action) {
+    const name = Erlang_Maps["get/2"](Type.atom("name"), action);
+    const params = Erlang_Maps["get/2"](Type.atom("params"), action);
+    const target = Erlang_Maps["get/2"](Type.atom("target"), action);
 
     const componentModule = ComponentRegistry.getComponentModule(target);
     const componentStruct = ComponentRegistry.getComponentStruct(target);
@@ -179,10 +117,78 @@ export default class Hologram {
         );
       }
 
-      Hologram.#executeAction(nextAction);
+      Hologram.executeAction(nextAction);
     } else {
       Hologram.render();
     }
+  }
+
+  static handleEvent(event, eventType, operationSpecDom, defaultTarget) {
+    const eventImpl = Hologram.#getEventImplementation(eventType);
+
+    if (!eventImpl.isEventIgnored(event)) {
+      event.preventDefault();
+
+      const eventParam = eventImpl.buildOperationParam(event);
+
+      const operation = Operation.fromSpecDom(
+        operationSpecDom,
+        defaultTarget,
+        eventParam,
+      );
+
+      Operation.isAction(operation)
+        ? Hologram.executeAction(operation)
+        : Hologram.enqueueCommand(operation);
+    }
+  }
+
+  // Made public only to make it stubable in tests
+  static render() {
+    if (!Hologram.#virtualDocument) {
+      Hologram.#virtualDocument = toVNode(window.document.documentElement);
+    }
+
+    const newVirtualDocument = Renderer.renderPage(
+      Hologram.#pageModule,
+      Hologram.#pageParams,
+    );
+
+    patch(Hologram.#virtualDocument, newVirtualDocument);
+
+    Hologram.#virtualDocument = newVirtualDocument;
+  }
+
+  static run() {
+    Hologram.#onReady(() => {
+      if (!Hologram.#isInitiated) {
+        Hologram.#init();
+      }
+
+      try {
+        Hologram.#mountPage();
+      } catch (error) {
+        if (error instanceof HologramBoxedError) {
+          error.name = Interpreter.getErrorType(error);
+          error.message = Interpreter.getErrorMessage(error);
+        }
+
+        throw error;
+      }
+    });
+  }
+
+  static #defineManuallyPortedFunctions() {
+    window.Elixir_Code = {};
+    window.Elixir_Code["ensure_compiled/1"] = Elixir_Code["ensure_compiled/1"];
+
+    window.Elixir_Hologram_Router_Helpers = {};
+    window.Elixir_Hologram_Router_Helpers["asset_path/1"] =
+      Elixir_Hologram_Router_Helpers["asset_path/1"];
+
+    window.Elixir_Kernel = {};
+    window.Elixir_Kernel["inspect/1"] = Elixir_Kernel["inspect/1"];
+    window.Elixir_Kernel["inspect/2"] = Elixir_Kernel["inspect/2"];
   }
 
   static #getEventImplementation(eventType) {
