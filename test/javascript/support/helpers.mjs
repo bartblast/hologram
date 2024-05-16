@@ -168,6 +168,14 @@ export function elixirHologramComponentActionStruct0() {
   ]);
 }
 
+export function elixirHologramComponentCommandStruct0() {
+  return Type.struct("Hologram.Component.Command", [
+    [Type.atom("name"), Type.atom("nil")],
+    [Type.atom("params"), Type.map([])],
+    [Type.atom("target"), Type.atom("nil")],
+  ]);
+}
+
 export function elixirHologramComponentStruct0() {
   return Type.struct("Hologram.Component", [
     [Type.atom("emitted_context"), Type.map([])],
