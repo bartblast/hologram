@@ -22,6 +22,34 @@ export {assert} from "../../../assets/node_modules/chai/index.js";
 export * as sinon from "../../../assets/node_modules/sinon/pkg/sinon-esm.js";
 export {h as vnode} from "../../../assets/node_modules/snabbdom/build/index.js";
 
+export function actionFixture(data = {}) {
+  let actionStruct = elixirHologramComponentActionStruct0();
+
+  const {name, params, target} = data;
+
+  if (typeof name !== "undefined") {
+    actionStruct = Erlang_Maps["put/3"](Type.atom("name"), name, actionStruct);
+  }
+
+  if (typeof params !== "undefined") {
+    actionStruct = Erlang_Maps["put/3"](
+      Type.atom("params"),
+      params,
+      actionStruct,
+    );
+  }
+
+  if (typeof target !== "undefined") {
+    actionStruct = Erlang_Maps["put/3"](
+      Type.atom("target"),
+      target,
+      actionStruct,
+    );
+  }
+
+  return actionStruct;
+}
+
 export function assertBoxedError(
   callable,
   expectedErrorType,
