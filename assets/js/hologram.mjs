@@ -45,7 +45,7 @@ export default class Hologram {
 
   // Made public only to make commands easier to test
   static enqueueCommand(command) {
-    commandQueue.push(command);
+    Hologram.commandQueue.push(command);
   }
 
   // Made public only to make actions easier to test

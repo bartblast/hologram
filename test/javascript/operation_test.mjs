@@ -2,7 +2,6 @@
 
 import {assert, linkModules, unlinkModules} from "./support/helpers.mjs";
 
-import Erlang_Maps from "../../assets/js/erlang/maps.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Operation from "../../assets/js/operation.mjs";
 import Type from "../../assets/js/type.mjs";
