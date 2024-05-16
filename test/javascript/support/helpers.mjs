@@ -319,6 +319,10 @@ export function putAction(component, action) {
   return Erlang_Maps["put/3"](Type.atom("next_action"), action, component);
 }
 
+export function putCommand(component, command) {
+  return Erlang_Maps["put/3"](Type.atom("next_command"), command, component);
+}
+
 export function putContext(component, context) {
   const oldContext = Erlang_Maps["get/2"](
     Type.atom("emitted_context"),
