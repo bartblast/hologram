@@ -159,6 +159,34 @@ defmodule Hologram.Component do
   end
 
   @doc """
+  Puts the given command spec to the component's next_command field.
+  Next command will be sent asynchronously to the server.
+  """
+  @spec put_command(Component.t(), atom | keyword) :: Component.t()
+  def put_command(component, name_or_spec)
+
+  def put_command(%Component{} = component, name) when is_atom(name) do
+    %{component | next_command: %Command{name: name}}
+  end
+
+  def put_command(%Component{} = component, spec) when is_list(spec) do
+    name = spec[:name]
+    params = Map.new(spec[:params] || [])
+    target = spec[:target]
+
+    %{component | next_command: %Command{name: name, params: params, target: target}}
+  end
+
+  @doc """
+  Puts the given command spec to the component's next_command field.
+  Next command will be sent asynchronously to the server.
+  """
+  @spec put_command(Component.t(), atom, keyword) :: Component.t()
+  def put_command(%Component{} = component, name, params) do
+    %{component | next_command: %Command{name: name, params: Map.new(params)}}
+  end
+
+  @doc """
   Puts the given key-value pair to the component's emitted_context field.
   Context emitted by a component is available to all of its child nodes.
   """
