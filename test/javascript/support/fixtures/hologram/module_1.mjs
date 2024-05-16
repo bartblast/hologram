@@ -13,7 +13,7 @@ defmodule Module1 do
 
   def action(:my_action_1, %{a: a, b: b, event: event}, component) do
     component
-    |> put_state(:c, a + b + 1)
+    |> put_state(:x, a + b + 1)
     |> put_context(:event, event)
   end
 
@@ -41,7 +41,7 @@ export function defineModule1Fixture() {
             context.vars.component,
             Type.map([
               [
-                Type.atom("c"),
+                Type.atom("x"),
                 Erlang["+/2"](
                   Erlang["+/2"](context.vars.a, context.vars.b),
                   Type.integer(1n),

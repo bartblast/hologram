@@ -103,7 +103,7 @@ export default class Hologram {
     savedComponentStruct = Erlang_Maps["put/3"](
       Type.atom("next_command"),
       Type.nil(),
-      resultComponentStruct,
+      savedComponentStruct,
     );
 
     ComponentRegistry.putComponentStruct(target, savedComponentStruct);
