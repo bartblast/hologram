@@ -315,6 +315,10 @@ export function linkModules() {
   globalThis.Elixir_String_Chars["to_string/1"] = elixirStringCharsToString1;
 }
 
+export function putAction(component, action) {
+  return Erlang_Maps["put/3"](Type.atom("next_action"), action, component);
+}
+
 export function putContext(component, context) {
   const oldContext = Erlang_Maps["get/2"](
     Type.atom("emitted_context"),
