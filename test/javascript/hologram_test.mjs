@@ -44,6 +44,14 @@ describe("Hologram", () => {
 
   after(() => unlinkModules());
 
+  it("enqueueCommand()", () => {
+    Hologram.commandQueue = [];
+
+    Hologram.enqueueCommand("dummy_command");
+
+    assert.deepStrictEqual(Hologram.commandQueue, ["dummy_command"]);
+  });
+
   describe("executeAction()", () => {
     let renderStub;
 
