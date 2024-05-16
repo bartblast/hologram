@@ -160,6 +160,14 @@ export function contextFixture(data = {}) {
   return Interpreter.buildContext({module: module, vars: vars});
 }
 
+export function elixirHologramComponentActionStruct0() {
+  return Type.struct("Hologram.Component.Action", [
+    [Type.atom("name"), Type.atom("nil")],
+    [Type.atom("params"), Type.map([])],
+    [Type.atom("target"), Type.atom("nil")],
+  ]);
+}
+
 export function elixirHologramComponentStruct0() {
   return Type.struct("Hologram.Component", [
     [Type.atom("emitted_context"), Type.map([])],
