@@ -121,6 +121,38 @@ export function assertMatchError(callable, value) {
   }
 }
 
+export function commandFixture(data = {}) {
+  let commandStruct = elixirHologramComponentCommandStruct0();
+
+  const {name, params, target} = data;
+
+  if (typeof name !== "undefined") {
+    commandStruct = Erlang_Maps["put/3"](
+      Type.atom("name"),
+      name,
+      commandStruct,
+    );
+  }
+
+  if (typeof params !== "undefined") {
+    commandStruct = Erlang_Maps["put/3"](
+      Type.atom("params"),
+      params,
+      commandStruct,
+    );
+  }
+
+  if (typeof target !== "undefined") {
+    commandStruct = Erlang_Maps["put/3"](
+      Type.atom("target"),
+      target,
+      commandStruct,
+    );
+  }
+
+  return commandStruct;
+}
+
 export function componentRegistryEntryFixture(data = {}) {
   let {module} = data;
 
