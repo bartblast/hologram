@@ -2,9 +2,12 @@
 
 import {Socket} from "phoenix";
 
-// Tested implicitely in feature tests.
+// TODO: test
 export default class Client {
   static channel = null;
+
+  // Made public to make tests easier
+  static socket = null;
 
   static async connect() {
     const socket = new Socket("/hologram");
@@ -20,6 +23,10 @@ export default class Client {
       .receive("error", (_resp) => {
         console.error("Unable to join Hologram channel");
       });
+  }
+
+  static isConnected() {
+    return Client.socket === null ? false : Client.socket.isConnected();
   }
 
   static async push(event, payload, callback) {
