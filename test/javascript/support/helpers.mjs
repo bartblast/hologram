@@ -329,6 +329,14 @@ export function linkModules() {
   globalThis.Elixir_Hologram_Component["__struct__/0"] =
     elixirHologramComponentStruct0;
 
+  globalThis.Elixir_Hologram_Component_Action = {};
+  globalThis.Elixir_Hologram_Component_Action["__struct__/0"] =
+    elixirHologramComponentActionStruct0;
+
+  globalThis.Elixir_Hologram_Component_Command = {};
+  globalThis.Elixir_Hologram_Component_Command["__struct__/0"] =
+    elixirHologramComponentCommandStruct0;
+
   globalThis.Elixir_String_Chars = {};
   globalThis.Elixir_String_Chars["to_string/1"] = elixirStringCharsToString1;
 }
@@ -373,6 +381,8 @@ export function unlinkModules() {
   delete globalThis.Elixir_Code;
   delete globalThis.Elixir_Enum;
   delete globalThis.Elixir_Hologram_Component;
+  delete globalThis.Elixir_Hologram_Component_Action;
+  delete globalThis.Elixir_Hologram_Component_Command;
   delete globalThis.Elixir_Kernel;
   delete globalThis.Elixir_String_Chars;
 }

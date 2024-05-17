@@ -37,6 +37,9 @@ defmodule Hologram.Compiler.CallGraph do
   @mfas_used_by_all_pages_and_components [
     # Used by __props__/0 function injected into component and page modules.
     {Enum, :reverse, 1},
+    {Hologram.Component, :__struct__, 0},
+    {Hologram.Component.Action, :__struct__, 0},
+    {Hologram.Component.Command, :__struct__, 0},
     {Hologram.Router.Helpers, :page_path, 1},
     {Hologram.Router.Helpers, :page_path, 2}
   ]
