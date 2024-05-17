@@ -10,6 +10,7 @@ import {
   unlinkModules,
 } from "./support/helpers.mjs";
 
+import CommandQueue from "../../assets/js/command_queue.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -44,23 +45,20 @@ describe("Hologram", () => {
 
   after(() => unlinkModules());
 
-  it("enqueueCommand()", () => {
-    Hologram.commandQueue = [];
-
-    Hologram.enqueueCommand("dummy_command");
-
-    assert.deepStrictEqual(Hologram.commandQueue, ["dummy_command"]);
-  });
-
   describe("executeAction()", () => {
-    let renderStub;
+    let commandQueueProcessStub, renderStub;
 
     beforeEach(() => {
-      Hologram.commandQueue = [];
+      CommandQueue.items = [];
+      commandQueueProcessStub = sinon
+        .stub(CommandQueue, "process")
+        .callsFake(() => null);
+
       renderStub = sinon.stub(Hologram, "render").callsFake(() => null);
     });
 
     afterEach(() => {
+      CommandQueue.process.restore();
       Hologram.render.restore();
     });
 
@@ -111,7 +109,7 @@ describe("Hologram", () => {
 
       sinon.assert.calledOnce(renderStub);
 
-      assert.equal(Hologram.commandQueue.length, 0);
+      assert.equal(CommandQueue.size(), 0);
     });
 
     it("with next action having target specified", () => {
@@ -172,7 +170,7 @@ describe("Hologram", () => {
 
       sinon.assert.calledOnce(renderStub);
 
-      assert.equal(Hologram.commandQueue.length, 0);
+      assert.equal(CommandQueue.size(), 0);
     });
 
     it("with next action not having target specified", () => {
@@ -226,7 +224,7 @@ describe("Hologram", () => {
 
       sinon.assert.calledOnce(renderStub);
 
-      assert.equal(Hologram.commandQueue.length, 0);
+      assert.equal(CommandQueue.size(), 0);
     });
 
     it("with next command having target specified", () => {
@@ -276,7 +274,12 @@ describe("Hologram", () => {
 
       sinon.assert.calledOnce(renderStub);
 
-      assert.deepStrictEqual(Hologram.commandQueue, [
+      assert.equal(CommandQueue.size(), 1);
+
+      const enqueuedCommand = CommandQueue.getNextPending().command;
+
+      assert.deepStrictEqual(
+        enqueuedCommand,
         commandFixture({
           name: Type.atom("my_command_5"),
           params: Type.map([
@@ -285,7 +288,7 @@ describe("Hologram", () => {
           ]),
           target: cid2,
         }),
-      ]);
+      );
     });
 
     it("with next command not having target specified", () => {
@@ -335,7 +338,12 @@ describe("Hologram", () => {
 
       sinon.assert.calledOnce(renderStub);
 
-      assert.deepStrictEqual(Hologram.commandQueue, [
+      assert.equal(CommandQueue.size(), 1);
+
+      const enqueuedCommand = CommandQueue.getNextPending().command;
+
+      assert.deepStrictEqual(
+        enqueuedCommand,
         commandFixture({
           name: Type.atom("my_command_6"),
           params: Type.map([
@@ -344,12 +352,12 @@ describe("Hologram", () => {
           ]),
           target: cid1,
         }),
-      ]);
+      );
     });
   });
 
   describe("handleEvent()", () => {
-    let enqueueCommandStub, executeActionStub;
+    let commandQueueProcessStub, commandQueuePushStub, executeActionStub;
 
     const actionSpecDom = Type.keywordList([
       [Type.atom("text"), Type.bitstring("my_action")],
@@ -360,8 +368,12 @@ describe("Hologram", () => {
     const notIgnoredEvent = {pageX: 1, pageY: 2, preventDefault: () => null};
 
     beforeEach(() => {
-      enqueueCommandStub = sinon
-        .stub(Hologram, "enqueueCommand")
+      commandQueueProcessStub = sinon
+        .stub(CommandQueue, "process")
+        .callsFake(() => null);
+
+      commandQueuePushStub = sinon
+        .stub(CommandQueue, "push")
         .callsFake(() => null);
 
       executeActionStub = sinon
@@ -370,7 +382,8 @@ describe("Hologram", () => {
     });
 
     afterEach(() => {
-      Hologram.enqueueCommand.restore();
+      CommandQueue.process.restore();
+      CommandQueue.push.restore();
       Hologram.executeAction.restore();
     });
 
@@ -389,7 +402,8 @@ describe("Hologram", () => {
         defaultTarget,
       );
 
-      sinon.assert.notCalled(enqueueCommandStub);
+      sinon.assert.notCalled(commandQueuePushStub);
+      sinon.assert.notCalled(commandQueueProcessStub);
       sinon.assert.notCalled(executeActionStub);
     });
 
@@ -401,7 +415,8 @@ describe("Hologram", () => {
         defaultTarget,
       );
 
-      sinon.assert.notCalled(enqueueCommandStub);
+      sinon.assert.notCalled(commandQueuePushStub);
+      sinon.assert.notCalled(commandQueueProcessStub);
       sinon.assert.calledOnce(executeActionStub);
     });
 
@@ -425,7 +440,8 @@ describe("Hologram", () => {
         defaultTarget,
       );
 
-      sinon.assert.calledOnce(enqueueCommandStub);
+      sinon.assert.calledOnce(commandQueuePushStub);
+      sinon.assert.calledOnce(commandQueueProcessStub);
       sinon.assert.notCalled(executeActionStub);
     });
   });

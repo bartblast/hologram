@@ -3,6 +3,7 @@
 import AssetPathRegistry from "./asset_path_registry.mjs";
 import Bitstring from "./bitstring.mjs";
 import Client from "./client.mjs";
+import CommandQueue from "./command_queue.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Elixir_Code from "./elixir/code.mjs";
 import Elixir_Hologram_Router_Helpers from "./elixir/hologram/router/helpers.mjs";
@@ -24,9 +25,6 @@ const patch = init([attributesModule, eventListenersModule]);
 
 // TODO: test
 export default class Hologram {
-  // Made public to make tests easier
-  static commandQueue = [];
-
   static #deps = {
     Bitstring: Bitstring,
     HologramBoxedError: HologramBoxedError,
@@ -42,11 +40,6 @@ export default class Hologram {
   static #pageModule = null;
   static #pageParams = null;
   static #virtualDocument = null;
-
-  // Made public to make tests easier
-  static enqueueCommand(command) {
-    Hologram.commandQueue.push(command);
-  }
 
   // Made public to make tests easier
   // Deps: [:maps.get/2, :maps.put/3]
@@ -91,7 +84,8 @@ export default class Hologram {
         );
       }
 
-      Hologram.commandQueue.push(nextCommand);
+      CommandQueue.push(nextCommand);
+      CommandQueue.process();
     }
 
     let savedComponentStruct = Erlang_Maps["put/3"](
@@ -137,14 +131,13 @@ export default class Hologram {
         eventParam,
       );
 
-      Operation.isAction(operation)
-        ? Hologram.executeAction(operation)
-        : Hologram.enqueueCommand(operation);
+      if (Operation.isAction(operation)) {
+        Hologram.executeAction(operation);
+      } else {
+        CommandQueue.push(operation);
+        CommandQueue.process();
+      }
     }
-  }
-
-  static processCommandsQueue() {
-    if (Client.isConnected()) Hologram.commandQueue.forEach();
   }
 
   // Made public to make tests easier
