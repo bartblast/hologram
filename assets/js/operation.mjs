@@ -1,8 +1,6 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
-import HologramInterpreterError from "./errors/interpreter_error.mjs";
-import Interpreter from "./interpreter.mjs";
 import Renderer from "./renderer.mjs";
 import Type from "./type.mjs";
 
@@ -23,17 +21,12 @@ export default class Operation {
     } else if (Operation.#isExpressionShorthandSyntax(specDom)) {
       operation.#constructFromExpressionShorthandSyntaxSpec();
     } else if (Operation.#isExpressionLonghandSyntax(specDom)) {
-      operation.#constructFromExpressionLonghandSyntaxSpec();
+      return operation.#constructFromExpressionLonghandSyntaxSpec(specDom);
     } else {
       operation.#constructFromMultiChunkSyntaxSpec();
     }
 
-    const structAliasString =
-      operation.type.value === "action"
-        ? "Hologram.Component.Action"
-        : "Hologram.Component.Command";
-
-    return Type.struct(structAliasString, [
+    return Type.struct("Hologram.Component.Action", [
       [Type.atom("name"), operation.name],
       [Type.atom("params"), operation.params],
       [Type.atom("target"), operation.target],
@@ -57,43 +50,29 @@ export default class Operation {
     );
   }
 
-  #constructFromExpressionLonghandSyntaxSpec() {
-    this.name = Interpreter.accessKeywordListElement(
-      this.#specDom.data[0].data[1].data[0],
-      Type.atom("name"),
+  // Deps: [:maps.get/2, :maps.put/3]
+  #constructFromExpressionLonghandSyntaxSpec(specDom) {
+    const specStruct = specDom.data[0].data[1].data[0];
+
+    const params = Erlang_Maps["put/3"](
+      Type.atom("event"),
+      this.#eventParam,
+      Erlang_Maps["get/2"](Type.atom("params"), specStruct),
     );
 
-    if (this.name === null) {
-      throw new HologramInterpreterError(
-        `Operation spec is invalid: "${Interpreter.inspect(this.#specDom.data[0].data[1])}". See what to do here: https://www.hologram.page/TODO`,
+    let result = Erlang_Maps["put/3"](Type.atom("params"), params, specStruct);
+
+    const specTarget = Erlang_Maps["get/2"](Type.atom("target"), specStruct);
+
+    if (Type.isNil(specTarget)) {
+      result = Erlang_Maps["put/3"](
+        Type.atom("target"),
+        this.#defaultTarget,
+        result,
       );
     }
 
-    const paramsKeywordList =
-      Interpreter.accessKeywordListElement(
-        this.#specDom.data[0].data[1].data[0],
-        Type.atom("params"),
-      ) || Type.keywordList([]);
-
-    this.#buildParamsMap(paramsKeywordList);
-
-    const target = Interpreter.accessKeywordListElement(
-      this.#specDom.data[0].data[1].data[0],
-      Type.atom("target"),
-    );
-
-    this.target = target ? target : this.#defaultTarget;
-
-    const type = Interpreter.accessKeywordListElement(
-      this.#specDom.data[0].data[1].data[0],
-      Type.atom("type"),
-    );
-
-    if (type) {
-      this.type = type;
-    } else {
-      this.type = Type.atom("action");
-    }
+    return result;
   }
 
   #constructFromExpressionShorthandSyntaxSpec() {
@@ -128,12 +107,12 @@ export default class Operation {
     this.type = Type.atom("action");
   }
 
-  // Example: $click={name: :my_action, params: [a: 1, b: 2]}
+  // Example: $click={%Action{name: :my_action, params: %{a: 1, b: 2}}}
   static #isExpressionLonghandSyntax(specDom) {
     return (
       specDom.data.length === 1 &&
       specDom.data[0].data[0].value === "expression" &&
-      Type.isList(specDom.data[0].data[1].data[0])
+      Type.isStruct(specDom.data[0].data[1].data[0])
     );
   }
 
