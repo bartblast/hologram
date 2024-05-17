@@ -57,7 +57,7 @@ defmodule Hologram.Component do
 
         alias Hologram.Component
         alias Hologram.Component.Action
-        alias Hologram.Component.Component
+        alias Hologram.Component.Command
 
         @before_compile Component
 

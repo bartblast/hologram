@@ -28,7 +28,7 @@ defmodule Hologram.Page do
 
         alias Hologram.Component
         alias Hologram.Component.Action
-        alias Hologram.Component.Component
+        alias Hologram.Component.Command
         alias Hologram.Page
 
         @before_compile Component
