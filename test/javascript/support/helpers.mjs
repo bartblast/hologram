@@ -153,6 +153,24 @@ export function commandFixture(data = {}) {
   return commandStruct;
 }
 
+export function commandQueueItemFixture(data = {}) {
+  let {id, command, status, failCount} = data;
+
+  if (typeof id === "undefined") {
+    id = crypto.randomUUID();
+  }
+
+  if (typeof status === "undefined") {
+    status = "pending";
+  }
+
+  if (typeof failCount === "undefined") {
+    failCount = 0;
+  }
+
+  return {id, command, status, failCount};
+}
+
 export function componentRegistryEntryFixture(data = {}) {
   let {module} = data;
 
