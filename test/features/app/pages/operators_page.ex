@@ -22,13 +22,12 @@ defmodule HologramFeatureTests.OperatorsPage do
   def template do
     ~H"""
     <p>
-      <button id="unary+" $click={%Action{name: :"unary+", params: %{value: @integer_a}, target: "dupa"}}> unary + </button>
-      <button id="unary+" $click={%{name: :"unary+", params: %{value: @integer_a}, type: :action, target: "dupa"}}> unary + </button>
+      <button id="unary+" $click={:"unary+", value: @integer_a}> unary + </button>
       <button id="unary-" $click={:"unary-", value: @integer_a}> unary - </button>
       <button id="+" $click={:+, left: @integer_a, right: @integer_b}> + </button>
       <button id="-" $click={:-, left: @integer_a, right: @integer_b}> - </button>
       <button id="*" $click={:*, left: @integer_a, right: @integer_b}> * </button>
-      <button id="/" $click={%Action{name: :/, params: [left: @integer_a, right: @integer_b], target: "dupa"}}> / </button>
+      <button id="/" $click={:/, left: @integer_a, right: @integer_b}> / </button>
       <button id="++" $click={:++, left: @list_a, right: @list_b}> ++ </button>
       <button id="--" $click={:--, left: @list_a, right: @list_b}> -- </button>
       <button id="and" $click={:and, left: @boolean_a, right: @boolean_b}> and </button>
