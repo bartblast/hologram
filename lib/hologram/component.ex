@@ -56,6 +56,8 @@ defmodule Hologram.Component do
         import Hologram.Template, only: [sigil_H: 2]
 
         alias Hologram.Component
+        alias Hologram.Component.Action
+        alias Hologram.Component.Component
 
         @before_compile Component
 

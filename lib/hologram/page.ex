@@ -26,6 +26,9 @@ defmodule Hologram.Page do
         import Hologram.Router.Helpers, only: [asset_path: 1]
         import Hologram.Template, only: [sigil_H: 2]
 
+        alias Hologram.Component
+        alias Hologram.Component.Action
+        alias Hologram.Component.Component
         alias Hologram.Page
 
         @before_compile Component
