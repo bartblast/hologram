@@ -29,17 +29,19 @@ export default class Client {
     return Client.socket === null ? false : Client.socket.isConnected();
   }
 
-  static async push(event, payload, callback) {
+  static async push(event, payload, successCallback, failureCallback) {
     Client.#channel
       .push(event, payload)
-      .receive("ok", callback)
+      .receive("ok", (_resp) => successCallback())
       .receive("error", (_resp) => {
+        failureCallback();
         console.error(
           "Unable to push an event to the server (reason: error)",
           arguments,
         );
       })
       .receive("timeout", (_resp) => {
+        failureCallback();
         console.error(
           "Unable to push an event to the server (reason: timeout)",
           arguments,

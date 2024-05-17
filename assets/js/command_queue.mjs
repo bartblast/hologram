@@ -1,6 +1,11 @@
 "use strict";
 
+import Client from "./client.mjs";
+
 export default class CommandQueue {
+  // Made public to make tests easier
+  static isProcessing = false;
+
   // Made public to make tests easier
   static items = {};
 
@@ -14,6 +19,29 @@ export default class CommandQueue {
     }
 
     return null;
+  }
+
+  static async process() {
+    if (!CommandQueue.isProcessing && Client.isConnected()) {
+      CommandQueue.isProcessing = true;
+
+      let item;
+
+      while ((item = CommandQueue.getNextPending())) {
+        item.status = "sending";
+
+        const successCallback = ((currentItem) => {
+          return () => CommandQueue.remove(currentItem.id);
+        })(item);
+
+        // TODO: implement failureCallback
+        const failureCallback = () => null;
+
+        Client.push("command", item.command, successCallback, failureCallback);
+      }
+
+      CommandQueue.isProcessing = false;
+    }
   }
 
   static push(command) {
