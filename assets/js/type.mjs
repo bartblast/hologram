@@ -231,6 +231,14 @@ export default class Type {
     return term.type === "reference";
   }
 
+  // Deps: [:maps.is_key/2]
+  static isStruct(term) {
+    return (
+      Type.isMap(term) &&
+      Type.isTrue(Erlang_Maps["is_key/2"](Type.atom("__struct__"), term))
+    );
+  }
+
   static isTrue(term) {
     return Type.isAtom(term) && term.value === "true";
   }

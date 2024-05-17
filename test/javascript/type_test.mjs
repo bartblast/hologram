@@ -794,6 +794,26 @@ describe("Type", () => {
     });
   });
 
+  describe("isStruct()", () => {
+    it("not a map", () => {
+      assert.isFalse(Type.isStruct(Type.integer(123)));
+    });
+
+    it("a map that is not a struct", () => {
+      assert.isFalse(
+        Type.isStruct(Type.map([[Type.atom("a"), Type.integer(1)]])),
+      );
+    });
+
+    it("a struct", () => {
+      assert.isTrue(
+        Type.isStruct(
+          Type.struct("Aaa.Bbb", [[Type.atom("a"), Type.integer(1)]]),
+        ),
+      );
+    });
+  });
+
   describe("isTrue()", () => {
     it("returns true for boxed true value", () => {
       const arg = Type.atom("true");
