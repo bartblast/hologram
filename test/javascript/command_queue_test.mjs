@@ -76,6 +76,8 @@ describe("CommandQueue", () => {
 
       assert.equal(CommandQueue.items.b.status, "pending");
       assert.equal(CommandQueue.items.d.status, "pending");
+
+      assert.isTrue(CommandQueue.isProcessing);
     });
 
     it("client is not connected", () => {
@@ -89,6 +91,8 @@ describe("CommandQueue", () => {
 
       assert.equal(CommandQueue.items.b.status, "pending");
       assert.equal(CommandQueue.items.d.status, "pending");
+
+      assert.isFalse(CommandQueue.isProcessing);
 
       sinon.assert.calledOnce(isConnectedStub);
       Client.isConnected.restore();
@@ -105,6 +109,8 @@ describe("CommandQueue", () => {
       CommandQueue.process();
 
       assert.deepStrictEqual(CommandQueue.items, {});
+
+      assert.isFalse(CommandQueue.isProcessing);
 
       sinon.assert.calledOnce(isConnectedStub);
       Client.isConnected.restore();
@@ -131,6 +137,8 @@ describe("CommandQueue", () => {
       assert.equal(CommandQueue.items.b.status, "sending");
       assert.equal(CommandQueue.items.c.status, "failed");
       assert.equal(CommandQueue.items.d.status, "sending");
+
+      assert.isFalse(CommandQueue.isProcessing);
 
       successCallbacks.forEach((callback) => callback());
 

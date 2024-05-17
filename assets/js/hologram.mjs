@@ -24,7 +24,7 @@ const patch = init([attributesModule, eventListenersModule]);
 
 // TODO: test
 export default class Hologram {
-  // Made public only to make commands easier to test
+  // Made public to make tests easier
   static commandQueue = [];
 
   static #deps = {
@@ -43,12 +43,12 @@ export default class Hologram {
   static #pageParams = null;
   static #virtualDocument = null;
 
-  // Made public only to make commands easier to test
+  // Made public to make tests easier
   static enqueueCommand(command) {
     Hologram.commandQueue.push(command);
   }
 
-  // Made public only to make actions easier to test
+  // Made public to make tests easier
   // Deps: [:maps.get/2, :maps.put/3]
   static executeAction(action) {
     const name = Erlang_Maps["get/2"](Type.atom("name"), action);
@@ -143,7 +143,11 @@ export default class Hologram {
     }
   }
 
-  // Made public only to make it stubable in tests
+  static processCommandsQueue() {
+    if (Client.isConnected()) Hologram.commandQueue.forEach();
+  }
+
+  // Made public to make tests easier
   static render() {
     if (!Hologram.#virtualDocument) {
       Hologram.#virtualDocument = toVNode(window.document.documentElement);
