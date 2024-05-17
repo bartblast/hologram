@@ -8,7 +8,6 @@ import {
   unlinkModules,
 } from "./support/helpers.mjs";
 
-import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Operation from "../../assets/js/operation.mjs";
 import Type from "../../assets/js/type.mjs";
 
