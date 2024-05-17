@@ -57,4 +57,8 @@ export default class CommandQueue {
   static remove(id) {
     delete CommandQueue.items[id];
   }
+
+  static size() {
+    return Object.keys(CommandQueue.items).length;
+  }
 }

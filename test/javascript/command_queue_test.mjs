@@ -198,4 +198,14 @@ describe("CommandQueue", () => {
       id3: "dummy_item_3",
     });
   });
+
+  it("size()", () => {
+    CommandQueue.items = {
+      id1: "dummy_item_1",
+      id2: "dummy_item_2",
+      id3: "dummy_item_3",
+    };
+
+    assert.equal(CommandQueue.size(), 3);
+  });
 });
