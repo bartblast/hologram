@@ -81,7 +81,8 @@ defmodule Hologram.Compiler.CallGraph do
       {:maps, :merge, 2}
     ],
     type_class: [
-      {:maps, :get, 3}
+      {:maps, :get, 3},
+      {:maps, :is_key, 2}
     ]
   ]
 
