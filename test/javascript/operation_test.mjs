@@ -1,6 +1,12 @@
 "use strict";
 
-import {assert, linkModules, unlinkModules} from "./support/helpers.mjs";
+import {
+  actionFixture,
+  assert,
+  commandFixture,
+  linkModules,
+  unlinkModules,
+} from "./support/helpers.mjs";
 
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Operation from "../../assets/js/operation.mjs";
@@ -96,14 +102,12 @@ describe("Operation", () => {
       );
     });
 
-    it("single expression chunk, longhand syntax, action (by default), no params, default target", () => {
-      // {name: :my_action}
+    it("single expression chunk, longhand syntax, action, no params, default target", () => {
+      // {%Action{name: :my_action}}
       const specDom = Type.keywordList([
         [
           Type.atom("expression"),
-          Type.tuple([
-            Type.keywordList([[Type.atom("name"), Type.atom("my_action")]]),
-          ]),
+          Type.tuple([actionFixture({name: Type.atom("my_action")})]),
         ],
       ]);
 
@@ -115,25 +119,20 @@ describe("Operation", () => {
 
       assert.deepStrictEqual(
         operation,
-        Type.struct("Hologram.Component.Action", [
-          [Type.atom("name"), Type.atom("my_action")],
-          [Type.atom("params"), Type.map([[Type.atom("event"), eventParam]])],
-          [Type.atom("target"), defaultTarget],
-        ]),
+        actionFixture({
+          name: Type.atom("my_action"),
+          params: Type.map([[Type.atom("event"), eventParam]]),
+          target: defaultTarget,
+        }),
       );
     });
 
     it("single expression chunk, longhand syntax, command, no params, default target", () => {
-      // {name: :my_command, type: :command}
+      // {%Command{name: :my_command}}
       const specDom = Type.keywordList([
         [
           Type.atom("expression"),
-          Type.tuple([
-            Type.keywordList([
-              [Type.atom("name"), Type.atom("my_command")],
-              [Type.atom("type"), Type.atom("command")],
-            ]),
-          ]),
+          Type.tuple([commandFixture({name: Type.atom("my_command")})]),
         ],
       ]);
 
@@ -145,58 +144,23 @@ describe("Operation", () => {
 
       assert.deepStrictEqual(
         operation,
-        Type.struct("Hologram.Component.Command", [
-          [Type.atom("name"), Type.atom("my_command")],
-          [Type.atom("params"), Type.map([[Type.atom("event"), eventParam]])],
-          [Type.atom("target"), defaultTarget],
-        ]),
+        commandFixture({
+          name: Type.atom("my_command"),
+          params: Type.map([[Type.atom("event"), eventParam]]),
+          target: defaultTarget,
+        }),
       );
     });
 
     it("single expression chunk, longhand syntax, target specified", () => {
       const target = Type.bitstring("my_target");
 
-      // {name: :my_action, target: "my_target"}
+      // {%Action{name: :my_action, target: "my_target"}}
       const specDom = Type.keywordList([
         [
           Type.atom("expression"),
           Type.tuple([
-            Type.keywordList([
-              [Type.atom("name"), Type.atom("my_action")],
-              [Type.atom("target"), target],
-            ]),
-          ]),
-        ],
-      ]);
-
-      const operation = Operation.fromSpecDom(specDom, target, eventParam);
-
-      assert.deepStrictEqual(
-        operation,
-        Type.struct("Hologram.Component.Action", [
-          [Type.atom("name"), Type.atom("my_action")],
-          [Type.atom("params"), Type.map([[Type.atom("event"), eventParam]])],
-          [Type.atom("target"), target],
-        ]),
-      );
-    });
-
-    it("single expression chunk, longhand syntax, with params", () => {
-      // {name: :my_action, params: [a: 1, b: 2]}
-      const specDom = Type.keywordList([
-        [
-          Type.atom("expression"),
-          Type.tuple([
-            Type.keywordList([
-              [Type.atom("name"), Type.atom("my_action")],
-              [
-                Type.atom("params"),
-                Type.keywordList([
-                  [Type.atom("a"), Type.integer(1)],
-                  [Type.atom("b"), Type.integer(2)],
-                ]),
-              ],
-            ]),
+            actionFixture({name: Type.atom("my_action"), target: target}),
           ]),
         ],
       ]);
@@ -209,18 +173,48 @@ describe("Operation", () => {
 
       assert.deepStrictEqual(
         operation,
-        Type.struct("Hologram.Component.Action", [
-          [Type.atom("name"), Type.atom("my_action")],
-          [
-            Type.atom("params"),
-            Type.map([
-              [Type.atom("a"), Type.integer(1)],
-              [Type.atom("b"), Type.integer(2)],
-              [Type.atom("event"), eventParam],
-            ]),
-          ],
-          [Type.atom("target"), defaultTarget],
-        ]),
+        actionFixture({
+          name: Type.atom("my_action"),
+          params: Type.map([[Type.atom("event"), eventParam]]),
+          target: target,
+        }),
+      );
+    });
+
+    it("single expression chunk, longhand syntax, with params", () => {
+      // {%Action{name: :my_action, params: %{a: 1, b: 2}}}
+      const specDom = Type.keywordList([
+        [
+          Type.atom("expression"),
+          Type.tuple([
+            actionFixture({
+              name: Type.atom("my_action"),
+              params: Type.map([
+                [Type.atom("a"), Type.integer(1)],
+                [Type.atom("b"), Type.integer(2)],
+              ]),
+            }),
+          ]),
+        ],
+      ]);
+
+      const operation = Operation.fromSpecDom(
+        specDom,
+        defaultTarget,
+        eventParam,
+      );
+
+      assert.deepStrictEqual(
+        operation,
+        actionFixture({
+          name: Type.atom("my_action"),
+          params: Type.map([
+            [Type.atom("a"), Type.integer(1)],
+            [Type.atom("b"), Type.integer(2)],
+            [Type.atom("event"), eventParam],
+          ]),
+          target: defaultTarget,
+        }),
       );
     });
 
@@ -240,11 +234,11 @@ describe("Operation", () => {
 
       assert.deepStrictEqual(
         operation,
-        Type.struct("Hologram.Component.Action", [
-          [Type.atom("name"), Type.atom("aaa123bbb")],
-          [Type.atom("params"), Type.map([[Type.atom("event"), eventParam]])],
-          [Type.atom("target"), defaultTarget],
-        ]),
+        actionFixture({
+          name: Type.atom("aaa123bbb"),
+          params: Type.map([[Type.atom("event"), eventParam]]),
+          target: defaultTarget,
+        }),
       );
     });
 
@@ -297,3 +291,69 @@ describe("Operation", () => {
     });
   });
 });
+
+// Interpreter.defineElixirFunction("MyModule", "template", 0, "public", [
+//   {
+//     params: (context) => [],
+//     guards: [],
+//     body: (context) => {
+//       window.__hologramReturn__ = Type.anonymousFunction(
+//         1,
+//         [
+//           {
+//             params: (context) => [Type.variablePattern("vars")],
+//             guards: [],
+//             body: (context) => {
+//               Interpreter.matchOperator(
+//                 context.vars.vars,
+//                 Type.matchPlaceholder(),
+//                 context,
+//               );
+//               Interpreter.updateVarsToMatchedValues(context);
+//               return Type.list([
+//                 Type.tuple([
+//                   Type.atom("element"),
+//                   Type.bitstring("button"),
+//                   Type.list([
+//                     Type.tuple([
+//                       Type.bitstring("$click"),
+//                       Type.list([
+//                         Type.tuple([
+//                           Type.atom("expression"),
+//                           Type.tuple([
+//                             Elixir_Hologram_Component_Action["__struct__/1"](
+//                               Type.list([
+//                                 Type.tuple([Type.atom("params"), Type.map([])]),
+//                                 Type.tuple([
+//                                   Type.atom("target"),
+//                                   Type.atom("nil"),
+//                                 ]),
+//                                 Type.tuple([
+//                                   Type.atom("name"),
+//                                   Type.atom("abc"),
+//                                 ]),
+//                               ]),
+//                             ),
+//                           ]),
+//                         ]),
+//                       ]),
+//                     ]),
+//                   ]),
+//                   Type.list([
+//                     Type.tuple([
+//                       Type.atom("text"),
+//                       Type.bitstring(" click me "),
+//                     ]),
+//                   ]),
+//                 ]),
+//               ]);
+//             },
+//           },
+//         ],
+//         context,
+//       );
+//       Interpreter.updateVarsToMatchedValues(context);
+//       return window.__hologramReturn__;
+//     },
+//   },
+// ]);
