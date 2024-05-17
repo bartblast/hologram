@@ -8,6 +8,40 @@ describe("CommandQueue", () => {
   before(() => linkModules());
   after(() => unlinkModules());
 
+  describe("getNextPending()", () => {
+    it("empty queue", () => {
+      CommandQueue.items = {};
+      assert.isNull(CommandQueue.getNextPending());
+    });
+
+    it("non-empty queue", () => {
+      const itemA = {
+        id: "a",
+        command: "dummy_command_a",
+        status: "sent",
+      };
+
+      const itemC = {
+        id: "c",
+        command: "dummy_command_c",
+        status: "pending",
+      };
+
+      const itemB = {
+        id: "b",
+        command: "dummy_command_b",
+        status: "pending",
+      };
+
+      CommandQueue.items = {};
+      CommandQueue.items["a"] = itemA;
+      CommandQueue.items["c"] = itemC;
+      CommandQueue.items["b"] = itemB;
+
+      assert.equal(CommandQueue.getNextPending(), itemC);
+    });
+  });
+
   it("push()", () => {
     CommandQueue.items = {};
 
