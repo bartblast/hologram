@@ -107,7 +107,7 @@ describe("CommandQueue", () => {
           id: "a",
           command: "dummy_command_a",
           status: "failed",
-          failCount: 1,
+          failCount: 2,
         },
         b: {
           id: "b",
@@ -119,7 +119,7 @@ describe("CommandQueue", () => {
           id: "c",
           command: "dummy_command_c",
           status: "failed",
-          failCount: 1,
+          failCount: 2,
         },
         d: {
           id: "d",
@@ -208,13 +208,13 @@ describe("CommandQueue", () => {
           id: "a",
           command: "dummy_command_a",
           status: "failed",
-          failCount: 1,
+          failCount: 2,
         },
         c: {
           id: "c",
           command: "dummy_command_c",
           status: "failed",
-          failCount: 1,
+          failCount: 2,
         },
       });
 
@@ -222,6 +222,52 @@ describe("CommandQueue", () => {
       Client.isConnected.restore();
 
       sinon.assert.calledTwice(pushStub);
+      Client.push.restore();
+    });
+
+    it("commands fail", () => {
+      CommandQueue.isProcessing = false;
+
+      sinon.stub(Client, "isConnected").callsFake(() => true);
+
+      const failureCallbacks = [];
+      sinon
+        .stub(Client, "push")
+        .callsFake((_event, _payload, _successCallback, failureCallback) =>
+          failureCallbacks.push(failureCallback),
+        );
+      CommandQueue.process();
+
+      failureCallbacks.forEach((callback) => callback());
+
+      assert.deepStrictEqual(CommandQueue.items, {
+        a: {
+          id: "a",
+          command: "dummy_command_a",
+          status: "failed",
+          failCount: 2,
+        },
+        b: {
+          id: "b",
+          command: "dummy_command_b",
+          status: "failed",
+          failCount: 1,
+        },
+        c: {
+          id: "c",
+          command: "dummy_command_c",
+          status: "failed",
+          failCount: 2,
+        },
+        d: {
+          id: "d",
+          command: "dummy_command_d",
+          status: "failed",
+          failCount: 1,
+        },
+      });
+
+      Client.isConnected.restore();
       Client.push.restore();
     });
   });

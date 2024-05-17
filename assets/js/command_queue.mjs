@@ -39,8 +39,9 @@ export default class CommandQueue {
           return () => CommandQueue.remove(currentItem.id);
         })(item);
 
-        // TODO: implement failureCallback
-        const failureCallback = () => null;
+        const failureCallback = ((currentItem) => {
+          return () => CommandQueue.fail(currentItem.id);
+        })(item);
 
         Client.push("command", item.command, successCallback, failureCallback);
       }
