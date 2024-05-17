@@ -10,10 +10,10 @@ export default class Client {
   static socket = null;
 
   static async connect() {
-    const socket = new Socket("/hologram");
-    socket.connect();
+    Client.socket = new Socket("/hologram");
+    Client.socket.connect();
 
-    Client.#channel = socket.channel("hologram");
+    Client.#channel = Client.socket.channel("hologram");
 
     Client.#channel
       .join()
