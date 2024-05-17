@@ -9,6 +9,63 @@ describe("CommandQueue", () => {
   before(() => linkModules());
   after(() => unlinkModules());
 
+  describe("fail()", () => {
+    beforeEach(() => {
+      CommandQueue.items = {
+        a: {
+          id: "a",
+          command: "dummy_command_a",
+          status: "pending",
+          failCount: 0,
+        },
+        b: {
+          id: "b",
+          command: "dummy_command_b",
+          status: "failed",
+          failCount: 2,
+        },
+      };
+    });
+
+    it("not failed yet", () => {
+      CommandQueue.fail("a");
+
+      assert.deepStrictEqual(CommandQueue.items, {
+        a: {
+          id: "a",
+          command: "dummy_command_a",
+          status: "failed",
+          failCount: 1,
+        },
+        b: {
+          id: "b",
+          command: "dummy_command_b",
+          status: "failed",
+          failCount: 2,
+        },
+      });
+    });
+
+    it("already failed", () => {
+      CommandQueue.fail("b");
+
+      assert.deepStrictEqual(CommandQueue.items, {
+        a: {
+          id: "a",
+          command: "dummy_command_a",
+          status: "pending",
+          failCount: 0,
+        },
+        b: {
+          id: "b",
+          command: "dummy_command_b",
+          status: "failed",
+          failCount: 3,
+        },
+      });
+    });
+  });
+
   describe("getNextPending()", () => {
     it("empty queue", () => {
       CommandQueue.items = {};
@@ -50,21 +107,25 @@ describe("CommandQueue", () => {
           id: "a",
           command: "dummy_command_a",
           status: "failed",
+          failCount: 1,
         },
         b: {
           id: "b",
           command: "dummy_command_b",
           status: "pending",
+          failCount: 0,
         },
         c: {
           id: "c",
           command: "dummy_command_c",
           status: "failed",
+          failCount: 1,
         },
         d: {
           id: "d",
           command: "dummy_command_d",
           status: "pending",
+          failCount: 0,
         },
       };
     });
@@ -147,11 +208,13 @@ describe("CommandQueue", () => {
           id: "a",
           command: "dummy_command_a",
           status: "failed",
+          failCount: 1,
         },
         c: {
           id: "c",
           command: "dummy_command_c",
           status: "failed",
+          failCount: 1,
         },
       });
 
@@ -179,6 +242,7 @@ describe("CommandQueue", () => {
       id: id,
       command: "dummy_command",
       status: "pending",
+      failCount: 0,
     };
 
     assert.deepStrictEqual(CommandQueue.items, expectedItems);

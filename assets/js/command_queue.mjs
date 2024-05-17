@@ -9,6 +9,11 @@ export default class CommandQueue {
   // Made public to make tests easier
   static items = {};
 
+  static fail(id) {
+    CommandQueue.items[id].status = "failed";
+    ++CommandQueue.items[id].failCount;
+  }
+
   // Made public to make tests easier
   static getNextPending() {
     // The traversal order for string keys is ascending chronological (so we get FIFO behaviour)
@@ -51,6 +56,7 @@ export default class CommandQueue {
       id: id,
       command: command,
       status: "pending",
+      failCount: 0,
     };
   }
 
