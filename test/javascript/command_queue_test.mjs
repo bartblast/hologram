@@ -1,6 +1,12 @@
 "use strict";
 
-import {assert, linkModules, sinon, unlinkModules} from "./support/helpers.mjs";
+import {
+  assert,
+  commandQueueItemFixture,
+  linkModules,
+  sinon,
+  unlinkModules,
+} from "./support/helpers.mjs";
 
 import Client from "../../assets/js/client.mjs";
 import CommandQueue from "../../assets/js/command_queue.mjs";
@@ -12,18 +18,13 @@ describe("CommandQueue", () => {
   describe("fail()", () => {
     beforeEach(() => {
       CommandQueue.items = {
-        a: {
-          id: "a",
-          command: "dummy_command_a",
-          status: "pending",
-          failCount: 0,
-        },
-        b: {
+        a: commandQueueItemFixture({id: "a", command: "dummy_command_a"}),
+        b: commandQueueItemFixture({
           id: "b",
           command: "dummy_command_b",
           status: "failed",
           failCount: 2,
-        },
+        }),
       };
     });
 
@@ -31,18 +32,18 @@ describe("CommandQueue", () => {
       CommandQueue.fail("a");
 
       assert.deepStrictEqual(CommandQueue.items, {
-        a: {
+        a: commandQueueItemFixture({
           id: "a",
           command: "dummy_command_a",
           status: "failed",
           failCount: 1,
-        },
-        b: {
+        }),
+        b: commandQueueItemFixture({
           id: "b",
           command: "dummy_command_b",
           status: "failed",
           failCount: 2,
-        },
+        }),
       });
     });
 
@@ -50,18 +51,13 @@ describe("CommandQueue", () => {
       CommandQueue.fail("b");
 
       assert.deepStrictEqual(CommandQueue.items, {
-        a: {
-          id: "a",
-          command: "dummy_command_a",
-          status: "pending",
-          failCount: 0,
-        },
-        b: {
+        a: commandQueueItemFixture({id: "a", command: "dummy_command_a"}),
+        b: commandQueueItemFixture({
           id: "b",
           command: "dummy_command_b",
           status: "failed",
           failCount: 3,
-        },
+        }),
       });
     });
   });
@@ -73,23 +69,21 @@ describe("CommandQueue", () => {
     });
 
     it("non-empty queue", () => {
-      const itemA = {
+      const itemA = commandQueueItemFixture({
         id: "a",
         command: "dummy_command_a",
         status: "sending",
-      };
+      });
 
-      const itemC = {
+      const itemC = commandQueueItemFixture({
         id: "c",
         command: "dummy_command_c",
-        status: "pending",
-      };
+      });
 
-      const itemB = {
+      const itemB = commandQueueItemFixture({
         id: "b",
         command: "dummy_command_b",
-        status: "pending",
-      };
+      });
 
       CommandQueue.items = {};
       CommandQueue.items["a"] = itemA;
@@ -103,30 +97,20 @@ describe("CommandQueue", () => {
   describe("process()", () => {
     beforeEach(() => {
       CommandQueue.items = {
-        a: {
+        a: commandQueueItemFixture({
           id: "a",
           command: "dummy_command_a",
           status: "failed",
           failCount: 2,
-        },
-        b: {
-          id: "b",
-          command: "dummy_command_b",
-          status: "pending",
-          failCount: 0,
-        },
-        c: {
+        }),
+        b: commandQueueItemFixture({id: "b", command: "dummy_command_b"}),
+        c: commandQueueItemFixture({
           id: "c",
           command: "dummy_command_c",
           status: "failed",
           failCount: 2,
-        },
-        d: {
-          id: "d",
-          command: "dummy_command_d",
-          status: "pending",
-          failCount: 0,
-        },
+        }),
+        d: commandQueueItemFixture({id: "d", command: "dummy_command_d"}),
       };
     });
 
@@ -204,18 +188,18 @@ describe("CommandQueue", () => {
       successCallbacks.forEach((callback) => callback());
 
       assert.deepStrictEqual(CommandQueue.items, {
-        a: {
+        a: commandQueueItemFixture({
           id: "a",
           command: "dummy_command_a",
           status: "failed",
           failCount: 2,
-        },
-        c: {
+        }),
+        c: commandQueueItemFixture({
           id: "c",
           command: "dummy_command_c",
           status: "failed",
           failCount: 2,
-        },
+        }),
       });
 
       sinon.assert.calledOnce(isConnectedStub);
@@ -241,30 +225,30 @@ describe("CommandQueue", () => {
       failureCallbacks.forEach((callback) => callback());
 
       assert.deepStrictEqual(CommandQueue.items, {
-        a: {
+        a: commandQueueItemFixture({
           id: "a",
           command: "dummy_command_a",
           status: "failed",
           failCount: 2,
-        },
-        b: {
+        }),
+        b: commandQueueItemFixture({
           id: "b",
           command: "dummy_command_b",
           status: "failed",
           failCount: 1,
-        },
-        c: {
+        }),
+        c: commandQueueItemFixture({
           id: "c",
           command: "dummy_command_c",
           status: "failed",
           failCount: 2,
-        },
-        d: {
+        }),
+        d: commandQueueItemFixture({
           id: "d",
           command: "dummy_command_d",
           status: "failed",
           failCount: 1,
-        },
+        }),
       });
 
       Client.isConnected.restore();
@@ -284,12 +268,12 @@ describe("CommandQueue", () => {
     );
 
     const expectedItems = {};
-    expectedItems[id] = {
+    expectedItems[id] = commandQueueItemFixture({
       id: id,
       command: "dummy_command",
       status: "pending",
       failCount: 0,
-    };
+    });
 
     assert.deepStrictEqual(CommandQueue.items, expectedItems);
   });
