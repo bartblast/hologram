@@ -107,6 +107,7 @@ describe("Hologram", () => {
         ]),
       );
 
+      sinon.assert.notCalled(commandQueueProcessStub);
       sinon.assert.calledOnce(renderStub);
 
       assert.equal(CommandQueue.size(), 0);
@@ -168,6 +169,7 @@ describe("Hologram", () => {
         ]),
       );
 
+      sinon.assert.notCalled(commandQueueProcessStub);
       sinon.assert.calledOnce(renderStub);
 
       assert.equal(CommandQueue.size(), 0);
@@ -222,6 +224,7 @@ describe("Hologram", () => {
         ]),
       );
 
+      sinon.assert.notCalled(commandQueueProcessStub);
       sinon.assert.calledOnce(renderStub);
 
       assert.equal(CommandQueue.size(), 0);
@@ -272,6 +275,7 @@ describe("Hologram", () => {
         ]),
       );
 
+      sinon.assert.calledOnce(commandQueueProcessStub);
       sinon.assert.calledOnce(renderStub);
 
       assert.equal(CommandQueue.size(), 1);
@@ -336,6 +340,7 @@ describe("Hologram", () => {
         ]),
       );
 
+      sinon.assert.calledOnce(commandQueueProcessStub);
       sinon.assert.calledOnce(renderStub);
 
       assert.equal(CommandQueue.size(), 1);
