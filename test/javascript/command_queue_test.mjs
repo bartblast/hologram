@@ -8,7 +8,7 @@ describe("CommandQueue", () => {
   before(() => linkModules());
   after(() => unlinkModules());
 
-  it.only("push", () => {
+  it("push()", () => {
     CommandQueue.items = {};
 
     CommandQueue.push("dummy_command");
@@ -27,5 +27,20 @@ describe("CommandQueue", () => {
     };
 
     assert.deepStrictEqual(CommandQueue.items, expectedItems);
+  });
+
+  it("remove()", () => {
+    CommandQueue.items = {
+      id1: "dummy_item_1",
+      id2: "dummy_item_2",
+      id3: "dummy_item_3",
+    };
+
+    CommandQueue.remove("id2");
+
+    assert.deepStrictEqual(CommandQueue.items, {
+      id1: "dummy_item_1",
+      id3: "dummy_item_3",
+    });
   });
 });

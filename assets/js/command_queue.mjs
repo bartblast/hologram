@@ -13,4 +13,8 @@ export default class CommandQueue {
       status: "pending",
     };
   }
+
+  static remove(id) {
+    delete CommandQueue.items[id];
+  }
 }
