@@ -132,7 +132,7 @@ describe("CommandQueue", () => {
 
       CommandQueue.process();
 
-      assert.equal(Object.keys(CommandQueue.items).length, 4);
+      assert.equal(CommandQueue.size(), 4);
       assert.equal(CommandQueue.items.a.status, "failed");
       assert.equal(CommandQueue.items.b.status, "sending");
       assert.equal(CommandQueue.items.c.status, "failed");
