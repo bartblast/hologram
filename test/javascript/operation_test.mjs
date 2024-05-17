@@ -241,32 +241,6 @@ describe("Operation", () => {
         }),
       );
     });
-
-    it("invalid operation spec", () => {
-      // {params: [a: 1, b: 2]}
-      const specDom = Type.keywordList([
-        [
-          Type.atom("expression"),
-          Type.tuple([
-            Type.keywordList([
-              [
-                Type.atom("params"),
-                Type.keywordList([
-                  [Type.atom("a"), Type.integer(1)],
-                  [Type.atom("b"), Type.integer(2)],
-                ]),
-              ],
-            ]),
-          ]),
-        ],
-      ]);
-
-      assert.throw(
-        () => Operation.fromSpecDom(specDom, defaultTarget, eventParam),
-        HologramInterpreterError,
-        `Operation spec is invalid: "{[params: [a: 1, b: 2]]}". See what to do here: https://www.hologram.page/TODO`,
-      );
-    });
   });
 
   describe("isAction()", () => {

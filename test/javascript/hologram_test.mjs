@@ -429,12 +429,7 @@ describe("Hologram", () => {
       const commandSpecDom = Type.keywordList([
         [
           Type.atom("expression"),
-          Type.tuple([
-            Type.keywordList([
-              [Type.atom("name"), Type.atom("my_command")],
-              [Type.atom("type"), Type.atom("command")],
-            ]),
-          ]),
+          Type.tuple([commandFixture({name: Type.atom("my_command")})]),
         ],
       ]);
 
