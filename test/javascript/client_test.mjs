@@ -23,7 +23,7 @@ describe("Client", () => {
     Client.encoder(msg, callbackSpy);
 
     const expected =
-      '["dummy_join_ref","dummy_ref","dummy_topic","dummy_event",{"type":"integer","value":"__bigint__:123"}]';
+      '["dummy_join_ref","dummy_ref","dummy_topic","dummy_event","__integer__:123"]';
 
     sinon.assert.calledOnceWithExactly(callbackSpy, expected);
   });

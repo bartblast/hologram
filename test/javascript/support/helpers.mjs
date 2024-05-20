@@ -15,8 +15,8 @@ import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import HologramMatchError from "../../../assets/js/errors/match_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
+import Serializer from "../../../assets/js/serializer.mjs";
 import Type from "../../../assets/js/type.mjs";
-import Utils from "../../../assets/js/utils.mjs";
 
 export {assert} from "../../../assets/node_modules/chai/index.js";
 export * as sinon from "../../../assets/node_modules/sinon/pkg/sinon-esm.js";
@@ -309,7 +309,7 @@ export function inspectEx(term) {
 }
 
 export function inspectJs(term) {
-  console.log(Utils.serialize(term));
+  console.log(Serializer.serialize(term));
 
   return term;
 }

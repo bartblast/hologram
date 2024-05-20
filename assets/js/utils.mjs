@@ -41,17 +41,4 @@ export default class Utils {
   static evaluate(code) {
     return new Function(`return (${code});`)();
   }
-
-  static serialize(term) {
-    return JSON.stringify(term, (_key, value) => {
-      if (typeof value === "bigint") {
-        return `__bigint__:${value.toString()}`;
-      } else if (Type.isBinary(term)) {
-        const text = Bitstring.toText(term);
-        return `__string__:${text}`;
-      } else {
-        return value;
-      }
-    });
-  }
 }

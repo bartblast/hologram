@@ -350,7 +350,7 @@ describe("Type", () => {
       assert.throw(
         () => Type.improperList([Type.integer(1)]),
         HologramInterpreterError,
-        'improper list must have at least 2 items, received [{"type":"integer","value":"__bigint__:1"}]',
+        'improper list must have at least 2 items, received ["__integer__:1"]',
       );
     });
 
