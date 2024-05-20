@@ -1,5 +1,7 @@
 "use strict";
 
+import Utils from "./utils.mjs";
+
 import {Socket} from "phoenix";
 
 // TODO: test
@@ -10,7 +12,7 @@ export default class Client {
   static socket = null;
 
   static async connect() {
-    Client.socket = new Socket("/hologram");
+    Client.socket = new Socket("/hologram", Client.encoder);
     Client.socket.connect();
 
     Client.#channel = Client.socket.channel("hologram");
@@ -23,6 +25,18 @@ export default class Client {
       .receive("error", (_resp) => {
         console.error("Unable to join Hologram channel");
       });
+  }
+
+  static encoder(msg, callback) {
+    return callback(
+      Utils.serialize([
+        msg.join_ref,
+        msg.ref,
+        msg.topic,
+        msg.event,
+        msg.payload,
+      ]),
+    );
   }
 
   static isConnected() {
