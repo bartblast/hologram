@@ -38,4 +38,10 @@ defmodule Hologram.Socket.Decoder do
   def decode(%{"type" => "reference", "value" => value}) do
     IEx.Helpers.ref(value)
   end
+
+  def decode(%{"type" => "tuple", "data" => data}) do
+    data
+    |> Enum.map(&decode/1)
+    |> List.to_tuple()
+  end
 end

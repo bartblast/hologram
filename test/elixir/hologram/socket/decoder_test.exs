@@ -35,4 +35,11 @@ defmodule Hologram.Socket.DecoderTest do
   test "reference" do
     assert decode(%{"type" => "reference", "value" => "0.1.2.3"}) == ref("0.1.2.3")
   end
+
+  test "tuple" do
+    assert decode(%{
+             "type" => "tuple",
+             "data" => ["__integer__:1", %{"type" => "float", "value" => 2.34}]
+           }) == {1, 2.34}
+  end
 end
