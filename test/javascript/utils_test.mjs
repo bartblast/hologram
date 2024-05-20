@@ -90,27 +90,27 @@ describe("Utils", () => {
   });
 
   describe("serialize()", () => {
-    it("serializes number to JSON", () => {
+    it("JS integer", () => {
       assert.equal(Utils.serialize(123), "123");
     });
 
-    it("serializes string to JSON", () => {
+    it("JS string", () => {
       assert.equal(Utils.serialize("abc"), '"abc"');
     });
 
-    it("serializes non-negative bigint to JSON", () => {
+    it("JS non-negative BigInt", () => {
       assert.equal(Utils.serialize(123n), '"__bigint__:123"');
     });
 
-    it("serializes negative bigint to JSON", () => {
+    it("JS negative BigInt", () => {
       assert.equal(Utils.serialize(-123n), '"__bigint__:-123"');
     });
 
-    it("serializes non-nested object to JSON", () => {
+    it("JS non-nested object", () => {
       assert.equal(Utils.serialize({a: 1, b: 2}), '{"a":1,"b":2}');
     });
 
-    it("serializes nested object to JSON", () => {
+    it("JS nested object", () => {
       const term = {a: 1, b: 2, c: {d: 3, e: 4}};
       const expected = '{"a":1,"b":2,"c":{"d":3,"e":4}}';
 
