@@ -27,6 +27,10 @@ defmodule Hologram.Socket.Decoder do
     IntegerUtils.parse!(value)
   end
 
+  def decode(%{"type" => "pid", "segments" => [x, y, z]}) do
+    IEx.Helpers.pid(x, y, z)
+  end
+
   def decode(%{"type" => "port", "value" => value}) do
     IEx.Helpers.port(value)
   end
