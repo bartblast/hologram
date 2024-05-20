@@ -24,6 +24,13 @@ defmodule Hologram.Socket.DecoderTest do
     assert decode("__integer__:123") == 123
   end
 
+  test "list" do
+    assert decode(%{
+             "type" => "list",
+             "data" => ["__integer__:1", %{"type" => "float", "value" => 2.34}]
+           }) == [1, 2.34]
+  end
+
   test "pid" do
     assert decode(%{"type" => "pid", "segments" => [0, 11, 222]}) == pid("0.11.222")
   end
