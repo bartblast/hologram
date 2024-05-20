@@ -15,6 +15,14 @@ defmodule Hologram.Socket.Decoder do
     value
   end
 
+  def decode(%{"type" => "float", "value" => value}) when is_integer(value) do
+    value + 0.0
+  end
+
+  def decode(%{"type" => "float", "value" => value}) do
+    value
+  end
+
   def decode("__integer__:" <> value) do
     IntegerUtils.parse!(value)
   end
