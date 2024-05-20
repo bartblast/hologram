@@ -20,7 +20,7 @@ export default class Serializer {
         return Serializer.#serializeBitstring(term);
 
       case "integer":
-        return `"__integer__:${term.value.toString()}"`;
+        return Serializer.serialize(term.value);
 
       case "list":
         return Serializer.#serializeList(term);
