@@ -14,7 +14,7 @@
     "jsdom-global": "^3",
     "mocha": "^10",
     "prettier": "^3",
-    "sinon": "^17"
+    "sinon": "^18"
   },
   "scripts": {
     "test": "mocha '../test/javascript/**/*.mjs' --color --require jsdom-global/register",
