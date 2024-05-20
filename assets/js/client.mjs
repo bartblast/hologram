@@ -12,7 +12,7 @@ export default class Client {
   static socket = null;
 
   static async connect() {
-    Client.socket = new Socket("/hologram", Client.encoder);
+    Client.socket = new Socket("/hologram", {encode: Client.encoder});
     Client.socket.connect();
 
     Client.#channel = Client.socket.channel("hologram");
