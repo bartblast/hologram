@@ -41,7 +41,13 @@ export default class Serializer {
         return Serializer.#serializeTuple(term);
 
       default:
-        return JSON.stringify(term);
+        return JSON.stringify(term, (_key, value) => {
+          if (typeof value === "bigint") {
+            return `__integer__:${value.toString()}`;
+          } else {
+            return value;
+          }
+        });
     }
   }
 

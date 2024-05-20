@@ -161,6 +161,13 @@ describe("Serializer", () => {
       assert.equal(Serializer.serialize(term), expected);
     });
 
+    it("JS BigInt", () => {
+      const term = 123n;
+      const expected = '"__integer__:123"';
+
+      assert.equal(Serializer.serialize(term), expected);
+    });
+
     it("JS boolean", () => {
       const term = true;
       const expected = "true";
