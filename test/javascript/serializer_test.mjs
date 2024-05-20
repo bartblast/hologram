@@ -69,7 +69,7 @@ describe("Serializer", () => {
       const term = Type.list([Type.integer(1), Type.float(2.3)]);
 
       const expected =
-        '{"type":"list",data:["__integer__:1",{"type":"float","value":2.3}]}';
+        '{"type":"list","data":["__integer__:1",{"type":"float","value":2.3}]}';
 
       assert.equal(Serializer.serialize(term), expected);
     });
@@ -81,7 +81,7 @@ describe("Serializer", () => {
       ]);
 
       const expected =
-        '{"type":"map",data:[[{"type":"atom","value":"a"},"__integer__:1"],["__binary__:b",{"type":"float","value":2.3}]]}';
+        '{"type":"map","data":[[{"type":"atom","value":"a"},"__integer__:1"],["__binary__:b",{"type":"float","value":2.3}]]}';
 
       assert.equal(Serializer.serialize(term), expected);
     });
@@ -149,7 +149,7 @@ describe("Serializer", () => {
       const term = Type.tuple([Type.integer(1), Type.float(2.3)]);
 
       const expected =
-        '{"type":"tuple",data:["__integer__:1",{"type":"float","value":2.3}]}';
+        '{"type":"tuple","data":["__integer__:1",{"type":"float","value":2.3}]}';
 
       assert.equal(Serializer.serialize(term), expected);
     });

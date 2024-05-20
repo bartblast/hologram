@@ -76,7 +76,7 @@ export default class Serializer {
   }
 
   static #serializeList(term) {
-    return `{"type":"list",data:[${Serializer.#serializeEnumData(term.data)}]}`;
+    return `{"type":"list","data":[${Serializer.#serializeEnumData(term.data)}]}`;
   }
 
   static #serializeMap(term) {
@@ -87,7 +87,7 @@ export default class Serializer {
       )
       .join(",");
 
-    return `{"type":"map",data:[${dataOutput}]}`;
+    return `{"type":"map","data":[${dataOutput}]}`;
   }
 
   static #serializePid(term) {
@@ -121,6 +121,6 @@ export default class Serializer {
   }
 
   static #serializeTuple(term) {
-    return `{"type":"tuple",data:[${Serializer.#serializeEnumData(term.data)}]}`;
+    return `{"type":"tuple","data":[${Serializer.#serializeEnumData(term.data)}]}`;
   }
 }
