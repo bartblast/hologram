@@ -2,6 +2,7 @@
 
 import {assert, linkModules, unlinkModules} from "./support/helpers.mjs";
 
+import Type from "../../assets/js/type.mjs";
 import Utils from "../../assets/js/utils.mjs";
 
 describe("Utils", () => {
@@ -113,6 +114,34 @@ describe("Utils", () => {
     it("JS nested object", () => {
       const term = {a: 1, b: 2, c: {d: 3, e: 4}};
       const expected = '{"a":1,"b":2,"c":{"d":3,"e":4}}';
+
+      assert.equal(Utils.serialize(term), expected);
+    });
+
+    it("boxed integer", () => {
+      const term = Type.integer(123);
+      const expected = '{"type":"integer","value":"__bigint__:123"}';
+
+      assert.equal(Utils.serialize(term), expected);
+    });
+
+    it("boxed float", () => {
+      const term = Type.float(1.23);
+      const expected = '{"type":"float","value":1.23}';
+
+      assert.equal(Utils.serialize(term), expected);
+    });
+
+    it("boxed binary", () => {
+      const term = Type.bitstring('a"bc');
+      const expected = '"__string__:a\\"bc"';
+
+      assert.equal(Utils.serialize(term), expected);
+    });
+
+    it("boxed bitstring that is not a binary", () => {
+      const term = Type.bitstring([1, 0, 1, 0]);
+      const expected = '{"type":"bitstring","bits":{"0":1,"1":0,"2":1,"3":0}}';
 
       assert.equal(Utils.serialize(term), expected);
     });

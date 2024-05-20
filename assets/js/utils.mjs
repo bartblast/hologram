@@ -1,5 +1,8 @@
 "use strict";
 
+import Bitstring from "./bitstring.mjs";
+import Type from "./type.mjs";
+
 // See: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
 import cloneDeep from "lodash/cloneDeep.js";
 
@@ -40,8 +43,15 @@ export default class Utils {
   }
 
   static serialize(term) {
-    return JSON.stringify(term, (_key, value) =>
-      typeof value === "bigint" ? `__bigint__:${value.toString()}` : value,
-    );
+    return JSON.stringify(term, (_key, value) => {
+      if (typeof value === "bigint") {
+        return `__bigint__:${value.toString()}`;
+      } else if (Type.isBinary(term)) {
+        const text = Bitstring.toText(term);
+        return `__string__:${text}`;
+      } else {
+        return value;
+      }
+    });
   }
 }
