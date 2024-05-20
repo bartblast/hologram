@@ -41,6 +41,10 @@ export default class Serializer {
         return Serializer.#serializeTuple(term);
 
       default:
+        if (Array.isArray(term)) {
+          return Serializer.#serializeArray(term);
+        }
+
         return JSON.stringify(term, (_key, value) => {
           if (typeof value === "bigint") {
             return `__integer__:${value.toString()}`;
@@ -53,6 +57,10 @@ export default class Serializer {
 
   static #escapeDoubleQuotes(str) {
     return str.replace(/"/g, '\\"');
+  }
+
+  static #serializeArray(term) {
+    return `[${Serializer.#serializeEnumData(term)}]`;
   }
 
   static #serializeBitstring(term) {

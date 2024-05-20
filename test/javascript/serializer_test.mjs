@@ -155,8 +155,8 @@ describe("Serializer", () => {
     });
 
     it("JS array", () => {
-      const term = [123, "abc"];
-      const expected = '[123,"abc"]';
+      const term = [123, Type.float(2.34)];
+      const expected = '[123,{"type":"float","value":2.34}]';
 
       assert.equal(Serializer.serialize(term), expected);
     });
