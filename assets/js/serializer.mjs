@@ -97,7 +97,7 @@ export default class Serializer {
       );
     }
 
-    return `{"type":"pid","node":"${Serializer.#escapeDoubleQuotes(term.node)}","segments":${Serializer.serialize(term.segments)}}`;
+    return `{"type":"pid","segments":${Serializer.serialize(term.segments)}}`;
   }
 
   static #serializePort(term) {

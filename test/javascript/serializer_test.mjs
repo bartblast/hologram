@@ -99,9 +99,7 @@ describe("Serializer", () => {
 
       it("originating in server", () => {
         const term = Type.pid('my_node@my_"host', [0, 11, 222], "server");
-
-        const expected =
-          '{"type":"pid","node":"my_node@my_\\"host","segments":[0,11,222]}';
+        const expected = '{"type":"pid","segments":[0,11,222]}';
 
         assert.equal(Serializer.serialize(term), expected);
       });
