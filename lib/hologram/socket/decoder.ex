@@ -27,6 +27,10 @@ defmodule Hologram.Socket.Decoder do
     IntegerUtils.parse!(value)
   end
 
+  def decode(%{"type" => "port", "value" => value}) do
+    IEx.Helpers.port(value)
+  end
+
   def decode(%{"type" => "reference", "value" => value}) do
     IEx.Helpers.ref(value)
   end

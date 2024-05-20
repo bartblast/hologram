@@ -24,6 +24,10 @@ defmodule Hologram.Socket.DecoderTest do
     assert decode("__integer__:123") == 123
   end
 
+  test "port" do
+    assert decode(%{"type" => "port", "value" => "0.11"}) == port("0.11")
+  end
+
   test "reference" do
     assert decode(%{"type" => "reference", "value" => "0.1.2.3"}) == ref("0.1.2.3")
   end
