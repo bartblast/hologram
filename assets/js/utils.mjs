@@ -1,8 +1,5 @@
 "use strict";
 
-import Bitstring from "./bitstring.mjs";
-import Type from "./type.mjs";
-
 // See: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
 import cloneDeep from "lodash/cloneDeep.js";
 

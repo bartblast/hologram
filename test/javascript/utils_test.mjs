@@ -2,7 +2,6 @@
 
 import {assert, linkModules, unlinkModules} from "./support/helpers.mjs";
 
-import Type from "../../assets/js/type.mjs";
 import Utils from "../../assets/js/utils.mjs";
 
 describe("Utils", () => {
