@@ -9,6 +9,7 @@ defmodule Hologram.Channel do
   # TODO: implement
   @impl Phoenix.Channel
   def handle_in("command", payload, socket) do
+    # credo:disable-for-next-line Credo.Check.Warning.IoInspect
     IO.inspect(payload)
     {:reply, :ok, socket}
   end
