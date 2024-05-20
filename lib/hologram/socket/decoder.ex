@@ -11,6 +11,10 @@ defmodule Hologram.Socket.Decoder do
     String.to_existing_atom(value)
   end
 
+  def decode("__binary__:" <> value) do
+    value
+  end
+
   def decode("__integer__:" <> value) do
     IntegerUtils.parse!(value)
   end
