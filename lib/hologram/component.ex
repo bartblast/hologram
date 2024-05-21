@@ -133,31 +133,31 @@ defmodule Hologram.Component do
   end
 
   @doc """
-  Puts the given action spec to the component's next_action field.
-  Next action will be executed by the runtime directly after the current action has completed its execution.
+  Puts the given action spec to the component or server struct's next_action field.
+  Next action will be executed by the runtime synchronously.
   """
-  @spec put_action(Component.t(), atom | keyword) :: Component.t()
-  def put_action(component, name_or_spec)
+  @spec put_action(Component.t() | Server.t(), atom | keyword) :: Component.t() | Server.t()
+  def put_action(struct, name_or_spec)
 
-  def put_action(%Component{} = component, name) when is_atom(name) do
-    %{component | next_action: %Action{name: name}}
+  def put_action(struct, name) when is_atom(name) do
+    %{struct | next_action: %Action{name: name}}
   end
 
-  def put_action(%Component{} = component, spec) when is_list(spec) do
+  def put_action(struct, spec) when is_list(spec) do
     name = spec[:name]
     params = Map.new(spec[:params] || [])
     target = spec[:target]
 
-    %{component | next_action: %Action{name: name, params: params, target: target}}
+    %{struct | next_action: %Action{name: name, params: params, target: target}}
   end
 
   @doc """
-  Puts the given action spec to the component's next_action field.
-  Next action will be executed by the runtime directly after the current action has completed its execution.
+  Puts the given action spec to the component or server struct's next_action field.
+  Next action will be executed by the runtime synchronously.
   """
-  @spec put_action(Component.t(), atom, keyword) :: Component.t()
-  def put_action(%Component{} = component, name, params) do
-    %{component | next_action: %Action{name: name, params: Map.new(params)}}
+  @spec put_action(Component.t() | Server.t(), atom, keyword) :: Component.t() | Server.t()
+  def put_action(struct, name, params) do
+    %{struct | next_action: %Action{name: name, params: Map.new(params)}}
   end
 
   @doc """

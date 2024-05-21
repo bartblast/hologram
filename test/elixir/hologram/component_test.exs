@@ -70,7 +70,7 @@ defmodule Hologram.ComponentTest do
     end
   end
 
-  describe "put_action/2" do
+  describe "put_action/2, component struct" do
     test "name" do
       assert put_action(%Component{}, :my_action) == %Component{
                next_action: %Action{name: :my_action, params: %{}, target: nil}
@@ -96,8 +96,40 @@ defmodule Hologram.ComponentTest do
     end
   end
 
-  test "put_action/3" do
+  describe "put_action/2, server struct" do
+    test "name" do
+      assert put_action(%Server{}, :my_action) == %Server{
+               next_action: %Action{name: :my_action, params: %{}, target: nil}
+             }
+    end
+
+    test "spec: name" do
+      assert put_action(%Server{}, name: :my_action) == %Server{
+               next_action: %Action{name: :my_action, params: %{}, target: nil}
+             }
+    end
+
+    test "spec: params" do
+      assert put_action(%Server{}, params: [a: 1, b: 2]) == %Server{
+               next_action: %Action{name: nil, params: %{a: 1, b: 2}, target: nil}
+             }
+    end
+
+    test "spec: target" do
+      assert put_action(%Server{}, target: "my_target") == %Server{
+               next_action: %Action{name: nil, target: "my_target", params: %{}}
+             }
+    end
+  end
+
+  test "put_action/3, component struct" do
     assert put_action(%Component{}, :my_action, a: 1, b: 2) == %Component{
+             next_action: %Action{name: :my_action, params: %{a: 1, b: 2}, target: nil}
+           }
+  end
+
+  test "put_action/3, server struct" do
+    assert put_action(%Server{}, :my_action, a: 1, b: 2) == %Server{
              next_action: %Action{name: :my_action, params: %{a: 1, b: 2}, target: nil}
            }
   end
