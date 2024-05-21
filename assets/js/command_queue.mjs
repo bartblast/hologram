@@ -47,7 +47,9 @@ export default class CommandQueue {
           return () => CommandQueue.fail(currentItem.id);
         })(item);
 
-        Client.push("command", item.command, successCallback, failureCallback);
+        const payload = CommandQueue.#buildPayload(item);
+
+        Client.push("command", payload, successCallback, failureCallback);
       }
 
       CommandQueue.isProcessing = false;
@@ -83,5 +85,13 @@ export default class CommandQueue {
 
   static size() {
     return Object.keys(CommandQueue.items).length;
+  }
+
+  static #buildPayload(item) {
+    return Type.map([
+      [Type.atom("module"), item.module],
+      [Type.atom("name"), item.name],
+      [Type.atom("params"), item.params],
+    ]);
   }
 }
