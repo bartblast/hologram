@@ -31,6 +31,12 @@ defmodule Hologram.Socket.Decoder do
     Enum.map(data, &decode/1)
   end
 
+  def decode(%{"type" => "map", "data" => data}) do
+    data
+    |> Enum.map(fn [key, value] -> {decode(key), decode(value)} end)
+    |> Enum.into(%{})
+  end
+
   def decode(%{"type" => "pid", "segments" => [x, y, z]}) do
     IEx.Helpers.pid(x, y, z)
   end
