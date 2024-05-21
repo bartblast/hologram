@@ -308,6 +308,8 @@ describe("CommandQueue", () => {
     });
 
     it("invalid target", () => {
+      ComponentRegistry.entries = Type.map([]);
+
       assertBoxedError(
         () => CommandQueue.push(command),
         "Hologram.RuntimeError",
