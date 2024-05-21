@@ -296,6 +296,7 @@ describe("Hologram", () => {
             [Type.atom("d"), Type.integer(20)],
           ]),
           status: "pending",
+          target: cid2,
         }),
       );
     });
@@ -364,6 +365,7 @@ describe("Hologram", () => {
             [Type.atom("d"), Type.integer(20)],
           ]),
           status: "pending",
+          target: cid1,
         }),
       );
     });
