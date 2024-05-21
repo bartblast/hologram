@@ -76,6 +76,7 @@ export default class CommandQueue {
       name: Erlang_Maps["get/2"](Type.atom("name"), command),
       params: Erlang_Maps["get/2"](Type.atom("params"), command),
       status: "pending",
+      target: target,
     };
   }
 
@@ -92,6 +93,7 @@ export default class CommandQueue {
       [Type.atom("module"), item.module],
       [Type.atom("name"), item.name],
       [Type.atom("params"), item.params],
+      [Type.atom("target"), item.target],
     ]);
   }
 }

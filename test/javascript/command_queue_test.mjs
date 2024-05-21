@@ -302,6 +302,7 @@ describe("CommandQueue", () => {
         name: name,
         params: params,
         status: "pending",
+        target: target,
       });
 
       assert.deepStrictEqual(CommandQueue.items, expectedItems);
