@@ -2,6 +2,16 @@ defmodule Hologram.Commons.BitstringUtilsTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Commons.BitstringUtils
 
+  describe "from_bit_list/1" do
+    test "starting with 1" do
+      assert from_bit_list([1, 0, 1, 0]) == <<1::1, 0::1, 1::1, 0::1>>
+    end
+
+    test "starting with 0" do
+      assert from_bit_list([0, 1, 0, 1]) == <<0::1, 1::1, 0::1, 1::1>>
+    end
+  end
+
   describe "to_bit_list/1" do
     test "bitstring" do
       assert to_bit_list(<<1::1, 0::1, 1::1, 0::1>>) == [1, 0, 1, 0]
