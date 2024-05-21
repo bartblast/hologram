@@ -9,6 +9,10 @@ defmodule Hologram.Socket.Decoder do
     :page_y
   ]
 
+  @doc """
+  Returns the atoms whitelist related to client DOM events. 
+  """
+  @spec atoms_whitelist :: list(atom)
   def atoms_whitelist, do: @atoms_whitelist
 
   @doc """
