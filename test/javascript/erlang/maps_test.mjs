@@ -484,7 +484,7 @@ describe("Erlang_Maps", () => {
     });
   });
 
-  describe.only("remove/2", () => {
+  describe("remove/2", () => {
     const remove = Erlang_Maps["remove/2"];
 
     it("when the map has the given key", () => {
