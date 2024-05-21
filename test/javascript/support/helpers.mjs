@@ -154,21 +154,36 @@ export function commandFixture(data = {}) {
 }
 
 export function commandQueueItemFixture(data = {}) {
-  let {id, command, status, failCount} = data;
+  let {id, failCount, module, name, params, status} = data;
 
   if (typeof id === "undefined") {
     id = crypto.randomUUID();
-  }
-
-  if (typeof status === "undefined") {
-    status = "pending";
   }
 
   if (typeof failCount === "undefined") {
     failCount = 0;
   }
 
-  return {id, command, status, failCount};
+  if (typeof name === "undefined") {
+    name = "my_command";
+  }
+
+  if (typeof module === "undefined") {
+    module = Type.alias("MyModule");
+  }
+
+  if (typeof params === "undefined") {
+    params = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+    ]);
+  }
+
+  if (typeof status === "undefined") {
+    status = "pending";
+  }
+
+  return {id, failCount, module, name, params, status};
 }
 
 export function componentRegistryEntryFixture(data = {}) {
