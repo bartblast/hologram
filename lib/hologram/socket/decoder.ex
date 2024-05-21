@@ -2,6 +2,15 @@ defmodule Hologram.Socket.Decoder do
   alias Hologram.Commons.BitstringUtils
   alias Hologram.Commons.IntegerUtils
 
+  # This is added only to make String.to_existing_atom/1 recognize atoms related to client DOM events
+  @atoms_whitelist [
+    # click event
+    :page_x,
+    :page_y
+  ]
+
+  def atoms_whitelist, do: @atoms_whitelist
+
   @doc """
   Decodes a term serialized by the client and pre-decoded from JSON.
   """
