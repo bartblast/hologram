@@ -15,10 +15,10 @@ defmodule Hologram.Channel do
   def handle_in("command", payload, socket) do
     %{module: module, name: name, params: params, target: target} = Decoder.decode(payload)
 
-    result = apply(module, :command, [name, params, %Server{}])
+    result = module.command(name, params, %Server{})
 
     # TODO: handle session & cookies
-    reply =
+    next_action =
       case result do
         %Server{next_action: action = %Action{target: nil}} ->
           %{action | target: target}
@@ -29,8 +29,7 @@ defmodule Hologram.Channel do
         _fallback ->
           nil
       end
-      |> Encoder.encode_term()
 
-    {:reply, {:ok, reply}, socket}
+    {:reply, {:ok, Encoder.encode_term(next_action)}, socket}
   end
 end
