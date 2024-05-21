@@ -18,16 +18,18 @@ defmodule Hologram.Channel do
     result = apply(module, :command, [name, params, %Server{}])
 
     # TODO: handle session & cookies
-    server_struct =
+    reply =
       case result do
-        %Server{next_action: action = %Action{target: nil}} = server ->
-          %{server | next_action: %{action | target: target}}
+        %Server{next_action: action = %Action{target: nil}} ->
+          %{action | target: target}
 
-        fallback ->
-          fallback
+        %Server{next_action: action} ->
+          action
+
+        _fallback ->
+          nil
       end
-
-    reply = Encoder.encode_term(server_struct.next_action)
+      |> Encoder.encode_term()
 
     {:reply, {:ok, reply}, socket}
   end
