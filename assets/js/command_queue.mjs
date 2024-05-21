@@ -1,6 +1,10 @@
 "use strict";
 
+import Bitstring from "./bitstring.mjs";
 import Client from "./client.mjs";
+import ComponentRegistry from "./component_registry.mjs";
+import Interpreter from "./interpreter.mjs";
+import Type from "./type.mjs";
 
 export default class CommandQueue {
   // Made public to make tests easier
@@ -50,14 +54,26 @@ export default class CommandQueue {
     }
   }
 
+  // Deps: [:maps.get/2]
   static push(command) {
     const id = crypto.randomUUID();
+    const target = Erlang_Maps["get/2"](Type.atom("target"), command);
+    const module = ComponentRegistry.getComponentModule(target);
+
+    if (module === null) {
+      Interpreter.raiseError(
+        "Hologram.RuntimeError",
+        `invalid command target: "${Bitstring.toText(target)}"`,
+      );
+    }
 
     CommandQueue.items[id] = {
       id: id,
-      command: command,
-      status: "pending",
       failCount: 0,
+      module: module,
+      name: Erlang_Maps["get/2"](Type.atom("name"), command),
+      params: Erlang_Maps["get/2"](Type.atom("params"), command),
+      status: "pending",
     };
   }
 

@@ -2,7 +2,10 @@
 
 import {
   assert,
+  assertBoxedError,
+  commandFixture,
   commandQueueItemFixture,
+  componentRegistryEntryFixture,
   linkModules,
   sinon,
   unlinkModules,
@@ -10,6 +13,8 @@ import {
 
 import Client from "../../assets/js/client.mjs";
 import CommandQueue from "../../assets/js/command_queue.mjs";
+import ComponentRegistry from "../../assets/js/component_registry.mjs";
+import Type from "../../assets/js/type.mjs";
 
 describe("CommandQueue", () => {
   before(() => linkModules());
@@ -256,26 +261,59 @@ describe("CommandQueue", () => {
     });
   });
 
-  it("push()", () => {
-    CommandQueue.items = {};
+  describe("push()", () => {
+    const name = Type.bitstring("my_command");
 
-    CommandQueue.push("dummy_command");
+    const params = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+    ]);
 
-    const id = Object.keys(CommandQueue.items)[0];
-    assert.match(
-      id,
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-    );
+    const target = Type.bitstring("my_component");
 
-    const expectedItems = {};
-    expectedItems[id] = commandQueueItemFixture({
-      id: id,
-      command: "dummy_command",
-      status: "pending",
-      failCount: 0,
+    const command = commandFixture({name, params, target});
+
+    beforeEach(() => {
+      CommandQueue.items = {};
     });
 
-    assert.deepStrictEqual(CommandQueue.items, expectedItems);
+    it("valid target", () => {
+      const module = Type.alias("MyModule");
+
+      ComponentRegistry.entries = Type.map([
+        [target, componentRegistryEntryFixture({module: module})],
+      ]);
+
+      CommandQueue.push(command);
+
+      const id = Object.keys(CommandQueue.items)[0];
+
+      assert.match(
+        id,
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+
+      const expectedItems = {};
+
+      expectedItems[id] = commandQueueItemFixture({
+        id: id,
+        failCount: 0,
+        module: module,
+        name: name,
+        params: params,
+        status: "pending",
+      });
+
+      assert.deepStrictEqual(CommandQueue.items, expectedItems);
+    });
+
+    it("invalid target", () => {
+      assertBoxedError(
+        () => CommandQueue.push(command),
+        "Hologram.RuntimeError",
+        'invalid command target: "my_component"',
+      );
+    });
   });
 
   it("remove()", () => {

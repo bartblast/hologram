@@ -49,6 +49,9 @@ defmodule Hologram.Compiler.CallGraph do
       {:maps, :get, 3},
       {:maps, :put, 3}
     ],
+    command_queue_class: [
+      {:maps, :get, 2}
+    ],
     component_registry_class: [
       {:maps, :get, 2},
       {:maps, :get, 3}
