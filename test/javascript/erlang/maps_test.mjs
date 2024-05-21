@@ -484,6 +484,51 @@ describe("Erlang_Maps", () => {
     });
   });
 
+  describe.only("remove/2", () => {
+    const remove = Erlang_Maps["remove/2"];
+
+    it("when the map has the given key", () => {
+      const map = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+        [Type.atom("c"), Type.integer(3)],
+      ]);
+
+      const result = remove(Type.atom("b"), map);
+
+      const expected = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("c"), Type.integer(3)],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("when the map doesn't have the given key", () => {
+      const map = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("c"), Type.integer(3)],
+      ]);
+
+      const result = remove(Type.atom("b"), map);
+
+      const expected = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("c"), Type.integer(3)],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises BadMapError if the second argument is not a map", () => {
+      assertBoxedError(
+        () => remove(Type.atom("b"), Type.integer(123)),
+        "BadMapError",
+        "expected a map, got: 123",
+      );
+    });
+  });
+
   describe("to_list/1", () => {
     const to_list = Erlang_Maps["to_list/1"];
 

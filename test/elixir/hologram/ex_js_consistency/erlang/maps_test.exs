@@ -224,6 +224,22 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
   end
 
+  describe "remove/2" do
+    test "when the map has the given key" do
+      assert :maps.remove(:b, %{a: 1, b: 2, c: 3}) == %{a: 1, c: 3}
+    end
+
+    test "when the map doesn't have the given key" do
+      assert :maps.remove(:b, %{a: 1, c: 3}) == %{a: 1, c: 3}
+    end
+
+    test "raises BadMapError if the second argument is not a map" do
+      assert_raise BadMapError, "expected a map, got: 123", fn ->
+        :maps.remove(:b, 123)
+      end
+    end
+  end
+
   describe "to_list/1" do
     test "returns an empty list if given an empty map" do
       assert :maps.to_list(%{}) == []

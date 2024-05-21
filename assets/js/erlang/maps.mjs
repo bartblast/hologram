@@ -157,6 +157,20 @@ const Erlang_Maps = {
   // End put/3
   // Deps: []
 
+  // Start remove/2
+  "remove/2": (key, map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    const newMap = Utils.cloneDeep(map);
+    delete newMap.data[Type.encodeMapKey(key)];
+
+    return newMap;
+  },
+  // End remove/2
+  // Deps: []
+
   // TODO: implement iterators
   // Start to_list/1
   "to_list/1": (mapOrIterator) => {
