@@ -154,7 +154,7 @@ export function commandFixture(data = {}) {
 }
 
 export function commandQueueItemFixture(data = {}) {
-  let {id, failCount, module, name, params, status} = data;
+  let {id, failCount, module, name, params, status, target} = data;
 
   if (typeof id === "undefined") {
     id = crypto.randomUUID();
@@ -183,7 +183,11 @@ export function commandQueueItemFixture(data = {}) {
     status = "pending";
   }
 
-  return {id, failCount, module, name, params, status};
+  if (typeof target === "undefined") {
+    target = "my_target";
+  }
+
+  return {id, failCount, module, name, params, status, target};
 }
 
 export function componentRegistryEntryFixture(data = {}) {
