@@ -10,6 +10,10 @@ defmodule Hologram.Socket.DecoderTest do
     assert decode("__binary__:a\"bc") == "a\"bc"
   end
 
+  test "bitstring (which is not a binary)" do
+    assert decode(%{"type" => "bitstring", "bits" => [1, 0, 1, 0]}) == <<1::1, 0::1, 1::1, 0::1>>
+  end
+
   describe "float" do
     test "float" do
       assert decode(%{"type" => "float", "value" => 1.0}) === 1.0

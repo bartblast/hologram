@@ -1,4 +1,5 @@
 defmodule Hologram.Socket.Decoder do
+  alias Hologram.Commons.BitstringUtils
   alias Hologram.Commons.IntegerUtils
 
   @doc """
@@ -13,6 +14,10 @@ defmodule Hologram.Socket.Decoder do
 
   def decode("__binary__:" <> value) do
     value
+  end
+
+  def decode(%{"type" => "bitstring", "bits" => bits}) do
+    BitstringUtils.from_bit_list(bits)
   end
 
   def decode(%{"type" => "float", "value" => value}) when is_integer(value) do
