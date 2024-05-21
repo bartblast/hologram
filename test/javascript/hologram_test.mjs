@@ -4,6 +4,7 @@ import {
   actionFixture,
   assert,
   commandFixture,
+  commandQueueItemFixture,
   componentRegistryEntryFixture,
   linkModules,
   sinon,
@@ -233,6 +234,7 @@ describe("Hologram", () => {
     it("with next command having target specified", () => {
       ComponentRegistry.entries = Type.map([
         [cid1, componentRegistryEntryFixture({module: module4})],
+        [cid2, componentRegistryEntryFixture({module: module5})],
       ]);
 
       const action = actionFixture({
@@ -272,6 +274,7 @@ describe("Hologram", () => {
               state: Type.map([[Type.atom("x"), Type.integer(7)]]),
             }),
           ],
+          [cid2, componentRegistryEntryFixture({module: module5})],
         ]),
       );
 
@@ -280,17 +283,19 @@ describe("Hologram", () => {
 
       assert.equal(CommandQueue.size(), 1);
 
-      const enqueuedCommand = CommandQueue.getNextPending().command;
+      const enqueuedItem = CommandQueue.getNextPending();
 
       assert.deepStrictEqual(
-        enqueuedCommand,
-        commandFixture({
+        enqueuedItem,
+        commandQueueItemFixture({
+          id: enqueuedItem.id,
+          module: module5,
           name: Type.atom("my_command_5"),
           params: Type.map([
             [Type.atom("c"), Type.integer(10)],
             [Type.atom("d"), Type.integer(20)],
           ]),
-          target: cid2,
+          status: "pending",
         }),
       );
     });
@@ -345,17 +350,20 @@ describe("Hologram", () => {
 
       assert.equal(CommandQueue.size(), 1);
 
-      const enqueuedCommand = CommandQueue.getNextPending().command;
+      const enqueuedItem = CommandQueue.getNextPending();
 
       assert.deepStrictEqual(
-        enqueuedCommand,
-        commandFixture({
+        enqueuedItem,
+        commandQueueItemFixture({
+          id: enqueuedItem.id,
+          failCount: 0,
+          module: module5,
           name: Type.atom("my_command_6"),
           params: Type.map([
             [Type.atom("c"), Type.integer(10)],
             [Type.atom("d"), Type.integer(20)],
           ]),
-          target: cid1,
+          status: "pending",
         }),
       );
     });
