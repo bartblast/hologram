@@ -1,7 +1,7 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
-import Interpreter from "./interpreter.mjs";
+import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Type from "./type.mjs";
 
 export default class JsonEncoder {
@@ -12,8 +12,7 @@ export default class JsonEncoder {
 
     switch (term.type) {
       case "anonymous_function":
-        Interpreter.raiseError(
-          "Hologram.RuntimeError",
+        throw new HologramRuntimeError(
           "can't JSON encode boxed anonymous functions",
         );
 
@@ -93,8 +92,7 @@ export default class JsonEncoder {
 
   static #encodePid(term) {
     if (term.origin === "client") {
-      Interpreter.raiseError(
-        "Hologram.RuntimeError",
+      throw new HologramRuntimeError(
         "can't JSON encode PIDs originating in client",
       );
     }
@@ -104,8 +102,7 @@ export default class JsonEncoder {
 
   static #encodePort(term) {
     if (term.origin === "client") {
-      Interpreter.raiseError(
-        "Hologram.RuntimeError",
+      throw new HologramRuntimeError(
         "can't JSON encode ports originating in client",
       );
     }
@@ -115,8 +112,7 @@ export default class JsonEncoder {
 
   static #encodeReference(term) {
     if (term.origin === "client") {
-      Interpreter.raiseError(
-        "Hologram.RuntimeError",
+      throw new HologramRuntimeError(
         "can't JSON encode references originating in client",
       );
     }
