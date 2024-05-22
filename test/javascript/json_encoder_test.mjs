@@ -2,6 +2,7 @@
 
 import {
   assert,
+  assertBoxedError,
   contextFixture,
   linkModules,
   unlinkModules,
@@ -19,9 +20,9 @@ describe("JsonEncoder", () => {
     it("boxed anonymous function", () => {
       const term = Type.anonymousFunction(2, [], contextFixture());
 
-      assert.throw(
+      assertBoxedError(
         () => JsonEncoder.encode(term),
-        HologramInterpreterError,
+        "Hologram.RuntimeError",
         "can't JSON encode boxed anonymous functions",
       );
     });
@@ -90,9 +91,9 @@ describe("JsonEncoder", () => {
       it("originating in client", () => {
         const term = Type.pid("my_node@my_host", [0, 11, 222], "client");
 
-        assert.throw(
+        assertBoxedError(
           () => JsonEncoder.encode(term),
-          HologramInterpreterError,
+          "Hologram.RuntimeError",
           "can't JSON encode PIDs originating in client",
         );
       });
@@ -109,9 +110,9 @@ describe("JsonEncoder", () => {
       it("originating in client", () => {
         const term = Type.port("0.11", "client");
 
-        assert.throw(
+        assertBoxedError(
           () => JsonEncoder.encode(term),
-          HologramInterpreterError,
+          "Hologram.RuntimeError",
           "can't JSON encode ports originating in client",
         );
       });
@@ -128,9 +129,9 @@ describe("JsonEncoder", () => {
       it("originating in client", () => {
         const term = Type.reference("0.1.2.3", "client");
 
-        assert.throw(
+        assertBoxedError(
           () => JsonEncoder.encode(term),
-          HologramInterpreterError,
+          "Hologram.RuntimeError",
           "can't JSON encode references originating in client",
         );
       });
