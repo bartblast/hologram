@@ -16,6 +16,7 @@ export default class Client {
       encode: Client.encoder,
       longPollFallbackMs: 3000,
     });
+
     Client.socket.connect();
 
     Client.#channel = Client.socket.channel("hologram");
