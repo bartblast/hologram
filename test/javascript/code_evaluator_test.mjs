@@ -9,7 +9,7 @@ describe("CodeEvaluator", () => {
   before(() => linkModules());
   after(() => unlinkModules());
 
-  it.only("evaluate()", () => {
+  it("evaluate()", () => {
     //  %{a: 1, b: 2}.a
     const code =
       'Interpreter.dotOperator(Type.map([[Type.atom("a"), Type.integer(1n)], [Type.atom("b"), Type.integer(2n)]]), Type.atom("a"))';
