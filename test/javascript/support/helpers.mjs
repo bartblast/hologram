@@ -22,34 +22,6 @@ export {assert} from "../../../assets/node_modules/chai/index.js";
 export * as sinon from "../../../assets/node_modules/sinon/pkg/sinon-esm.js";
 export {h as vnode} from "../../../assets/node_modules/snabbdom/build/index.js";
 
-export function actionFixture(data = {}) {
-  let actionStruct = elixirHologramComponentActionStruct0();
-
-  const {name, params, target} = data;
-
-  if (typeof name !== "undefined") {
-    actionStruct = Erlang_Maps["put/3"](Type.atom("name"), name, actionStruct);
-  }
-
-  if (typeof params !== "undefined") {
-    actionStruct = Erlang_Maps["put/3"](
-      Type.atom("params"),
-      params,
-      actionStruct,
-    );
-  }
-
-  if (typeof target !== "undefined") {
-    actionStruct = Erlang_Maps["put/3"](
-      Type.atom("target"),
-      target,
-      actionStruct,
-    );
-  }
-
-  return actionStruct;
-}
-
 export function assertBoxedError(
   callable,
   expectedErrorType,
@@ -257,14 +229,6 @@ export function contextFixture(data = {}) {
   return Interpreter.buildContext({module: module, vars: vars});
 }
 
-export function elixirHologramComponentActionStruct0() {
-  return Type.struct("Hologram.Component.Action", [
-    [Type.atom("name"), Type.nil()],
-    [Type.atom("params"), Type.map([])],
-    [Type.atom("target"), Type.nil()],
-  ]);
-}
-
 export function elixirHologramComponentCommandStruct0() {
   return Type.struct("Hologram.Component.Command", [
     [Type.atom("name"), Type.nil()],
@@ -348,10 +312,6 @@ export function linkModules() {
   globalThis.Elixir_Hologram_Component["__struct__/0"] =
     elixirHologramComponentStruct0;
 
-  globalThis.Elixir_Hologram_Component_Action = {};
-  globalThis.Elixir_Hologram_Component_Action["__struct__/0"] =
-    elixirHologramComponentActionStruct0;
-
   globalThis.Elixir_Hologram_Component_Command = {};
   globalThis.Elixir_Hologram_Component_Command["__struct__/0"] =
     elixirHologramComponentCommandStruct0;
@@ -400,7 +360,6 @@ export function unlinkModules() {
   delete globalThis.Elixir_Code;
   delete globalThis.Elixir_Enum;
   delete globalThis.Elixir_Hologram_Component;
-  delete globalThis.Elixir_Hologram_Component_Action;
   delete globalThis.Elixir_Hologram_Component_Command;
   delete globalThis.Elixir_Kernel;
   delete globalThis.Elixir_String_Chars;

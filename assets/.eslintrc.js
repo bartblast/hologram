@@ -9,7 +9,6 @@ module.exports = {
     Elixir_Code: "readonly",
     Elixir_Enum: "readonly",
     Elixir_Hologram_Component: "readonly",
-    Elixir_Hologram_Component_Action: "readonly",
     Elixir_Hologram_Component_Command: "readonly",
     Elixir_Hologram_Template_Renderer: "readonly",
     Elixir_Kernel: "readonly",

@@ -1,7 +1,6 @@
 "use strict";
 
 import {
-  actionFixture,
   assert,
   commandFixture,
   commandQueueItemFixture,
@@ -68,7 +67,7 @@ describe("Hologram", () => {
         [cid1, componentRegistryEntryFixture({module: module1})],
       ]);
 
-      const action = actionFixture({
+      const action = Type.actionStruct({
         name: Type.atom("my_action_1"),
         params: Type.map([
           [Type.atom("a"), Type.integer(1)],
@@ -120,7 +119,7 @@ describe("Hologram", () => {
         [cid2, componentRegistryEntryFixture({module: module6})],
       ]);
 
-      const action = actionFixture({
+      const action = Type.actionStruct({
         name: Type.atom("my_action_2"),
         params: Type.map([
           [Type.atom("a"), Type.integer(1)],
@@ -181,7 +180,7 @@ describe("Hologram", () => {
         [cid1, componentRegistryEntryFixture({module: module3})],
       ]);
 
-      const action = actionFixture({
+      const action = Type.actionStruct({
         name: Type.atom("my_action_3a"),
         params: Type.map([
           [Type.atom("a"), Type.integer(1)],
@@ -237,7 +236,7 @@ describe("Hologram", () => {
         [cid2, componentRegistryEntryFixture({module: module5})],
       ]);
 
-      const action = actionFixture({
+      const action = Type.actionStruct({
         name: Type.atom("my_action_4"),
         params: Type.map([
           [Type.atom("a"), Type.integer(1)],
@@ -306,7 +305,7 @@ describe("Hologram", () => {
         [cid1, componentRegistryEntryFixture({module: module5})],
       ]);
 
-      const action = actionFixture({
+      const action = Type.actionStruct({
         name: Type.atom("my_action_5"),
         params: Type.map([
           [Type.atom("a"), Type.integer(1)],

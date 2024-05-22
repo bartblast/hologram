@@ -26,11 +26,11 @@ export default class Operation {
       operation.#constructFromMultiChunkSyntaxSpec();
     }
 
-    return Type.struct("Hologram.Component.Action", [
-      [Type.atom("name"), operation.name],
-      [Type.atom("params"), operation.params],
-      [Type.atom("target"), operation.target],
-    ]);
+    return Type.actionStruct({
+      name: operation.name,
+      params: operation.params,
+      target: operation.target,
+    });
   }
 
   // Deps: [:maps.get/2]

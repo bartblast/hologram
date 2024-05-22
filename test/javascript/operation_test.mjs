@@ -1,7 +1,6 @@
 "use strict";
 
 import {
-  actionFixture,
   assert,
   commandFixture,
   linkModules,
@@ -33,11 +32,11 @@ describe("Operation", () => {
 
       assert.deepStrictEqual(
         operation,
-        Type.struct("Hologram.Component.Action", [
-          [Type.atom("name"), Type.atom("my_action")],
-          [Type.atom("params"), Type.map([[Type.atom("event"), eventParam]])],
-          [Type.atom("target"), defaultTarget],
-        ]),
+        Type.actionStruct({
+          name: Type.atom("my_action"),
+          params: Type.map([[Type.atom("event"), eventParam]]),
+          target: defaultTarget,
+        }),
       );
     });
 
@@ -55,11 +54,11 @@ describe("Operation", () => {
 
       assert.deepStrictEqual(
         operation,
-        Type.struct("Hologram.Component.Action", [
-          [Type.atom("name"), Type.atom("my_action")],
-          [Type.atom("params"), Type.map([[Type.atom("event"), eventParam]])],
-          [Type.atom("target"), defaultTarget],
-        ]),
+        Type.actionStruct({
+          name: Type.atom("my_action"),
+          params: Type.map([[Type.atom("event"), eventParam]]),
+          target: defaultTarget,
+        }),
       );
     });
 
@@ -86,18 +85,15 @@ describe("Operation", () => {
 
       assert.deepStrictEqual(
         operation,
-        Type.struct("Hologram.Component.Action", [
-          [Type.atom("name"), Type.atom("my_action")],
-          [
-            Type.atom("params"),
-            Type.map([
-              [Type.atom("a"), Type.integer(1)],
-              [Type.atom("b"), Type.integer(2)],
-              [Type.atom("event"), eventParam],
-            ]),
-          ],
-          [Type.atom("target"), defaultTarget],
-        ]),
+        Type.actionStruct({
+          name: Type.atom("my_action"),
+          params: Type.map([
+            [Type.atom("a"), Type.integer(1)],
+            [Type.atom("b"), Type.integer(2)],
+            [Type.atom("event"), eventParam],
+          ]),
+          target: defaultTarget,
+        }),
       );
     });
 
@@ -106,7 +102,7 @@ describe("Operation", () => {
       const specDom = Type.keywordList([
         [
           Type.atom("expression"),
-          Type.tuple([actionFixture({name: Type.atom("my_action")})]),
+          Type.tuple([Type.actionStruct({name: Type.atom("my_action")})]),
         ],
       ]);
 
@@ -118,7 +114,7 @@ describe("Operation", () => {
 
       assert.deepStrictEqual(
         operation,
-        actionFixture({
+        Type.actionStruct({
           name: Type.atom("my_action"),
           params: Type.map([[Type.atom("event"), eventParam]]),
           target: defaultTarget,
@@ -159,7 +155,7 @@ describe("Operation", () => {
         [
           Type.atom("expression"),
           Type.tuple([
-            actionFixture({name: Type.atom("my_action"), target: target}),
+            Type.actionStruct({name: Type.atom("my_action"), target: target}),
           ]),
         ],
       ]);
@@ -172,7 +168,7 @@ describe("Operation", () => {
 
       assert.deepStrictEqual(
         operation,
-        actionFixture({
+        Type.actionStruct({
           name: Type.atom("my_action"),
           params: Type.map([[Type.atom("event"), eventParam]]),
           target: target,
@@ -186,7 +182,7 @@ describe("Operation", () => {
         [
           Type.atom("expression"),
           Type.tuple([
-            actionFixture({
+            Type.actionStruct({
               name: Type.atom("my_action"),
               params: Type.map([
                 [Type.atom("a"), Type.integer(1)],
@@ -205,7 +201,7 @@ describe("Operation", () => {
 
       assert.deepStrictEqual(
         operation,
-        actionFixture({
+        Type.actionStruct({
           name: Type.atom("my_action"),
           params: Type.map([
             [Type.atom("a"), Type.integer(1)],
@@ -233,7 +229,7 @@ describe("Operation", () => {
 
       assert.deepStrictEqual(
         operation,
-        actionFixture({
+        Type.actionStruct({
           name: Type.atom("aaa123bbb"),
           params: Type.map([[Type.atom("event"), eventParam]]),
           target: defaultTarget,
@@ -244,11 +240,11 @@ describe("Operation", () => {
 
   describe("isAction()", () => {
     it("action", () => {
-      const action = Type.struct("Hologram.Component.Action", [
-        [Type.atom("name"), Type.atom("my_action")],
-        [Type.atom("params"), Type.map([])],
-        [Type.atom("target"), Type.bitstring("my_target")],
-      ]);
+      const action = Type.actionStruct({
+        name: Type.atom("my_action"),
+        params: Type.map([]),
+        target: Type.bitstring("my_target"),
+      });
 
       assert.isTrue(Operation.isAction(action));
     });

@@ -1,11 +1,6 @@
 "use strict";
 
-import {
-  actionFixture,
-  putAction,
-  putContext,
-  putState,
-} from "../../helpers.mjs";
+import {putAction, putContext, putState} from "../../helpers.mjs";
 
 import Interpreter from "../../../../../assets/js/interpreter.mjs";
 import Type from "../../../../../assets/js/type.mjs";
@@ -64,7 +59,7 @@ export function defineModule3Fixture() {
             ),
             Type.map([[Type.atom("event"), context.vars.event]]),
           ),
-          actionFixture({
+          Type.actionStruct({
             name: Type.atom("my_action_3b"),
             params: Type.map([
               [Type.atom("c"), Type.integer(10)],
