@@ -8,6 +8,28 @@ import Sequence from "./sequence.mjs";
 import Utils from "./utils.mjs";
 
 export default class Type {
+  static actionStruct(data = {}) {
+    let {name, params, target} = data;
+
+    if (typeof name === "undefined") {
+      name = Type.nil();
+    }
+
+    if (typeof params === "undefined") {
+      params = Type.map([]);
+    }
+
+    if (typeof target === "undefined") {
+      target = Type.nil();
+    }
+
+    return Type.struct("Hologram.Component.Action", [
+      [Type.atom("name"), name],
+      [Type.atom("params"), params],
+      [Type.atom("target"), target],
+    ]);
+  }
+
   static alias(aliasStr) {
     return Type.atom(`Elixir.${aliasStr}`);
   }
