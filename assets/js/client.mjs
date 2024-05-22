@@ -1,6 +1,6 @@
 "use strict";
 
-import Serializer from "./serializer.mjs";
+import JsonEncoder from "./json_encoder.mjs";
 
 import {Socket} from "phoenix";
 
@@ -29,7 +29,7 @@ export default class Client {
 
   static encoder(msg, callback) {
     return callback(
-      Serializer.serialize([
+      JsonEncoder.encode([
         msg.join_ref,
         msg.ref,
         msg.topic,

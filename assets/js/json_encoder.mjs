@@ -4,8 +4,8 @@ import Bitstring from "./bitstring.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Type from "./type.mjs";
 
-export default class Serializer {
-  static serialize(term) {
+export default class JsonEncoder {
+  static encode(term) {
     if (term === null || typeof term === "undefined") {
       return "null";
     }
@@ -13,36 +13,36 @@ export default class Serializer {
     switch (term.type) {
       case "anonymous_function":
         throw new HologramInterpreterError(
-          "can't serialize boxed anonymous functions",
+          "can't JSON encode boxed anonymous functions",
         );
 
       case "bitstring":
-        return Serializer.#serializeBitstring(term);
+        return JsonEncoder.#encodeBitstring(term);
 
       case "integer":
-        return Serializer.serialize(term.value);
+        return JsonEncoder.encode(term.value);
 
       case "list":
-        return Serializer.#serializeList(term);
+        return JsonEncoder.#encodeList(term);
 
       case "map":
-        return Serializer.#serializeMap(term);
+        return JsonEncoder.#encodeMap(term);
 
       case "pid":
-        return Serializer.#serializePid(term);
+        return JsonEncoder.#encodePid(term);
 
       case "port":
-        return Serializer.#serializePort(term);
+        return JsonEncoder.#encodePort(term);
 
       case "reference":
-        return Serializer.#serializeReference(term);
+        return JsonEncoder.#encodeReference(term);
 
       case "tuple":
-        return Serializer.#serializeTuple(term);
+        return JsonEncoder.#encodeTuple(term);
 
       default:
         if (Array.isArray(term)) {
-          return Serializer.#serializeArray(term);
+          return JsonEncoder.#encodeArray(term);
         }
 
         return JSON.stringify(term, (_key, value) => {
@@ -59,68 +59,68 @@ export default class Serializer {
     return str.replace(/"/g, '\\"');
   }
 
-  static #serializeArray(term) {
-    return `[${Serializer.#serializeEnumData(term)}]`;
+  static #encodeArray(term) {
+    return `[${JsonEncoder.#encodeEnumData(term)}]`;
   }
 
-  static #serializeBitstring(term) {
+  static #encodeBitstring(term) {
     if (Type.isBinary(term)) {
-      return `"__binary__:${Serializer.#escapeDoubleQuotes(Bitstring.toText(term))}"`;
+      return `"__binary__:${JsonEncoder.#escapeDoubleQuotes(Bitstring.toText(term))}"`;
     }
 
     return JSON.stringify(term);
   }
 
-  static #serializeEnumData(data) {
-    return data.map((item) => Serializer.serialize(item)).join(",");
+  static #encodeEnumData(data) {
+    return data.map((item) => JsonEncoder.encode(item)).join(",");
   }
 
-  static #serializeList(term) {
-    return `{"type":"list","data":[${Serializer.#serializeEnumData(term.data)}]}`;
+  static #encodeList(term) {
+    return `{"type":"list","data":[${JsonEncoder.#encodeEnumData(term.data)}]}`;
   }
 
-  static #serializeMap(term) {
+  static #encodeMap(term) {
     const dataOutput = Object.values(term.data)
       .map(
         ([key, value]) =>
-          `[${Serializer.serialize(key)},${Serializer.serialize(value)}]`,
+          `[${JsonEncoder.encode(key)},${JsonEncoder.encode(value)}]`,
       )
       .join(",");
 
     return `{"type":"map","data":[${dataOutput}]}`;
   }
 
-  static #serializePid(term) {
+  static #encodePid(term) {
     if (term.origin === "client") {
       throw new HologramInterpreterError(
-        "can't serialize PIDs originating in client",
+        "can't JSON encode PIDs originating in client",
       );
     }
 
-    return `{"type":"pid","segments":${Serializer.serialize(term.segments)}}`;
+    return `{"type":"pid","segments":${JsonEncoder.encode(term.segments)}}`;
   }
 
-  static #serializePort(term) {
+  static #encodePort(term) {
     if (term.origin === "client") {
       throw new HologramInterpreterError(
-        "can't serialize ports originating in client",
+        "can't JSON encode ports originating in client",
       );
     }
 
     return `{"type":"port","value":"${term.value}"}`;
   }
 
-  static #serializeReference(term) {
+  static #encodeReference(term) {
     if (term.origin === "client") {
       throw new HologramInterpreterError(
-        "can't serialize references originating in client",
+        "can't JSON encode references originating in client",
       );
     }
 
     return `{"type":"reference","value":"${term.value}"}`;
   }
 
-  static #serializeTuple(term) {
-    return `{"type":"tuple","data":[${Serializer.#serializeEnumData(term.data)}]}`;
+  static #encodeTuple(term) {
+    return `{"type":"tuple","data":[${JsonEncoder.#encodeEnumData(term.data)}]}`;
   }
 }

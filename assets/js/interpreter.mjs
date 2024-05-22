@@ -7,7 +7,7 @@ import Bitstring from "./bitstring.mjs";
 import Console from "./console.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramMatchError from "./errors/match_error.mjs";
-import Serializer from "./serializer.mjs";
+import JsonEncoder from "./json_encoder.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
@@ -424,7 +424,7 @@ export default class Interpreter {
 
       // TODO: remove when all types are supported
       default:
-        return Serializer.serialize(term);
+        return JsonEncoder.encode(term);
     }
   }
 

@@ -15,7 +15,7 @@ import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import HologramMatchError from "../../../assets/js/errors/match_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
-import Serializer from "../../../assets/js/serializer.mjs";
+import JsonEncoder from "../../../assets/js/json_encoder.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 export {assert} from "../../../assets/node_modules/chai/index.js";
@@ -328,7 +328,7 @@ export function inspectEx(term) {
 }
 
 export function inspectJs(term) {
-  console.log(Serializer.serialize(term));
+  console.log(JsonEncoder.encode(term));
 
   return term;
 }
