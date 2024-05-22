@@ -338,6 +338,7 @@ export default class Interpreter {
   }
 
   static evaluateTranspiledCode(code) {
+    // See why not to use eval() with esbuild and in general: https://esbuild.github.io/content-types/#direct-eval
     return new Function("Type", "Interpreter", `return (${code});`)(
       Type,
       Interpreter,
