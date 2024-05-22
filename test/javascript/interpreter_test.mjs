@@ -2247,6 +2247,16 @@ describe("Interpreter", () => {
     });
   });
 
+  it("evaluateTranspiledCode()", () => {
+    //  %{a: 1, b: 2}.a
+    const code =
+      'Interpreter.dotOperator(Type.map([[Type.atom("a"), Type.integer(1n)], [Type.atom("b"), Type.integer(2n)]]), Type.atom("a"))';
+
+    const result = Interpreter.evaluateTranspiledCode(code);
+
+    assert.deepStrictEqual(result, Type.integer(1));
+  });
+
   it("getErrorMessage()", () => {
     const errorStruct = Type.errorStruct("MyError", "my message");
     const jsError = new HologramBoxedError(errorStruct);

@@ -337,6 +337,13 @@ export default class Interpreter {
     return Erlang_Maps["get/2"](right, left);
   }
 
+  static evaluateTranspiledCode(code) {
+    return new Function("Type", "Interpreter", `return (${code});`)(
+      Type,
+      Interpreter,
+    );
+  }
+
   static getErrorMessage(jsError) {
     // TODO: use transpiled Elixir code
     return Bitstring.toText(jsError.struct.data["atom(message)"][1]);

@@ -2,7 +2,6 @@
 
 import Bitstring from "./bitstring.mjs";
 import Client from "./client.mjs";
-import CodeEvaluator from "./code_evaluator.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Hologram from "./hologram.mjs";
 import Interpreter from "./interpreter.mjs";
@@ -45,7 +44,7 @@ export default class CommandQueue {
           return (resp) => {
             CommandQueue.remove(currentItem.id);
 
-            const nextAction = CodeEvaluator.evaluate(resp);
+            const nextAction = Interpreter.evaluateTranspiledCode(resp);
 
             if (!Type.isNil(nextAction)) {
               Hologram.executeAction(nextAction);
