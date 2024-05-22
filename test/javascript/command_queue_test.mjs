@@ -2,7 +2,6 @@
 
 import {
   assert,
-  assertBoxedError,
   commandFixture,
   commandQueueItemFixture,
   componentRegistryEntryFixture,
@@ -15,6 +14,7 @@ import Client from "../../assets/js/client.mjs";
 import CommandQueue from "../../assets/js/command_queue.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
+import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import Type from "../../assets/js/type.mjs";
 
 describe("CommandQueue", () => {
@@ -348,9 +348,9 @@ describe("CommandQueue", () => {
     it("invalid target", () => {
       ComponentRegistry.entries = Type.map([]);
 
-      assertBoxedError(
+      assert.throw(
         () => CommandQueue.push(command),
-        "Hologram.RuntimeError",
+        HologramRuntimeError,
         'invalid command target: "my_component"',
       );
     });

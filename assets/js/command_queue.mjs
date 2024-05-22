@@ -4,6 +4,7 @@ import Bitstring from "./bitstring.mjs";
 import Client from "./client.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Hologram from "./hologram.mjs";
+import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 
@@ -72,8 +73,7 @@ export default class CommandQueue {
     const module = ComponentRegistry.getComponentModule(target);
 
     if (module === null) {
-      Interpreter.raiseError(
-        "Hologram.RuntimeError",
+      throw new HologramRuntimeError(
         `invalid command target: "${Bitstring.toText(target)}"`,
       );
     }
