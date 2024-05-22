@@ -207,5 +207,12 @@ describe("Serializer", () => {
 
       assert.equal(Serializer.serialize(term), expected);
     });
+
+    it("JS undefined", () => {
+      const term = undefined;
+      const expected = "null";
+
+      assert.equal(Serializer.serialize(term), expected);
+    });
   });
 });

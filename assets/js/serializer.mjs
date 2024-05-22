@@ -6,7 +6,7 @@ import Type from "./type.mjs";
 
 export default class Serializer {
   static serialize(term) {
-    if (term === null) {
+    if (term === null || typeof term === "undefined") {
       return "null";
     }
 
