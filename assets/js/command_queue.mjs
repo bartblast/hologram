@@ -3,8 +3,10 @@
 import Bitstring from "./bitstring.mjs";
 import Client from "./client.mjs";
 import ComponentRegistry from "./component_registry.mjs";
+import Hologram from "./hologram.mjs";
 import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
+import Utils from "./utils.mjs";
 
 export default class CommandQueue {
   // Made public to make tests easier
@@ -40,7 +42,15 @@ export default class CommandQueue {
         item.status = "sending";
 
         const successCallback = ((currentItem) => {
-          return () => CommandQueue.remove(currentItem.id);
+          return (resp) => {
+            CommandQueue.remove(currentItem.id);
+
+            const nextAction = Utils.evaluate(resp);
+
+            if (!Type.isNil(nextAction)) {
+              Hologram.executeAction(nextAction);
+            }
+          };
         })(item);
 
         const failureCallback = ((currentItem) => {

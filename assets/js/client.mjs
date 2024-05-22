@@ -46,7 +46,7 @@ export default class Client {
   static async push(event, payload, successCallback, failureCallback) {
     Client.#channel
       .push(event, payload)
-      .receive("ok", (_resp) => successCallback())
+      .receive("ok", (resp) => successCallback(resp))
       .receive("error", (_resp) => {
         failureCallback();
         console.error(
