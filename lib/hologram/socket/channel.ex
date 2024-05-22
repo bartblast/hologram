@@ -1,4 +1,4 @@
-defmodule Hologram.Channel do
+defmodule Hologram.Socket.Channel do
   use Phoenix.Channel
 
   alias Hologram.Compiler.Encoder

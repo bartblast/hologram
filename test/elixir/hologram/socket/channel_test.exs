@@ -1,6 +1,6 @@
-defmodule Hologram.ChannelTest do
+defmodule Hologram.Socket.ChannelTest do
   use Hologram.Test.BasicCase, async: true
-  import Hologram.Channel
+  import Hologram.Socket.Channel
 
   # Make sure String.to_existing_atom/1 recognizes atoms from the fixture component
   Code.ensure_loaded(Hologram.Test.Fixtures.Socket.Channel.Module1)
@@ -101,7 +101,7 @@ defmodule Hologram.ChannelTest do
 
     test "invalid topic name" do
       assert_raise FunctionClauseError,
-                   "no function clause matching in Hologram.Channel.join/3",
+                   "no function clause matching in Hologram.Socket.Channel.join/3",
                    fn ->
                      join("invalid", :dummy_payload, :dummy_socket)
                    end
