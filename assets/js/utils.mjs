@@ -34,8 +34,4 @@ export default class Utils {
       return mergedArr;
     }, new Uint8Array());
   }
-
-  static evaluate(code) {
-    return new Function(`return (${code});`)();
-  }
 }

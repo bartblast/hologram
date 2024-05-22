@@ -83,9 +83,4 @@ describe("Utils", () => {
       assert.deepStrictEqual(result, expected);
     });
   });
-
-  it("evaluate()", () => {
-    const result = Utils.evaluate("{value: 2 + 2}");
-    assert.deepStrictEqual(result, {value: 4});
-  });
 });
