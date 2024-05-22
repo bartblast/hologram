@@ -14,6 +14,7 @@ import {
 import Client from "../../assets/js/client.mjs";
 import CommandQueue from "../../assets/js/command_queue.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
+import Hologram from "../../assets/js/hologram.mjs";
 import Type from "../../assets/js/type.mjs";
 
 describe("CommandQueue", () => {
@@ -166,7 +167,7 @@ describe("CommandQueue", () => {
       Client.isConnected.restore();
     });
 
-    it("non-empty queue, queue is not being processed and the client is connected", () => {
+    it("non-empty queue, queue is not being processed and the client is connected, next action is nil", () => {
       CommandQueue.isProcessing = false;
 
       const isConnectedStub = sinon
@@ -180,6 +181,10 @@ describe("CommandQueue", () => {
           successCallbacks.push(successCallback),
         );
 
+      const executeAction = sinon
+        .stub(Hologram, "executeAction")
+        .callsFake((_action) => null);
+
       CommandQueue.process();
 
       assert.equal(CommandQueue.size(), 4);
@@ -190,7 +195,7 @@ describe("CommandQueue", () => {
 
       assert.isFalse(CommandQueue.isProcessing);
 
-      successCallbacks.forEach((callback) => callback());
+      successCallbacks.forEach((callback) => callback("Type.nil()"));
 
       assert.deepStrictEqual(CommandQueue.items, {
         a: commandQueueItemFixture({
@@ -212,6 +217,38 @@ describe("CommandQueue", () => {
 
       sinon.assert.calledTwice(pushStub);
       Client.push.restore();
+
+      sinon.assert.notCalled(executeAction);
+      Hologram.executeAction.restore();
+    });
+
+    it("it executes next action if it is not nil", () => {
+      CommandQueue.isProcessing = false;
+
+      sinon.stub(Client, "isConnected").callsFake(() => true);
+
+      const successCallbacks = [];
+
+      sinon
+        .stub(Client, "push")
+        .callsFake((_event, _payload, successCallback, _failureCallback) =>
+          successCallbacks.push(successCallback),
+        );
+
+      const executeAction = sinon
+        .stub(Hologram, "executeAction")
+        .callsFake((_action) => null);
+
+      CommandQueue.process();
+
+      successCallbacks.forEach((callback) => callback('"dummy_action"'));
+
+      Client.isConnected.restore();
+      Client.push.restore();
+
+      sinon.assert.calledTwice(executeAction);
+      sinon.assert.alwaysCalledWithExactly(executeAction, "dummy_action");
+      Hologram.executeAction.restore();
     });
 
     it("commands fail", () => {

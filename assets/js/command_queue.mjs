@@ -2,11 +2,11 @@
 
 import Bitstring from "./bitstring.mjs";
 import Client from "./client.mjs";
+import CodeEvaluator from "./code_evaluator.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Hologram from "./hologram.mjs";
 import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
-import Utils from "./utils.mjs";
 
 export default class CommandQueue {
   // Made public to make tests easier
@@ -45,7 +45,7 @@ export default class CommandQueue {
           return (resp) => {
             CommandQueue.remove(currentItem.id);
 
-            const nextAction = Utils.evaluate(resp);
+            const nextAction = CodeEvaluator.evaluate(resp);
 
             if (!Type.isNil(nextAction)) {
               Hologram.executeAction(nextAction);
