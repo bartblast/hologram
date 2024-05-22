@@ -259,25 +259,25 @@ export function contextFixture(data = {}) {
 
 export function elixirHologramComponentActionStruct0() {
   return Type.struct("Hologram.Component.Action", [
-    [Type.atom("name"), Type.atom("nil")],
+    [Type.atom("name"), Type.nil()],
     [Type.atom("params"), Type.map([])],
-    [Type.atom("target"), Type.atom("nil")],
+    [Type.atom("target"), Type.nil()],
   ]);
 }
 
 export function elixirHologramComponentCommandStruct0() {
   return Type.struct("Hologram.Component.Command", [
-    [Type.atom("name"), Type.atom("nil")],
+    [Type.atom("name"), Type.nil()],
     [Type.atom("params"), Type.map([])],
-    [Type.atom("target"), Type.atom("nil")],
+    [Type.atom("target"), Type.nil()],
   ]);
 }
 
 export function elixirHologramComponentStruct0() {
   return Type.struct("Hologram.Component", [
     [Type.atom("emitted_context"), Type.map([])],
-    [Type.atom("next_action"), Type.atom("nil")],
-    [Type.atom("next_command"), Type.atom("nil")],
+    [Type.atom("next_action"), Type.nil()],
+    [Type.atom("next_command"), Type.nil()],
     [Type.atom("state"), Type.map([])],
   ]);
 }

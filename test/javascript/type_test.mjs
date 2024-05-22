@@ -661,7 +661,7 @@ describe("Type", () => {
 
   describe("isNil()", () => {
     it("returns true for boxed atom with 'nil' value", () => {
-      const arg = Type.atom("nil");
+      const arg = Type.nil();
       const result = Type.isNil(arg);
 
       assert.isTrue(result);
