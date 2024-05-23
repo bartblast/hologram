@@ -6,11 +6,22 @@ defmodule Hologram.ExJsConsistency.TypeTest do
   """
   use Hologram.Test.BasicCase, async: true
 
+  alias Hologram.Component
   alias Hologram.Component.Action
   alias Hologram.Component.Command
 
   test "action struct" do
     assert %Action{} == %{__struct__: Action, name: nil, params: %{}, target: nil}
+  end
+
+  test "component struct" do
+    assert %Component{} == %{
+             __struct__: Component,
+             emitted_context: %{},
+             next_action: nil,
+             next_command: nil,
+             state: %{}
+           }
   end
 
   test "command struct" do
