@@ -307,8 +307,6 @@ describe("CommandQueue", () => {
 
     const target = Type.bitstring("my_component");
 
-    const command = Type.commandStruct({name, params, target});
-
     beforeEach(() => {
       CommandQueue.items = {};
     });
@@ -319,6 +317,8 @@ describe("CommandQueue", () => {
       ComponentRegistry.entries = Type.map([
         [target, componentRegistryEntryFixture({module: module})],
       ]);
+
+      const command = Type.commandStruct({name, params, target});
 
       CommandQueue.push(command);
 
@@ -347,10 +347,16 @@ describe("CommandQueue", () => {
     it("invalid target", () => {
       ComponentRegistry.entries = Type.map();
 
+      const command = Type.commandStruct({
+        name,
+        params,
+        target: Type.atom("my_target"),
+      });
+
       assert.throw(
         () => CommandQueue.push(command),
         HologramRuntimeError,
-        'invalid command target: "my_component"',
+        "invalid command target, there is no component with CID: :my_target",
       );
     });
   });

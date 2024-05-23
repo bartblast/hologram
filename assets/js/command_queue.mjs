@@ -1,6 +1,5 @@
 "use strict";
 
-import Bitstring from "./bitstring.mjs";
 import Client from "./client.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Hologram from "./hologram.mjs";
@@ -68,15 +67,15 @@ export default class CommandQueue {
 
   // Deps: [:maps.get/2]
   static push(command) {
-    const id = crypto.randomUUID();
     const target = Erlang_Maps["get/2"](Type.atom("target"), command);
-    const module = ComponentRegistry.getComponentModule(target);
 
-    if (module === null) {
-      throw new HologramRuntimeError(
-        `invalid command target: "${Bitstring.toText(target)}"`,
-      );
+    if (!ComponentRegistry.isCidRegistered(target)) {
+      const msg = `invalid command target, there is no component with CID: ${Interpreter.inspect(target)}`;
+      throw new HologramRuntimeError(msg);
     }
+
+    const id = crypto.randomUUID();
+    const module = ComponentRegistry.getComponentModule(target);
 
     CommandQueue.items[id] = {
       id: id,
