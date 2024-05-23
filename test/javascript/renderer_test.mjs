@@ -128,11 +128,11 @@ describe("Renderer", () => {
   after(() => unlinkModules());
 
   beforeEach(() => {
-    ComponentRegistry.entries = Type.map([]);
+    ComponentRegistry.entries = Type.map();
   });
 
   const cid = Type.bitstring("my_component");
-  const context = Type.map([]);
+  const context = Type.map();
   const defaultTarget = Type.bitstring("my_default_target");
   const slots = Type.keywordList([]);
 
@@ -769,7 +769,7 @@ describe("Renderer", () => {
 
           const vdom = Renderer.renderPage(
             Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module56"),
-            Type.map([]),
+            Type.map(),
           );
 
           const stub = sinon
@@ -799,7 +799,7 @@ describe("Renderer", () => {
 
           const vdom = Renderer.renderPage(
             Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module57"),
-            Type.map([]),
+            Type.map(),
           );
 
           const stub = sinon
@@ -1070,7 +1070,7 @@ describe("Renderer", () => {
 
       assert.deepStrictEqual(result, expected);
 
-      assert.deepStrictEqual(ComponentRegistry.entries, Type.map([]));
+      assert.deepStrictEqual(ComponentRegistry.entries, Type.map());
     });
 
     it("with props", () => {
@@ -1110,7 +1110,7 @@ describe("Renderer", () => {
 
       assert.deepStrictEqual(result, expected);
 
-      assert.deepStrictEqual(ComponentRegistry.entries, Type.map([]));
+      assert.deepStrictEqual(ComponentRegistry.entries, Type.map());
     });
 
     it("with unregistered var used", () => {
@@ -1652,7 +1652,7 @@ describe("Renderer", () => {
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module39"),
-        Type.map([]),
+        Type.map(),
       );
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
@@ -1678,7 +1678,7 @@ describe("Renderer", () => {
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module46"),
-        Type.map([]),
+        Type.map(),
       );
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
@@ -1704,7 +1704,7 @@ describe("Renderer", () => {
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module40"),
-        Type.map([]),
+        Type.map(),
       );
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
@@ -1730,7 +1730,7 @@ describe("Renderer", () => {
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module43"),
-        Type.map([]),
+        Type.map(),
       );
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
@@ -1756,7 +1756,7 @@ describe("Renderer", () => {
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module45"),
-        Type.map([]),
+        Type.map(),
       );
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
@@ -1805,7 +1805,7 @@ describe("Renderer", () => {
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module14"),
-        Type.map([]),
+        Type.map(),
       );
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
@@ -1826,7 +1826,7 @@ describe("Renderer", () => {
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module25"),
-        Type.map([]),
+        Type.map(),
       );
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
@@ -1853,7 +1853,7 @@ describe("Renderer", () => {
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module27"),
-        Type.map([]),
+        Type.map(),
       );
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
@@ -1908,7 +1908,7 @@ describe("Renderer", () => {
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module24"),
-        Type.map([]),
+        Type.map(),
       );
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
@@ -1926,7 +1926,7 @@ describe("Renderer", () => {
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module62"),
-        Type.map([]),
+        Type.map(),
       );
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
@@ -1944,7 +1944,7 @@ describe("Renderer", () => {
 
       const result = Renderer.renderPage(
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module63"),
-        Type.map([]),
+        Type.map(),
       );
 
       const expected = vnode("html", {attrs: {}, on: {}}, [

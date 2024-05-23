@@ -629,7 +629,7 @@ defmodule Hologram.Compiler.EncoderTest do
     }
 
     assert encode_ir(ir) ==
-             "Interpreter.comprehension([{match: Type.variablePattern(\"x\"), guards: [(context) => Erlang[\"</2\"](context.vars.x, Type.integer(3n))], body: (context) => Type.list([Type.integer(1n), Type.integer(2n)])}, {match: Type.variablePattern(\"y\"), guards: [(context) => Erlang[\"</2\"](context.vars.y, Type.integer(5n))], body: (context) => Type.list([Type.integer(3n), Type.integer(4n)])}], [(context) => Erlang[\"is_integer/1\"](context.vars.x), (context) => Erlang[\"is_integer/1\"](context.vars.y)], Type.map([]), true, (context) => Type.tuple([context.vars.x, context.vars.y]), context)"
+             "Interpreter.comprehension([{match: Type.variablePattern(\"x\"), guards: [(context) => Erlang[\"</2\"](context.vars.x, Type.integer(3n))], body: (context) => Type.list([Type.integer(1n), Type.integer(2n)])}, {match: Type.variablePattern(\"y\"), guards: [(context) => Erlang[\"</2\"](context.vars.y, Type.integer(5n))], body: (context) => Type.list([Type.integer(3n), Type.integer(4n)])}], [(context) => Erlang[\"is_integer/1\"](context.vars.x), (context) => Erlang[\"is_integer/1\"](context.vars.y)], Type.map(), true, (context) => Type.tuple([context.vars.x, context.vars.y]), context)"
   end
 
   test "comprehension filter" do
@@ -986,7 +986,7 @@ defmodule Hologram.Compiler.EncoderTest do
   describe "map type" do
     test "empty" do
       # %{}
-      assert encode_ir(%IR.MapType{data: []}) == "Type.map([])"
+      assert encode_ir(%IR.MapType{data: []}) == "Type.map()"
     end
 
     test "single key" do

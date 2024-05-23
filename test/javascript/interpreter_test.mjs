@@ -1176,7 +1176,7 @@ describe("Interpreter", () => {
         const result = Interpreter.comprehension(
           [generator1, generator2],
           [],
-          Type.map([]),
+          Type.map(),
           false,
           (context) => Type.tuple([context.vars.x, context.vars.y]),
           context,
@@ -1272,7 +1272,7 @@ describe("Interpreter", () => {
         Interpreter.comprehension(
           [generator1, generator2],
           [],
-          Type.map([]),
+          Type.map(),
           false,
           (context) => Type.tuple([context.vars.x, context.vars.y]),
           context,
@@ -1697,7 +1697,7 @@ describe("Interpreter", () => {
         Interpreter.comprehension(
           [generator1, generator2],
           [],
-          Type.map([]),
+          Type.map(),
           false,
           (context) => Type.tuple([context.vars.x, context.vars.y]),
           context,
@@ -2420,7 +2420,7 @@ describe("Interpreter", () => {
 
     describe("map", () => {
       it("empty", () => {
-        const result = Interpreter.inspect(Type.map([]), {});
+        const result = Interpreter.inspect(Type.map(), {});
         assert.equal(result, "%{}");
       });
 
@@ -4295,7 +4295,7 @@ describe("Interpreter", () => {
         [Type.atom("y"), Type.integer(2)],
       ]);
 
-      const emptyMap = Type.map([]);
+      const emptyMap = Type.map();
 
       // %{x: 1, y: 2} = %{x: 1, y: 2}
       it("left and right maps have the same items", () => {

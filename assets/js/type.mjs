@@ -16,7 +16,7 @@ export default class Type {
     }
 
     if (typeof params === "undefined") {
-      params = Type.map([]);
+      params = Type.map();
     }
 
     if (typeof target === "undefined") {
@@ -98,7 +98,7 @@ export default class Type {
     }
 
     if (typeof params === "undefined") {
-      params = Type.map([]);
+      params = Type.map();
     }
 
     if (typeof target === "undefined") {
@@ -308,7 +308,7 @@ export default class Type {
     return Type.list(data.map((item) => Type.tuple(item)));
   }
 
-  static map(data) {
+  static map(data = []) {
     const hashTableWithMetadata = data.reduce((acc, [key, value]) => {
       acc[Type.encodeMapKey(key)] = [key, value];
       return acc;

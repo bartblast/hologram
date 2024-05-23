@@ -7,7 +7,7 @@ export default class AssetPathRegistry {
 
   // Deps: [:maps.put/3]
   static hydrate(assetManifest) {
-    AssetPathRegistry.entries = Type.map([]);
+    AssetPathRegistry.entries = Type.map();
 
     for (const [staticPath, assetPath] of Object.entries(assetManifest)) {
       const key = Type.bitstring(staticPath);

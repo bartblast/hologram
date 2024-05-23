@@ -345,7 +345,7 @@ describe("CommandQueue", () => {
     });
 
     it("invalid target", () => {
-      ComponentRegistry.entries = Type.map([]);
+      ComponentRegistry.entries = Type.map();
 
       assert.throw(
         () => CommandQueue.push(command),

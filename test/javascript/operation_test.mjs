@@ -237,7 +237,7 @@ describe("Operation", () => {
     it("action", () => {
       const action = Type.actionStruct({
         name: Type.atom("my_action"),
-        params: Type.map([]),
+        params: Type.map(),
         target: Type.bitstring("my_target"),
       });
 
@@ -247,7 +247,7 @@ describe("Operation", () => {
     it("command", () => {
       const command = Type.commandStruct({
         name: Type.atom("my_command"),
-        params: Type.map([]),
+        params: Type.map(),
         target: Type.bitstring("my_target"),
       });
 

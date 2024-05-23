@@ -71,7 +71,7 @@ describe("Erlang_Maps", () => {
     });
 
     it("reduces empty map", () => {
-      const result = fold(fun, Type.integer(10), Type.map([]));
+      const result = fold(fun, Type.integer(10), Type.map());
       assert.deepStrictEqual(result, Type.integer(10));
     });
 
@@ -82,7 +82,7 @@ describe("Erlang_Maps", () => {
 
     it("raises ArgumentError if the first argument is not an anonymous function", () => {
       assertBoxedError(
-        () => fold(Type.atom("abc"), Type.integer(10), Type.map([])),
+        () => fold(Type.atom("abc"), Type.integer(10), Type.map()),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(
           1,
@@ -105,7 +105,7 @@ describe("Erlang_Maps", () => {
       );
 
       assertBoxedError(
-        () => fold(fun, Type.integer(10), Type.map([])),
+        () => fold(fun, Type.integer(10), Type.map()),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(
           1,
@@ -198,7 +198,7 @@ describe("Erlang_Maps", () => {
 
     it("raises KeyError if the map doesn't contain the given key", () => {
       assertBoxedError(
-        () => get(Type.atom("a"), Type.map([])),
+        () => get(Type.atom("a"), Type.map()),
         "KeyError",
         "key :a not found in: %{}",
       );
@@ -232,7 +232,7 @@ describe("Erlang_Maps", () => {
     });
 
     it("returns the default value if the map doesn't contain the given key", () => {
-      const result = get(Type.atom("a"), Type.map([]), defaultValue);
+      const result = get(Type.atom("a"), Type.map(), defaultValue);
       assert.deepStrictEqual(result, defaultValue);
     });
   });
@@ -261,7 +261,7 @@ describe("Erlang_Maps", () => {
     const keys = Erlang_Maps["keys/1"];
 
     it("empty map", () => {
-      assert.deepStrictEqual(keys(Type.map([])), Type.list([]));
+      assert.deepStrictEqual(keys(Type.map()), Type.list([]));
     });
 
     it("non-empty map", () => {
@@ -303,8 +303,8 @@ describe("Erlang_Maps", () => {
     const map = Erlang_Maps["map/2"];
 
     it("maps empty map", () => {
-      const result = map(fun, Type.map([]));
-      assert.deepStrictEqual(result, Type.map([]));
+      const result = map(fun, Type.map());
+      assert.deepStrictEqual(result, Type.map());
     });
 
     it("maps non-empty map", () => {
@@ -329,7 +329,7 @@ describe("Erlang_Maps", () => {
 
     it("raises ArgumentError if the first argument is not an anonymous function", () => {
       assertBoxedError(
-        () => map(Type.atom("abc"), Type.map([])),
+        () => map(Type.atom("abc"), Type.map()),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(
           1,
@@ -354,7 +354,7 @@ describe("Erlang_Maps", () => {
       );
 
       assertBoxedError(
-        () => map(fun, Type.map([])),
+        () => map(fun, Type.map()),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(
           1,
@@ -544,7 +544,7 @@ describe("Erlang_Maps", () => {
     });
 
     it("returns an empty list if given an empty map", () => {
-      const result = to_list(Type.map([]));
+      const result = to_list(Type.map());
       assert.deepStrictEqual(result, Type.list([]));
     });
 

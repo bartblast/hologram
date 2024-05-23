@@ -22,7 +22,7 @@ describe("Type", () => {
         Type.map([
           [Type.atom("__struct__"), Type.alias("Hologram.Component.Action")],
           [Type.atom("name"), Type.nil()],
-          [Type.atom("params"), Type.map([])],
+          [Type.atom("params"), Type.map()],
           [Type.atom("target"), Type.nil()],
         ]),
       );
@@ -249,7 +249,7 @@ describe("Type", () => {
         Type.map([
           [Type.atom("__struct__"), Type.alias("Hologram.Component.Command")],
           [Type.atom("name"), Type.nil()],
-          [Type.atom("params"), Type.map([])],
+          [Type.atom("params"), Type.map()],
           [Type.atom("target"), Type.nil()],
         ]),
       );
@@ -359,7 +359,7 @@ describe("Type", () => {
     });
 
     it("encodes empty boxed map value as map key", () => {
-      const result = Type.encodeMapKey(Type.map([]));
+      const result = Type.encodeMapKey(Type.map());
 
       assert.equal(result, "map()");
     });
@@ -986,7 +986,7 @@ describe("Type", () => {
     it("returns empty boxed map value", () => {
       const expected = {type: "map", data: {}};
 
-      assert.deepStrictEqual(Type.map([]), expected);
+      assert.deepStrictEqual(Type.map(), expected);
     });
 
     it("returns non-empty boxed map value", () => {
@@ -1168,7 +1168,7 @@ describe("Type", () => {
         Type.map([
           [Type.atom("__struct__"), Type.alias("Hologram.Component.Action")],
           [Type.atom("name"), Type.nil()],
-          [Type.atom("params"), Type.map([])],
+          [Type.atom("params"), Type.map()],
           [Type.atom("target"), Type.nil()],
         ]),
       );
@@ -1180,7 +1180,7 @@ describe("Type", () => {
         Type.map([
           [Type.atom("__struct__"), Type.alias("Hologram.Component.Command")],
           [Type.atom("name"), Type.nil()],
-          [Type.atom("params"), Type.map([])],
+          [Type.atom("params"), Type.map()],
           [Type.atom("target"), Type.nil()],
         ]),
       );
