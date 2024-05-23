@@ -30,7 +30,7 @@ export function defineModule21Fixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Type.list([]);
+          return Type.list();
         },
       },
     ],
@@ -47,8 +47,8 @@ export function defineModule21Fixture() {
         guards: [],
         body: (_context) => {
           return Type.list([
-            Type.tuple([Type.atom("key_1"), Type.nil(), Type.list([])]),
-            Type.tuple([Type.atom("key_2"), Type.nil(), Type.list([])]),
+            Type.tuple([Type.atom("key_1"), Type.nil(), Type.list()]),
+            Type.tuple([Type.atom("key_2"), Type.nil(), Type.list()]),
           ]);
         },
       },

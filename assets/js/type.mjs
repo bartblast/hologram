@@ -327,7 +327,7 @@ export default class Type {
     return term.type === "variable_pattern";
   }
 
-  static list(data) {
+  static list(data = []) {
     return {type: "list", data: data, isProper: true};
   }
 

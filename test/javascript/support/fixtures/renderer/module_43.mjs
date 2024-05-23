@@ -32,7 +32,7 @@ export function defineModule43Fixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Type.list([]);
+          return Type.list();
         },
       },
     ],
@@ -48,7 +48,7 @@ export function defineModule43Fixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Type.list([]);
+          return Type.list();
         },
       },
     ],
@@ -83,8 +83,8 @@ export function defineModule43Fixture() {
                       Type.atom(
                         "Elixir.Hologram.Test.Fixtures.Template.Renderer.Module38",
                       ),
-                      Type.list([]),
-                      Type.list([]),
+                      Type.list(),
+                      Type.list(),
                     ]),
                   ]);
                 },

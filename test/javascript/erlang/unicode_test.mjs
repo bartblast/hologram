@@ -42,7 +42,7 @@ describe("Erlang_Unicode", () => {
     const utf8Atom = Type.atom("utf8");
 
     it("input is an empty list", () => {
-      const result = characters_to_binary(Type.list([]), utf8Atom, utf8Atom);
+      const result = characters_to_binary(Type.list(), utf8Atom, utf8Atom);
 
       assert.deepStrictEqual(result, Type.bitstring(""));
     });
@@ -233,7 +233,7 @@ describe("Erlang_Unicode", () => {
     // This is temporary, until the related TODO is implemented.
     it("input encoding is different than :utf8", () => {
       assert.throw(
-        () => characters_to_binary(Type.list([]), Type.atom("utf16"), utf8Atom),
+        () => characters_to_binary(Type.list(), Type.atom("utf16"), utf8Atom),
         HologramInterpreterError,
         "encodings other than utf8 are not yet implemented in Hologram",
       );
@@ -242,7 +242,7 @@ describe("Erlang_Unicode", () => {
     // This is temporary, until the related TODO is implemented.
     it("output encoding is different than :utf8", () => {
       assert.throw(
-        () => characters_to_binary(Type.list([]), utf8Atom, Type.atom("utf16")),
+        () => characters_to_binary(Type.list(), utf8Atom, Type.atom("utf16")),
         HologramInterpreterError,
         "encodings other than utf8 are not yet implemented in Hologram",
       );

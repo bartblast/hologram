@@ -6,7 +6,7 @@ import Type from "../type.mjs";
 const Elixir_Kernel = {
   // Deps: [Kernel.inspect/2]
   "inspect/1": (term) => {
-    return Elixir_Kernel["inspect/2"](term, Type.list([]));
+    return Elixir_Kernel["inspect/2"](term, Type.list());
   },
 
   // TODO: support opts param

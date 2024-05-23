@@ -46,7 +46,7 @@ export function defineModule63Fixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Type.list([]);
+          return Type.list();
         },
       },
     ],
@@ -62,7 +62,7 @@ export function defineModule63Fixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Elixir_Enum["reverse/1"](Type.list([]));
+          return Elixir_Enum["reverse/1"](Type.list());
         },
       },
     ],

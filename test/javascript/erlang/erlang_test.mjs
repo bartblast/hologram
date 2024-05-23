@@ -198,7 +198,7 @@ describe("Erlang", () => {
     });
 
     it("first list is empty", () => {
-      const left = Type.list([]);
+      const left = Type.list();
       const right = Type.list([Type.integer(1), Type.integer(2)]);
 
       const result = testedFun(left, right);
@@ -209,7 +209,7 @@ describe("Erlang", () => {
 
     it("second list is empty", () => {
       const left = Type.list([Type.integer(1), Type.integer(2)]);
-      const right = Type.list([]);
+      const right = Type.list();
 
       const result = testedFun(left, right);
       const expected = Type.list([Type.integer(1), Type.integer(2)]);
@@ -219,7 +219,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the first argument is not a list", () => {
       assertBoxedError(
-        () => testedFun(atomAbc, Type.list([])),
+        () => testedFun(atomAbc, Type.list()),
         "ArgumentError",
         "argument error",
       );
@@ -230,7 +230,7 @@ describe("Erlang", () => {
         () =>
           testedFun(
             Type.improperList([Type.integer(1), Type.integer(2)]),
-            Type.list([]),
+            Type.list(),
           ),
         "ArgumentError",
         "argument error",
@@ -349,7 +349,7 @@ describe("Erlang", () => {
     });
 
     it("first list is empty", () => {
-      const left = Type.list([]);
+      const left = Type.list();
       const right = Type.list([Type.integer(1), Type.integer(2)]);
 
       assert.deepStrictEqual(testedFun(left, right), left);
@@ -357,7 +357,7 @@ describe("Erlang", () => {
 
     it("second list is empty", () => {
       const left = Type.list([Type.integer(1), Type.integer(2)]);
-      const right = Type.list([]);
+      const right = Type.list();
 
       assert.deepStrictEqual(testedFun(left, right), left);
     });
@@ -1425,7 +1425,7 @@ describe("Erlang", () => {
 
     it("empty atom", () => {
       const result = atom_to_list(Type.atom(""));
-      assert.deepStrictEqual(result, Type.list([]));
+      assert.deepStrictEqual(result, Type.list());
     });
 
     it("ASCII atom", () => {
@@ -1635,7 +1635,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the argument is an empty list", () => {
       assertBoxedError(
-        () => hd(Type.list([])),
+        () => hd(Type.list()),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(1, "not a nonempty list"),
       );
@@ -2064,7 +2064,7 @@ describe("Erlang", () => {
       it("1 item", () => {
         const list = Type.list([Type.integer(1)]);
         const result = tl(list);
-        const expected = Type.list([]);
+        const expected = Type.list();
 
         assert.deepStrictEqual(result, expected);
       });
@@ -2117,7 +2117,7 @@ describe("Erlang", () => {
     describe("errors", () => {
       it("raises ArgumentError if the argument is an empty boxed list", () => {
         assertBoxedError(
-          () => tl(Type.list([])),
+          () => tl(Type.list()),
           "ArgumentError",
           Interpreter.buildErrorsFoundMsg(1, "not a nonempty list"),
         );

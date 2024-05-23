@@ -14,7 +14,7 @@ export function defineModule32Fixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Type.list([]);
+          return Type.list();
         },
       },
     ],
@@ -48,8 +48,8 @@ export function defineModule32Fixture() {
                     Type.tuple([
                       Type.atom("element"),
                       Type.bitstring("slot"),
-                      Type.list([]),
-                      Type.list([]),
+                      Type.list(),
+                      Type.list(),
                     ]),
                     Type.tuple([Type.atom("text"), Type.bitstring("32z,")]),
                   ]);

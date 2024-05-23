@@ -29,7 +29,7 @@ export function defineModule59Fixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Type.list([]);
+          return Type.list();
         },
       },
     ],
@@ -75,7 +75,7 @@ export function defineModule59Fixture() {
                           ]),
                         ]),
                       ]),
-                      Type.list([]),
+                      Type.list(),
                     ]),
                   ]);
                 },

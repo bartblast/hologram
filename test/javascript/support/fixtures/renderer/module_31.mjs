@@ -14,7 +14,7 @@ export function defineModule31Fixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Type.list([]);
+          return Type.list();
         },
       },
     ],
@@ -50,7 +50,7 @@ export function defineModule31Fixture() {
                       Type.atom(
                         "Elixir.Hologram.Test.Fixtures.Template.Renderer.Module32",
                       ),
-                      Type.list([]),
+                      Type.list(),
                       Type.list([
                         Type.tuple([Type.atom("text"), Type.bitstring("31b,")]),
                         Type.tuple([
@@ -58,7 +58,7 @@ export function defineModule31Fixture() {
                           Type.atom(
                             "Elixir.Hologram.Test.Fixtures.Template.Renderer.Module33",
                           ),
-                          Type.list([]),
+                          Type.list(),
                           Type.list([
                             Type.tuple([
                               Type.atom("text"),
@@ -67,8 +67,8 @@ export function defineModule31Fixture() {
                             Type.tuple([
                               Type.atom("element"),
                               Type.bitstring("slot"),
-                              Type.list([]),
-                              Type.list([]),
+                              Type.list(),
+                              Type.list(),
                             ]),
                             Type.tuple([
                               Type.atom("text"),

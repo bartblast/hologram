@@ -30,7 +30,7 @@ export function defineModule55Fixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Type.list([]);
+          return Type.list();
         },
       },
     ],
@@ -63,7 +63,7 @@ export function defineModule55Fixture() {
                     Type.tuple([
                       Type.atom("element"),
                       Type.bitstring("div"),
-                      Type.list([]),
+                      Type.list(),
                       Type.list([
                         Type.tuple([Type.atom("text"), Type.bitstring("\n  ")]),
                         Type.tuple([

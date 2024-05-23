@@ -14,7 +14,7 @@ import Erlang_Lists from "../../../assets/js/erlang/lists.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-const emptyList = Type.list([]);
+const emptyList = Type.list();
 
 const improperList = Type.improperList([
   Type.integer(1),
@@ -238,7 +238,7 @@ describe("Erlang_Lists", () => {
 
     it("raises ArgumentError if the second argument (index) is not an integer", () => {
       assertBoxedError(
-        () => keyfind(Type.atom("abc"), Type.atom("xyz"), Type.list([])),
+        () => keyfind(Type.atom("abc"), Type.atom("xyz"), Type.list()),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(2, "not an integer"),
       );
@@ -246,7 +246,7 @@ describe("Erlang_Lists", () => {
 
     it("raises ArgumentError if the second argument (index) is smaller than 1", () => {
       assertBoxedError(
-        () => keyfind(Type.atom("abc"), Type.integer(0), Type.list([])),
+        () => keyfind(Type.atom("abc"), Type.integer(0), Type.list()),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(2, "out of range"),
       );
@@ -311,7 +311,7 @@ describe("Erlang_Lists", () => {
 
     it("raises ArgumentError if the second argument (index) is not an integer", () => {
       assertBoxedError(
-        () => keymember(Type.atom("abc"), Type.atom("xyz"), Type.list([])),
+        () => keymember(Type.atom("abc"), Type.atom("xyz"), Type.list()),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(2, "not an integer"),
       );
@@ -319,7 +319,7 @@ describe("Erlang_Lists", () => {
 
     it("raises ArgumentError if the second argument (index) is smaller than 1", () => {
       assertBoxedError(
-        () => keymember(Type.atom("abc"), Type.integer(0), Type.list([])),
+        () => keymember(Type.atom("abc"), Type.integer(0), Type.list()),
         "ArgumentError",
         Interpreter.buildErrorsFoundMsg(2, "out of range"),
       );

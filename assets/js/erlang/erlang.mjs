@@ -585,7 +585,7 @@ const Erlang = {
     const length = list.data.length;
 
     if (length === 1) {
-      return Type.list([]);
+      return Type.list();
     }
 
     const isProper = Type.isProperList(list);

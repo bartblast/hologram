@@ -30,7 +30,7 @@ export function defineModule62Fixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Type.list([]);
+          return Type.list();
         },
       },
     ],
@@ -46,7 +46,7 @@ export function defineModule62Fixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Elixir_Enum["reverse/1"](Type.list([]));
+          return Elixir_Enum["reverse/1"](Type.list());
         },
       },
     ],
@@ -81,13 +81,13 @@ export function defineModule62Fixture() {
                     Type.tuple([
                       Type.atom("element"),
                       Type.bitstring("html"),
-                      Type.list([]),
+                      Type.list(),
                       Type.list([
                         Type.tuple([Type.atom("text"), Type.bitstring("\n  ")]),
                         Type.tuple([
                           Type.atom("element"),
                           Type.bitstring("body"),
-                          Type.list([]),
+                          Type.list(),
                           Type.list([
                             Type.tuple([
                               Type.atom("text"),

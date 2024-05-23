@@ -52,7 +52,7 @@ export function defineModule25Fixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Type.list([]);
+          return Type.list();
         },
       },
     ],
@@ -81,7 +81,7 @@ export function defineModule25Fixture() {
                     context,
                   );
                   Interpreter.updateVarsToMatchedValues(context);
-                  return Type.list([]);
+                  return Type.list();
                 },
               },
             ],

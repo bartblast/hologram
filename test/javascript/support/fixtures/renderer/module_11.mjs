@@ -14,7 +14,7 @@ export function defineModule11Fixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Type.list([]);
+          return Type.list();
         },
       },
     ],
@@ -57,8 +57,8 @@ export function defineModule11Fixture() {
                     Type.tuple([
                       Type.atom("element"),
                       Type.bitstring("slot"),
-                      Type.list([]),
-                      Type.list([]),
+                      Type.list(),
+                      Type.list(),
                     ]),
                   ]);
                 },

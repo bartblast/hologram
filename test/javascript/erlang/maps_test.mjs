@@ -261,7 +261,7 @@ describe("Erlang_Maps", () => {
     const keys = Erlang_Maps["keys/1"];
 
     it("empty map", () => {
-      assert.deepStrictEqual(keys(Type.map()), Type.list([]));
+      assert.deepStrictEqual(keys(Type.map()), Type.list());
     });
 
     it("non-empty map", () => {
@@ -545,7 +545,7 @@ describe("Erlang_Maps", () => {
 
     it("returns an empty list if given an empty map", () => {
       const result = to_list(Type.map());
-      assert.deepStrictEqual(result, Type.list([]));
+      assert.deepStrictEqual(result, Type.list());
     });
 
     it("returns a list of tuples containing key-value pairs if given a non-empty map", () => {

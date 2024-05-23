@@ -1228,7 +1228,7 @@ describe("Interpreter", () => {
         const result = Interpreter.comprehension(
           [generator1, generator2],
           [],
-          Type.list([]),
+          Type.list(),
           false,
           (context) => Type.tuple([context.vars.x, context.vars.y]),
           context,
@@ -1322,7 +1322,7 @@ describe("Interpreter", () => {
         const result = Interpreter.comprehension(
           [generator1, generator2],
           [],
-          Type.list([]),
+          Type.list(),
           false,
           (context) => Type.tuple([context.vars.x, context.vars.y]),
           context,
@@ -1388,7 +1388,7 @@ describe("Interpreter", () => {
         const result = Interpreter.comprehension(
           [generator1, generator2],
           [],
-          Type.list([]),
+          Type.list(),
           false,
           (context) => Type.tuple([context.vars.x, context.vars.y]),
           context,
@@ -1422,7 +1422,7 @@ describe("Interpreter", () => {
         const result = Interpreter.comprehension(
           [generator],
           [],
-          Type.list([]),
+          Type.list(),
           false,
           (context) => context.vars.x,
           context,
@@ -1460,7 +1460,7 @@ describe("Interpreter", () => {
         const result = Interpreter.comprehension(
           [generator1, generator2],
           [],
-          Type.list([]),
+          Type.list(),
           false,
           (context) => Type.tuple([context.vars.x, context.vars.y]),
           context,
@@ -1492,7 +1492,7 @@ describe("Interpreter", () => {
             Interpreter.comprehension(
               [generator],
               [],
-              Type.list([]),
+              Type.list(),
               false,
               (context) => context.vars.x,
               context,
@@ -1551,7 +1551,7 @@ describe("Interpreter", () => {
         const result = Interpreter.comprehension(
           [generator1, generator2],
           filters,
-          Type.list([]),
+          Type.list(),
           false,
           (context) => Type.tuple([context.vars.x, context.vars.y]),
           context,
@@ -1585,7 +1585,7 @@ describe("Interpreter", () => {
         const result = Interpreter.comprehension(
           [generator],
           [filter],
-          Type.list([]),
+          Type.list(),
           false,
           (context) => context.vars.x,
           context,
@@ -1622,7 +1622,7 @@ describe("Interpreter", () => {
         const result = Interpreter.comprehension(
           [generator1, generator2],
           [],
-          Type.list([]),
+          Type.list(),
           true,
           (context) => Type.tuple([context.vars.x, context.vars.y]),
           context,
@@ -1655,7 +1655,7 @@ describe("Interpreter", () => {
         const result = Interpreter.comprehension(
           [generator],
           [],
-          Type.list([]),
+          Type.list(),
           false,
           (context) => Type.tuple([context.vars.x, context.vars.b]),
           context,
@@ -1836,7 +1836,7 @@ describe("Interpreter", () => {
 
     it("constructs a proper list when the tail param is an empty list", () => {
       const head = Type.integer(1);
-      const tail = Type.list([]);
+      const tail = Type.list();
       const result = Interpreter.consOperator(head, tail);
       const expected = Type.list([Type.integer(1)]);
 
@@ -2391,7 +2391,7 @@ describe("Interpreter", () => {
 
     describe("list", () => {
       it("empty", () => {
-        const result = Interpreter.inspect(Type.list([]), {});
+        const result = Interpreter.inspect(Type.list(), {});
         assert.equal(result, "[]");
       });
 
@@ -3366,7 +3366,7 @@ describe("Interpreter", () => {
     //       );
     //     });
     //     it("[h | t] = []", () => {
-    //       const right = Type.list([]);
+    //       const right = Type.list();
     //       assertMatchError(
     //         () => Interpreter.matchOperator(right, left, vars),
     //         right,
@@ -3379,7 +3379,7 @@ describe("Interpreter", () => {
     //       assert.deepStrictEqual(vars, {
     //         a: Type.integer(9),
     //         h: Type.integer(1),
-    //         t: Type.list([]),
+    //         t: Type.list(),
     //       });
     //     });
     //     it("[h | t] = [1, 2]", () => {
@@ -3444,7 +3444,7 @@ describe("Interpreter", () => {
     //       );
     //     });
     //     it("[1 | t] = []", () => {
-    //       const right = Type.list([]);
+    //       const right = Type.list();
     //       assertMatchError(
     //         () => Interpreter.matchOperator(right, left, vars),
     //         right,
@@ -3456,7 +3456,7 @@ describe("Interpreter", () => {
     //       assert.deepStrictEqual(result, right);
     //       assert.deepStrictEqual(vars, {
     //         a: Type.integer(9),
-    //         t: Type.list([]),
+    //         t: Type.list(),
     //       });
     //     });
     //     it("[1 | t] = [5]", () => {
@@ -3560,7 +3560,7 @@ describe("Interpreter", () => {
     //       );
     //     });
     //     it("[h | 3] = []", () => {
-    //       const right = Type.list([]);
+    //       const right = Type.list();
     //       assertMatchError(
     //         () => Interpreter.matchOperator(right, left, vars),
     //         right,
@@ -3615,7 +3615,7 @@ describe("Interpreter", () => {
     //   describe("[h | []]", () => {
     //     let left;
     //     beforeEach(() => {
-    //       left = Type.consPattern(Type.variablePattern("h"), Type.list([]));
+    //       left = Type.consPattern(Type.variablePattern("h"), Type.list());
     //     });
     //     it("[h | []] = 3", () => {
     //       const right = Type.integer(3);
@@ -3625,7 +3625,7 @@ describe("Interpreter", () => {
     //       );
     //     });
     //     it("[h | []] = []", () => {
-    //       const right = Type.list([]);
+    //       const right = Type.list();
     //       assertMatchError(
     //         () => Interpreter.matchOperator(right, left, vars),
     //         right,
@@ -3693,7 +3693,7 @@ describe("Interpreter", () => {
     //       );
     //     });
     //     it("[h | [3]] = []", () => {
-    //       const right = Type.list([]);
+    //       const right = Type.list();
     //       assertMatchError(
     //         () => Interpreter.matchOperator(right, left, vars),
     //         right,
@@ -3761,7 +3761,7 @@ describe("Interpreter", () => {
     //       );
     //     });
     //     it("[h | [2, 3]] = []", () => {
-    //       const right = Type.list([]);
+    //       const right = Type.list();
     //       assertMatchError(
     //         () => Interpreter.matchOperator(right, left, vars),
     //         right,
@@ -3829,7 +3829,7 @@ describe("Interpreter", () => {
     //       );
     //     });
     //     it("[h | [2 | 3]] = []", () => {
-    //       const right = Type.list([]);
+    //       const right = Type.list();
     //       assertMatchError(
     //         () => Interpreter.matchOperator(right, left, vars),
     //         right,
@@ -3897,7 +3897,7 @@ describe("Interpreter", () => {
     //       );
     //     });
     //     it("[h | [1, 2, 3]] = []", () => {
-    //       const right = Type.list([]);
+    //       const right = Type.list();
     //       assertMatchError(
     //         () => Interpreter.matchOperator(right, left, vars),
     //         right,
@@ -3966,7 +3966,7 @@ describe("Interpreter", () => {
     //       );
     //     });
     //     it("[h | [1, 2 | 3]] = []", () => {
-    //       const right = Type.list([]);
+    //       const right = Type.list();
     //       assertMatchError(
     //         () => Interpreter.matchOperator(right, left, vars),
     //         right,
@@ -4023,7 +4023,7 @@ describe("Interpreter", () => {
     //         Type.integer(1),
     //         Type.consPattern(
     //           Type.integer(2),
-    //           Type.consPattern(Type.integer(3), Type.list([])),
+    //           Type.consPattern(Type.integer(3), Type.list()),
     //         ),
     //       );
     //     });
@@ -4250,19 +4250,19 @@ describe("Interpreter", () => {
     //   });
     //   it("[] = [1, 2]", () => {
     //     assertMatchError(
-    //       () => Interpreter.matchOperator(list1, Type.list([]), vars),
+    //       () => Interpreter.matchOperator(list1, Type.list(), vars),
     //       list1,
     //     );
     //   });
     //   it("[1, 2] = []", () => {
-    //     const emptyList = Type.list([]);
+    //     const emptyList = Type.list();
     //     assertMatchError(
     //       () => Interpreter.matchOperator(emptyList, list1, vars),
     //       emptyList,
     //     );
     //   });
     //   it("[] = []", () => {
-    //     const emptyList = Type.list([]);
+    //     const emptyList = Type.list();
     //     const result = Interpreter.matchOperator(emptyList, emptyList, vars);
     //     assert.deepStrictEqual(result, emptyList);
     //     assert.deepStrictEqual(vars, {a: Type.integer(9)});

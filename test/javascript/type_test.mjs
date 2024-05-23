@@ -395,7 +395,7 @@ describe("Type", () => {
     });
 
     it("encodes empty boxed list value as map key", () => {
-      const result = Type.encodeMapKey(Type.list([]));
+      const result = Type.encodeMapKey(Type.list());
 
       assert.equal(result, "list()");
     });
@@ -1007,12 +1007,21 @@ describe("Type", () => {
     });
   });
 
-  it("list()", () => {
-    const data = [Type.integer(1), Type.integer(2)];
-    const result = Type.list(data);
-    const expected = {type: "list", data: data, isProper: true};
+  describe("list()", () => {
+    it("empty", () => {
+      const result = Type.list();
+      const expected = {type: "list", data: [], isProper: true};
 
-    assert.deepStrictEqual(result, expected);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("non-empty", () => {
+      const data = [Type.integer(1), Type.integer(2)];
+      const result = Type.list(data);
+      const expected = {type: "list", data: data, isProper: true};
+
+      assert.deepStrictEqual(result, expected);
+    });
   });
 
   it("keywordList()", () => {

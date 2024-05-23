@@ -15,16 +15,8 @@ export function defineModule26Fixture() {
         guards: [],
         body: (_context) => {
           return Type.list([
-            Type.tuple([
-              Type.atom("prop_1"),
-              Type.atom("string"),
-              Type.list([]),
-            ]),
-            Type.tuple([
-              Type.atom("prop_3"),
-              Type.atom("string"),
-              Type.list([]),
-            ]),
+            Type.tuple([Type.atom("prop_1"), Type.atom("string"), Type.list()]),
+            Type.tuple([Type.atom("prop_3"), Type.atom("string"), Type.list()]),
           ]);
         },
       },

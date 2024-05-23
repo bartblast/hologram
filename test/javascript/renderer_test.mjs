@@ -146,7 +146,7 @@ describe("Renderer", () => {
   describe("public comment node", () => {
     it("empty", () => {
       // <!---->
-      const node = Type.tuple([Type.atom("public_comment"), Type.list([])]);
+      const node = Type.tuple([Type.atom("public_comment"), Type.list()]);
 
       const result = Renderer.renderDom(node, context, slots, defaultTarget);
       const expected = vnode("!", "");
@@ -162,8 +162,8 @@ describe("Renderer", () => {
           Type.tuple([
             Type.atom("element"),
             Type.bitstring("div"),
-            Type.list([]),
-            Type.list([]),
+            Type.list(),
+            Type.list(),
           ]),
         ]),
       ]);
@@ -183,8 +183,8 @@ describe("Renderer", () => {
           Type.tuple([
             Type.atom("element"),
             Type.bitstring("div"),
-            Type.list([]),
-            Type.list([]),
+            Type.list(),
+            Type.list(),
           ]),
         ]),
       ]);
@@ -224,7 +224,7 @@ describe("Renderer", () => {
                     Type.keywordList([[Type.atom("text"), cid3]]),
                   ]),
                 ]),
-                Type.list([]),
+                Type.list(),
               ]),
               Type.tuple([
                 Type.atom("component"),
@@ -235,7 +235,7 @@ describe("Renderer", () => {
                     Type.keywordList([[Type.atom("text"), cid7]]),
                   ]),
                 ]),
-                Type.list([]),
+                Type.list(),
               ]),
             ]),
           ]),
@@ -294,8 +294,8 @@ describe("Renderer", () => {
       const node = Type.tuple([
         Type.atom("element"),
         Type.bitstring("div"),
-        Type.list([]),
-        Type.list([]),
+        Type.list(),
+        Type.list(),
       ]);
 
       const result = Renderer.renderDom(node, context, slots, defaultTarget);
@@ -328,7 +328,7 @@ describe("Renderer", () => {
             ]),
           ]),
         ]),
-        Type.list([]),
+        Type.list(),
       ]);
 
       const result = Renderer.renderDom(node, context, slots, defaultTarget);
@@ -346,12 +346,12 @@ describe("Renderer", () => {
       const node = Type.tuple([
         Type.atom("element"),
         Type.bitstring("div"),
-        Type.list([]),
+        Type.list(),
         Type.list([
           Type.tuple([
             Type.atom("element"),
             Type.bitstring("span"),
-            Type.list([]),
+            Type.list(),
             Type.keywordList([[Type.atom("text"), Type.bitstring("abc")]]),
           ]),
           Type.tuple([Type.atom("text"), Type.bitstring("xyz")]),
@@ -372,8 +372,8 @@ describe("Renderer", () => {
       const node = Type.tuple([
         Type.atom("element"),
         Type.bitstring("img"),
-        Type.list([]),
-        Type.list([]),
+        Type.list(),
+        Type.list(),
       ]);
 
       const result = Renderer.renderDom(node, context, slots, defaultTarget);
@@ -406,7 +406,7 @@ describe("Renderer", () => {
             ]),
           ]),
         ]),
-        Type.list([]),
+        Type.list(),
       ]);
 
       const result = Renderer.renderDom(node, context, slots, defaultTarget);
@@ -428,7 +428,7 @@ describe("Renderer", () => {
           Type.tuple([Type.bitstring("attr_1"), Type.keywordList([])]),
           Type.tuple([Type.bitstring("attr_2"), Type.keywordList([])]),
         ]),
-        Type.list([]),
+        Type.list(),
       ]);
 
       const result = Renderer.renderDom(node, context, slots, defaultTarget);
@@ -486,7 +486,7 @@ describe("Renderer", () => {
           Type.tuple([Type.bitstring("attr_7"), Type.keywordList([])]),
           Type.tuple([Type.bitstring("$attr_8"), Type.keywordList([])]),
         ]),
-        Type.list([]),
+        Type.list(),
       ]);
 
       const result = Renderer.renderDom(node, context, slots, defaultTarget);
@@ -522,7 +522,7 @@ describe("Renderer", () => {
                 Type.keywordList([[Type.atom("text"), cid3]]),
               ]),
             ]),
-            Type.list([]),
+            Type.list(),
           ]),
           Type.tuple([
             Type.atom("component"),
@@ -533,7 +533,7 @@ describe("Renderer", () => {
                 Type.keywordList([[Type.atom("text"), cid7]]),
               ]),
             ]),
-            Type.list([]),
+            Type.list(),
           ]),
         ]),
       ]);
@@ -643,7 +643,7 @@ describe("Renderer", () => {
                 ]),
               ]),
             ]),
-            Type.list([]),
+            Type.list(),
           ]);
 
           const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
@@ -702,7 +702,7 @@ describe("Renderer", () => {
                 Type.list([Type.tuple([Type.atom("text"), cid])]),
               ]),
             ]),
-            Type.list([]),
+            Type.list(),
           ]);
 
           initComponentRegistryEntry(cid);
@@ -736,8 +736,8 @@ describe("Renderer", () => {
             Type.atom(
               "Elixir.Hologram.Test.Fixtures.Template.Renderer.Module55",
             ),
-            Type.list([]),
-            Type.list([]),
+            Type.list(),
+            Type.list(),
           ]);
 
           const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
@@ -840,7 +840,7 @@ describe("Renderer", () => {
                 ]),
               ]),
             ]),
-            Type.list([]),
+            Type.list(),
           ]);
 
           initComponentRegistryEntry(Type.bitstring("component_59"));
@@ -881,8 +881,8 @@ describe("Renderer", () => {
         Type.tuple([
           Type.atom("element"),
           Type.bitstring("div"),
-          Type.list([]),
-          Type.list([]),
+          Type.list(),
+          Type.list(),
         ]),
         Type.tuple([Type.atom("text"), Type.bitstring("bbb")]),
       ]);
@@ -934,7 +934,7 @@ describe("Renderer", () => {
               Type.keywordList([[Type.atom("text"), cid3]]),
             ]),
           ]),
-          Type.list([]),
+          Type.list(),
         ]),
         Type.tuple([Type.atom("text"), Type.bitstring("xyz")]),
         Type.tuple([
@@ -946,7 +946,7 @@ describe("Renderer", () => {
               Type.keywordList([[Type.atom("text"), cid7]]),
             ]),
           ]),
-          Type.list([]),
+          Type.list(),
         ]),
       ]);
 
@@ -1001,7 +1001,7 @@ describe("Renderer", () => {
               Type.keywordList([[Type.atom("text"), cid51]]),
             ]),
           ]),
-          Type.list([]),
+          Type.list(),
         ]),
         Type.tuple([Type.atom("text"), Type.bitstring("xyz")]),
         Type.tuple([
@@ -1013,7 +1013,7 @@ describe("Renderer", () => {
               Type.keywordList([[Type.atom("text"), cid52]]),
             ]),
           ]),
-          Type.list([]),
+          Type.list(),
         ]),
       ]);
 
@@ -1061,8 +1061,8 @@ describe("Renderer", () => {
       const node = Type.tuple([
         Type.atom("component"),
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module1"),
-        Type.list([]),
-        Type.list([]),
+        Type.list(),
+        Type.list(),
       ]);
 
       const result = Renderer.renderDom(node, context, slots, defaultTarget);
@@ -1097,7 +1097,7 @@ describe("Renderer", () => {
             ]),
           ]),
         ]),
-        Type.list([]),
+        Type.list(),
       ]);
 
       const result = Renderer.renderDom(node, context, slots, defaultTarget);
@@ -1127,7 +1127,7 @@ describe("Renderer", () => {
             Type.keywordList([[Type.atom("text"), Type.bitstring("222")]]),
           ]),
         ]),
-        Type.list([]),
+        Type.list(),
       ]);
 
       assertBoxedError(
@@ -1150,7 +1150,7 @@ describe("Renderer", () => {
             Type.keywordList([[Type.atom("text"), cid]]),
           ]),
         ]),
-        Type.list([]),
+        Type.list(),
       ]);
 
       initComponentRegistryEntry(cid);
@@ -1202,7 +1202,7 @@ describe("Renderer", () => {
             ]),
           ]),
         ]),
-        Type.list([]),
+        Type.list(),
       ]);
 
       initComponentRegistryEntry(cid);
@@ -1242,7 +1242,7 @@ describe("Renderer", () => {
             Type.keywordList([[Type.atom("text"), cid]]),
           ]),
         ]),
-        Type.list([]),
+        Type.list(),
       ]);
 
       const entry = componentRegistryEntryFixture({
@@ -1286,7 +1286,7 @@ describe("Renderer", () => {
             Type.keywordList([[Type.atom("text"), cid]]),
           ]),
         ]),
-        Type.list([]),
+        Type.list(),
       ]);
 
       const resultVDom = Renderer.renderDom(
@@ -1337,7 +1337,7 @@ describe("Renderer", () => {
             Type.keywordList([[Type.atom("text"), Type.bitstring("prop_c")]]),
           ]),
         ]),
-        Type.list([]),
+        Type.list(),
       ]);
 
       const entry = componentRegistryEntryFixture({
@@ -1402,7 +1402,7 @@ describe("Renderer", () => {
             Type.keywordList([[Type.atom("text"), Type.bitstring("value_4")]]),
           ]),
         ]),
-        Type.list([]),
+        Type.list(),
       ]);
 
       initComponentRegistryEntry(cid);
@@ -1433,7 +1433,7 @@ describe("Renderer", () => {
             Type.keywordList([[Type.atom("text"), Type.bitstring("333")]]),
           ]),
         ]),
-        Type.list([]),
+        Type.list(),
       ]);
 
       const entry = componentRegistryEntryFixture({
@@ -1455,7 +1455,7 @@ describe("Renderer", () => {
       const node = Type.tuple([
         Type.atom("component"),
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module8"),
-        Type.list([]),
+        Type.list(),
         Type.keywordList([[Type.atom("text"), Type.bitstring("123")]]),
       ]);
 
@@ -1468,7 +1468,7 @@ describe("Renderer", () => {
       const node = Type.tuple([
         Type.atom("component"),
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module8"),
-        Type.list([]),
+        Type.list(),
         Type.keywordList([
           [Type.atom("text"), Type.bitstring("123")],
           [Type.atom("expression"), Type.tuple([Type.integer(456)])],
@@ -1484,12 +1484,12 @@ describe("Renderer", () => {
       const node = Type.tuple([
         Type.atom("component"),
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module8"),
-        Type.list([]),
+        Type.list(),
         Type.list([
           Type.tuple([
             Type.atom("component"),
             Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module9"),
-            Type.list([]),
+            Type.list(),
             Type.keywordList([[Type.atom("text"), Type.bitstring("789")]]),
           ]),
         ]),
@@ -1514,7 +1514,7 @@ describe("Renderer", () => {
             Type.keywordList([[Type.atom("text"), cid10]]),
           ]),
         ]),
-        Type.list([]),
+        Type.list(),
       ]);
 
       const entry10 = componentRegistryEntryFixture({
@@ -1552,7 +1552,7 @@ describe("Renderer", () => {
       const node = Type.tuple([
         Type.atom("component"),
         Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module31"),
-        Type.list([]),
+        Type.list(),
         Type.keywordList([[Type.atom("text"), Type.bitstring("abc")]]),
       ]);
 
@@ -1789,7 +1789,7 @@ describe("Renderer", () => {
             Type.keywordList([[Type.atom("text"), cid]]),
           ]),
         ]),
-        Type.list([]),
+        Type.list(),
       ]);
 
       const result = Renderer.renderDom(node, context, slots, defaultTarget);

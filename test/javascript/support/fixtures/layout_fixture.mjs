@@ -14,7 +14,7 @@ export function defineLayoutFixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Type.list([]);
+          return Type.list();
         },
       },
     ],
@@ -47,8 +47,8 @@ export function defineLayoutFixture() {
                     Type.tuple([
                       Type.atom("element"),
                       Type.bitstring("slot"),
-                      Type.list([]),
-                      Type.list([]),
+                      Type.list(),
+                      Type.list(),
                     ]),
                   ]);
                 },
