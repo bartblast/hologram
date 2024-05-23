@@ -90,6 +90,28 @@ export default class Type {
     return Type.atom(value.toString());
   }
 
+  static commandStruct(data = {}) {
+    let {name, params, target} = data;
+
+    if (typeof name === "undefined") {
+      name = Type.nil();
+    }
+
+    if (typeof params === "undefined") {
+      params = Type.map([]);
+    }
+
+    if (typeof target === "undefined") {
+      target = Type.nil();
+    }
+
+    return Type.struct("Hologram.Component.Command", [
+      [Type.atom("name"), name],
+      [Type.atom("params"), params],
+      [Type.atom("target"), target],
+    ]);
+  }
+
   static consPattern(head, tail) {
     return {type: "cons_pattern", head: head, tail: tail};
   }

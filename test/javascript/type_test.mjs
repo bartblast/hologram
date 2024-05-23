@@ -242,6 +242,43 @@ describe("Type", () => {
     });
   });
 
+  describe("commandStruct()", () => {
+    it("default values", () => {
+      assert.deepStrictEqual(
+        Type.commandStruct(),
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("Hologram.Component.Command")],
+          [Type.atom("name"), Type.nil()],
+          [Type.atom("params"), Type.map([])],
+          [Type.atom("target"), Type.nil()],
+        ]),
+      );
+    });
+
+    it("custom values", () => {
+      const name = Type.atom("my_command");
+
+      const params = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      const target = Type.bitstring("my_target");
+
+      const result = Type.commandStruct({name, params, target});
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("Hologram.Component.Command")],
+          [Type.atom("name"), name],
+          [Type.atom("params"), params],
+          [Type.atom("target"), target],
+        ]),
+      );
+    });
+  });
+
   it("consPattern()", () => {
     const head = Type.integer(1);
     const tail = Type.list([Type.integer(2), Type.integer(3)]);
