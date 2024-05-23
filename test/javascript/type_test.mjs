@@ -1225,6 +1225,18 @@ describe("Type", () => {
 
     it("command struct", () => {
       assert.deepStrictEqual(
+        Type.commandStruct(),
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("Hologram.Component.Command")],
+          [Type.atom("name"), Type.nil()],
+          [Type.atom("params"), Type.map()],
+          [Type.atom("target"), Type.nil()],
+        ]),
+      );
+    });
+
+    it("component struct", () => {
+      assert.deepStrictEqual(
         Type.componentStruct(),
         Type.map([
           [Type.atom("__struct__"), Type.alias("Hologram.Component")],
@@ -1232,18 +1244,6 @@ describe("Type", () => {
           [Type.atom("next_action"), Type.nil()],
           [Type.atom("next_command"), Type.nil()],
           [Type.atom("state"), Type.map()],
-        ]),
-      );
-    });
-
-    it("command struct", () => {
-      assert.deepStrictEqual(
-        Type.commandStruct(),
-        Type.map([
-          [Type.atom("__struct__"), Type.alias("Hologram.Component.Command")],
-          [Type.atom("name"), Type.nil()],
-          [Type.atom("params"), Type.map()],
-          [Type.atom("target"), Type.nil()],
         ]),
       );
     });

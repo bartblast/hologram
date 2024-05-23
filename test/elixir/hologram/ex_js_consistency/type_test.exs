@@ -14,6 +14,10 @@ defmodule Hologram.ExJsConsistency.TypeTest do
     assert %Action{} == %{__struct__: Action, name: nil, params: %{}, target: nil}
   end
 
+  test "command struct" do
+    assert %Command{} == %{__struct__: Command, name: nil, params: %{}, target: nil}
+  end
+
   test "component struct" do
     assert %Component{} == %{
              __struct__: Component,
@@ -22,9 +26,5 @@ defmodule Hologram.ExJsConsistency.TypeTest do
              next_command: nil,
              state: %{}
            }
-  end
-
-  test "command struct" do
-    assert %Command{} == %{__struct__: Command, name: nil, params: %{}, target: nil}
   end
 end
