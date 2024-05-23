@@ -1,11 +1,6 @@
 "use strict";
 
-import {
-  commandFixture,
-  putCommand,
-  putContext,
-  putState,
-} from "../../helpers.mjs";
+import {putCommand, putContext, putState} from "../../helpers.mjs";
 
 import Interpreter from "../../../../../assets/js/interpreter.mjs";
 import Type from "../../../../../assets/js/type.mjs";
@@ -58,7 +53,7 @@ export function defineModule5Fixture() {
             ),
             Type.map([[Type.atom("event"), context.vars.event]]),
           ),
-          commandFixture({
+          Type.commandStruct({
             name: Type.atom("my_command_6"),
             params: Type.map([
               [Type.atom("c"), Type.integer(10)],

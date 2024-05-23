@@ -93,38 +93,6 @@ export function assertMatchError(callable, value) {
   }
 }
 
-export function commandFixture(data = {}) {
-  let commandStruct = elixirHologramComponentCommandStruct0();
-
-  const {name, params, target} = data;
-
-  if (typeof name !== "undefined") {
-    commandStruct = Erlang_Maps["put/3"](
-      Type.atom("name"),
-      name,
-      commandStruct,
-    );
-  }
-
-  if (typeof params !== "undefined") {
-    commandStruct = Erlang_Maps["put/3"](
-      Type.atom("params"),
-      params,
-      commandStruct,
-    );
-  }
-
-  if (typeof target !== "undefined") {
-    commandStruct = Erlang_Maps["put/3"](
-      Type.atom("target"),
-      target,
-      commandStruct,
-    );
-  }
-
-  return commandStruct;
-}
-
 export function commandQueueItemFixture(data = {}) {
   let {id, failCount, module, name, params, status, target} = data;
 
@@ -229,14 +197,6 @@ export function contextFixture(data = {}) {
   return Interpreter.buildContext({module: module, vars: vars});
 }
 
-export function elixirHologramComponentCommandStruct0() {
-  return Type.struct("Hologram.Component.Command", [
-    [Type.atom("name"), Type.nil()],
-    [Type.atom("params"), Type.map([])],
-    [Type.atom("target"), Type.nil()],
-  ]);
-}
-
 export function elixirHologramComponentStruct0() {
   return Type.struct("Hologram.Component", [
     [Type.atom("emitted_context"), Type.map([])],
@@ -311,10 +271,6 @@ export function linkModules() {
   globalThis.Elixir_Hologram_Component = {};
   globalThis.Elixir_Hologram_Component["__struct__/0"] =
     elixirHologramComponentStruct0;
-
-  globalThis.Elixir_Hologram_Component_Command = {};
-  globalThis.Elixir_Hologram_Component_Command["__struct__/0"] =
-    elixirHologramComponentCommandStruct0;
 
   globalThis.Elixir_String_Chars = {};
   globalThis.Elixir_String_Chars["to_string/1"] = elixirStringCharsToString1;

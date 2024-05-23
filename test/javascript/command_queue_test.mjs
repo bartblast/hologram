@@ -2,7 +2,6 @@
 
 import {
   assert,
-  commandFixture,
   commandQueueItemFixture,
   componentRegistryEntryFixture,
   linkModules,
@@ -308,7 +307,7 @@ describe("CommandQueue", () => {
 
     const target = Type.bitstring("my_component");
 
-    const command = commandFixture({name, params, target});
+    const command = Type.commandStruct({name, params, target});
 
     beforeEach(() => {
       CommandQueue.items = {};

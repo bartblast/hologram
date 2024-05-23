@@ -2,7 +2,6 @@
 
 import {
   assert,
-  commandFixture,
   commandQueueItemFixture,
   componentRegistryEntryFixture,
   linkModules,
@@ -438,7 +437,7 @@ describe("Hologram", () => {
       const commandSpecDom = Type.keywordList([
         [
           Type.atom("expression"),
-          Type.tuple([commandFixture({name: Type.atom("my_command")})]),
+          Type.tuple([Type.commandStruct({name: Type.atom("my_command")})]),
         ],
       ]);
 

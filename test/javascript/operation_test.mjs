@@ -1,11 +1,6 @@
 "use strict";
 
-import {
-  assert,
-  commandFixture,
-  linkModules,
-  unlinkModules,
-} from "./support/helpers.mjs";
+import {assert, linkModules, unlinkModules} from "./support/helpers.mjs";
 
 import Operation from "../../assets/js/operation.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -127,7 +122,7 @@ describe("Operation", () => {
       const specDom = Type.keywordList([
         [
           Type.atom("expression"),
-          Type.tuple([commandFixture({name: Type.atom("my_command")})]),
+          Type.tuple([Type.commandStruct({name: Type.atom("my_command")})]),
         ],
       ]);
 
@@ -139,7 +134,7 @@ describe("Operation", () => {
 
       assert.deepStrictEqual(
         operation,
-        commandFixture({
+        Type.commandStruct({
           name: Type.atom("my_command"),
           params: Type.map([[Type.atom("event"), eventParam]]),
           target: defaultTarget,
@@ -250,11 +245,11 @@ describe("Operation", () => {
     });
 
     it("command", () => {
-      const command = Type.struct("Hologram.Component.Command", [
-        [Type.atom("name"), Type.atom("my_command")],
-        [Type.atom("params"), Type.map([])],
-        [Type.atom("target"), Type.bitstring("my_target")],
-      ]);
+      const command = Type.commandStruct({
+        name: Type.atom("my_command"),
+        params: Type.map([]),
+        target: Type.bitstring("my_target"),
+      });
 
       assert.isFalse(Operation.isAction(command));
     });
