@@ -1173,5 +1173,17 @@ describe("Type", () => {
         ]),
       );
     });
+
+    it("command struct", () => {
+      assert.deepStrictEqual(
+        Type.commandStruct(),
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("Hologram.Component.Command")],
+          [Type.atom("name"), Type.nil()],
+          [Type.atom("params"), Type.map([])],
+          [Type.atom("target"), Type.nil()],
+        ]),
+      );
+    });
   });
 });

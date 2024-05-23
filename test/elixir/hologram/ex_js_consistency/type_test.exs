@@ -5,9 +5,15 @@ defmodule Hologram.ExJsConsistency.TypeTest do
   Always update both together.
   """
   use Hologram.Test.BasicCase, async: true
+
   alias Hologram.Component.Action
+  alias Hologram.Component.Command
 
   test "action struct" do
     assert %Action{} == %{__struct__: Action, name: nil, params: %{}, target: nil}
+  end
+
+  test "command struct" do
+    assert %Command{} == %{__struct__: Command, name: nil, params: %{}, target: nil}
   end
 end
