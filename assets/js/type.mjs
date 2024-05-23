@@ -108,6 +108,33 @@ export default class Type {
     ]);
   }
 
+  static componentStruct(data = {}) {
+    let {emittedContext, nextAction, nextCommand, state} = data;
+
+    if (typeof emittedContext === "undefined") {
+      emittedContext = Type.map();
+    }
+
+    if (typeof nextAction === "undefined") {
+      nextAction = Type.nil();
+    }
+
+    if (typeof nextCommand === "undefined") {
+      nextCommand = Type.nil();
+    }
+
+    if (typeof state === "undefined") {
+      state = Type.map();
+    }
+
+    return Type.struct("Hologram.Component", [
+      [Type.atom("emitted_context"), emittedContext],
+      [Type.atom("next_action"), nextAction],
+      [Type.atom("next_command"), nextCommand],
+      [Type.atom("state"), state],
+    ]);
+  }
+
   static consPattern(head, tail) {
     return {type: "cons_pattern", head: head, tail: tail};
   }

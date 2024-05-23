@@ -279,6 +279,55 @@ describe("Type", () => {
     });
   });
 
+  describe("componentStruct()", () => {
+    it("default values", () => {
+      assert.deepStrictEqual(
+        Type.componentStruct(),
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("Hologram.Component")],
+          [Type.atom("emitted_context"), Type.map()],
+          [Type.atom("next_action"), Type.nil()],
+          [Type.atom("next_command"), Type.nil()],
+          [Type.atom("state"), Type.map()],
+        ]),
+      );
+    });
+
+    it("custom values", () => {
+      const emittedContext = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      const nextAction = Type.actionStruct({name: "my_action"});
+
+      const nextCommand = Type.commandStruct({name: "my_command"});
+
+      const state = Type.map([
+        [Type.atom("c"), Type.integer(3)],
+        [Type.atom("d"), Type.integer(4)],
+      ]);
+
+      const result = Type.componentStruct({
+        emittedContext,
+        nextAction,
+        nextCommand,
+        state,
+      });
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("Hologram.Component")],
+          [Type.atom("emitted_context"), emittedContext],
+          [Type.atom("next_action"), nextAction],
+          [Type.atom("next_command"), nextCommand],
+          [Type.atom("state"), state],
+        ]),
+      );
+    });
+  });
+
   it("consPattern()", () => {
     const head = Type.integer(1);
     const tail = Type.list([Type.integer(2), Type.integer(3)]);
