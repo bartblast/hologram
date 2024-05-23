@@ -55,6 +55,11 @@ export default class ComponentRegistry {
     ComponentRegistry.entries = entries;
   }
 
+  // Deps: [:maps.is_key/2]
+  static isCidRegistered(cid) {
+    return Type.isTrue(Erlang_Maps["is_key/2"](cid, ComponentRegistry.entries));
+  }
+
   // Optimized (mutates entries/struct field)
   static putComponentStruct(cid, componentStruct) {
     ComponentRegistry.entries.data[Type.encodeMapKey(cid)][1].data[

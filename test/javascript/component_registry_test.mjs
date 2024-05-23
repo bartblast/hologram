@@ -155,6 +155,16 @@ describe("ComponentRegistry", () => {
     assert.equal(ComponentRegistry.entries, "dummyentries");
   });
 
+  describe("isCidRegistered()", () => {
+    it("is registered", () => {
+      assert.isTrue(ComponentRegistry.isCidRegistered(cid2));
+    });
+
+    it("is not registered", () => {
+      assert.isFalse(ComponentRegistry.isCidRegistered(cid3));
+    });
+  });
+
   it("putEntry()", () => {
     ComponentRegistry.putEntry(cid3, entry3);
 
