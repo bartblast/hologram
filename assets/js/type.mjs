@@ -34,10 +34,6 @@ export default class Type {
     return Type.atom(`Elixir.${aliasStr}`);
   }
 
-  static isAlias(term) {
-    return Type.isAtom(term) && term.value.startsWith("Elixir.");
-  }
-
   static anonymousFunction(arity, clauses, context) {
     return {
       type: "anonymous_function",
@@ -168,6 +164,10 @@ export default class Type {
     }
 
     return {type: "integer", value: value};
+  }
+
+  static isAlias(term) {
+    return Type.isAtom(term) && term.value.startsWith("Elixir.");
   }
 
   static isAnonymousFunction(term) {
