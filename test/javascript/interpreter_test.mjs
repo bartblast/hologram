@@ -6011,4 +6011,21 @@ describe("Interpreter", () => {
       '"with" expression is not yet implemented in Hologram',
     );
   });
+
+  // IMPORTANT!
+  // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/type_test.exs
+  // Always update both together.
+  describe("consistency tests", () => {
+    it("action struct", () => {
+      assert.deepStrictEqual(
+        Type.actionStruct(),
+        Type.map([
+          [Type.atom("__struct__"), Type.alias("Hologram.Component.Action")],
+          [Type.atom("name"), Type.nil()],
+          [Type.atom("params"), Type.map([])],
+          [Type.atom("target"), Type.nil()],
+        ]),
+      );
+    });
+  });
 });
