@@ -139,48 +139,8 @@ export function componentRegistryEntryFixture(data = {}) {
 
   return Type.map([
     [Type.atom("module"), module],
-    [Type.atom("struct"), componentStructFixture(data)],
+    [Type.atom("struct"), Type.componentStruct(data)],
   ]);
-}
-
-export function componentStructFixture(data = {}) {
-  let componentStruct = elixirHologramComponentStruct0();
-
-  const {emittedContext, nextAction, nextCommand, state} = data;
-
-  if (typeof emittedContext !== "undefined") {
-    componentStruct = Erlang_Maps["put/3"](
-      Type.atom("emitted_context"),
-      emittedContext,
-      componentStruct,
-    );
-  }
-
-  if (typeof nextAction !== "undefined") {
-    componentStruct = Erlang_Maps["put/3"](
-      Type.atom("next_action"),
-      nextAction,
-      componentStruct,
-    );
-  }
-
-  if (typeof nextCommand !== "undefined") {
-    componentStruct = Erlang_Maps["put/3"](
-      Type.atom("next_command"),
-      nextCommand,
-      componentStruct,
-    );
-  }
-
-  if (typeof state !== "undefined") {
-    componentStruct = Erlang_Maps["put/3"](
-      Type.atom("state"),
-      state,
-      componentStruct,
-    );
-  }
-
-  return componentStruct;
 }
 
 export function contextFixture(data = {}) {
@@ -195,15 +155,6 @@ export function contextFixture(data = {}) {
   }
 
   return Interpreter.buildContext({module: module, vars: vars});
-}
-
-export function elixirHologramComponentStruct0() {
-  return Type.struct("Hologram.Component", [
-    [Type.atom("emitted_context"), Type.map()],
-    [Type.atom("next_action"), Type.nil()],
-    [Type.atom("next_command"), Type.nil()],
-    [Type.atom("state"), Type.map()],
-  ]);
 }
 
 function elixirStringCharsToString1(term) {
@@ -268,10 +219,6 @@ export function linkModules() {
   globalThis.Elixir_Enum = {};
   globalThis.Elixir_Kernel = Elixir_Kernel;
 
-  globalThis.Elixir_Hologram_Component = {};
-  globalThis.Elixir_Hologram_Component["__struct__/0"] =
-    elixirHologramComponentStruct0;
-
   globalThis.Elixir_String_Chars = {};
   globalThis.Elixir_String_Chars["to_string/1"] = elixirStringCharsToString1;
 }
@@ -315,8 +262,6 @@ export function unlinkModules() {
   delete globalThis.Erlang_Unicode;
   delete globalThis.Elixir_Code;
   delete globalThis.Elixir_Enum;
-  delete globalThis.Elixir_Hologram_Component;
-  delete globalThis.Elixir_Hologram_Component_Command;
   delete globalThis.Elixir_Kernel;
   delete globalThis.Elixir_String_Chars;
 }

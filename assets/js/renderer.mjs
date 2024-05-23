@@ -248,8 +248,7 @@ export default class Renderer {
 
     if (componentState === null) {
       if ("init/2" in moduleRef) {
-        const emptyComponentStruct =
-          Elixir_Hologram_Component["__struct__/0"]();
+        const emptyComponentStruct = Type.componentStruct();
 
         const componentStruct = moduleRef["init/2"](
           props,

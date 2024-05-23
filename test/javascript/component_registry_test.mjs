@@ -2,7 +2,6 @@
 
 import {
   assert,
-  componentStructFixture,
   initComponentRegistryEntry,
   linkModules,
   unlinkModules,
@@ -50,17 +49,17 @@ const state3 = Type.map([
   [Type.atom("state_3b"), Type.integer(302)],
 ]);
 
-const struct1 = componentStructFixture({
+const struct1 = Type.componentStruct({
   emittedContext: emittedContext1,
   state: state1,
 });
 
-const struct2 = componentStructFixture({
+const struct2 = Type.componentStruct({
   emittedContext: emittedContext2,
   state: state2,
 });
 
-const struct3 = componentStructFixture({
+const struct3 = Type.componentStruct({
   emittedContext: emittedContext3,
   state: state3,
 });
@@ -172,7 +171,7 @@ describe("ComponentRegistry", () => {
   it("putComponentStruct()", () => {
     initComponentRegistryEntry(cid4);
 
-    const componentStruct = componentStructFixture();
+    const componentStruct = Type.componentStruct();
     ComponentRegistry.putComponentStruct(cid4, componentStruct);
 
     assert.equal(ComponentRegistry.getComponentStruct(cid4), componentStruct);
