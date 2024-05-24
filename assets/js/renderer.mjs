@@ -208,7 +208,11 @@ export default class Renderer {
         Type.atom("expression"),
       )
     ) {
-      evaluatedValue = valueDom.data[0].data[1].data[0];
+      if (valueDom.data[0].data[1].data.length === 1) {
+        evaluatedValue = valueDom.data[0].data[1].data[0];
+      } else {
+        evaluatedValue = valueDom.data[0].data[1];
+      }
     } else {
       evaluatedValue = Renderer.valueDomToBitstring(valueDom);
     }

@@ -60,6 +60,7 @@ import {defineModule60Fixture} from "./support/fixtures/renderer/module_60.mjs";
 import {defineModule61Fixture} from "./support/fixtures/renderer/module_61.mjs";
 import {defineModule62Fixture} from "./support/fixtures/renderer/module_62.mjs";
 import {defineModule63Fixture} from "./support/fixtures/renderer/module_63.mjs";
+import {defineModule64Fixture} from "./support/fixtures/renderer/module_64.mjs";
 import {defineModule7Fixture} from "./support/fixtures/renderer/module_7.mjs";
 import {defineModule8Fixture} from "./support/fixtures/renderer/module_8.mjs";
 import {defineModule9Fixture} from "./support/fixtures/renderer/module_9.mjs";
@@ -120,6 +121,7 @@ describe("Renderer", () => {
     defineModule61Fixture();
     defineModule62Fixture();
     defineModule63Fixture();
+    defineModule64Fixture();
     defineModule7Fixture();
     defineModule8Fixture();
     defineModule9Fixture();
@@ -1053,6 +1055,53 @@ describe("Renderer", () => {
           [cid52, entry52],
         ]),
       );
+    });
+  });
+
+  describe("component props", () => {
+    it("single-valued", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module64"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("my_prop"),
+            Type.keywordList([
+              [Type.atom("expression"), Type.tuple([Type.integer(123)])],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const expected = ["my_prop = 123"];
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multi-valued", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module64"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("my_prop"),
+            Type.keywordList([
+              [
+                Type.atom("expression"),
+                Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+              ],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const expected = ["my_prop = {1, 2, 3}"];
+
+      assert.deepStrictEqual(result, expected);
     });
   });
 
