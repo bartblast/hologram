@@ -157,6 +157,20 @@ export function contextFixture(data = {}) {
   return Interpreter.buildContext({module: module, vars: vars});
 }
 
+function defineElixirEnumModule() {
+  return {
+    "reverse/1": (term) => {
+      if (!Type.isList(term) && !Type.isTuple(term)) {
+        throw new HologramInterpreterError(
+          `not a list or tuple: ${inspectEx(term)}`,
+        );
+      }
+
+      return {...term, data: term.data.reverse()};
+    },
+  };
+}
+
 function elixirStringCharsToString1(term) {
   switch (term.type) {
     case "atom":
@@ -216,7 +230,7 @@ export function linkModules() {
   globalThis.Erlang_Persistent_Term = Erlang_Persistent_Term;
   globalThis.Erlang_Unicode = Erlang_Unicode;
   globalThis.Elixir_Code = Elixir_Code;
-  globalThis.Elixir_Enum = {};
+  globalThis.Elixir_Enum = defineElixirEnumModule();
   globalThis.Elixir_Kernel = Elixir_Kernel;
 
   globalThis.Elixir_String_Chars = {};
