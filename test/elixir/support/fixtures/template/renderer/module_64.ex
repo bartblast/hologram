@@ -1,4 +1,4 @@
-defmodule Hologram.Test.Fixtures.Template.Renderer.Module63 do
+defmodule Hologram.Test.Fixtures.Template.Renderer.Module64 do
   use Hologram.Component
 
   prop :my_prop, :any
