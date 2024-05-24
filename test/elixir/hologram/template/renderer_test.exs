@@ -52,6 +52,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module53
   alias Hologram.Test.Fixtures.Template.Renderer.Module6
   alias Hologram.Test.Fixtures.Template.Renderer.Module62
+  alias Hologram.Test.Fixtures.Template.Renderer.Module63
   alias Hologram.Test.Fixtures.Template.Renderer.Module7
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
@@ -312,6 +313,18 @@ defmodule Hologram.Template.RendererTest do
                   "component_51" => %{module: Module51, struct: %Component{state: %{a: 1, b: 2}}},
                   "component_52" => %{module: Module52, struct: %Component{state: %{c: 3, d: 4}}}
                 }}
+    end
+  end
+
+  describe "component props" do
+    test "single-valued" do
+      node = {:component, Module63, [{"my_prop", [expression: {123}]}], []}
+      assert render_dom(node, @env) == {"my_prop = 123", %{}}
+    end
+
+    test "multi-valued" do
+      node = {:component, Module63, [{"my_prop", [expression: {1, 2, 3}]}], []}
+      assert render_dom(node, @env) == {"my_prop = {1, 2, 3}", %{}}
     end
   end
 

@@ -195,6 +195,10 @@ defmodule Hologram.Template.Renderer do
     {name, value}
   end
 
+  defp evaluate_prop_value({name, [expression: value]}) do
+    {name, value}
+  end
+
   defp evaluate_prop_value({name, value_dom}) do
     {value_str, %{}} = render_dom(value_dom, %Env{node_type: :property})
     {name, value_str}
