@@ -18,7 +18,7 @@ import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
 // Events
-import ClickEvent from "./events/click_event.mjs";
+import MouseEvent from "./events/mouse_event.mjs";
 
 import {attributesModule, eventListenersModule, init, toVNode} from "snabbdom";
 const patch = init([attributesModule, eventListenersModule]);
@@ -191,7 +191,11 @@ export default class Hologram {
   static #getEventImplementation(eventType) {
     switch (eventType) {
       case "click":
-        return ClickEvent;
+        // TODO: change to PointerEvent when Firefox and Safari bugs are fixed:
+        // See: https://stackoverflow.com/a/76900433
+        // See: https://bugzilla.mozilla.org/show_bug.cgi?id=1675847
+        // See: https://bugs.webkit.org/show_bug.cgi?id=218665
+        return MouseEvent;
     }
   }
 

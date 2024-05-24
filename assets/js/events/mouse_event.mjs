@@ -2,7 +2,7 @@
 
 import Type from "../type.mjs";
 
-export default class ClickEvent {
+export default class MouseEvent {
   // TODO: add more event details
   static buildOperationParam(event) {
     return Type.map([
