@@ -3,7 +3,7 @@
 import Type from "../type.mjs";
 
 export default class MouseEvent {
-  // TODO: add more event details
+  // TODO: add more fields specific to MouseEvent
   static buildOperationParam(event) {
     return Type.map([
       [Type.atom("page_x"), Type.integer(event.pageX)],
