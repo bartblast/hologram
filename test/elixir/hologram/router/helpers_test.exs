@@ -38,8 +38,15 @@ defmodule Hologram.Router.HelpersTest do
     end
   end
 
-  test "page_path/1" do
-    assert page_path(Module1) == "/hologram-test-fixtures-router-module1"
+  describe "page_path/1" do
+    test "module arg" do
+      assert page_path(Module1) == "/hologram-test-fixtures-router-module1"
+    end
+
+    test "tuple arg" do
+      assert page_path({Module2, param_1: :abc, param_2: 123}) ==
+               "/hologram-test-fixtures-router-module2/abc/123"
+    end
   end
 
   describe "page_path/2" do

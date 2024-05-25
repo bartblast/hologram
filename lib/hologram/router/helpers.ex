@@ -18,9 +18,14 @@ defmodule Hologram.Router.Helpers do
   end
 
   @doc """
-  Builds relative URL for the given page module.
+  Builds relative URL for the given page module or a tuple of a page module and params.
   """
-  @spec page_path(module) :: String.t()
+  @spec page_path(module | tuple) :: String.t()
+
+  def page_path({module, params}) do
+    page_path(module, params)
+  end
+
   def page_path(module) do
     page_path(module, [])
   end
