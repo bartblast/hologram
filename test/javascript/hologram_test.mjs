@@ -370,7 +370,10 @@ describe("Hologram", () => {
   });
 
   describe("handleEvent()", () => {
-    let commandQueueProcessStub, commandQueuePushStub, executeActionStub;
+    let commandQueueProcessStub,
+      commandQueuePushStub,
+      executeActionStub,
+      prefetchPageStub;
 
     const actionSpecDom = Type.keywordList([
       [Type.atom("text"), Type.bitstring("my_action")],
@@ -378,7 +381,12 @@ describe("Hologram", () => {
 
     const defaultTarget = cid1;
     const eventType = "click";
-    const notIgnoredEvent = {pageX: 1, pageY: 2, preventDefault: () => null};
+    const notIgnoredEvent = {
+      pageX: 1,
+      pageY: 2,
+      preventDefault: () => null,
+      target: {id: "dummy_node"},
+    };
 
     beforeEach(() => {
       commandQueueProcessStub = sinon
@@ -392,12 +400,17 @@ describe("Hologram", () => {
       executeActionStub = sinon
         .stub(Hologram, "executeAction")
         .callsFake(() => null);
+
+      prefetchPageStub = sinon
+        .stub(Hologram, "prefetchPage")
+        .callsFake(() => null);
     });
 
     afterEach(() => {
       CommandQueue.process.restore();
       CommandQueue.push.restore();
       Hologram.executeAction.restore();
+      Hologram.prefetchPage.restore();
     });
 
     it("event is ignored", () => {
@@ -418,9 +431,10 @@ describe("Hologram", () => {
       sinon.assert.notCalled(commandQueuePushStub);
       sinon.assert.notCalled(commandQueueProcessStub);
       sinon.assert.notCalled(executeActionStub);
+      sinon.assert.notCalled(prefetchPageStub);
     });
 
-    it("action", () => {
+    it("regular action", () => {
       Hologram.handleEvent(
         notIgnoredEvent,
         eventType,
@@ -431,6 +445,55 @@ describe("Hologram", () => {
       sinon.assert.notCalled(commandQueuePushStub);
       sinon.assert.notCalled(commandQueueProcessStub);
       sinon.assert.calledOnce(executeActionStub);
+      sinon.assert.notCalled(prefetchPageStub);
+    });
+
+    it("prefetch page action", () => {
+      const actionSpecDom = Type.keywordList([
+        [
+          Type.atom("expression"),
+          Type.tuple([
+            Type.actionStruct({
+              name: Elixir_Hologram_RuntimeSettings[
+                "prefetch_page_action_name/0"
+              ](),
+              params: Type.map([[Type.atom("to"), Type.alias("MyPage")]]),
+            }),
+          ]),
+        ],
+      ]);
+
+      Hologram.handleEvent(
+        notIgnoredEvent,
+        eventType,
+        actionSpecDom,
+        defaultTarget,
+      );
+
+      sinon.assert.notCalled(commandQueuePushStub);
+      sinon.assert.notCalled(commandQueueProcessStub);
+      sinon.assert.notCalled(executeActionStub);
+
+      const expectedOperation = Type.actionStruct({
+        name: Elixir_Hologram_RuntimeSettings["prefetch_page_action_name/0"](),
+        params: Type.map([
+          [Type.atom("to"), Type.alias("MyPage")],
+          [
+            Type.atom("event"),
+            Type.map([
+              [Type.atom("page_x"), Type.integer(1)],
+              [Type.atom("page_y"), Type.integer(2)],
+            ]),
+          ],
+        ]),
+        target: defaultTarget,
+      });
+
+      sinon.assert.calledOnceWithExactly(
+        prefetchPageStub,
+        expectedOperation,
+        notIgnoredEvent.target,
+      );
     });
 
     it("command", () => {
@@ -451,6 +514,7 @@ describe("Hologram", () => {
       sinon.assert.calledOnce(commandQueuePushStub);
       sinon.assert.calledOnce(commandQueueProcessStub);
       sinon.assert.notCalled(executeActionStub);
+      sinon.assert.notCalled(prefetchPageStub);
     });
   });
 });

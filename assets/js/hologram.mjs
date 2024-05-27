@@ -132,12 +132,21 @@ export default class Hologram {
       );
 
       if (Operation.isAction(operation)) {
-        Hologram.executeAction(operation);
+        if (Hologram.#isPrefetchPageAction(operation)) {
+          Hologram.prefetchPage(operation, event.target);
+        } else {
+          Hologram.executeAction(operation);
+        }
       } else {
         CommandQueue.push(operation);
         CommandQueue.process();
       }
     }
+  }
+
+  // Made public to make tests easier
+  static prefetchPage(operation, target) {
+    // TODO: implement
   }
 
   // Made public to make tests easier
@@ -208,6 +217,16 @@ export default class Hologram {
       console.log("INSPECT: " + Interpreter.inspect(term));
 
     Hologram.#isInitiated = true;
+  }
+
+  // Deps: [:maps.get/2]
+  static #isPrefetchPageAction(operation) {
+    const prefetchPageActionName =
+      Elixir_Hologram_RuntimeSettings["prefetch_page_action_name/0"]();
+
+    const actionName = Erlang_Maps["get/2"](Type.atom("name"), operation);
+
+    return Interpreter.isEqual(actionName, prefetchPageActionName);
   }
 
   static #loadMountData() {
