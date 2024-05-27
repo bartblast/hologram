@@ -8,6 +8,7 @@ module.exports = {
   globals: {
     Elixir_Code: "readonly",
     Elixir_Enum: "readonly",
+    Elixir_Hologram_RuntimeSettings: "readonly",
     Elixir_Hologram_Template_Renderer: "readonly",
     Elixir_Kernel: "readonly",
     Elixir_Map: "readonly",

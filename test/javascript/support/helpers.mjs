@@ -231,6 +231,11 @@ export function linkModules() {
   globalThis.Erlang_Unicode = Erlang_Unicode;
   globalThis.Elixir_Code = Elixir_Code;
   globalThis.Elixir_Enum = defineElixirEnumModule();
+
+  globalThis.Elixir_Hologram_RuntimeSettings = {};
+  globalThis.Elixir_Hologram_RuntimeSettings["prefetch_page_action_name/0"] =
+    () => Type.atom("__prefetch_page__");
+
   globalThis.Elixir_Kernel = Elixir_Kernel;
 
   globalThis.Elixir_String_Chars = {};
@@ -276,6 +281,7 @@ export function unlinkModules() {
   delete globalThis.Erlang_Unicode;
   delete globalThis.Elixir_Code;
   delete globalThis.Elixir_Enum;
+  delete globalThis.Elixir_Hologram_RuntimeSettings;
   delete globalThis.Elixir_Kernel;
   delete globalThis.Elixir_String_Chars;
 }
