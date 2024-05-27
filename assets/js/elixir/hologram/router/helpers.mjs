@@ -70,7 +70,7 @@ const Elixir_Hologram_Router_Helpers = {
         );
 
         const newPathAcc = Type.bitstring(
-          Bitstring.toText(pathAcc).replaceAll(`:${key}`, paramValueText),
+          Bitstring.toText(pathAcc).replaceAll(`:${key.value}`, paramValueText),
         );
 
         return [newParamsAcc, newPathAcc];
