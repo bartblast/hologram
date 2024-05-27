@@ -7,6 +7,7 @@ defmodule Hologram.Commons.Reflection do
   @module_beam_path_plt_dump_file_name "module_beam_path.plt"
   @module_digest_plt_dump_file_name "module_digest.plt"
   @page_digest_plt_dump_file_name "page_digest.plt"
+  @prefetch_page_action_name :__prefetch_page__
 
   @doc """
   Determines whether the given term is an alias.
@@ -393,6 +394,14 @@ defmodule Hologram.Commons.Reflection do
   @spec page_digest_plt_dump_file_name() :: String.t()
   def page_digest_plt_dump_file_name do
     @page_digest_plt_dump_file_name
+  end
+
+  @doc """
+  Returns the action name used for page prefetching.
+  """
+  @spec prefetch_page_action_name() :: atom
+  def prefetch_page_action_name do
+    @prefetch_page_action_name
   end
 
   @doc """
