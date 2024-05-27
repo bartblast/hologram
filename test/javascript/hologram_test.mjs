@@ -444,8 +444,23 @@ describe("Hologram", () => {
 
       sinon.assert.notCalled(commandQueuePushStub);
       sinon.assert.notCalled(commandQueueProcessStub);
-      sinon.assert.calledOnce(executeActionStub);
       sinon.assert.notCalled(prefetchPageStub);
+
+      const expectedAction = Type.actionStruct({
+        name: Type.atom("my_action"),
+        params: Type.map([
+          [
+            Type.atom("event"),
+            Type.map([
+              [Type.atom("page_x"), Type.integer(1)],
+              [Type.atom("page_y"), Type.integer(2)],
+            ]),
+          ],
+        ]),
+        target: defaultTarget,
+      });
+
+      sinon.assert.calledOnceWithExactly(executeActionStub, expectedAction);
     });
 
     it("prefetch page action", () => {
@@ -474,7 +489,7 @@ describe("Hologram", () => {
       sinon.assert.notCalled(commandQueueProcessStub);
       sinon.assert.notCalled(executeActionStub);
 
-      const expectedOperation = Type.actionStruct({
+      const expectedAction = Type.actionStruct({
         name: Elixir_Hologram_RuntimeSettings["prefetch_page_action_name/0"](),
         params: Type.map([
           [Type.atom("to"), Type.alias("MyPage")],
@@ -491,7 +506,7 @@ describe("Hologram", () => {
 
       sinon.assert.calledOnceWithExactly(
         prefetchPageStub,
-        expectedOperation,
+        expectedAction,
         notIgnoredEvent.target,
       );
     });
@@ -511,10 +526,25 @@ describe("Hologram", () => {
         defaultTarget,
       );
 
-      sinon.assert.calledOnce(commandQueuePushStub);
-      sinon.assert.calledOnce(commandQueueProcessStub);
       sinon.assert.notCalled(executeActionStub);
       sinon.assert.notCalled(prefetchPageStub);
+
+      const expectedCommand = Type.commandStruct({
+        name: Type.atom("my_command"),
+        params: Type.map([
+          [
+            Type.atom("event"),
+            Type.map([
+              [Type.atom("page_x"), Type.integer(1)],
+              [Type.atom("page_y"), Type.integer(2)],
+            ]),
+          ],
+        ]),
+        target: defaultTarget,
+      });
+
+      sinon.assert.calledOnceWithExactly(commandQueuePushStub, expectedCommand);
+      sinon.assert.calledOnceWithExactly(commandQueueProcessStub);
     });
   });
 });
