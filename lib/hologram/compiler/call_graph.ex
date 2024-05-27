@@ -30,6 +30,8 @@ defmodule Hologram.Compiler.CallGraph do
   @manually_ported_mfas [
     {Code, :ensure_loaded, 1},
     {Hologram.Router.Helpers, :asset_path, 1},
+    {Hologram.Router.Helpers, :page_path, 1},
+    {Hologram.Router.Helpers, :page_path, 2},
     {Kernel, :inspect, 1},
     {Kernel, :inspect, 2}
   ]
