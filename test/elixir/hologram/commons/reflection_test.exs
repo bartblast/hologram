@@ -273,10 +273,6 @@ defmodule Hologram.Commons.ReflectionTest do
     assert page_digest_plt_dump_file_name() == "page_digest.plt"
   end
 
-  test "prefetch_page_action_name/0" do
-    assert prefetch_page_action_name() == :__prefetch_page__
-  end
-
   test "release_priv_dir/0" do
     assert release_priv_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv"
   end
