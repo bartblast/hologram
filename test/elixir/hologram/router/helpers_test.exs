@@ -63,7 +63,7 @@ defmodule Hologram.Router.HelpersTest do
                    end
     end
 
-    test "missing multiple param" do
+    test "missing multiple params" do
       assert_raise ArgumentError,
                    ~s'page "Hologram.Test.Fixtures.Router.Module2" expects "param_1" param',
                    fn ->

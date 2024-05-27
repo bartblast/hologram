@@ -73,6 +73,11 @@ defmodule Hologram.Compiler.CallGraph do
     manually_ported_code_module: [
       {:code, :ensure_loaded, 1}
     ],
+    manually_ported_hologram_router_helpers_module: [
+      {String.Chars, :to_string, 1},
+      {:lists, :keyfind, 3},
+      {:lists, :keymember, 3}
+    ],
     operation_class: [
       {:maps, :from_list, 1},
       {:maps, :get, 2},
