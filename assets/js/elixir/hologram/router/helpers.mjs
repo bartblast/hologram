@@ -20,6 +20,16 @@ const Elixir_Hologram_Router_Helpers = {
     return assetPath;
   },
 
+  "page_path/1": (arg) => {
+    const page_path_2 = Elixir_Hologram_Router_Helpers["page_path/2"];
+
+    if (Type.isTuple(arg)) {
+      return page_path_2(arg.data[0], arg.data[1]);
+    }
+
+    return page_path_2(arg, Type.keywordList([]));
+  },
+
   // Deps: [String.Chars.to_string/1, :lists.keyfind/3, :lists.keymember/3]
   "page_path/2": (pageModule, params) => {
     const context = Interpreter.buildContext();

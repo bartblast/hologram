@@ -7,6 +7,7 @@ import {
   unlinkModules,
 } from "../../../support/helpers.mjs";
 
+import {defineModule1Fixture} from "../../../support/fixtures/router/module_1.mjs";
 import {defineModule2Fixture} from "../../../support/fixtures/router/module_2.mjs";
 
 import AssetPathRegistry from "../../../../../assets/js/asset_path_registry.mjs";
@@ -19,9 +20,14 @@ const assetManifest = {
   "static-path-3": "/asset-path-3",
 };
 
+const module1 = Type.alias("Hologram.Test.Fixtures.Router.Module1");
+const module2 = Type.alias("Hologram.Test.Fixtures.Router.Module2");
+
 describe("Elixir_Hologram_Router_Helpers", () => {
   before(() => {
     linkModules();
+
+    defineModule1Fixture();
     defineModule2Fixture();
   });
 
@@ -48,10 +54,34 @@ describe("Elixir_Hologram_Router_Helpers", () => {
     });
   });
 
+  describe("page_path/1", () => {
+    const page_path = Elixir_Hologram_Router_Helpers["page_path/1"];
+
+    it("module arg", () => {
+      const result = page_path(module1);
+      const expected = Type.bitstring("/hologram-test-fixtures-router-module1");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("tuple arg", () => {
+      const params = Type.keywordList([
+        [Type.atom("param_1"), Type.atom("abc")],
+        [Type.atom("param_2"), Type.integer(123)],
+      ]);
+
+      const result = page_path(Type.tuple([module2, params]));
+
+      const expected = Type.bitstring(
+        "/hologram-test-fixtures-router-module2/abc/123",
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   describe("page_path/2", () => {
     const page_path = Elixir_Hologram_Router_Helpers["page_path/2"];
-
-    const module2 = Type.alias("Hologram.Test.Fixtures.Router.Module2");
 
     it("valid params", () => {
       const params = Type.keywordList([
