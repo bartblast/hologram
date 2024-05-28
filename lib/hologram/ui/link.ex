@@ -4,6 +4,7 @@ defmodule Hologram.UI.Link do
 
   prop :to, [:module, :string, :tuple]
 
+  @impl Component
   def template do
     ~H"""
     <a 
