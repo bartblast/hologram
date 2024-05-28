@@ -171,6 +171,15 @@ function defineElixirEnumModule() {
   };
 }
 
+function defineElixirHologramRuntimeSettingsModule() {
+  return {
+    "navigate_to_prefetched_page_action_name/0": () =>
+      Type.atom("__navigate_to_prefetched_page__"),
+
+    "prefetch_page_action_name/0": () => Type.atom("__prefetch_page__"),
+  };
+}
+
 export function defineGlobalErlangAndElixirModules() {
   globalThis.Erlang = Erlang;
   globalThis.Erlang_Code = Erlang_Code;
@@ -180,16 +189,8 @@ export function defineGlobalErlangAndElixirModules() {
   globalThis.Erlang_Unicode = Erlang_Unicode;
   globalThis.Elixir_Code = Elixir_Code;
   globalThis.Elixir_Enum = defineElixirEnumModule();
-
-  globalThis.Elixir_Hologram_RuntimeSettings = {};
-
-  globalThis.Elixir_Hologram_RuntimeSettings[
-    "navigate_to_prefetched_page_action_name/0"
-  ] = () => Type.atom("__navigate_to_prefetched_page__");
-
-  globalThis.Elixir_Hologram_RuntimeSettings["prefetch_page_action_name/0"] =
-    () => Type.atom("__prefetch_page__");
-
+  globalThis.Elixir_Hologram_RuntimeSettings =
+    defineElixirHologramRuntimeSettingsModule();
   globalThis.Elixir_Kernel = Elixir_Kernel;
 
   globalThis.Elixir_String_Chars = {};
