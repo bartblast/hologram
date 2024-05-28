@@ -6,7 +6,6 @@ import {
   componentRegistryEntryFixture,
   linkModules,
   sinon,
-  unlinkModules,
 } from "./support/helpers.mjs";
 
 import Client from "../../assets/js/client.mjs";
@@ -528,7 +527,7 @@ describe("Hologram", () => {
     let commandQueueProcessStub,
       commandQueuePushStub,
       executeActionStub,
-      prefetchPageStub;
+      executePrefetchPageActionStub;
 
     const actionSpecDom = Type.keywordList([
       [Type.atom("text"), Type.bitstring("my_action")],
@@ -556,8 +555,8 @@ describe("Hologram", () => {
         .stub(Hologram, "executeAction")
         .callsFake(() => null);
 
-      prefetchPageStub = sinon
-        .stub(Hologram, "prefetchPage")
+      executePrefetchPageActionStub = sinon
+        .stub(Hologram, "executePrefetchPageAction")
         .callsFake(() => null);
     });
 
@@ -565,7 +564,7 @@ describe("Hologram", () => {
       CommandQueue.process.restore();
       CommandQueue.push.restore();
       Hologram.executeAction.restore();
-      Hologram.prefetchPage.restore();
+      Hologram.executePrefetchPageAction.restore();
     });
 
     it("event is ignored", () => {
@@ -586,7 +585,7 @@ describe("Hologram", () => {
       sinon.assert.notCalled(commandQueuePushStub);
       sinon.assert.notCalled(commandQueueProcessStub);
       sinon.assert.notCalled(executeActionStub);
-      sinon.assert.notCalled(prefetchPageStub);
+      sinon.assert.notCalled(executePrefetchPageActionStub);
     });
 
     it("regular action", () => {
@@ -599,7 +598,7 @@ describe("Hologram", () => {
 
       sinon.assert.notCalled(commandQueuePushStub);
       sinon.assert.notCalled(commandQueueProcessStub);
-      sinon.assert.notCalled(prefetchPageStub);
+      sinon.assert.notCalled(executePrefetchPageActionStub);
 
       const expectedAction = Type.actionStruct({
         name: Type.atom("my_action"),
@@ -660,7 +659,7 @@ describe("Hologram", () => {
       });
 
       sinon.assert.calledOnceWithExactly(
-        prefetchPageStub,
+        executePrefetchPageActionStub,
         expectedAction,
         notIgnoredEvent.target,
       );
@@ -682,7 +681,7 @@ describe("Hologram", () => {
       );
 
       sinon.assert.notCalled(executeActionStub);
-      sinon.assert.notCalled(prefetchPageStub);
+      sinon.assert.notCalled(executePrefetchPageActionStub);
 
       const expectedCommand = Type.commandStruct({
         name: Type.atom("my_command"),
