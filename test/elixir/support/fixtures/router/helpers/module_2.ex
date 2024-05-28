@@ -1,7 +1,7 @@
-defmodule Hologram.Test.Fixtures.Router.Module2 do
+defmodule Hologram.Test.Fixtures.Router.Helpers.Module2 do
   use Hologram.Page
 
-  route "/hologram-test-fixtures-router-module2/:param_1/:param_2"
+  route "/hologram-test-fixtures-router-helpers-module2/:param_1/:param_2"
 
   param :param_1
 

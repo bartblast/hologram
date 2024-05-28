@@ -6,8 +6,8 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "../../../support/helpers.mjs";
 
-import {defineModule1Fixture} from "../../../support/fixtures/router/module_1.mjs";
-import {defineModule2Fixture} from "../../../support/fixtures/router/module_2.mjs";
+import {defineModule1Fixture} from "../../../support/fixtures/router/helpers/module_1.mjs";
+import {defineModule2Fixture} from "../../../support/fixtures/router/helpers/module_2.mjs";
 
 import AssetPathRegistry from "../../../../../assets/js/asset_path_registry.mjs";
 import Elixir_Hologram_Router_Helpers from "../../../../../assets/js/elixir/hologram/router/helpers.mjs";
@@ -21,8 +21,8 @@ const assetManifest = {
   "static-path-3": "/asset-path-3",
 };
 
-const module1 = Type.alias("Hologram.Test.Fixtures.Router.Module1");
-const module2 = Type.alias("Hologram.Test.Fixtures.Router.Module2");
+const module1 = Type.alias("Hologram.Test.Fixtures.Router.Helpers.Module1");
+const module2 = Type.alias("Hologram.Test.Fixtures.Router.Helpers.Module2");
 
 describe("Elixir_Hologram_Router_Helpers", () => {
   before(() => {
@@ -56,7 +56,9 @@ describe("Elixir_Hologram_Router_Helpers", () => {
 
     it("module arg", () => {
       const result = page_path(module1);
-      const expected = Type.bitstring("/hologram-test-fixtures-router-module1");
+      const expected = Type.bitstring(
+        "/hologram-test-fixtures-router-helpers-module1",
+      );
 
       assert.deepStrictEqual(result, expected);
     });
@@ -70,7 +72,7 @@ describe("Elixir_Hologram_Router_Helpers", () => {
       const result = page_path(Type.tuple([module2, params]));
 
       const expected = Type.bitstring(
-        "/hologram-test-fixtures-router-module2/abc/123",
+        "/hologram-test-fixtures-router-helpers-module2/abc/123",
       );
 
       assert.deepStrictEqual(result, expected);
@@ -89,7 +91,7 @@ describe("Elixir_Hologram_Router_Helpers", () => {
       const result = page_path(module2, params);
 
       const expected = Type.bitstring(
-        "/hologram-test-fixtures-router-module2/abc/123",
+        "/hologram-test-fixtures-router-helpers-module2/abc/123",
       );
 
       assert.deepStrictEqual(result, expected);
@@ -103,7 +105,7 @@ describe("Elixir_Hologram_Router_Helpers", () => {
             Type.keywordList([[Type.atom("param_2"), Type.integer(123)]]),
           ),
         "ArgumentError",
-        'page "Hologram.Test.Fixtures.Router.Module2" expects "param_1" param',
+        'page "Hologram.Test.Fixtures.Router.Helpers.Module2" expects "param_1" param',
       );
     });
 
@@ -111,7 +113,7 @@ describe("Elixir_Hologram_Router_Helpers", () => {
       assertBoxedError(
         () => page_path(module2, Type.keywordList([])),
         "ArgumentError",
-        'page "Hologram.Test.Fixtures.Router.Module2" expects "param_1" param',
+        'page "Hologram.Test.Fixtures.Router.Helpers.Module2" expects "param_1" param',
       );
     });
 
@@ -125,7 +127,7 @@ describe("Elixir_Hologram_Router_Helpers", () => {
       assertBoxedError(
         () => page_path(module2, params),
         "ArgumentError",
-        `page "Hologram.Test.Fixtures.Router.Module2" doesn't expect "param_3" param`,
+        `page "Hologram.Test.Fixtures.Router.Helpers.Module2" doesn't expect "param_3" param`,
       );
     });
 
@@ -140,7 +142,7 @@ describe("Elixir_Hologram_Router_Helpers", () => {
       assertBoxedError(
         () => page_path(module2, params),
         "ArgumentError",
-        `page "Hologram.Test.Fixtures.Router.Module2" doesn't expect "param_3" param`,
+        `page "Hologram.Test.Fixtures.Router.Helpers.Module2" doesn't expect "param_3" param`,
       );
     });
   });
