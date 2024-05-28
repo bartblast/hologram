@@ -3,18 +3,16 @@
 import {
   assert,
   contextFixture,
-  linkModules,
-  unlinkModules,
+  defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import JsonEncoder from "../../assets/js/json_encoder.mjs";
 import Type from "../../assets/js/type.mjs";
 
-describe("JsonEncoder", () => {
-  before(() => linkModules());
-  after(() => unlinkModules());
+defineGlobalErlangAndElixirModules();
 
+describe("JsonEncoder", () => {
   describe("encode()", () => {
     it("boxed anonymous function", () => {
       const term = Type.anonymousFunction(2, [], contextFixture());

@@ -1,9 +1,14 @@
 "use strict";
 
-import {assert, linkModules, unlinkModules} from "./support/helpers.mjs";
+import {
+  assert,
+  defineGlobalErlangAndElixirModules,
+} from "./support/helpers.mjs";
 
 import AssetPathRegistry from "../../assets/js/asset_path_registry.mjs";
 import Type from "../../assets/js/type.mjs";
+
+defineGlobalErlangAndElixirModules();
 
 const assetManifest = {
   "static-path-1": "/asset-path-1",
@@ -12,9 +17,6 @@ const assetManifest = {
 };
 
 describe("AssetPathRegistry", () => {
-  before(() => linkModules());
-  after(() => unlinkModules());
-
   beforeEach(() => {
     AssetPathRegistry.hydrate(assetManifest);
   });

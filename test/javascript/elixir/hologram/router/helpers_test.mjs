@@ -3,8 +3,7 @@
 import {
   assert,
   assertBoxedError,
-  linkModules,
-  unlinkModules,
+  defineGlobalErlangAndElixirModules,
 } from "../../../support/helpers.mjs";
 
 import {defineModule1Fixture} from "../../../support/fixtures/router/module_1.mjs";
@@ -13,6 +12,8 @@ import {defineModule2Fixture} from "../../../support/fixtures/router/module_2.mj
 import AssetPathRegistry from "../../../../../assets/js/asset_path_registry.mjs";
 import Elixir_Hologram_Router_Helpers from "../../../../../assets/js/elixir/hologram/router/helpers.mjs";
 import Type from "../../../../../assets/js/type.mjs";
+
+defineGlobalErlangAndElixirModules();
 
 const assetManifest = {
   "static-path-1": "/asset-path-1",
@@ -25,13 +26,9 @@ const module2 = Type.alias("Hologram.Test.Fixtures.Router.Module2");
 
 describe("Elixir_Hologram_Router_Helpers", () => {
   before(() => {
-    linkModules();
-
     defineModule1Fixture();
     defineModule2Fixture();
   });
-
-  after(() => unlinkModules());
 
   beforeEach(() => {
     AssetPathRegistry.hydrate(assetManifest);

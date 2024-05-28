@@ -5,9 +5,8 @@ import {
   assertBoxedError,
   assertMatchError,
   contextFixture,
-  linkModules,
+  defineGlobalErlangAndElixirModules,
   sinon,
-  unlinkModules,
 } from "./support/helpers.mjs";
 
 import {defineModule1Fixture} from "./support/fixtures/ex_js_consistency/match_operator/module_1.mjs";
@@ -19,14 +18,10 @@ import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
 import Utils from "../../assets/js/utils.mjs";
 
+defineGlobalErlangAndElixirModules();
+
 describe("Interpreter", () => {
-  before(() => {
-    linkModules();
-
-    defineModule1Fixture();
-  });
-
-  after(() => unlinkModules());
+  before(() => defineModule1Fixture());
 
   describe("accessKeywordListElement()", () => {
     const keywordList = Type.keywordList([

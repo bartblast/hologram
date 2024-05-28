@@ -3,18 +3,16 @@
 import {
   assert,
   contextFixture,
-  linkModules,
-  unlinkModules,
+  defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Sequence from "../../assets/js/sequence.mjs";
 import Type from "../../assets/js/type.mjs";
 
-describe("Type", () => {
-  before(() => linkModules());
-  after(() => unlinkModules());
+defineGlobalErlangAndElixirModules();
 
+describe("Type", () => {
   describe("actionStruct()", () => {
     it("default values", () => {
       assert.deepStrictEqual(

@@ -1,14 +1,16 @@
 "use strict";
 
-import {assert, linkModules, unlinkModules} from "../support/helpers.mjs";
+import {
+  assert,
+  defineGlobalErlangAndElixirModules,
+} from "../support/helpers.mjs";
 
 import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-describe("HologramBoxedError", () => {
-  before(() => linkModules());
-  after(() => unlinkModules());
+defineGlobalErlangAndElixirModules();
 
+describe("HologramBoxedError", () => {
   it("throw", () => {
     const struct = Type.errorStruct("MyType", "my message");
 

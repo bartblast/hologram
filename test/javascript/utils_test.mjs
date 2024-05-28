@@ -1,13 +1,15 @@
 "use strict";
 
-import {assert, linkModules, unlinkModules} from "./support/helpers.mjs";
+import {
+  assert,
+  defineGlobalErlangAndElixirModules,
+} from "./support/helpers.mjs";
 
 import Utils from "../../assets/js/utils.mjs";
 
-describe("Utils", () => {
-  before(() => linkModules());
-  after(() => unlinkModules());
+defineGlobalErlangAndElixirModules();
 
+describe("Utils", () => {
   describe("capitalize()", () => {
     it("empty string", () => {
       assert.equal(Utils.capitalize(""), "");

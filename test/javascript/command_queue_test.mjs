@@ -4,9 +4,8 @@ import {
   assert,
   commandQueueItemFixture,
   componentRegistryEntryFixture,
-  linkModules,
+  defineGlobalErlangAndElixirModules,
   sinon,
-  unlinkModules,
 } from "./support/helpers.mjs";
 
 import Client from "../../assets/js/client.mjs";
@@ -16,10 +15,9 @@ import Hologram from "../../assets/js/hologram.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import Type from "../../assets/js/type.mjs";
 
-describe("CommandQueue", () => {
-  before(() => linkModules());
-  after(() => unlinkModules());
+defineGlobalErlangAndElixirModules();
 
+describe("CommandQueue", () => {
   describe("fail()", () => {
     beforeEach(() => {
       CommandQueue.items = {

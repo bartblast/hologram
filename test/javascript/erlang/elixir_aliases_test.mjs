@@ -3,21 +3,19 @@
 import {
   assert,
   assertBoxedError,
-  linkModules,
-  unlinkModules,
+  defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
 import Erlang_Elixir_Aliases from "../../../assets/js/erlang/elixir_aliases.mjs";
 import Type from "../../../assets/js/type.mjs";
+
+defineGlobalErlangAndElixirModules();
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/elixir_aliases_test.exs
 // Always update both together.
 
 describe("Erlang_Elixir_Aliases", () => {
-  before(() => linkModules());
-  after(() => unlinkModules());
-
   describe("concat/1", () => {
     const concat = Erlang_Elixir_Aliases["concat/1"];
     const expectedAlias = Type.alias("Aaa.Bbb.Ccc");

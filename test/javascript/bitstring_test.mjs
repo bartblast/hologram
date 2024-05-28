@@ -3,18 +3,16 @@
 import {
   assert,
   assertBoxedError,
-  linkModules,
-  unlinkModules,
+  defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
 import Bitstring from "../../assets/js/bitstring.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Type from "../../assets/js/type.mjs";
 
-describe("Bitstring", () => {
-  before(() => linkModules());
-  after(() => unlinkModules());
+defineGlobalErlangAndElixirModules();
 
+describe("Bitstring", () => {
   describe("buildSignedBigIntFromBitArray()", () => {
     it("0", () => {
       const bitArray = new Uint8Array([]);

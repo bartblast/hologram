@@ -6,13 +6,14 @@ import {
   assertBoxedFalse,
   assertBoxedTrue,
   contextFixture,
-  linkModules,
-  unlinkModules,
+  defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
 import Erlang_Lists from "../../../assets/js/erlang/lists.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
+
+defineGlobalErlangAndElixirModules();
 
 const emptyList = Type.list();
 
@@ -33,9 +34,6 @@ const properList = Type.list([
 // Always update both together.
 
 describe("Erlang_Lists", () => {
-  before(() => linkModules());
-  after(() => unlinkModules());
-
   describe("flatten/1", () => {
     const flatten = Erlang_Lists["flatten/1"];
 

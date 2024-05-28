@@ -3,8 +3,7 @@
 import {
   assert,
   assertBoxedError,
-  linkModules,
-  unlinkModules,
+  defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
 import Erlang_Unicode from "../../../assets/js/erlang/unicode.mjs";
@@ -12,14 +11,13 @@ import HologramInterpreterError from "../../../assets/js/errors/interpreter_erro
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
+defineGlobalErlangAndElixirModules();
+
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/unicode_test.exs
 // Always update both together.
 
 describe("Erlang_Unicode", () => {
-  before(() => linkModules());
-  after(() => unlinkModules());
-
   describe("characters_to_binary/1", () => {
     it("delegates to :unicode.characters_to_binary/3", () => {
       const input = Type.bitstring("全息图");

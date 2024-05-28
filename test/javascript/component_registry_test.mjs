@@ -2,13 +2,14 @@
 
 import {
   assert,
+  defineGlobalErlangAndElixirModules,
   initComponentRegistryEntry,
-  linkModules,
-  unlinkModules,
 } from "./support/helpers.mjs";
 
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Type from "../../assets/js/type.mjs";
+
+defineGlobalErlangAndElixirModules();
 
 const cid1 = Type.bitstring("my_component_1");
 const cid2 = Type.bitstring("my_component_2");
@@ -80,9 +81,6 @@ const entry3 = Type.map([
 ]);
 
 describe("ComponentRegistry", () => {
-  before(() => linkModules());
-  after(() => unlinkModules());
-
   beforeEach(() => {
     ComponentRegistry.entries = Type.map([
       [cid1, entry1],

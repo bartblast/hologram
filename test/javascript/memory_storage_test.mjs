@@ -1,13 +1,15 @@
 "use strict";
 
-import {assert, linkModules, unlinkModules} from "./support/helpers.mjs";
+import {
+  assert,
+  defineGlobalErlangAndElixirModules,
+} from "./support/helpers.mjs";
 
 import MemoryStorage from "../../assets/js/memory_storage.mjs";
 
-describe("MemoryStorage", () => {
-  before(() => linkModules());
-  after(() => unlinkModules());
+defineGlobalErlangAndElixirModules();
 
+describe("MemoryStorage", () => {
   beforeEach(() => {
     MemoryStorage.data = {};
   });

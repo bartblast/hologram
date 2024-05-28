@@ -6,14 +6,15 @@ import {
   assertBoxedFalse,
   assertBoxedTrue,
   contextFixture,
-  linkModules,
-  unlinkModules,
+  defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
+
+defineGlobalErlangAndElixirModules();
 
 const atomA = Type.atom("a");
 const atomAbc = Type.atom("abc");
@@ -36,9 +37,6 @@ const tuple3 = Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]);
 // Always update both together.
 
 describe("Erlang", () => {
-  before(() => linkModules());
-  after(() => unlinkModules());
-
   describe("*/2", () => {
     const testedFun = Erlang["*/2"];
 

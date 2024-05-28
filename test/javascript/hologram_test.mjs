@@ -4,7 +4,7 @@ import {
   assert,
   commandQueueItemFixture,
   componentRegistryEntryFixture,
-  linkModules,
+  defineGlobalErlangAndElixirModules,
   sinon,
 } from "./support/helpers.mjs";
 
@@ -22,7 +22,7 @@ import {defineModule5Fixture} from "./support/fixtures/hologram/module_5.mjs";
 import {defineModule6Fixture} from "./support/fixtures/hologram/module_6.mjs";
 import {defineModule7Fixture} from "./support/fixtures/hologram/module_7.mjs";
 
-linkModules();
+defineGlobalErlangAndElixirModules();
 
 const cid1 = Type.bitstring("my_component_1");
 const cid2 = Type.bitstring("my_component_2");

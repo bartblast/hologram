@@ -6,10 +6,9 @@ import {
   assert,
   assertBoxedError,
   componentRegistryEntryFixture,
+  defineGlobalErlangAndElixirModules,
   initComponentRegistryEntry,
-  linkModules,
   sinon,
-  unlinkModules,
   vnode,
 } from "./support/helpers.mjs";
 
@@ -70,10 +69,10 @@ import Hologram from "../../assets/js/hologram.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
 
+defineGlobalErlangAndElixirModules();
+
 describe("Renderer", () => {
   before(() => {
-    linkModules();
-
     defineLayoutFixture();
     defineModule1Fixture();
     defineModule10Fixture();
@@ -126,8 +125,6 @@ describe("Renderer", () => {
     defineModule8Fixture();
     defineModule9Fixture();
   });
-
-  after(() => unlinkModules());
 
   beforeEach(() => {
     ComponentRegistry.entries = Type.map();

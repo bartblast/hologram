@@ -2,19 +2,17 @@
 
 import {
   assert,
-  linkModules,
+  defineGlobalErlangAndElixirModules,
   sinon,
-  unlinkModules,
 } from "../support/helpers.mjs";
 
 import MouseEvent from "../../../assets/js/events/mouse_event.mjs";
 import PointerEvent from "../../../assets/js/events/pointer_event.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-describe("PointerEvent", () => {
-  before(() => linkModules());
-  after(() => unlinkModules());
+defineGlobalErlangAndElixirModules();
 
+describe("PointerEvent", () => {
   describe("buildOperationParam()", () => {
     it("known pointer type", () => {
       const event = {pageX: 1, pageY: 2, pointerType: "mouse"};

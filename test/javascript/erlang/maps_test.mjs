@@ -6,14 +6,15 @@ import {
   assertBoxedFalse,
   assertBoxedTrue,
   contextFixture,
+  defineGlobalErlangAndElixirModules,
   freeze,
-  linkModules,
-  unlinkModules,
 } from "../support/helpers.mjs";
 
 import Erlang_Maps from "../../../assets/js/erlang/maps.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
+
+defineGlobalErlangAndElixirModules();
 
 const atomA = freeze(Type.atom("a"));
 const atomAbc = freeze(Type.atom("abc"));
@@ -34,9 +35,6 @@ const mapA1B2 = freeze(
 // Always update both together.
 
 describe("Erlang_Maps", () => {
-  before(() => linkModules());
-  after(() => unlinkModules());
-
   describe("fold/3", () => {
     const fold = Erlang_Maps["fold/3"];
 

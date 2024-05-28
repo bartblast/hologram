@@ -171,6 +171,26 @@ function defineElixirEnumModule() {
   };
 }
 
+export function defineGlobalErlangAndElixirModules() {
+  globalThis.Erlang = Erlang;
+  globalThis.Erlang_Code = Erlang_Code;
+  globalThis.Erlang_Lists = Erlang_Lists;
+  globalThis.Erlang_Maps = Erlang_Maps;
+  globalThis.Erlang_Persistent_Term = Erlang_Persistent_Term;
+  globalThis.Erlang_Unicode = Erlang_Unicode;
+  globalThis.Elixir_Code = Elixir_Code;
+  globalThis.Elixir_Enum = defineElixirEnumModule();
+
+  globalThis.Elixir_Hologram_RuntimeSettings = {};
+  globalThis.Elixir_Hologram_RuntimeSettings["prefetch_page_action_name/0"] =
+    () => Type.atom("__prefetch_page__");
+
+  globalThis.Elixir_Kernel = Elixir_Kernel;
+
+  globalThis.Elixir_String_Chars = {};
+  globalThis.Elixir_String_Chars["to_string/1"] = elixirStringCharsToString1;
+}
+
 function elixirStringCharsToString1(term) {
   switch (term.type) {
     case "atom":
@@ -222,26 +242,6 @@ export function inspectJs(term) {
   return term;
 }
 
-export function linkModules() {
-  globalThis.Erlang = Erlang;
-  globalThis.Erlang_Code = Erlang_Code;
-  globalThis.Erlang_Lists = Erlang_Lists;
-  globalThis.Erlang_Maps = Erlang_Maps;
-  globalThis.Erlang_Persistent_Term = Erlang_Persistent_Term;
-  globalThis.Erlang_Unicode = Erlang_Unicode;
-  globalThis.Elixir_Code = Elixir_Code;
-  globalThis.Elixir_Enum = defineElixirEnumModule();
-
-  globalThis.Elixir_Hologram_RuntimeSettings = {};
-  globalThis.Elixir_Hologram_RuntimeSettings["prefetch_page_action_name/0"] =
-    () => Type.atom("__prefetch_page__");
-
-  globalThis.Elixir_Kernel = Elixir_Kernel;
-
-  globalThis.Elixir_String_Chars = {};
-  globalThis.Elixir_String_Chars["to_string/1"] = elixirStringCharsToString1;
-}
-
 export function putAction(component, action) {
   return Erlang_Maps["put/3"](Type.atom("next_action"), action, component);
 }
@@ -270,18 +270,4 @@ export function putState(component, state) {
   const newState = Erlang_Maps["merge/2"](oldState, state);
 
   return Erlang_Maps["put/3"](Type.atom("state"), newState, component);
-}
-
-export function unlinkModules() {
-  delete globalThis.Erlang;
-  delete globalThis.Erlang_Code;
-  delete globalThis.Erlang_Lists;
-  delete globalThis.Erlang_Maps;
-  delete globalThis.Erlang_Persistent_Term;
-  delete globalThis.Erlang_Unicode;
-  delete globalThis.Elixir_Code;
-  delete globalThis.Elixir_Enum;
-  delete globalThis.Elixir_Hologram_RuntimeSettings;
-  delete globalThis.Elixir_Kernel;
-  delete globalThis.Elixir_String_Chars;
 }

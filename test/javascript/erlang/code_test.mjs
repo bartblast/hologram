@@ -3,21 +3,19 @@
 import {
   assert,
   assertBoxedError,
-  linkModules,
-  unlinkModules,
+  defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
 import Erlang_Code from "../../../assets/js/erlang/code.mjs";
 import Type from "../../../assets/js/type.mjs";
+
+defineGlobalErlangAndElixirModules();
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/code_test.exs
 // Always update both together.
 
 describe("Erlang_Code", () => {
-  before(() => linkModules());
-  after(() => unlinkModules());
-
   describe("ensure_loaded/1", () => {
     const ensure_loaded = Erlang_Code["ensure_loaded/1"];
 

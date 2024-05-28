@@ -1,14 +1,17 @@
 "use strict";
 
-import {assert, linkModules, sinon, unlinkModules} from "./support/helpers.mjs";
+import {
+  assert,
+  defineGlobalErlangAndElixirModules,
+  sinon,
+} from "./support/helpers.mjs";
 
 import Client from "../../assets/js/client.mjs";
 import Type from "../../assets/js/type.mjs";
 
-describe("Client", () => {
-  before(() => linkModules());
-  after(() => unlinkModules());
+defineGlobalErlangAndElixirModules();
 
+describe("Client", () => {
   it("encoder()", () => {
     const callbackSpy = sinon.spy();
 

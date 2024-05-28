@@ -1,14 +1,16 @@
 "use strict";
 
-import {assert, linkModules, unlinkModules} from "../support/helpers.mjs";
+import {
+  assert,
+  defineGlobalErlangAndElixirModules,
+} from "../support/helpers.mjs";
 
 import MouseEvent from "../../../assets/js/events/mouse_event.mjs";
 import Type from "../../../assets/js/type.mjs";
 
-describe("MouseEvent", () => {
-  before(() => linkModules());
-  after(() => unlinkModules());
+defineGlobalErlangAndElixirModules();
 
+describe("MouseEvent", () => {
   it("buildOperationParam()", () => {
     const event = {pageX: 1, pageY: 2};
     const result = MouseEvent.buildOperationParam(event);

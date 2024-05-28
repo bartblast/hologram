@@ -1,13 +1,15 @@
 "use strict";
 
-import {assert, linkModules, unlinkModules} from "../support/helpers.mjs";
+import {
+  assert,
+  defineGlobalErlangAndElixirModules,
+} from "../support/helpers.mjs";
 
 import HologramMatchError from "../../../assets/js/errors/match_error.mjs";
 
-describe("HologramMatchError", () => {
-  before(() => linkModules());
-  after(() => unlinkModules());
+defineGlobalErlangAndElixirModules();
 
+describe("HologramMatchError", () => {
   it("throw", () => {
     const value = {a: 1, b: 2};
 
