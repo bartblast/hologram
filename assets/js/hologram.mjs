@@ -25,6 +25,9 @@ const patch = init([attributesModule, eventListenersModule]);
 
 // TODO: test
 export default class Hologram {
+  // Made public to make tests easier
+  static prefetchedPages = new Map();
+
   static #deps = {
     Bitstring: Bitstring,
     HologramBoxedError: HologramBoxedError,
@@ -117,6 +120,33 @@ export default class Hologram {
     }
   }
 
+  // Made public to make tests easier
+  static executePrefetchPageAction(operation, eventNode) {
+    const toParam = Erlang_Maps["get/2"](
+      Type.atom("to"),
+      Erlang_Maps["get/2"](Type.atom("params"), operation),
+    );
+
+    const pagePath = Bitstring.toText(
+      Elixir_Hologram_Router_Helpers["page_path/1"](toParam),
+    );
+
+    if (!Hologram.prefetchedPages.has(eventNode)) {
+      Hologram.prefetchedPages.set(eventNode, new Map());
+    }
+
+    if (!Hologram.prefetchedPages.get(eventNode).has(pagePath)) {
+      Hologram.prefetchedPages.get(eventNode).set(pagePath, {
+        html: null,
+        isNavigateConfirmed: false,
+      });
+
+      Client.fetchPage(pagePath, () =>
+        Hologram.onPrefetchPageSuccess(pagePath, eventNode),
+      );
+    }
+  }
+
   static handleEvent(event, eventType, operationSpecDom, defaultTarget) {
     const eventImpl = Hologram.#getEventImplementation(eventType);
 
@@ -133,7 +163,7 @@ export default class Hologram {
 
       if (Operation.isAction(operation)) {
         if (Hologram.#isPrefetchPageAction(operation)) {
-          Hologram.prefetchPage(operation, event.target);
+          Hologram.executePrefetchPageAction(operation, event.target);
         } else {
           Hologram.executeAction(operation);
         }
@@ -144,8 +174,7 @@ export default class Hologram {
     }
   }
 
-  // Made public to make tests easier
-  static prefetchPage(operation, target) {
+  static onPrefetchPageSuccess(_pagePath, _eventNode) {
     // TODO: implement
   }
 
@@ -189,8 +218,15 @@ export default class Hologram {
     window.Elixir_Code["ensure_compiled/1"] = Elixir_Code["ensure_compiled/1"];
 
     window.Elixir_Hologram_Router_Helpers = {};
+
     window.Elixir_Hologram_Router_Helpers["asset_path/1"] =
       Elixir_Hologram_Router_Helpers["asset_path/1"];
+
+    window.Elixir_Hologram_Router_Helpers["page_path/1"] =
+      Elixir_Hologram_Router_Helpers["page_path/1"];
+
+    window.Elixir_Hologram_Router_Helpers["page_path/2"] =
+      Elixir_Hologram_Router_Helpers["page_path/2"];
 
     window.Elixir_Kernel = {};
     window.Elixir_Kernel["inspect/1"] = Elixir_Kernel["inspect/1"];

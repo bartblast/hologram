@@ -9,6 +9,7 @@ import {
   unlinkModules,
 } from "./support/helpers.mjs";
 
+import Client from "../../assets/js/client.mjs";
 import CommandQueue from "../../assets/js/command_queue.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
@@ -20,6 +21,9 @@ import {defineModule3Fixture} from "./support/fixtures/hologram/module_3.mjs";
 import {defineModule4Fixture} from "./support/fixtures/hologram/module_4.mjs";
 import {defineModule5Fixture} from "./support/fixtures/hologram/module_5.mjs";
 import {defineModule6Fixture} from "./support/fixtures/hologram/module_6.mjs";
+import {defineModule7Fixture} from "./support/fixtures/hologram/module_7.mjs";
+
+linkModules();
 
 const cid1 = Type.bitstring("my_component_1");
 const cid2 = Type.bitstring("my_component_2");
@@ -30,19 +34,18 @@ const module3 = Type.alias("Module3");
 const module4 = Type.alias("Module4");
 const module5 = Type.alias("Module5");
 const module6 = Type.alias("Module6");
+const module7 = Type.alias("Hologram.Module7");
 
 describe("Hologram", () => {
   before(() => {
-    linkModules();
     defineModule1Fixture();
     defineModule2Fixture();
     defineModule3Fixture();
     defineModule4Fixture();
     defineModule5Fixture();
     defineModule6Fixture();
+    defineModule7Fixture();
   });
-
-  after(() => unlinkModules());
 
   describe("executeAction()", () => {
     let commandQueueProcessStub, renderStub;
@@ -366,6 +369,158 @@ describe("Hologram", () => {
           target: cid1,
         }),
       );
+    });
+  });
+
+  describe("executePrefetchPageAction()", () => {
+    const eventNode = {id: "dummy_node"};
+    const expectedPagePath = "/hologram-test-fixtures-module7";
+
+    const expectedPrefetchedPages = new Map([
+      [
+        eventNode,
+        new Map([
+          [
+            expectedPagePath,
+            {
+              html: null,
+              isNavigateConfirmed: false,
+            },
+          ],
+        ]),
+      ],
+    ]);
+
+    const prefetchPageAction = Type.actionStruct({
+      name: Elixir_Hologram_RuntimeSettings["prefetch_page_action_name/0"](),
+      params: Type.map([[Type.atom("to"), module7]]),
+      target: cid1,
+    });
+
+    let clientFetchPageStub, onPagePrefetchSuccess, successCallbacks;
+
+    beforeEach(() => {
+      successCallbacks = [];
+
+      clientFetchPageStub = sinon
+        .stub(Client, "fetchPage")
+        .callsFake((_pagePath, successCallback) =>
+          successCallbacks.push(successCallback),
+        );
+
+      onPagePrefetchSuccess = sinon
+        .stub(Hologram, "onPrefetchPageSuccess")
+        .callsFake((_pagePath, _eventNode) => null);
+    });
+
+    afterEach(() => {
+      Client.fetchPage.restore();
+      Hologram.onPrefetchPageSuccess.restore();
+    });
+
+    it("map entry for event node doesn't exist", () => {
+      Hologram.prefetchedPages = new Map();
+
+      Hologram.executePrefetchPageAction(prefetchPageAction, eventNode);
+
+      // Can't use assert.deepStrictEqual for Maps
+      assert.instanceOf(expectedPrefetchedPages, Map);
+      assert.equal(expectedPrefetchedPages.size, 1);
+      assert.isTrue(expectedPrefetchedPages.has(eventNode));
+      assert.instanceOf(expectedPrefetchedPages.get(eventNode), Map);
+      assert.equal(expectedPrefetchedPages.get(eventNode).size, 1);
+
+      assert.deepStrictEqual(
+        Hologram.prefetchedPages.get(eventNode).get(expectedPagePath),
+        {
+          html: null,
+          isNavigateConfirmed: false,
+        },
+      );
+
+      sinon.assert.calledOnceWithExactly(
+        clientFetchPageStub,
+        expectedPagePath,
+        successCallbacks[0],
+      );
+
+      assert.equal(successCallbacks.length, 1);
+
+      successCallbacks[0]();
+
+      sinon.assert.calledOnceWithExactly(
+        onPagePrefetchSuccess,
+        expectedPagePath,
+        eventNode,
+      );
+    });
+
+    it("map entry for page path doesn't exist", () => {
+      Hologram.prefetchedPages = new Map([[eventNode, new Map()]]);
+
+      Hologram.executePrefetchPageAction(prefetchPageAction, eventNode);
+
+      // Can't use assert.deepStrictEqual for Maps
+      assert.instanceOf(expectedPrefetchedPages, Map);
+      assert.equal(expectedPrefetchedPages.size, 1);
+      assert.isTrue(expectedPrefetchedPages.has(eventNode));
+      assert.instanceOf(expectedPrefetchedPages.get(eventNode), Map);
+      assert.equal(expectedPrefetchedPages.get(eventNode).size, 1);
+
+      assert.deepStrictEqual(
+        Hologram.prefetchedPages.get(eventNode).get(expectedPagePath),
+        {
+          html: null,
+          isNavigateConfirmed: false,
+        },
+      );
+
+      sinon.assert.calledOnceWithExactly(
+        clientFetchPageStub,
+        expectedPagePath,
+        successCallbacks[0],
+      );
+
+      assert.equal(successCallbacks.length, 1);
+
+      successCallbacks[0]();
+
+      sinon.assert.calledOnceWithExactly(
+        onPagePrefetchSuccess,
+        expectedPagePath,
+        eventNode,
+      );
+    });
+
+    it("map entries for event node and page path exist", () => {
+      const prefetchedPagesMapEntryValue = {
+        html: "<html></html>",
+        isNavigateConfirmed: false,
+      };
+
+      Hologram.prefetchedPages = new Map([
+        [
+          eventNode,
+          new Map([[expectedPagePath, prefetchedPagesMapEntryValue]]),
+        ],
+      ]);
+
+      Hologram.executePrefetchPageAction(prefetchPageAction, eventNode);
+
+      // Can't use assert.deepStrictEqual for Maps
+      assert.instanceOf(expectedPrefetchedPages, Map);
+      assert.equal(expectedPrefetchedPages.size, 1);
+      assert.isTrue(expectedPrefetchedPages.has(eventNode));
+      assert.instanceOf(expectedPrefetchedPages.get(eventNode), Map);
+      assert.equal(expectedPrefetchedPages.get(eventNode).size, 1);
+
+      assert.deepStrictEqual(
+        Hologram.prefetchedPages.get(eventNode).get(expectedPagePath),
+        prefetchedPagesMapEntryValue,
+      );
+
+      sinon.assert.notCalled(clientFetchPageStub);
+      sinon.assert.notCalled(onPagePrefetchSuccess);
     });
   });
 

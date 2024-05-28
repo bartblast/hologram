@@ -7,8 +7,6 @@ defmodule Hologram.Test.Fixtures.Router.Module1 do
 
   @impl Page
   def template do
-    ~H"""
-    page Hologram.Test.Fixtures.Router.Module1 template
-    """
+    ~H""
   end
 end

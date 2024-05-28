@@ -1,5 +1,6 @@
 "use strict";
 
+import {inspectEx} from "../../test/javascript/support/helpers.mjs";
 import JsonEncoder from "./json_encoder.mjs";
 
 import {Socket} from "phoenix";
@@ -41,6 +42,10 @@ export default class Client {
         msg.payload,
       ]),
     );
+  }
+
+  static fetchPage(_pagePath, _successCallback) {
+    // TODO: implement
   }
 
   static isConnected() {
