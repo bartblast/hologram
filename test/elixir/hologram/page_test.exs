@@ -63,6 +63,10 @@ defmodule Hologram.PageTest do
     test "string" do
       assert cast_params(Module6, %{d: "abc"}) == %{d: "abc"}
     end
+
+    test "multiple params" do
+      assert cast_params(Module6, %{a: "test", c: "123"}) == %{a: :test, c: 123}
+    end
   end
 
   describe "init/3" do
