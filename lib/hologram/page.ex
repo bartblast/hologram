@@ -22,7 +22,7 @@ defmodule Hologram.Page do
         import Hologram.Component,
           only: [put_action: 2, put_action: 3, put_context: 3, put_state: 2, put_state: 3]
 
-        import Hologram.Page, only: [layout: 1, layout: 2, param: 1, route: 1]
+        import Hologram.Page, only: [layout: 1, layout: 2, param: 2, route: 1]
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
         import Hologram.Template, only: [sigil_H: 2]
 
@@ -95,10 +95,10 @@ defmodule Hologram.Page do
   @doc """
   Accumulates the given param name in __props__ module attribute.
   """
-  @spec param(atom) :: Macro.t()
-  defmacro param(name) do
+  @spec param(atom, atom) :: Macro.t()
+  defmacro param(name, type) do
     quote do
-      Module.put_attribute(__MODULE__, :__props__, {unquote(name), nil, []})
+      Module.put_attribute(__MODULE__, :__props__, {unquote(name), unquote(type), []})
     end
   end
 

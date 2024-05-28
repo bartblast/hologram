@@ -3,8 +3,8 @@ defmodule Hologram.Test.Fixtures.Controller.Module1 do
 
   route "/hologram-test-fixtures-runtime-controller-module1/:aaa/ccc/:bbb"
 
-  param :aaa
-  param :bbb
+  param :aaa, :integer
+  param :bbb, :integer
 
   layout Hologram.Test.Fixtures.LayoutFixture
 

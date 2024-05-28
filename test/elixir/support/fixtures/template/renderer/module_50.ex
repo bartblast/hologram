@@ -3,8 +3,8 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module50 do
 
   route "/hologram-test-fixtures-template-renderer-module50"
 
-  param :key_1
-  param :key_2
+  param :key_1, :integer
+  param :key_2, :string
 
   layout Hologram.Test.Fixtures.Template.Renderer.Module49
 
