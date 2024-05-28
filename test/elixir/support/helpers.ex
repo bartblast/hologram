@@ -180,7 +180,7 @@ defmodule Hologram.Test.Helpers do
   def render_markup(template, vars \\ %{}, env \\ %Env{}) do
     vars
     |> template.()
-    |> Hologram.Template.Renderer.render_dom(env)
+    |> Renderer.render_dom(env)
     |> elem(0)
   end
 
