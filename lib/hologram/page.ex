@@ -58,6 +58,10 @@ defmodule Hologram.Page do
     ]
   end
 
+  @doc """
+  Casts page params string values to types specified with param/2 macro.
+  """
+  @spec cast_params(module, %{atom => String.t()}) :: %{atom => any}
   def cast_params(page_module, params) do
     types =
       page_module.__props__()
@@ -72,14 +76,12 @@ defmodule Hologram.Page do
   end
 
   defp cast_param(:atom, str, name) do
-    try do
-      String.to_existing_atom(str)
-    rescue
-      ArgumentError ->
-        raise Hologram.ParamError,
-          message:
-            ~s/can't cast param "#{name}" with value "#{str}" to atom, because it's not an already existing atom/
-    end
+    String.to_existing_atom(str)
+  rescue
+    ArgumentError ->
+      reraise Hologram.ParamError,
+        message:
+          ~s/can't cast param "#{name}" with value "#{str}" to atom, because it's not an already existing atom/
   end
 
   defp cast_param(:float, str, name) do
