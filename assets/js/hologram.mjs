@@ -19,6 +19,7 @@ import Utils from "./utils.mjs";
 
 // Events
 import MouseEvent from "./events/mouse_event.mjs";
+import PointerEvent from "./events/pointer_event.mjs";
 
 import {attributesModule, eventListenersModule, init, toVNode} from "snabbdom";
 const patch = init([attributesModule, eventListenersModule]);
@@ -247,6 +248,9 @@ export default class Hologram {
         // See: https://bugzilla.mozilla.org/show_bug.cgi?id=1675847
         // See: https://bugs.webkit.org/show_bug.cgi?id=218665
         return MouseEvent;
+
+      case "pointerdown":
+        return PointerEvent;
     }
   }
 
