@@ -182,6 +182,11 @@ export function defineGlobalErlangAndElixirModules() {
   globalThis.Elixir_Enum = defineElixirEnumModule();
 
   globalThis.Elixir_Hologram_RuntimeSettings = {};
+
+  globalThis.Elixir_Hologram_RuntimeSettings[
+    "navigate_to_prefetched_page_action_name/0"
+  ] = () => Type.atom("__navigate_to_prefetched_page__");
+
   globalThis.Elixir_Hologram_RuntimeSettings["prefetch_page_action_name/0"] =
     () => Type.atom("__prefetch_page__");
 
