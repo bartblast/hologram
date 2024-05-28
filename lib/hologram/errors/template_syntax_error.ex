@@ -1,6 +1,6 @@
 defmodule Hologram.TemplateSyntaxError do
   @moduledoc """
-  Raised when the template markup is invalid.
+  Raised when template markup is invalid.
   """
 
   defexception [:message]
