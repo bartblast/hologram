@@ -141,8 +141,10 @@ export default class Hologram {
         isNavigateConfirmed: false,
       });
 
-      Client.fetchPage(pagePath, () =>
-        Hologram.onPrefetchPageSuccess(pagePath, eventNode),
+      Client.fetchPage(
+        pagePath,
+        () => Hologram.onPrefetchPageSuccess(pagePath, eventNode),
+        () => Hologram.onPrefetchPageError(pagePath, eventNode),
       );
     }
   }
@@ -172,6 +174,10 @@ export default class Hologram {
         CommandQueue.process();
       }
     }
+  }
+
+  static onPrefetchPageError(_pagePath, _eventNode) {
+    // TODO: implement
   }
 
   static onPrefetchPageSuccess(_pagePath, _eventNode) {

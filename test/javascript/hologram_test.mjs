@@ -396,25 +396,36 @@ describe("Hologram", () => {
       target: cid1,
     });
 
-    let clientFetchPageStub, onPagePrefetchSuccess, successCallbacks;
+    let clientFetchPageStub,
+      errorCallbacks,
+      onPrefetchPageErrorStub,
+      onPrefetchPageSuccessStub,
+      successCallbacks;
 
     beforeEach(() => {
       successCallbacks = [];
+      errorCallbacks = [];
 
       clientFetchPageStub = sinon
         .stub(Client, "fetchPage")
-        .callsFake((_pagePath, successCallback) =>
-          successCallbacks.push(successCallback),
-        );
+        .callsFake((_pagePath, successCallback, errorCallback) => {
+          successCallbacks.push(successCallback);
+          errorCallbacks.push(errorCallback);
+        });
 
-      onPagePrefetchSuccess = sinon
+      onPrefetchPageSuccessStub = sinon
         .stub(Hologram, "onPrefetchPageSuccess")
+        .callsFake((_pagePath, _eventNode) => null);
+
+      onPrefetchPageErrorStub = sinon
+        .stub(Hologram, "onPrefetchPageError")
         .callsFake((_pagePath, _eventNode) => null);
     });
 
     afterEach(() => {
       Client.fetchPage.restore();
       Hologram.onPrefetchPageSuccess.restore();
+      Hologram.onPrefetchPageError.restore();
     });
 
     it("map entry for event node doesn't exist", () => {
@@ -441,6 +452,7 @@ describe("Hologram", () => {
         clientFetchPageStub,
         expectedPagePath,
         successCallbacks[0],
+        errorCallbacks[0],
       );
 
       assert.equal(successCallbacks.length, 1);
@@ -448,7 +460,17 @@ describe("Hologram", () => {
       successCallbacks[0]();
 
       sinon.assert.calledOnceWithExactly(
-        onPagePrefetchSuccess,
+        onPrefetchPageSuccessStub,
+        expectedPagePath,
+        eventNode,
+      );
+
+      assert.equal(errorCallbacks.length, 1);
+
+      errorCallbacks[0]();
+
+      sinon.assert.calledOnceWithExactly(
+        onPrefetchPageErrorStub,
         expectedPagePath,
         eventNode,
       );
@@ -478,6 +500,7 @@ describe("Hologram", () => {
         clientFetchPageStub,
         expectedPagePath,
         successCallbacks[0],
+        errorCallbacks[0],
       );
 
       assert.equal(successCallbacks.length, 1);
@@ -485,7 +508,17 @@ describe("Hologram", () => {
       successCallbacks[0]();
 
       sinon.assert.calledOnceWithExactly(
-        onPagePrefetchSuccess,
+        onPrefetchPageSuccessStub,
+        expectedPagePath,
+        eventNode,
+      );
+
+      assert.equal(errorCallbacks.length, 1);
+
+      errorCallbacks[0]();
+
+      sinon.assert.calledOnceWithExactly(
+        onPrefetchPageErrorStub,
         expectedPagePath,
         eventNode,
       );
@@ -519,7 +552,8 @@ describe("Hologram", () => {
       );
 
       sinon.assert.notCalled(clientFetchPageStub);
-      sinon.assert.notCalled(onPagePrefetchSuccess);
+      sinon.assert.notCalled(onPrefetchPageSuccessStub);
+      sinon.assert.notCalled(onPrefetchPageErrorStub);
     });
   });
 
