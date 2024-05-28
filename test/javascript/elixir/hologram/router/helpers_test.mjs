@@ -56,6 +56,7 @@ describe("Elixir_Hologram_Router_Helpers", () => {
 
     it("module arg", () => {
       const result = page_path(module1);
+
       const expected = Type.bitstring(
         "/hologram-test-fixtures-router-helpers-module1",
       );
