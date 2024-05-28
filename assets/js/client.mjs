@@ -43,8 +43,26 @@ export default class Client {
     );
   }
 
-  static fetchPage(_pagePath, _successCallback) {
-    // TODO: implement
+  static fetchPage(pagePath, successCallback, failureCallback) {
+    Client.#channel
+      .push("fetch_page", pagePath, 3000)
+      .receive("ok", (resp) => successCallback(resp))
+      .receive("error", (_resp) => {
+        failureCallback();
+        console.error(
+          "Unable to fetch page (reason: error)",
+          pagePath,
+          arguments,
+        );
+      })
+      .receive("timeout", (_resp) => {
+        failureCallback();
+        console.error(
+          "Unable to fetch page (reason: timeout)",
+          pagePath,
+          arguments,
+        );
+      });
   }
 
   static isConnected() {
