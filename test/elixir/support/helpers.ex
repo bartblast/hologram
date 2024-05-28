@@ -14,6 +14,7 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Server
   alias Hologram.Template.Parser
   alias Hologram.Template.Renderer
+  alias Hologram.Template.Renderer.Env
 
   defdelegate ast(code), to: AST, as: :for_code
   defdelegate clean_dir(file_path), to: FileUtils, as: :recreate_dir
@@ -170,6 +171,17 @@ defmodule Hologram.Test.Helpers do
     {html, _component_structs} = Renderer.render_dom(node, %Renderer.Env{context: context})
 
     html
+  end
+
+  @doc """
+  Renders the given markup.
+  """
+  @spec render_markup(fun, %{atom => any}, Env.t()) :: String.t()
+  def render_markup(template, vars \\ %{}, env \\ %Env{}) do
+    vars
+    |> template.()
+    |> Hologram.Template.Renderer.render_dom(env)
+    |> elem(0)
   end
 
   @doc """
