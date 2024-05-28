@@ -43,7 +43,7 @@ export default class Client {
     );
   }
 
-  static fetchPage(pagePath, successCallback, failureCallback) {
+  static async fetchPage(pagePath, successCallback, failureCallback) {
     Client.#channel
       .push("fetch_page", pagePath, 3000)
       .receive("ok", (resp) => successCallback(resp))
