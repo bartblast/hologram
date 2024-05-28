@@ -58,6 +58,54 @@ defmodule Hologram.Page do
     ]
   end
 
+  def cast_params(page_module, params) do
+    types =
+      page_module.__props__()
+      |> Enum.map(fn {name, type, _opts} -> {name, type} end)
+      |> Enum.into(%{})
+
+    params
+    |> Enum.map(fn {name, value} ->
+      {name, cast_param(types[name], value, name)}
+    end)
+    |> Enum.into(%{})
+  end
+
+  defp cast_param(:atom, str, name) do
+    try do
+      String.to_existing_atom(str)
+    rescue
+      ArgumentError ->
+        raise Hologram.ParamError,
+          message:
+            ~s/can't cast param "#{name}" with value "#{str}" to atom, because it's not an already existing atom/
+    end
+  end
+
+  defp cast_param(:float, str, name) do
+    case Float.parse(str) do
+      {value, _remainder} ->
+        value
+
+      :error ->
+        raise Hologram.ParamError,
+          message: ~s/can't cast param "#{name}" with value "#{str}" to float/
+    end
+  end
+
+  defp cast_param(:integer, str, name) do
+    case Integer.parse(str) do
+      {value, _remainder} ->
+        value
+
+      :error ->
+        raise Hologram.ParamError,
+          message: ~s/can't cast param "#{name}" with value "#{str}" to integer/
+    end
+  end
+
+  defp cast_param(:string, str, _name), do: str
+
   @doc """
   Defines page's layout metadata functions.
   """

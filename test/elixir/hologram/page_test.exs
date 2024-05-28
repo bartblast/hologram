@@ -1,5 +1,6 @@
 defmodule Hologram.PageTest do
   use Hologram.Test.BasicCase, async: true
+  import Hologram.Page
 
   alias Hologram.Component
   alias Hologram.Server
@@ -8,6 +9,7 @@ defmodule Hologram.PageTest do
   alias Hologram.Test.Fixtures.Page.Module3
   alias Hologram.Test.Fixtures.Page.Module4
   alias Hologram.Test.Fixtures.Page.Module5
+  alias Hologram.Test.Fixtures.Page.Module6
 
   test "__is_hologram_page__/0" do
     assert Module1.__is_hologram_page__()
@@ -29,6 +31,38 @@ defmodule Hologram.PageTest do
 
   test "__route__/0" do
     assert Module1.__route__() == "/hologram-test-fixtures-runtime-page-module1"
+  end
+
+  describe "cast params" do
+    test "atom" do
+      assert cast_params(Module6, %{a: "test"}) == %{a: :test}
+    end
+
+    test "valid float" do
+      assert cast_params(Module6, %{b: "1.23abc"}) == %{b: 1.23}
+    end
+
+    test "invalid float" do
+      assert_raise Hologram.ParamError, ~s/can't cast param "b" with value "abc" to float/, fn ->
+        cast_params(Module6, %{b: "abc"})
+      end
+    end
+
+    test "valid integer" do
+      assert cast_params(Module6, %{c: "123abc"}) == %{c: 123}
+    end
+
+    test "invalid integer" do
+      assert_raise Hologram.ParamError,
+                   ~s/can't cast param "c" with value "abc" to integer/,
+                   fn ->
+                     cast_params(Module6, %{c: "abc"})
+                   end
+    end
+
+    test "string" do
+      assert cast_params(Module6, %{d: "abc"}) == %{d: "abc"}
+    end
   end
 
   describe "init/3" do
