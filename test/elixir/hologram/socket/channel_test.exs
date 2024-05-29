@@ -5,13 +5,16 @@ defmodule Hologram.Socket.ChannelTest do
   import Hologram.Test.Stubs
   import Mox
 
+  alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
   alias Hologram.Test.Fixtures.Socket.Channel.Module2
   alias Hologram.Test.Fixtures.Socket.Channel.Module3
+  alias Hologram.Test.Fixtures.Socket.Channel.Module5
 
   # Make sure String.to_existing_atom/1 recognizes atoms from the fixture component
   Code.ensure_loaded(Hologram.Test.Fixtures.Socket.Channel.Module1)
 
+  use_module_stub :asset_path_registry
   use_module_stub :page_digest_registry
 
   setup :set_mox_global
@@ -108,6 +111,12 @@ defmodule Hologram.Socket.ChannelTest do
   describe "handle_in/3, page" do
     setup do
       stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
+      stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
+
+      setup_asset_fixtures(AssetPathRegistryStub.static_dir())
+      AssetPathRegistry.start_link([])
+      AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
+
       setup_page_digest_registry(PageDigestRegistryStub)
 
       :ok
@@ -144,6 +153,19 @@ defmodule Hologram.Socket.ChannelTest do
 
       assert handle_in("page", payload, :dummy_socket) ==
                {:reply, {:ok, "page Module3 template, params: a = 1, b = 2"}, :dummy_socket}
+    end
+
+    test "rendered page is not treated as initial page" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
+
+      payload = %{
+        "type" => "atom",
+        "value" => "Elixir.Hologram.Test.Fixtures.Socket.Channel.Module5"
+      }
+
+      assert {:reply, {:ok, html}, :dummy_socket} = handle_in("page", payload, :dummy_socket)
+
+      refute String.contains?(html, "__hologramAssetManifest__")
     end
   end
 
