@@ -4,7 +4,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module19 do
   route "/hologram-test-fixtures-template-renderer-module19"
 
   param :param_1, :string
-  param :param_3, :string
+  param :param_3, :integer
 
   layout Hologram.Test.Fixtures.LayoutFixture
 

@@ -5,6 +5,7 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.Encoder
   alias Hologram.Component
+  alias Hologram.Page
   alias Hologram.Server
   alias Hologram.Template.DOM
 
@@ -127,18 +128,18 @@ defmodule Hologram.Template.Renderer do
 
   ## Examples
 
-      iex> render_page(MyPage, [{"param", [text: "value"]}], initial_page?: true)
+      iex> render_page(MyPage, %{param: "value"}, initial_page?: true)
       {
         "<div>full page content including layout</div>",
         %{"page" => %{module: MyPage, struct: %Component{state: %{a: 1, b: 2}}}}
       }
   """
-  @spec render_page(module, DOM.t(), T.opts()) ::
+  @spec render_page(module, %{(atom | String.t()) => any}, T.opts()) ::
           {String.t(), %{String.t() => %{module: module, struct: Component.t()}}}
-  def render_page(page_module, params_dom, opts) do
+  def render_page(page_module, params, opts) do
     initial_page? = opts[:initial_page?] || false
-    params = cast_props(params_dom, page_module)
-    {page_component_struct, _server_struct} = init_component(page_module, params)
+    casted_params = Page.cast_params(page_module, params)
+    {page_component_struct, _server_struct} = init_component(page_module, casted_params)
 
     page_digest = PageDigestRegistry.lookup(page_module)
 
@@ -151,7 +152,7 @@ defmodule Hologram.Template.Renderer do
     {initial_html, initial_component_registry} =
       render_page_inside_layout(
         page_module,
-        params,
+        casted_params,
         page_component_struct_with_emitted_context_before_rendering
       )
 
@@ -171,7 +172,7 @@ defmodule Hologram.Template.Renderer do
       initial_html
       |> interpolate_component_registry_js(component_registry_with_page_struct)
       |> interpolate_page_module_js(page_module)
-      |> interpolate_page_params_js(params)
+      |> interpolate_page_params_js(casted_params)
 
     {html_with_interpolated_js, component_registry_with_page_struct}
   end
