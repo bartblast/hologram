@@ -6,8 +6,8 @@ export default class MouseEvent {
   // TODO: add more fields specific to MouseEvent
   static buildOperationParam(event) {
     return Type.map([
-      [Type.atom("page_x"), Type.integer(event.pageX)],
-      [Type.atom("page_y"), Type.integer(event.pageY)],
+      [Type.atom("page_x"), Type.float(event.pageX)],
+      [Type.atom("page_y"), Type.float(event.pageY)],
     ]);
   }
 

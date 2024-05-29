@@ -18,8 +18,8 @@ describe("MouseEvent", () => {
     assert.deepStrictEqual(
       result,
       Type.map([
-        [Type.atom("page_x"), Type.integer(1)],
-        [Type.atom("page_y"), Type.integer(2)],
+        [Type.atom("page_x"), Type.float(1)],
+        [Type.atom("page_y"), Type.float(2)],
       ]),
     );
   });
