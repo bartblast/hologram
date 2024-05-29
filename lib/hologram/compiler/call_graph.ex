@@ -604,9 +604,9 @@ defmodule Hologram.Compiler.CallGraph do
     add_edge(call_graph, module, {module, :template, 0})
   end
 
-  # A page module can be passed as a prop to a component, enabling the component to use its __route__/0 function.
-  # This can be particularly useful, for example, in constructing the page's URL.
+  # __props__/0 and __route__/0 functions are needed to build page link href (e.g. in Hologram.UI.Link component).
   defp add_page_call_graph_edges(call_graph, module) do
+    add_edge(call_graph, module, {module, :__props__, 0})
     add_edge(call_graph, module, {module, :__route__, 0})
   end
 
