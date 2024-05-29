@@ -71,7 +71,7 @@ defmodule Hologram.Page do
 
     params
     |> Enum.map(fn {name, value} ->
-      if types[name] == nil do
+      unless types[name] do
         raise Hologram.ParamError,
           message:
             ~s/page "#{Reflection.module_name(page_module)}" doesn't expect "#{name}" param/
