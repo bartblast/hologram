@@ -1,5 +1,6 @@
 "use strict";
 
+import Config from "./config.mjs";
 import JsonEncoder from "./json_encoder.mjs";
 
 import {Socket} from "phoenix";
@@ -45,7 +46,7 @@ export default class Client {
 
   static async fetchPage(pagePath, successCallback, failureCallback) {
     Client.#channel
-      .push("fetch_page", pagePath, 3000)
+      .push("fetch_page", pagePath, Config.fetchPageTimeoutMs)
       .receive("ok", (resp) => successCallback(resp))
       .receive("error", (_resp) => {
         failureCallback();
