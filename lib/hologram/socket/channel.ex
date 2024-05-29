@@ -5,6 +5,7 @@ defmodule Hologram.Socket.Channel do
   alias Hologram.Component.Action
   alias Hologram.Server
   alias Hologram.Socket.Decoder
+  alias Hologram.Template.Renderer
 
   @impl Phoenix.Channel
   def join("hologram", _payload, socket) do
@@ -31,5 +32,21 @@ defmodule Hologram.Socket.Channel do
       end
 
     {:reply, {:ok, Encoder.encode_term(next_action)}, socket}
+  end
+
+  @impl Phoenix.Channel
+  def handle_in("page", payload, socket) do
+    opts = [initial_page?: false]
+
+    {html, _component_registry} =
+      case Decoder.decode(payload) do
+        {page_module, params} ->
+          Renderer.render_page(page_module, params, opts)
+
+        page_module ->
+          Renderer.render_page(page_module, %{}, opts)
+      end
+
+    {:reply, {:ok, html}, socket}
   end
 end
