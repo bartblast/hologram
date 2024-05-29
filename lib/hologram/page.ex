@@ -1,4 +1,5 @@
 defmodule Hologram.Page do
+  alias Hologram.Commons.Reflection
   alias Hologram.Component
   alias Hologram.Page
   alias Hologram.Server
@@ -70,6 +71,12 @@ defmodule Hologram.Page do
 
     params
     |> Enum.map(fn {name, value} ->
+      if types[name] == nil do
+        raise Hologram.ParamError,
+          message:
+            ~s/page "#{Reflection.module_name(page_module)}" doesn't expect "#{name}" param/
+      end
+
       {name, cast_param(types[name], value, name)}
     end)
     |> Enum.into(%{})

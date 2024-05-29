@@ -111,6 +111,14 @@ defmodule Hologram.PageTest do
     test "multiple params" do
       assert cast_params(Module6, %{a: "test", c: "123"}) == %{a: :test, c: 123}
     end
+
+    test "extraneous param" do
+      assert_raise Hologram.ParamError,
+                   ~s/page "Hologram.Test.Fixtures.Page.Module6" doesn't expect "x" param/,
+                   fn ->
+                     cast_params(Module6, %{x: 123})
+                   end
+    end
   end
 
   describe "init/3" do
