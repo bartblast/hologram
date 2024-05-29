@@ -386,6 +386,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
+    # credo:disable-for-lines:48 Credo.Check.Design.DuplicatedCode
     test "module definition ir", %{empty_call_graph: call_graph} do
       ir = %IR.ModuleDefinition{
         module: %IR.AtomType{value: Module11},
@@ -699,6 +700,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  # credo:disable-for-lines:50 Credo.Check.Design.DuplicatedCode
   test "build_for_module/3", %{empty_call_graph: call_graph} do
     ir = %IR.ModuleDefinition{
       module: %IR.AtomType{value: Module11},
