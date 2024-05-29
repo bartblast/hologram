@@ -75,38 +75,76 @@ defmodule Hologram.Page do
     |> Enum.into(%{})
   end
 
-  defp cast_param(:atom, str, name) do
-    String.to_existing_atom(str)
+  defp cast_param(:atom, value, _name) when is_atom(value) do
+    value
+  end
+
+  defp cast_param(:atom, value, name) when is_binary(value) do
+    String.to_existing_atom(value)
   rescue
     ArgumentError ->
       reraise Hologram.ParamError,
         message:
-          ~s/can't cast param "#{name}" with value "#{str}" to atom, because it's not an already existing atom/
+          ~s/can't cast param "#{name}" with value #{inspect(value)} to atom, because it's not an already existing atom/
   end
 
-  defp cast_param(:float, str, name) do
-    case Float.parse(str) do
-      {value, _remainder} ->
-        value
+  defp cast_param(:atom, value, name) do
+    raise Hologram.ParamError,
+      message:
+        ~s/can't cast param "#{name}" with value #{inspect(value)} to atom, because it's of invalid type/
+  end
+
+  defp cast_param(:float, value, _name) when is_float(value) do
+    value
+  end
+
+  defp cast_param(:float, value, name) when is_binary(value) do
+    case Float.parse(value) do
+      {float, _remainder} ->
+        float
 
       :error ->
         raise Hologram.ParamError,
-          message: ~s/can't cast param "#{name}" with value "#{str}" to float/
+          message: ~s/can't cast param "#{name}" with value #{inspect(value)} to float/
     end
   end
 
-  defp cast_param(:integer, str, name) do
-    case Integer.parse(str) do
-      {value, _remainder} ->
-        value
+  defp cast_param(:float, value, name) do
+    raise Hologram.ParamError,
+      message:
+        ~s/can't cast param "#{name}" with value #{inspect(value)} to float, because it's of invalid type/
+  end
+
+  defp cast_param(:integer, value, _name) when is_integer(value) do
+    value
+  end
+
+  defp cast_param(:integer, value, name) when is_binary(value) do
+    case Integer.parse(value) do
+      {integer, _remainder} ->
+        integer
 
       :error ->
         raise Hologram.ParamError,
-          message: ~s/can't cast param "#{name}" with value "#{str}" to integer/
+          message: ~s/can't cast param "#{name}" with value #{inspect(value)} to integer/
     end
   end
 
-  defp cast_param(:string, str, _name), do: str
+  defp cast_param(:integer, value, name) do
+    raise Hologram.ParamError,
+      message:
+        ~s/can't cast param "#{name}" with value #{inspect(value)} to integer, because it's of invalid type/
+  end
+
+  defp cast_param(:string, value, _name) when is_binary(value) do
+    value
+  end
+
+  defp cast_param(:string, value, name) do
+    raise Hologram.ParamError,
+      message:
+        ~s/can't cast param "#{name}" with value #{inspect(value)} to string, because it's of invalid type/
+  end
 
   @doc """
   Defines page's layout metadata functions.
