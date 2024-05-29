@@ -11,6 +11,7 @@ import {
 import Client from "../../assets/js/client.mjs";
 import CommandQueue from "../../assets/js/command_queue.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
+import Config from "../../assets/js/config.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -372,23 +373,12 @@ describe("Hologram", () => {
   });
 
   describe("executePrefetchPageAction()", () => {
-    const eventNode = {id: "dummy_node"};
-    const expectedPagePath = "/hologram-test-fixtures-module7";
-
-    const expectedPrefetchedPages = new Map([
-      [
-        eventNode,
-        new Map([
-          [
-            expectedPagePath,
-            {
-              html: null,
-              isNavigateConfirmed: false,
-            },
-          ],
-        ]),
-      ],
-    ]);
+    let clientFetchPageStub,
+      errorCallbacks,
+      eventTargetNode,
+      onPrefetchPageErrorStub,
+      onPrefetchPageSuccessStub,
+      successCallbacks;
 
     const prefetchPageAction = Type.actionStruct({
       name: Elixir_Hologram_RuntimeSettings["prefetch_page_action_name/0"](),
@@ -396,30 +386,26 @@ describe("Hologram", () => {
       target: cid1,
     });
 
-    let clientFetchPageStub,
-      errorCallbacks,
-      onPrefetchPageErrorStub,
-      onPrefetchPageSuccessStub,
-      successCallbacks;
-
     beforeEach(() => {
       successCallbacks = [];
       errorCallbacks = [];
 
       clientFetchPageStub = sinon
         .stub(Client, "fetchPage")
-        .callsFake((_pagePath, successCallback, errorCallback) => {
+        .callsFake((_toParam, successCallback, errorCallback) => {
           successCallbacks.push(successCallback);
           errorCallbacks.push(errorCallback);
         });
 
       onPrefetchPageSuccessStub = sinon
         .stub(Hologram, "onPrefetchPageSuccess")
-        .callsFake((_pagePath, _eventNode) => null);
+        .callsFake((_mapKey, _resp) => null);
 
       onPrefetchPageErrorStub = sinon
         .stub(Hologram, "onPrefetchPageError")
-        .callsFake((_pagePath, _eventNode) => null);
+        .callsFake((_mapKey, _resp) => null);
+
+      eventTargetNode = {id: "dummy_event_target_node"};
     });
 
     afterEach(() => {
@@ -428,128 +414,154 @@ describe("Hologram", () => {
       Hologram.onPrefetchPageError.restore();
     });
 
-    it("map entry for event node doesn't exist", () => {
+    it("adds a Hologram ID to an event target DOM node that doesn't have one", () => {
+      Hologram.executePrefetchPageAction(prefetchPageAction, eventTargetNode);
+
+      assert.match(
+        eventTargetNode.__hologramId__,
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+      );
+    });
+
+    it("doesn't add a Hologram ID to an event target DOM node that already has one", () => {
+      eventTargetNode.__hologramId__ = "dummy_hologram_id";
+
+      Hologram.executePrefetchPageAction(prefetchPageAction, eventTargetNode);
+
+      assert.equal(eventTargetNode.__hologramId__, "dummy_hologram_id");
+    });
+
+    it("prefetches the page if there is no previous prefetch in progress", () => {
       Hologram.prefetchedPages = new Map();
 
-      Hologram.executePrefetchPageAction(prefetchPageAction, eventNode);
+      Hologram.executePrefetchPageAction(prefetchPageAction, eventTargetNode);
+
+      const mapKey = `${eventTargetNode.__hologramId__}:/hologram-test-fixtures-module7`;
 
       // Can't use assert.deepStrictEqual for Maps
-      assert.instanceOf(expectedPrefetchedPages, Map);
-      assert.equal(expectedPrefetchedPages.size, 1);
-      assert.isTrue(expectedPrefetchedPages.has(eventNode));
-      assert.instanceOf(expectedPrefetchedPages.get(eventNode), Map);
-      assert.equal(expectedPrefetchedPages.get(eventNode).size, 1);
+      assert.instanceOf(Hologram.prefetchedPages, Map);
+      assert.equal(Hologram.prefetchedPages.size, 1);
+      assert.isTrue(Hologram.prefetchedPages.has(mapKey));
 
-      assert.deepStrictEqual(
-        Hologram.prefetchedPages.get(eventNode).get(expectedPagePath),
-        {
-          html: null,
-          isNavigateConfirmed: false,
-        },
-      );
-
-      sinon.assert.calledOnceWithExactly(
-        clientFetchPageStub,
-        expectedPagePath,
-        successCallbacks[0],
-        errorCallbacks[0],
-      );
-
-      assert.equal(successCallbacks.length, 1);
-
-      successCallbacks[0]();
-
-      sinon.assert.calledOnceWithExactly(
-        onPrefetchPageSuccessStub,
-        expectedPagePath,
-        eventNode,
-      );
-
-      assert.equal(errorCallbacks.length, 1);
-
-      errorCallbacks[0]();
-
-      sinon.assert.calledOnceWithExactly(
-        onPrefetchPageErrorStub,
-        expectedPagePath,
-        eventNode,
-      );
-    });
-
-    it("map entry for page path doesn't exist", () => {
-      Hologram.prefetchedPages = new Map([[eventNode, new Map()]]);
-
-      Hologram.executePrefetchPageAction(prefetchPageAction, eventNode);
-
-      // Can't use assert.deepStrictEqual for Maps
-      assert.instanceOf(expectedPrefetchedPages, Map);
-      assert.equal(expectedPrefetchedPages.size, 1);
-      assert.isTrue(expectedPrefetchedPages.has(eventNode));
-      assert.instanceOf(expectedPrefetchedPages.get(eventNode), Map);
-      assert.equal(expectedPrefetchedPages.get(eventNode).size, 1);
-
-      assert.deepStrictEqual(
-        Hologram.prefetchedPages.get(eventNode).get(expectedPagePath),
-        {
-          html: null,
-          isNavigateConfirmed: false,
-        },
-      );
-
-      sinon.assert.calledOnceWithExactly(
-        clientFetchPageStub,
-        expectedPagePath,
-        successCallbacks[0],
-        errorCallbacks[0],
-      );
-
-      assert.equal(successCallbacks.length, 1);
-
-      successCallbacks[0]();
-
-      sinon.assert.calledOnceWithExactly(
-        onPrefetchPageSuccessStub,
-        expectedPagePath,
-        eventNode,
-      );
-
-      assert.equal(errorCallbacks.length, 1);
-
-      errorCallbacks[0]();
-
-      sinon.assert.calledOnceWithExactly(
-        onPrefetchPageErrorStub,
-        expectedPagePath,
-        eventNode,
-      );
-    });
-
-    it("map entries for event node and page path exist", () => {
-      const prefetchedPagesMapEntryValue = {
-        html: "<html></html>",
+      assert.deepStrictEqual(Hologram.prefetchedPages.get(mapKey), {
+        html: null,
         isNavigateConfirmed: false,
-      };
+        pagePath: "/hologram-test-fixtures-module7",
+        timestamp: Hologram.prefetchedPages.get(mapKey).timestamp,
+      });
+
+      assert.isAtMost(
+        Math.abs(Date.now() - Hologram.prefetchedPages.get(mapKey).timestamp),
+        100,
+      );
+
+      sinon.assert.calledOnceWithExactly(
+        clientFetchPageStub,
+        module7,
+        successCallbacks[0],
+        errorCallbacks[0],
+      );
+
+      assert.equal(successCallbacks.length, 1);
+
+      successCallbacks[0]("dummy_resp");
+
+      sinon.assert.calledOnceWithExactly(
+        onPrefetchPageSuccessStub,
+        mapKey,
+        "dummy_resp",
+      );
+
+      assert.equal(errorCallbacks.length, 1);
+
+      errorCallbacks[0]("dummy_resp");
+
+      sinon.assert.calledOnceWithExactly(
+        onPrefetchPageErrorStub,
+        mapKey,
+        "dummy_resp",
+      );
+    });
+
+    it("prefetches the page if the previous prefetch has timed out", () => {
+      eventTargetNode = {__hologramId__: "dummy_hologram_id"};
+      const mapKey = "dummy_hologram_id:/hologram-test-fixtures-module7";
 
       Hologram.prefetchedPages = new Map([
         [
-          eventNode,
-          new Map([[expectedPagePath, prefetchedPagesMapEntryValue]]),
+          mapKey,
+          {
+            dummyKey: "dummy_value",
+            timestamp: Date.now() - Config.fetchPageTimeoutMs - 1,
+          },
         ],
       ]);
 
-      Hologram.executePrefetchPageAction(prefetchPageAction, eventNode);
+      Hologram.executePrefetchPageAction(prefetchPageAction, eventTargetNode);
 
       // Can't use assert.deepStrictEqual for Maps
-      assert.instanceOf(expectedPrefetchedPages, Map);
-      assert.equal(expectedPrefetchedPages.size, 1);
-      assert.isTrue(expectedPrefetchedPages.has(eventNode));
-      assert.instanceOf(expectedPrefetchedPages.get(eventNode), Map);
-      assert.equal(expectedPrefetchedPages.get(eventNode).size, 1);
+      assert.instanceOf(Hologram.prefetchedPages, Map);
+      assert.equal(Hologram.prefetchedPages.size, 1);
+      assert.isTrue(Hologram.prefetchedPages.has(mapKey));
 
-      assert.deepStrictEqual(
-        Hologram.prefetchedPages.get(eventNode).get(expectedPagePath),
-        prefetchedPagesMapEntryValue,
+      assert.deepStrictEqual(Hologram.prefetchedPages.get(mapKey), {
+        html: null,
+        isNavigateConfirmed: false,
+        pagePath: "/hologram-test-fixtures-module7",
+        timestamp: Hologram.prefetchedPages.get(mapKey).timestamp,
+      });
+
+      assert.isAtMost(
+        Math.abs(Date.now() - Hologram.prefetchedPages.get(mapKey).timestamp),
+        100,
       );
+
+      sinon.assert.calledOnceWithExactly(
+        clientFetchPageStub,
+        module7,
+        successCallbacks[0],
+        errorCallbacks[0],
+      );
+
+      assert.equal(successCallbacks.length, 1);
+
+      successCallbacks[0]("dummy_resp");
+
+      sinon.assert.calledOnceWithExactly(
+        onPrefetchPageSuccessStub,
+        mapKey,
+        "dummy_resp",
+      );
+
+      assert.equal(errorCallbacks.length, 1);
+
+      errorCallbacks[0]("dummy_resp");
+
+      sinon.assert.calledOnceWithExactly(
+        onPrefetchPageErrorStub,
+        mapKey,
+        "dummy_resp",
+      );
+    });
+
+    it("doesn't prefetch the page if the previous prefetch is in progress and hasn't timed out", () => {
+      eventTargetNode = {__hologramId__: "dummy_hologram_id"};
+      const mapKey = "dummy_hologram_id:/hologram-test-fixtures-module7";
+
+      const mapValue = {
+        dummyKey: "dummy_value",
+        timestamp: Date.now(),
+      };
+
+      Hologram.prefetchedPages = new Map([[mapKey, mapValue]]);
+
+      Hologram.executePrefetchPageAction(prefetchPageAction, eventTargetNode);
+
+      // Can't use assert.deepStrictEqual for Maps
+      assert.instanceOf(Hologram.prefetchedPages, Map);
+      assert.equal(Hologram.prefetchedPages.size, 1);
+      assert.isTrue(Hologram.prefetchedPages.has(mapKey));
+      assert.equal(Hologram.prefetchedPages.get(mapKey), mapValue);
 
       sinon.assert.notCalled(clientFetchPageStub);
       sinon.assert.notCalled(onPrefetchPageSuccessStub);

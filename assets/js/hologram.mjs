@@ -5,6 +5,7 @@ import Bitstring from "./bitstring.mjs";
 import Client from "./client.mjs";
 import CommandQueue from "./command_queue.mjs";
 import ComponentRegistry from "./component_registry.mjs";
+import Config from "./config.mjs";
 import Elixir_Code from "./elixir/code.mjs";
 import Elixir_Hologram_Router_Helpers from "./elixir/hologram/router/helpers.mjs";
 import Elixir_Kernel from "./elixir/kernel.mjs";
@@ -122,7 +123,9 @@ export default class Hologram {
   }
 
   // Made public to make tests easier
-  static executePrefetchPageAction(operation, eventNode) {
+  static executePrefetchPageAction(operation, eventTargetNode) {
+    Hologram.#ensureDomNodeHasHologramId(eventTargetNode);
+
     const toParam = Erlang_Maps["get/2"](
       Type.atom("to"),
       Erlang_Maps["get/2"](Type.atom("params"), operation),
@@ -132,20 +135,23 @@ export default class Hologram {
       Elixir_Hologram_Router_Helpers["page_path/1"](toParam),
     );
 
-    if (!Hologram.prefetchedPages.has(eventNode)) {
-      Hologram.prefetchedPages.set(eventNode, new Map());
-    }
+    const mapKey = `${eventTargetNode.__hologramId__}:${pagePath}`;
 
-    if (!Hologram.prefetchedPages.get(eventNode).has(pagePath)) {
-      Hologram.prefetchedPages.get(eventNode).set(pagePath, {
+    if (
+      !Hologram.prefetchedPages.has(mapKey) ||
+      Hologram.#isPrefetchPageTimedOut(mapKey)
+    ) {
+      Hologram.prefetchedPages.set(mapKey, {
         html: null,
         isNavigateConfirmed: false,
+        pagePath: pagePath,
+        timestamp: Date.now(),
       });
 
       Client.fetchPage(
-        pagePath,
-        () => Hologram.onPrefetchPageSuccess(pagePath, eventNode),
-        () => Hologram.onPrefetchPageError(pagePath, eventNode),
+        toParam,
+        (resp) => Hologram.onPrefetchPageSuccess(mapKey, resp),
+        (resp) => Hologram.onPrefetchPageError(mapKey, resp),
       );
     }
   }
@@ -177,11 +183,11 @@ export default class Hologram {
     }
   }
 
-  static onPrefetchPageError(_pagePath, _eventNode) {
+  static onPrefetchPageError(_mapKey, _resp) {
     // TODO: implement
   }
 
-  static onPrefetchPageSuccess(_pagePath, _eventNode) {
+  static onPrefetchPageSuccess(_mapKey, _resp) {
     // TODO: implement
   }
 
@@ -240,6 +246,12 @@ export default class Hologram {
     window.Elixir_Kernel["inspect/2"] = Elixir_Kernel["inspect/2"];
   }
 
+  static #ensureDomNodeHasHologramId(eventNode) {
+    if (typeof eventNode.__hologramId__ === "undefined") {
+      eventNode.__hologramId__ = crypto.randomUUID();
+    }
+  }
+
   static #getEventImplementation(eventType) {
     switch (eventType) {
       case "click":
@@ -273,6 +285,13 @@ export default class Hologram {
     const actionName = Erlang_Maps["get/2"](Type.atom("name"), operation);
 
     return Interpreter.isEqual(actionName, prefetchPageActionName);
+  }
+
+  static #isPrefetchPageTimedOut(mapKey) {
+    return (
+      Date.now() - Hologram.prefetchedPages.get(mapKey).timestamp >
+      Config.fetchPageTimeoutMs
+    );
   }
 
   static #loadMountData() {
