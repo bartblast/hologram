@@ -222,8 +222,11 @@ export default class Hologram {
     globalThis.__hologramPageScriptLoaded__ = false;
 
     const newVirtualDocument = Vdom.from(html);
-    patch(Hologram.virtualDocument, newVirtualDocument);
-    Hologram.virtualDocument = newVirtualDocument;
+
+    Hologram.virtualDocument = patch(
+      Hologram.virtualDocument,
+      newVirtualDocument,
+    );
 
     const historyStateId = crypto.randomUUID();
     sessionStorage.setItem(historyStateId, html);
@@ -267,9 +270,10 @@ export default class Hologram {
       Hologram.#pageParams,
     );
 
-    patch(Hologram.virtualDocument, newVirtualDocument);
-
-    Hologram.virtualDocument = newVirtualDocument;
+    Hologram.virtualDocument = patch(
+      Hologram.virtualDocument,
+      newVirtualDocument,
+    );
   }
 
   static run() {
