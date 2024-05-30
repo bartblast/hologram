@@ -126,19 +126,42 @@ export default class Hologram {
   }
 
   // Made public to make tests easier
-  static executePrefetchPageAction(operation, eventTargetNode) {
+  static executeNavigateToPrefetchedPageAction(action, eventTargetNode) {
     Hologram.#ensureDomNodeHasHologramId(eventTargetNode);
 
-    const toParam = Erlang_Maps["get/2"](
-      Type.atom("to"),
-      Erlang_Maps["get/2"](Type.atom("params"), operation),
+    const toParam = Hologram.#getToParam(action);
+    const pagePath = Hologram.#buildPagePath(toParam);
+
+    const mapKey = Hologram.#buildPrefetchedPagesMapKey(
+      eventTargetNode,
+      pagePath,
     );
 
-    const pagePath = Bitstring.toText(
-      Elixir_Hologram_Router_Helpers["page_path/1"](toParam),
-    );
+    const mapValue = Hologram.prefetchedPages.get(mapKey);
 
-    const mapKey = `${eventTargetNode.__hologramId__}:${pagePath}`;
+    if (typeof mapValue === "undefined") {
+      return;
+    }
+
+    if (mapValue.html === null) {
+      mapValue.isNavigateConfirmed = true;
+    } else {
+      Hologram.prefetchedPages.delete(mapKey);
+      Hologram.navigate(pagePath, mapValue.html);
+    }
+  }
+
+  // Made public to make tests easier
+  static executePrefetchPageAction(action, eventTargetNode) {
+    Hologram.#ensureDomNodeHasHologramId(eventTargetNode);
+
+    const toParam = Hologram.#getToParam(action);
+    const pagePath = Hologram.#buildPagePath(toParam);
+
+    const mapKey = Hologram.#buildPrefetchedPagesMapKey(
+      eventTargetNode,
+      pagePath,
+    );
 
     if (
       !Hologram.prefetchedPages.has(mapKey) ||
@@ -174,10 +197,18 @@ export default class Hologram {
       );
 
       if (Operation.isAction(operation)) {
-        if (Hologram.#isPrefetchPageAction(operation)) {
-          Hologram.executePrefetchPageAction(operation, event.target);
-        } else {
-          Hologram.executeAction(operation);
+        switch (Hologram.#getActionName(operation)) {
+          case "__navigate_to_prefetched_page__":
+            return Hologram.executeNavigateToPrefetchedPageAction(
+              operation,
+              event.target,
+            );
+
+          case "__prefetch_page__":
+            return Hologram.executePrefetchPageAction(operation, event.target);
+
+          default:
+            return Hologram.executeAction(operation);
         }
       } else {
         CommandQueue.push(operation);
@@ -258,6 +289,16 @@ export default class Hologram {
     });
   }
 
+  static #buildPagePath(toParam) {
+    return Bitstring.toText(
+      Elixir_Hologram_Router_Helpers["page_path/1"](toParam),
+    );
+  }
+
+  static #buildPrefetchedPagesMapKey(eventTargetNode, pagePath) {
+    return `${eventTargetNode.__hologramId__}:${pagePath}`;
+  }
+
   static #defineManuallyPortedFunctions() {
     globalThis.Elixir_Code = {};
     globalThis.Elixir_Code["ensure_compiled/1"] =
@@ -285,6 +326,11 @@ export default class Hologram {
     }
   }
 
+  // Deps: [:maps.get/2]
+  static #getActionName(action) {
+    return Erlang_Maps["get/2"](Type.atom("name"), action).value;
+  }
+
   static #getEventImplementation(eventType) {
     switch (eventType) {
       case "click":
@@ -299,6 +345,14 @@ export default class Hologram {
     }
   }
 
+  // Deps: [:maps.get/2]
+  static #getToParam(operation) {
+    return Erlang_Maps["get/2"](
+      Type.atom("to"),
+      Erlang_Maps["get/2"](Type.atom("params"), operation),
+    );
+  }
+
   static #init() {
     Client.connect();
 
@@ -308,16 +362,6 @@ export default class Hologram {
       console.log("INSPECT: " + Interpreter.inspect(term));
 
     Hologram.#isInitiated = true;
-  }
-
-  // Deps: [:maps.get/2]
-  static #isPrefetchPageAction(operation) {
-    const prefetchPageActionName =
-      Elixir_Hologram_RuntimeSettings["prefetch_page_action_name/0"]();
-
-    const actionName = Erlang_Maps["get/2"](Type.atom("name"), operation);
-
-    return Interpreter.isEqual(actionName, prefetchPageActionName);
   }
 
   static #isPrefetchPageTimedOut(mapKey) {
