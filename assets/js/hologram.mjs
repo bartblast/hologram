@@ -17,6 +17,7 @@ import Operation from "./operation.mjs";
 import Renderer from "./renderer.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
+import Vdom from "./vdom.mjs";
 
 // Events
 import MouseEvent from "./events/mouse_event.mjs";
@@ -29,6 +30,9 @@ const patch = init([attributesModule, eventListenersModule]);
 export default class Hologram {
   // Made public to make tests easier
   static prefetchedPages = new Map();
+
+  // Made public to make tests easier
+  static virtualDocument = null;
 
   static #deps = {
     Bitstring: Bitstring,
@@ -44,7 +48,6 @@ export default class Hologram {
   static #mountData = null;
   static #pageModule = null;
   static #pageParams = null;
-  static #virtualDocument = null;
 
   // Made public to make tests easier
   // Deps: [:maps.get/2, :maps.put/3]
@@ -184,8 +187,15 @@ export default class Hologram {
   }
 
   // Made public to make tests easier
-  static navigate(_pagePath, _html) {
-    // TODO: implement
+  static navigate(pagePath, html) {
+    const newVirtualDocument = Vdom.from(html);
+    patch(Hologram.virtualDocument, newVirtualDocument);
+    Hologram.virtualDocument = newVirtualDocument;
+
+    const historyStateId = crypto.randomUUID();
+    sessionStorage.setItem(historyStateId, html);
+
+    history.pushState(historyStateId, null, pagePath);
   }
 
   static onPrefetchPageError(mapKey, _resp) {
@@ -215,8 +225,8 @@ export default class Hologram {
 
   // Made public to make tests easier
   static render() {
-    if (!Hologram.#virtualDocument) {
-      Hologram.#virtualDocument = toVNode(window.document.documentElement);
+    if (!Hologram.virtualDocument) {
+      Hologram.virtualDocument = toVNode(window.document.documentElement);
     }
 
     const newVirtualDocument = Renderer.renderPage(
@@ -224,9 +234,9 @@ export default class Hologram {
       Hologram.#pageParams,
     );
 
-    patch(Hologram.#virtualDocument, newVirtualDocument);
+    patch(Hologram.virtualDocument, newVirtualDocument);
 
-    Hologram.#virtualDocument = newVirtualDocument;
+    Hologram.virtualDocument = newVirtualDocument;
   }
 
   static run() {
