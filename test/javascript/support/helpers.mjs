@@ -19,7 +19,7 @@ import JsonEncoder from "../../../assets/js/json_encoder.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 export {assert} from "../../../assets/node_modules/chai/index.js";
-import "../../../assets/node_modules/jsdom-global/register.js";
+import {JSDOM} from "../../../assets/node_modules/jsdom/lib/api.js";
 export * as sinon from "../../../assets/node_modules/sinon/pkg/sinon-esm.js";
 export {h as vnode} from "../../../assets/node_modules/snabbdom/build/index.js";
 
@@ -280,5 +280,9 @@ export function putState(component, state) {
 }
 
 export function registerWebApis() {
+  const {window} = new JSDOM("", {url: "http://localhost"});
+
   globalThis.DOMParser = window.DOMParser;
+  globalThis.history = window.history;
+  globalThis.sessionStorage = window.sessionStorage;
 }
