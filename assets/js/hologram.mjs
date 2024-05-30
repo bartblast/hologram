@@ -188,8 +188,14 @@ export default class Hologram {
     // TODO: implement
   }
 
-  static onPrefetchPageError(_mapKey, _resp) {
-    // TODO: implement
+  static onPrefetchPageError(mapKey, _resp) {
+    const mapValue = Hologram.prefetchedPages.get(mapKey);
+
+    if (typeof mapValue === "undefined") {
+      return;
+    }
+
+    console.error("page prefetch failed:", mapValue.pagePath);
   }
 
   static onPrefetchPageSuccess(mapKey, html) {

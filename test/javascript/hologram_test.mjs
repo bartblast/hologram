@@ -748,6 +748,48 @@ describe("Hologram", () => {
     });
   });
 
+  describe("onPrefetchPageError()", () => {
+    let consoleErrorStub;
+
+    beforeEach(() => {
+      consoleErrorStub = sinon
+        .stub(console, "error")
+        .callsFake((_arg1, _arg2) => null);
+    });
+
+    afterEach(() => console.error.restore());
+
+    it("no prefetchedPages map entry", () => {
+      Hologram.prefetchedPages = new Map();
+
+      Hologram.onPrefetchPageError("dummy_map_key", "my_resp");
+
+      sinon.assert.notCalled(consoleErrorStub);
+    });
+
+    it("has prefetchedPages map entry", () => {
+      Hologram.prefetchedPages = new Map([
+        [
+          "dummy_map_key",
+          {
+            html: null,
+            isNavigateConfirmed: true,
+            pagePath: "/my-page-path",
+            timestamp: Date.now(),
+          },
+        ],
+      ]);
+
+      Hologram.onPrefetchPageError("dummy_map_key", "my_resp");
+
+      sinon.assert.calledOnceWithExactly(
+        consoleErrorStub,
+        "page prefetch failed:",
+        "/my-page-path",
+      );
+    });
+  });
+
   describe("onPrefetchPageSuccess()", () => {
     let navigateStub;
 
@@ -759,7 +801,7 @@ describe("Hologram", () => {
 
     afterEach(() => Hologram.navigate.restore());
 
-    it("no map entry", () => {
+    it("no prefetchedPages map entry", () => {
       Hologram.prefetchedPages = new Map();
 
       Hologram.onPrefetchPageSuccess("dummy_map_key", "my_html");
