@@ -226,7 +226,7 @@ export default class Hologram {
   // Made public to make tests easier
   static render() {
     if (!Hologram.virtualDocument) {
-      Hologram.virtualDocument = toVNode(window.document.documentElement);
+      Hologram.virtualDocument = toVNode(globalThis.document.documentElement);
     }
 
     const newVirtualDocument = Renderer.renderPage(
@@ -259,23 +259,24 @@ export default class Hologram {
   }
 
   static #defineManuallyPortedFunctions() {
-    window.Elixir_Code = {};
-    window.Elixir_Code["ensure_compiled/1"] = Elixir_Code["ensure_compiled/1"];
+    globalThis.Elixir_Code = {};
+    globalThis.Elixir_Code["ensure_compiled/1"] =
+      Elixir_Code["ensure_compiled/1"];
 
-    window.Elixir_Hologram_Router_Helpers = {};
+    globalThis.Elixir_Hologram_Router_Helpers = {};
 
-    window.Elixir_Hologram_Router_Helpers["asset_path/1"] =
+    globalThis.Elixir_Hologram_Router_Helpers["asset_path/1"] =
       Elixir_Hologram_Router_Helpers["asset_path/1"];
 
-    window.Elixir_Hologram_Router_Helpers["page_path/1"] =
+    globalThis.Elixir_Hologram_Router_Helpers["page_path/1"] =
       Elixir_Hologram_Router_Helpers["page_path/1"];
 
-    window.Elixir_Hologram_Router_Helpers["page_path/2"] =
+    globalThis.Elixir_Hologram_Router_Helpers["page_path/2"] =
       Elixir_Hologram_Router_Helpers["page_path/2"];
 
-    window.Elixir_Kernel = {};
-    window.Elixir_Kernel["inspect/1"] = Elixir_Kernel["inspect/1"];
-    window.Elixir_Kernel["inspect/2"] = Elixir_Kernel["inspect/2"];
+    globalThis.Elixir_Kernel = {};
+    globalThis.Elixir_Kernel["inspect/1"] = Elixir_Kernel["inspect/1"];
+    globalThis.Elixir_Kernel["inspect/2"] = Elixir_Kernel["inspect/2"];
   }
 
   static #ensureDomNodeHasHologramId(eventNode) {
@@ -303,7 +304,7 @@ export default class Hologram {
 
     Hologram.#defineManuallyPortedFunctions();
 
-    window.console.inspect = (term) =>
+    globalThis.console.inspect = (term) =>
       console.log("INSPECT: " + Interpreter.inspect(term));
 
     Hologram.#isInitiated = true;
@@ -327,7 +328,7 @@ export default class Hologram {
   }
 
   static #loadMountData() {
-    const mountData = window.__hologramPageMountData__(Hologram.#deps);
+    const mountData = globalThis.__hologramPageMountData__(Hologram.#deps);
 
     Hologram.#mountData = mountData;
     Hologram.#pageModule = mountData.pageModule;
@@ -336,12 +337,12 @@ export default class Hologram {
 
   static #maybeInitAssetPathRegistry() {
     if (AssetPathRegistry.entries === null) {
-      AssetPathRegistry.hydrate(window.__hologramAssetManifest__);
+      AssetPathRegistry.hydrate(globalThis.__hologramAssetManifest__);
     }
   }
 
   static #mountPage() {
-    window.__hologramPageReachableFunctionDefs__(Hologram.#deps);
+    globalThis.__hologramPageReachableFunctionDefs__(Hologram.#deps);
 
     Hologram.#loadMountData();
 
