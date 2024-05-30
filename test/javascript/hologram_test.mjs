@@ -5,7 +5,9 @@ import {
   commandQueueItemFixture,
   componentRegistryEntryFixture,
   defineGlobalErlangAndElixirModules,
+  registerWebApis,
   sinon,
+  UUID_REGEX,
 } from "./support/helpers.mjs";
 
 import Client from "../../assets/js/client.mjs";
@@ -14,6 +16,9 @@ import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Config from "../../assets/js/config.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import Type from "../../assets/js/type.mjs";
+
+import {toVNode} from "../../assets/node_modules/snabbdom/build/index.js";
+import vnodeToHtml from "../../assets/node_modules/snabbdom-to-html/index.js";
 
 import {defineModule1Fixture} from "./support/fixtures/hologram/module_1.mjs";
 import {defineModule2Fixture} from "./support/fixtures/hologram/module_2.mjs";
@@ -24,6 +29,7 @@ import {defineModule6Fixture} from "./support/fixtures/hologram/module_6.mjs";
 import {defineModule7Fixture} from "./support/fixtures/hologram/module_7.mjs";
 
 defineGlobalErlangAndElixirModules();
+registerWebApis();
 
 const cid1 = Type.bitstring("my_component_1");
 const cid2 = Type.bitstring("my_component_2");
@@ -748,16 +754,63 @@ describe("Hologram", () => {
     });
   });
 
+  it("navigate()", () => {
+    const historyPushStateStub = sinon
+      .stub(globalThis.history, "pushState")
+      .callsFake((_state, _unused, _url) => null);
+
+    globalThis.sessionStorage.clear();
+
+    const parser = new DOMParser();
+
+    const doc = parser.parseFromString(
+      "<DOCTYPE html><html><head></head><body><div></div></body></html>",
+      "text/html",
+    );
+
+    Hologram.virtualDocument = toVNode(doc.documentElement);
+
+    const pagePath = "/my-page-path";
+
+    const html =
+      "<!DOCTYPE html><html><head></head><body><span></span></body></html>";
+
+    Hologram.navigate(pagePath, html);
+
+    assert.deepStrictEqual(
+      vnodeToHtml(Hologram.virtualDocument),
+      "<html><head></head><body><span></span></body></html>",
+    );
+
+    const sessionStorageKeys = Object.keys(globalThis.sessionStorage);
+    assert.equal(sessionStorageKeys.length, 1);
+    assert.match(sessionStorageKeys[0], UUID_REGEX);
+
+    assert.equal(
+      globalThis.sessionStorage.getItem(sessionStorageKeys[0]),
+      html,
+    );
+
+    sinon.assert.calledOnceWithExactly(
+      historyPushStateStub,
+      sessionStorageKeys[0],
+      null,
+      pagePath,
+    );
+
+    globalThis.history.pushState.restore();
+  });
+
   describe("onPrefetchPageError()", () => {
     let consoleErrorStub;
 
     beforeEach(() => {
       consoleErrorStub = sinon
-        .stub(console, "error")
+        .stub(globalThis.console, "error")
         .callsFake((_arg1, _arg2) => null);
     });
 
-    afterEach(() => console.error.restore());
+    afterEach(() => globalThis.console.error.restore());
 
     it("no prefetchedPages map entry", () => {
       Hologram.prefetchedPages = new Map();
