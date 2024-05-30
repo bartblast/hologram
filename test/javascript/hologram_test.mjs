@@ -935,6 +935,8 @@ describe("Hologram", () => {
       .stub(globalThis.history, "pushState")
       .callsFake((_state, _unused, _url) => null);
 
+    globalThis.__hologramPageScriptLoaded__ = true;
+
     globalThis.sessionStorage.clear();
 
     const parser = new DOMParser();
@@ -952,6 +954,8 @@ describe("Hologram", () => {
       "<!DOCTYPE html><html><head></head><body><span></span></body></html>";
 
     Hologram.navigate(pagePath, html);
+
+    assert.isFalse(globalThis.__hologramPageScriptLoaded__);
 
     assert.deepStrictEqual(
       vnodeToHtml(Hologram.virtualDocument),

@@ -219,6 +219,8 @@ export default class Hologram {
 
   // Made public to make tests easier
   static navigate(pagePath, html) {
+    globalThis.__hologramPageScriptLoaded__ = false;
+
     const newVirtualDocument = Vdom.from(html);
     patch(Hologram.virtualDocument, newVirtualDocument);
     Hologram.virtualDocument = newVirtualDocument;
