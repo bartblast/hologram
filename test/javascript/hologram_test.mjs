@@ -747,4 +747,82 @@ describe("Hologram", () => {
       sinon.assert.calledOnceWithExactly(commandQueueProcessStub);
     });
   });
+
+  describe("onPrefetchPageSuccess()", () => {
+    let navigateStub;
+
+    beforeEach(() => {
+      navigateStub = sinon
+        .stub(Hologram, "navigate")
+        .callsFake((_pagePath, _html) => null);
+    });
+
+    afterEach(() => Hologram.navigate.restore());
+
+    it("no map entry", () => {
+      Hologram.prefetchedPages = new Map();
+
+      Hologram.onPrefetchPageSuccess("dummy_map_key", "my_html");
+
+      assert.deepStrictEqual(Hologram.prefetchedPages, new Map());
+      sinon.assert.notCalled(navigateStub);
+    });
+
+    it("navigate has been confirmed", () => {
+      Hologram.prefetchedPages = new Map([
+        [
+          "dummy_map_key",
+          {
+            html: null,
+            isNavigateConfirmed: true,
+            pagePath: "/my-page-path",
+            timestamp: Date.now(),
+          },
+        ],
+      ]);
+
+      Hologram.onPrefetchPageSuccess("dummy_map_key", "my_html");
+
+      assert.deepStrictEqual(Hologram.prefetchedPages, new Map());
+
+      sinon.assert.calledOnceWithExactly(
+        navigateStub,
+        "/my-page-path",
+        "my_html",
+      );
+    });
+
+    it("navigate hasn't been confirmed", () => {
+      Hologram.prefetchedPages = new Map([
+        [
+          "dummy_map_key",
+          {
+            html: null,
+            isNavigateConfirmed: false,
+            pagePath: "/my-page-path",
+            timestamp: Date.now(),
+          },
+        ],
+      ]);
+
+      Hologram.onPrefetchPageSuccess("dummy_map_key", "my_html");
+
+      assert.deepStrictEqual(
+        Hologram.prefetchedPages,
+        new Map([
+          [
+            "dummy_map_key",
+            {
+              html: "my_html",
+              isNavigateConfirmed: false,
+              pagePath: "/my-page-path",
+              timestamp: Date.now(),
+            },
+          ],
+        ]),
+      );
+
+      sinon.assert.notCalled(navigateStub);
+    });
+  });
 });

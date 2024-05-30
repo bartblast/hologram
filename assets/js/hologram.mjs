@@ -183,12 +183,28 @@ export default class Hologram {
     }
   }
 
+  // Made public to make tests easier
+  static navigate(_pagePath, _html) {
+    // TODO: implement
+  }
+
   static onPrefetchPageError(_mapKey, _resp) {
     // TODO: implement
   }
 
-  static onPrefetchPageSuccess(_mapKey, _resp) {
-    // TODO: implement
+  static onPrefetchPageSuccess(mapKey, html) {
+    const mapValue = Hologram.prefetchedPages.get(mapKey);
+
+    if (typeof mapValue === "undefined") {
+      return;
+    }
+
+    if (mapValue.isNavigateConfirmed) {
+      Hologram.prefetchedPages.delete(mapKey);
+      Hologram.navigate(mapValue.pagePath, html);
+    } else {
+      mapValue.html = html;
+    }
   }
 
   // Made public to make tests easier
