@@ -306,24 +306,47 @@ export default class Hologram {
   }
 
   static #defineManuallyPortedFunctions() {
-    globalThis.Elixir_Code = {};
-    globalThis.Elixir_Code["ensure_compiled/1"] =
-      Elixir_Code["ensure_compiled/1"];
+    Interpreter.defineManuallyPortedFunction(
+      "Code",
+      "ensure_compiled/1",
+      "public",
+      Elixir_Code["ensure_compiled/1"],
+    );
 
-    globalThis.Elixir_Hologram_Router_Helpers = {};
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Router.Helpers",
+      "asset_path/1",
+      "public",
+      Elixir_Hologram_Router_Helpers["asset_path/1"],
+    );
 
-    globalThis.Elixir_Hologram_Router_Helpers["asset_path/1"] =
-      Elixir_Hologram_Router_Helpers["asset_path/1"];
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Router.Helpers",
+      "page_path/1",
+      "public",
+      Elixir_Hologram_Router_Helpers["page_path/1"],
+    );
 
-    globalThis.Elixir_Hologram_Router_Helpers["page_path/1"] =
-      Elixir_Hologram_Router_Helpers["page_path/1"];
+    Interpreter.defineManuallyPortedFunction(
+      "Hologram.Router.Helpers",
+      "page_path/2",
+      "public",
+      Elixir_Hologram_Router_Helpers["page_path/2"],
+    );
 
-    globalThis.Elixir_Hologram_Router_Helpers["page_path/2"] =
-      Elixir_Hologram_Router_Helpers["page_path/2"];
+    Interpreter.defineManuallyPortedFunction(
+      "Kernel",
+      "inspect/1",
+      "public",
+      Elixir_Kernel["inspect/1"],
+    );
 
-    globalThis.Elixir_Kernel = {};
-    globalThis.Elixir_Kernel["inspect/1"] = Elixir_Kernel["inspect/1"];
-    globalThis.Elixir_Kernel["inspect/2"] = Elixir_Kernel["inspect/2"];
+    Interpreter.defineManuallyPortedFunction(
+      "Kernel",
+      "inspect/2",
+      "public",
+      Elixir_Kernel["inspect/2"],
+    );
   }
 
   static #ensureDomNodeHasHologramId(eventNode) {
