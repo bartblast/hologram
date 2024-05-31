@@ -5837,7 +5837,7 @@ describe("Interpreter", () => {
   });
 
   describe("maybeInitModuleProxy()", () => {
-    beforeEach(() => delete globalThis.MyModuleJsName);
+    beforeEach(() => delete globalThis.Elixir_MyModuleExName);
 
     it("proxy hasn't been initiated yet", () => {
       Interpreter.maybeInitModuleProxy(
