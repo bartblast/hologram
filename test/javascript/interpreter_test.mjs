@@ -5775,6 +5775,82 @@ describe("Interpreter", () => {
     });
   });
 
+  describe("maybeInitModuleProxy()", () => {
+    beforeEach(() => delete globalThis.MyModuleJsName);
+
+    it("proxy hasn't been initiated yet", () => {
+      Interpreter.maybeInitModuleProxy(
+        "MyModuleExName",
+        "Elixir_MyModuleExName",
+      );
+
+      assert.deepStrictEqual(
+        globalThis.Elixir_MyModuleExName.__exModule__,
+        Type.alias("MyModuleExName"),
+      );
+
+      assert.deepStrictEqual(
+        globalThis.Elixir_MyModuleExName.__exports__,
+        new Set(),
+      );
+
+      assert.equal(
+        globalThis.Elixir_MyModuleExName.__jsName__,
+        "Elixir_MyModuleExName",
+      );
+
+      globalThis.Elixir_MyModuleExName["my_defined_fun/3"] = () =>
+        "my_defined_fun/3 result";
+
+      assert.equal(
+        globalThis.Elixir_MyModuleExName["my_defined_fun/3"](),
+        "my_defined_fun/3 result",
+      );
+
+      assertBoxedError(
+        () => globalThis.Elixir_MyModuleExName["my_undefined_fun/3"](),
+        "UndefinedFunctionError",
+        "function MyModuleExName.my_undefined_fun/3 is undefined or private",
+      );
+    });
+
+    it("proxy has been already initiated", () => {
+      Interpreter.maybeInitModuleProxy(
+        "MyModuleExName",
+        "Elixir_MyModuleExName",
+      );
+
+      globalThis.Elixir_MyModuleExName["my_defined_fun/3"] = () =>
+        "my_defined_fun/3 result";
+
+      globalThis.Elixir_MyModuleExName.__exports__.add("my_defined_fun/3");
+
+      Interpreter.maybeInitModuleProxy(
+        "MyModuleExName",
+        "Elixir_MyModuleExName",
+      );
+
+      assert.equal(
+        globalThis.Elixir_MyModuleExName["my_defined_fun/3"](),
+        "my_defined_fun/3 result",
+      );
+
+      assert.deepStrictEqual(
+        globalThis.Elixir_MyModuleExName.__exports__,
+        new Set(["my_defined_fun/3"]),
+      );
+    });
+
+    it("module JS name is generated if it is not given in the second arg", () => {
+      Interpreter.maybeInitModuleProxy("MyModuleExName");
+
+      assert.equal(
+        globalThis.Elixir_MyModuleExName.__jsName__,
+        "Elixir_MyModuleExName",
+      );
+    });
+  });
+
   describe("moduleJsName()", () => {
     describe("boxed alias argument", () => {
       it("Elixir module alias without camel case segments", () => {

@@ -242,28 +242,7 @@ export default class Interpreter {
   ) {
     const moduleJsName = Interpreter.moduleJsName("Elixir." + moduleExName);
 
-    if (!globalThis[moduleJsName]) {
-      const handler = {
-        get(moduleRef, functionArityStr) {
-          if (functionArityStr in moduleRef) {
-            return moduleRef[functionArityStr];
-          }
-
-          const [functionName, arity] = functionArityStr.split("/");
-
-          Interpreter.raiseUndefinedFunctionError(
-            Interpreter.inspect(moduleRef.__exModule__),
-            functionName,
-            arity,
-          );
-        },
-      };
-
-      globalThis[moduleJsName] = new Proxy({}, handler);
-      globalThis[moduleJsName].__exModule__ = Type.alias(moduleExName);
-      globalThis[moduleJsName].__exports__ = new Set();
-      globalThis[moduleJsName].__jsName__ = moduleJsName;
-    }
+    Interpreter.maybeInitModuleProxy(moduleExName, moduleJsName);
 
     globalThis[moduleJsName][`${functionName}/${arity}`] = function () {
       const mfa = `${moduleExName}.${functionName}/${arity}`;
@@ -523,6 +502,35 @@ export default class Interpreter {
     }
 
     return right;
+  }
+
+  static maybeInitModuleProxy(moduleExName, moduleJsName = null) {
+    if (moduleJsName === null) {
+      moduleJsName = Interpreter.moduleJsName("Elixir." + moduleExName);
+    }
+
+    if (!globalThis[moduleJsName]) {
+      const handler = {
+        get(moduleRef, functionArityStr) {
+          if (functionArityStr in moduleRef) {
+            return moduleRef[functionArityStr];
+          }
+
+          const [functionName, arity] = functionArityStr.split("/");
+
+          Interpreter.raiseUndefinedFunctionError(
+            Interpreter.inspect(moduleRef.__exModule__),
+            functionName,
+            arity,
+          );
+        },
+      };
+
+      globalThis[moduleJsName] = new Proxy({}, handler);
+      globalThis[moduleJsName].__exModule__ = Type.alias(moduleExName);
+      globalThis[moduleJsName].__exports__ = new Set();
+      globalThis[moduleJsName].__jsName__ = moduleJsName;
+    }
   }
 
   // Based on: Hologram.Compiler.Encoder.encode_as_class_name/1
