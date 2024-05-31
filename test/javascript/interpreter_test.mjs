@@ -2162,6 +2162,67 @@ describe("Interpreter", () => {
     });
   });
 
+  describe("defineManuallyPortedFunction()", () => {
+    beforeEach(() => delete globalThis.Elixir_MyModuleExName);
+
+    it("initializes function's module proxy if it hasn't been initialized", () => {
+      Interpreter.defineManuallyPortedFunction(
+        "MyModuleExName",
+        "my_defined_fun/3",
+        "public",
+        () => "my_defined_fun/3 result",
+      );
+
+      assertBoxedError(
+        () => globalThis.Elixir_MyModuleExName["my_undefined_fun/3"],
+        "UndefinedFunctionError",
+        "function MyModuleExName.my_undefined_fun/3 is undefined or private",
+      );
+    });
+
+    it("makes the function available through its module proxy", () => {
+      Interpreter.defineManuallyPortedFunction(
+        "MyModuleExName",
+        "my_defined_fun/3",
+        "public",
+        () => "my_defined_fun/3 result",
+      );
+
+      assert.equal(
+        globalThis.Elixir_MyModuleExName["my_defined_fun/3"](),
+        "my_defined_fun/3 result",
+      );
+    });
+
+    it("adds the function to the list of module exports if it is public", () => {
+      Interpreter.defineManuallyPortedFunction(
+        "MyModuleExName",
+        "my_defined_fun/3",
+        "public",
+        () => "my_defined_fun/3 result",
+      );
+
+      assert.deepStrictEqual(
+        globalThis.Elixir_MyModuleExName.__exports__,
+        new Set(["my_defined_fun/3"]),
+      );
+    });
+
+    it("doesn't add the function to the list of module exports if it is private", () => {
+      Interpreter.defineManuallyPortedFunction(
+        "MyModuleExName",
+        "my_defined_fun/3",
+        "private",
+        () => "my_defined_fun/3 result",
+      );
+
+      assert.deepStrictEqual(
+        globalThis.Elixir_MyModuleExName.__exports__,
+        new Set([]),
+      );
+    });
+  });
+
   describe("defineNotImplementedErlangFunction()", () => {
     beforeEach(() => {
       Interpreter.defineNotImplementedErlangFunction("aaa_bbb", "my_fun_a", 2);

@@ -289,6 +289,23 @@ export default class Interpreter {
     globalThis[moduleJsName][`${functionName}/${arity}`] = jsFunction;
   }
 
+  static defineManuallyPortedFunction(
+    moduleExName,
+    functionArityStr,
+    visibility,
+    fun,
+  ) {
+    const moduleJsName = Interpreter.moduleJsName("Elixir." + moduleExName);
+
+    Interpreter.maybeInitModuleProxy(moduleExName, moduleJsName);
+
+    globalThis[moduleJsName][functionArityStr] = fun;
+
+    if (visibility === "public") {
+      globalThis[moduleJsName].__exports__.add(functionArityStr);
+    }
+  }
+
   static defineNotImplementedErlangFunction(moduleExName, functionName, arity) {
     const moduleJsName = Interpreter.moduleJsName(moduleExName);
 
