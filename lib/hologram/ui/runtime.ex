@@ -9,27 +9,30 @@ defmodule Hologram.UI.Runtime do
   @impl Component
   def template do
     ~H"""
-    {%if @initial_page? or !@page_mounted?}
+    {%if @initial_page?}
+      <script>{AssetManifestCache.get_manifest_js()}</script>
+    {/if}
+
+    {%if !@page_mounted?}
       <script>
-        {%if @initial_page?}
-          {AssetManifestCache.get_manifest_js()}
-        {/if}
-        {%if !@page_mounted?}
-          {%raw}
-            window.__hologramPageMountData__ = (deps) => {
-              const Type = deps.Type;
-              
-              return {
-                componentRegistry: $COMPONENT_REGISTRY_JS_PLACEHOLDER,
-                pageModule: $PAGE_MODULE_JS_PLACEHOLDER,
-                pageParams: $PAGE_PARAMS_JS_PLACEHOLDER
-              };
+        {%raw}
+          window.__hologramPageMountData__ = (deps) => {
+            const Type = deps.Type;
+            
+            return {
+              componentRegistry: $COMPONENT_REGISTRY_JS_PLACEHOLDER,
+              pageModule: $PAGE_MODULE_JS_PLACEHOLDER,
+              pageParams: $PAGE_PARAMS_JS_PLACEHOLDER
             };
-          {/raw}
-        {/if}
+          };
+        {/raw}
       </script>
     {/if}
-    <script async src={asset_path("hologram/runtime.js")}></script>
+
+    {%if @initial_page?}
+      <script async src={asset_path("hologram/runtime.js")}></script>
+    {/if}
+
     <script async src="/hologram/page-{@page_digest}.js"></script>
     """
   end

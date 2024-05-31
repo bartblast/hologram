@@ -34,7 +34,9 @@ defmodule Hologram.UI.RuntimeTest do
 
   test "initial_page? prop = false", %{context: context} do
     markup = render_component(Runtime, %{}, context)
+
     refute String.contains?(markup, "window.__hologramAssetManifest__")
+    refute String.contains?(markup, "hologram/runtime")
   end
 
   test "initial_page? prop = true", %{context: context} do
@@ -42,6 +44,7 @@ defmodule Hologram.UI.RuntimeTest do
     markup = render_component(Runtime, %{}, context)
 
     assert String.contains?(markup, "window.__hologramAssetManifest__")
+    assert String.contains?(markup, "hologram/runtime")
   end
 
   test "page_mounted? prop = false", %{context: context} do
