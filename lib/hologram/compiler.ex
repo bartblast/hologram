@@ -158,7 +158,9 @@ defmodule Hologram.Compiler do
     }
 
     window.__hologramPageScriptLoaded__ = true;
-    document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));\
+    document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));
+
+    console.debug("Hologram: executed page script");\
     """
   end
 
@@ -193,7 +195,9 @@ defmodule Hologram.Compiler do
 
     if (window.__hologramPageScriptLoaded__) {
       document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));
-    }\
+    }
+
+    console.debug("Hologram: executed runtime script");\
     """
   end
 
