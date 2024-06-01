@@ -434,7 +434,11 @@ export default class Renderer {
       typeof attrsVdom.src === "string" &&
       attrsVdom.src
     ) {
-      data = {key: attrsVdom.src, attrs: attrsVdom, on: eventListenersVdom};
+      data = {
+        key: `__hologramScript__:${attrsVdom.src}`,
+        attrs: attrsVdom,
+        on: eventListenersVdom,
+      };
     } else {
       data = {attrs: attrsVdom, on: eventListenersVdom};
     }

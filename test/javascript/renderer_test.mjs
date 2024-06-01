@@ -999,7 +999,11 @@ describe("Renderer", () => {
           );
           const expected = vnode(
             "script",
-            {key: "my_script", attrs: {src: "my_script"}, on: {}},
+            {
+              key: "__hologramScript__:my_script",
+              attrs: {src: "my_script"},
+              on: {},
+            },
             [],
           );
 
