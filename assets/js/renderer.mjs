@@ -427,11 +427,19 @@ export default class Renderer {
       defaultTarget,
     );
 
-    return vnode(
-      tagName,
-      {attrs: attrsVdom, on: eventListenersVdom},
-      childrenVdom,
-    );
+    let data;
+
+    if (
+      tagName === "script" &&
+      typeof attrsVdom.src === "string" &&
+      attrsVdom.src
+    ) {
+      data = {key: attrsVdom.src, attrs: attrsVdom, on: eventListenersVdom};
+    } else {
+      data = {attrs: attrsVdom, on: eventListenersVdom};
+    }
+
+    return vnode(tagName, data, childrenVdom);
   }
 
   static #renderEventListeners(attrsDom, defaultTarget) {

@@ -869,6 +869,143 @@ describe("Renderer", () => {
           Hologram.handleEvent.restore();
         });
       });
+
+      describe("script element vnode key", () => {
+        it("not a script element", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("img"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("src"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("my_source")],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+          );
+          const expected = vnode(
+            "img",
+            {attrs: {src: "my_source"}, on: {}},
+            [],
+          );
+
+          assert.deepStrictEqual(result, expected);
+        });
+
+        it("script element without src attribute (inline script)", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("script"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("type"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("text/javascript")],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+          );
+          const expected = vnode(
+            "script",
+            {attrs: {type: "text/javascript"}, on: {}},
+            [],
+          );
+
+          assert.deepStrictEqual(result, expected);
+        });
+
+        it("script element with empty string src attribute", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("script"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("src"),
+                Type.keywordList([[Type.atom("text"), Type.bitstring("")]]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+          );
+          const expected = vnode("script", {attrs: {src: ""}, on: {}}, []);
+
+          assert.deepStrictEqual(result, expected);
+        });
+
+        it("script element with boolean src attribute", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("script"),
+            Type.list([
+              Type.tuple([Type.bitstring("src"), Type.keywordList([])]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+          );
+          const expected = vnode("script", {attrs: {src: true}, on: {}}, []);
+
+          assert.deepStrictEqual(result, expected);
+        });
+
+        it("script element with non-empty src attribute", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("script"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("src"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("my_script")],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+          );
+          const expected = vnode(
+            "script",
+            {key: "my_script", attrs: {src: "my_script"}, on: {}},
+            [],
+          );
+
+          assert.deepStrictEqual(result, expected);
+        });
+      });
     });
   });
 
