@@ -29,6 +29,16 @@ export default class Vdom {
       attrs[attr.name] = attr.value === "" ? true : attr.value;
     }
 
-    return vnode(node.tagName.toLowerCase(), {attrs: attrs}, children);
+    const tagName = node.tagName.toLowerCase();
+
+    let data;
+
+    if (tagName === "script" && typeof attrs.src === "string") {
+      data = {key: `__hologramScript__:${attrs.src}`, attrs: attrs};
+    } else {
+      data = {attrs: attrs};
+    }
+
+    return vnode(tagName, data, children);
   }
 }
