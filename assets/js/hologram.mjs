@@ -263,6 +263,7 @@ export default class Hologram {
   static render() {
     if (!Hologram.virtualDocument) {
       Hologram.virtualDocument = toVNode(globalThis.document.documentElement);
+      Vdom.addKeysToScriptVnodes(Hologram.virtualDocument);
     }
 
     const newVirtualDocument = Renderer.renderPage(
