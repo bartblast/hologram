@@ -83,7 +83,14 @@ describe("Vdom", () => {
 
       assert.deepStrictEqual(
         node,
-        vnode("script", {key: "my_script", attrs: {src: "my_script"}}, []),
+        vnode(
+          "script",
+          {
+            key: "__hologramScript__:my_script",
+            attrs: {src: "my_script"},
+          },
+          [],
+        ),
       );
     });
 
@@ -101,13 +108,19 @@ describe("Vdom", () => {
         vnode("div", {}, [
           vnode(
             "script",
-            {key: "my_script_1", attrs: {src: "my_script_1"}},
+            {
+              key: "__hologramScript__:my_script_1",
+              attrs: {src: "my_script_1"},
+            },
             [],
           ),
           vnode("img", {attrs: {src: "my_source"}}, []),
           vnode(
             "script",
-            {key: "my_script_2", attrs: {src: "my_script_2"}},
+            {
+              key: "__hologramScript__:my_script_2",
+              attrs: {src: "my_script_2"},
+            },
             [],
           ),
         ]),

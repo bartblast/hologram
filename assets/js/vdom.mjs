@@ -9,8 +9,8 @@ export default class Vdom {
       node.data?.attrs?.src &&
       typeof node.data.attrs.src === "string"
     ) {
-      node.key = node.data.attrs.src;
-      node.data.key = node.data.attrs.src;
+      node.key = `__hologramScript__:${node.data.attrs.src}`;
+      node.data.key = node.key;
     }
 
     if (Array.isArray(node.children)) {
