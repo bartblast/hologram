@@ -13,6 +13,108 @@ defineGlobalErlangAndElixirModules();
 registerWebApis();
 
 describe("Vdom", () => {
+  describe("addKeysToScriptVnodes()", () => {
+    it("element node that is not a script", () => {
+      const node = vnode("img", {attrs: {src: "my_source"}}, []);
+      Vdom.addKeysToScriptVnodes(node);
+
+      assert.deepStrictEqual(
+        node,
+        vnode("img", {attrs: {src: "my_source"}}, []),
+      );
+    });
+
+    it("text node", () => {
+      const node = {
+        sel: undefined,
+        data: undefined,
+        children: undefined,
+        text: "my_text",
+        elm: undefined,
+        key: undefined,
+      };
+
+      Vdom.addKeysToScriptVnodes(node);
+
+      assert.deepStrictEqual(node, {
+        sel: undefined,
+        data: undefined,
+        children: undefined,
+        text: "my_text",
+        elm: undefined,
+        key: undefined,
+      });
+    });
+
+    it("script element without attrs field", () => {
+      const node = vnode("script", {}, []);
+      Vdom.addKeysToScriptVnodes(node);
+
+      assert.deepStrictEqual(node, vnode("script", {}, []));
+    });
+
+    it("script element without src attribute (inline script), but with some other attribute", () => {
+      const node = vnode("script", {attrs: {type: "text/javascript"}}, []);
+      Vdom.addKeysToScriptVnodes(node);
+
+      assert.deepStrictEqual(
+        node,
+        vnode("script", {attrs: {type: "text/javascript"}}, []),
+      );
+    });
+
+    it("script element with empty string src attribute", () => {
+      const node = vnode("script", {attrs: {src: ""}}, []);
+      Vdom.addKeysToScriptVnodes(node);
+
+      assert.deepStrictEqual(node, vnode("script", {attrs: {src: ""}}, []));
+    });
+
+    it("script element with boolean src attribute", () => {
+      const node = vnode("script", {attrs: {src: true}}, []);
+      Vdom.addKeysToScriptVnodes(node);
+
+      assert.deepStrictEqual(node, vnode("script", {attrs: {src: true}}, []));
+    });
+
+    it("script element with non-empty string src attribute", () => {
+      const node = vnode("script", {attrs: {src: "my_script"}}, []);
+      Vdom.addKeysToScriptVnodes(node);
+
+      assert.deepStrictEqual(
+        node,
+        vnode("script", {key: "my_script", attrs: {src: "my_script"}}, []),
+      );
+    });
+
+    it("nested script nodes", () => {
+      const node = vnode("div", {}, [
+        vnode("script", {attrs: {src: "my_script_1"}}, []),
+        vnode("img", {attrs: {src: "my_source"}}, []),
+        vnode("script", {attrs: {src: "my_script_2"}}, []),
+      ]);
+
+      Vdom.addKeysToScriptVnodes(node);
+
+      assert.deepStrictEqual(
+        node,
+        vnode("div", {}, [
+          vnode(
+            "script",
+            {key: "my_script_1", attrs: {src: "my_script_1"}},
+            [],
+          ),
+          vnode("img", {attrs: {src: "my_source"}}, []),
+          vnode(
+            "script",
+            {key: "my_script_2", attrs: {src: "my_script_2"}},
+            [],
+          ),
+        ]),
+      );
+    });
+  });
+
   describe("from()", () => {
     it("builds virtual DOM from HTML markup", () => {
       const html =

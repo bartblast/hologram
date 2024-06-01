@@ -3,6 +3,23 @@
 import {h as vnode} from "snabbdom";
 
 export default class Vdom {
+  static addKeysToScriptVnodes(node) {
+    if (
+      node.sel === "script" &&
+      node.data?.attrs?.src &&
+      typeof node.data.attrs.src === "string"
+    ) {
+      node.key = node.data.attrs.src;
+      node.data.key = node.data.attrs.src;
+    }
+
+    if (Array.isArray(node.children)) {
+      for (const childNode of node.children) {
+        Vdom.addKeysToScriptVnodes(childNode);
+      }
+    }
+  }
+
   static from(html) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, "text/html");
