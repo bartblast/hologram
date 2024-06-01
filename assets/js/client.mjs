@@ -25,10 +25,10 @@ export default class Client {
     Client.#channel
       .join()
       .receive("ok", (_resp) => {
-        console.debug("Joined Hologram channel");
+        console.debug("Hologram: connected to a server");
       })
       .receive("error", (_resp) => {
-        console.error("Unable to join Hologram channel");
+        console.error("Hologram: unable to connect to a server");
       });
   }
 
