@@ -275,6 +275,10 @@ export function putContext(component, context) {
   );
 }
 
+export function putPage(component, pageModule) {
+  return Erlang_Maps["put/3"](Type.atom("next_page"), pageModule, component);
+}
+
 export function putState(component, state) {
   const oldState = Erlang_Maps["get/2"](Type.atom("state"), component);
   const newState = Erlang_Maps["merge/2"](oldState, state);
