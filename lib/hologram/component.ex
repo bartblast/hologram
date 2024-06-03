@@ -49,6 +49,8 @@ defmodule Hologram.Component do
             put_action: 2,
             put_action: 3,
             put_context: 3,
+            put_page: 2,
+            put_page: 3,
             put_state: 2,
             put_state: 3
           ]
