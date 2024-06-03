@@ -424,6 +424,8 @@ export default class Hologram {
 
     Hologram.#maybeInitAssetPathRegistry();
 
+    Hologram.prefetchedPages.clear();
+
     Hologram.render();
   }
 
