@@ -24,6 +24,7 @@ defmodule Hologram.ExJsConsistency.TypeTest do
              emitted_context: %{},
              next_action: nil,
              next_command: nil,
+             next_page: nil,
              state: %{}
            }
   end

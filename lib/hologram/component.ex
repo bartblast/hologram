@@ -4,7 +4,7 @@ defmodule Hologram.Component do
   alias Hologram.Component
   alias Hologram.Server
 
-  defstruct emitted_context: %{}, next_action: nil, next_command: nil, state: %{}
+  defstruct emitted_context: %{}, next_action: nil, next_command: nil, next_page: nil, state: %{}
 
   defmodule Action do
     defstruct name: nil, params: %{}, target: nil
