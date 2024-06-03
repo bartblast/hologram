@@ -78,6 +78,11 @@ export default class Hologram {
       resultComponentStruct,
     );
 
+    const nextPage = Erlang_Maps["get/2"](
+      Type.atom("next_page"),
+      resultComponentStruct,
+    );
+
     let nextCommand = Erlang_Maps["get/2"](
       Type.atom("next_command"),
       resultComponentStruct,
@@ -122,6 +127,10 @@ export default class Hologram {
       Hologram.executeAction(nextAction);
     } else {
       Hologram.render();
+    }
+
+    if (!Type.isNil(nextPage)) {
+      Hologram.navigateToPage(nextPage);
     }
   }
 
@@ -232,6 +241,11 @@ export default class Hologram {
     sessionStorage.setItem(historyStateId, html);
 
     history.pushState(historyStateId, null, pagePath);
+  }
+
+  // Made public to make tests easier
+  static navigateToPage(_page) {
+    // TODO: implement
   }
 
   static onPrefetchPageError(mapKey, _resp) {

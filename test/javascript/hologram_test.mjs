@@ -27,6 +27,8 @@ import {defineModule4Fixture} from "./support/fixtures/hologram/module_4.mjs";
 import {defineModule5Fixture} from "./support/fixtures/hologram/module_5.mjs";
 import {defineModule6Fixture} from "./support/fixtures/hologram/module_6.mjs";
 import {defineModule7Fixture} from "./support/fixtures/hologram/module_7.mjs";
+import {defineModule8Fixture} from "./support/fixtures/hologram/module_8.mjs";
+import {defineModule9Fixture} from "./support/fixtures/hologram/module_9.mjs";
 
 defineGlobalErlangAndElixirModules();
 registerWebApis();
@@ -41,6 +43,8 @@ const module4 = Type.alias("Module4");
 const module5 = Type.alias("Module5");
 const module6 = Type.alias("Module6");
 const module7 = Type.alias("Hologram.Module7");
+const module8 = Type.alias("Hologram.Module8");
+const module9 = Type.alias("Hologram.Module9");
 
 describe("Hologram", () => {
   before(() => {
@@ -51,10 +55,12 @@ describe("Hologram", () => {
     defineModule5Fixture();
     defineModule6Fixture();
     defineModule7Fixture();
+    defineModule8Fixture();
+    defineModule9Fixture();
   });
 
   describe("executeAction()", () => {
-    let commandQueueProcessStub, renderStub;
+    let commandQueueProcessStub, navigateToPageStub, renderStub;
 
     beforeEach(() => {
       CommandQueue.items = [];
@@ -62,11 +68,16 @@ describe("Hologram", () => {
         .stub(CommandQueue, "process")
         .callsFake(() => null);
 
+      navigateToPageStub = sinon
+        .stub(Hologram, "navigateToPage")
+        .callsFake(() => null);
+
       renderStub = sinon.stub(Hologram, "render").callsFake(() => null);
     });
 
     afterEach(() => {
       CommandQueue.process.restore();
+      Hologram.navigateToPage.restore();
       Hologram.render.restore();
     });
 
@@ -375,6 +386,41 @@ describe("Hologram", () => {
           target: cid1,
         }),
       );
+    });
+
+    it("with next page", () => {
+      ComponentRegistry.entries = Type.map([
+        [cid1, componentRegistryEntryFixture({module: module8})],
+      ]);
+
+      const action = Type.actionStruct({
+        name: Type.atom("my_action_8"),
+        params: Type.map(),
+        target: cid1,
+      });
+
+      Hologram.executeAction(action);
+
+      sinon.assert.calledOnceWithExactly(
+        navigateToPageStub,
+        Type.alias("MyPage"),
+      );
+    });
+
+    it("without next page", () => {
+      ComponentRegistry.entries = Type.map([
+        [cid1, componentRegistryEntryFixture({module: module9})],
+      ]);
+
+      const action = Type.actionStruct({
+        name: Type.atom("my_action_9"),
+        params: Type.map(),
+        target: cid1,
+      });
+
+      Hologram.executeAction(action);
+
+      sinon.assert.notCalled(navigateToPageStub);
     });
   });
 
