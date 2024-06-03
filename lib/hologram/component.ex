@@ -198,6 +198,24 @@ defmodule Hologram.Component do
   end
 
   @doc """
+  Puts the given page module to the component's next_page field.
+  The client will navigate to this page asynchronously after the current action finished executing.
+  """
+  @spec put_page(Component.t(), module) :: Component.t()
+  def put_page(component, page_module) do
+    %{component | next_page: page_module}
+  end
+
+  @doc """
+  Puts the given page module and params to the component's next_page field (as a tuple).
+  The client will navigate to this page asynchronously after the current action finished executing.
+  """
+  @spec put_page(Component.t(), module, keyword) :: Component.t()
+  def put_page(component, page_module, params) do
+    %{component | next_page: {page_module, params}}
+  end
+
+  @doc """
   Puts the given key-value entries to the component state.
   """
   @spec put_state(Component.t(), keyword | map) :: Component.t()

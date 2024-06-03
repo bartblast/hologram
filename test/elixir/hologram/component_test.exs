@@ -174,6 +174,16 @@ defmodule Hologram.ComponentTest do
            }
   end
 
+  test "put_page/2" do
+    assert put_page(%Component{}, MyPage) == %Component{next_page: MyPage}
+  end
+
+  test "put_page/3" do
+    assert put_page(%Component{}, MyPage, a: 1, b: 2) == %Component{
+             next_page: {MyPage, a: 1, b: 2}
+           }
+  end
+
   describe "put_state/2" do
     test "keyword" do
       component = %Component{state: %{a: 1}}
