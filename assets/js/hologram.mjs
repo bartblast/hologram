@@ -11,6 +11,7 @@ import Elixir_Hologram_Router_Helpers from "./elixir/hologram/router/helpers.mjs
 import Elixir_Kernel from "./elixir/kernel.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
+import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import MemoryStorage from "./memory_storage.mjs";
 import Operation from "./operation.mjs";
@@ -244,8 +245,18 @@ export default class Hologram {
   }
 
   // Made public to make tests easier
-  static navigateToPage(_page) {
-    // TODO: implement
+  static async navigateToPage(toParam) {
+    const pagePath = Hologram.#buildPagePath(toParam);
+
+    Client.fetchPage(
+      toParam,
+      (resp) => Hologram.navigate(pagePath, resp),
+      (_resp) => {
+        throw new HologramRuntimeError(
+          "Failed to navigate to page: " + pagePath,
+        );
+      },
+    );
   }
 
   static onPrefetchPageError(mapKey, _resp) {
