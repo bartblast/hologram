@@ -22,6 +22,7 @@ defmodule Hologram.Component do
           emitted_context: %{atom => any} | %{{module, atom} => any},
           next_action: Action.t() | nil,
           next_command: Command.t() | nil,
+          next_page: module | {module, keyword},
           state: %{atom => any}
         }
 
