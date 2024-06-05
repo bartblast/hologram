@@ -157,7 +157,7 @@ export default class Hologram {
       mapValue.isNavigateConfirmed = true;
     } else {
       Hologram.prefetchedPages.delete(mapKey);
-      Hologram.navigate(pagePath, mapValue.html);
+      Hologram.loadPage(pagePath, mapValue.html);
     }
   }
 
@@ -228,7 +228,7 @@ export default class Hologram {
   }
 
   // Made public to make tests easier
-  static navigate(pagePath, html) {
+  static loadPage(pagePath, html) {
     globalThis.__hologramPageScriptLoaded__ = false;
 
     const newVirtualDocument = Vdom.from(html);
@@ -250,7 +250,7 @@ export default class Hologram {
 
     Client.fetchPage(
       toParam,
-      (resp) => Hologram.navigate(pagePath, resp),
+      (resp) => Hologram.loadPage(pagePath, resp),
       (_resp) => {
         throw new HologramRuntimeError(
           "Failed to navigate to page: " + pagePath,
@@ -278,7 +278,7 @@ export default class Hologram {
 
     if (mapValue.isNavigateConfirmed) {
       Hologram.prefetchedPages.delete(mapKey);
-      Hologram.navigate(mapValue.pagePath, html);
+      Hologram.loadPage(mapValue.pagePath, html);
     } else {
       mapValue.html = html;
     }
