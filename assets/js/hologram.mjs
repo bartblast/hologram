@@ -229,7 +229,11 @@ export default class Hologram {
 
   // Made public to make tests easier
   static loadPage(pagePath, html) {
-    Hologram.#patchPage(html);
+    requestAnimationFrame(() => {
+      Hologram.#patchPage(html);
+      window.scrollTo(0, 0);
+    });
+
     Hologram.#pushPageHtmlToHistoryStack(pagePath, html);
   }
 

@@ -979,12 +979,16 @@ describe("Hologram", () => {
 
   it("loadPage()", () => {
     const historyPushStateStub = sinon
-      .stub(globalThis.history, "pushState")
+      .stub(history, "pushState")
       .callsFake((_state, _unused, _url) => null);
+
+    const windowScrollToStub = sinon
+      .stub(window, "scrollTo")
+      .callsFake((_x, _y) => null);
 
     globalThis.__hologramPageScriptLoaded__ = true;
 
-    globalThis.sessionStorage.clear();
+    sessionStorage.clear();
 
     const parser = new DOMParser();
 
@@ -1009,14 +1013,11 @@ describe("Hologram", () => {
       "<html><head></head><body><span></span></body></html>",
     );
 
-    const sessionStorageKeys = Object.keys(globalThis.sessionStorage);
+    const sessionStorageKeys = Object.keys(sessionStorage);
     assert.equal(sessionStorageKeys.length, 1);
     assert.match(sessionStorageKeys[0], UUID_REGEX);
 
-    assert.equal(
-      globalThis.sessionStorage.getItem(sessionStorageKeys[0]),
-      html,
-    );
+    assert.equal(sessionStorage.getItem(sessionStorageKeys[0]), html);
 
     sinon.assert.calledOnceWithExactly(
       historyPushStateStub,
@@ -1025,7 +1026,10 @@ describe("Hologram", () => {
       pagePath,
     );
 
-    globalThis.history.pushState.restore();
+    sinon.assert.calledOnceWithExactly(windowScrollToStub, 0, 0);
+
+    history.pushState.restore();
+    window.scrollTo.restore();
   });
 
   it("navigateToPage()", () => {
