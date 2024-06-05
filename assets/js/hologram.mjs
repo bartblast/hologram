@@ -229,14 +229,7 @@ export default class Hologram {
 
   // Made public to make tests easier
   static loadPage(pagePath, html) {
-    globalThis.__hologramPageScriptLoaded__ = false;
-
-    const newVirtualDocument = Vdom.from(html);
-
-    Hologram.virtualDocument = patch(
-      Hologram.virtualDocument,
-      newVirtualDocument,
-    );
+    Hologram.#patchPage(html);
 
     const historyStateId = crypto.randomUUID();
     sessionStorage.setItem(historyStateId, html);
@@ -413,6 +406,10 @@ export default class Hologram {
 
     Hologram.#defineManuallyPortedFunctions();
 
+    window.addEventListener("popstate", (event) => {
+      Hologram.#patchPage(sessionStorage.getItem(event.state));
+    });
+
     globalThis.console.inspect = (term) =>
       console.log("INSPECT: " + Interpreter.inspect(term));
 
@@ -466,5 +463,16 @@ export default class Hologram {
         callback();
       });
     }
+  }
+
+  static #patchPage(html) {
+    globalThis.__hologramPageScriptLoaded__ = false;
+
+    const newVirtualDocument = Vdom.from(html);
+
+    Hologram.virtualDocument = patch(
+      Hologram.virtualDocument,
+      newVirtualDocument,
+    );
   }
 }
