@@ -291,5 +291,6 @@ export function registerWebApis() {
 
   globalThis.DOMParser = window.DOMParser;
   globalThis.history = window.history;
+  globalThis.requestAnimationFrame = (callback) => callback();
   globalThis.sessionStorage = window.sessionStorage;
 }
