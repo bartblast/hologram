@@ -230,11 +230,7 @@ export default class Hologram {
   // Made public to make tests easier
   static loadPage(pagePath, html) {
     Hologram.#patchPage(html);
-
-    const historyStateId = crypto.randomUUID();
-    sessionStorage.setItem(historyStateId, html);
-
-    history.pushState(historyStateId, null, pagePath);
+    Hologram.#pushPageHtmlToHistoryStack(pagePath, html);
   }
 
   // Made public to make tests easier
@@ -279,11 +275,6 @@ export default class Hologram {
 
   // Made public to make tests easier
   static render() {
-    if (!Hologram.virtualDocument) {
-      Hologram.virtualDocument = toVNode(globalThis.document.documentElement);
-      Vdom.addKeysToScriptVnodes(Hologram.virtualDocument);
-    }
-
     const newVirtualDocument = Renderer.renderPage(
       Hologram.#pageModule,
       Hologram.#pageParams,
@@ -401,6 +392,7 @@ export default class Hologram {
     );
   }
 
+  // Executed only once, on the initial page load.
   static #init() {
     Client.connect();
 
@@ -409,6 +401,14 @@ export default class Hologram {
     window.addEventListener("popstate", (event) => {
       Hologram.#patchPage(sessionStorage.getItem(event.state));
     });
+
+    Hologram.virtualDocument = toVNode(document.documentElement);
+    Vdom.addKeysToScriptVnodes(Hologram.virtualDocument);
+
+    Hologram.#pushPageHtmlToHistoryStack(
+      window.location.pathname,
+      document.documentElement.outerHTML,
+    );
 
     globalThis.console.inspect = (term) =>
       console.log("INSPECT: " + Interpreter.inspect(term));
@@ -474,5 +474,12 @@ export default class Hologram {
       Hologram.virtualDocument,
       newVirtualDocument,
     );
+  }
+
+  static #pushPageHtmlToHistoryStack(pagePath, html) {
+    const historyStateId = crypto.randomUUID();
+    sessionStorage.setItem(historyStateId, html);
+
+    history.pushState(historyStateId, null, pagePath);
   }
 }
