@@ -406,6 +406,12 @@ export default class Hologram {
       Hologram.#patchPage(sessionStorage.getItem(event.state));
     });
 
+    window.addEventListener("pageshow", (event) => {
+      if (event.persisted) {
+        Client.connect();
+      }
+    });
+
     Hologram.virtualDocument = toVNode(document.documentElement);
     Vdom.addKeysToScriptVnodes(Hologram.virtualDocument);
 
