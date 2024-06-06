@@ -32,31 +32,47 @@ defmodule Hologram.UI.RuntimeTest do
     ]
   end
 
-  test "initial_page? prop = false", %{context: context} do
+  test "initial page, page mounted", %{context: context} do
+    context =
+      context
+      |> Map.put({Hologram.Runtime, :initial_page?}, true)
+      |> Map.put({Hologram.Runtime, :page_mounted?}, true)
+
     markup = render_component(Runtime, %{}, context)
 
     refute String.contains?(markup, "window.__hologramAssetManifest__")
+    refute String.contains?(markup, "window.__hologramPageMountData__")
     refute String.contains?(markup, "hologram/runtime")
+    refute String.contains?(markup, "hologram/page")
   end
 
-  test "initial_page? prop = true", %{context: context} do
+  test "initial page, page not mounted", %{context: context} do
     context = Map.put(context, {Hologram.Runtime, :initial_page?}, true)
     markup = render_component(Runtime, %{}, context)
 
     assert String.contains?(markup, "window.__hologramAssetManifest__")
-    assert String.contains?(markup, "hologram/runtime")
-  end
-
-  test "page_mounted? prop = false", %{context: context} do
-    markup = render_component(Runtime, %{}, context)
     assert String.contains?(markup, "window.__hologramPageMountData__")
+    assert String.contains?(markup, "hologram/runtime")
+    assert String.contains?(markup, "hologram/page")
   end
 
-  test "page_mounted? prop = true", %{context: context} do
+  test "not initial page, page mounted", %{context: context} do
     context = Map.put(context, {Hologram.Runtime, :page_mounted?}, true)
     markup = render_component(Runtime, %{}, context)
 
+    refute String.contains?(markup, "window.__hologramAssetManifest__")
     refute String.contains?(markup, "window.__hologramPageMountData__")
+    refute String.contains?(markup, "hologram/runtime")
+    refute String.contains?(markup, "hologram/page")
+  end
+
+  test "not initial page, page not mounted", %{context: context} do
+    markup = render_component(Runtime, %{}, context)
+
+    refute String.contains?(markup, "window.__hologramAssetManifest__")
+    assert String.contains?(markup, "window.__hologramPageMountData__")
+    refute String.contains?(markup, "hologram/runtime")
+    assert String.contains?(markup, "hologram/page")
   end
 
   test "page_digest prop", %{context: context} do

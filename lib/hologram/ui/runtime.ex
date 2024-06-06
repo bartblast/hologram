@@ -9,7 +9,7 @@ defmodule Hologram.UI.Runtime do
   @impl Component
   def template do
     ~H"""
-    {%if @initial_page?}
+    {%if @initial_page? && !@page_mounted?}
       <script>{AssetManifestCache.get_manifest_js()}</script>
     {/if}
 
@@ -29,11 +29,13 @@ defmodule Hologram.UI.Runtime do
       </script>
     {/if}
 
-    {%if @initial_page?}
+    {%if @initial_page? && !@page_mounted?}
       <script async src={asset_path("hologram/runtime.js")}></script>
     {/if}
 
-    <script async src="/hologram/page-{@page_digest}.js"></script>
+    {%if !@page_mounted?}
+      <script async src="/hologram/page-{@page_digest}.js"></script>
+    {/if}
     """
   end
 end
