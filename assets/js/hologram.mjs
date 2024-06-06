@@ -409,7 +409,7 @@ export default class Hologram {
     Hologram.virtualDocument = toVNode(document.documentElement);
     Vdom.addKeysToScriptVnodes(Hologram.virtualDocument);
 
-    Hologram.#pushPageHtmlToHistoryStack(
+    Hologram.#replacePageHtmlInHistoryStack(
       window.location.pathname,
       document.documentElement.outerHTML,
     );
@@ -485,5 +485,12 @@ export default class Hologram {
     sessionStorage.setItem(historyStateId, html);
 
     history.pushState(historyStateId, null, pagePath);
+  }
+
+  static #replacePageHtmlInHistoryStack(pagePath, html) {
+    const historyStateId = crypto.randomUUID();
+    sessionStorage.setItem(historyStateId, html);
+
+    history.replaceState(historyStateId, null, pagePath);
   }
 }
