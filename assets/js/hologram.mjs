@@ -128,6 +128,7 @@ export default class Hologram {
       Hologram.executeAction(nextAction);
     } else {
       Hologram.render();
+      Hologram.#replaceHistoryState();
     }
 
     if (!Type.isNil(nextPage)) {
@@ -232,9 +233,8 @@ export default class Hologram {
     requestAnimationFrame(() => {
       Hologram.#patchPage(html);
       window.scrollTo(0, 0);
+      history.pushState(null, null, pagePath);
     });
-
-    Hologram.#pushPageHtmlToHistoryStack(pagePath, html);
   }
 
   // Made public to make tests easier
@@ -396,15 +396,24 @@ export default class Hologram {
     );
   }
 
+  static #handlePopstateEvent(event) {
+    const {componentRegistryEntries, pageModule, pageParams} =
+      sessionStorage.getItem(event.state);
+
+    ComponentRegistry.entries = componentRegistryEntries;
+    Hologram.#pageModule = pageModule;
+    Hologram.#pageParams = pageParams;
+
+    Hologram.render();
+  }
+
   // Executed only once, on the initial page load.
   static #init() {
     Client.connect();
 
     Hologram.#defineManuallyPortedFunctions();
 
-    window.addEventListener("popstate", (event) => {
-      Hologram.#patchPage(sessionStorage.getItem(event.state));
-    });
+    window.addEventListener("popstate", Hologram.#handlePopstateEvent);
 
     window.addEventListener("pageshow", (event) => {
       if (event.persisted) {
@@ -414,11 +423,6 @@ export default class Hologram {
 
     Hologram.virtualDocument = toVNode(document.documentElement);
     Vdom.addKeysToScriptVnodes(Hologram.virtualDocument);
-
-    Hologram.#replacePageHtmlInHistoryStack(
-      window.location.pathname,
-      document.documentElement.outerHTML,
-    );
 
     globalThis.console.inspect = (term) =>
       console.log("INSPECT: " + Interpreter.inspect(term));
@@ -459,6 +463,8 @@ export default class Hologram {
     Hologram.prefetchedPages.clear();
 
     Hologram.render();
+
+    Hologram.#replaceHistoryState();
   }
 
   static #onReady(callback) {
@@ -486,17 +492,16 @@ export default class Hologram {
     );
   }
 
-  static #pushPageHtmlToHistoryStack(pagePath, html) {
-    const historyStateId = crypto.randomUUID();
-    sessionStorage.setItem(historyStateId, html);
+  static #replaceHistoryState() {
+    const state = {
+      componentRegistryEntries: ComponentRegistry.entries,
+      pageModule: Hologram.#pageModule,
+      pageParams: Hologram.#pageParams,
+    };
 
-    history.pushState(historyStateId, null, pagePath);
-  }
+    const historyStateId = `__hologramHistoryState__:${crypto.randomUUID()}`;
+    sessionStorage.setItem(historyStateId, state);
 
-  static #replacePageHtmlInHistoryStack(pagePath, html) {
-    const historyStateId = crypto.randomUUID();
-    sessionStorage.setItem(historyStateId, html);
-
-    history.replaceState(historyStateId, null, pagePath);
+    history.replaceState(historyStateId, null, window.location.pathname);
   }
 }
