@@ -45,6 +45,7 @@ export default class Hologram {
     Utils: Utils,
   };
 
+  static #historyStorage = {};
   static #isInitiated = false;
   static #mountData = null;
   static #pageModule = null;
@@ -398,7 +399,7 @@ export default class Hologram {
 
   static #handlePopstateEvent(event) {
     const {componentRegistryEntries, pageModule, pageParams} =
-      sessionStorage.getItem(event.state);
+      Hologram.#historyStorage[event.state];
 
     ComponentRegistry.entries = componentRegistryEntries;
     Hologram.#pageModule = pageModule;
@@ -499,8 +500,8 @@ export default class Hologram {
       pageParams: Hologram.#pageParams,
     };
 
-    const historyStateId = `__hologramHistoryState__:${crypto.randomUUID()}`;
-    sessionStorage.setItem(historyStateId, state);
+    const historyStateId = crypto.randomUUID();
+    Hologram.#historyStorage[historyStateId] = state;
 
     history.replaceState(historyStateId, null, window.location.pathname);
   }
