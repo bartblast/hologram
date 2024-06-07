@@ -988,8 +988,6 @@ describe("Hologram", () => {
 
     globalThis.__hologramPageScriptLoaded__ = true;
 
-    sessionStorage.clear();
-
     const parser = new DOMParser();
 
     const doc = parser.parseFromString(
@@ -1013,15 +1011,9 @@ describe("Hologram", () => {
       "<html><head></head><body><span></span></body></html>",
     );
 
-    const sessionStorageKeys = Object.keys(sessionStorage);
-    assert.equal(sessionStorageKeys.length, 1);
-    assert.match(sessionStorageKeys[0], UUID_REGEX);
-
-    assert.equal(sessionStorage.getItem(sessionStorageKeys[0]), html);
-
     sinon.assert.calledOnceWithExactly(
       historyPushStateStub,
-      sessionStorageKeys[0],
+      null,
       null,
       pagePath,
     );
