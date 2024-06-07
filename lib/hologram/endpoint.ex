@@ -7,7 +7,7 @@ defmodule Hologram.Endpoint do
 
   defmacro hologram_socket do
     quote do
-      socket "/hologram", Hologram.Socket, websocket: [check_origin: true]
+      socket "/hologram", Hologram.Socket, websocket: [check_origin: true], longpoll: true
     end
   end
 end
