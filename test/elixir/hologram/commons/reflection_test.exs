@@ -6,6 +6,7 @@ defmodule Hologram.Commons.ReflectionTest do
   alias Hologram.Test.Fixtures.Commons.Reflection.Module2
   alias Hologram.Test.Fixtures.Commons.Reflection.Module3
   alias Hologram.Test.Fixtures.Commons.Reflection.Module4
+  alias Hologram.Test.Fixtures.Commons.Reflection.Module7
 
   describe "alias?/1" do
     test "atom which is an alias" do
@@ -271,6 +272,20 @@ defmodule Hologram.Commons.ReflectionTest do
 
   test "page_digest_plt_dump_file_name/0" do
     assert page_digest_plt_dump_file_name() == "page_digest.plt"
+  end
+
+  describe "phoenix_endpoint/0" do
+    test "there is a config entry for the given Phoenix endpoint module" do
+      Application.put_env(:hologram, Module7, [])
+
+      assert phoenix_endpoint() == Module7
+
+      Application.delete_env(:hologram, Module7)
+    end
+
+    test "there is no config entry for the given Phoenix endpoint module" do
+      assert phoenix_endpoint() == nil
+    end
   end
 
   test "release_priv_dir/0" do

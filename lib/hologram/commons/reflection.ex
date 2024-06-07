@@ -396,6 +396,24 @@ defmodule Hologram.Commons.Reflection do
   end
 
   @doc """
+  Determines the app's Phoenix endpoint module.
+  """
+  @spec phoenix_endpoint :: module | nil
+  def phoenix_endpoint do
+    Enum.find_value(:code.all_loaded(), fn {module, _beam_path} ->
+      has_phoenix_endpoint_behaviour? =
+        module.module_info(:attributes)
+        |> Keyword.get_values(:behaviour)
+        |> List.flatten()
+        |> Enum.member?(Phoenix.Endpoint)
+
+      if has_phoenix_endpoint_behaviour? && Application.get_env(otp_app(), module),
+        do: module,
+        else: nil
+    end)
+  end
+
+  @doc """
   Returns true if the given term is a protocol module, or false otherwise.
   """
   @spec protocol?(any) :: boolean
