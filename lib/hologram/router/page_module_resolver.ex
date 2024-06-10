@@ -31,6 +31,10 @@ defmodule Hologram.Router.PageModuleResolver do
     __MODULE__
   end
 
+  @doc """
+  Reloads the persistent term that stores the search tree used for page module resolving.
+  """
+  @spec reload :: :ok
   def reload do
     populate_persistent_term()
   end
