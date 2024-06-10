@@ -89,6 +89,10 @@ defmodule Hologram.Assets.PathRegistry do
     ETS.put(impl().ets_table_name(), static_path, asset_path)
   end
 
+  @doc """
+  Reloads the ETS table that stores the paths data.
+  """
+  @spec reload :: :ok
   def reload() do
     ets_table_name = impl().ets_table_name()
     ETS.reset(ets_table_name)
