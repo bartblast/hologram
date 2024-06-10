@@ -1,5 +1,7 @@
 # TODO: test
 defmodule Hologram.LiveReload do
+  use GenServer
+
   alias Hologram.Commons.Reflection
   alias Hologram.Assets.ManifestCache
   alias Hologram.Assets.PageDigestRegistry
