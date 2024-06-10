@@ -44,6 +44,27 @@ defmodule Hologram.Assets.ManifestCacheTest do
     assert :persistent_term.get(AssetManifestCacheStub.persistent_term_key()) == get_manifest_js()
   end
 
+  test "reload/0" do
+    AssetManifestCache.start_link([])
+
+    key = AssetManifestCacheStub.persistent_term_key()
+    :persistent_term.put(key, :dummy_value)
+
+    reload()
+
+    assert :persistent_term.get(key) == """
+           window.__hologramAssetManifest__ = {
+           "hologram/test_file_9.css": "/hologram/test_file_9-99999999999999999999999999999999.css",
+           "test_dir_1/test_dir_2/page.js": "/test_dir_1/test_dir_2/page-33333333333333333333333333333333.js",
+           "test_dir_1/test_dir_2/test_file_1.css": "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css",
+           "test_dir_1/test_dir_2/test_file_2.css": "/test_dir_1/test_dir_2/test_file_2-22222222222222222222222222222222.css",
+           "test_dir_3/page.js": "/test_dir_3/page-66666666666666666666666666666666.js",
+           "test_dir_3/test_file_4.css": "/test_dir_3/test_file_4-44444444444444444444444444444444.css",
+           "test_dir_3/test_file_5.css": "/test_dir_3/test_file_5-55555555555555555555555555555555.css"
+           };\
+           """
+  end
+
   test "start_link/1" do
     assert {:ok, pid} = AssetManifestCache.start_link([])
     assert is_pid(pid)

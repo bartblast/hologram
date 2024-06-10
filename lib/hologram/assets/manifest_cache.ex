@@ -17,10 +17,7 @@ defmodule Hologram.Assets.ManifestCache do
 
   @impl GenServer
   def init(nil) do
-    key = impl().persistent_term_key()
-    manifest = build_manifest()
-    :persistent_term.put(key, manifest)
-
+    populate()
     {:ok, nil}
   end
 
@@ -40,6 +37,14 @@ defmodule Hologram.Assets.ManifestCache do
     __MODULE__
   end
 
+  @doc """
+  Reloads the the manifest cache data.
+  """
+  @spec reload :: :ok
+  def reload do
+    populate()
+  end
+
   defp build_manifest do
     entries_js =
       AssetPathRegistry.get_mapping()
@@ -57,5 +62,11 @@ defmodule Hologram.Assets.ManifestCache do
 
   defp impl do
     Application.get_env(:hologram, :asset_manifest_cache_impl, __MODULE__)
+  end
+
+  defp populate do
+    key = impl().persistent_term_key()
+    manifest = build_manifest()
+    :persistent_term.put(key, manifest)
   end
 end
