@@ -35,11 +35,10 @@ defmodule Hologram.Router.PageModuleResolverTest do
   end
 
   test "reload/0" do
-    :persistent_term.put(PageModuleResolverStub.persistent_term_key(), :dummy_value)
+    key = PageModuleResolverStub.persistent_term_key()
+    :persistent_term.put(key, :dummy_value)
 
     reload()
-
-    search_tree = :persistent_term.get(PageModuleResolverStub.persistent_term_key())
 
     assert %SearchTree.Node{
              value: nil,
@@ -49,7 +48,7 @@ defmodule Hologram.Router.PageModuleResolverTest do
                  children: %{}
                }
              }
-           } = search_tree
+           } = :persistent_term.get(key)
   end
 
   describe "resolve/2" do
