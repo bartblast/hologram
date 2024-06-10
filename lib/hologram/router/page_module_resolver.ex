@@ -19,13 +19,7 @@ defmodule Hologram.Router.PageModuleResolver do
 
   @impl GenServer
   def init(nil) do
-    search_tree =
-      Enum.reduce(Reflection.list_pages(), %SearchTree.Node{}, fn page_module, acc ->
-        SearchTree.add_route(acc, page_module.__route__(), page_module)
-      end)
-
-    :persistent_term.put(impl().persistent_term_key(), search_tree)
-
+    build_search_tree_persistent_term()
     {:ok, nil}
   end
 
@@ -37,6 +31,10 @@ defmodule Hologram.Router.PageModuleResolver do
     __MODULE__
   end
 
+  def reload do
+    build_search_tree_persistent_term()
+  end
+
   @doc """
   Given a request path it returns the page module that handles it.
   """
@@ -45,6 +43,15 @@ defmodule Hologram.Router.PageModuleResolver do
     impl().persistent_term_key()
     |> :persistent_term.get()
     |> SearchTree.match_route(request_path)
+  end
+
+  defp build_search_tree_persistent_term do
+    search_tree =
+      Enum.reduce(Reflection.list_pages(), %SearchTree.Node{}, fn page_module, acc ->
+        SearchTree.add_route(acc, page_module.__route__(), page_module)
+      end)
+
+    :persistent_term.put(impl().persistent_term_key(), search_tree)
   end
 
   defp impl do
