@@ -26,7 +26,7 @@ defmodule Hologram.Assets.PageDigestRegistry do
   def init(nil) do
     [table_name: impl().ets_table_name()]
     |> PLT.start()
-    |> PLT.load(impl().dump_path())
+    |> populate()
 
     {:ok, nil}
   end
@@ -57,11 +57,22 @@ defmodule Hologram.Assets.PageDigestRegistry do
     __MODULE__
   end
 
+  def reload do
+    impl().ets_table_name()
+    |> plt()
+    |> PLT.reset()
+    |> populate()
+  end
+
   defp impl do
     Application.get_env(:hologram, :page_digest_registry_impl, __MODULE__)
   end
 
   defp plt(table_name) do
-    %PLT{table_name: table_name}
+    %PLT{table_name: table_name, table_ref: :ets.whereis(table_name)}
+  end
+
+  defp populate(plt) do
+    PLT.load(plt, impl().dump_path())
   end
 end

@@ -50,6 +50,21 @@ defmodule Hologram.Assets.PageDigestRegistryTest do
     end
   end
 
+  test "reload/0" do
+    PageDigestRegistry.start_link([])
+
+    ets_table_name = PageDigestRegistryStub.ets_table_name()
+    ETS.put(ets_table_name, :dummy_key, :dummy_value)
+
+    reload()
+
+    assert ETS.get_all(ets_table_name) == %{
+             module_a: :module_a_digest,
+             module_b: :module_b_digest,
+             module_c: :module_c_digest
+           }
+  end
+
   test "start_link/1" do
     assert {:ok, pid} = PageDigestRegistry.start_link([])
     assert is_pid(pid)
