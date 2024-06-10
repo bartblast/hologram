@@ -63,7 +63,7 @@ defmodule Hologram.Assets.PathRegistryTest do
   end
 
   test "reload/0", %{mapping: mapping} do
-    start_link([])
+    AssetPathRegistry.start_link([])
 
     ets_table_name = AssetPathRegistryStub.ets_table_name()
     ETS.put(ets_table_name, :dummy_key, :dummy_value)
