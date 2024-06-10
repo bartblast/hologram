@@ -33,9 +33,7 @@ defmodule Hologram.Assets.PathRegistry do
     ets_table_name = impl().ets_table_name()
     ETS.create_named_table(ets_table_name)
 
-    impl().static_dir()
-    |> find_assets()
-    |> Enum.each(fn {key, value} -> ETS.put(ets_table_name, key, value) end)
+    populate(ets_table_name)
 
     {:ok, nil}
   end
@@ -91,6 +89,13 @@ defmodule Hologram.Assets.PathRegistry do
     ETS.put(impl().ets_table_name(), static_path, asset_path)
   end
 
+  def reload() do
+    ets_table_name = impl().ets_table_name()
+    ETS.reset(ets_table_name)
+
+    populate(ets_table_name)
+  end
+
   @doc """
   Returns the implementation of the asset path registry's static dir path.
   """
@@ -115,6 +120,12 @@ defmodule Hologram.Assets.PathRegistry do
 
   defp impl do
     Application.get_env(:hologram, :asset_path_registry_impl, __MODULE__)
+  end
+
+  defp populate(ets_table_name) do
+    impl().static_dir()
+    |> find_assets()
+    |> Enum.each(fn {key, value} -> ETS.put(ets_table_name, key, value) end)
   end
 
   defp stream_build_asset_entries(file_infos) do

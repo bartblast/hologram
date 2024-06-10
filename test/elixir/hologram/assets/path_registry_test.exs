@@ -62,6 +62,17 @@ defmodule Hologram.Assets.PathRegistryTest do
     assert lookup("my_static_path") == {:ok, "/my_asset_path"}
   end
 
+  test "reload/0", %{mapping: mapping} do
+    init(nil)
+
+    ets_table_name = AssetPathRegistryStub.ets_table_name()
+    ETS.put(ets_table_name, :dummy_key, :dummy_value)
+
+    reload()
+
+    assert ETS.get_all(ets_table_name) == mapping
+  end
+
   test "start_link/1" do
     assert {:ok, pid} = AssetPathRegistry.start_link([])
     assert is_pid(pid)
