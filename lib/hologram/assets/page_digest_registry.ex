@@ -57,6 +57,10 @@ defmodule Hologram.Assets.PageDigestRegistry do
     __MODULE__
   end
 
+  @doc """
+  Reloads the page digest registry data.
+  """
+  @spec reload :: PLT.t()
   def reload do
     impl().ets_table_name()
     |> plt()
