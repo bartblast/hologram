@@ -30,6 +30,8 @@ export default class Client {
       .receive("error", (_resp) => {
         console.error("Hologram: unable to connect to a server");
       });
+
+    Client.#channel.on("reload", (_payload) => document.location.reload());
   }
 
   static encoder(msg, callback) {
