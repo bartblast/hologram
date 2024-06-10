@@ -90,7 +90,7 @@ defmodule Hologram.Assets.PathRegistry do
   end
 
   @doc """
-  Reloads the ETS table that stores the paths data.
+  Reloads the path registry data.
   """
   @spec reload :: :ok
   def reload() do
