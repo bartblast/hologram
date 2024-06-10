@@ -160,6 +160,12 @@ defmodule Hologram.Commons.PLT do
   Removes all items from the PLT.
   """
   @spec reset(PLT.t()) :: PLT.t()
+
+  def reset(%PLT{table_ref: nil, table_name: table_name} = plt) do
+    ETS.reset(table_name)
+    plt
+  end
+
   def reset(%PLT{table_ref: table_ref} = plt) do
     ETS.reset(table_ref)
     plt

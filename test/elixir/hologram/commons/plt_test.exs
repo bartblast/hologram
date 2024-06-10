@@ -157,9 +157,24 @@ defmodule Hologram.Commons.PLTTest do
     assert ETS.get!(table_ref, :my_key_3) == :my_value_3
   end
 
-  test "reset/1", %{plt: %{table_ref: table_ref} = plt} do
-    assert reset(plt) == plt
-    assert ETS.get_all(table_ref) == %{}
+  describe "reset/1" do
+    test "by table ref", %{plt: %{table_ref: table_ref} = plt} do
+      assert plt.table_name == nil
+      assert reset(plt) == plt
+      assert ETS.get_all(table_ref) == %{}
+    end
+
+    test "by table name" do
+      plt =
+        [table_name: :my_table]
+        |> start()
+        |> put(@items)
+        |> Map.put(:table_ref, nil)
+
+      assert plt.table_ref == nil
+      assert reset(plt) == plt
+      assert ETS.get_all(:my_table) == %{}
+    end
   end
 
   describe "start/1" do
