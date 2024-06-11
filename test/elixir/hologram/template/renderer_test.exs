@@ -326,6 +326,21 @@ defmodule Hologram.Template.RendererTest do
       node = {:component, Module64, [{"my_prop", [expression: {1, 2, 3}]}], []}
       assert render_dom(node, @env) == {"my_prop = {1, 2, 3}", %{}}
     end
+
+    test "cast" do
+      node =
+        {:component, Module16,
+         [
+           {"cid", [text: "my_component"]},
+           {"prop_1", [text: "value_1"]},
+           {"prop_2", [expression: {2}]},
+           {"prop_3", [text: "aaa", expression: {2}, text: "bbb"]},
+           {"prop_4", [text: "value_4"]}
+         ], []}
+
+      assert {~s'component vars = [cid: &quot;my_component&quot;, prop_1: &quot;value_1&quot;, prop_2: 2, prop_3: &quot;aaa2bbb&quot;]',
+              _} = render_dom(node, @env)
+    end
   end
 
   describe "stateless component" do
@@ -428,21 +443,6 @@ defmodule Hologram.Template.RendererTest do
       assert render_dom(node, @env) ==
                {"<div>state_a = 1, state_b = 2</div>",
                 %{"my_component" => %{module: Module6, struct: %Component{state: %{a: 1, b: 2}}}}}
-    end
-
-    test "cast props" do
-      node =
-        {:component, Module16,
-         [
-           {"cid", [text: "my_component"]},
-           {"prop_1", [text: "value_1"]},
-           {"prop_2", [expression: {2}]},
-           {"prop_3", [text: "aaa", expression: {2}, text: "bbb"]},
-           {"prop_4", [text: "value_4"]}
-         ], []}
-
-      assert {~s'component vars = [cid: &quot;my_component&quot;, prop_1: &quot;value_1&quot;, prop_2: 2, prop_3: &quot;aaa2bbb&quot;]',
-              _} = render_dom(node, @env)
     end
 
     test "with unregistered var used" do
