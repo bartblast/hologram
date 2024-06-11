@@ -8,10 +8,15 @@ defmodule Hologram.LiveReload do
   alias Hologram.Commons.Reflection
   alias Hologram.Router.PageModuleResolver
 
+  @doc """
+  Starts live reload process.
+  """
+  @spec start_link(keyword) :: GenServer.on_start()
   def start_link(_opts) do
     GenServer.start_link(__MODULE__, nil)
   end
 
+  @impl GenServer
   def init(_opts) do
     {:ok, pid} =
       :os.type()
@@ -23,14 +28,17 @@ defmodule Hologram.LiveReload do
     {:ok, Reflection.phoenix_endpoint()}
   end
 
+  @impl GenServer
   def handle_info({:file_event, _pid, :stop}, state) do
     {:noreply, state}
   end
 
+  @impl GenServer
   def handle_info({:file_event, _pid, {_file_path, [:renamed]}}, state) do
     {:noreply, state}
   end
 
+  @impl GenServer
   def handle_info({:file_event, _pid, {modified_file_path, _events}}, endpoint) do
     recompiled_file_path =
       case Path.extname(modified_file_path) do
