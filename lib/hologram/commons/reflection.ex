@@ -402,7 +402,8 @@ defmodule Hologram.Commons.Reflection do
   def phoenix_endpoint do
     Enum.find_value(:code.all_loaded(), fn {module, _beam_path} ->
       has_phoenix_endpoint_behaviour? =
-        module.module_info(:attributes)
+        :attributes
+        |> module.module_info()
         |> Keyword.get_values(:behaviour)
         |> List.flatten()
         |> Enum.member?(Phoenix.Endpoint)

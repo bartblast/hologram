@@ -58,6 +58,7 @@ defmodule Hologram.LiveReload do
       Kernel.ParallelCompiler.compile_to_path([recompiled_file_path], Mix.Project.compile_path())
       Code.put_compiler_option(:ignore_module_conflict, false)
 
+      # credo:disable-for-next-line Credo.Check.Design.AliasUsage
       Mix.Tasks.Compile.Hologram.run([])
 
       PageModuleResolver.reload()
