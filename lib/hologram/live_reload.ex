@@ -13,11 +13,11 @@ defmodule Hologram.LiveReload do
   end
 
   def init(_opts) do
-    root_dir = Reflection.root_dir()
-    compiled_paths = Mix.Project.get().project()[:elixirc_paths]
-    watched_dirs = Enum.map(compiled_paths, &Path.join(root_dir, &1))
+    {:ok, pid} =
+      :os.type()
+      |> watcher_opts()
+      |> FileSystem.start_link()
 
-    {:ok, pid} = FileSystem.start_link(dirs: watched_dirs)
     FileSystem.subscribe(pid)
 
     {:ok, Reflection.phoenix_endpoint()}
@@ -57,5 +57,19 @@ defmodule Hologram.LiveReload do
     end
 
     {:noreply, endpoint}
+  end
+
+  defp watched_dirs do
+    root_dir = Reflection.root_dir()
+    compiled_paths = Mix.Project.get().project()[:elixirc_paths]
+    Enum.map(compiled_paths, &Path.join(root_dir, &1))
+  end
+
+  defp watcher_opts({:unix, :darwin}) do
+    [dirs: watched_dirs(), latency: 0, no_defer: true]
+  end
+
+  defp watcher_opts(_os_type) do
+    [dirs: watched_dirs()]
   end
 end
