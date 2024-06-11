@@ -27,15 +27,34 @@ defmodule Hologram.LiveReload do
     {:noreply, state}
   end
 
-  def handle_info({:file_event, _pid, {_file_path, _events}}, endpoint) do
-    Mix.Tasks.Compile.Hologram.run([])
+  def handle_info({:file_event, _pid, {modified_file_path, _events}}, endpoint) do
+    recompiled_file_path =
+      case Path.extname(modified_file_path) do
+        ".ex" ->
+          modified_file_path
 
-    PageModuleResolver.reload()
-    PathRegistry.reload()
-    ManifestCache.reload()
-    PageDigestRegistry.reload()
+        ".holo" ->
+          ex_file = Path.rootname(modified_file_path) <> ".ex"
+          if File.exists?(ex_file), do: ex_file
 
-    endpoint.broadcast!("hologram", "reload", %{})
+        _fallback ->
+          nil
+      end
+
+    if recompiled_file_path do
+      Code.put_compiler_option(:ignore_module_conflict, true)
+      Kernel.ParallelCompiler.compile_to_path([recompiled_file_path], Mix.Project.compile_path())
+      Code.put_compiler_option(:ignore_module_conflict, false)
+
+      Mix.Tasks.Compile.Hologram.run([])
+
+      PageModuleResolver.reload()
+      PathRegistry.reload()
+      ManifestCache.reload()
+      PageDigestRegistry.reload()
+
+      endpoint.broadcast!("hologram", "reload", %{})
+    end
 
     {:noreply, endpoint}
   end
