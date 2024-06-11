@@ -69,6 +69,7 @@ defmodule Hologram.LiveReload do
     Enum.map(compiled_paths, &Path.join(root_dir, &1))
   end
 
+  # This is macOS.
   defp watcher_opts({:unix, :darwin}) do
     [dirs: watched_dirs(), latency: 0, no_defer: true]
   end
