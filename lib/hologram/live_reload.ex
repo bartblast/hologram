@@ -27,6 +27,10 @@ defmodule Hologram.LiveReload do
     {:noreply, state}
   end
 
+  def handle_info({:file_event, _pid, [:renamed]}, state) do
+    {:noreply, state}
+  end
+
   def handle_info({:file_event, _pid, {modified_file_path, _events}}, endpoint) do
     recompiled_file_path =
       case Path.extname(modified_file_path) do
