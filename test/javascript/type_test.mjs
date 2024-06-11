@@ -719,7 +719,7 @@ describe("Type", () => {
 
   describe("isKeywordList()", () => {
     it("empty keyword list", () => {
-      const term = Type.keywordList([]);
+      const term = Type.keywordList();
       assert.isTrue(Type.isKeywordList(term));
     });
 
@@ -1033,20 +1033,26 @@ describe("Type", () => {
     });
   });
 
-  it("keywordList()", () => {
-    const data = [
-      [Type.atom("a"), Type.integer(1)],
-      [Type.atom("b"), Type.integer(2)],
-    ];
+  describe("keywordList()", () => {
+    it("empty", () => {
+      assert.deepStrictEqual(Type.keywordList(), Type.list());
+    });
 
-    const result = Type.keywordList(data);
+    it("non-empty", () => {
+      const data = [
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ];
 
-    const expected = Type.list([
-      Type.tuple([Type.atom("a"), Type.integer(1)]),
-      Type.tuple([Type.atom("b"), Type.integer(2)]),
-    ]);
+      const result = Type.keywordList(data);
 
-    assert.deepStrictEqual(result, expected);
+      const expected = Type.list([
+        Type.tuple([Type.atom("a"), Type.integer(1)]),
+        Type.tuple([Type.atom("b"), Type.integer(2)]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
   });
 
   describe("map()", () => {

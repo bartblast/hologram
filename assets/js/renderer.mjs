@@ -512,7 +512,7 @@ export default class Renderer {
     return Renderer.renderDom(
       layoutNode,
       pageEmittedContext,
-      Type.keywordList([]),
+      Type.keywordList(),
       Type.bitstring("layout"),
     );
   }
@@ -545,7 +545,7 @@ export default class Renderer {
     return Renderer.renderDom(
       slotDom,
       context,
-      Type.keywordList([]),
+      Type.keywordList(),
       defaultTarget,
     );
   }

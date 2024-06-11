@@ -27,7 +27,7 @@ const Elixir_Hologram_Router_Helpers = {
       return page_path_2(arg.data[0], arg.data[1]);
     }
 
-    return page_path_2(arg, Type.keywordList([]));
+    return page_path_2(arg, Type.keywordList());
   },
 
   // Deps: [String.Chars.to_string/1, :lists.keyfind/3, :lists.keymember/3]

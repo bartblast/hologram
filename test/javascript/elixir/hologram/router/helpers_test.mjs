@@ -112,7 +112,7 @@ describe("Elixir_Hologram_Router_Helpers", () => {
 
     it("missing multiple params", () => {
       assertBoxedError(
-        () => page_path(module2, Type.keywordList([])),
+        () => page_path(module2, Type.keywordList()),
         "ArgumentError",
         'page "Hologram.Test.Fixtures.Router.Helpers.Module2" expects "param_1" param',
       );

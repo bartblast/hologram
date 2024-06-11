@@ -336,7 +336,7 @@ export default class Type {
     return {type: "list", data: data, isProper: true};
   }
 
-  static keywordList(data) {
+  static keywordList(data = []) {
     return Type.list(data.map((item) => Type.tuple(item)));
   }
 

@@ -133,7 +133,7 @@ describe("Renderer", () => {
   const cid = Type.bitstring("my_component");
   const context = Type.map();
   const defaultTarget = Type.bitstring("my_default_target");
-  const slots = Type.keywordList([]);
+  const slots = Type.keywordList();
 
   it("text node", () => {
     const node = Type.tuple([Type.atom("text"), Type.bitstring("abc")]);
@@ -424,8 +424,8 @@ describe("Renderer", () => {
         Type.atom("element"),
         Type.bitstring("img"),
         Type.list([
-          Type.tuple([Type.bitstring("attr_1"), Type.keywordList([])]),
-          Type.tuple([Type.bitstring("attr_2"), Type.keywordList([])]),
+          Type.tuple([Type.bitstring("attr_1"), Type.keywordList()]),
+          Type.tuple([Type.bitstring("attr_2"), Type.keywordList()]),
         ]),
         Type.list(),
       ]);
@@ -482,8 +482,8 @@ describe("Renderer", () => {
               [Type.atom("text"), Type.bitstring("fff")],
             ]),
           ]),
-          Type.tuple([Type.bitstring("attr_7"), Type.keywordList([])]),
-          Type.tuple([Type.bitstring("$attr_8"), Type.keywordList([])]),
+          Type.tuple([Type.bitstring("attr_7"), Type.keywordList()]),
+          Type.tuple([Type.bitstring("$attr_8"), Type.keywordList()]),
         ]),
         Type.list(),
       ]);
@@ -960,7 +960,7 @@ describe("Renderer", () => {
             Type.atom("element"),
             Type.bitstring("script"),
             Type.list([
-              Type.tuple([Type.bitstring("src"), Type.keywordList([])]),
+              Type.tuple([Type.bitstring("src"), Type.keywordList()]),
             ]),
             Type.list(),
           ]);

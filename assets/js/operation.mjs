@@ -81,7 +81,7 @@ export default class Operation {
     this.type = Type.atom("action");
 
     const paramsKeywordList =
-      this.#specDom.data[0].data[1].data[1] || Type.keywordList([]);
+      this.#specDom.data[0].data[1].data[1] || Type.keywordList();
 
     this.#buildParamsMap(paramsKeywordList);
   }
