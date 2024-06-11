@@ -27,7 +27,7 @@ defmodule Hologram.LiveReload do
     {:noreply, state}
   end
 
-  def handle_info({:file_event, _pid, [:renamed]}, state) do
+  def handle_info({:file_event, _pid, {_file_path, [:renamed]}}, state) do
     {:noreply, state}
   end
 
