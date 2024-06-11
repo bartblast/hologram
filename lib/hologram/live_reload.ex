@@ -13,7 +13,11 @@ defmodule Hologram.LiveReload do
   end
 
   def init(_opts) do
-    {:ok, pid} = FileSystem.start_link(dirs: [Mix.Project.build_path()])
+    root_dir = Reflection.root_dir()
+    compiled_paths = Mix.Project.get().project()[:elixirc_paths]
+    watched_dirs = Enum.map(compiled_paths, &Path.join(root_dir, &1))
+
+    {:ok, pid} = FileSystem.start_link(dirs: watched_dirs)
     FileSystem.subscribe(pid)
 
     {:ok, Reflection.phoenix_endpoint()}
