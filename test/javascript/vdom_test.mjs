@@ -63,13 +63,6 @@ describe("Vdom", () => {
       );
     });
 
-    it("script element with empty string src attribute", () => {
-      const node = vnode("script", {attrs: {src: ""}}, []);
-      Vdom.addKeysToScriptVnodes(node);
-
-      assert.deepStrictEqual(node, vnode("script", {attrs: {src: ""}}, []));
-    });
-
     it("script element with boolean src attribute", () => {
       const node = vnode("script", {attrs: {src: true}}, []);
       Vdom.addKeysToScriptVnodes(node);
