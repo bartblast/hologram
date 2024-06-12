@@ -400,7 +400,9 @@ defmodule Hologram.Commons.Reflection do
   """
   @spec phoenix_endpoint :: module | nil
   def phoenix_endpoint do
-    Enum.find_value(:code.all_loaded(), fn {module, _beam_path} ->
+    modules = list_elixir_modules([otp_app()])
+
+    Enum.find(modules, fn module ->
       has_phoenix_endpoint_behaviour? =
         :attributes
         |> module.module_info()
@@ -408,9 +410,7 @@ defmodule Hologram.Commons.Reflection do
         |> List.flatten()
         |> Enum.member?(Phoenix.Endpoint)
 
-      if has_phoenix_endpoint_behaviour? && Application.get_env(otp_app(), module),
-        do: module,
-        else: nil
+      has_phoenix_endpoint_behaviour? && Application.get_env(otp_app(), module)
     end)
   end
 
