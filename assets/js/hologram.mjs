@@ -428,7 +428,7 @@ export default class Hologram {
     Vdom.addKeysToScriptVnodes(Hologram.virtualDocument);
 
     globalThis.console.inspect = (term) =>
-      console.log("INSPECT: " + Interpreter.inspect(term));
+      console.log(Interpreter.inspect(term));
 
     Hologram.#isInitiated = true;
   }
