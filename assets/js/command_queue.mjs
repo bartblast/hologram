@@ -53,12 +53,15 @@ export default class CommandQueue {
         })(item);
 
         const failureCallback = ((currentItem) => {
-          return () => CommandQueue.fail(currentItem.id);
+          return () => {
+            CommandQueue.fail(currentItem.id);
+            throw new HologramRuntimeError("command failed");
+          };
         })(item);
 
         const payload = CommandQueue.#buildPayload(item);
 
-        Client.push("command", payload, successCallback, failureCallback);
+        Client.sendCommand(payload, successCallback, failureCallback);
       }
 
       CommandQueue.isProcessing = false;

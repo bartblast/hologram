@@ -172,9 +172,10 @@ describe("CommandQueue", () => {
         .callsFake(() => true);
 
       const successCallbacks = [];
-      const pushStub = sinon
-        .stub(Client, "push")
-        .callsFake((_event, _payload, successCallback, _failureCallback) =>
+
+      const sendCommandStub = sinon
+        .stub(Client, "sendCommand")
+        .callsFake((_payload, successCallback, _failureCallback) =>
           successCallbacks.push(successCallback),
         );
 
@@ -212,8 +213,8 @@ describe("CommandQueue", () => {
       sinon.assert.calledOnce(isConnectedStub);
       Client.isConnected.restore();
 
-      sinon.assert.calledTwice(pushStub);
-      Client.push.restore();
+      sinon.assert.calledTwice(sendCommandStub);
+      Client.sendCommand.restore();
 
       sinon.assert.notCalled(executeAction);
       Hologram.executeAction.restore();
@@ -227,8 +228,8 @@ describe("CommandQueue", () => {
       const successCallbacks = [];
 
       sinon
-        .stub(Client, "push")
-        .callsFake((_event, _payload, successCallback, _failureCallback) =>
+        .stub(Client, "sendCommand")
+        .callsFake((_payload, successCallback, _failureCallback) =>
           successCallbacks.push(successCallback),
         );
 
@@ -241,7 +242,7 @@ describe("CommandQueue", () => {
       successCallbacks.forEach((callback) => callback('"dummy_action"'));
 
       Client.isConnected.restore();
-      Client.push.restore();
+      Client.sendCommand.restore();
 
       sinon.assert.calledTwice(executeAction);
       sinon.assert.alwaysCalledWithExactly(executeAction, "dummy_action");
@@ -254,14 +255,18 @@ describe("CommandQueue", () => {
       sinon.stub(Client, "isConnected").callsFake(() => true);
 
       const failureCallbacks = [];
+
       sinon
-        .stub(Client, "push")
-        .callsFake((_event, _payload, _successCallback, failureCallback) =>
+        .stub(Client, "sendCommand")
+        .callsFake((_payload, _successCallback, failureCallback) =>
           failureCallbacks.push(failureCallback),
         );
+
       CommandQueue.process();
 
-      failureCallbacks.forEach((callback) => callback());
+      failureCallbacks.forEach((callback) => {
+        assert.throw(() => callback(), HologramRuntimeError, "command failed");
+      });
 
       assert.deepStrictEqual(CommandQueue.items, {
         a: commandQueueItemFixture({
@@ -291,7 +296,7 @@ describe("CommandQueue", () => {
       });
 
       Client.isConnected.restore();
-      Client.push.restore();
+      Client.sendCommand.restore();
     });
   });
 
