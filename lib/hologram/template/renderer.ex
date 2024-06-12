@@ -321,7 +321,12 @@ defmodule Hologram.Template.Renderer do
 
   defp render_attribute(name, value_dom) do
     {value_str, %{}} = render_dom(value_dom, %Env{node_type: :attribute})
-    ~s(#{name}="#{value_str}")
+
+    if value_str == "" do
+      name
+    else
+      ~s(#{name}="#{value_str}")
+    end
   end
 
   defp render_attributes(attrs_dom)
