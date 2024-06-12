@@ -203,8 +203,8 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "boolean attributes" do
-      node = {:element, "img", [{"attr_1", []}, {"attr_2", []}], []}
-      assert render_dom(node, @env) == {~s(<img attr_1 attr_2 />), %{}}
+      node = {:element, "img", [{"attr_1", []}, {"attr_2", [text: ""]}], []}
+      assert render_dom(node, @env) == {~s(<img attr_1 attr_2="" />), %{}}
     end
 
     test "filters out attributes that specify event handlers (starting with '$' character)" do
