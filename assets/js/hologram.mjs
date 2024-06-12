@@ -6,8 +6,6 @@ import Client from "./client.mjs";
 import CommandQueue from "./command_queue.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Config from "./config.mjs";
-import Elixir_Code from "./elixir/code.mjs";
-import Elixir_Kernel from "./elixir/kernel.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
@@ -23,6 +21,8 @@ import Vdom from "./vdom.mjs";
 import MouseEvent from "./events/mouse_event.mjs";
 import PointerEvent from "./events/pointer_event.mjs";
 
+import ManuallyPortedElixirCode from "./elixir/code.mjs";
+import ManuallyPortedElixirKernel from "./elixir/kernel.mjs";
 import ManuallyPortedElixirHologramRouterHelpers from "./elixir/hologram/router/helpers.mjs";
 
 import {attributesModule, eventListenersModule, init, toVNode} from "snabbdom";
@@ -328,7 +328,7 @@ export default class Hologram {
       "Code",
       "ensure_compiled/1",
       "public",
-      Elixir_Code["ensure_compiled/1"],
+      ManuallyPortedElixirCode["ensure_compiled/1"],
     );
 
     Interpreter.defineManuallyPortedFunction(
@@ -342,14 +342,14 @@ export default class Hologram {
       "Kernel",
       "inspect/1",
       "public",
-      Elixir_Kernel["inspect/1"],
+      ManuallyPortedElixirKernel["inspect/1"],
     );
 
     Interpreter.defineManuallyPortedFunction(
       "Kernel",
       "inspect/2",
       "public",
-      Elixir_Kernel["inspect/2"],
+      ManuallyPortedElixirKernel["inspect/2"],
     );
   }
 
