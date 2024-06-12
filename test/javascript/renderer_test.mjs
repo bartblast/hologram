@@ -437,7 +437,7 @@ describe("Renderer", () => {
 
       const expected = vnode(
         "img",
-        {attrs: {attr_1: true, attr_2: ""}, on: {}},
+        {attrs: {attr_1: true, attr_2: true}, on: {}},
         [],
       );
 
@@ -953,7 +953,7 @@ describe("Renderer", () => {
             slots,
             defaultTarget,
           );
-          const expected = vnode("script", {attrs: {src: ""}, on: {}}, []);
+          const expected = vnode("script", {attrs: {src: true}, on: {}}, []);
 
           assert.deepStrictEqual(result, expected);
         });

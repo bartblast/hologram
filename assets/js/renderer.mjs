@@ -347,7 +347,7 @@ export default class Renderer {
 
     const valueText = Renderer.#valueDomToText(valueDom);
 
-    return [nameText, valueText];
+    return [nameText, valueText === "" ? true : valueText];
   }
 
   // Based on render_attributes/1
