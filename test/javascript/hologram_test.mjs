@@ -596,11 +596,7 @@ describe("Hologram", () => {
 
     it("adds a Hologram ID to an event target DOM node that doesn't have one", () => {
       Hologram.executePrefetchPageAction(prefetchPageAction, eventTargetNode);
-
-      assert.match(
-        eventTargetNode.__hologramId__,
-        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-      );
+      assert.match(eventTargetNode.__hologramId__, UUID_REGEX);
     });
 
     it("doesn't add a Hologram ID to an event target DOM node that already has one", () => {
