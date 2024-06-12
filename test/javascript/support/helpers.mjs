@@ -368,8 +368,11 @@ export function putState(component, state) {
 export function registerWebApis() {
   const {window} = new JSDOM("", {url: "http://localhost"});
 
+  globalThis.window = window;
+  globalThis.window.requestAnimationFrame = (callback) => callback();
+
+  globalThis.console = window.console;
   globalThis.DOMParser = window.DOMParser;
   globalThis.history = window.history;
-  globalThis.requestAnimationFrame = (callback) => callback();
   globalThis.sessionStorage = window.sessionStorage;
 }

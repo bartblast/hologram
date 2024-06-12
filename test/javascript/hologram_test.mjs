@@ -982,7 +982,7 @@ describe("Hologram", () => {
       .stub(window, "scrollTo")
       .callsFake((_x, _y) => null);
 
-    globalThis.__hologramPageScriptLoaded__ = true;
+    window.__hologramPageScriptLoaded__ = true;
 
     const parser = new DOMParser();
 
@@ -1000,7 +1000,7 @@ describe("Hologram", () => {
 
     Hologram.loadPage(pagePath, html);
 
-    assert.isFalse(globalThis.__hologramPageScriptLoaded__);
+    assert.isFalse(window.__hologramPageScriptLoaded__);
 
     assert.deepStrictEqual(
       vnodeToHtml(Hologram.virtualDocument),

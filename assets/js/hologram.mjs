@@ -232,7 +232,7 @@ export default class Hologram {
 
   // Made public to make tests easier
   static loadPage(pagePath, html) {
-    requestAnimationFrame(() => {
+    window.requestAnimationFrame(() => {
       Hologram.#patchPage(html);
       window.scrollTo(0, 0);
       history.pushState(null, null, pagePath);
@@ -414,8 +414,7 @@ export default class Hologram {
     Hologram.virtualDocument = toVNode(document.documentElement);
     Vdom.addKeysToScriptVnodes(Hologram.virtualDocument);
 
-    globalThis.console.inspect = (term) =>
-      console.log(Interpreter.inspect(term));
+    console.inspect = (term) => console.log(Interpreter.inspect(term));
 
     Hologram.#isInitiated = true;
   }
@@ -428,7 +427,7 @@ export default class Hologram {
   }
 
   static #loadMountData() {
-    const mountData = globalThis.__hologramPageMountData__(Hologram.#deps);
+    const mountData = window.__hologramPageMountData__(Hologram.#deps);
 
     Hologram.#mountData = mountData;
     Hologram.#pageModule = mountData.pageModule;
@@ -437,12 +436,12 @@ export default class Hologram {
 
   static #maybeInitAssetPathRegistry() {
     if (AssetPathRegistry.entries === null) {
-      AssetPathRegistry.hydrate(globalThis.__hologramAssetManifest__);
+      AssetPathRegistry.hydrate(window.__hologramAssetManifest__);
     }
   }
 
   static #mountPage() {
-    globalThis.__hologramPageReachableFunctionDefs__(Hologram.#deps);
+    window.__hologramPageReachableFunctionDefs__(Hologram.#deps);
 
     Hologram.#loadMountData();
 
@@ -472,7 +471,7 @@ export default class Hologram {
   }
 
   static #patchPage(html) {
-    globalThis.__hologramPageScriptLoaded__ = false;
+    window.__hologramPageScriptLoaded__ = false;
 
     const newVirtualDocument = Vdom.from(html);
 

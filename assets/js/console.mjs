@@ -5,8 +5,8 @@ import Interpreter from "./interpreter.mjs";
 // TODO: write unit tests
 export default class Console {
   static isDarkMode =
-    globalThis.matchMedia &&
-    globalThis.matchMedia("(prefers-color-scheme: dark)").matches;
+    window.matchMedia &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches;
 
   static endGroup(groupName) {
     console.groupEnd(groupName);
