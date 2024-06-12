@@ -34,6 +34,16 @@ import {defineModule9Fixture} from "./support/fixtures/hologram/module_9.mjs";
 defineGlobalErlangAndElixirModules();
 registerWebApis();
 
+defineModule1Fixture();
+defineModule2Fixture();
+defineModule3Fixture();
+defineModule4Fixture();
+defineModule5Fixture();
+defineModule6Fixture();
+defineModule7Fixture();
+defineModule8Fixture();
+defineModule9Fixture();
+
 const cid1 = Type.bitstring("my_component_1");
 const cid2 = Type.bitstring("my_component_2");
 
@@ -48,18 +58,6 @@ const module8 = Type.alias("Hologram.Test.Fixtures.Module8");
 const module9 = Type.alias("Hologram.Test.Fixtures.Module9");
 
 describe("Hologram", () => {
-  before(() => {
-    defineModule1Fixture();
-    defineModule2Fixture();
-    defineModule3Fixture();
-    defineModule4Fixture();
-    defineModule5Fixture();
-    defineModule6Fixture();
-    defineModule7Fixture();
-    defineModule8Fixture();
-    defineModule9Fixture();
-  });
-
   describe("executeAction()", () => {
     let commandQueueProcessStub, navigateToPageStub, renderStub;
 

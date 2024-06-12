@@ -20,9 +20,9 @@ import Utils from "../../assets/js/utils.mjs";
 
 defineGlobalErlangAndElixirModules();
 
-describe("Interpreter", () => {
-  before(() => defineModule1Fixture());
+defineModule1Fixture();
 
+describe("Interpreter", () => {
   describe("accessKeywordListElement()", () => {
     const keywordList = Type.keywordList([
       [Type.atom("a"), Type.integer(1)],

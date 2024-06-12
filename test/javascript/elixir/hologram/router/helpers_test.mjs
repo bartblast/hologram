@@ -15,6 +15,9 @@ import Type from "../../../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
+defineModule1Fixture();
+defineModule2Fixture();
+
 const assetManifest = {
   "static-path-1": "/asset-path-1",
   "static-path-2": "/asset-path-2",
@@ -25,11 +28,6 @@ const module1 = Type.alias("Hologram.Test.Fixtures.Router.Helpers.Module1");
 const module2 = Type.alias("Hologram.Test.Fixtures.Router.Helpers.Module2");
 
 describe("Elixir_Hologram_Router_Helpers", () => {
-  before(() => {
-    defineModule1Fixture();
-    defineModule2Fixture();
-  });
-
   beforeEach(() => {
     AssetPathRegistry.hydrate(assetManifest);
   });
