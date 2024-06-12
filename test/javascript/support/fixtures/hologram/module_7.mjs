@@ -6,7 +6,7 @@ import Type from "../../../../../assets/js/type.mjs";
 /*
 Based on:
 
-defmodule Module7 do
+defmodule Hologram.Module7 do
   use Hologram.Page
 
   route "/hologram-test-fixtures-module7"

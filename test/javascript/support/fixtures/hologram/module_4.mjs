@@ -8,7 +8,7 @@ import Type from "../../../../../assets/js/type.mjs";
 /*
 Based on:
 
-defmodule Module4 do
+defmodule Hologram.Module4 do
   use Hologram.Component
 
   def action(:my_action_4, %{a: a, b: b, event: event}, component) do
@@ -24,7 +24,7 @@ defmodule Module4 do
 end
 */
 export function defineModule4Fixture() {
-  Interpreter.defineElixirFunction("Module4", "action", 3, "public", [
+  Interpreter.defineElixirFunction("Hologram.Module4", "action", 3, "public", [
     {
       params: (_context) => [
         Type.atom("my_action_4"),

@@ -37,12 +37,12 @@ registerWebApis();
 const cid1 = Type.bitstring("my_component_1");
 const cid2 = Type.bitstring("my_component_2");
 
-const module1 = Type.alias("Module1");
-const module2 = Type.alias("Module2");
-const module3 = Type.alias("Module3");
-const module4 = Type.alias("Module4");
-const module5 = Type.alias("Module5");
-const module6 = Type.alias("Module6");
+const module1 = Type.alias("Hologram.Module1");
+const module2 = Type.alias("Hologram.Module2");
+const module3 = Type.alias("Hologram.Module3");
+const module4 = Type.alias("Hologram.Module4");
+const module5 = Type.alias("Hologram.Module5");
+const module6 = Type.alias("Hologram.Module6");
 const module7 = Type.alias("Hologram.Module7");
 const module8 = Type.alias("Hologram.Module8");
 const module9 = Type.alias("Hologram.Module9");
