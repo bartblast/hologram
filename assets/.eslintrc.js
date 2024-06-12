@@ -9,7 +9,6 @@ module.exports = {
     Elixir_Code: "readonly",
     Elixir_Enum: "readonly",
     Elixir_Hologram_Router_Helpers: "readonly",
-    Elixir_Hologram_RuntimeSettings: "readonly",
     Elixir_Kernel: "readonly",
     Elixir_Map: "readonly",
     Elixir_String_Chars: "readonly",

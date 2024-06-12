@@ -559,7 +559,7 @@ describe("Hologram", () => {
     const pagePath = "/hologram-test-fixtures-module7";
 
     const prefetchPageAction = Type.actionStruct({
-      name: Elixir_Hologram_RuntimeSettings["prefetch_page_action_name/0"](),
+      name: Type.atom("__prefetch_page__"),
       params: Type.map([[Type.atom("to"), module7]]),
       target: cid1,
     });
@@ -894,9 +894,7 @@ describe("Hologram", () => {
           Type.atom("expression"),
           Type.tuple([
             Type.actionStruct({
-              name: Elixir_Hologram_RuntimeSettings[
-                "prefetch_page_action_name/0"
-              ](),
+              name: Type.atom("__prefetch_page__"),
               params: Type.map([[Type.atom("to"), Type.alias("MyPage")]]),
             }),
           ]),
@@ -916,7 +914,7 @@ describe("Hologram", () => {
       sinon.assert.notCalled(executeNavigateToPrefetchedPageActionStub);
 
       const expectedAction = Type.actionStruct({
-        name: Elixir_Hologram_RuntimeSettings["prefetch_page_action_name/0"](),
+        name: Type.atom("__prefetch_page__"),
         params: Type.map([
           [Type.atom("to"), Type.alias("MyPage")],
           [

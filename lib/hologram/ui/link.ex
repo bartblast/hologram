@@ -1,6 +1,5 @@
 defmodule Hologram.UI.Link do
   use Hologram.Component
-  alias Hologram.RuntimeSettings
 
   prop :to, [:module, :string, :tuple]
 
@@ -9,8 +8,8 @@ defmodule Hologram.UI.Link do
     ~H"""
     <a 
       href={page_path(@to)}
-      $pointerdown={%Action{name: RuntimeSettings.prefetch_page_action_name(), params: %{to: @to}}}
-      $click={%Action{name: RuntimeSettings.navigate_to_prefetched_page_action_name(), params: %{to: @to}}}
+      $pointerdown={%Action{name: :__prefetch_page__, params: %{to: @to}}}
+      $click={%Action{name: :__navigate_to_prefetched_page__, params: %{to: @to}}}
     ><slot /></a>
     """
   end
