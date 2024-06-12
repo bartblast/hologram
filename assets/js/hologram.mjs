@@ -260,7 +260,9 @@ export default class Hologram {
       return;
     }
 
-    console.error("page prefetch failed:", mapValue.pagePath);
+    throw new HologramRuntimeError(
+      `page prefetch failed: ${mapValue.pagePath}`,
+    );
   }
 
   static onPrefetchPageSuccess(mapKey, html) {

@@ -1069,22 +1069,12 @@ describe("Hologram", () => {
   });
 
   describe("onPrefetchPageError()", () => {
-    let consoleErrorStub;
-
-    beforeEach(() => {
-      consoleErrorStub = sinon
-        .stub(globalThis.console, "error")
-        .callsFake((_arg1, _arg2) => null);
-    });
-
-    afterEach(() => globalThis.console.error.restore());
-
     it("no prefetchedPages map entry", () => {
       Hologram.prefetchedPages = new Map();
 
-      Hologram.onPrefetchPageError("dummy_map_key", "my_resp");
-
-      sinon.assert.notCalled(consoleErrorStub);
+      assert.doesNotThrow(() =>
+        Hologram.onPrefetchPageError("dummy_map_key", "my_resp"),
+      );
     });
 
     it("has prefetchedPages map entry", () => {
@@ -1100,12 +1090,10 @@ describe("Hologram", () => {
         ],
       ]);
 
-      Hologram.onPrefetchPageError("dummy_map_key", "my_resp");
-
-      sinon.assert.calledOnceWithExactly(
-        consoleErrorStub,
-        "page prefetch failed:",
-        "/my-page-path",
+      assert.throw(
+        () => Hologram.onPrefetchPageError("dummy_map_key", "my_resp"),
+        HologramRuntimeError,
+        "page prefetch failed: /my-page-path",
       );
     });
   });
