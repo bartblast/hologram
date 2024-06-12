@@ -37,15 +37,15 @@ registerWebApis();
 const cid1 = Type.bitstring("my_component_1");
 const cid2 = Type.bitstring("my_component_2");
 
-const module1 = Type.alias("Hologram.Module1");
-const module2 = Type.alias("Hologram.Module2");
-const module3 = Type.alias("Hologram.Module3");
-const module4 = Type.alias("Hologram.Module4");
-const module5 = Type.alias("Hologram.Module5");
-const module6 = Type.alias("Hologram.Module6");
-const module7 = Type.alias("Hologram.Module7");
-const module8 = Type.alias("Hologram.Module8");
-const module9 = Type.alias("Hologram.Module9");
+const module1 = Type.alias("Hologram.Test.Fixtures.Module1");
+const module2 = Type.alias("Hologram.Test.Fixtures.Module2");
+const module3 = Type.alias("Hologram.Test.Fixtures.Module3");
+const module4 = Type.alias("Hologram.Test.Fixtures.Module4");
+const module5 = Type.alias("Hologram.Test.Fixtures.Module5");
+const module6 = Type.alias("Hologram.Test.Fixtures.Module6");
+const module7 = Type.alias("Hologram.Test.Fixtures.Module7");
+const module8 = Type.alias("Hologram.Test.Fixtures.Module8");
+const module9 = Type.alias("Hologram.Test.Fixtures.Module9");
 
 describe("Hologram", () => {
   before(() => {

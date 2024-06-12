@@ -6,7 +6,7 @@ import Type from "../../../../../assets/js/type.mjs";
 /*
 Based on:
 
-defmodule Hologram.Module7 do
+defmodule Hologram.Test.Fixtures.Module7 do
   use Hologram.Page
 
   route "/hologram-test-fixtures-module7"
@@ -22,7 +22,7 @@ end
 */
 export function defineModule7Fixture() {
   Interpreter.defineElixirFunction(
-    "Hologram.Module7",
+    "Hologram.Test.Fixtures.Module7",
     "__props__",
     0,
     "public",
@@ -38,7 +38,7 @@ export function defineModule7Fixture() {
   );
 
   Interpreter.defineElixirFunction(
-    "Hologram.Module7",
+    "Hologram.Test.Fixtures.Module7",
     "__route__",
     0,
     "public",

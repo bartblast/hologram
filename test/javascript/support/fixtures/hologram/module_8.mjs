@@ -8,7 +8,7 @@ import Type from "../../../../../assets/js/type.mjs";
 /*
 Based on:
 
-defmodule Hologram.Module8 do
+defmodule Hologram.Test.Fixtures.Module8 do
   use Hologram.Component
 
   def action(:my_action_8, _params, component) do
@@ -23,17 +23,23 @@ end
 
 */
 export function defineModule8Fixture() {
-  Interpreter.defineElixirFunction("Hologram.Module8", "action", 3, "public", [
-    {
-      params: (_context) => [
-        Type.atom("my_action_8"),
-        Type.matchPlaceholder(),
-        Type.variablePattern("component"),
-      ],
-      guards: [],
-      body: (context) => {
-        return putPage(context.vars.component, Type.alias("MyPage"));
+  Interpreter.defineElixirFunction(
+    "Hologram.Test.Fixtures.Module8",
+    "action",
+    3,
+    "public",
+    [
+      {
+        params: (_context) => [
+          Type.atom("my_action_8"),
+          Type.matchPlaceholder(),
+          Type.variablePattern("component"),
+        ],
+        guards: [],
+        body: (context) => {
+          return putPage(context.vars.component, Type.alias("MyPage"));
+        },
       },
-    },
-  ]);
+    ],
+  );
 }

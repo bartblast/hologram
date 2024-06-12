@@ -8,7 +8,7 @@ import Type from "../../../../../assets/js/type.mjs";
 /*
 Based on:
 
-defmodule Hologram.Module6 do
+defmodule Hologram.Test.Fixtures.Module6 do
   use Hologram.Component
 
   def action(:my_action_6, %{c: c, d: d}, component) do
@@ -23,34 +23,40 @@ defmodule Hologram.Module6 do
 end
 */
 export function defineModule6Fixture() {
-  Interpreter.defineElixirFunction("Hologram.Module6", "action", 3, "public", [
-    {
-      params: (_context) => [
-        Type.atom("my_action_6"),
-        Type.map([
-          [Type.atom("c"), Type.variablePattern("c")],
-          [Type.atom("d"), Type.variablePattern("d")],
-        ]),
-        Type.variablePattern("component"),
-      ],
-      guards: [],
-      body: (context) => {
-        return putContext(
-          putState(
-            context.vars.component,
-            Type.map([
-              [
-                Type.atom("y"),
-                Erlang["+/2"](
-                  Erlang["+/2"](context.vars.c, context.vars.d),
-                  Type.integer(6n),
-                ),
-              ],
-            ]),
-          ),
-          Type.map([[Type.atom("my_context"), Type.integer(6n)]]),
-        );
+  Interpreter.defineElixirFunction(
+    "Hologram.Test.Fixtures.Module6",
+    "action",
+    3,
+    "public",
+    [
+      {
+        params: (_context) => [
+          Type.atom("my_action_6"),
+          Type.map([
+            [Type.atom("c"), Type.variablePattern("c")],
+            [Type.atom("d"), Type.variablePattern("d")],
+          ]),
+          Type.variablePattern("component"),
+        ],
+        guards: [],
+        body: (context) => {
+          return putContext(
+            putState(
+              context.vars.component,
+              Type.map([
+                [
+                  Type.atom("y"),
+                  Erlang["+/2"](
+                    Erlang["+/2"](context.vars.c, context.vars.d),
+                    Type.integer(6n),
+                  ),
+                ],
+              ]),
+            ),
+            Type.map([[Type.atom("my_context"), Type.integer(6n)]]),
+          );
+        },
       },
-    },
-  ]);
+    ],
+  );
 }

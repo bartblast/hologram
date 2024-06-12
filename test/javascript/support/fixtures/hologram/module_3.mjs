@@ -8,7 +8,7 @@ import Type from "../../../../../assets/js/type.mjs";
 /*
 Based on:
 
-defmodule Hologram.Module3 do
+defmodule Hologram.Test.Fixtures.Module3 do
   use Hologram.Component
 
   def action(:my_action_3a, %{a: a, b: b, event: event}, component) do
@@ -30,73 +30,79 @@ defmodule Hologram.Module3 do
 end
 */
 export function defineModule3Fixture() {
-  Interpreter.defineElixirFunction("Hologram.Module3", "action", 3, "public", [
-    {
-      params: (_context) => [
-        Type.atom("my_action_3a"),
-        Type.map([
-          [Type.atom("a"), Type.variablePattern("a")],
-          [Type.atom("b"), Type.variablePattern("b")],
-          [Type.atom("event"), Type.variablePattern("event")],
-        ]),
-        Type.variablePattern("component"),
-      ],
-      guards: [],
-      body: (context) => {
-        return putAction(
-          putContext(
+  Interpreter.defineElixirFunction(
+    "Hologram.Test.Fixtures.Module3",
+    "action",
+    3,
+    "public",
+    [
+      {
+        params: (_context) => [
+          Type.atom("my_action_3a"),
+          Type.map([
+            [Type.atom("a"), Type.variablePattern("a")],
+            [Type.atom("b"), Type.variablePattern("b")],
+            [Type.atom("event"), Type.variablePattern("event")],
+          ]),
+          Type.variablePattern("component"),
+        ],
+        guards: [],
+        body: (context) => {
+          return putAction(
+            putContext(
+              putState(
+                context.vars.component,
+                Type.map([
+                  [
+                    Type.atom("x"),
+                    Erlang["+/2"](
+                      Erlang["+/2"](context.vars.a, context.vars.b),
+                      Type.integer(3n),
+                    ),
+                  ],
+                ]),
+              ),
+              Type.map([[Type.atom("event"), context.vars.event]]),
+            ),
+            Type.actionStruct({
+              name: Type.atom("my_action_3b"),
+              params: Type.map([
+                [Type.atom("c"), Type.integer(10)],
+                [Type.atom("d"), Type.integer(20)],
+              ]),
+              target: Type.nil(),
+            }),
+          );
+        },
+      },
+      {
+        params: (_context) => [
+          Type.atom("my_action_3b"),
+          Type.map([
+            [Type.atom("c"), Type.variablePattern("c")],
+            [Type.atom("d"), Type.variablePattern("d")],
+          ]),
+          Type.variablePattern("component"),
+        ],
+        guards: [],
+        body: (context) => {
+          return putContext(
             putState(
               context.vars.component,
               Type.map([
                 [
-                  Type.atom("x"),
+                  Type.atom("y"),
                   Erlang["+/2"](
-                    Erlang["+/2"](context.vars.a, context.vars.b),
+                    Erlang["+/2"](context.vars.c, context.vars.d),
                     Type.integer(3n),
                   ),
                 ],
               ]),
             ),
-            Type.map([[Type.atom("event"), context.vars.event]]),
-          ),
-          Type.actionStruct({
-            name: Type.atom("my_action_3b"),
-            params: Type.map([
-              [Type.atom("c"), Type.integer(10)],
-              [Type.atom("d"), Type.integer(20)],
-            ]),
-            target: Type.nil(),
-          }),
-        );
+            Type.map([[Type.atom("my_context"), Type.integer(3n)]]),
+          );
+        },
       },
-    },
-    {
-      params: (_context) => [
-        Type.atom("my_action_3b"),
-        Type.map([
-          [Type.atom("c"), Type.variablePattern("c")],
-          [Type.atom("d"), Type.variablePattern("d")],
-        ]),
-        Type.variablePattern("component"),
-      ],
-      guards: [],
-      body: (context) => {
-        return putContext(
-          putState(
-            context.vars.component,
-            Type.map([
-              [
-                Type.atom("y"),
-                Erlang["+/2"](
-                  Erlang["+/2"](context.vars.c, context.vars.d),
-                  Type.integer(3n),
-                ),
-              ],
-            ]),
-          ),
-          Type.map([[Type.atom("my_context"), Type.integer(3n)]]),
-        );
-      },
-    },
-  ]);
+    ],
+  );
 }
