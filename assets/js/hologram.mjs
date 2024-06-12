@@ -22,8 +22,8 @@ import MouseEvent from "./events/mouse_event.mjs";
 import PointerEvent from "./events/pointer_event.mjs";
 
 import ManuallyPortedElixirCode from "./elixir/code.mjs";
-import ManuallyPortedElixirKernel from "./elixir/kernel.mjs";
 import ManuallyPortedElixirHologramRouterHelpers from "./elixir/hologram/router/helpers.mjs";
+import ManuallyPortedElixirKernel from "./elixir/kernel.mjs";
 
 import {attributesModule, eventListenersModule, init, toVNode} from "snabbdom";
 const patch = init([attributesModule, eventListenersModule]);
