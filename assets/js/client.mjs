@@ -15,7 +15,9 @@ export default class Client {
   static async connect() {
     Client.socket = new Socket("/hologram", {
       encode: Client.encoder,
-      longPollFallbackMs: 3000,
+      longPollFallbackMs: window.location.host.startsWith("localhost")
+        ? undefined
+        : 3000,
     });
 
     Client.socket.connect();
