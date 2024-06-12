@@ -188,6 +188,7 @@ function defineElixirHologramRouterHelpersModule() {
       return page_path_2(arg, Type.keywordList());
     },
 
+    // Deps: [String.Chars.to_string/1, :lists.keyfind/3, :lists.keymember/3]
     "page_path/2": (pageModule, params) => {
       const context = Interpreter.buildContext();
 
