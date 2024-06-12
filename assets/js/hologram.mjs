@@ -7,7 +7,6 @@ import CommandQueue from "./command_queue.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Config from "./config.mjs";
 import Elixir_Code from "./elixir/code.mjs";
-import Elixir_Hologram_Router_Helpers from "./elixir/hologram/router/helpers.mjs";
 import Elixir_Kernel from "./elixir/kernel.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
@@ -23,6 +22,8 @@ import Vdom from "./vdom.mjs";
 // Events
 import MouseEvent from "./events/mouse_event.mjs";
 import PointerEvent from "./events/pointer_event.mjs";
+
+import ManuallyPortedElixirHologramRouterHelpers from "./elixir/hologram/router/helpers.mjs";
 
 import {attributesModule, eventListenersModule, init, toVNode} from "snabbdom";
 const patch = init([attributesModule, eventListenersModule]);
@@ -334,21 +335,7 @@ export default class Hologram {
       "Hologram.Router.Helpers",
       "asset_path/1",
       "public",
-      Elixir_Hologram_Router_Helpers["asset_path/1"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Hologram.Router.Helpers",
-      "page_path/1",
-      "public",
-      Elixir_Hologram_Router_Helpers["page_path/1"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Hologram.Router.Helpers",
-      "page_path/2",
-      "public",
-      Elixir_Hologram_Router_Helpers["page_path/2"],
+      ManuallyPortedElixirHologramRouterHelpers["asset_path/1"],
     );
 
     Interpreter.defineManuallyPortedFunction(

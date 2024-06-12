@@ -2,6 +2,7 @@
 
 import {assert} from "../../../assets/node_modules/chai/index.js";
 
+import Bitstring from "../../../assets/js/bitstring.mjs";
 import ComponentRegistry from "../../../assets/js/component_registry.mjs";
 import Elixir_Code from "../../../assets/js/elixir/code.mjs";
 import Elixir_Kernel from "../../../assets/js/elixir/kernel.mjs";
@@ -175,6 +176,90 @@ function defineElixirEnumModule() {
   };
 }
 
+function defineElixirHologramRouterHelpersModule() {
+  return {
+    "page_path/1": (arg) => {
+      const page_path_2 = Elixir_Hologram_Router_Helpers["page_path/2"];
+
+      if (Type.isTuple(arg)) {
+        return page_path_2(arg.data[0], arg.data[1]);
+      }
+
+      return page_path_2(arg, Type.keywordList());
+    },
+
+    "page_path/2": (pageModule, params) => {
+      const context = Interpreter.buildContext();
+
+      const requiredParams = Interpreter.callNamedFunction(
+        pageModule,
+        "__props__",
+        0,
+        [],
+        context,
+      );
+
+      const route = Interpreter.callNamedFunction(
+        pageModule,
+        "__route__",
+        0,
+        [],
+        context,
+      );
+
+      const [remainingParams, path] = requiredParams.data.reduce(
+        (acc, requiredParam) => {
+          const key = requiredParam.data[0];
+          const paramsAcc = acc[0];
+          const pathAcc = acc[1];
+
+          if (
+            Type.isFalse(
+              Erlang_Lists["keymember/3"](key, Type.integer(1), paramsAcc),
+            )
+          ) {
+            const msg = `page "${Interpreter.inspect(pageModule)}" expects "${key.value}" param`;
+            Interpreter.raiseArgumentError(msg);
+          }
+
+          const newParamsAcc = Type.list(
+            paramsAcc.data.filter((param) => param.data[0].value !== key.value),
+          );
+
+          const paramValue = Erlang_Lists["keyfind/3"](
+            key,
+            Type.integer(1),
+            paramsAcc,
+          ).data[1];
+
+          const paramValueText = Bitstring.toText(
+            Elixir_String_Chars["to_string/1"](paramValue),
+          );
+
+          const newPathAcc = Type.bitstring(
+            Bitstring.toText(pathAcc).replaceAll(
+              `:${key.value}`,
+              paramValueText,
+            ),
+          );
+
+          return [newParamsAcc, newPathAcc];
+        },
+        [params, route],
+      );
+
+      if (remainingParams.data.length > 0) {
+        const key = remainingParams.data[0].data[0];
+
+        const msg = `page "${Interpreter.inspect(pageModule)}" doesn't expect "${key.value}" param`;
+        Interpreter.raiseArgumentError(msg);
+      }
+
+      return path;
+    },
+  };
+}
+
 function defineElixirHologramRuntimeSettingsModule() {
   return {
     "navigate_to_prefetched_page_action_name/0": () =>
@@ -193,8 +278,13 @@ export function defineGlobalErlangAndElixirModules() {
   globalThis.Erlang_Unicode = Erlang_Unicode;
   globalThis.Elixir_Code = Elixir_Code;
   globalThis.Elixir_Enum = defineElixirEnumModule();
+
+  globalThis.Elixir_Hologram_Router_Helpers =
+    defineElixirHologramRouterHelpersModule();
+
   globalThis.Elixir_Hologram_RuntimeSettings =
     defineElixirHologramRuntimeSettingsModule();
+
   globalThis.Elixir_Kernel = Elixir_Kernel;
 
   globalThis.Elixir_String_Chars = {};
