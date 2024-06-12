@@ -425,7 +425,10 @@ describe("Renderer", () => {
         Type.bitstring("img"),
         Type.list([
           Type.tuple([Type.bitstring("attr_1"), Type.keywordList()]),
-          Type.tuple([Type.bitstring("attr_2"), Type.keywordList()]),
+          Type.tuple([
+            Type.bitstring("attr_2"),
+            Type.keywordList([[Type.atom("text"), Type.bitstring("")]]),
+          ]),
         ]),
         Type.list(),
       ]);
@@ -434,7 +437,7 @@ describe("Renderer", () => {
 
       const expected = vnode(
         "img",
-        {attrs: {attr_1: true, attr_2: true}, on: {}},
+        {attrs: {attr_1: true, attr_2: ""}, on: {}},
         [],
       );
 
