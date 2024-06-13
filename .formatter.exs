@@ -11,6 +11,7 @@ exported_locals_without_parens = [
 ]
 
 test_locals_without_parens = [
+  assert_error: 3,
   use_module_stub: 1
 ]
 
