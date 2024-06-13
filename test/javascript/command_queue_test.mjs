@@ -346,7 +346,7 @@ describe("CommandQueue", () => {
     });
 
     it("invalid target", () => {
-      ComponentRegistry.entries = Type.map();
+      ComponentRegistry.clear();
 
       const command = Type.commandStruct({
         name,

@@ -125,7 +125,7 @@ defineModule9Fixture();
 
 describe("Renderer", () => {
   beforeEach(() => {
-    ComponentRegistry.entries = Type.map();
+    ComponentRegistry.clear();
   });
 
   const cid = Type.bitstring("my_component");
