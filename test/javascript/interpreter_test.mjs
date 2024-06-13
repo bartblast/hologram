@@ -5993,12 +5993,22 @@ describe("Interpreter", () => {
     );
   });
 
-  it("raiseArithmeticError()", () => {
-    assertBoxedError(
-      () => Interpreter.raiseArithmeticError(),
-      "ArithmeticError",
-      "bad argument in arithmetic expression",
-    );
+  describe("raiseArithmeticError()", () => {
+    it("without blame info", () => {
+      assertBoxedError(
+        () => Interpreter.raiseArithmeticError(),
+        "ArithmeticError",
+        "bad argument in arithmetic expression",
+      );
+    });
+
+    it("with blame info", () => {
+      assertBoxedError(
+        () => Interpreter.raiseArithmeticError("my blame"),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: my blame",
+      );
+    });
   });
 
   it("raiseBadMapError()", () => {
