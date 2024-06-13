@@ -88,6 +88,20 @@ describe("ComponentRegistry", () => {
     ]);
   });
 
+  it("clear()", () => {
+    assert.deepStrictEqual(
+      ComponentRegistry.entries,
+      Type.map([
+        [cid1, entry1],
+        [cid2, entry2],
+      ]),
+    );
+
+    ComponentRegistry.clear();
+
+    assert.deepStrictEqual(ComponentRegistry.entries, Type.map());
+  });
+
   describe("getComponentEmittedContext()", () => {
     it("entry exists", () => {
       const result = ComponentRegistry.getComponentEmittedContext(cid2);
