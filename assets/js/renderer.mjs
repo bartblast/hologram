@@ -456,7 +456,12 @@ export default class Renderer {
       .reduce((acc, attrDom) => {
         const nameText = Bitstring.toText(attrDom.data[0]).substring(1);
         acc[nameText] = (event) =>
-          Hologram.handleEvent(event, nameText, attrDom.data[1], defaultTarget);
+          Hologram.handleUiEvent(
+            event,
+            nameText,
+            attrDom.data[1],
+            defaultTarget,
+          );
 
         return acc;
       }, {});

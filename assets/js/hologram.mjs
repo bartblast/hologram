@@ -195,7 +195,7 @@ export default class Hologram {
     }
   }
 
-  static handleEvent(event, eventType, operationSpecDom, defaultTarget) {
+  static handleUiEvent(event, eventType, operationSpecDom, defaultTarget) {
     const eventImpl = Hologram.#getEventImplementation(eventType);
 
     if (!eventImpl.isEventIgnored(event)) {

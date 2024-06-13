@@ -599,7 +599,7 @@ describe("Renderer", () => {
           assert.deepStrictEqual(Object.keys(vdom.data.on), ["click"]);
 
           const stub = sinon
-            .stub(Hologram, "handleEvent")
+            .stub(Hologram, "handleUiEvent")
             .callsFake(
               (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
             );
@@ -616,7 +616,7 @@ describe("Renderer", () => {
             defaultTarget,
           );
 
-          Hologram.handleEvent.restore();
+          Hologram.handleUiEvent.restore();
         });
 
         it("multiple event listeners", () => {
@@ -651,7 +651,7 @@ describe("Renderer", () => {
           assert.deepStrictEqual(Object.keys(vdom.data.on), ["click", "focus"]);
 
           const stub = sinon
-            .stub(Hologram, "handleEvent")
+            .stub(Hologram, "handleUiEvent")
             .callsFake(
               (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
             );
@@ -685,7 +685,7 @@ describe("Renderer", () => {
             defaultTarget,
           );
 
-          Hologram.handleEvent.restore();
+          Hologram.handleUiEvent.restore();
         });
       });
 
@@ -710,7 +710,7 @@ describe("Renderer", () => {
           const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
 
           const stub = sinon
-            .stub(Hologram, "handleEvent")
+            .stub(Hologram, "handleUiEvent")
             .callsFake(
               (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
             );
@@ -727,7 +727,7 @@ describe("Renderer", () => {
             cid,
           );
 
-          Hologram.handleEvent.restore();
+          Hologram.handleUiEvent.restore();
         });
 
         it("parent stateful component", () => {
@@ -743,7 +743,7 @@ describe("Renderer", () => {
           const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
 
           const stub = sinon
-            .stub(Hologram, "handleEvent")
+            .stub(Hologram, "handleUiEvent")
             .callsFake(
               (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
             );
@@ -760,7 +760,7 @@ describe("Renderer", () => {
             defaultTarget,
           );
 
-          Hologram.handleEvent.restore();
+          Hologram.handleUiEvent.restore();
         });
 
         it("page", () => {
@@ -773,7 +773,7 @@ describe("Renderer", () => {
           );
 
           const stub = sinon
-            .stub(Hologram, "handleEvent")
+            .stub(Hologram, "handleUiEvent")
             .callsFake(
               (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
             );
@@ -790,7 +790,7 @@ describe("Renderer", () => {
             Type.bitstring("page"),
           );
 
-          Hologram.handleEvent.restore();
+          Hologram.handleUiEvent.restore();
         });
 
         it("layout", () => {
@@ -803,7 +803,7 @@ describe("Renderer", () => {
           );
 
           const stub = sinon
-            .stub(Hologram, "handleEvent")
+            .stub(Hologram, "handleUiEvent")
             .callsFake(
               (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
             );
@@ -820,7 +820,7 @@ describe("Renderer", () => {
             Type.bitstring("layout"),
           );
 
-          Hologram.handleEvent.restore();
+          Hologram.handleUiEvent.restore();
         });
 
         it("slot of a stateful component nested in another stateful component", () => {
@@ -850,7 +850,7 @@ describe("Renderer", () => {
           const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
 
           const stub = sinon
-            .stub(Hologram, "handleEvent")
+            .stub(Hologram, "handleUiEvent")
             .callsFake(
               (_event, _eventType, _operationSpecVdom, _defaultTarget) => null,
             );
@@ -867,7 +867,7 @@ describe("Renderer", () => {
             Type.bitstring("component_61"),
           );
 
-          Hologram.handleEvent.restore();
+          Hologram.handleUiEvent.restore();
         });
       });
 

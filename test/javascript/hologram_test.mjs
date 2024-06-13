@@ -735,7 +735,7 @@ describe("Hologram", () => {
     });
   });
 
-  describe("handleEvent()", () => {
+  describe("handleUiEvent()", () => {
     let commandQueueProcessStub,
       commandQueuePushStub,
       executeActionStub,
@@ -793,7 +793,7 @@ describe("Hologram", () => {
         preventDefault: () => null,
       };
 
-      Hologram.handleEvent(
+      Hologram.handleUiEvent(
         ignoredEvent,
         eventType,
         actionSpecDom,
@@ -808,7 +808,7 @@ describe("Hologram", () => {
     });
 
     it("regular action", () => {
-      Hologram.handleEvent(
+      Hologram.handleUiEvent(
         notIgnoredEvent,
         eventType,
         actionSpecDom,
@@ -850,7 +850,7 @@ describe("Hologram", () => {
         ],
       ]);
 
-      Hologram.handleEvent(
+      Hologram.handleUiEvent(
         notIgnoredEvent,
         eventType,
         actionSpecDom,
@@ -897,7 +897,7 @@ describe("Hologram", () => {
         ],
       ]);
 
-      Hologram.handleEvent(
+      Hologram.handleUiEvent(
         notIgnoredEvent,
         eventType,
         actionSpecDom,
@@ -939,7 +939,7 @@ describe("Hologram", () => {
         ],
       ]);
 
-      Hologram.handleEvent(
+      Hologram.handleUiEvent(
         notIgnoredEvent,
         eventType,
         commandSpecDom,
