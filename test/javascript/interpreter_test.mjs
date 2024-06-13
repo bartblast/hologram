@@ -5901,15 +5901,6 @@ describe("Interpreter", () => {
         new Set(["my_defined_fun/3"]),
       );
     });
-
-    it("module JS name is generated if it is not given in the second arg", () => {
-      Interpreter.maybeInitModuleProxy("MyModuleExName");
-
-      assert.equal(
-        globalThis.Elixir_MyModuleExName.__jsName__,
-        "Elixir_MyModuleExName",
-      );
-    });
   });
 
   describe("moduleJsName()", () => {

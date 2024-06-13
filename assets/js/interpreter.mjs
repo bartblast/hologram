@@ -521,11 +521,7 @@ export default class Interpreter {
     return right;
   }
 
-  static maybeInitModuleProxy(moduleExName, moduleJsName = null) {
-    if (moduleJsName === null) {
-      moduleJsName = Interpreter.moduleJsName("Elixir." + moduleExName);
-    }
-
+  static maybeInitModuleProxy(moduleExName, moduleJsName) {
     if (!globalThis[moduleJsName]) {
       const handler = {
         get(moduleRef, functionArityStr) {
