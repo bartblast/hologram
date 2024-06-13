@@ -1,4 +1,5 @@
 defmodule Hologram.Test.Helpers do
+  import ExUnit.Assertions
   import Hologram.Template, only: [sigil_H: 2]
 
   alias Hologram.Assets.PageDigestRegistry
@@ -23,6 +24,24 @@ defmodule Hologram.Test.Helpers do
   defdelegate pid(str), to: IEx.Helpers
   defdelegate port(str), to: IEx.Helpers
   defdelegate ref(str), to: IEx.Helpers
+
+  @doc """
+  Asserts that the given module function call raises the given error (with the given error message).
+  The expected error message must contain the context information that is appended by blame/2.
+  """
+  defmacro assert_error(error_module, error_msg, mfargs) do
+    quote do
+      {module, fun, args} = unquote(mfargs)
+
+      try do
+        apply(module, fun, build_value(args))
+      rescue
+        error in unquote(error_module) ->
+          {error_with_blame, _stacktrace} = unquote(error_module).blame(error, __STACKTRACE__)
+          assert error_with_blame.message == unquote(error_msg)
+      end
+    end
+  end
 
   @doc """
   Builds empty component struct.
