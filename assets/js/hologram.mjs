@@ -189,9 +189,36 @@ export default class Hologram {
 
       Client.fetchPage(
         toParam,
-        (resp) => Hologram.onPrefetchPageSuccess(mapKey, resp),
-        (resp) => Hologram.onPrefetchPageError(mapKey, resp),
+        (resp) => Hologram.handlePrefetchPageSuccess(mapKey, resp),
+        (resp) => Hologram.handlePrefetchPageError(mapKey, resp),
       );
+    }
+  }
+
+  static handlePrefetchPageError(mapKey, _resp) {
+    const mapValue = Hologram.prefetchedPages.get(mapKey);
+
+    if (typeof mapValue === "undefined") {
+      return;
+    }
+
+    throw new HologramRuntimeError(
+      `page prefetch failed: ${mapValue.pagePath}`,
+    );
+  }
+
+  static handlePrefetchPageSuccess(mapKey, html) {
+    const mapValue = Hologram.prefetchedPages.get(mapKey);
+
+    if (typeof mapValue === "undefined") {
+      return;
+    }
+
+    if (mapValue.isNavigateConfirmed) {
+      Hologram.prefetchedPages.delete(mapKey);
+      Hologram.loadPage(mapValue.pagePath, html);
+    } else {
+      mapValue.html = html;
     }
   }
 
@@ -252,33 +279,6 @@ export default class Hologram {
         );
       },
     );
-  }
-
-  static onPrefetchPageError(mapKey, _resp) {
-    const mapValue = Hologram.prefetchedPages.get(mapKey);
-
-    if (typeof mapValue === "undefined") {
-      return;
-    }
-
-    throw new HologramRuntimeError(
-      `page prefetch failed: ${mapValue.pagePath}`,
-    );
-  }
-
-  static onPrefetchPageSuccess(mapKey, html) {
-    const mapValue = Hologram.prefetchedPages.get(mapKey);
-
-    if (typeof mapValue === "undefined") {
-      return;
-    }
-
-    if (mapValue.isNavigateConfirmed) {
-      Hologram.prefetchedPages.delete(mapKey);
-      Hologram.loadPage(mapValue.pagePath, html);
-    } else {
-      mapValue.html = html;
-    }
   }
 
   // Made public to make tests easier

@@ -552,8 +552,8 @@ describe("Hologram", () => {
     let clientFetchPageStub,
       errorCallbacks,
       eventTargetNode,
-      onPrefetchPageErrorStub,
-      onPrefetchPageSuccessStub,
+      handlePrefetchPageErrorStub,
+      handlePrefetchPageSuccessStub,
       successCallbacks;
 
     const pagePath = "/hologram-test-fixtures-module7";
@@ -577,12 +577,12 @@ describe("Hologram", () => {
           errorCallbacks.push(errorCallback);
         });
 
-      onPrefetchPageSuccessStub = sinon
-        .stub(Hologram, "onPrefetchPageSuccess")
+      handlePrefetchPageSuccessStub = sinon
+        .stub(Hologram, "handlePrefetchPageSuccess")
         .callsFake((_mapKey, _resp) => null);
 
-      onPrefetchPageErrorStub = sinon
-        .stub(Hologram, "onPrefetchPageError")
+      handlePrefetchPageErrorStub = sinon
+        .stub(Hologram, "handlePrefetchPageError")
         .callsFake((_mapKey, _resp) => null);
 
       eventTargetNode = {id: "dummy_event_target_node"};
@@ -590,8 +590,8 @@ describe("Hologram", () => {
 
     afterEach(() => {
       Client.fetchPage.restore();
-      Hologram.onPrefetchPageSuccess.restore();
-      Hologram.onPrefetchPageError.restore();
+      Hologram.handlePrefetchPageSuccess.restore();
+      Hologram.handlePrefetchPageError.restore();
     });
 
     it("adds a Hologram ID to an event target DOM node that doesn't have one", () => {
@@ -642,7 +642,7 @@ describe("Hologram", () => {
       successCallbacks[0](resp);
 
       sinon.assert.calledOnceWithExactly(
-        onPrefetchPageSuccessStub,
+        handlePrefetchPageSuccessStub,
         mapKey,
         resp,
       );
@@ -651,7 +651,11 @@ describe("Hologram", () => {
 
       errorCallbacks[0](resp);
 
-      sinon.assert.calledOnceWithExactly(onPrefetchPageErrorStub, mapKey, resp);
+      sinon.assert.calledOnceWithExactly(
+        handlePrefetchPageErrorStub,
+        mapKey,
+        resp,
+      );
     });
 
     it("prefetches the page if the previous prefetch has timed out", () => {
@@ -698,7 +702,7 @@ describe("Hologram", () => {
       successCallbacks[0](resp);
 
       sinon.assert.calledOnceWithExactly(
-        onPrefetchPageSuccessStub,
+        handlePrefetchPageSuccessStub,
         mapKey,
         resp,
       );
@@ -707,7 +711,11 @@ describe("Hologram", () => {
 
       errorCallbacks[0](resp);
 
-      sinon.assert.calledOnceWithExactly(onPrefetchPageErrorStub, mapKey, resp);
+      sinon.assert.calledOnceWithExactly(
+        handlePrefetchPageErrorStub,
+        mapKey,
+        resp,
+      );
     });
 
     it("doesn't prefetch the page if the previous prefetch is in progress and hasn't timed out", () => {
@@ -730,8 +738,8 @@ describe("Hologram", () => {
       assert.equal(Hologram.prefetchedPages.get(mapKey), mapValue);
 
       sinon.assert.notCalled(clientFetchPageStub);
-      sinon.assert.notCalled(onPrefetchPageSuccessStub);
-      sinon.assert.notCalled(onPrefetchPageErrorStub);
+      sinon.assert.notCalled(handlePrefetchPageSuccessStub);
+      sinon.assert.notCalled(handlePrefetchPageErrorStub);
     });
   });
 
@@ -1060,12 +1068,12 @@ describe("Hologram", () => {
     Hologram.loadPage.restore();
   });
 
-  describe("onPrefetchPageError()", () => {
+  describe("handlePrefetchPageError()", () => {
     it("no prefetchedPages map entry", () => {
       Hologram.prefetchedPages = new Map();
 
       assert.doesNotThrow(() =>
-        Hologram.onPrefetchPageError("dummy_map_key", "my_resp"),
+        Hologram.handlePrefetchPageError("dummy_map_key", "my_resp"),
       );
     });
 
@@ -1083,14 +1091,14 @@ describe("Hologram", () => {
       ]);
 
       assert.throw(
-        () => Hologram.onPrefetchPageError("dummy_map_key", "my_resp"),
+        () => Hologram.handlePrefetchPageError("dummy_map_key", "my_resp"),
         HologramRuntimeError,
         "page prefetch failed: /my-page-path",
       );
     });
   });
 
-  describe("onPrefetchPageSuccess()", () => {
+  describe("handlePrefetchPageSuccess()", () => {
     let loadPageStub;
 
     beforeEach(() => {
@@ -1104,7 +1112,7 @@ describe("Hologram", () => {
     it("no prefetchedPages map entry", () => {
       Hologram.prefetchedPages = new Map();
 
-      Hologram.onPrefetchPageSuccess("dummy_map_key", "my_html");
+      Hologram.handlePrefetchPageSuccess("dummy_map_key", "my_html");
 
       assert.deepStrictEqual(Hologram.prefetchedPages, new Map());
       sinon.assert.notCalled(loadPageStub);
@@ -1123,7 +1131,7 @@ describe("Hologram", () => {
         ],
       ]);
 
-      Hologram.onPrefetchPageSuccess("dummy_map_key", "my_html");
+      Hologram.handlePrefetchPageSuccess("dummy_map_key", "my_html");
 
       assert.deepStrictEqual(Hologram.prefetchedPages, new Map());
 
@@ -1147,7 +1155,7 @@ describe("Hologram", () => {
         ],
       ]);
 
-      Hologram.onPrefetchPageSuccess("dummy_map_key", "my_html");
+      Hologram.handlePrefetchPageSuccess("dummy_map_key", "my_html");
 
       assert.deepStrictEqual(
         Hologram.prefetchedPages,
