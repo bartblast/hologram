@@ -423,13 +423,13 @@ describe("Hologram", () => {
     });
   });
 
-  describe("executeNavigateToPrefetchedPageAction()", () => {
+  describe("executeLoadPrefetchedPageAction()", () => {
     let eventTargetNode, loadPageStub;
 
     const html = "my_html";
 
-    const navigateToPrefetchedPageAction = Type.actionStruct({
-      name: Type.atom("__navigate_to_prefetched_page__"),
+    const loadPrefetchedPageAction = Type.actionStruct({
+      name: Type.atom("__load_prefetched_page__"),
       params: Type.map([[Type.atom("to"), module7]]),
       target: cid1,
     });
@@ -447,8 +447,8 @@ describe("Hologram", () => {
     afterEach(() => Hologram.loadPage.restore());
 
     it("adds a Hologram ID to an event target DOM node that doesn't have one", () => {
-      Hologram.executeNavigateToPrefetchedPageAction(
-        navigateToPrefetchedPageAction,
+      Hologram.executeLoadPrefetchedPageAction(
+        loadPrefetchedPageAction,
         eventTargetNode,
       );
 
@@ -458,8 +458,8 @@ describe("Hologram", () => {
     it("doesn't add a Hologram ID to an event target DOM node that already has one", () => {
       eventTargetNode.__hologramId__ = "dummy_hologram_id";
 
-      Hologram.executeNavigateToPrefetchedPageAction(
-        navigateToPrefetchedPageAction,
+      Hologram.executeLoadPrefetchedPageAction(
+        loadPrefetchedPageAction,
         eventTargetNode,
       );
 
@@ -482,8 +482,8 @@ describe("Hologram", () => {
         ],
       ]);
 
-      Hologram.executeNavigateToPrefetchedPageAction(
-        navigateToPrefetchedPageAction,
+      Hologram.executeLoadPrefetchedPageAction(
+        loadPrefetchedPageAction,
         eventTargetNode,
       );
 
@@ -520,8 +520,8 @@ describe("Hologram", () => {
         ],
       ]);
 
-      Hologram.executeNavigateToPrefetchedPageAction(
-        navigateToPrefetchedPageAction,
+      Hologram.executeLoadPrefetchedPageAction(
+        loadPrefetchedPageAction,
         eventTargetNode,
       );
 
@@ -535,8 +535,8 @@ describe("Hologram", () => {
     it("is a no-op if there is no prefeteched pages map entry for the given map key", () => {
       Hologram.prefetchedPages = new Map();
 
-      Hologram.executeNavigateToPrefetchedPageAction(
-        navigateToPrefetchedPageAction,
+      Hologram.executeLoadPrefetchedPageAction(
+        loadPrefetchedPageAction,
         eventTargetNode,
       );
 
@@ -739,7 +739,7 @@ describe("Hologram", () => {
     let commandQueueProcessStub,
       commandQueuePushStub,
       executeActionStub,
-      executeNavigateToPrefetchedPageActionStub,
+      executeLoadPrefetchedPageActionStub,
       executePrefetchPageActionStub;
 
     const actionSpecDom = Type.keywordList([
@@ -768,8 +768,8 @@ describe("Hologram", () => {
         .stub(Hologram, "executeAction")
         .callsFake((_action) => null);
 
-      executeNavigateToPrefetchedPageActionStub = sinon
-        .stub(Hologram, "executeNavigateToPrefetchedPageAction")
+      executeLoadPrefetchedPageActionStub = sinon
+        .stub(Hologram, "executeLoadPrefetchedPageAction")
         .callsFake((_action, _eventTargetNode) => null);
 
       executePrefetchPageActionStub = sinon
@@ -781,7 +781,7 @@ describe("Hologram", () => {
       CommandQueue.process.restore();
       CommandQueue.push.restore();
       Hologram.executeAction.restore();
-      Hologram.executeNavigateToPrefetchedPageAction.restore();
+      Hologram.executeLoadPrefetchedPageAction.restore();
       Hologram.executePrefetchPageAction.restore();
     });
 
@@ -803,7 +803,7 @@ describe("Hologram", () => {
       sinon.assert.notCalled(commandQueuePushStub);
       sinon.assert.notCalled(commandQueueProcessStub);
       sinon.assert.notCalled(executeActionStub);
-      sinon.assert.notCalled(executeNavigateToPrefetchedPageActionStub);
+      sinon.assert.notCalled(executeLoadPrefetchedPageActionStub);
       sinon.assert.notCalled(executePrefetchPageActionStub);
     });
 
@@ -817,7 +817,7 @@ describe("Hologram", () => {
 
       sinon.assert.notCalled(commandQueuePushStub);
       sinon.assert.notCalled(commandQueueProcessStub);
-      sinon.assert.notCalled(executeNavigateToPrefetchedPageActionStub);
+      sinon.assert.notCalled(executeLoadPrefetchedPageActionStub);
       sinon.assert.notCalled(executePrefetchPageActionStub);
 
       const expectedAction = Type.actionStruct({
@@ -843,7 +843,7 @@ describe("Hologram", () => {
           Type.atom("expression"),
           Type.tuple([
             Type.actionStruct({
-              name: Type.atom("__navigate_to_prefetched_page__"),
+              name: Type.atom("__load_prefetched_page__"),
               params: Type.map([[Type.atom("to"), Type.alias("MyPage")]]),
             }),
           ]),
@@ -863,7 +863,7 @@ describe("Hologram", () => {
       sinon.assert.notCalled(executePrefetchPageActionStub);
 
       const expectedAction = Type.actionStruct({
-        name: Type.atom("__navigate_to_prefetched_page__"),
+        name: Type.atom("__load_prefetched_page__"),
         params: Type.map([
           [Type.atom("to"), Type.alias("MyPage")],
           [
@@ -878,7 +878,7 @@ describe("Hologram", () => {
       });
 
       sinon.assert.calledOnceWithExactly(
-        executeNavigateToPrefetchedPageActionStub,
+        executeLoadPrefetchedPageActionStub,
         expectedAction,
         notIgnoredEvent.target,
       );
@@ -907,7 +907,7 @@ describe("Hologram", () => {
       sinon.assert.notCalled(commandQueuePushStub);
       sinon.assert.notCalled(commandQueueProcessStub);
       sinon.assert.notCalled(executeActionStub);
-      sinon.assert.notCalled(executeNavigateToPrefetchedPageActionStub);
+      sinon.assert.notCalled(executeLoadPrefetchedPageActionStub);
 
       const expectedAction = Type.actionStruct({
         name: Type.atom("__prefetch_page__"),
@@ -948,7 +948,7 @@ describe("Hologram", () => {
 
       sinon.assert.notCalled(executeActionStub);
       sinon.assert.notCalled(executePrefetchPageActionStub);
-      sinon.assert.notCalled(executeNavigateToPrefetchedPageActionStub);
+      sinon.assert.notCalled(executeLoadPrefetchedPageActionStub);
 
       const expectedCommand = Type.commandStruct({
         name: Type.atom("my_command"),

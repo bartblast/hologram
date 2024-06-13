@@ -9,7 +9,7 @@ defmodule Hologram.UI.Link do
     <a 
       href={page_path(@to)}
       $pointerdown={%Action{name: :__prefetch_page__, params: %{to: @to}}}
-      $click={%Action{name: :__navigate_to_prefetched_page__, params: %{to: @to}}}
+      $click={%Action{name: :__load_prefetched_page__, params: %{to: @to}}}
     ><slot /></a>
     """
   end

@@ -139,7 +139,7 @@ export default class Hologram {
   }
 
   // Made public to make tests easier
-  static executeNavigateToPrefetchedPageAction(action, eventTargetNode) {
+  static executeLoadPrefetchedPageAction(action, eventTargetNode) {
     Hologram.#ensureDomNodeHasHologramId(eventTargetNode);
 
     const toParam = Hologram.#getToParam(action);
@@ -211,8 +211,8 @@ export default class Hologram {
 
       if (Operation.isAction(operation)) {
         switch (Hologram.#getActionName(operation)) {
-          case "__navigate_to_prefetched_page__":
-            return Hologram.executeNavigateToPrefetchedPageAction(
+          case "__load_prefetched_page__":
+            return Hologram.executeLoadPrefetchedPageAction(
               operation,
               event.target,
             );
