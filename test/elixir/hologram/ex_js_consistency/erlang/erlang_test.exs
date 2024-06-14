@@ -1276,23 +1276,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "raises ArgumentError if the argument is an empty list" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_errors_found_msg(1, "not a nonempty list"),
-                   fn ->
-                     []
-                     |> wrap_value()
-                     |> :erlang.hd()
-                   end
+                   {:erlang, :hd, [[]]}
     end
 
     test "raises ArgumentError if the argument is not a list" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_errors_found_msg(1, "not a nonempty list"),
-                   fn ->
-                     123
-                     |> wrap_value()
-                     |> :erlang.hd()
-                   end
+                   {:erlang, :hd, [123]}
     end
   end
 
