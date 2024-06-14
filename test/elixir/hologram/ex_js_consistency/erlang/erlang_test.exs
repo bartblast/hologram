@@ -1161,13 +1161,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "raises ArgumentError if the argument is not an atom" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_errors_found_msg(1, "not an atom"),
-                   fn ->
-                     # wrap the code with anonymous function to avoid compiler warnings
-                     fun = fn x -> :erlang.atom_to_binary(x) end
-                     fun.(123)
-                   end
+                   {:erlang, :atom_to_binary, [123]}
     end
   end
 
