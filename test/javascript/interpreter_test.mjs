@@ -6045,9 +6045,13 @@ describe("Interpreter", () => {
 
   it("raiseFunctionClauseError()", () => {
     assertBoxedError(
-      () => Interpreter.raiseFunctionClauseError("abc"),
+      () =>
+        Interpreter.raiseFunctionClauseError("MyModule.my_fun/2", [
+          Type.integer(123),
+          Type.atom("abc"),
+        ]),
       "FunctionClauseError",
-      "abc",
+      "no function clause matching in MyModule.my_fun/2\n\nThe following arguments were given to MyModule.my_fun/2:\n\n    # 1\n    123\n\n    # 2\n    :abc\n",
     );
   });
 
