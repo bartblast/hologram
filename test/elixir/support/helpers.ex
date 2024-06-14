@@ -7,6 +7,7 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.ProcessUtils
+  alias Hologram.Commons.Reflection
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
@@ -29,21 +30,20 @@ defmodule Hologram.Test.Helpers do
   Asserts that the given module function call raises the given error (with the given error message).
   The expected error message must contain the context information that is appended by blame/2.
   """
-  defmacro assert_error(error_module, error_msg, fun_or_mfargs)
+  defmacro assert_error(error_module, expected_msg, fun_or_mfargs)
 
-  defmacro assert_error(error_module, error_msg, {:fn, _meta, _data} = fun) do
+  defmacro assert_error(error_module, expected_msg, {:fn, _meta, _data} = fun) do
     quote do
       try do
         unquote(fun).()
       rescue
         error in unquote(error_module) ->
-          {error_with_blame, _stacktrace} = unquote(error_module).blame(error, __STACKTRACE__)
-          assert error_with_blame.message == unquote(error_msg)
+          assert resolve_error_msg(error, __STACKTRACE__) == unquote(expected_msg)
       end
     end
   end
 
-  defmacro assert_error(error_module, error_msg, {:{}, _meta, _data} = mfargs) do
+  defmacro assert_error(error_module, expected_msg, {:{}, _meta, _data} = mfargs) do
     quote do
       {module, fun, args} = unquote(mfargs)
 
@@ -51,8 +51,7 @@ defmodule Hologram.Test.Helpers do
         apply(module, fun, wrap_value(args))
       rescue
         error in unquote(error_module) ->
-          {error_with_blame, _stacktrace} = unquote(error_module).blame(error, __STACKTRACE__)
-          assert error_with_blame.message == unquote(error_msg)
+          assert resolve_error_msg(error, __STACKTRACE__) == unquote(expected_msg)
       end
     end
   end
@@ -206,6 +205,27 @@ defmodule Hologram.Test.Helpers do
     |> template.()
     |> Renderer.render_dom(env)
     |> elem(0)
+  end
+
+  @doc """
+  Given an error and its stacktrace resolves the error message.
+  """
+  @spec resolve_error_msg(struct, list(tuple)) :: String.t()
+  def resolve_error_msg(error, stacktrace)
+
+  def resolve_error_msg(%BadMapError{term: term}, _stacktrace) do
+    "expected a map, got: #{inspect(term)}"
+  end
+
+  def resolve_error_msg(%error_module{} = error, stacktrace) do
+    if Reflection.has_function?(error_module, :blame, 2) do
+      error
+      |> error_module.blame(stacktrace)
+      |> elem(0)
+      |> Map.get(:message)
+    else
+      error.message
+    end
   end
 
   @doc """
