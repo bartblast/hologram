@@ -1577,13 +1577,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "raises ArgumentError if the argument is not a tuple" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_errors_found_msg(1, "not a tuple"),
-                   fn ->
-                     :abc
-                     |> wrap_value()
-                     |> :erlang.tuple_to_list()
-                   end
+                   {:erlang, :tuple_to_list, [:abc]}
     end
   end
 end
