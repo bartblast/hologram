@@ -390,7 +390,7 @@ export default class Hologram {
     const {componentRegistryEntries, pageModule, pageParams} =
       Hologram.#historyStorage[event.state];
 
-    ComponentRegistry.entries = componentRegistryEntries;
+    ComponentRegistry.hydrate(componentRegistryEntries);
     Hologram.#pageModule = pageModule;
     Hologram.#pageParams = pageParams;
 
