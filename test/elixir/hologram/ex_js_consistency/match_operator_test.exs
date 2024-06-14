@@ -7,10 +7,10 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   use Hologram.Test.BasicCase, async: true
   alias Hologram.Test.Fixtures.ExJsConsistency.MatchOperator.Module1
 
-  # The build_match_operator/2 and build_value/1 helpers
+  # The wrap_match_operator/2 and wrap_value/1 helpers
   # prevent warnings about incompatible types.
 
-  defp build_match_operator(left, right) do
+  defp wrap_match_operator(left, right) do
     ^left = right
   end
 
@@ -24,14 +24,14 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     # :abc = :xyz
     test "left atom != right atom" do
       assert_raise MatchError, "no match of right hand side value: :xyz", fn ->
-        build_match_operator(:abc, :xyz)
+        wrap_match_operator(:abc, :xyz)
       end
     end
 
     # :abc = 2
     test "left atom != right non-atom" do
       assert_raise MatchError, "no match of right hand side value: 2", fn ->
-        build_match_operator(:abc, 2)
+        wrap_match_operator(:abc, 2)
       end
     end
   end
@@ -179,7 +179,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     # <<>> = :abc
     test "left empty bitstring != right non-bitstring" do
       assert_raise MatchError, "no match of right hand side value: :abc", fn ->
-        <<>> = build_value(:abc)
+        <<>> = wrap_value(:abc)
       end
     end
 
@@ -196,7 +196,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
     test "left literal single-segment bitstring != right non-bitstring" do
       assert_raise MatchError, "no match of right hand side value: :abc", fn ->
-        <<1::integer>> = build_value(:abc)
+        <<1::integer>> = wrap_value(:abc)
       end
     end
 
@@ -295,25 +295,25 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
   #   test "raises match error if right is not a list" do
   #     assert_raise MatchError, "no match of right hand side value: 123", fn ->
-  #       [_h | _t] = build_value(123)
+  #       [_h | _t] = wrap_value(123)
   #     end
   #   end
 
   #   test "raises match error if right is an empty list" do
   #     assert_raise MatchError, "no match of right hand side value: []", fn ->
-  #       [_h | _t] = build_value([])
+  #       [_h | _t] = wrap_value([])
   #     end
   #   end
 
   #   test "raises match error if head doesn't match" do
   #     assert_raise MatchError, "no match of right hand side value: [1, 2, 3]", fn ->
-  #       [4 | [2, 3]] = build_value([1, 2, 3])
+  #       [4 | [2, 3]] = wrap_value([1, 2, 3])
   #     end
   #   end
 
   #   test "raises match error if tail doesn't match" do
   #     assert_raise MatchError, "no match of right hand side value: [1, 2, 3]", fn ->
-  #       [1 | [4, 3]] = build_value([1, 2, 3])
+  #       [1 | [4, 3]] = wrap_value([1, 2, 3])
   #     end
   #   end
   # end
@@ -327,13 +327,13 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
   #   test "left float != right float" do
   #     assert_raise MatchError, "no match of right hand side value: 3.0", fn ->
-  #       2.0 = build_value(3.0)
+  #       2.0 = wrap_value(3.0)
   #     end
   #   end
 
   #   test "left float != right non-float" do
   #     assert_raise MatchError, "no match of right hand side value: :abc", fn ->
-  #       2.0 = build_value(:abc)
+  #       2.0 = wrap_value(:abc)
   #     end
   #   end
   # end
@@ -347,13 +347,13 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
   #   test "left integer != right integer" do
   #     assert_raise MatchError, "no match of right hand side value: 3", fn ->
-  #       2 = build_value(3)
+  #       2 = wrap_value(3)
   #     end
   #   end
 
   #   test "left integer != right non-integer" do
   #     assert_raise MatchError, "no match of right hand side value: :abc", fn ->
-  #       2 = build_value(:abc)
+  #       2 = wrap_value(:abc)
   #     end
   #   end
   # end
@@ -367,13 +367,13 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
   #   test "left list != right list" do
   #     assert_raise MatchError, "no match of right hand side value: [1, 3]", fn ->
-  #       [1, 2] = build_value([1, 3])
+  #       [1, 2] = wrap_value([1, 3])
   #     end
   #   end
 
   #   test "left list != right non-list" do
   #     assert_raise MatchError, "no match of right hand side value: :abc", fn ->
-  #       [1, 2] = build_value(:abc)
+  #       [1, 2] = wrap_value(:abc)
   #     end
   #   end
 
@@ -403,7 +403,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     #  %{x: 1, y: 2, z: 3} = %{x: 1, y: 2}
     test "right map is missing some some keys from the left map" do
       assert_raise MatchError, "no match of right hand side value: %{y: 2, x: 1}", fn ->
-        %{x: 1, y: 2, z: 3} = build_value(%{x: 1, y: 2})
+        %{x: 1, y: 2, z: 3} = wrap_value(%{x: 1, y: 2})
       end
     end
 
@@ -417,7 +417,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     # %{x: 1, y: 2} = :abc
     test "left map != right non-map" do
       assert_raise MatchError, "no match of right hand side value: :abc", fn ->
-        %{x: 1, y: 2} = build_value(:abc)
+        %{x: 1, y: 2} = wrap_value(:abc)
       end
     end
 
@@ -433,7 +433,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     # %{x: 1, y: 2} = %{}
     test "left is a non-empty map, right is an empty map" do
       assert_raise MatchError, "no match of right hand side value: %{}", fn ->
-        %{x: 1, y: 2} = build_value(%{})
+        %{x: 1, y: 2} = wrap_value(%{})
       end
     end
 
@@ -466,7 +466,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
     test "x = 2 = 3" do
       assert_raise MatchError, "no match of right hand side value: 3", fn ->
-        _x = 2 = build_value(3)
+        _x = 2 = wrap_value(3)
       end
     end
 
@@ -479,7 +479,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
     test "2 = x = 3" do
       assert_raise MatchError, "no match of right hand side value: 3", fn ->
-        2 = _x = build_value(3)
+        2 = _x = wrap_value(3)
       end
     end
 
@@ -494,14 +494,14 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     test "2 = 2 = x, (x = 3)" do
       assert_raise MatchError, "no match of right hand side value: 3", fn ->
         x = 3
-        2 = 2 = build_value(x)
+        2 = 2 = wrap_value(x)
       end
     end
 
     test "1 = 2 = x, (x = 2)" do
       assert_raise MatchError, "no match of right hand side value: 2", fn ->
         x = 2
-        1 = 2 = build_value(x)
+        1 = 2 = wrap_value(x)
       end
     end
 
@@ -521,20 +521,20 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
     test "[1 = 1] = [1 = 2]" do
       assert_raise MatchError, "no match of right hand side value: 2", fn ->
-        [1 = 1] = [1 = build_value(2)]
+        [1 = 1] = [1 = wrap_value(2)]
       end
     end
 
     test "[1 = 1] = [2 = 1]" do
       assert_raise MatchError, "no match of right hand side value: 1", fn ->
-        [1 = 1] = [2 = build_value(1)]
+        [1 = 1] = [2 = wrap_value(1)]
       end
     end
 
     # TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/javascript/interpreter_test.mjs)
     test "[1 = 2] = [1 = 1]" do
       assert_raise MatchError, "no match of right hand side value: [1]", fn ->
-        x = build_value(2)
+        x = wrap_value(2)
         [1 = ^x] = [1 = 1]
       end
     end
@@ -542,7 +542,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     # TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/javascript/interpreter_test.mjs)
     test "[2 = 1] = [1 = 1]" do
       assert_raise MatchError, "no match of right hand side value: [1]", fn ->
-        x = build_value(2)
+        x = wrap_value(2)
         [^x = 1] = [1 = 1]
       end
     end
@@ -776,13 +776,13 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
   #   test "left tuple != right tuple" do
   #     assert_raise MatchError, "no match of right hand side value: {1, 3}", fn ->
-  #       {1, 2} = build_value({1, 3})
+  #       {1, 2} = wrap_value({1, 3})
   #     end
   #   end
 
   #   test "left tuple != right non-tuple" do
   #     assert_raise MatchError, "no match of right hand side value: :abc", fn ->
-  #       {1, 2} = build_value(:abc)
+  #       {1, 2} = wrap_value(:abc)
   #     end
   #   end
 
@@ -815,7 +815,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     # [x, x] = [1, 2]
     test "multiple variables with the same name being matched to the different values" do
       assert_raise MatchError, "no match of right hand side value: [1, 2]", fn ->
-        [x, x] = build_value([1, 2])
+        [x, x] = wrap_value([1, 2])
       end
     end
   end

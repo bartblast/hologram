@@ -79,14 +79,14 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
 
     test "raises BadMapError if the second argument is not a map" do
       assert_raise BadMapError, "expected a map, got: 1", fn ->
-        :maps.get(:a, build_value(1))
+        :maps.get(:a, wrap_value(1))
       end
     end
 
     test "raises KeyError if the map doesn't contain the given key" do
       assert_raise KeyError, "key :a not found in: %{}", fn ->
         :a
-        |> build_value()
+        |> wrap_value()
         |> :maps.get(%{})
       end
     end
@@ -120,7 +120,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     test "raises BadMapError if the second argument is not a map" do
       assert_raise BadMapError, "expected a map, got: :abc", fn ->
         :x
-        |> build_value()
+        |> wrap_value()
         |> :maps.is_key(:abc)
       end
     end
@@ -196,7 +196,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     test "raises BadMapError if the first argument is not a map" do
       assert_raise BadMapError, "expected a map, got: 123", fn ->
         123
-        |> build_value()
+        |> wrap_value()
         |> :maps.merge(%{a: 1})
       end
     end
@@ -219,7 +219,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
 
     test "raises BadMapError if the third argument is not a map" do
       assert_raise BadMapError, "expected a map, got: :abc", fn ->
-        :maps.put(:a, 1, build_value(:abc))
+        :maps.put(:a, 1, wrap_value(:abc))
       end
     end
   end

@@ -27,14 +27,14 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "raises ArithmeticError if the first argument is not a number" do
       assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
         :a
-        |> build_value()
+        |> wrap_value()
         |> :erlang.*(1)
       end
     end
 
     test "raises ArithmeticError if the second argument is not a number" do
       assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
-        :erlang.*(1, build_value(:a))
+        :erlang.*(1, wrap_value(:a))
       end
     end
   end
@@ -67,7 +67,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "non-number" do
       assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
         :abc
-        |> build_value()
+        |> wrap_value()
         |> :erlang.+()
       end
     end
@@ -127,7 +127,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "raises ArgumentError if the first argument is not a list" do
       assert_raise ArgumentError, "argument error", fn ->
         :abc
-        |> build_value()
+        |> wrap_value()
         |> :erlang.++([])
       end
     end
@@ -135,7 +135,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "raises ArgumentError if the first argument is an improper list" do
       assert_raise ArgumentError, "argument error", fn ->
         [1 | 2]
-        |> build_value()
+        |> wrap_value()
         |> :erlang.++([])
       end
     end
@@ -169,7 +169,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "non-number" do
       assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
         :abc
-        |> build_value()
+        |> wrap_value()
         |> :erlang.-()
       end
     end
@@ -195,14 +195,14 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "raises ArithmeticError if the first argument is not a number" do
       assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
         :a
-        |> build_value()
+        |> wrap_value()
         |> :erlang.-(1)
       end
     end
 
     test "raises ArithmeticError if the second argument is not a number" do
       assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
-        :erlang.-(1, build_value(:a))
+        :erlang.-(1, wrap_value(:a))
       end
     end
   end
@@ -227,14 +227,14 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "first arg is not a list" do
       assert_raise ArgumentError, "argument error", fn ->
         :abc
-        |> build_value()
+        |> wrap_value()
         |> :erlang.--([1, 2])
       end
     end
 
     test "second arg is not a list" do
       assert_raise ArgumentError, "argument error", fn ->
-        :erlang.--([1, 2], build_value(:abc))
+        :erlang.--([1, 2], wrap_value(:abc))
       end
     end
   end
@@ -251,26 +251,26 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "first arg is not a number" do
       assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
         :abc
-        |> build_value()
+        |> wrap_value()
         |> :erlang./(3)
       end
     end
 
     test "second arg is not a number" do
       assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
-        :erlang./(3, build_value(:abc))
+        :erlang./(3, wrap_value(:abc))
       end
     end
 
     test "second arg is equal to (float) 0.0" do
       assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
-        :erlang./(1, build_value(0.0))
+        :erlang./(1, wrap_value(0.0))
       end
     end
 
     test "second arg is equal to (integer) 0" do
       assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
-        :erlang./(1, build_value(0))
+        :erlang./(1, wrap_value(0))
       end
     end
   end
@@ -1209,7 +1209,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_errors_found_msg(1, "not an atom"),
                    fn ->
                      123
-                     |> build_value()
+                     |> wrap_value()
                      |> :erlang.atom_to_list()
                    end
     end
@@ -1240,7 +1240,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_errors_found_msg(1, "not a binary"),
                    fn ->
                      <<1::1, 0::1, 1::1>>
-                     |> build_value()
+                     |> wrap_value()
                      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
                      |> :erlang.binary_to_atom(:utf8)
                    end
@@ -1251,7 +1251,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_errors_found_msg(1, "not a binary"),
                    fn ->
                      :abc
-                     |> build_value()
+                     |> wrap_value()
                      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
                      |> :erlang.binary_to_atom(:utf8)
                    end
@@ -1276,7 +1276,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_errors_found_msg(1, "not a bitstring"),
                    fn ->
                      :abc
-                     |> build_value()
+                     |> wrap_value()
                      |> :erlang.bit_size()
                    end
     end
@@ -1292,7 +1292,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_errors_found_msg(1, "not an integer"),
                    fn ->
                      :abc
-                     |> build_value()
+                     |> wrap_value()
                      |> :erlang.element({5, 6, 7})
                    end
     end
@@ -1301,7 +1301,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_raise ArgumentError,
                    build_errors_found_msg(2, "not a tuple"),
                    fn ->
-                     :erlang.element(1, build_value(:abc))
+                     :erlang.element(1, wrap_value(:abc))
                    end
     end
 
@@ -1310,7 +1310,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_errors_found_msg(1, "out of range"),
                    fn ->
                      10
-                     |> build_value()
+                     |> wrap_value()
                      |> :erlang.element({5, 6, 7})
                    end
     end
@@ -1320,7 +1320,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_errors_found_msg(1, "out of range"),
                    fn ->
                      0
-                     |> build_value()
+                     |> wrap_value()
                      |> :erlang.element({5, 6, 7})
                    end
     end
@@ -1336,7 +1336,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_errors_found_msg(1, "not a nonempty list"),
                    fn ->
                      []
-                     |> build_value()
+                     |> wrap_value()
                      |> :erlang.hd()
                    end
     end
@@ -1346,7 +1346,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_errors_found_msg(1, "not a nonempty list"),
                    fn ->
                      123
-                     |> build_value()
+                     |> wrap_value()
                      |> :erlang.hd()
                    end
     end
@@ -1571,7 +1571,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_errors_found_msg(1, "not a list"),
                    fn ->
                      :abc
-                     |> build_value()
+                     |> wrap_value()
                      |> :erlang.length()
                    end
     end
@@ -1603,7 +1603,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "not boolean" do
       assert_raise ArgumentError, "argument error", fn ->
         "abc"
-        |> build_value()
+        |> wrap_value()
         |> :erlang.not()
       end
     end
@@ -1661,7 +1661,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    build_errors_found_msg(1, "not a tuple"),
                    fn ->
                      :abc
-                     |> build_value()
+                     |> wrap_value()
                      |> :erlang.tuple_to_list()
                    end
     end

@@ -34,7 +34,7 @@ defmodule Hologram.Test.Helpers do
       {module, fun, args} = unquote(mfargs)
 
       try do
-        apply(module, fun, build_value(args))
+        apply(module, fun, wrap_value(args))
       rescue
         error in unquote(error_module) ->
           {error_with_blame, _stacktrace} = unquote(error_module).blame(error, __STACKTRACE__)
@@ -69,15 +69,6 @@ defmodule Hologram.Test.Helpers do
   @spec build_server_struct() :: Server.t()
   def build_server_struct do
     %Server{}
-  end
-
-  @doc """
-  Returns the given argument.
-  It prevents compiler warnings in tests when the given value is not permitted is specific situation.
-  """
-  @spec build_value(any) :: any
-  def build_value(value) do
-    value
   end
 
   @doc """
@@ -323,5 +314,14 @@ defmodule Hologram.Test.Helpers do
     else
       :ok
     end
+  end
+
+  @doc """
+  Returns the given argument.
+  It prevents compiler warnings in tests when the given value is not permitted is specific situation.
+  """
+  @spec wrap_value(any) :: any
+  def wrap_value(value) do
+    value
   end
 end

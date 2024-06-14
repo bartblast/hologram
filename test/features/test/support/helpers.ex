@@ -6,8 +6,8 @@ defmodule HologramFeatureTests.Helpers do
   Returns the given argument.
   It prevents compiler warnings in tests when the given value is not permitted is specific situation.
   """
-  @spec build_value(any) :: any
-  def build_value(value) do
+  @spec wrap_value(any) :: any
+  def wrap_value(value) do
     value
   end
 
