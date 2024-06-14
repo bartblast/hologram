@@ -1507,11 +1507,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "raises BadMapError if the argument is not a map" do
-      assert_raise BadMapError,
+      assert_error BadMapError,
                    "expected a map, got: :abc",
-                   fn ->
-                     :erlang.map_size(:abc)
-                   end
+                   {:erlang, :map_size, [:abc]}
     end
   end
 
