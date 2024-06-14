@@ -295,7 +295,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(atomA, integer1),
         "ArithmeticError",
-        "bad argument in arithmetic expression",
+        "bad argument in arithmetic expression: :a - 1",
       );
     });
 
@@ -303,7 +303,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(integer1, atomA),
         "ArithmeticError",
-        "bad argument in arithmetic expression",
+        "bad argument in arithmetic expression: 1 - :a",
       );
     });
   });
