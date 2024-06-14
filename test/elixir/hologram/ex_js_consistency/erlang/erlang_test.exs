@@ -231,29 +231,27 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "first arg is not a number" do
-      assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
-        :abc
-        |> wrap_value()
-        |> :erlang./(3)
-      end
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: :abc / 3",
+                   {:erlang, :/, [:abc, 3]}
     end
 
     test "second arg is not a number" do
-      assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
-        :erlang./(3, wrap_value(:abc))
-      end
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: 3 / :abc",
+                   {:erlang, :/, [3, :abc]}
     end
 
     test "second arg is equal to (float) 0.0" do
-      assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
-        :erlang./(1, wrap_value(0.0))
-      end
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: 1 / 0.0",
+                   {:erlang, :/, [1, 0.0]}
     end
 
     test "second arg is equal to (integer) 0" do
-      assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
-        :erlang./(1, wrap_value(0))
-      end
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: 1 / 0",
+                   {:erlang, :/, [1, 0]}
     end
   end
 

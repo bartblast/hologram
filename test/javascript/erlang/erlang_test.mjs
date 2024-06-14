@@ -406,7 +406,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc"), Type.integer(3)),
         "ArithmeticError",
-        "bad argument in arithmetic expression",
+        "bad argument in arithmetic expression: :abc / 3",
       );
     });
 
@@ -414,7 +414,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(3), Type.atom("abc")),
         "ArithmeticError",
-        "bad argument in arithmetic expression",
+        "bad argument in arithmetic expression: 3 / :abc",
       );
     });
 
@@ -422,7 +422,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(1), Type.float(0.0)),
         "ArithmeticError",
-        "bad argument in arithmetic expression",
+        "bad argument in arithmetic expression: 1 / 0.0",
       );
     });
 
@@ -430,7 +430,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(Type.integer(1), Type.integer(0)),
         "ArithmeticError",
-        "bad argument in arithmetic expression",
+        "bad argument in arithmetic expression: 1 / 0",
       );
     });
   });

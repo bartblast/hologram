@@ -157,7 +157,8 @@ const Erlang = {
   // Start //2
   "//2": (left, right) => {
     if (!Type.isNumber(left) || !Type.isNumber(right) || right.value == 0) {
-      Interpreter.raiseArithmeticError();
+      const blame = `${Interpreter.inspect(left)} / ${Interpreter.inspect(right)}`;
+      Interpreter.raiseArithmeticError(blame);
     }
 
     return Type.float(Number(left.value) / Number(right.value));
