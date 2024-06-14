@@ -1246,41 +1246,27 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "raises ArgumentError if the first argument is not an integer" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_errors_found_msg(1, "not an integer"),
-                   fn ->
-                     :abc
-                     |> wrap_value()
-                     |> :erlang.element({5, 6, 7})
-                   end
+                   {:erlang, :element, [:abc, {5, 6, 7}]}
     end
 
     test "raises ArgumentError if the second argument is not a tuple" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_errors_found_msg(2, "not a tuple"),
-                   fn ->
-                     :erlang.element(1, wrap_value(:abc))
-                   end
+                   {:erlang, :element, [1, :abc]}
     end
 
     test "raises ArgumentError if the given index is greater than the number of elements in the tuple" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_errors_found_msg(1, "out of range"),
-                   fn ->
-                     10
-                     |> wrap_value()
-                     |> :erlang.element({5, 6, 7})
-                   end
+                   {:erlang, :element, [10, {5, 6, 7}]}
     end
 
     test "raises ArgumentError if the given index is smaller than 1" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_errors_found_msg(1, "out of range"),
-                   fn ->
-                     0
-                     |> wrap_value()
-                     |> :erlang.element({5, 6, 7})
-                   end
+                   {:erlang, :element, [0, {5, 6, 7}]}
     end
   end
 
