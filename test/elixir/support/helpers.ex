@@ -7,7 +7,6 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.ProcessUtils
-  alias Hologram.Commons.Reflection
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
@@ -211,21 +210,9 @@ defmodule Hologram.Test.Helpers do
   Given an error and its stacktrace resolves the error message.
   """
   @spec resolve_error_msg(struct, list(tuple)) :: String.t()
-  def resolve_error_msg(error, stacktrace)
-
-  def resolve_error_msg(%BadMapError{term: term}, _stacktrace) do
-    "expected a map, got: #{inspect(term)}"
-  end
-
-  def resolve_error_msg(%error_module{} = error, stacktrace) do
-    if Reflection.has_function?(error_module, :blame, 2) do
-      error
-      |> error_module.blame(stacktrace)
-      |> elem(0)
-      |> Map.get(:message)
-    else
-      error.message
-    end
+  def resolve_error_msg(error, stacktrace) do
+    {error_with_blame, _stacktrace} = Exception.blame(:error, error, stacktrace)
+    Exception.message(error_with_blame)
   end
 
   @doc """
