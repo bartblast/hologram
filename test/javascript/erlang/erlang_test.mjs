@@ -267,7 +267,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => testedFun(atomAbc),
         "ArithmeticError",
-        "bad argument in arithmetic expression",
+        "bad argument in arithmetic expression: -(:abc)",
       );
     });
   });

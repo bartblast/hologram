@@ -101,7 +101,8 @@ const Erlang = {
   // Start -/1
   "-/1": (number) => {
     if (!Type.isNumber(number)) {
-      Interpreter.raiseArithmeticError();
+      const blame = `-(${Interpreter.inspect(number)})`;
+      Interpreter.raiseArithmeticError(blame);
     }
 
     return number.value == 0 ? number : Type[number.type](-number.value);

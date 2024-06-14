@@ -155,11 +155,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "non-number" do
-      assert_raise ArithmeticError, "bad argument in arithmetic expression", fn ->
-        :abc
-        |> wrap_value()
-        |> :erlang.-()
-      end
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: -(:abc)",
+                   {:erlang, :-, [:abc]}
     end
   end
 
