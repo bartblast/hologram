@@ -1523,11 +1523,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "not boolean" do
-      assert_raise ArgumentError, "argument error", fn ->
-        "abc"
-        |> wrap_value()
-        |> :erlang.not()
-      end
+      assert_error ArgumentError,
+                   "argument error",
+                   {:erlang, :not, ["abc"]}
     end
   end
 
