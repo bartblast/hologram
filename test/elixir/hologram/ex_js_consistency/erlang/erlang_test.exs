@@ -1495,13 +1495,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "raises ArgumentError if the argument is not a list" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_errors_found_msg(1, "not a list"),
-                   fn ->
-                     :abc
-                     |> wrap_value()
-                     |> :erlang.length()
-                   end
+                   {:erlang, :length, [:abc]}
     end
   end
 
