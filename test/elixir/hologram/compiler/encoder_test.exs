@@ -788,7 +788,8 @@ defmodule Hologram.Compiler.EncoderTest do
       assert output == """
              Interpreter.defineErlangFunction("erlang", "+", 2, (left, right) => {
                  if (!Type.isNumber(left) || !Type.isNumber(right)) {
-                   Interpreter.raiseArithmeticError();
+                   const blame = `${Interpreter.inspect(left)} + ${Interpreter.inspect(right)}`;
+                   Interpreter.raiseArithmeticError(blame);
                  }
 
                  const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
