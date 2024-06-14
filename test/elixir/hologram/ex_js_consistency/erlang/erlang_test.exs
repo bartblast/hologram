@@ -1234,13 +1234,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "not bitstring" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_errors_found_msg(1, "not a bitstring"),
-                   fn ->
-                     :abc
-                     |> wrap_value()
-                     |> :erlang.bit_size()
-                   end
+                   {:erlang, :bit_size, [:abc]}
     end
   end
 
