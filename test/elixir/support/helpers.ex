@@ -29,7 +29,21 @@ defmodule Hologram.Test.Helpers do
   Asserts that the given module function call raises the given error (with the given error message).
   The expected error message must contain the context information that is appended by blame/2.
   """
-  defmacro assert_error(error_module, error_msg, mfargs) do
+  defmacro assert_error(error_module, error_msg, fun_or_mfargs)
+
+  defmacro assert_error(error_module, error_msg, {:fn, _meta, _data} = fun) do
+    quote do
+      try do
+        unquote(fun).()
+      rescue
+        error in unquote(error_module) ->
+          {error_with_blame, _stacktrace} = unquote(error_module).blame(error, __STACKTRACE__)
+          assert error_with_blame.message == unquote(error_msg)
+      end
+    end
+  end
+
+  defmacro assert_error(error_module, error_msg, {:{}, _meta, _data} = mfargs) do
     quote do
       {module, fun, args} = unquote(mfargs)
 
