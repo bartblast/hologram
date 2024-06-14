@@ -1181,13 +1181,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "not an atom" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_errors_found_msg(1, "not an atom"),
-                   fn ->
-                     123
-                     |> wrap_value()
-                     |> :erlang.atom_to_list()
-                   end
+                   {:erlang, :atom_to_list, [123]}
     end
   end
 
