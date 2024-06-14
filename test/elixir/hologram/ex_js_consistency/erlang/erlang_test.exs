@@ -1294,11 +1294,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   describe "integer_to_binary/2" do
     test "positive integer, base = 1" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_errors_found_msg(2, "not an integer in the range 2 through 36"),
-                   fn ->
-                     :erlang.integer_to_binary(123_123, 1)
-                   end
+                   {:erlang, :integer_to_binary, [123_123, 1]}
     end
 
     test "positive integer, base = 2" do
@@ -1314,11 +1312,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "positive integer, base = 37" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_errors_found_msg(2, "not an integer in the range 2 through 36"),
-                   fn ->
-                     :erlang.integer_to_binary(123_123, 37)
-                   end
+                   {:erlang, :integer_to_binary, [123_123, 37]}
     end
 
     test "negative integer" do
@@ -1326,19 +1322,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "1st argument (integer) is not an integer" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_errors_found_msg(1, "not an integer"),
-                   fn ->
-                     :erlang.integer_to_binary(:abc, 16)
-                   end
+                   {:erlang, :integer_to_binary, [:abc, 16]}
     end
 
     test "2nd argument (base) is not an integer" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_errors_found_msg(2, "not an integer in the range 2 through 36"),
-                   fn ->
-                     :erlang.integer_to_binary(123_123, :abc)
-                   end
+                   {:erlang, :integer_to_binary, [123_123, :abc]}
     end
   end
 
