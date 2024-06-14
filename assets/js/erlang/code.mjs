@@ -10,11 +10,9 @@ import Type from "../type.mjs";
 const Erlang_Code = {
   // This function is simplified - it returns either {:module, MyModule} or {:error, :nofile}.
   // Start ensure_loaded/1
-  "ensure_loaded/1": (module) => {
+  "ensure_loaded/1": function (module) {
     if (!Type.isAtom(module)) {
-      Interpreter.raiseFunctionClauseError(
-        "no function clause matching in :code.ensure_loaded/1",
-      );
+      Interpreter.raiseFunctionClauseError(":code.ensure_loaded/1", arguments);
     }
 
     return typeof Interpreter.moduleRef(module) === "undefined"

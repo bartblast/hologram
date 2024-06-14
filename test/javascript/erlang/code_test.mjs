@@ -39,7 +39,7 @@ describe("Erlang_Code", () => {
       assertBoxedError(
         () => ensure_loaded(Type.integer(1)),
         "FunctionClauseError",
-        "no function clause matching in :code.ensure_loaded/1",
+        "no function clause matching in :code.ensure_loaded/1\n\nThe following arguments were given to :code.ensure_loaded/1:\n\n    # 1\n    1\n",
       );
     });
   });
