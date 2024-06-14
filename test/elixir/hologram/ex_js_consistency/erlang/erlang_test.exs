@@ -1208,25 +1208,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "raises ArgumentError if the first argument is a non-binary bitstring" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_errors_found_msg(1, "not a binary"),
-                   fn ->
-                     <<1::1, 0::1, 1::1>>
-                     |> wrap_value()
-                     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-                     |> :erlang.binary_to_atom(:utf8)
-                   end
+                   {:erlang, :binary_to_atom, [<<1::1, 0::1, 1::1>>, :utf8]}
     end
 
     test "raises ArgumentErorr if the first argument is not a bitstring" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_errors_found_msg(1, "not a binary"),
-                   fn ->
-                     :abc
-                     |> wrap_value()
-                     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-                     |> :erlang.binary_to_atom(:utf8)
-                   end
+                   {:erlang, :binary_to_atom, [:abc, :utf8]}
     end
   end
 
