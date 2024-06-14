@@ -209,17 +209,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "first arg is not a list" do
-      assert_raise ArgumentError, "argument error", fn ->
-        :abc
-        |> wrap_value()
-        |> :erlang.--([1, 2])
-      end
+      assert_error ArgumentError,
+                   "argument error",
+                   {:erlang, :--, [:abc, [1, 2]]}
     end
 
     test "second arg is not a list" do
-      assert_raise ArgumentError, "argument error", fn ->
-        :erlang.--([1, 2], wrap_value(:abc))
-      end
+      assert_error ArgumentError,
+                   "argument error",
+                   {:erlang, :--, [[1, 2], :abc]}
     end
   end
 
