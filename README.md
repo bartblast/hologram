@@ -43,7 +43,7 @@ defmodule MyPage do
   end
 
   def action(:increment, params, component) do
-    put_state(component, component.state.count + params.by)
+    put_state(component, :count, component.state.count + params.by)
   end
 
   def command(:save_record, params, server) do
