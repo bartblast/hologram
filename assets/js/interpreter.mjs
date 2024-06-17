@@ -817,14 +817,17 @@ export default class Interpreter {
     return ":" + term.value;
   }
 
-  // TODO: support bitstrings which are not text
   static #inspectBitstring(term, _opts) {
     if (Bitstring.isText(term)) {
       return '"' + Bitstring.toText(term) + '"';
     }
 
-    // TODO: this is temporary
-    return `bitstring(${term.bits.length})`;
+    const segmentStrs = Utils.chunkArray(term.bits, 8).map((bits) => {
+      const value = Bitstring.buildUnsignedBigIntFromBitArray(bits).toString();
+      return bits.length === 8 ? value : `${value}::size(${bits.length})`;
+    });
+
+    return `<<${segmentStrs.join(", ")}>>`;
   }
 
   static #inspectFloat(term, _opts) {

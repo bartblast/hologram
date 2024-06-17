@@ -2400,10 +2400,18 @@ describe("Interpreter", () => {
         assert.equal(result, '"全息图"');
       });
 
-      // TODO: remove when all types are supported
       it("not text", () => {
-        const result = Interpreter.inspect(Type.bitstring([1, 0, 1]), {});
-        assert.equal(result, "bitstring(3)");
+        const result = Interpreter.inspect(
+          // prettier-ignore
+          Type.bitstring([
+            1, 1, 0, 0, 1, 1, 0, 0,
+            1, 0, 1, 0, 1, 0, 1, 0,
+            1, 1,
+          ]),
+          {},
+        );
+
+        assert.equal(result, "<<204, 170, 3::size(2)>>");
       });
     });
 

@@ -60,7 +60,7 @@ describe("Utils", () => {
     });
   });
 
-  describe.only("chunkArray()", () => {
+  describe("chunkArray()", () => {
     it("empty array", () => {
       const result = Utils.chunkArray([], 3);
       assert.deepStrictEqual(result, []);
