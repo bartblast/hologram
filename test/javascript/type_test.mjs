@@ -147,6 +147,7 @@ describe("Type", () => {
     const segment2 = Type.bitstringSegment(Type.integer(2), {type: "integer"});
 
     const result = Type.bitstringPattern([segment1, segment2]);
+
     const expected = {
       type: "bitstring_pattern",
       segments: [segment1, segment2],
