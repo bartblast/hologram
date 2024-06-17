@@ -99,11 +99,11 @@ describe("Erlang_Elixir_Aliases", () => {
       assertBoxedError(
         () => concat(Type.atom("abc")),
         "FunctionClauseError",
-        "no function clause matching in :elixir_aliases.do_concat/2",
+        'no function clause matching in :elixir_aliases.do_concat/2\n\nThe following arguments were given to :elixir_aliases.do_concat/2:\n\n    # 1\n    :abc\n\n    # 2\n    "Elixir"\n',
       );
     });
 
-    it("raises FunctionClauseError if any non-binary bitstring segments are present", () => {
+    it("raises FunctionClauseError if a non-binary bitstring segment is present", () => {
       const segments = Type.list([
         Type.bitstring("Aaa"),
         Type.bitstring([
@@ -118,7 +118,7 @@ describe("Erlang_Elixir_Aliases", () => {
       assertBoxedError(
         () => concat(segments),
         "FunctionClauseError",
-        "no function clause matching in :elixir_aliases.do_concat/2",
+        'no function clause matching in :elixir_aliases.do_concat/2\n\nThe following arguments were given to :elixir_aliases.do_concat/2:\n\n    # 1\n    [<<1::size(2)>>, "Ccc"]\n\n    # 2\n    "Elixir.Aaa"\n',
       );
     });
 
@@ -132,7 +132,32 @@ describe("Erlang_Elixir_Aliases", () => {
       assertBoxedError(
         () => concat(segments),
         "FunctionClauseError",
-        "no function clause matching in :elixir_aliases.do_concat/2",
+        'no function clause matching in :elixir_aliases.do_concat/2\n\nThe following arguments were given to :elixir_aliases.do_concat/2:\n\n    # 1\n    [123, "Ccc"]\n\n    # 2\n    "Elixir.Aaa"\n',
+      );
+    });
+
+    it("raises FunctionClauseError if invalid segment is present and the segments contain 'Elixir' as the first segment", () => {
+      const segments = Type.list([
+        Type.bitstring("Elixir"),
+        Type.bitstring("Aaa"),
+        Type.integer(123),
+        Type.bitstring("Ccc"),
+      ]);
+
+      assertBoxedError(
+        () => concat(segments),
+        "FunctionClauseError",
+        'no function clause matching in :elixir_aliases.do_concat/2\n\nThe following arguments were given to :elixir_aliases.do_concat/2:\n\n    # 1\n    [123, "Ccc"]\n\n    # 2\n    "Elixir.Aaa"\n',
+      );
+    });
+
+    it("raises FunctionClauseError if invalid segment is present as the first segment", () => {
+      const segments = Type.list([Type.integer(123), Type.bitstring("Ccc")]);
+
+      assertBoxedError(
+        () => concat(segments),
+        "FunctionClauseError",
+        'no function clause matching in :elixir_aliases.do_concat/2\n\nThe following arguments were given to :elixir_aliases.do_concat/2:\n\n    # 1\n    [123, "Ccc"]\n\n    # 2\n    "Elixir"\n',
       );
     });
   });
