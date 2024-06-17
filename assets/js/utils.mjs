@@ -21,6 +21,17 @@ export default class Utils {
     return sets.reduce((a, b) => a.flatMap((d) => b.map((e) => [d, e].flat())));
   }
 
+  static chunkArray(array, chunkSize) {
+    const result = [];
+
+    for (let i = 0; i < array.length; i += chunkSize) {
+      const chunk = array.slice(i, i + chunkSize);
+      result.push(chunk);
+    }
+
+    return result;
+  }
+
   static cloneDeep(context) {
     return cloneDeep(context);
   }

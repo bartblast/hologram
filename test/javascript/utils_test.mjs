@@ -60,6 +60,33 @@ describe("Utils", () => {
     });
   });
 
+  describe.only("chunkArray()", () => {
+    it("empty array", () => {
+      const result = Utils.chunkArray([], 3);
+      assert.deepStrictEqual(result, []);
+    });
+
+    it("array can be chunked into equal parts", () => {
+      const result = Utils.chunkArray([1, 2, 3, 4, 5, 6, 7, 8, 9], 3);
+
+      assert.deepStrictEqual(result, [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9],
+      ]);
+    });
+
+    it("array can't be chunked into equal parts", () => {
+      const result = Utils.chunkArray([1, 2, 3, 4, 5, 6, 7, 8], 3);
+
+      assert.deepStrictEqual(result, [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8],
+      ]);
+    });
+  });
+
   describe("cloneDeep()", () => {
     it("clones vars recursively (deep clone)", () => {
       const nested = {c: 3, d: 4};
