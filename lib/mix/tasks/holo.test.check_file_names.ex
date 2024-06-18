@@ -14,6 +14,8 @@ defmodule Mix.Tasks.Holo.Test.CheckFileNames do
   use Mix.Task
   alias Hologram.Commons.FileUtils
 
+  @requirements ["app.config"]
+
   @doc false
   @impl Mix.Task
   def run(args) do

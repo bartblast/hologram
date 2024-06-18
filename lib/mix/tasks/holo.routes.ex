@@ -6,6 +6,8 @@ defmodule Mix.Tasks.Holo.Routes do
   use Mix.Task
   alias Hologram.Commons.Reflection
 
+  @requirements ["app.config"]
+
   @doc false
   @impl Mix.Task
   def run(_args) do
