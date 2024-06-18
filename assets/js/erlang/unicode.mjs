@@ -42,7 +42,7 @@ const Erlang_Unicode = {
 
     if (!Type.isList(input)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(
+        Interpreter.buildArgumentErrorMsg(
           1,
           "not valid character data (an iodata term)",
         ),
@@ -72,7 +72,7 @@ const Erlang_Unicode = {
         }
       } else {
         Interpreter.raiseArgumentError(
-          Interpreter.buildErrorsFoundMsg(
+          Interpreter.buildArgumentErrorMsg(
             1,
             "not valid character data (an iodata term)",
           ),

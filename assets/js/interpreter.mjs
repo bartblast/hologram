@@ -42,6 +42,15 @@ export default class Interpreter {
     }
   }
 
+  static buildArgumentErrorMsg(argumentIndex, message) {
+    // Based on: https://stackoverflow.com/a/39466341/13040586
+    const suffix =
+      ["st", "nd", "rd"][((((argumentIndex + 90) % 100) - 10) % 10) - 1] ||
+      "th";
+
+    return `errors were found at the given arguments:\n\n  * ${argumentIndex}${suffix} argument: ${message}\n`;
+  }
+
   static buildContext(data = {}) {
     const {module, vars} = data;
     const context = {module: null, vars: {}};
@@ -55,15 +64,6 @@ export default class Interpreter {
     }
 
     return context;
-  }
-
-  static buildErrorsFoundMsg(argumentIndex, message) {
-    // Based on: https://stackoverflow.com/a/39466341/13040586
-    const suffix =
-      ["st", "nd", "rd"][((((argumentIndex + 90) % 100) - 10) % 10) - 1] ||
-      "th";
-
-    return `errors were found at the given arguments:\n\n  * ${argumentIndex}${suffix} argument: ${message}\n`;
   }
 
   static callAnonymousFunction(fun, argsArray) {

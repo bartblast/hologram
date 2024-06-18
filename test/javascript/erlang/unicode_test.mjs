@@ -108,7 +108,7 @@ describe("Erlang_Unicode", () => {
         () =>
           characters_to_binary(Type.bitstring([1, 0, 1]), utf8Atom, utf8Atom),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(
+        Interpreter.buildArgumentErrorMsg(
           1,
           "not valid character data (an iodata term)",
         ),
@@ -139,7 +139,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => characters_to_binary(input, utf8Atom, utf8Atom),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(
+        Interpreter.buildArgumentErrorMsg(
           1,
           "not valid character data (an iodata term)",
         ),
@@ -168,7 +168,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => characters_to_binary(input, utf8Atom, utf8Atom),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(
+        Interpreter.buildArgumentErrorMsg(
           1,
           "not valid character data (an iodata term)",
         ),
@@ -179,7 +179,7 @@ describe("Erlang_Unicode", () => {
       assertBoxedError(
         () => characters_to_binary(Type.atom("abc"), utf8Atom, utf8Atom),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(
+        Interpreter.buildArgumentErrorMsg(
           1,
           "not valid character data (an iodata term)",
         ),

@@ -66,25 +66,25 @@ const Erlang_Lists = {
   "keyfind/3": (value, index, tuples) => {
     if (!Type.isInteger(index)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(2, "not an integer"),
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
       );
     }
 
     if (index.value < 1) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(2, "out of range"),
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
       );
     }
 
     if (!Type.isList(tuples)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(3, "not a list"),
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
       );
     }
 
     if (!Type.isProperList(tuples)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(3, "not a proper list"),
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
       );
     }
 
@@ -142,7 +142,7 @@ const Erlang_Lists = {
   "member/2": (elem, list) => {
     if (!Type.isList(list)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(2, "not a list"),
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
       );
     }
 
@@ -154,7 +154,7 @@ const Erlang_Lists = {
           return Type.boolean(true);
         } else {
           Interpreter.raiseArgumentError(
-            Interpreter.buildErrorsFoundMsg(2, "not a proper list"),
+            Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
           );
         }
       }
@@ -162,7 +162,7 @@ const Erlang_Lists = {
 
     if (!isProperList) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(2, "not a proper list"),
+        Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
       );
     }
 
@@ -181,7 +181,7 @@ const Erlang_Lists = {
 
     if (!Type.isProperList(list)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(1, "not a list"),
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
       );
     }
 
@@ -194,13 +194,13 @@ const Erlang_Lists = {
   "reverse/2": (list, tail) => {
     if (!Type.isList(list)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(1, "not a list"),
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
       );
     }
 
     if (!Type.isProperList(list)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(1, "not a proper list"),
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
       );
     }
 

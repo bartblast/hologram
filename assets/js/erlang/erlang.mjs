@@ -258,7 +258,7 @@ const Erlang = {
   "atom_to_binary/1": (atom) => {
     if (!Type.isAtom(atom)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(1, "not an atom"),
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
       );
     }
 
@@ -271,7 +271,7 @@ const Erlang = {
   "atom_to_list/1": (atom) => {
     if (!Type.isAtom(atom)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(1, "not an atom"),
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
       );
     }
 
@@ -295,7 +295,7 @@ const Erlang = {
   "binary_to_atom/2": (binary, encoding) => {
     if (!Type.isBinary(binary)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(1, "not a binary"),
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
     }
 
@@ -335,7 +335,7 @@ const Erlang = {
   "bit_size/1": (term) => {
     if (!Type.isBitstring(term)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(1, "not a bitstring"),
+        Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
       );
     }
 
@@ -348,19 +348,19 @@ const Erlang = {
   "element/2": (index, tuple) => {
     if (!Type.isInteger(index)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(1, "not an integer"),
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
       );
     }
 
     if (!Type.isTuple(tuple)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(2, "not a tuple"),
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
       );
     }
 
     if (index.value > tuple.data.length || index.value < 1) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(1, "out of range"),
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
     }
 
@@ -390,7 +390,7 @@ const Erlang = {
   "hd/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(1, "not a nonempty list"),
+        Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
       );
     }
 
@@ -410,13 +410,13 @@ const Erlang = {
   "integer_to_binary/2": (integer, base) => {
     if (!Type.isInteger(integer)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(1, "not an integer"),
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
       );
     }
 
     if (!Type.isInteger(base) || base.value < 2 || base.value > 36) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(
+        Interpreter.buildArgumentErrorMsg(
           2,
           "not an integer in the range 2 through 36",
         ),
@@ -534,7 +534,7 @@ const Erlang = {
   "length/1": (list) => {
     if (!Type.isList(list)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(1, "not a list"),
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
       );
     }
 
@@ -584,7 +584,7 @@ const Erlang = {
   "tl/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(1, "not a nonempty list"),
+        Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
       );
     }
 
@@ -611,7 +611,7 @@ const Erlang = {
   "tuple_to_list/1": (tuple) => {
     if (!Type.isTuple(tuple)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildErrorsFoundMsg(1, "not a tuple"),
+        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
       );
     }
 

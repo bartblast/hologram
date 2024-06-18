@@ -82,7 +82,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => fold(Type.atom("abc"), Type.integer(10), Type.map()),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(
+        Interpreter.buildArgumentErrorMsg(
           1,
           "not a fun that takes three arguments",
         ),
@@ -105,7 +105,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => fold(fun, Type.integer(10), Type.map()),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(
+        Interpreter.buildArgumentErrorMsg(
           1,
           "not a fun that takes three arguments",
         ),
@@ -164,7 +164,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => from_list(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(1, "not a list"),
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
       );
     });
   });
@@ -329,7 +329,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => map(Type.atom("abc"), Type.map()),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(
+        Interpreter.buildArgumentErrorMsg(
           1,
           "not a fun that takes two arguments",
         ),
@@ -354,7 +354,7 @@ describe("Erlang_Maps", () => {
       assertBoxedError(
         () => map(fun, Type.map()),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(
+        Interpreter.buildArgumentErrorMsg(
           1,
           "not a fun that takes two arguments",
         ),

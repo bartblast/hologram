@@ -238,7 +238,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keyfind(Type.atom("abc"), Type.atom("xyz"), Type.list()),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(2, "not an integer"),
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
       );
     });
 
@@ -246,7 +246,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keyfind(Type.atom("abc"), Type.integer(0), Type.list()),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(2, "out of range"),
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
       );
     });
 
@@ -254,7 +254,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keyfind(Type.atom("abc"), Type.integer(1), Type.atom("xyz")),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(3, "not a list"),
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
       );
     });
 
@@ -271,7 +271,7 @@ describe("Erlang_Lists", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(3, "not a proper list"),
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
       );
     });
   });
@@ -311,7 +311,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keymember(Type.atom("abc"), Type.atom("xyz"), Type.list()),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(2, "not an integer"),
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
       );
     });
 
@@ -319,7 +319,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keymember(Type.atom("abc"), Type.integer(0), Type.list()),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(2, "out of range"),
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
       );
     });
 
@@ -327,7 +327,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keymember(Type.atom("abc"), Type.integer(1), Type.atom("xyz")),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(3, "not a list"),
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
       );
     });
 
@@ -344,7 +344,7 @@ describe("Erlang_Lists", () => {
             ]),
           ),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(3, "not a proper list"),
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
       );
     });
   });
@@ -463,7 +463,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => member(Type.integer(3), improperList),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(2, "not a proper list"),
+        Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
       );
     });
 
@@ -476,7 +476,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => member(Type.integer(4), improperList),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(2, "not a proper list"),
+        Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
       );
     });
 
@@ -495,7 +495,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => member(Type.integer(2), Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(2, "not a list"),
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
       );
     });
   });
@@ -527,7 +527,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => reverse(improperList),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(1, "not a list"),
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
       );
     });
   });
@@ -578,7 +578,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => reverse(improperList12, list34),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(1, "not a proper list"),
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
       );
     });
 
@@ -607,7 +607,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => reverse(integer5, list34),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(1, "not a list"),
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
       );
     });
   });

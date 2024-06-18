@@ -49,6 +49,53 @@ describe("Interpreter", () => {
     });
   });
 
+  describe("buildArgumentErrorMsg()", () => {
+    it("1st argument", () => {
+      const result = Interpreter.buildArgumentErrorMsg(1, "my message");
+
+      const expected =
+        "errors were found at the given arguments:\n\n  * 1st argument: my message\n";
+
+      assert.equal(result, expected);
+    });
+
+    it("2nd argument", () => {
+      const result = Interpreter.buildArgumentErrorMsg(2, "my message");
+
+      const expected =
+        "errors were found at the given arguments:\n\n  * 2nd argument: my message\n";
+
+      assert.equal(result, expected);
+    });
+
+    it("3rd argument", () => {
+      const result = Interpreter.buildArgumentErrorMsg(3, "my message");
+
+      const expected =
+        "errors were found at the given arguments:\n\n  * 3rd argument: my message\n";
+
+      assert.equal(result, expected);
+    });
+
+    it("4th argument", () => {
+      const result = Interpreter.buildArgumentErrorMsg(4, "my message");
+
+      const expected =
+        "errors were found at the given arguments:\n\n  * 4th argument: my message\n";
+
+      assert.equal(result, expected);
+    });
+
+    it("15th argument", () => {
+      const result = Interpreter.buildArgumentErrorMsg(15, "my message");
+
+      const expected =
+        "errors were found at the given arguments:\n\n  * 15th argument: my message\n";
+
+      assert.equal(result, expected);
+    });
+  });
+
   describe("buildContext()", () => {
     it("module undefined, vars undefined", () => {
       const result = Interpreter.buildContext();
@@ -82,53 +129,6 @@ describe("Interpreter", () => {
       };
 
       assert.deepStrictEqual(result, expected);
-    });
-  });
-
-  describe("buildErrorsFoundMsg()", () => {
-    it("1st argument", () => {
-      const result = Interpreter.buildErrorsFoundMsg(1, "my message");
-
-      const expected =
-        "errors were found at the given arguments:\n\n  * 1st argument: my message\n";
-
-      assert.equal(result, expected);
-    });
-
-    it("2nd argument", () => {
-      const result = Interpreter.buildErrorsFoundMsg(2, "my message");
-
-      const expected =
-        "errors were found at the given arguments:\n\n  * 2nd argument: my message\n";
-
-      assert.equal(result, expected);
-    });
-
-    it("3rd argument", () => {
-      const result = Interpreter.buildErrorsFoundMsg(3, "my message");
-
-      const expected =
-        "errors were found at the given arguments:\n\n  * 3rd argument: my message\n";
-
-      assert.equal(result, expected);
-    });
-
-    it("4th argument", () => {
-      const result = Interpreter.buildErrorsFoundMsg(4, "my message");
-
-      const expected =
-        "errors were found at the given arguments:\n\n  * 4th argument: my message\n";
-
-      assert.equal(result, expected);
-    });
-
-    it("15th argument", () => {
-      const result = Interpreter.buildErrorsFoundMsg(15, "my message");
-
-      const expected =
-        "errors were found at the given arguments:\n\n  * 15th argument: my message\n";
-
-      assert.equal(result, expected);
     });
   });
 

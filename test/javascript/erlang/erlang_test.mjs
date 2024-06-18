@@ -1413,7 +1413,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => atom_to_binary(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(1, "not an atom"),
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
       );
     });
   });
@@ -1452,7 +1452,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => atom_to_list(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(1, "not an atom"),
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
       );
     });
   });
@@ -1490,7 +1490,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_atom(Type.bitstring([1, 0, 1]), encoding),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(1, "not a binary"),
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -1498,7 +1498,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_atom(Type.atom("abc"), encoding),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(1, "not a binary"),
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
     });
   });
@@ -1550,7 +1550,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => bit_size(myAtom),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(1, "not a bitstring"),
+        Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
       );
     });
   });
@@ -1573,7 +1573,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => element(Type.atom("abc"), tuple),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(1, "not an integer"),
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
       );
     });
 
@@ -1581,7 +1581,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => element(Type.integer(1), Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(2, "not a tuple"),
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
       );
     });
 
@@ -1589,7 +1589,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => element(Type.integer(10), tuple),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(1, "out of range"),
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -1597,7 +1597,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => element(Type.integer(0), tuple),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(1, "out of range"),
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
     });
   });
@@ -1635,7 +1635,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => hd(Type.list()),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(1, "not a nonempty list"),
+        Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
       );
     });
 
@@ -1643,7 +1643,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => hd(Type.integer(123)),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(1, "not a nonempty list"),
+        Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
       );
     });
   });
@@ -1666,7 +1666,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => integer_to_binary(Type.integer(123123), Type.integer(1)),
           "ArgumentError",
-          Interpreter.buildErrorsFoundMsg(
+          Interpreter.buildArgumentErrorMsg(
             2,
             "not an integer in the range 2 through 36",
           ),
@@ -1707,7 +1707,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => integer_to_binary(Type.integer(123123), Type.integer(37)),
           "ArgumentError",
-          Interpreter.buildErrorsFoundMsg(
+          Interpreter.buildArgumentErrorMsg(
             2,
             "not an integer in the range 2 through 36",
           ),
@@ -1727,7 +1727,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => integer_to_binary(Type.atom("abc"), Type.integer(16)),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(1, "not an integer"),
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
       );
     });
 
@@ -1735,7 +1735,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => integer_to_binary(Type.integer(123123), Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(
+        Interpreter.buildArgumentErrorMsg(
           2,
           "not an integer in the range 2 through 36",
         ),
@@ -1952,7 +1952,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => length(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(1, "not a list"),
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
       );
     });
   });
@@ -2117,7 +2117,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => tl(Type.list()),
           "ArgumentError",
-          Interpreter.buildErrorsFoundMsg(1, "not a nonempty list"),
+          Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
         );
       });
 
@@ -2125,7 +2125,7 @@ describe("Erlang", () => {
         assertBoxedError(
           () => tl(Type.integer(123)),
           "ArgumentError",
-          Interpreter.buildErrorsFoundMsg(1, "not a nonempty list"),
+          Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
         );
       });
     });
@@ -2148,7 +2148,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => tuple_to_list(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildErrorsFoundMsg(1, "not a tuple"),
+        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
       );
     });
   });
