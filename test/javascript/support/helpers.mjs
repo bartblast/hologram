@@ -261,6 +261,29 @@ function defineElixirHologramRouterHelpersModule() {
   };
 }
 
+function defineElixirStringCharsModule() {
+  return {
+    "to_string/1": (term) => {
+      switch (term.type) {
+        case "atom":
+          return Type.bitstring(term.value);
+
+        case "bitstring":
+          return term;
+
+        case "integer":
+          return Type.bitstring(term.value.toString());
+
+        default: {
+          const inspectedTerm = Interpreter.inspect(term);
+          const msg = `client test version of String.Chars.to_string/1 doesn't know how to handle: ${inspectedTerm} of type "${term.type}"`;
+          throw new HologramInterpreterError(msg);
+        }
+      }
+    },
+  };
+}
+
 export function defineGlobalErlangAndElixirModules() {
   globalThis.Erlang = Erlang;
   globalThis.Erlang_Code = Erlang_Code;
@@ -275,28 +298,7 @@ export function defineGlobalErlangAndElixirModules() {
     defineElixirHologramRouterHelpersModule();
 
   globalThis.Elixir_Kernel = Elixir_Kernel;
-
-  globalThis.Elixir_String_Chars = {};
-  globalThis.Elixir_String_Chars["to_string/1"] = elixirStringCharsToString1;
-}
-
-function elixirStringCharsToString1(term) {
-  switch (term.type) {
-    case "atom":
-      return Type.bitstring(term.value);
-
-    case "bitstring":
-      return term;
-
-    case "integer":
-      return Type.bitstring(term.value.toString());
-
-    default: {
-      const inspectedTerm = Interpreter.inspect(term);
-      const msg = `elixirStringCharsToString1() doesn't know how to handle: ${inspectedTerm} of type "${term.type}"`;
-      throw new HologramInterpreterError(msg);
-    }
-  }
+  globalThis.Elixir_String_Chars = defineElixirStringCharsModule();
 }
 
 // Based on deepFreeze() from: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/freeze
