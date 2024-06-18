@@ -80,6 +80,28 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Builds an error message for FunctionClauseError.
+  """
+  @spec build_function_clause_error_msg(String.t(), list) :: String.t()
+  def build_function_clause_error_msg(mfa, args) do
+    initial_str = """
+    no function clause matching in #{mfa}
+
+    The following arguments were given to #{mfa}:
+    """
+
+    args
+    |> Enum.with_index()
+    |> Enum.reduce(initial_str, fn {arg, idx}, acc ->
+      """
+      #{acc}
+          # #{idx + 1}
+          #{inspect(arg)}
+      """
+    end)
+  end
+
+  @doc """
   Builds empty server struct.
   """
   @spec build_server_struct() :: Server.t()
