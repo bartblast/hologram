@@ -1,6 +1,7 @@
 defmodule Hologram.Page do
   alias Hologram.Commons.Reflection
   alias Hologram.Commons.Types, as: T
+  alias Hologram.Compiler.AST
   alias Hologram.Component
   alias Hologram.Page
   alias Hologram.Server
