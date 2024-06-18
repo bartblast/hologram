@@ -34,49 +34,25 @@ defmodule Hologram.ExJsConsistency.Erlang.ElixirAliasesTest do
 
     test "raises FunctionClauseError if the argument is not a list" do
       assert_error FunctionClauseError,
-                   """
-                   no function clause matching in :elixir_aliases.do_concat/2
-
-                   The following arguments were given to :elixir_aliases.do_concat/2:
-
-                       # 1
-                       :abc
-
-                       # 2
-                       "Elixir"
-                   """,
+                   build_function_clause_error_msg(":elixir_aliases.do_concat/2", [:abc, "Elixir"]),
                    fn -> :elixir_aliases.concat(:abc) end
     end
 
     test "raises FunctionClauseError if a non-binary bitstring segment is present" do
       assert_error FunctionClauseError,
-                   """
-                   no function clause matching in :elixir_aliases.do_concat/2
-
-                   The following arguments were given to :elixir_aliases.do_concat/2:
-
-                       # 1
-                       [<<1::size(2)>>, "Ccc"]
-
-                       # 2
-                       "Elixir.Aaa"
-                   """,
+                   build_function_clause_error_msg(":elixir_aliases.do_concat/2", [
+                     [<<1::size(2)>>, "Ccc"],
+                     "Elixir.Aaa"
+                   ]),
                    fn -> :elixir_aliases.concat(["Aaa", <<1::2>>, "Ccc"]) end
     end
 
     test "raises FunctionClauseError if any non-atom or non-bitstring segments are present" do
       assert_error FunctionClauseError,
-                   """
-                   no function clause matching in :elixir_aliases.do_concat/2
-
-                   The following arguments were given to :elixir_aliases.do_concat/2:
-
-                       # 1
-                       [123, "Ccc"]
-
-                       # 2
-                       "Elixir.Aaa"
-                   """,
+                   build_function_clause_error_msg(":elixir_aliases.do_concat/2", [
+                     [123, "Ccc"],
+                     "Elixir.Aaa"
+                   ]),
                    fn ->
                      :elixir_aliases.concat(["Aaa", 123, "Ccc"])
                    end
@@ -84,17 +60,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ElixirAliasesTest do
 
     test "raises FunctionClauseError if invalid segment is present and the segments contain 'Elixir' as the first segment" do
       assert_error FunctionClauseError,
-                   """
-                   no function clause matching in :elixir_aliases.do_concat/2
-
-                   The following arguments were given to :elixir_aliases.do_concat/2:
-
-                       # 1
-                       [123, "Ccc"]
-
-                       # 2
-                       "Elixir.Aaa"
-                   """,
+                   build_function_clause_error_msg(":elixir_aliases.do_concat/2", [
+                     [123, "Ccc"],
+                     "Elixir.Aaa"
+                   ]),
                    fn ->
                      :elixir_aliases.concat(["Elixir", "Aaa", 123, "Ccc"])
                    end
@@ -102,17 +71,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ElixirAliasesTest do
 
     test "raises FunctionClauseError if invalid segment is present as the first segment" do
       assert_error FunctionClauseError,
-                   """
-                   no function clause matching in :elixir_aliases.do_concat/2
-
-                   The following arguments were given to :elixir_aliases.do_concat/2:
-
-                       # 1
-                       [123, "Ccc"]
-
-                       # 2
-                       "Elixir"
-                   """,
+                   build_function_clause_error_msg(":elixir_aliases.do_concat/2", [
+                     [123, "Ccc"],
+                     "Elixir"
+                   ]),
                    fn ->
                      :elixir_aliases.concat([123, "Ccc"])
                    end

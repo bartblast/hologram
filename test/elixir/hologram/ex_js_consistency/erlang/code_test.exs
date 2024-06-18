@@ -18,14 +18,7 @@ defmodule Hologram.ExJsConsistency.Erlang.CodeTest do
 
     test "raises FunctionClauseError if the argument is not an atom" do
       assert_error FunctionClauseError,
-                   """
-                   no function clause matching in :code.ensure_loaded/1
-
-                   The following arguments were given to :code.ensure_loaded/1:
-
-                       # 1
-                       1
-                   """,
+                   build_function_clause_error_msg(":code.ensure_loaded/1", [1]),
                    fn -> :code.ensure_loaded(1) end
     end
   end
