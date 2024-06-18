@@ -40,7 +40,7 @@ export function defineModule27Fixture() {
 
   Interpreter.defineElixirFunction(
     "Hologram.Test.Fixtures.Template.Renderer.Module27",
-    "__props__",
+    "__params__",
     0,
     "public",
     [
@@ -48,7 +48,7 @@ export function defineModule27Fixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Type.list();
+          return Elixir_Enum["reverse/1"](Type.list());
         },
       },
     ],

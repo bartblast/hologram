@@ -6,7 +6,7 @@ import Type from "../../../../../../assets/js/type.mjs";
 export function defineModule2Fixture() {
   Interpreter.defineElixirFunction(
     "Hologram.Test.Fixtures.Router.Helpers.Module2",
-    "__props__",
+    "__params__",
     0,
     "public",
     [

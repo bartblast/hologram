@@ -23,7 +23,7 @@ end
 export function defineModule7Fixture() {
   Interpreter.defineElixirFunction(
     "Hologram.Test.Fixtures.Module7",
-    "__props__",
+    "__params__",
     0,
     "public",
     [

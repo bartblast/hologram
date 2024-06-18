@@ -38,7 +38,7 @@ export function defineModule62Fixture() {
 
   Interpreter.defineElixirFunction(
     "Hologram.Test.Fixtures.Template.Renderer.Module62",
-    "__props__",
+    "__params__",
     0,
     "public",
     [

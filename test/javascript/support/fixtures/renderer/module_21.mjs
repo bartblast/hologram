@@ -38,7 +38,7 @@ export function defineModule21Fixture() {
 
   Interpreter.defineElixirFunction(
     "Hologram.Test.Fixtures.Template.Renderer.Module21",
-    "__props__",
+    "__params__",
     0,
     "public",
     [
@@ -46,10 +46,20 @@ export function defineModule21Fixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Type.list([
-            Type.tuple([Type.atom("key_1"), Type.nil(), Type.list()]),
-            Type.tuple([Type.atom("key_2"), Type.nil(), Type.list()]),
-          ]);
+          return Elixir_Enum["reverse/1"](
+            Type.list([
+              Type.tuple([
+                Type.atom("key_2"),
+                Type.atom("string"),
+                Type.list(),
+              ]),
+              Type.tuple([
+                Type.atom("key_1"),
+                Type.atom("string"),
+                Type.list(),
+              ]),
+            ]),
+          );
         },
       },
     ],
