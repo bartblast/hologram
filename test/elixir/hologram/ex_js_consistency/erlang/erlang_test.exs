@@ -1162,7 +1162,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the argument is not an atom" do
       assert_error ArgumentError,
-                   build_errors_found_msg(1, "not an atom"),
+                   build_argument_error_msg(1, "not an atom"),
                    {:erlang, :atom_to_binary, [123]}
     end
   end
@@ -1182,7 +1182,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "not an atom" do
       assert_error ArgumentError,
-                   build_errors_found_msg(1, "not an atom"),
+                   build_argument_error_msg(1, "not an atom"),
                    {:erlang, :atom_to_list, [123]}
     end
   end
@@ -1209,13 +1209,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the first argument is a non-binary bitstring" do
       assert_error ArgumentError,
-                   build_errors_found_msg(1, "not a binary"),
+                   build_argument_error_msg(1, "not a binary"),
                    {:erlang, :binary_to_atom, [<<1::1, 0::1, 1::1>>, :utf8]}
     end
 
     test "raises ArgumentErorr if the first argument is not a bitstring" do
       assert_error ArgumentError,
-                   build_errors_found_msg(1, "not a binary"),
+                   build_argument_error_msg(1, "not a binary"),
                    {:erlang, :binary_to_atom, [:abc, :utf8]}
     end
   end
@@ -1235,7 +1235,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "not bitstring" do
       assert_error ArgumentError,
-                   build_errors_found_msg(1, "not a bitstring"),
+                   build_argument_error_msg(1, "not a bitstring"),
                    {:erlang, :bit_size, [:abc]}
     end
   end
@@ -1247,25 +1247,25 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the first argument is not an integer" do
       assert_error ArgumentError,
-                   build_errors_found_msg(1, "not an integer"),
+                   build_argument_error_msg(1, "not an integer"),
                    {:erlang, :element, [:abc, {5, 6, 7}]}
     end
 
     test "raises ArgumentError if the second argument is not a tuple" do
       assert_error ArgumentError,
-                   build_errors_found_msg(2, "not a tuple"),
+                   build_argument_error_msg(2, "not a tuple"),
                    {:erlang, :element, [1, :abc]}
     end
 
     test "raises ArgumentError if the given index is greater than the number of elements in the tuple" do
       assert_error ArgumentError,
-                   build_errors_found_msg(1, "out of range"),
+                   build_argument_error_msg(1, "out of range"),
                    {:erlang, :element, [10, {5, 6, 7}]}
     end
 
     test "raises ArgumentError if the given index is smaller than 1" do
       assert_error ArgumentError,
-                   build_errors_found_msg(1, "out of range"),
+                   build_argument_error_msg(1, "out of range"),
                    {:erlang, :element, [0, {5, 6, 7}]}
     end
   end
@@ -1277,13 +1277,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the argument is an empty list" do
       assert_error ArgumentError,
-                   build_errors_found_msg(1, "not a nonempty list"),
+                   build_argument_error_msg(1, "not a nonempty list"),
                    {:erlang, :hd, [[]]}
     end
 
     test "raises ArgumentError if the argument is not a list" do
       assert_error ArgumentError,
-                   build_errors_found_msg(1, "not a nonempty list"),
+                   build_argument_error_msg(1, "not a nonempty list"),
                    {:erlang, :hd, [123]}
     end
   end
@@ -1295,7 +1295,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   describe "integer_to_binary/2" do
     test "positive integer, base = 1" do
       assert_error ArgumentError,
-                   build_errors_found_msg(2, "not an integer in the range 2 through 36"),
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
                    {:erlang, :integer_to_binary, [123_123, 1]}
     end
 
@@ -1313,7 +1313,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "positive integer, base = 37" do
       assert_error ArgumentError,
-                   build_errors_found_msg(2, "not an integer in the range 2 through 36"),
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
                    {:erlang, :integer_to_binary, [123_123, 37]}
     end
 
@@ -1323,13 +1323,13 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "1st argument (integer) is not an integer" do
       assert_error ArgumentError,
-                   build_errors_found_msg(1, "not an integer"),
+                   build_argument_error_msg(1, "not an integer"),
                    {:erlang, :integer_to_binary, [:abc, 16]}
     end
 
     test "2nd argument (base) is not an integer" do
       assert_error ArgumentError,
-                   build_errors_found_msg(2, "not an integer in the range 2 through 36"),
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
                    {:erlang, :integer_to_binary, [123_123, :abc]}
     end
   end
@@ -1496,7 +1496,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the argument is not a list" do
       assert_error ArgumentError,
-                   build_errors_found_msg(1, "not a list"),
+                   build_argument_error_msg(1, "not a list"),
                    {:erlang, :length, [:abc]}
     end
   end
@@ -1578,7 +1578,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the argument is not a tuple" do
       assert_error ArgumentError,
-                   build_errors_found_msg(1, "not a tuple"),
+                   build_argument_error_msg(1, "not a tuple"),
                    {:erlang, :tuple_to_list, [:abc]}
     end
   end

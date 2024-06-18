@@ -86,7 +86,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
     test "raises ArgumentError if the second argument (index) is not an integer" do
       assert_raise ArgumentError,
-                   build_errors_found_msg(2, "not an integer"),
+                   build_argument_error_msg(2, "not an integer"),
                    fn ->
                      :lists.keyfind(:abc, :xyz, [])
                    end
@@ -94,7 +94,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
     test "raises ArgumentError if the second argument (index) is smaller than 1" do
       assert_raise ArgumentError,
-                   build_errors_found_msg(2, "out of range"),
+                   build_argument_error_msg(2, "out of range"),
                    fn ->
                      :lists.keyfind(:abc, 0, [])
                    end
@@ -102,7 +102,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
     test "raises ArgumentError if the third argument (tuples) is not a list" do
       assert_raise ArgumentError,
-                   build_errors_found_msg(3, "not a list"),
+                   build_argument_error_msg(3, "not a list"),
                    fn ->
                      :lists.keyfind(:abc, 1, :xyz)
                    end
@@ -110,7 +110,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
     test "raises ArgumentError if the third argument (tuples) is an improper list" do
       assert_raise ArgumentError,
-                   build_errors_found_msg(3, "not a proper list"),
+                   build_argument_error_msg(3, "not a proper list"),
                    fn ->
                      :lists.keyfind(7, 4, [1, 2 | 3])
                    end
@@ -128,7 +128,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
     test "raises ArgumentError if the second argument (index) is not an integer" do
       assert_raise ArgumentError,
-                   build_errors_found_msg(2, "not an integer"),
+                   build_argument_error_msg(2, "not an integer"),
                    fn ->
                      :lists.keymember(:abc, :xyz, [])
                    end
@@ -136,7 +136,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
     test "raises ArgumentError if the second argument (index) is smaller than 1" do
       assert_raise ArgumentError,
-                   build_errors_found_msg(2, "out of range"),
+                   build_argument_error_msg(2, "out of range"),
                    fn ->
                      :lists.keymember(:abc, 0, [])
                    end
@@ -144,7 +144,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
     test "raises ArgumentError if the third argument (tuples) is not a list" do
       assert_raise ArgumentError,
-                   build_errors_found_msg(3, "not a list"),
+                   build_argument_error_msg(3, "not a list"),
                    fn ->
                      :lists.keymember(:abc, 1, :xyz)
                    end
@@ -152,7 +152,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
     test "raises ArgumentError if the third argument (tuples) is an improper list" do
       assert_raise ArgumentError,
-                   build_errors_found_msg(3, "not a proper list"),
+                   build_argument_error_msg(3, "not a proper list"),
                    fn ->
                      :lists.keymember(7, 4, [1, 2 | 3])
                    end
@@ -207,7 +207,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "is the last member of an improper list" do
-      assert_raise ArgumentError, build_errors_found_msg(2, "not a proper list"), fn ->
+      assert_raise ArgumentError, build_argument_error_msg(2, "not a proper list"), fn ->
         :lists.member(3, [1, 2 | 3])
       end
     end
@@ -217,7 +217,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "is not a member of an improper list" do
-      assert_raise ArgumentError, build_errors_found_msg(2, "not a proper list"), fn ->
+      assert_raise ArgumentError, build_argument_error_msg(2, "not a proper list"), fn ->
         :lists.member(4, [1, 2 | 3])
       end
     end
@@ -228,7 +228,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
     test "raises ArgumentError if the second argument is not a list" do
       assert_raise ArgumentError,
-                   build_errors_found_msg(2, "not a list"),
+                   build_argument_error_msg(2, "not a list"),
                    fn ->
                      :lists.member(2, :abc)
                    end
@@ -248,7 +248,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
     test "raises ArgumentError if the argument is not a proper list" do
       assert_raise ArgumentError,
-                   build_errors_found_msg(1, "not a list"),
+                   build_argument_error_msg(1, "not a list"),
                    fn ->
                      :lists.reverse([1, 2 | 3])
                    end
@@ -273,7 +273,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "1st arg is an improper list" do
-      assert_raise ArgumentError, build_errors_found_msg(1, "not a proper list"), fn ->
+      assert_raise ArgumentError, build_argument_error_msg(1, "not a proper list"), fn ->
         :lists.reverse([1 | 2], [3, 4])
       end
     end
@@ -295,7 +295,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "1st arg is not a list" do
-      assert_raise ArgumentError, build_errors_found_msg(1, "not a list"), fn ->
+      assert_raise ArgumentError, build_argument_error_msg(1, "not a list"), fn ->
         :lists.reverse(5, [3, 4])
       end
     end
