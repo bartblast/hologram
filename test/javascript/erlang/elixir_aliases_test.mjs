@@ -7,6 +7,7 @@ import {
 } from "../support/helpers.mjs";
 
 import Erlang_Elixir_Aliases from "../../../assets/js/erlang/elixir_aliases.mjs";
+import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
@@ -99,26 +100,34 @@ describe("Erlang_Elixir_Aliases", () => {
       assertBoxedError(
         () => concat(Type.atom("abc")),
         "FunctionClauseError",
-        'no function clause matching in :elixir_aliases.do_concat/2\n\nThe following arguments were given to :elixir_aliases.do_concat/2:\n\n    # 1\n    :abc\n\n    # 2\n    "Elixir"\n',
+        Interpreter.buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
+          Type.atom("abc"),
+          Type.bitstring("Elixir"),
+        ]),
       );
     });
 
     it("raises FunctionClauseError if a non-binary bitstring segment is present", () => {
+      const bitstringSize2 = Type.bitstring([
+        Type.bitstringSegment(Type.integer(1), {
+          type: "integer",
+          size: Type.integer(2),
+        }),
+      ]);
+
       const segments = Type.list([
         Type.bitstring("Aaa"),
-        Type.bitstring([
-          Type.bitstringSegment(Type.integer(1), {
-            type: "integer",
-            size: Type.integer(2),
-          }),
-        ]),
+        bitstringSize2,
         Type.bitstring("Ccc"),
       ]);
 
       assertBoxedError(
         () => concat(segments),
         "FunctionClauseError",
-        'no function clause matching in :elixir_aliases.do_concat/2\n\nThe following arguments were given to :elixir_aliases.do_concat/2:\n\n    # 1\n    [<<1::size(2)>>, "Ccc"]\n\n    # 2\n    "Elixir.Aaa"\n',
+        Interpreter.buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
+          Type.list([bitstringSize2, Type.bitstring("Ccc")]),
+          Type.bitstring("Elixir.Aaa"),
+        ]),
       );
     });
 
@@ -132,7 +141,10 @@ describe("Erlang_Elixir_Aliases", () => {
       assertBoxedError(
         () => concat(segments),
         "FunctionClauseError",
-        'no function clause matching in :elixir_aliases.do_concat/2\n\nThe following arguments were given to :elixir_aliases.do_concat/2:\n\n    # 1\n    [123, "Ccc"]\n\n    # 2\n    "Elixir.Aaa"\n',
+        Interpreter.buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
+          Type.list([Type.integer(123), Type.bitstring("Ccc")]),
+          Type.bitstring("Elixir.Aaa"),
+        ]),
       );
     });
 
@@ -147,7 +159,10 @@ describe("Erlang_Elixir_Aliases", () => {
       assertBoxedError(
         () => concat(segments),
         "FunctionClauseError",
-        'no function clause matching in :elixir_aliases.do_concat/2\n\nThe following arguments were given to :elixir_aliases.do_concat/2:\n\n    # 1\n    [123, "Ccc"]\n\n    # 2\n    "Elixir.Aaa"\n',
+        Interpreter.buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
+          Type.list([Type.integer(123), Type.bitstring("Ccc")]),
+          Type.bitstring("Elixir.Aaa"),
+        ]),
       );
     });
 
@@ -157,7 +172,10 @@ describe("Erlang_Elixir_Aliases", () => {
       assertBoxedError(
         () => concat(segments),
         "FunctionClauseError",
-        'no function clause matching in :elixir_aliases.do_concat/2\n\nThe following arguments were given to :elixir_aliases.do_concat/2:\n\n    # 1\n    [123, "Ccc"]\n\n    # 2\n    "Elixir"\n',
+        Interpreter.buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
+          Type.list([Type.integer(123), Type.bitstring("Ccc")]),
+          Type.bitstring("Elixir"),
+        ]),
       );
     });
   });

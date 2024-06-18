@@ -608,14 +608,8 @@ export default class Interpreter {
     return Erlang["error/1"](errorStruct);
   }
 
-  static raiseFunctionClauseError(mfa, args) {
-    const msg = Array.from(args).reduce(
-      (acc, arg, idx) =>
-        `${acc}\n    # ${idx + 1}\n    ${Interpreter.inspect(arg)}\n`,
-      `no function clause matching in ${mfa}\n\nThe following arguments were given to ${mfa}:\n`,
-    );
-
-    return Interpreter.raiseError("FunctionClauseError", msg);
+  static raiseFunctionClauseError(message) {
+    return Interpreter.raiseError("FunctionClauseError", message);
   }
 
   static raiseKeyError(message) {

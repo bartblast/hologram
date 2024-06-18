@@ -7,6 +7,7 @@ import {
 } from "../support/helpers.mjs";
 
 import Erlang_Code from "../../../assets/js/erlang/code.mjs";
+import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
@@ -39,7 +40,9 @@ describe("Erlang_Code", () => {
       assertBoxedError(
         () => ensure_loaded(Type.integer(1)),
         "FunctionClauseError",
-        "no function clause matching in :code.ensure_loaded/1\n\nThe following arguments were given to :code.ensure_loaded/1:\n\n    # 1\n    1\n",
+        Interpreter.buildFunctionClauseErrorMsg(":code.ensure_loaded/1", [
+          Type.integer(1),
+        ]),
       );
     });
   });
