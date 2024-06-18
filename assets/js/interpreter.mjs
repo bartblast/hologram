@@ -66,6 +66,14 @@ export default class Interpreter {
     return context;
   }
 
+  static buildFunctionClauseErrorMsg(mfa, args) {
+    return Array.from(args).reduce(
+      (acc, arg, idx) =>
+        `${acc}\n    # ${idx + 1}\n    ${Interpreter.inspect(arg)}\n`,
+      `no function clause matching in ${mfa}\n\nThe following arguments were given to ${mfa}:\n`,
+    );
+  }
+
   static callAnonymousFunction(fun, argsArray) {
     const args = Type.list(argsArray);
 

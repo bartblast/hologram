@@ -132,6 +132,30 @@ describe("Interpreter", () => {
     });
   });
 
+  describe("buildFunctionClauseErrorMsg()", () => {
+    it("1 arg", () => {
+      const result = Interpreter.buildFunctionClauseErrorMsg(
+        "MyModule.my_fun/2",
+        [Type.integer(123)],
+      );
+      const expected =
+        "no function clause matching in MyModule.my_fun/2\n\nThe following arguments were given to MyModule.my_fun/2:\n\n    # 1\n    123\n";
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("2 args", () => {
+      const result = Interpreter.buildFunctionClauseErrorMsg(
+        "MyModule.my_fun/2",
+        [Type.integer(123), Type.atom("abc")],
+      );
+      const expected =
+        "no function clause matching in MyModule.my_fun/2\n\nThe following arguments were given to MyModule.my_fun/2:\n\n    # 1\n    123\n\n    # 2\n    :abc\n";
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   describe("callAnonymousFunction()", () => {
     let anonFun, context;
 
