@@ -10,6 +10,7 @@ defmodule Hologram.PageTest do
   alias Hologram.Test.Fixtures.Page.Module4
   alias Hologram.Test.Fixtures.Page.Module5
   alias Hologram.Test.Fixtures.Page.Module6
+  alias Hologram.Test.Fixtures.Page.Module7
 
   test "__is_hologram_page__/0" do
     assert Module1.__is_hologram_page__()
@@ -27,6 +28,10 @@ defmodule Hologram.PageTest do
     test "custom" do
       assert Module3.__layout_props__() == [a: 1, b: 2]
     end
+  end
+
+  test "__params__/0" do
+    assert Module7.__params__() == [{:a, :string, []}, {:b, :integer, [opt_1: 111, opt_2: 222]}]
   end
 
   test "__route__/0" do

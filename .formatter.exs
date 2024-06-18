@@ -7,6 +7,7 @@ exported_locals_without_parens = [
   layout: 1,
   layout: 2,
   param: 2,
+  param: 3,
   route: 1
 ]
 

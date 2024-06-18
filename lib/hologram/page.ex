@@ -1,5 +1,6 @@
 defmodule Hologram.Page do
   alias Hologram.Commons.Reflection
+  alias Hologram.Commons.Types, as: T
   alias Hologram.Component
   alias Hologram.Page
   alias Hologram.Server
@@ -31,7 +32,7 @@ defmodule Hologram.Page do
             put_state: 3
           ]
 
-        import Hologram.Page, only: [layout: 1, layout: 2, param: 2, route: 1]
+        import Hologram.Page, only: [layout: 1, layout: 2, param: 2, param: 3, route: 1]
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
         import Hologram.Template, only: [sigil_H: 2]
 
@@ -40,7 +41,7 @@ defmodule Hologram.Page do
         alias Hologram.Component.Command
         alias Hologram.Page
 
-        @before_compile Component
+        @before_compile Page
 
         @external_resource unquote(template_path)
 
@@ -63,8 +64,18 @@ defmodule Hologram.Page do
         defoverridable init: 3
       end,
       Component.maybe_define_template_fun(template_path, __MODULE__),
-      Component.register_props_accumulator()
+      Page.register_params_accumulator()
     ]
+  end
+
+  defmacro __before_compile__(_env) do
+    quote do
+      @doc """
+      Returns the list of param definitions for the compiled page.
+      """
+      @spec __params__() :: list({atom, atom, keyword})
+      def __params__, do: Enum.reverse(@__params__)
+    end
   end
 
   @doc """
@@ -73,7 +84,7 @@ defmodule Hologram.Page do
   @spec cast_params(module, %{atom => String.t()}) :: %{atom => any}
   def cast_params(page_module, params) do
     types =
-      page_module.__props__()
+      page_module.__params__()
       |> Enum.map(fn {name, type, _opts} -> {name, type} end)
       |> Enum.into(%{})
 
@@ -196,12 +207,22 @@ defmodule Hologram.Page do
   end
 
   @doc """
-  Accumulates the given param name in __props__ module attribute.
+  Accumulates the given param definition in __params__ module attribute.
   """
-  @spec param(atom, atom) :: Macro.t()
-  defmacro param(name, type) do
+  @spec param(atom, atom, T.opts()) :: Macro.t()
+  defmacro param(name, type, opts \\ []) do
     quote do
-      Module.put_attribute(__MODULE__, :__props__, {unquote(name), unquote(type), []})
+      Module.put_attribute(__MODULE__, :__params__, {unquote(name), unquote(type), unquote(opts)})
+    end
+  end
+
+  @doc """
+  Returns the AST of code that registers __params__ module attribute.
+  """
+  @spec register_params_accumulator() :: AST.t()
+  def register_params_accumulator do
+    quote do
+      Module.register_attribute(__MODULE__, :__params__, accumulate: true)
     end
   end
 
