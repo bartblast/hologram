@@ -50,6 +50,7 @@ defmodule Hologram.MixProject do
       {:mix_audit, "~> 2.0", only: [:dev, :test], runtime: false},
       {:mox, "~> 1.0", only: :test},
       {:phoenix, "~> 1.7"},
+      {:recode, "~> 0.7", only: :dev, runtime: false},
       {:sobelow, "~> 0.12", only: [:dev, :test], runtime: false}
     ]
   end
