@@ -15,7 +15,7 @@
     {:hex_audit, "mix hex.audit"},
     {:mix_audit, env: %{"MIX_ENV" => "test"}},
     {:prettier,
-     "assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.js' 'assets/*.json' 'assets/js/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern"},
+     "assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern"},
     {:sobelow, "mix sobelow --config"},
     {:test_js, "mix test.js"},
 
