@@ -1,7 +1,7 @@
 defmodule Hologram.Commons.FileUtilsTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Commons.FileUtils
-  alias Hologram.Commons.Reflection
+  alias Hologram.Reflection
 
   describe "list_files_recursively/1" do
     @base_dir "test/elixir/support/fixtures/commons/file_utils/list_files_recursively"

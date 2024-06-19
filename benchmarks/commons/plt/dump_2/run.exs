@@ -1,6 +1,6 @@
 alias Hologram.Commons.PLT
-alias Hologram.Commons.Reflection
 alias Hologram.Compiler
+alias Hologram.Reflection
 
 Benchee.run(
   %{

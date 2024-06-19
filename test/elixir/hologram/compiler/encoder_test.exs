@@ -2,9 +2,9 @@ defmodule Hologram.Compiler.EncoderTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.Encoder, except: [encode_ir: 2]
 
-  alias Hologram.Commons.Reflection
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
+  alias Hologram.Reflection
 
   defdelegate encode_ir(ir, context \\ %Context{}), to: Hologram.Compiler.Encoder
 

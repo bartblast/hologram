@@ -1,7 +1,7 @@
 alias Hologram.Commons.FileUtils
-alias Hologram.Commons.Reflection
 alias Hologram.Compiler
 alias Hologram.Compiler.CallGraph
+alias Hologram.Reflection
 
 Benchee.run(
   %{

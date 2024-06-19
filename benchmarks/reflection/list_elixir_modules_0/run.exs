@@ -1,4 +1,4 @@
-alias Hologram.Commons.Reflection
+alias Hologram.Reflection
 
 Benchee.run(
   %{
@@ -9,7 +9,7 @@ Benchee.run(
   formatters: [
     Benchee.Formatters.Console,
     {Benchee.Formatters.Markdown,
-     description: "Hologram.Commons.Reflection.list_elixir_modules/0",
+     description: "Hologram.Reflection.list_elixir_modules/0",
      file: Path.join(__DIR__, "README.md")}
   ],
   time: 60

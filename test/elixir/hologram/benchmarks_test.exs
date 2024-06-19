@@ -3,8 +3,8 @@ defmodule Hologram.BenchmarksTest do
   import Hologram.Benchmarks
 
   alias Hologram.Commons.PLT
-  alias Hologram.Commons.Reflection
   alias Hologram.Compiler
+  alias Hologram.Reflection
 
   defp count_added_modules(modules, old_module_digest_plt, new_module_digest_plt) do
     Enum.reduce(modules, 0, fn module, acc ->

@@ -4,7 +4,7 @@ defmodule Mix.Tasks.Holo.Routes do
   """
 
   use Mix.Task
-  alias Hologram.Commons.Reflection
+  alias Hologram.Reflection
 
   @requirements ["app.config"]
 

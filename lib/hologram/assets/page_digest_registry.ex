@@ -2,7 +2,7 @@ defmodule Hologram.Assets.PageDigestRegistry do
   use GenServer
 
   alias Hologram.Commons.PLT
-  alias Hologram.Commons.Reflection
+  alias Hologram.Reflection
 
   @doc """
   Returns the name of the ETS table used by the page digest registry registered process.

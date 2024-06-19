@@ -2,10 +2,10 @@ defmodule Hologram.ComponentTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Component
 
-  alias Hologram.Commons.Reflection
   alias Hologram.Component
   alias Hologram.Component.Action
   alias Hologram.Component.Command
+  alias Hologram.Reflection
   alias Hologram.Server
   alias Hologram.Test.Fixtures.Component.Module1
   alias Hologram.Test.Fixtures.Component.Module2

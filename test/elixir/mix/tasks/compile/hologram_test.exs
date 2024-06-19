@@ -3,7 +3,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   import Mix.Tasks.Compile.Hologram
 
   alias Hologram.Commons.PLT
-  alias Hologram.Commons.Reflection
+  alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
 

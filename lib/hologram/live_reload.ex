@@ -5,7 +5,7 @@ defmodule Hologram.LiveReload do
   alias Hologram.Assets.ManifestCache
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Assets.PathRegistry
-  alias Hologram.Commons.Reflection
+  alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
 
   @doc """

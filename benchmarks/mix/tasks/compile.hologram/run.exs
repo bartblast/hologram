@@ -1,5 +1,5 @@
 alias Hologram.Commons.FileUtils
-alias Hologram.Commons.Reflection
+alias Hologram.Reflection
 
 Benchee.run(
   %{

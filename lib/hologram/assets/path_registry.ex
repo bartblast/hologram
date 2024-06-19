@@ -3,7 +3,7 @@ defmodule Hologram.Assets.PathRegistry do
 
   alias Hologram.Commons.ETS
   alias Hologram.Commons.FileUtils
-  alias Hologram.Commons.Reflection
+  alias Hologram.Reflection
 
   @doc """
   Returns the name of the ETS table used by the asset path registry registered process.

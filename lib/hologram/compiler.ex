@@ -1,13 +1,13 @@
 defmodule Hologram.Compiler do
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.PLT
-  alias Hologram.Commons.Reflection
   alias Hologram.Commons.TaskUtils
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
   alias Hologram.Compiler.IR
+  alias Hologram.Reflection
 
   @doc """
   Builds the call graph of all modules in the project.

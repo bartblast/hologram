@@ -1,7 +1,7 @@
 defmodule Hologram.Router.PageModuleResolver do
   use GenServer
 
-  alias Hologram.Commons.Reflection
+  alias Hologram.Reflection
   alias Hologram.Router.SearchTree
 
   @doc """

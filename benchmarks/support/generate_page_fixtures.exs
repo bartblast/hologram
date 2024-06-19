@@ -1,4 +1,4 @@
-alias Hologram.Commons.Reflection
+alias Hologram.Reflection
 
 Enum.each(1..100, fn i ->
   content = """

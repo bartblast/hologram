@@ -1,4 +1,4 @@
-defmodule Hologram.Commons.Reflection do
+defmodule Hologram.Reflection do
   alias Hologram.Commons.StringUtils
 
   @call_graph_dump_file_name "call_graph.bin"
@@ -35,7 +35,7 @@ defmodule Hologram.Commons.Reflection do
 
   ## Examples
 
-      iex> beam_path = ~c"/Users/bartblast/Projects/hologram/_build/dev/lib/hologram/ebin/Elixir.Hologram.Commons.Reflection.beam"  
+      iex> beam_path = ~c"/Users/bartblast/Projects/hologram/_build/dev/lib/hologram/ebin/Elixir.Hologram.Reflection.beam"  
       iex> beam_defs()
       [
         ...,
@@ -89,7 +89,7 @@ defmodule Hologram.Commons.Reflection do
       iex> component?(MyComponent)
       true
 
-      iex> component?(Hologram.Commons.Reflection)
+      iex> component?(Hologram.Reflection)
       false
   """
   @spec component?(term) :: boolean
@@ -379,7 +379,7 @@ defmodule Hologram.Commons.Reflection do
       iex> page?(MyPage)
       true
 
-      iex> page?(Hologram.Commons.Reflection)
+      iex> page?(Hologram.Reflection)
       false
   """
   @spec page?(term) :: boolean

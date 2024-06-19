@@ -4,8 +4,8 @@ defmodule Hologram.Commons.PLTTest do
 
   alias Hologram.Commons.ETS
   alias Hologram.Commons.PLT
-  alias Hologram.Commons.Reflection
   alias Hologram.Commons.SerializationUtils
+  alias Hologram.Reflection
 
   @items [
     {:my_key_1, :my_value_1},

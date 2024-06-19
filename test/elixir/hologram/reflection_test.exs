@@ -1,6 +1,6 @@
-defmodule Hologram.Commons.ReflectionTest do
+defmodule Hologram.ReflectionTest do
   use Hologram.Test.BasicCase, async: true
-  import Hologram.Commons.Reflection
+  import Hologram.Reflection
 
   alias Hologram.Test.Fixtures.Commons.Reflection.Module1
   alias Hologram.Test.Fixtures.Commons.Reflection.Module2

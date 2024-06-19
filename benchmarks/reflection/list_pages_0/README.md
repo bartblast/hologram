@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Commons.Reflection.list_pages/0
+Hologram.Reflection.list_pages/0
 
 ## System
 

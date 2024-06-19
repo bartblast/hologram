@@ -3,10 +3,10 @@ defmodule Hologram.CompilerTest do
   import Hologram.Compiler
 
   alias Hologram.Commons.PLT
-  alias Hologram.Commons.Reflection
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Compiler.IR
+  alias Hologram.Reflection
 
   alias Hologram.Test.Fixtures.Compiler.Module1
   alias Hologram.Test.Fixtures.Compiler.Module11
@@ -134,7 +134,7 @@ defmodule Hologram.CompilerTest do
     } do
       assert %PLT{} = plt = build_module_digest_plt!(module_beam_path_plt)
 
-      assert <<_digest::256>> = PLT.get!(plt, Hologram.Commons.Reflection)
+      assert <<_digest::256>> = PLT.get!(plt, Hologram.Reflection)
       assert <<_digest::256>> = PLT.get!(plt, Hologram.Compiler)
     end
 

@@ -10,10 +10,10 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   alias Hologram.Commons.IntegerUtils
-  alias Hologram.Commons.Reflection
   alias Hologram.Commons.StringUtils
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
+  alias Hologram.Reflection
 
   @doc """
   Encodes Elixir or Erlang alias as JavaScript class name.

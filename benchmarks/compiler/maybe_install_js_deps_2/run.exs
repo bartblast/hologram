@@ -1,6 +1,6 @@
 alias Hologram.Commons.FileUtils
-alias Hologram.Commons.Reflection
 alias Hologram.Compiler
+alias Hologram.Reflection
 
 lib_package_json_path = Path.join([Reflection.root_dir(), "assets", "package.json"])
 
