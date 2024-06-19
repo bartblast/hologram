@@ -4,7 +4,6 @@ import isEqual from "lodash/isEqual.js";
 import uniqWith from "lodash/uniqWith.js";
 
 import Bitstring from "./bitstring.mjs";
-import Console from "./console.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramMatchError from "./errors/match_error.mjs";
 import JsonEncoder from "./json_encoder.mjs";
@@ -933,23 +932,25 @@ export default class Interpreter {
     );
   }
 
-  static #logFunctionCall(mfa, args) {
-    Console.startGroup(mfa);
+  // TODO: reenable when debug mode is implemented
+  // static #logFunctionCall(mfa, args) {
+  //   Console.startGroup(mfa);
 
-    if (args.length > 0) {
-      Console.printHeader("args");
+  //   if (args.length > 0) {
+  //     Console.printHeader("args");
 
-      for (let i = 0; i < args.length; ++i) {
-        Console.printDataItem(i + 1, args[i]);
-      }
-    }
-  }
+  //     for (let i = 0; i < args.length; ++i) {
+  //       Console.printDataItem(i + 1, args[i]);
+  //     }
+  //   }
+  // }
 
-  static #logFunctionResult(mfa, result) {
-    Console.printHeader("result");
-    Console.printData(result);
-    Console.endGroup(mfa);
-  }
+  // TODO: reenable when debug mode is implemented
+  // static #logFunctionResult(mfa, result) {
+  //   Console.printHeader("result");
+  //   Console.printData(result);
+  //   Console.endGroup(mfa);
+  // }
 
   static #matchBitstringPattern(right, left, context) {
     if (right.type !== "bitstring" && right.type !== "bitstring_pattern") {
