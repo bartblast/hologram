@@ -2,11 +2,11 @@ defmodule Hologram.ReflectionTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Reflection
 
-  alias Hologram.Test.Fixtures.Commons.Reflection.Module1
-  alias Hologram.Test.Fixtures.Commons.Reflection.Module2
-  alias Hologram.Test.Fixtures.Commons.Reflection.Module3
-  alias Hologram.Test.Fixtures.Commons.Reflection.Module4
-  alias Hologram.Test.Fixtures.Commons.Reflection.Module7
+  alias Hologram.Test.Fixtures.Reflection.Module1
+  alias Hologram.Test.Fixtures.Reflection.Module2
+  alias Hologram.Test.Fixtures.Reflection.Module3
+  alias Hologram.Test.Fixtures.Reflection.Module4
+  alias Hologram.Test.Fixtures.Reflection.Module7
 
   describe "alias?/1" do
     test "atom which is an alias" do
@@ -180,8 +180,8 @@ defmodule Hologram.ReflectionTest do
     result = list_pages()
 
     assert Hologram.Test.Fixtures.Compiler.CallGraph.Module11 in result
-    assert Hologram.Test.Fixtures.Commons.Reflection.Module2 in result
-    assert Hologram.Test.Fixtures.Commons.Reflection.Module6 in result
+    assert Hologram.Test.Fixtures.Reflection.Module2 in result
+    assert Hologram.Test.Fixtures.Reflection.Module6 in result
     assert Hologram.Test.Fixtures.Page.Module1 in result
 
     refute Hologram.Test.Fixtures.Compiler.Module6 in result
@@ -193,7 +193,7 @@ defmodule Hologram.ReflectionTest do
     result = list_protocol_implementations(String.Chars)
 
     assert String.Chars.Atom in result
-    assert String.Chars.Hologram.Test.Fixtures.Commons.Reflection.Module5 in result
+    assert String.Chars.Hologram.Test.Fixtures.Reflection.Module5 in result
   end
 
   test "list_std_lib_elixir_modules/0" do

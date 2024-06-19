@@ -1,5 +1,5 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Commons.Reflection.Module6 do
+defmodule Hologram.Test.Fixtures.Reflection.Module6 do
   use Hologram.Page
 
   route "/hologram-test-fixtures-commons-reflection-module6"
