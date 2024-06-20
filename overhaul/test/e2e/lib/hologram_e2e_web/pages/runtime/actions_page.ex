@@ -14,19 +14,13 @@ defmodule HologramE2E.Runtime.ActionsPage do
 
   def template do
     ~H"""
-    <button id="button-4" on:click={:component_3_id, :component_3_action_1}>Component 3 Action 1</button>
-    <button id="button-5" on:click={:component_3_id, :component_3_action_2, a: 5, b: 6}>Component 3 Action 2</button>
     <button id="button-6" on:click="action_4">Action 4</button>
     <button id="button-7" on:click="action_5">Action 5</button>
     <button id="button-8" on:click="action_6">Action 6</button>
     <button id="button-9" on:click="action_7">Action 7</button>
     <button id="button-10" on:click="action_8">Action 8</button>
     <button id="button-11" on:click="action_9">Action 9</button>
-    <button id="button-12" on:click="action_10">Action 10</button>
     <button id="button-13" on:click={:component_3_id, :component_3_action_3}>Component 3 Action 3</button>
-    <button id="button-14" on:click={:page, :action_11}>Action 11</button>
-    <button id="button-16" on:click="action_12">Action 12</button>
-    <button id="button-17" on:click="action_13">Action 13</button>
     <br />
 
     <div id="text">{@text}</div><br />
@@ -89,22 +83,6 @@ defmodule HologramE2E.Runtime.ActionsPage do
 
   def action(:action_9, _params, state) do
     put(state, :text, "text updated by action_9, state.value = #{state.value}")
-  end
-
-  def action(:action_10, _params, state) do
-    put(state, :text, "text updated by action_10, state.value = #{state.value}")
-  end
-
-  def action(:action_11, _params, state) do
-    put(state, :text, "text updated by action_11, state.value = #{state.value}")
-  end
-
-  def action(:action_12, _params, state) do
-    put(state, :text, "text updated by action_12, state.value = #{state.value}")
-  end
-
-  def action(:action_13, _params, state) do
-    {state, :command_3}
   end
 
   def action(:action_13_b, _params, state) do

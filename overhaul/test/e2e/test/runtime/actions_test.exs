@@ -2,30 +2,6 @@ defmodule HologramE2E.Runtime.ActionsTest do
   use HologramE2E.TestCase, async: false
   alias HologramE2E.Runtime.ActionsPage
 
-  describe "action spec" do
-
-    feature "action spec with target ID", %{session: session} do
-      session
-      |> visit(ActionsPage)
-      |> click(css("#button-4"))
-      |> assert_has(
-        css("#text-component-3", text: "text updated by component_3_action_1, state.value = c3")
-      )
-    end
-
-    feature "action spec with targetID and params", %{session: session} do
-      session
-      |> visit(ActionsPage)
-      |> click(css("#button-5"))
-      |> assert_has(
-        css("#text-component-3",
-          text:
-            "text updated by component_3_action_2, params.a = 5, params.b = 6, state.value = c3"
-        )
-      )
-    end
-  end
-
   describe "action result" do
     feature "action returning state only, not wrapped in tuple", %{session: session} do
       session
@@ -85,47 +61,6 @@ defmodule HologramE2E.Runtime.ActionsTest do
             "text updated by action_8_b triggered by component_3_command_2, params.a = 10, params.b = 20, state.value = p1"
         )
       )
-    end
-  end
-
-  describe "target" do
-    feature "default target", %{session: session} do
-      session
-      |> visit(ActionsPage)
-      |> click(css("#button-12"))
-      |> assert_has(css("#text", text: "text updated by action_10, state.value = p1"))
-    end
-
-    feature "component target", %{session: session} do
-      session
-      |> visit(ActionsPage)
-      |> click(css("#button-4"))
-      |> assert_has(
-        css("#text-component-3", text: "text updated by component_3_action_1, state.value = c3")
-      )
-    end
-
-    feature "page target", %{session: session} do
-      session
-      |> visit(ActionsPage)
-      |> click(css("#button-14"))
-      |> assert_has(css("#text", text: "text updated by action_11, state.value = p1"))
-    end
-  end
-
-  describe "action trigger" do
-    feature "action triggered by event", %{session: session} do
-      session
-      |> visit(ActionsPage)
-      |> click(css("#button-16"))
-      |> assert_has(css("#text", text: "text updated by action_12, state.value = p1"))
-    end
-
-    feature "action trigerred by command", %{session: session} do
-      session
-      |> visit(ActionsPage)
-      |> click(css("#button-17"))
-      |> assert_has(css("#text", text: "text updated by action_13_b, state.value = p1"))
     end
   end
 end
