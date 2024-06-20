@@ -3,7 +3,7 @@ defmodule HologramFeatureTests.ActionsPage do
 
   route "/actions"
 
-  layout HologramFeatureTests.Components.DefaultLayout
+  layout HologramFeatureTests.Components.ActionsLayout
 
   def init(_params, component, _server) do
     put_state(component, :result, nil)
@@ -12,35 +12,35 @@ defmodule HologramFeatureTests.ActionsPage do
   def template do
     ~H"""
     <p>
-      <button id="action_1" $click="action_1"> action_1 </button>
-      <button id="action_2" $click={:action_2}> action_2 </button>
-      <button id="action_3" $click={:action_3, a: 1, b: 2}> action_3 </button>
-      <button id="action_4" $click={%Action{name: :action_4, params: %{a: 1, b: 2}}}> action_4 </button>
-      <button id="action_5" $click="ac{"ti"}on_{5}"> action_5 </button>
+      <button id="page_action_1" $click="page_action_1"> page_action_1 </button>
+      <button id="page_action_2" $click={:page_action_2}> page_action_2 </button>
+      <button id="page_action_3" $click={:page_action_3, a: 1, b: 2}> page_action_3 </button>
+      <button id="page_action_4" $click={%Action{name: :page_action_4, params: %{a: 1, b: 2}}}> page_action_4 </button>
+      <button id="page_action_5" $click="page_ac{"ti"}on_{5}"> page_action_5 </button>
     </p>
     <p>
-      Page result: <strong id="result">{inspect(@result)}</strong>
+      Page result: <strong id="page_result">{inspect(@result)}</strong>
     </p>   
     """
   end
 
-  def action(:action_1, params, component) do
-    put_state(component, :result, {"action_1", params})
+  def action(:page_action_1, params, component) do
+    put_state(component, :result, {"page_action_1", params})
   end
 
-  def action(:action_2, params, component) do
-    put_state(component, :result, {"action_2", params})
+  def action(:page_action_2, params, component) do
+    put_state(component, :result, {"page_action_2", params})
   end
 
-  def action(:action_3, params, component) do
-    put_state(component, :result, {"action_3", params})
+  def action(:page_action_3, params, component) do
+    put_state(component, :result, {"page_action_3", params})
   end
 
-  def action(:action_4, params, component) do
-    put_state(component, :result, {"action_4", params})
+  def action(:page_action_4, params, component) do
+    put_state(component, :result, {"page_action_4", params})
   end
 
-  def action(:action_5, params, component) do
-    put_state(component, :result, {"action_5", params})
+  def action(:page_action_5, params, component) do
+    put_state(component, :result, {"page_action_5", params})
   end
 end
