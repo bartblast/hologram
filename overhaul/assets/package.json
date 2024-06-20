@@ -1,8 +1,0 @@
-{
-  "devDependencies": {
-    "jsdom": "^21",
-    "morphdom": "^2",
-    "prettier": "^2",
-    "snabbdom": "^3"
-  }
-}
