@@ -55,7 +55,7 @@ defmodule HologramFeatureTests.ActionsTest do
   end
 
   describe "layout action" do
-    feature "triggered from layout", %{session: session} do
+    feature "triggered from layout (default target)", %{session: session} do
       session
       |> visit(ActionsPage)
       |> click(css("button[id='layout_action_1']"))
@@ -88,7 +88,7 @@ defmodule HologramFeatureTests.ActionsTest do
 
   describe "page action" do
     # Covered in preceding (syntax) tests:
-    # feature "triggered from page"
+    # feature "triggered from page (default target)"
 
     feature "triggered from layout", %{session: session} do
       session
@@ -132,7 +132,7 @@ defmodule HologramFeatureTests.ActionsTest do
       )
     end
 
-    feature "triggered from component", %{session: session} do
+    feature "triggered from component (default target)", %{session: session} do
       session
       |> visit(ActionsPage)
       |> click(css("button[id='component_1_action_1']"))
