@@ -25,7 +25,6 @@ defmodule HologramE2E.Runtime.ActionsPage do
     <button id="button-12" on:click="action_10">Action 10</button>
     <button id="button-13" on:click={:component_3_id, :component_3_action_3}>Component 3 Action 3</button>
     <button id="button-14" on:click={:page, :action_11}>Action 11</button>
-    <button id="button-15" on:click={:layout, :default_layout_action_1}>Layout Action 1</button>
     <button id="button-16" on:click="action_12">Action 12</button>
     <button id="button-17" on:click="action_13">Action 13</button>
     <br />

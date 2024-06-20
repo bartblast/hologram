@@ -25,10 +25,6 @@ defmodule HologramE2E.DefaultLayout do
     """
   end
 
-  def action(:default_layout_action_1, _params, state) do
-    {put(state, :text, "text updated by default_layout_action_1, state.value = #{state.value}")}
-  end
-
   def action(:default_layout_action_2_b, _params, state) do
     {put(
        state,

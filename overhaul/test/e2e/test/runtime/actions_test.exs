@@ -111,17 +111,6 @@ defmodule HologramE2E.Runtime.ActionsTest do
       |> click(css("#button-14"))
       |> assert_has(css("#text", text: "text updated by action_11, state.value = p1"))
     end
-
-    feature "layout target", %{session: session} do
-      session
-      |> visit(ActionsPage)
-      |> click(css("#button-15"))
-      |> assert_has(
-        css("#text-default-layout",
-          text: "text updated by default_layout_action_1, state.value = dl"
-        )
-      )
-    end
   end
 
   describe "action trigger" do

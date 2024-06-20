@@ -17,6 +17,7 @@ defmodule HologramFeatureTests.ActionsPage do
       <button id="page_action_3" $click={:page_action_3, a: 1, b: 2}> page_action_3 </button>
       <button id="page_action_4" $click={%Action{name: :page_action_4, params: %{a: 1, b: 2}}}> page_action_4 </button>
       <button id="page_action_5" $click="page_ac{"ti"}on_{5}"> page_action_5 </button>
+      <button id="layout_action_2" $click={%Action{name: :layout_action_2, params: %{a: 1, b: 2}, target: "layout"}}> layout_action_2 </button>
     </p>
     <p>
       Page result: <strong id="page_result">{inspect(@result)}</strong>
