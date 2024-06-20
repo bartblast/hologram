@@ -42,7 +42,7 @@ defmodule HologramFeatureTests.OperatorsPage do
       <button id=".." $click={:.., left: @integer_a, right: @integer_b}> .. </button>
     </p>
     <p>
-      Result: <strong id="result">{inspect(@result)}</strong>
+      Result: <strong id="result"><code>{inspect(@result)}</code></strong>
     </p>
     """
   end
