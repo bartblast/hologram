@@ -18,7 +18,7 @@ defmodule HologramFeatureTests.Components.ActionsLayout do
       <body style="padding: 25px">
         <slot />
         <p>
-          <button id="layout_action_1" $click="layout_action_1"> layout action_1 </button>
+          <button id="layout_action_1" $click="layout_action_1"> layout_action_1 </button>
         </p>        
         <p>
           Layout result: <strong id="layout_result">{inspect(@result)}</strong>
