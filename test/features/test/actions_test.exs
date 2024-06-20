@@ -74,4 +74,34 @@ defmodule HologramFeatureTests.ActionsTest do
       ~r/\{"layout_action_2", %\{a: 1, b: 2, event: %\{page_x: [0-9]+\.[0-9]+, page_y: [0-9]+\.[0-9]+\}\}\}/
     )
   end
+
+  feature "component action triggered from component", %{session: session} do
+    session
+    |> visit(ActionsPage)
+    |> click(css("button[id='component_1_action_1']"))
+    |> assert_text(
+      css("#component_1_result"),
+      ~r/\{"component_1_action_1", %\{event: %\{page_x: [0-9]+\.[0-9]+, page_y: [0-9]+\.[0-9]+\}\}\}/
+    )
+  end
+
+  feature "component action triggered from page", %{session: session} do
+    session
+    |> visit(ActionsPage)
+    |> click(css("button[id='component_1_action_2']"))
+    |> assert_text(
+      css("#component_1_result"),
+      ~r/\{"component_1_action_2", %\{a: 1, b: 2, event: %\{page_x: [0-9]+\.[0-9]+, page_y: [0-9]+\.[0-9]+\}\}\}/
+    )
+  end
+
+  feature "component action triggered from layout", %{session: session} do
+    session
+    |> visit(ActionsPage)
+    |> click(css("button[id='component_1_action_3']"))
+    |> assert_text(
+      css("#component_1_result"),
+      ~r/\{"component_1_action_3", %\{a: 1, b: 2, event: %\{page_x: [0-9]+\.[0-9]+, page_y: [0-9]+\.[0-9]+\}\}\}/
+    )
+  end
 end

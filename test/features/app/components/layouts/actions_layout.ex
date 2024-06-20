@@ -16,13 +16,14 @@ defmodule HologramFeatureTests.Components.ActionsLayout do
         <Runtime />
       </head>
       <body style="padding: 25px">
-        <slot />
         <p>
           <button id="layout_action_1" $click="layout_action_1"> layout_action_1 </button>
-        </p>        
+          <button id="component_1_action_3" $click={%Action{name: :component_1_action_3, params: %{a: 1, b: 2}, target: "component_1"}}> component_1_action_3 </button>
+        </p>
         <p>
-          Layout result: <strong id="layout_result">{inspect(@result)}</strong>
-        </p>         
+          Layout result: <strong id="layout_result"><code>{inspect(@result)}</code></strong>
+        </p>
+        <slot />
       </body>
     </html>
     """
