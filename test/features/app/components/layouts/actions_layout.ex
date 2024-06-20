@@ -37,4 +37,8 @@ defmodule HologramFeatureTests.Components.ActionsLayout do
   def action(:layout_action_2, params, component) do
     put_state(component, :result, {"layout_action_2", params})
   end
+
+  def action(:layout_action_3, params, component) do
+    put_state(component, :result, {"layout_action_3", params})
+  end
 end
