@@ -49,4 +49,12 @@ defmodule HologramFeatureTests.ActionsPage do
   def action(:page_action_5, params, component) do
     put_state(component, :result, {"page_action_5", params})
   end
+
+  def action(:page_action_6, params, component) do
+    put_state(component, :result, {"page_action_6", params})
+  end
+
+  def action(:page_action_7, params, component) do
+    put_state(component, :result, {"page_action_7", params})
+  end
 end

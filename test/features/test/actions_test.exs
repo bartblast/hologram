@@ -55,6 +55,26 @@ defmodule HologramFeatureTests.ActionsTest do
   # Covered in preceding (syntax) tests:
   # feature "page action triggered from page"
 
+  feature "page action triggered from layout", %{session: session} do
+    session
+    |> visit(ActionsPage)
+    |> click(css("button[id='page_action_6']"))
+    |> assert_text(
+      css("#page_result"),
+      ~r/\{"page_action_6", %\{a: 1, b: 2, event: %\{page_x: [0-9]+\.[0-9]+, page_y: [0-9]+\.[0-9]+\}\}\}/
+    )
+  end
+
+  feature "page action triggered from component", %{session: session} do
+    session
+    |> visit(ActionsPage)
+    |> click(css("button[id='page_action_7']"))
+    |> assert_text(
+      css("#page_result"),
+      ~r/\{"page_action_7", %\{a: 1, b: 2, event: %\{page_x: [0-9]+\.[0-9]+, page_y: [0-9]+\.[0-9]+\}\}\}/
+    )
+  end
+
   feature "layout action triggered from layout", %{session: session} do
     session
     |> visit(ActionsPage)

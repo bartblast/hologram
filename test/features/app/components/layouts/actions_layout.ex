@@ -18,6 +18,7 @@ defmodule HologramFeatureTests.Components.ActionsLayout do
       <body style="padding: 25px">
         <p>
           <button id="layout_action_1" $click="layout_action_1"> layout_action_1 </button>
+          <button id="page_action_6" $click={%Action{name: :page_action_6, params: %{a: 1, b: 2}, target: "page"}}> page_action_6 </button>
           <button id="component_1_action_3" $click={%Action{name: :component_1_action_3, params: %{a: 1, b: 2}, target: "component_1"}}> component_1_action_3 </button>
         </p>
         <p>

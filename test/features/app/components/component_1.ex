@@ -9,6 +9,7 @@ defmodule HologramFeatureTests.Components.Component1 do
     ~H"""
     <p>
       <button id="component_1_action_1" $click="component_1_action_1"> component_1_action_1 </button>
+      <button id="page_action_7" $click={%Action{name: :page_action_7, params: %{a: 1, b: 2}, target: "page"}}> page_action_7 </button>      
     </p>        
     <p>
       Component 1 result: <strong id="component_1_result"><code>{inspect(@result)}</code></strong>
