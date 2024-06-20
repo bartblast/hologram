@@ -142,4 +142,13 @@ defmodule HologramFeatureTests.ActionsTest do
       )
     end
   end
+
+  describe "component struct mutations" do
+    test "emitted context", %{session: session} do
+      session
+      |> visit(ActionsPage)
+      |> click(css("button[id='page_action_8']"))
+      |> assert_text(css("#component_1_prop_1"), ":updated_value")
+    end
+  end
 end

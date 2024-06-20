@@ -1,6 +1,8 @@
 defmodule HologramFeatureTests.Components.Component1 do
   use Hologram.Component
 
+  prop :prop_1, :atom, from_context: :my_context_key
+
   def init(_params, component, _server) do
     put_state(component, :result, nil)
   end
@@ -14,6 +16,9 @@ defmodule HologramFeatureTests.Components.Component1 do
     </p>        
     <p>
       Component 1 result: <strong id="component_1_result"><code>{inspect(@result)}</code></strong>
+    </p>
+    <p>
+      Component 1 prop_1: <strong id="component_1_prop_1"><code>{inspect(@prop_1)}</code></strong>
     </p>
     """
   end
