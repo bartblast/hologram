@@ -11,7 +11,7 @@ defmodule HologramFeatureTests.TestCase do
       import Kernel, except: [tap: 2]
 
       import HologramFeatureTests.Helpers
-      import Wallaby.Browser, except: [visit: 2]
+      import Wallaby.Browser, except: [assert_text: 2, assert_text: 3, has_text?: 2, visit: 2]
       import Wallaby.Feature
       import Wallaby.Query
 
