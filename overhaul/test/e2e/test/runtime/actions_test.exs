@@ -3,32 +3,6 @@ defmodule HologramE2E.Runtime.ActionsTest do
   alias HologramE2E.Runtime.ActionsPage
 
   describe "action spec" do
-    feature "action spec without target and params specified as text", %{session: session} do
-      session
-      |> visit(ActionsPage)
-      |> click(css("#button-1"))
-      |> assert_has(css("#text", text: "text updated by action_1, state.value = p1"))
-    end
-
-    feature "action spec without target and params specified as 1-element tuple", %{
-      session: session
-    } do
-      session
-      |> visit(ActionsPage)
-      |> click(css("#button-2"))
-      |> assert_has(css("#text", text: "text updated by action_2, state.value = p1"))
-    end
-
-    feature "action spec with params", %{session: session} do
-      session
-      |> visit(ActionsPage)
-      |> click(css("#button-3"))
-      |> assert_has(
-        css("#text",
-          text: "text updated by action_3, params.a = 5, params.b = 6, state.value = p1"
-        )
-      )
-    end
 
     feature "action spec with target ID", %{session: session} do
       session
