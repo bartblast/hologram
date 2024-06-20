@@ -12,7 +12,7 @@ defmodule HologramFeatureTests.Helpers do
     if has_text?(parent, regex) do
       parent
     else
-      raise Wallaby.ExpectationNotMetError, "Text '#{regex}' was not found."
+      raise Wallaby.ExpectationNotMetError, "Text matching regex #{inspect(regex)} was not found."
     end
   end
 
