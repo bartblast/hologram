@@ -1,4 +1,6 @@
 defmodule HologramFeatureTests.Helpers do
+  import ExUnit.Assertions, only: [assert: 1]
+
   alias Hologram.Router
   alias Wallaby.Browser
   alias Wallaby.Element
