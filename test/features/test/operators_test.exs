@@ -12,6 +12,9 @@ defmodule HologramFeatureTests.OperatorsTest do
   @list_a [1, 2, 3]
   @list_b [2, 3, 4]
 
+  @string_a "aaa"
+  @string_b "bbb"
+
   feature "unary +", %{session: session} do
     session
     |> visit(OperatorsPage)
@@ -143,5 +146,12 @@ defmodule HologramFeatureTests.OperatorsTest do
     |> visit(OperatorsPage)
     |> click(css("button[id='..//']"))
     |> assert_text(css("#result"), inspect(@integer_a..@integer_b//@integer_c))
+  end
+
+  feature "<>", %{session: session} do
+    session
+    |> visit(OperatorsPage)
+    |> click(css("button[id='<>']"))
+    |> assert_text(css("#result"), inspect(@string_a <> @string_b))
   end
 end

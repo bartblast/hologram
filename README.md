@@ -103,6 +103,7 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 | @        | :white_check_mark: |
 | ..       | :white_check_mark: |
 | ..//     | :white_check_mark: |
+| <>       | :white_check_mark: |
 
 #### Other
 
