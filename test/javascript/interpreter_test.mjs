@@ -156,6 +156,13 @@ describe("Interpreter", () => {
     });
   });
 
+  it("buildMatchErrorMsg()", () => {
+    const result = Interpreter.buildMatchErrorMsg(Type.atom("abc"));
+    const expected = "no match of right hand side value: :abc";
+
+    assert.deepStrictEqual(result, expected);
+  });
+
   describe("callAnonymousFunction()", () => {
     let anonFun, context;
 
@@ -6089,9 +6096,9 @@ describe("Interpreter", () => {
 
   it("raiseMatchError()", () => {
     assertBoxedError(
-      () => Interpreter.raiseMatchError(Type.atom("abc")),
+      () => Interpreter.raiseMatchError("my_message"),
       "MatchError",
-      "no match of right hand side value: :abc",
+      "my_message",
     );
   });
 

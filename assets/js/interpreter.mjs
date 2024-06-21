@@ -73,6 +73,10 @@ export default class Interpreter {
     );
   }
 
+  static buildMatchErrorMsg(right) {
+    return "no match of right hand side value: " + Interpreter.inspect(right);
+  }
+
   static callAnonymousFunction(fun, argsArray) {
     const args = Type.list(argsArray);
 
@@ -615,10 +619,7 @@ export default class Interpreter {
     return Interpreter.raiseError("KeyError", message);
   }
 
-  static raiseMatchError(arg) {
-    const message =
-      "no match of right hand side value: " + Interpreter.inspect(arg);
-
+  static raiseMatchError(message) {
     return Interpreter.raiseError("MatchError", message);
   }
 
