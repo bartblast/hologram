@@ -105,9 +105,11 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 
 ### Framework Runtime
 
-| Feature     | Status             |
-| :---------- | :----------------: |
-| Actions     | :white_check_mark: |
+| Feature   | Status             |
+| :-------- | :----------------: |
+| Actions   | :white_check_mark: |
+| Cookies   | :x:                |
+| Session   | :x:                |
 
 #### Other
 
