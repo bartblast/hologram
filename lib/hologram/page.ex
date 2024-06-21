@@ -26,6 +26,8 @@ defmodule Hologram.Page do
           only: [
             put_action: 2,
             put_action: 3,
+            put_command: 2,
+            put_command: 3,
             put_context: 3,
             put_page: 2,
             put_page: 3,
