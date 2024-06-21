@@ -144,26 +144,17 @@ export default class Bitstring {
       return true;
     }
 
-    switch (codePoint) {
-      // ?\n = 10
-      case 10:
-      // ?\r = 13
-      case 13:
-      // ?\t = 9
-      case 9:
-      // ?\v = 11
-      case 11:
-      // ?\b = 8
-      case 8:
-      // ?\f = 12
-      case 12:
-      // ?\e = 27
-      case 27:
-      // ?\d = 127
-      case 127:
-      // ?\a = 7
-      case 7:
-        return true;
+    // ?\n = 10
+    // ?\r = 13
+    // ?\t = 9
+    // ?\v = 11
+    // ?\b = 8
+    // ?\f = 12
+    // ?\e = 27
+    // ?\d = 127
+    // ?\a = 7
+    if ([10, 13, 9, 11, 8, 12, 27, 127, 7].includes(codePoint)) {
+      return true;
     }
 
     // 0xA0 = 160, 0xD7FF = 55295
