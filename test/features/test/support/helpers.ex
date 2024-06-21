@@ -6,7 +6,6 @@ defmodule HologramFeatureTests.Helpers do
 
   def assert_page(session, page_module, params \\ []) do
     path = Router.Helpers.page_path(page_module, params)
-
     assert Browser.current_path(session) == path
 
     session
@@ -57,11 +56,7 @@ defmodule HologramFeatureTests.Helpers do
     end
   end
 
-  def visit(session, page_module) do
-    visit(session, page_module, [])
-  end
-
-  def visit(session, page_module, params) do
+  def visit(session, page_module, params \\ []) do
     path = Router.Helpers.page_path(page_module, params)
     Browser.visit(session, path)
   end
