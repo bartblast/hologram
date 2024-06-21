@@ -14,7 +14,6 @@ import Erlang_Persistent_Term from "../../../assets/js/erlang/persistent_term.mj
 import Erlang_Unicode from "../../../assets/js/erlang/unicode.mjs";
 import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
-import HologramMatchError from "../../../assets/js/errors/match_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import JsonEncoder from "../../../assets/js/json_encoder.mjs";
 import Type from "../../../assets/js/type.mjs";
@@ -73,29 +72,6 @@ export function assertBoxedFalse(boxed) {
 
 export function assertBoxedTrue(boxed) {
   assert.isTrue(Type.isTrue(boxed));
-}
-
-export function assertMatchError(callable, value) {
-  let isErrorThrown = false;
-  let isAnyAssertFailed = false;
-
-  try {
-    callable();
-  } catch (error) {
-    isErrorThrown = true;
-
-    if (!(error instanceof HologramMatchError)) {
-      isAnyAssertFailed = true;
-    } else if (!Interpreter.isStrictlyEqual(error.value, value)) {
-      isAnyAssertFailed = true;
-    }
-  }
-
-  if (!isErrorThrown || isAnyAssertFailed) {
-    assert.fail(
-      `expected HologramMatchError with value: ${Interpreter.inspect(value)}`,
-    );
-  }
 }
 
 export function commandQueueItemFixture(data = {}) {

@@ -5,7 +5,6 @@ import uniqWith from "lodash/uniqWith.js";
 
 import Bitstring from "./bitstring.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
-import HologramMatchError from "./errors/match_error.mjs";
 import JsonEncoder from "./json_encoder.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
@@ -514,7 +513,7 @@ export default class Interpreter {
     }
 
     if (left.type !== right.type) {
-      throw new HologramMatchError(right);
+      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
     }
 
     if (Type.isList(left) || Type.isTuple(left)) {
@@ -526,7 +525,7 @@ export default class Interpreter {
     }
 
     if (!Interpreter.isStrictlyEqual(left, right)) {
-      throw new HologramMatchError(right);
+      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
     }
 
     return right;
@@ -820,7 +819,7 @@ export default class Interpreter {
   }
 
   static #inspectBitstring(term, _opts) {
-    if (Bitstring.isText(term)) {
+    if (Bitstring.isPrintableText(term)) {
       return '"' + Bitstring.toText(term) + '"';
     }
 
@@ -955,7 +954,7 @@ export default class Interpreter {
 
   static #matchBitstringPattern(right, left, context) {
     if (right.type !== "bitstring" && right.type !== "bitstring_pattern") {
-      throw new HologramMatchError(right);
+      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
     }
 
     let offset = 0;
@@ -969,7 +968,7 @@ export default class Interpreter {
         );
 
         if (!valueInfo) {
-          throw new HologramMatchError(right);
+          Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
         }
 
         const [value, segmentLen] = valueInfo;
@@ -980,12 +979,12 @@ export default class Interpreter {
         const segmentLen = segmentBitstring.bits.length;
 
         if (right.bits.length - offset < segmentLen) {
-          throw new HologramMatchError(right);
+          Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
         }
 
         for (let i = 0; i < segmentLen; ++i) {
           if (segmentBitstring.bits[i] !== right.bits[offset + i]) {
-            throw new HologramMatchError(right);
+            Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
           }
         }
 
@@ -994,7 +993,7 @@ export default class Interpreter {
     }
 
     if (offset < right.bits.length) {
-      throw new HologramMatchError(right);
+      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
     }
 
     return right;
@@ -1010,14 +1009,14 @@ export default class Interpreter {
   // Deps: [:erlang.hd/1, :erlang.tl/1]
   static #matchConsPattern(right, left, context) {
     if (!Type.isList(right) || right.data.length === 0) {
-      throw new HologramMatchError(right);
+      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
     }
 
     if (
       Type.isList(left.tail) &&
       Type.isProperList(left.tail) !== Type.isProperList(right)
     ) {
-      throw new HologramMatchError(right);
+      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
     }
 
     const rightHead = Erlang["hd/1"](right);
@@ -1027,7 +1026,7 @@ export default class Interpreter {
       !Interpreter.isMatched(left.head, rightHead, context) ||
       !Interpreter.isMatched(left.tail, rightTail, context)
     ) {
-      throw new HologramMatchError(right);
+      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
     }
 
     return right;
@@ -1037,16 +1036,16 @@ export default class Interpreter {
     const count = left.data.length;
 
     if (left.data.length !== right.data.length) {
-      throw new HologramMatchError(right);
+      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
     }
 
     if (Type.isList(left) && left.isProper !== right.isProper) {
-      throw new HologramMatchError(right);
+      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
     }
 
     for (let i = 0; i < count; ++i) {
       if (!Interpreter.isMatched(left.data[i], right.data[i], context)) {
-        throw new HologramMatchError(right);
+        Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
       }
     }
 
@@ -1059,7 +1058,7 @@ export default class Interpreter {
         typeof right.data[key] === "undefined" ||
         !Interpreter.isMatched(value[1], right.data[key][1], context)
       ) {
-        throw new HologramMatchError(right);
+        Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
       }
     }
 
@@ -1078,7 +1077,7 @@ export default class Interpreter {
       if (
         !Interpreter.isStrictlyEqual(context.vars.__matched__[left.name], right)
       ) {
-        throw new HologramMatchError(right);
+        Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
       }
     } else {
       context.vars.__matched__[left.name] = right;

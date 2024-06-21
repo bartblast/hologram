@@ -3,7 +3,6 @@
 import {
   assert,
   assertBoxedError,
-  assertMatchError,
   contextFixture,
   defineGlobalErlangAndElixirModules,
   sinon,
@@ -17,6 +16,7 @@ import HologramInterpreterError from "../../assets/js/errors/interpreter_error.m
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
 import Utils from "../../assets/js/utils.mjs";
+import Bitstring from "../../assets/js/bitstring.mjs";
 
 defineGlobalErlangAndElixirModules();
 
@@ -2843,9 +2843,10 @@ describe("Interpreter", () => {
       it("left atom != right atom", () => {
         const myAtom = Type.atom("xyz");
 
-        assertMatchError(
+        assertBoxedError(
           () => Interpreter.matchOperator(myAtom, Type.atom("abc"), context),
-          myAtom,
+          "MatchError",
+          "no match of right hand side value: :xyz",
         );
       });
 
@@ -2853,9 +2854,10 @@ describe("Interpreter", () => {
       it("left atom != right non-atom", () => {
         const myInteger = Type.integer(2);
 
-        assertMatchError(
+        assertBoxedError(
           () => Interpreter.matchOperator(myInteger, Type.atom("abc"), context),
-          myInteger,
+          "MatchError",
+          "no match of right hand side value: 2",
         );
       });
     });
@@ -2962,9 +2964,10 @@ describe("Interpreter", () => {
         // 170 == 0b10101010
         const right = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]);
 
-        assertMatchError(
+        assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
-          right,
+          "MatchError",
+          "no match of right hand side value: <<170>>",
         );
       });
 
@@ -3102,9 +3105,10 @@ describe("Interpreter", () => {
         // 170 == 0b10101010
         const right = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]);
 
-        assertMatchError(
+        assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
-          right,
+          "MatchError",
+          "no match of right hand side value: <<170>>",
         );
       });
 
@@ -3164,14 +3168,15 @@ describe("Interpreter", () => {
       it("left empty bitstring != right non-empty bitstring", () => {
         const myBitstring = Type.bitstring([1, 0]);
 
-        assertMatchError(
+        assertBoxedError(
           () =>
             Interpreter.matchOperator(
               myBitstring,
               emptyBitstringPattern,
               context,
             ),
-          myBitstring,
+          "MatchError",
+          "no match of right hand side value: <<2::size(2)>>",
         );
       });
 
@@ -3179,10 +3184,11 @@ describe("Interpreter", () => {
       it("left empty bitstring != right non-bitstring", () => {
         const myAtom = Type.atom("abc");
 
-        assertMatchError(
+        assertBoxedError(
           () =>
             Interpreter.matchOperator(myAtom, emptyBitstringPattern, context),
-          myAtom,
+          "MatchError",
+          "no match of right hand side value: :abc",
         );
       });
 
@@ -3209,7 +3215,7 @@ describe("Interpreter", () => {
           Type.bitstringSegment(Type.integer(2), {type: "integer"}),
         ]);
 
-        assertMatchError(
+        assertBoxedError(
           () =>
             Interpreter.matchOperator(
               myBitstring,
@@ -3218,14 +3224,15 @@ describe("Interpreter", () => {
               ]),
               context,
             ),
-          myBitstring,
+          "MatchError",
+          "no match of right hand side value: <<2>>",
         );
       });
 
       it("left literal single-segment bitstring != right non-bitstring", () => {
         const myAtom = Type.atom("abc");
 
-        assertMatchError(
+        assertBoxedError(
           () =>
             Interpreter.matchOperator(
               myAtom,
@@ -3234,7 +3241,8 @@ describe("Interpreter", () => {
               ]),
               context,
             ),
-          myAtom,
+          "MatchError",
+          "no match of right hand side value: :abc",
         );
       });
 
@@ -3388,7 +3396,7 @@ describe("Interpreter", () => {
 
       // <<3, y::integer>> = <<1, 2>>
       it("first segment in left multi-segment bitstring doesn't match", () => {
-        assertMatchError(
+        assertBoxedError(
           () =>
             Interpreter.matchOperator(
               multiSegmentBitstringValue,
@@ -3400,13 +3408,14 @@ describe("Interpreter", () => {
               ]),
               context,
             ),
-          multiSegmentBitstringValue,
+          "MatchError",
+          "no match of right hand side value: <<1, 2>>",
         );
       });
 
       // <<1, 2::size(7)>> = <<1, 2>>
       it("last segment in left multi-segment bitstring doesn't match, because there are too few bits", () => {
-        assertMatchError(
+        assertBoxedError(
           () =>
             Interpreter.matchOperator(
               multiSegmentBitstringValue,
@@ -3419,13 +3428,14 @@ describe("Interpreter", () => {
               ]),
               context,
             ),
-          multiSegmentBitstringValue,
+          "MatchError",
+          "no match of right hand side value: <<1, 2>>",
         );
       });
 
       // <<1, 2::size(9)>> = <<1, 2>>
       it("last segment in left multi-segment bitstring doesn't match, because there are too many bits", () => {
-        assertMatchError(
+        assertBoxedError(
           () =>
             Interpreter.matchOperator(
               multiSegmentBitstringValue,
@@ -3438,7 +3448,8 @@ describe("Interpreter", () => {
               ]),
               context,
             ),
-          multiSegmentBitstringValue,
+          "MatchError",
+          "no match of right hand side value: <<1, 2>>",
         );
       });
     });
@@ -4419,6 +4430,7 @@ describe("Interpreter", () => {
       });
 
       // %{x: 1, y: 2, z: 3} = %{x: 1, y: 2}
+      // The error message on the client may have diffent map keys ordering (the map keys order in Elixir is unpredictable).
       it("right map is missing some some keys from the left map", () => {
         const left = Type.map([
           [Type.atom("x"), Type.integer(1)],
@@ -4428,13 +4440,15 @@ describe("Interpreter", () => {
 
         const right = map;
 
-        assertMatchError(
+        assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
-          right,
+          "MatchError",
+          "no match of right hand side value: %{x: 1, y: 2}",
         );
       });
 
       // %{x: 1, y: 2} = %{x: 1, y: 3}
+      // The error message on the client may have diffent map keys ordering (the map keys order in Elixir is unpredictable).
       it("some values in the left map don't match values in the right map", () => {
         const left = map;
 
@@ -4443,9 +4457,10 @@ describe("Interpreter", () => {
           [Type.atom("y"), Type.integer(3)],
         ]);
 
-        assertMatchError(
+        assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
-          right,
+          "MatchError",
+          "no match of right hand side value: %{x: 1, y: 3}",
         );
       });
 
@@ -4454,9 +4469,10 @@ describe("Interpreter", () => {
         const left = map;
         const right = Type.atom("abc");
 
-        assertMatchError(
+        assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
-          right,
+          "MatchError",
+          "no match of right hand side value: :abc",
         );
       });
 
@@ -4492,9 +4508,10 @@ describe("Interpreter", () => {
         const left = map;
         const right = emptyMap;
 
-        assertMatchError(
+        assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
-          right,
+          "MatchError",
+          "no match of right hand side value: %{}",
         );
       });
 
@@ -4553,7 +4570,7 @@ describe("Interpreter", () => {
       });
 
       it("x = 2 = 3", () => {
-        assertMatchError(
+        assertBoxedError(
           () =>
             Interpreter.matchOperator(
               Interpreter.matchOperator(
@@ -4564,7 +4581,8 @@ describe("Interpreter", () => {
               Type.variablePattern("x"),
               context,
             ),
-          Type.integer(3),
+          "MatchError",
+          "no match of right hand side value: 3",
         );
       });
 
@@ -4590,7 +4608,7 @@ describe("Interpreter", () => {
       });
 
       it("2 = x = 3", () => {
-        assertMatchError(
+        assertBoxedError(
           () =>
             Interpreter.matchOperator(
               Interpreter.matchOperator(
@@ -4601,7 +4619,8 @@ describe("Interpreter", () => {
               Type.integer(2),
               context,
             ),
-          Type.integer(3),
+          "MatchError",
+          "no match of right hand side value: 3",
         );
       });
 
@@ -4636,7 +4655,7 @@ describe("Interpreter", () => {
           },
         });
 
-        assertMatchError(
+        assertBoxedError(
           () =>
             Interpreter.matchOperator(
               Interpreter.matchOperator(
@@ -4647,7 +4666,8 @@ describe("Interpreter", () => {
               Type.integer(2),
               context,
             ),
-          Type.integer(3),
+          "MatchError",
+          "no match of right hand side value: 3",
         );
       });
 
@@ -4659,7 +4679,7 @@ describe("Interpreter", () => {
           },
         });
 
-        assertMatchError(
+        assertBoxedError(
           () =>
             Interpreter.matchOperator(
               Interpreter.matchOperator(
@@ -4670,7 +4690,8 @@ describe("Interpreter", () => {
               Type.integer(1),
               context,
             ),
-          Type.integer(2),
+          "MatchError",
+          "no match of right hand side value: 2",
         );
       });
 
@@ -4734,7 +4755,7 @@ describe("Interpreter", () => {
       });
 
       it("[1 = 1] = [1 = 2]", () => {
-        assertMatchError(
+        assertBoxedError(
           () =>
             Interpreter.matchOperator(
               Type.list([
@@ -4753,12 +4774,13 @@ describe("Interpreter", () => {
               ]),
               context,
             ),
-          Type.integer(2),
+          "MatchError",
+          "no match of right hand side value: 2",
         );
       });
 
       it("[1 = 1] = [2 = 1]", () => {
-        assertMatchError(
+        assertBoxedError(
           () =>
             Interpreter.matchOperator(
               Type.list([
@@ -4777,13 +4799,14 @@ describe("Interpreter", () => {
               ]),
               context,
             ),
-          Type.integer(1),
+          "MatchError",
+          "no match of right hand side value: 1",
         );
       });
 
       // TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/elixir/hologram/ex_js_consistency/match_operator_test.exs)
       it("[1 = 2] = [1 = 1]", () => {
-        assertMatchError(
+        assertBoxedError(
           () =>
             Interpreter.matchOperator(
               Type.list([
@@ -4802,13 +4825,14 @@ describe("Interpreter", () => {
               ]),
               context,
             ),
-          Type.integer(2),
+          "MatchError",
+          "no match of right hand side value: 2",
         );
       });
 
       // TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/elixir/hologram/ex_js_consistency/match_operator_test.exs)
       it("[2 = 1] = [1 = 1]", () => {
-        assertMatchError(
+        assertBoxedError(
           () =>
             Interpreter.matchOperator(
               Type.list([
@@ -4827,7 +4851,8 @@ describe("Interpreter", () => {
               ]),
               context,
             ),
-          Type.integer(1),
+          "MatchError",
+          "no match of right hand side value: 1",
         );
       });
 
@@ -5803,9 +5828,10 @@ describe("Interpreter", () => {
 
         const right = Type.list([Type.integer(1), Type.integer(2)]);
 
-        assertMatchError(
+        assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
-          right,
+          "MatchError",
+          "no match of right hand side value: [1, 2]",
         );
       });
     });
