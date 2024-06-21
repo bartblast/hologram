@@ -1217,6 +1217,44 @@ describe("Bitstring", () => {
     });
   });
 
+  describe("isPrintableText()", () => {
+    it("empty text", () => {
+      assert.isTrue(Bitstring.isPrintableText(Type.bitstring("")));
+    });
+
+    it("ASCII text", () => {
+      assert.isTrue(Bitstring.isPrintableText(Type.bitstring("abc")));
+    });
+
+    it("Unicode text", () => {
+      assert.isTrue(Bitstring.isPrintableText(Type.bitstring("全息图")));
+    });
+
+    it("non-binary", () => {
+      assert.isFalse(Bitstring.isPrintableText(Type.bitstring([1, 0, 1])));
+    });
+
+    it("with code point that is not printable", () => {
+      const bitstring = Type.bitstring([
+        // ?a = 97
+        Type.bitstringSegment(Type.integer(97), {type: "integer"}),
+        Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+        // ?b = 98
+        Type.bitstringSegment(Type.integer(98), {type: "integer"}),
+      ]);
+
+      assert.isFalse(Bitstring.isPrintableText(bitstring));
+    });
+
+    it("with invalid code point", () => {
+      const bitstring = Type.bitstring([
+        Type.bitstringSegment(Type.integer(255), {type: "integer"}),
+      ]);
+
+      assert.isFalse(Bitstring.isPrintableText(bitstring));
+    });
+  });
+
   describe("isText()", () => {
     it("empty text", () => {
       assert.isTrue(Bitstring.isText(Type.bitstring("")));
@@ -1234,7 +1272,7 @@ describe("Bitstring", () => {
       assert.isFalse(Bitstring.isText(Type.bitstring([1, 0, 1])));
     });
 
-    it("invalid code point", () => {
+    it("with invalid code point", () => {
       const bitstring = Type.bitstring([
         Type.bitstringSegment(Type.integer(255), {type: "integer"}),
       ]);

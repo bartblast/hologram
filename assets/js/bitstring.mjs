@@ -184,6 +184,37 @@ export default class Bitstring {
     return false;
   }
 
+  static isPrintableText(bitstring) {
+    if (!Type.isBinary(bitstring)) {
+      return false;
+    }
+
+    let offset = 0;
+
+    while (offset < bitstring.bits.length) {
+      const codePointInfo = Bitstring.fetchNextCodePointFromUtf8BitstringChunk(
+        bitstring.bits,
+        offset,
+      );
+
+      if (!codePointInfo) {
+        return false;
+      }
+
+      if (!Bitstring.validateCodePoint(codePointInfo[0].value)) {
+        return false;
+      }
+
+      if (!Bitstring.isPrintableCodePoint(codePointInfo[0].value)) {
+        return false;
+      }
+
+      offset += codePointInfo[1];
+    }
+
+    return true;
+  }
+
   static isText(bitstring) {
     if (!Type.isBinary(bitstring)) {
       return false;
