@@ -70,7 +70,7 @@ end
 
 * Minimal reliance on JS except for interfacing with select third-party scripts or widgets. This can be mitigated through standardized libraries tailored to popular packages, streamlining interoperability.
 
-* Particularly welcoming to new Elixir converts or novice developers, prioritizing intuitive usability to streamline feature development without excessive technical troubleshooting or writing boilerplate code.
+* Particularly welcoming to new Elixir converts or novice developers, prioritizing DX and intuitive usability to streamline feature development without excessive technical troubleshooting or writing boilerplate code.
 
 ## Features
 
