@@ -25,6 +25,7 @@ defmodule HologramFeatureTests.OperatorsPage do
   def template do
     ~H"""
     <p>
+      <h2><code>Overridable General Operators</code></h2>
       <button id="unary+" $click={:"unary+", value: @integer_a}> unary + </button>
       <button id="unary-" $click={:"unary-", value: @integer_a}> unary - </button>
       <button id="+" $click={:+, left: @integer_a, right: @integer_b}> + </button>
