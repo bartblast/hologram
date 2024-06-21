@@ -154,4 +154,16 @@ defmodule HologramFeatureTests.OperatorsTest do
     |> click(css("button[id='<>']"))
     |> assert_text(css("#result"), inspect(@string_a <> @string_b))
   end
+
+  feature "|>", %{session: session} do
+    expected =
+      @integer_a
+      |> OperatorsPage.fun_1()
+      |> OperatorsPage.fun_2()
+
+    session
+    |> visit(OperatorsPage)
+    |> click(css("button[id='|>']"))
+    |> assert_text(css("#result"), inspect(expected))
+  end
 end

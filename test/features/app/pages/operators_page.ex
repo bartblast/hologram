@@ -45,6 +45,7 @@ defmodule HologramFeatureTests.OperatorsPage do
       <button id=".." $click={:.., left: @integer_a, right: @integer_b}> .. </button>
       <button id="..//" $click={:..//, first: @integer_a, last: @integer_b, step: @integer_c}> ..// </button>
       <button id="<>" $click={:<>, left: @string_a, right: @string_b}> &lt;&gt; </button>
+      <button id="|>" $click={:|>, arg: @integer_a}> |&gt; </button>
     </p>
     <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
@@ -131,4 +132,17 @@ defmodule HologramFeatureTests.OperatorsPage do
   def action(:<>, %{left: left, right: right}, component) do
     put_state(component, :result, left <> right)
   end
+
+  def action(:|>, %{arg: arg}, component) do
+    result =
+      arg
+      |> fun_1()
+      |> fun_2()
+
+    put_state(component, :result, result)
+  end
+
+  def fun_1(arg), do: arg * 2
+
+  def fun_2(arg), do: arg * 3
 end
