@@ -165,6 +165,9 @@ defmodule HologramFeatureTests.ActionsTest do
       |> assert_text(css("#page_result"), ~s/{"page_action_12", %{x: 10, y: 20}}/)
     end
 
+    # Covered in navigation test suite
+    # feature "next page"
+
     # Covered in preceding (syntax) tests:
     # feature "state"
   end
