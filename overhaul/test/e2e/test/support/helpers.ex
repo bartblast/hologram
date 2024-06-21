@@ -17,13 +17,4 @@ defmodule HologramE2E.Test.Helpers do
     Keyword.put(opts, :force, true)
     |> Compiler.compile()
   end
-
-  def assert_page(session, page) do
-    assert Browser.current_path(session) == page.route()
-    session
-  end
-
-  def visit(session, page) do
-    Browser.visit(session, page.route())
-  end
 end

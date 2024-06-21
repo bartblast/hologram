@@ -4,6 +4,14 @@ defmodule HologramFeatureTests.Helpers do
 
   defguard is_regex(term) when is_map(term) and term.__struct__ == Regex
 
+  def assert_page(session, page_module, params \\ []) do
+    path = Router.Helpers.page_path(page_module, params)
+
+    assert Browser.current_path(session) == path
+
+    session
+  end
+
   def assert_text(parent, text) when is_binary(text) do
     Wallaby.Browser.assert_text(parent, text)
   end
