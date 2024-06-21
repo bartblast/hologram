@@ -157,5 +157,12 @@ defmodule HologramFeatureTests.ActionsTest do
       |> click(css("button[id='page_action_9']"))
       |> assert_text(css("#page_result"), ~s/{"page_action_10", %{x: 10, y: 20}}/)
     end
+
+    test "next command", %{session: session} do
+      session
+      |> visit(ActionsPage)
+      |> click(css("button[id='page_action_11']"))
+      |> assert_text(css("#page_result"), ~s/{"page_action_12", %{x: 10, y: 20}}/)
+    end
   end
 end

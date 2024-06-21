@@ -23,6 +23,7 @@ defmodule HologramFeatureTests.ActionsPage do
       <button id="page_action_5" $click="page_ac{"ti"}on_{5}"> page_action_5 </button>
       <button id="page_action_8" $click="page_action_8"> page_action_8 </button>
       <button id="page_action_9" $click={:page_action_9, a: 1, b: 2}> page_action_9 </button>
+      <button id="page_action_11" $click={:page_action_11, a: 1, b: 2}> page_action_11 </button>
       <button id="component_1_action_2" $click={%Action{name: :component_1_action_2, params: %{a: 1, b: 2}, target: "component_1"}}> component_1_action_2 </button>
     </p>
     <p>
@@ -74,5 +75,19 @@ defmodule HologramFeatureTests.ActionsPage do
 
   def action(:page_action_10, params, component) do
     put_state(component, :result, {"page_action_10", params})
+  end
+
+  def action(:page_action_11, params, component) do
+    component
+    |> put_state(:result, {"page_action_11", params})
+    |> put_command(:page_command_1, x: 10, y: 20)
+  end
+
+  def action(:page_action_12, params, component) do
+    put_state(component, :result, {"page_action_12", params})
+  end
+
+  def command(:page_command_1, params, server) do
+    put_action(server, :page_action_12, params)
   end
 end
