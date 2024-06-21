@@ -1175,6 +1175,48 @@ describe("Bitstring", () => {
     });
   });
 
+  describe("isPrintableCodePoint()", () => {
+    it("codePoint in range 0x20..0x7E", () => {
+      assert.isTrue(Bitstring.isPrintableCodePoint(40));
+    });
+
+    it("codePoint not in range 0x20..0x7E", () => {
+      assert.isFalse(Bitstring.isPrintableCodePoint(128));
+    });
+
+    it("codePoint in range 0xA0..0xD7FF", () => {
+      assert.isTrue(Bitstring.isPrintableCodePoint(170));
+    });
+
+    it("codePoint not in range 0xA0..0xD7FF", () => {
+      assert.isFalse(Bitstring.isPrintableCodePoint(55296));
+    });
+
+    it("codePoint in range 0xE000..0xFFFD", () => {
+      assert.isTrue(Bitstring.isPrintableCodePoint(58000));
+    });
+
+    it("codePoint not in range 0xE000..0xFFFD", () => {
+      assert.isFalse(Bitstring.isPrintableCodePoint(65534));
+    });
+
+    it("codePoint in range 0x10000..0x10FFFF", () => {
+      assert.isTrue(Bitstring.isPrintableCodePoint(66000));
+    });
+
+    it("codePoint not in range 0x10000..0x10FFFF", () => {
+      assert.isFalse(Bitstring.isPrintableCodePoint(1114112));
+    });
+
+    it("one of special printable chars", () => {
+      assert.isTrue(Bitstring.isPrintableCodePoint(10));
+    });
+
+    it("not one of special printable chars", () => {
+      assert.isFalse(Bitstring.isPrintableCodePoint(14));
+    });
+  });
+
   describe("isText()", () => {
     it("empty text", () => {
       assert.isTrue(Bitstring.isText(Type.bitstring("")));

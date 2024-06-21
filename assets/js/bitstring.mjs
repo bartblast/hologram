@@ -136,6 +136,54 @@ export default class Bitstring {
     return {type: "bitstring", bits: Utils.concatUint8Arrays(bitArrays)};
   }
 
+  // See: String.printable?/2
+  // https://github.com/elixir-lang/elixir/blob/6bfb95ab884f11475de6da3f99c6528938e025a8/lib/elixir/lib/string.ex#L322
+  static isPrintableCodePoint(codePoint) {
+    // 0x20 = 32, 0x7E = 126
+    if (codePoint >= 32 && codePoint <= 126) {
+      return true;
+    }
+
+    switch (codePoint) {
+      // ?\n = 10
+      case 10:
+      // ?\r = 13
+      case 13:
+      // ?\t = 9
+      case 9:
+      // ?\v = 11
+      case 11:
+      // ?\b = 8
+      case 8:
+      // ?\f = 12
+      case 12:
+      // ?\e = 27
+      case 27:
+      // ?\d = 127
+      case 127:
+      // ?\a = 7
+      case 7:
+        return true;
+    }
+
+    // 0xA0 = 160, 0xD7FF = 55295
+    if (codePoint >= 160 && codePoint <= 55295) {
+      return true;
+    }
+
+    // 0xE000 = 57344, 0xFFFD = 65533
+    if (codePoint >= 57344 && codePoint <= 65533) {
+      return true;
+    }
+
+    // 0x10000 = 65536, 0x10FFFF = 1114111
+    if (codePoint >= 65536 && codePoint <= 1114111) {
+      return true;
+    }
+
+    return false;
+  }
+
   static isText(bitstring) {
     if (!Type.isBinary(bitstring)) {
       return false;
