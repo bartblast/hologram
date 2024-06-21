@@ -30,7 +30,6 @@ without its shortcomings related to scalability, efficiency, etc.
 
 | Feature     | Status             | Comments                                                        |
 | :---------- | :----------------: | :-------------------------------------------------------------- |
-| Actions     | :white_check_mark: |                                                                 |
 | Commands    | :white_check_mark: |                                                                 |
 | Routing     | :construction:     | done: paths without params, todo: params                        |
 | Session     | :x:                |                                                                 |
