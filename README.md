@@ -107,9 +107,9 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 
 #### Other
 
-| Feature                        | Status             |
-| :----------------------------- | :----------------: |
-| Regular expressions            | :x:                |
+| Feature               | Status             |
+| :-------------------- | :----------------: |
+| Regular expressions   | :x:                |
 
 ### Framework Runtime
 
