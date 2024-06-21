@@ -16,7 +16,6 @@ import HologramInterpreterError from "../../assets/js/errors/interpreter_error.m
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
 import Utils from "../../assets/js/utils.mjs";
-import Bitstring from "../../assets/js/bitstring.mjs";
 
 defineGlobalErlangAndElixirModules();
 
