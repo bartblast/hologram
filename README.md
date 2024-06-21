@@ -103,6 +103,12 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 | @        | :white_check_mark: |
 | ..       | :white_check_mark: |
 
+#### Other
+
+| Feature                        | Status             |
+| :----------------------------- | :----------------: |
+| Regular expressions            | :x:                |
+
 ### Framework Runtime
 
 | Feature   | Status             |
@@ -110,9 +116,3 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 | Actions   | :white_check_mark: |
 | Cookies   | :x:                |
 | Session   | :x:                |
-
-#### Other
-
-| Feature                        | Status             |
-| :----------------------------- | :----------------: |
-| Regular expressions            | :x:                |
