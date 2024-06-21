@@ -13,6 +13,7 @@ defmodule HologramFeatureTests.OperatorsPage do
       boolean_b: false,
       integer_a: 123,
       integer_b: 234,
+      integer_c: @integer_c,
       list_a: [1, 2, 3],
       list_b: [2, 3, 4],
       result: nil
@@ -40,6 +41,7 @@ defmodule HologramFeatureTests.OperatorsPage do
       <button id="not in" $click={:"not in", left: @integer_a, right: @list_a}> not in </button>
       <button id="@" $click="@"> @ </button>
       <button id=".." $click={:.., left: @integer_a, right: @integer_b}> .. </button>
+      <button id="..//" $click={:..//, first: @integer_a, last: @integer_b, step: @integer_c}> ..// </button>
     </p>
     <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
@@ -117,5 +119,9 @@ defmodule HologramFeatureTests.OperatorsPage do
 
   def action(:.., %{left: left, right: right}, component) do
     put_state(component, :result, left..right)
+  end
+
+  def action(:"..//", %{first: first, last: last, step: step}, component) do
+    put_state(component, :result, first..last//step)
   end
 end
