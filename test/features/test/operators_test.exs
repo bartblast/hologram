@@ -204,5 +204,26 @@ defmodule HologramFeatureTests.OperatorsTest do
       |> click(css("button[id='=']"))
       |> assert_text(css("#result"), inspect(@integer_a))
     end
+
+    feature "& (remote function)", %{session: session} do
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='& (remote function)']"))
+      |> assert_text(css("#result"), inspect([@integer_a, @integer_b, @integer_c]))
+    end
+
+    feature "& (local function)", %{session: session} do
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='& (local function)']"))
+      |> assert_text(css("#result"), inspect(@integer_a * 4))
+    end
+
+    feature "& (anonymous function)", %{session: session} do
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='& (anonymous function)']"))
+      |> assert_text(css("#result"), inspect(@integer_a * 5))
+    end
   end
 end

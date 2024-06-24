@@ -56,6 +56,9 @@ defmodule HologramFeatureTests.OperatorsPage do
       <button id=". (anonymous function call)" $click=". (anonymous function call)"> . (anonymous function call) </button>
       <button id=". (map access)" $click=". (map access)"> . (map access) </button>
       <button id="=" $click="="> = </button>
+      <button id="& (remote function)" $click="& (remote function)"> & (remote function) </button>
+      <button id="& (local function)" $click="& (local function)"> & (local function) </button>
+      <button id="& (anonymous function)" $click="& (anonymous function)"> & (anonymous function) </button>
     </p>
     <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
@@ -185,7 +188,30 @@ defmodule HologramFeatureTests.OperatorsPage do
     put_state(component, :result, result)
   end
 
+  def action(:"& (remote function)", _params, component) do
+    fun = &Enum.reverse/1
+    result = fun.([@integer_c, @integer_b, @integer_a])
+
+    put_state(component, :result, result)
+  end
+
+  def action(:"& (local function)", _params, component) do
+    fun = &fun_3/1
+    result = fun.(@integer_a)
+
+    put_state(component, :result, result)
+  end
+
+  def action(:"& (anonymous function)", _params, component) do
+    fun = &(&1 * 5)
+    result = fun.(@integer_a)
+
+    put_state(component, :result, result)
+  end
+
   def fun_1(arg), do: arg * 2
 
   def fun_2(arg), do: arg * 3
+
+  def fun_3(arg), do: arg * 4
 end
