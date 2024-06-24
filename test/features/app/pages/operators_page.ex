@@ -1,53 +1,53 @@
 defmodule HologramFeatureTests.OperatorsPage do
   use Hologram.Page
+  import HologramFeatureTests.Helpers, only: [wrap_value: 1]
 
   route "/operators"
 
   layout HologramFeatureTests.Components.DefaultLayout
 
+  @boolean_a true
+  @boolean_b false
+
   @integer_a 123
+  @integer_b 234
   @integer_c 345
 
+  @list_a [1, 2, 3]
+  @list_b [2, 3, 4]
+
+  @string_a "aaa"
+  @string_b "bbb"
+
   def init(_params, component, _server) do
-    put_state(component,
-      boolean_a: true,
-      boolean_b: false,
-      integer_a: 123,
-      integer_b: 234,
-      integer_c: @integer_c,
-      list_a: [1, 2, 3],
-      list_b: [2, 3, 4],
-      result: nil,
-      string_a: "aaa",
-      string_b: "bbb"
-    )
+    put_state(component, :result, nil)
   end
 
   def template do
     ~H"""
     <p>
       <h2><code>Overridable General Operators</code></h2>
-      <button id="unary+" $click={:"unary+", value: @integer_a}> unary + </button>
-      <button id="unary-" $click={:"unary-", value: @integer_a}> unary - </button>
-      <button id="+" $click={:+, left: @integer_a, right: @integer_b}> + </button>
-      <button id="-" $click={:-, left: @integer_a, right: @integer_b}> - </button>
-      <button id="*" $click={:*, left: @integer_a, right: @integer_b}> * </button>
-      <button id="/" $click={:/, left: @integer_a, right: @integer_b}> / </button>
-      <button id="++" $click={:++, left: @list_a, right: @list_b}> ++ </button>
-      <button id="--" $click={:--, left: @list_a, right: @list_b}> -- </button>
-      <button id="and" $click={:and, left: @boolean_a, right: @boolean_b}> and </button>
-      <button id="&amp;&amp;" $click={:&&, left: @boolean_a, right: @boolean_b}> &amp;&amp; </button>
-      <button id="or" $click={:or, left: @boolean_a, right: @boolean_b}> or </button>
-      <button id="||" $click={:||, left: @boolean_a, right: @boolean_b}> || </button>
-      <button id="not" $click={:not, value: @boolean_a}> not </button>
-      <button id="!" $click={:!, value: @boolean_a}> ! </button>
-      <button id="in" $click={:in, left: @integer_a, right: @list_a}> in </button>
-      <button id="not in" $click={:"not in", left: @integer_a, right: @list_a}> not in </button>
+      <button id="unary+" $click="unary+"> unary + </button>
+      <button id="unary-" $click="unary-"> unary - </button>
+      <button id="+" $click="+"> + </button>
+      <button id="-" $click="-"> - </button>
+      <button id="*" $click="*"> * </button>
+      <button id="/" $click="/"> / </button>
+      <button id="++" $click="++"> ++ </button>
+      <button id="--" $click="--"> -- </button>
+      <button id="and" $click="and"> and </button>
+      <button id="&amp;&amp;" $click="&&"> &amp;&amp; </button>
+      <button id="or" $click="or"> or </button>
+      <button id="||" $click="||"> || </button>
+      <button id="not" $click="not"> not </button>
+      <button id="!" $click="!"> ! </button>
+      <button id="in" $click="in"> in </button>
+      <button id="not in" $click="not in"> not in </button>
       <button id="@" $click="@"> @ </button>
-      <button id=".." $click={:.., left: @integer_a, right: @integer_b}> .. </button>
-      <button id="..//" $click={:..//, first: @integer_a, last: @integer_b, step: @integer_c}> ..// </button>
-      <button id="<>" $click={:<>, left: @string_a, right: @string_b}> &lt;&gt; </button>
-      <button id="|>" $click={:|>, arg: @integer_a}> |&gt; </button>
+      <button id=".." $click=".."> .. </button>
+      <button id="..//" $click="..//"> ..// </button>
+      <button id="<>" $click="<>"> &lt;&gt; </button>
+      <button id="|>" $click="|>"> |&gt; </button>
     </p>
     <p>
       <h2><code>Special Form Operators</code></h2>
@@ -59,84 +59,84 @@ defmodule HologramFeatureTests.OperatorsPage do
     """
   end
 
-  def action(:"unary+", %{value: value}, component) do
-    put_state(component, :result, +value)
+  def action(:"unary+", _params, component) do
+    put_state(component, :result, +@integer_a)
   end
 
-  def action(:"unary-", %{value: value}, component) do
-    put_state(component, :result, -value)
+  def action(:"unary-", _params, component) do
+    put_state(component, :result, -@integer_a)
   end
 
-  def action(:+, %{left: left, right: right}, component) do
-    put_state(component, :result, left + right)
+  def action(:+, _params, component) do
+    put_state(component, :result, @integer_a + @integer_b)
   end
 
-  def action(:-, %{left: left, right: right}, component) do
-    put_state(component, :result, left - right)
+  def action(:-, _params, component) do
+    put_state(component, :result, @integer_a - @integer_b)
   end
 
-  def action(:*, %{left: left, right: right}, component) do
-    put_state(component, :result, left * right)
+  def action(:*, _params, component) do
+    put_state(component, :result, @integer_a * @integer_b)
   end
 
-  def action(:/, %{left: left, right: right}, component) do
-    put_state(component, :result, left / right)
+  def action(:/, _params, component) do
+    put_state(component, :result, @integer_a / @integer_b)
   end
 
-  def action(:++, %{left: left, right: right}, component) do
-    put_state(component, :result, left ++ right)
+  def action(:++, _params, component) do
+    put_state(component, :result, @list_a ++ @list_b)
   end
 
-  def action(:--, %{left: left, right: right}, component) do
-    put_state(component, :result, left -- right)
+  def action(:--, _params, component) do
+    put_state(component, :result, @list_a -- @list_b)
   end
 
-  def action(:and, %{left: left, right: right}, component) do
-    put_state(component, :result, left and right)
+  def action(:and, _params, component) do
+    put_state(component, :result, @boolean_a and @boolean_b)
   end
 
-  def action(:&&, %{left: left, right: right}, component) do
-    put_state(component, :result, left && right)
+  def action(:&&, _params, component) do
+    put_state(component, :result, wrap_value(@boolean_a) && wrap_value(@boolean_b))
   end
 
-  def action(:or, %{left: left, right: right}, component) do
-    put_state(component, :result, left or right)
+  def action(:or, _params, component) do
+    put_state(component, :result, @boolean_a or @boolean_b)
   end
 
-  def action(:||, %{left: left, right: right}, component) do
-    put_state(component, :result, left || right)
+  def action(:||, _params, component) do
+    put_state(component, :result, wrap_value(@boolean_a) || wrap_value(@boolean_b))
   end
 
-  def action(:not, %{value: value}, component) do
-    put_state(component, :result, not value)
+  def action(:not, _params, component) do
+    put_state(component, :result, not @boolean_a)
   end
 
-  def action(:!, %{value: value}, component) do
-    put_state(component, :result, !value)
+  def action(:!, _params, component) do
+    put_state(component, :result, !@boolean_a)
   end
 
-  def action(:in, %{left: left, right: right}, component) do
-    put_state(component, :result, left in right)
+  def action(:in, _params, component) do
+    put_state(component, :result, @integer_a in @list_a)
   end
 
-  def action(:"not in", %{left: left, right: right}, component) do
-    put_state(component, :result, left not in right)
+  def action(:"not in", _params, component) do
+    put_state(component, :result, @integer_a not in @list_a)
   end
 
   def action(:@, _params, component) do
     put_state(component, :result, @integer_c)
   end
 
-  def action(:.., %{left: left, right: right}, component) do
-    put_state(component, :result, left..right)
+  def action(:.., _params, component) do
+    put_state(component, :result, @integer_a..@integer_b)
   end
 
-  def action(:"..//", %{first: first, last: last, step: step}, component) do
-    put_state(component, :result, first..last//step)
+  def action(:"..//", _params, component) do
+    put_state(component, :result, @integer_a..@integer_b//@integer_c)
   end
 
-  def action(:<>, %{left: left, right: right}, component) do
-    put_state(component, :result, left <> right)
+  def action(:<>, _params, component) do
+    put_state(component, :result, @string_a <> @string_b)
   end
 
   def action(:^, _params, component) do
@@ -146,9 +146,9 @@ defmodule HologramFeatureTests.OperatorsPage do
     put_state(component, :result, x)
   end
 
-  def action(:|>, %{arg: arg}, component) do
+  def action(:|>, _params, component) do
     result =
-      arg
+      @integer_a
       |> fun_1()
       |> fun_2()
 
