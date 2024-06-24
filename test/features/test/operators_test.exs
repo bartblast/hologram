@@ -168,4 +168,13 @@ defmodule HologramFeatureTests.OperatorsTest do
       |> assert_text(css("#result"), inspect(expected))
     end
   end
+
+  describe "special form operators" do
+    feature "^", %{session: session} do
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='^']"))
+      |> assert_text(css("#result"), inspect(@integer_a))
+    end
+  end
 end
