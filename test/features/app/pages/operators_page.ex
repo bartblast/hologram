@@ -52,6 +52,9 @@ defmodule HologramFeatureTests.OperatorsPage do
     <p>
       <h2><code>Special Form Operators</code></h2>
       <button id="^" $click="^"> ^ </button>
+      <button id=". (remote call)" $click=". (remote call)"> . (remote call) </button>
+      <button id=". (anonymous function call)" $click=". (anonymous function call)"> . (anonymous function call) </button>
+      <button id=". (map access)" $click=". (map access)"> . (map access) </button>
     </p>
     <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
@@ -153,6 +156,21 @@ defmodule HologramFeatureTests.OperatorsPage do
       |> fun_2()
 
     put_state(component, :result, result)
+  end
+
+  def action(:". (remote call)", _params, component) do
+    module = Enum
+    put_state(component, :result, module.reverse([3, 2, 1]))
+  end
+
+  def action(:". (anonymous function call)", _params, component) do
+    fun = fn n -> n * n end
+    put_state(component, :result, fun.(3))
+  end
+
+  def action(:". (map access)", _params, component) do
+    map = %{a: 1, b: 2}
+    put_state(component, :result, map.b)
   end
 
   def fun_1(arg), do: arg * 2

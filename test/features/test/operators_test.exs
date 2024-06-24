@@ -176,5 +176,35 @@ defmodule HologramFeatureTests.OperatorsTest do
       |> click(css("button[id='^']"))
       |> assert_text(css("#result"), inspect(@integer_a))
     end
+
+    feature ". (remote call)", %{session: session} do
+      module = Enum
+      expected = module.reverse([3, 2, 1])
+
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='. (remote call)']"))
+      |> assert_text(css("#result"), inspect(expected))
+    end
+
+    feature ". (anonymous function call)", %{session: session} do
+      fun = fn n -> n * n end
+      expected = fun.(3)
+
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='. (anonymous function call)']"))
+      |> assert_text(css("#result"), inspect(expected))
+    end
+
+    feature ". (map access)", %{session: session} do
+      map = %{a: 1, b: 2}
+      expected = map.b
+
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='. (map access)']"))
+      |> assert_text(css("#result"), inspect(expected))
+    end
   end
 end
