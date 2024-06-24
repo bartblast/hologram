@@ -144,10 +144,10 @@ defmodule HologramFeatureTests.OperatorsPage do
   end
 
   def action(:^, _params, component) do
-    x = @integer_a
-    {1, ^x} = {1, @integer_a}
+    result = @integer_b
+    {@integer_a, ^result} = {@integer_a, @integer_b}
 
-    put_state(component, :result, x)
+    put_state(component, :result, result)
   end
 
   def action(:|>, _params, component) do
@@ -161,17 +161,23 @@ defmodule HologramFeatureTests.OperatorsPage do
 
   def action(:". (remote call)", _params, component) do
     module = Enum
-    put_state(component, :result, module.reverse([3, 2, 1]))
+    result = module.reverse([@integer_c, @integer_b, @integer_a])
+
+    put_state(component, :result, result)
   end
 
   def action(:". (anonymous function call)", _params, component) do
     fun = fn n -> n * n end
-    put_state(component, :result, fun.(3))
+    result = fun.(@integer_c)
+
+    put_state(component, :result, result)
   end
 
   def action(:". (map access)", _params, component) do
-    map = %{a: 1, b: 2}
-    put_state(component, :result, map.b)
+    map = %{a: @integer_a, b: @integer_b}
+    result = map.b
+
+    put_state(component, :result, result)
   end
 
   def action(:=, _params, component) do
