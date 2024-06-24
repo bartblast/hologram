@@ -206,5 +206,12 @@ defmodule HologramFeatureTests.OperatorsTest do
       |> click(css("button[id='. (map access)']"))
       |> assert_text(css("#result"), inspect(expected))
     end
+
+    feature "=", %{session: session} do
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='=']"))
+      |> assert_text(css("#result"), inspect(@integer_a))
+    end
   end
 end

@@ -55,6 +55,7 @@ defmodule HologramFeatureTests.OperatorsPage do
       <button id=". (remote call)" $click=". (remote call)"> . (remote call) </button>
       <button id=". (anonymous function call)" $click=". (anonymous function call)"> . (anonymous function call) </button>
       <button id=". (map access)" $click=". (map access)"> . (map access) </button>
+      <button id="=" $click="="> = </button>
     </p>
     <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
@@ -171,6 +172,11 @@ defmodule HologramFeatureTests.OperatorsPage do
   def action(:". (map access)", _params, component) do
     map = %{a: 1, b: 2}
     put_state(component, :result, map.b)
+  end
+
+  def action(:=, _params, component) do
+    result = @integer_a
+    put_state(component, :result, result)
   end
 
   def fun_1(arg), do: arg * 2
