@@ -92,7 +92,7 @@ defmodule HologramFeatureTests.OperatorsPage do
   end
 
   def action(:and, _params, component) do
-    put_state(component, :result, @boolean_a and @boolean_b)
+    put_state(component, :result, wrap_term(@boolean_a) and wrap_term(@boolean_b))
   end
 
   def action(:&&, _params, component) do
@@ -100,7 +100,7 @@ defmodule HologramFeatureTests.OperatorsPage do
   end
 
   def action(:or, _params, component) do
-    put_state(component, :result, @boolean_a or @boolean_b)
+    put_state(component, :result, wrap_term(@boolean_a) or wrap_term(@boolean_b))
   end
 
   def action(:||, _params, component) do
@@ -112,7 +112,7 @@ defmodule HologramFeatureTests.OperatorsPage do
   end
 
   def action(:!, _params, component) do
-    put_state(component, :result, !@boolean_a)
+    put_state(component, :result, !wrap_term(@boolean_a))
   end
 
   def action(:in, _params, component) do
