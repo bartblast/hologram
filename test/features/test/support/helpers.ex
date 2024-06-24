@@ -7,6 +7,8 @@ defmodule HologramFeatureTests.Helpers do
 
   defguard is_regex(term) when is_map(term) and term.__struct__ == Regex
 
+  defdelegate wrap_term(term), to: HologramFeatureTests.Commons
+
   def assert_page(session, page_module, params \\ []) do
     path = Router.Helpers.page_path(page_module, params)
     assert Browser.current_path(session) == path
@@ -62,14 +64,5 @@ defmodule HologramFeatureTests.Helpers do
   def visit(session, page_module, params \\ []) do
     path = Router.Helpers.page_path(page_module, params)
     Browser.visit(session, path)
-  end
-
-  @doc """
-  Returns the given argument.
-  It prevents compiler warnings in tests when the given value is not permitted is specific situation.
-  """
-  @spec wrap_value(any) :: any
-  def wrap_value(value) do
-    value
   end
 end

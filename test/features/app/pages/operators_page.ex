@@ -1,6 +1,6 @@
 defmodule HologramFeatureTests.OperatorsPage do
   use Hologram.Page
-  import HologramFeatureTests.Helpers, only: [wrap_value: 1]
+  import HologramFeatureTests.Commons, only: [wrap_term: 1]
 
   route "/operators"
 
@@ -96,7 +96,7 @@ defmodule HologramFeatureTests.OperatorsPage do
   end
 
   def action(:&&, _params, component) do
-    put_state(component, :result, wrap_value(@boolean_a) && wrap_value(@boolean_b))
+    put_state(component, :result, wrap_term(@boolean_a) && wrap_term(@boolean_b))
   end
 
   def action(:or, _params, component) do
@@ -104,7 +104,7 @@ defmodule HologramFeatureTests.OperatorsPage do
   end
 
   def action(:||, _params, component) do
-    put_state(component, :result, wrap_value(@boolean_a) || wrap_value(@boolean_b))
+    put_state(component, :result, wrap_term(@boolean_a) || wrap_term(@boolean_b))
   end
 
   def action(:not, _params, component) do

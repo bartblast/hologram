@@ -83,7 +83,7 @@ defmodule HologramFeatureTests.OperatorsTest do
       session
       |> visit(OperatorsPage)
       |> click(css("button[id='&&']"))
-      |> assert_text(css("#result"), inspect(wrap_value(@boolean_a) && wrap_value(@boolean_b)))
+      |> assert_text(css("#result"), inspect(wrap_term(@boolean_a) && wrap_term(@boolean_b)))
     end
 
     feature "or", %{session: session} do
@@ -97,7 +97,7 @@ defmodule HologramFeatureTests.OperatorsTest do
       session
       |> visit(OperatorsPage)
       |> click(css("button[id='||']"))
-      |> assert_text(css("#result"), inspect(wrap_value(@boolean_a) || wrap_value(@boolean_b)))
+      |> assert_text(css("#result"), inspect(wrap_term(@boolean_a) || wrap_term(@boolean_b)))
     end
 
     feature "not", %{session: session} do

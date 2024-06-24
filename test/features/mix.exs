@@ -28,7 +28,8 @@ defmodule HologramFeatureTests.MixProject do
     ]
   end
 
-  defp elixirc_paths(_env), do: ["app", "lib", "test/support"]
+  defp elixirc_paths(:test), do: ["app", "lib", "test/support"]
+  defp elixirc_paths(_env), do: ["app", "lib"]
 
   def project do
     [
