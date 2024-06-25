@@ -234,7 +234,9 @@ defmodule HologramFeatureTests.OperatorsTest do
       |> click(css("button[id='::']"))
       |> assert_text(css("#result"), inspect(<<@float_a::float>>))
     end
+  end
 
+  describe "comparison operators" do
     feature "==", %{session: session} do
       session
       |> visit(OperatorsPage)
