@@ -248,5 +248,12 @@ defmodule HologramFeatureTests.OperatorsTest do
       |> click(css("button[id='===']"))
       |> assert_text(css("#result"), inspect(wrap_term(@integer_a) === wrap_term(@float_a)))
     end
+
+    feature "!=", %{session: session} do
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='!=']"))
+      |> assert_text(css("#result"), inspect(wrap_term(@integer_a) != wrap_term(@integer_b)))
+    end
   end
 end
