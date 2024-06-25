@@ -91,7 +91,6 @@ without its shortcomings related to scalability, efficiency, etc.
 | Type               | Status             | Comments                                                        |
 | :----------------- | :----------------: | :-------------------------------------------------------------- |
 | Anonymous Function | :construction:     | done: regular syntax, todo: shorthand syntax, multi-clause      |
-| Atom               | :white_check_mark: |                                                                 |
 | Binary             | :x:                |                                                                 |
 | Bitstring          | :x:                |                                                                 |     
 | Boolean            | :white_check_mark: |                                                                 |     

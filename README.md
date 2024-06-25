@@ -78,6 +78,12 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 
 ### Elixir Syntax
 
+#### Types
+
+| Type   | Status             |
+| :----- | :----------------: |
+| Atom   | :white_check_mark: |     
+
 #### Operators
 
 ##### Overridable General Operators
