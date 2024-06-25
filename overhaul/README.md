@@ -111,25 +111,6 @@ without its shortcomings related to scalability, efficiency, etc.
 
 #### Operators
 
-##### Overridable General Operators
-
-| Operator | Status             |
-| :------- | :----------------: |
-| <>       | :x:                |
-| \|>      | :x:                |
-| =~       | :x:                |
-
-##### Non-Overridable General Operators
-
-| Operator | Status             |
-| :------- | :----------------: |
-| ^        | :x:                |
-| .        | :white_check_mark: |
-| =        | :white_check_mark: |
-| &        | :x:                |
-| ::       | :x:                |
-| [ \| ]   | :white_check_mark: |
-
 ##### Comparison Operators
 
 | Operator | Status             |
