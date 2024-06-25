@@ -68,6 +68,7 @@ defmodule HologramFeatureTests.OperatorsPage do
       <button id="==" $click="=="> == </button>
       <button id="===" $click="==="> === </button>
       <button id="!=" $click="!="> != </button>
+      <button id="!==" $click="!=="> !== </button>
     </p>
     <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
@@ -235,6 +236,10 @@ defmodule HologramFeatureTests.OperatorsPage do
 
   def action(:!=, _params, component) do
     put_state(component, :result, wrap_term(@integer_a) != wrap_term(@integer_b))
+  end
+
+  def action(:!==, _params, component) do
+    put_state(component, :result, wrap_term(@integer_a) !== wrap_term(@float_a))
   end
 
   def fun_1(arg), do: arg * 2
