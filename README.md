@@ -156,8 +156,9 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 
 #### Core
 
-| Feature   | Status             |
-| :-------- | :----------------: |
-| Actions   | :white_check_mark: |
-| Cookies   | :x:                |
-| Session   | :x:                |
+| Feature    | Status             |
+| :--------- | :----------------: |
+| Actions    | :white_check_mark: |
+| Commands   | :white_check_mark: |
+| Cookies    | :x:                |
+| Session    | :x:                |

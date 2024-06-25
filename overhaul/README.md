@@ -30,7 +30,6 @@ without its shortcomings related to scalability, efficiency, etc.
 
 | Feature     | Status             | Comments                                                        |
 | :---------- | :----------------: | :-------------------------------------------------------------- |
-| Commands    | :white_check_mark: |                                                                 |
 | Routing     | :construction:     | done: paths without params, todo: params                        |
 
 #### Template Engine
