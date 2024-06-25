@@ -1,7 +1,5 @@
 import Config
 
-config :hologram_feature_tests, dev_routes: true
-
 config :hologram_feature_tests, HologramFeatureTestsWeb.Endpoint,
   check_origin: false,
   code_reloader: true,

@@ -1,2 +1,0 @@
-defmodule HologramFeatureTests do
-end

@@ -2,9 +2,7 @@ defmodule HologramFeatureTests.MixProject do
   use Mix.Project
 
   defp aliases do
-    [
-      setup: ["deps.get"]
-    ]
+    []
   end
 
   def application do
