@@ -141,9 +141,10 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 
 ##### Custom and Overriden Operators
 
-| Operator | Status             |
-| :------- | :----------------: |
-| custom   | :white_check_mark: |
+| Operator    | Status             |
+| :---------- | :----------------: |
+| custom      | :white_check_mark: |
+| overriden   | :white_check_mark: |
 
 #### Other
 

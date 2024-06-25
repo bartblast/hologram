@@ -301,5 +301,12 @@ defmodule HologramFeatureTests.OperatorsTest do
       |> click(css("button[id='+++ (custom)']"))
       |> assert_text(css("#result"), inspect(@integer_a * @integer_b - @integer_a))
     end
+
+    feature "+ (overriden)", %{session: session} do
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='+ (overriden)']"))
+      |> assert_text(css("#result"), inspect(@integer_a * @integer_b))
+    end
   end
 end

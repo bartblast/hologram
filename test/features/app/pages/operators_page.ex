@@ -2,7 +2,8 @@ defmodule HologramFeatureTests.OperatorsPage do
   use Hologram.Page
 
   import HologramFeatureTests.Commons, only: [wrap_term: 1]
-  import HologramFeatureTests.Operators
+  import HologramFeatureTests.Operators, only: [+++: 2]
+  import Kernel, except: [+: 2]
 
   route "/operators"
 
@@ -79,6 +80,7 @@ defmodule HologramFeatureTests.OperatorsPage do
     <p>
       <h2><code>Custom and Overriden Operators</code></h2>
       <button id="+++ (custom)" $click="+++ (custom)"> +++ (custom) </button>
+      <button id="+ (overriden)" $click="+ (overriden)"> + (overriden) </button>
     </p>
     <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
@@ -95,6 +97,7 @@ defmodule HologramFeatureTests.OperatorsPage do
   end
 
   def action(:+, _params, component) do
+    import Kernel, only: [+: 2, @: 1]
     put_state(component, :result, @integer_a + @integer_b)
   end
 
@@ -270,6 +273,11 @@ defmodule HologramFeatureTests.OperatorsPage do
 
   def action(:"+++ (custom)", _params, component) do
     put_state(component, :result, @integer_a +++ @integer_b)
+  end
+
+  def action(:"+ (overriden)", _params, component) do
+    import HologramFeatureTests.Operators, only: [+: 2]
+    put_state(component, :result, @integer_a + @integer_b)
   end
 
   def fun_1(arg), do: arg * 2
