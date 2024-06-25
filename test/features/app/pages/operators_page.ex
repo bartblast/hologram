@@ -9,6 +9,8 @@ defmodule HologramFeatureTests.OperatorsPage do
   @boolean_a true
   @boolean_b false
 
+  @float_a 1.23
+
   @integer_a 123
   @integer_b 234
   @integer_c 345
@@ -59,6 +61,7 @@ defmodule HologramFeatureTests.OperatorsPage do
       <button id="& (remote function)" $click="& (remote function)"> & (remote function) </button>
       <button id="& (local function)" $click="& (local function)"> & (local function) </button>
       <button id="& (anonymous function)" $click="& (anonymous function)"> & (anonymous function) </button>
+      <button id="::" $click="::"> :: </button>
     </p>
     <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
@@ -205,6 +208,13 @@ defmodule HologramFeatureTests.OperatorsPage do
   def action(:"& (anonymous function)", _params, component) do
     fun = &(&1 * 5)
     result = fun.(@integer_a)
+
+    put_state(component, :result, result)
+  end
+
+  def action(:"::", _params, component) do
+    x = @float_a
+    result = <<x::float>>
 
     put_state(component, :result, result)
   end

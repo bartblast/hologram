@@ -5,6 +5,8 @@ defmodule HologramFeatureTests.OperatorsTest do
   @boolean_a true
   @boolean_b false
 
+  @float_a 1.23
+
   @integer_a 123
   @integer_b 234
   @integer_c 345
@@ -224,6 +226,13 @@ defmodule HologramFeatureTests.OperatorsTest do
       |> visit(OperatorsPage)
       |> click(css("button[id='& (anonymous function)']"))
       |> assert_text(css("#result"), inspect(@integer_a * 5))
+    end
+
+    feature "::", %{session: session} do
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='::']"))
+      |> assert_text(css("#result"), inspect(<<@float_a::float>>))
     end
   end
 end
