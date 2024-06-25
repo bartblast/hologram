@@ -107,20 +107,7 @@ without its shortcomings related to scalability, efficiency, etc.
 | Regex              | :x:                |                                                                 |     
 | String             | :white_check_mark: |                                                                 |     
 | Struct             | :white_check_mark: |                                                                 |   
-| Tuple              | :white_check_mark: |                                                                 |     
-
-#### Operators
-
-##### Bitwise Module Operators
-
-| Operator | Status             |
-| :------- | :----------------: |
-| &&&      | :x:                |
-| ^^^      | :x:                |  
-| <<<      | :x:                |  
-| >>>      | :x:                |  
-| \|\|\|   | :x:                |
-| ~~~      | :x:                |
+| Tuple              | :white_check_mark: |                                                                 |
 
 #### Pattern Matching
 
