@@ -111,12 +111,6 @@ without its shortcomings related to scalability, efficiency, etc.
 
 #### Operators
 
-##### Comparison Operators
-
-| Operator | Status             |
-| :------- | :----------------: |
-| >=       | :x:                |
-
 ##### Bitwise Module Operators
 
 | Operator | Status             |
