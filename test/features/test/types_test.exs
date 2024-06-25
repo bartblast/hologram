@@ -8,4 +8,11 @@ defmodule HologramFeatureTests.TypesTest do
     |> click(css("button[id='atom']"))
     |> assert_text(css("#result"), inspect(:abc))
   end
+
+  feature "float", %{session: session} do
+    session
+    |> visit(TypesPage)
+    |> click(css("button[id='float']"))
+    |> assert_text(css("#result"), inspect(1.23))
+  end
 end

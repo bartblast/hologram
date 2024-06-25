@@ -80,9 +80,10 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 
 #### Types
 
-| Type   | Status             |
-| :----- | :----------------: |
-| Atom   | :white_check_mark: |     
+| Type    | Status             |
+| :------ | :----------------: |
+| Atom    | :white_check_mark: |     
+| Float   | :white_check_mark: |     
 
 #### Operators
 

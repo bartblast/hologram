@@ -13,6 +13,7 @@ defmodule HologramFeatureTests.TypesPage do
     ~H"""
     <p>
       <button id="atom" $click="atom"> atom </button>
+      <button id="float" $click="float"> float </button>
     </p>
     <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
@@ -22,6 +23,11 @@ defmodule HologramFeatureTests.TypesPage do
 
   def action(:atom, _params, component) do
     term = :abc
+    put_command(component, :echo, term: term)
+  end
+
+  def action(:float, _params, component) do
+    term = 1.23
     put_command(component, :echo, term: term)
   end
 
