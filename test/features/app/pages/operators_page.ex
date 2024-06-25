@@ -236,11 +236,11 @@ defmodule HologramFeatureTests.OperatorsPage do
   end
 
   def action(:!=, _params, component) do
-    put_state(component, :result, wrap_term(@integer_a) != wrap_term(@integer_b))
+    put_state(component, :result, @integer_a != @integer_b)
   end
 
   def action(:!==, _params, component) do
-    put_state(component, :result, wrap_term(@integer_a) !== wrap_term(@float_a))
+    put_state(component, :result, @integer_a !== @float_a)
   end
 
   def action(:<, _params, component) do
