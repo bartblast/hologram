@@ -94,8 +94,7 @@ without its shortcomings related to scalability, efficiency, etc.
 | Binary             | :x:                |                                                                 |
 | Bitstring          | :x:                |                                                                 |     
 | Boolean            | :white_check_mark: |                                                                 |     
-| Exception          | :x:                |                                                                 |     
-| Integer            | :white_check_mark: |                                                                 |     
+| Exception          | :x:                |                                                                 |        
 | IO Data            | :x:                |                                                                 |     
 | List               | :white_check_mark: |                                                                 |     
 | Map                | :white_check_mark: |                                                                 |     
