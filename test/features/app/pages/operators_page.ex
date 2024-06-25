@@ -9,7 +9,7 @@ defmodule HologramFeatureTests.OperatorsPage do
   @boolean_a true
   @boolean_b false
 
-  @float_a 1.23
+  @float_a 123.0
 
   @integer_a 123
   @integer_b 234
@@ -66,6 +66,7 @@ defmodule HologramFeatureTests.OperatorsPage do
     <p>
       <h2><code>Comparison Operators</code></h2>
       <button id="==" $click="=="> == </button>
+      <button id="===" $click="==="> === </button>
     </p>
     <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
@@ -225,6 +226,10 @@ defmodule HologramFeatureTests.OperatorsPage do
 
   def action(:==, _params, component) do
     put_state(component, :result, @integer_a == @integer_a)
+  end
+
+  def action(:===, _params, component) do
+    put_state(component, :result, @integer_a === @float_a)
   end
 
   def fun_1(arg), do: arg * 2

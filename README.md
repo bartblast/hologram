@@ -122,6 +122,7 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 | Operator | Status             |
 | :------- | :----------------: |
 | ==       | :white_check_mark: |
+| ===      | :white_check_mark: |
 
 #### Other
 
