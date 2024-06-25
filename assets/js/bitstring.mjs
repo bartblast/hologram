@@ -58,23 +58,51 @@ export default class Bitstring {
 
   // See: https://en.wikipedia.org/wiki/UTF-8#Encoding
   static fetchNextCodePointFromUtf8BitstringChunk(bitArray, offset) {
-    if (offset + 8 > bitArray.length) {
-      return false;
-    }
+    const numRemainingBits = bitArray.length - offset;
 
     let numBytes;
 
     // 0xxxxxxx
-    if (bitArray[offset] === 0) {
+    if (numRemainingBits >= 8 && bitArray[offset] === 0) {
       numBytes = 1;
-      // 110xxxxx
-    } else if (bitArray[offset + 2] === 0) {
+    } else if (
+      // 110xxxxx, 10xxxxxx
+      numRemainingBits >= 16 &&
+      bitArray[offset] === 1 &&
+      bitArray[offset + 1] === 1 &&
+      bitArray[offset + 2] === 0 &&
+      bitArray[offset + 8] == 1 &&
+      bitArray[offset + 9] == 0
+    ) {
       numBytes = 2;
-      //1110xxxx
-    } else if (bitArray[offset + 3] === 0) {
+    } else if (
+      //1110xxxx, 10xxxxxx, 10xxxxxx
+      numRemainingBits >= 24 &&
+      bitArray[offset] === 1 &&
+      bitArray[offset + 1] === 1 &&
+      bitArray[offset + 2] === 1 &&
+      bitArray[offset + 3] === 0 &&
+      bitArray[offset + 8] == 1 &&
+      bitArray[offset + 9] == 0 &&
+      bitArray[offset + 16] == 1 &&
+      bitArray[offset + 17] == 0
+    ) {
       numBytes = 3;
-      // 11110xxx
-    } else {
+    } else if (
+      // 11110xxx, 10xxxxxx, 10xxxxxx, 10xxxxxx
+      numRemainingBits >= 32 &&
+      bitArray[offset] === 1 &&
+      bitArray[offset + 1] === 1 &&
+      bitArray[offset + 2] === 1 &&
+      bitArray[offset + 3] === 1 &&
+      bitArray[offset + 4] === 0 &&
+      bitArray[offset + 8] == 1 &&
+      bitArray[offset + 9] == 0 &&
+      bitArray[offset + 16] == 1 &&
+      bitArray[offset + 17] == 0 &&
+      bitArray[offset + 24] == 1 &&
+      bitArray[offset + 25] == 0
+    ) {
       numBytes = 4;
     }
 
@@ -139,6 +167,8 @@ export default class Bitstring {
   // See: String.printable?/2
   // https://github.com/elixir-lang/elixir/blob/6bfb95ab884f11475de6da3f99c6528938e025a8/lib/elixir/lib/string.ex#L322
   static isPrintableCodePoint(codePoint) {
+    console.log("code point = ", codePoint);
+
     // 0x20 = 32, 0x7E = 126
     if (codePoint >= 32 && codePoint <= 126) {
       return true;
