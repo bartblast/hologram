@@ -154,6 +154,8 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 
 ### Framework Runtime
 
+#### Core
+
 | Feature   | Status             |
 | :-------- | :----------------: |
 | Actions   | :white_check_mark: |
