@@ -104,6 +104,8 @@ export default class Bitstring {
       bitArray[offset + 25] == 0
     ) {
       numBytes = 4;
+    } else {
+      return false;
     }
 
     if (numBytes > 1 && offset + numBytes * 8 > bitArray.length) {
