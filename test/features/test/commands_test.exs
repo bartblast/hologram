@@ -97,4 +97,9 @@ defmodule HologramFeatureTests.CommandsTest do
       )
     end
   end
+
+  describe "server struct mutations" do
+    # Covered in preceding (layout command, page command, component command) tests:
+    # feature "next_action"
+  end
 end
