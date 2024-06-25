@@ -276,5 +276,12 @@ defmodule HologramFeatureTests.OperatorsTest do
       |> click(css("button[id='>']"))
       |> assert_text(css("#result"), inspect(@integer_b > @integer_a))
     end
+
+    feature "<=", %{session: session} do
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='<=']"))
+      |> assert_text(css("#result"), inspect(@integer_a <= @integer_b))
+    end
   end
 end
