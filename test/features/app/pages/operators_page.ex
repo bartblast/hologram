@@ -229,7 +229,7 @@ defmodule HologramFeatureTests.OperatorsPage do
   end
 
   def action(:===, _params, component) do
-    put_state(component, :result, @integer_a === @float_a)
+    put_state(component, :result, wrap_term(@integer_a) === wrap_term(@float_a))
   end
 
   def fun_1(arg), do: arg * 2
