@@ -293,4 +293,13 @@ defmodule HologramFeatureTests.OperatorsTest do
       |> assert_text(css("#result"), inspect(@integer_b >= @integer_a))
     end
   end
+
+  describe "custom and overriden operators" do
+    feature "+++ (custom)", %{session: session} do
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='+++ (custom)']"))
+      |> assert_text(css("#result"), inspect(@integer_a * @integer_b - @integer_a))
+    end
+  end
 end

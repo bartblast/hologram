@@ -210,5 +210,4 @@ without its shortcomings related to scalability, efficiency, etc.
 #### Not on Roadmap
 * Types: PID, Port, Reference
 * Control Flow: Exit, Receive
-* Operators: Custom, Overriding
 * Other: Erlang Libraries

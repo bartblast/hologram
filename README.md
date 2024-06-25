@@ -139,6 +139,12 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 | >>>      | :x:                |
 | \|\|\|   | :x:                |
 
+##### Custom and Overriden Operators
+
+| Operator | Status             |
+| :------- | :----------------: |
+| custom   | :white_check_mark: |
+
 #### Other
 
 | Feature               | Status             |

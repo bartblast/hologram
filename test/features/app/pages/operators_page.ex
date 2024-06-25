@@ -1,6 +1,8 @@
 defmodule HologramFeatureTests.OperatorsPage do
   use Hologram.Page
+
   import HologramFeatureTests.Commons, only: [wrap_term: 1]
+  import HologramFeatureTests.Operators
 
   route "/operators"
 
@@ -73,6 +75,10 @@ defmodule HologramFeatureTests.OperatorsPage do
       <button id=">" $click=">"> &gt; </button>
       <button id="<=" $click="<="> &lt;= </button>
       <button id=">=" $click=">="> &gt;= </button>
+    </p>
+    <p>
+      <h2><code>Custom and Overriden Operators</code></h2>
+      <button id="+++ (custom)" $click="+++ (custom)"> +++ (custom) </button>
     </p>
     <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
@@ -260,6 +266,10 @@ defmodule HologramFeatureTests.OperatorsPage do
 
   def action(:>=, _params, component) do
     put_state(component, :result, @integer_b >= @integer_a)
+  end
+
+  def action(:"+++ (custom)", _params, component) do
+    put_state(component, :result, @integer_a +++ @integer_b)
   end
 
   def fun_1(arg), do: arg * 2
