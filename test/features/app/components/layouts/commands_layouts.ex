@@ -18,6 +18,7 @@ defmodule HologramFeatureTests.Components.CommandsLayout do
       <body style="padding: 25px">
         <p>
           <button id="layout_command_1" $click={%Command{name: :layout_command_1, params: %{a: 1, b: 2}}}> layout_command_1 </button>
+          <button id="page_command_1" $click={%Command{name: :page_command_1, params: %{a: 1, b: 2}, target: "page"}}> page_command_1 </button>
         </p>
         <p>
           Layout result: <strong id="layout_result"><code>{inspect(@result)}</code></strong>
