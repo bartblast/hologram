@@ -398,15 +398,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "atom < atom" do
-      left = wrap_value(:a)
-      right = wrap_value(:b)
+      left = wrap_term(:a)
+      right = wrap_term(:b)
 
       assert :erlang.<(left, right) == true
     end
 
     test "float < atom (always)" do
-      left = wrap_value(1.0)
-      right = wrap_value(:a)
+      left = wrap_term(1.0)
+      right = wrap_term(:a)
 
       assert :erlang.<(left, right) == true
     end
@@ -416,15 +416,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "float < integer" do
-      left = wrap_value(1.0)
-      right = wrap_value(2)
+      left = wrap_term(1.0)
+      right = wrap_term(2)
 
       assert :erlang.<(left, right) == true
     end
 
     test "integer < atom (always)" do
-      left = wrap_value(1)
-      right = wrap_value(:a)
+      left = wrap_term(1)
+      right = wrap_term(:a)
 
       assert :erlang.<(left, right) == true
     end
@@ -450,15 +450,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "tuple < tuple" do
-      left = wrap_value({1, 2})
-      right = wrap_value({1, 2, 3})
+      left = wrap_term({1, 2})
+      right = wrap_term({1, 2, 3})
 
       assert :erlang.<(left, right) == true
     end
 
     test "atom > atom" do
-      left = wrap_value(:b)
-      right = wrap_value(:a)
+      left = wrap_term(:b)
+      right = wrap_term(:a)
 
       assert :erlang.<(left, right) == false
     end
@@ -746,15 +746,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "atom < atom" do
-      left = wrap_value(:a)
-      right = wrap_value(:b)
+      left = wrap_term(:a)
+      right = wrap_term(:b)
 
       assert :erlang."=<"(left, right) == true
     end
 
     test "float < atom (always)" do
-      left = wrap_value(1.0)
-      right = wrap_value(:a)
+      left = wrap_term(1.0)
+      right = wrap_term(:a)
 
       assert :erlang."=<"(left, right) == true
     end
@@ -768,8 +768,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "integer < atom (always)" do
-      left = wrap_value(1)
-      right = wrap_value(:a)
+      left = wrap_term(1)
+      right = wrap_term(:a)
 
       assert :erlang."=<"(left, right) == true
     end
@@ -799,8 +799,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "atom > atom" do
-      left = wrap_value(:b)
-      right = wrap_value(:a)
+      left = wrap_term(:b)
+      right = wrap_term(:a)
 
       assert :erlang."=<"(left, right) == false
     end
@@ -978,15 +978,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "atom < atom" do
-      left = wrap_value(:a)
-      right = wrap_value(:b)
+      left = wrap_term(:a)
+      right = wrap_term(:b)
 
       assert :erlang.>(left, right) == false
     end
 
     test "float < atom (always)" do
-      left = wrap_value(1.0)
-      right = wrap_value(:a)
+      left = wrap_term(1.0)
+      right = wrap_term(:a)
 
       assert :erlang.>(left, right) == false
     end
@@ -1000,8 +1000,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "integer < atom (always)" do
-      left = wrap_value(1)
-      right = wrap_value(:a)
+      left = wrap_term(1)
+      right = wrap_term(:a)
 
       assert :erlang.>(left, right) == false
     end
@@ -1031,8 +1031,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "atom > atom" do
-      left = wrap_value(:b)
-      right = wrap_value(:a)
+      left = wrap_term(:b)
+      right = wrap_term(:a)
 
       assert :erlang.>(left, right) == true
     end
@@ -1100,15 +1100,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "atom < atom" do
-      left = wrap_value(:a)
-      right = wrap_value(:b)
+      left = wrap_term(:a)
+      right = wrap_term(:b)
 
       assert :erlang.>=(left, right) == false
     end
 
     test "float < atom (always)" do
-      left = wrap_value(1.0)
-      right = wrap_value(:a)
+      left = wrap_term(1.0)
+      right = wrap_term(:a)
 
       assert :erlang.>=(left, right) == false
     end
@@ -1122,8 +1122,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "integer < atom (always)" do
-      left = wrap_value(1)
-      right = wrap_value(:a)
+      left = wrap_term(1)
+      right = wrap_term(:a)
 
       assert :erlang.>=(left, right) == false
     end
@@ -1153,8 +1153,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "atom > atom" do
-      left = wrap_value(:b)
-      right = wrap_value(:a)
+      left = wrap_term(:b)
+      right = wrap_term(:a)
 
       assert :erlang.>=(left, right) == true
     end

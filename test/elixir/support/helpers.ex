@@ -47,7 +47,7 @@ defmodule Hologram.Test.Helpers do
       {module, fun, args} = unquote(mfargs)
 
       try do
-        apply(module, fun, wrap_value(args))
+        apply(module, fun, wrap_term(args))
       rescue
         error in unquote(error_module) ->
           assert resolve_error_msg(error, __STACKTRACE__) == unquote(expected_msg)
@@ -367,8 +367,8 @@ defmodule Hologram.Test.Helpers do
   Returns the given argument.
   It prevents compiler warnings in tests when the given value is not permitted is specific situation.
   """
-  @spec wrap_value(any) :: any
-  def wrap_value(value) do
+  @spec wrap_term(any) :: any
+  def wrap_term(value) do
     value
   end
 end
