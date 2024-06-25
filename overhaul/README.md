@@ -115,7 +115,6 @@ without its shortcomings related to scalability, efficiency, etc.
 
 | Operator | Status             |
 | :------- | :----------------: |
-| ==       | :white_check_mark: |
 | ===      | :x:                |
 | !=       | :white_check_mark: |
 | !==      | :x:                |
