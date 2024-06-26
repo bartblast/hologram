@@ -246,4 +246,34 @@ describe("Erlang_Unicode", () => {
       );
     });
   });
+
+  describe("characters_to_list/1", () => {
+    const fun = Erlang_Unicode["characters_to_list/1"];
+
+    it("UTF8 text", () => {
+      const result = fun(Type.bitstring("全息图"));
+
+      const expected = Type.list([
+        Type.integer(20840),
+        Type.integer(24687),
+        Type.integer(22270),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("input other than UTF8 text", () => {
+      const data = Type.list([
+        Type.integer(20840),
+        Type.integer(24687),
+        Type.integer(22270),
+      ]);
+
+      assert.throw(
+        () => fun(data),
+        HologramInterpreterError,
+        "Function :unicode.characters_to_list/1 is not yet fully ported and at the moment accepts only binary input. See what to do here: https://www.hologram.page/TODO",
+      );
+    });
+  });
 });

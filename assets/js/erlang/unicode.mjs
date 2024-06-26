@@ -84,6 +84,33 @@ const Erlang_Unicode = {
   },
   // End characters_to_binary/3
   // Deps: [:lists.flatten/1]
+
+  // TODO: finish porting (at the moment only UTF8 input is accepted)
+  // Start characters_to_list/1
+  "characters_to_list/1": (data) => {
+    if (!Bitstring.isText(data)) {
+      throw new HologramInterpreterError(
+        "Function :unicode.characters_to_list/1 is not yet fully ported and at the moment accepts only binary input. See what to do here: https://www.hologram.page/TODO",
+      );
+    }
+
+    let offset = 0;
+    const codePoints = [];
+
+    while (offset < data.bits.length) {
+      const codePointInfo = Bitstring.fetchNextCodePointFromUtf8BitstringChunk(
+        data.bits,
+        offset,
+      );
+
+      codePoints.push(codePointInfo[0]);
+      offset += codePointInfo[1];
+    }
+
+    return Type.list(codePoints);
+  },
+  // End characters_to_list/1
+  // Deps: []
 };
 
 export default Erlang_Unicode;

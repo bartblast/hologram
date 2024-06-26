@@ -158,4 +158,10 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
       assert :unicode.characters_to_binary(input, :utf8, :utf8) == expected
     end
   end
+
+  describe "characters_to_list/1" do
+    test "UTF8 text" do
+      assert :unicode.characters_to_list("全息图") == [20840, 24687, 22270]
+    end
+  end
 end
