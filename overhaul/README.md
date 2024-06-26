@@ -86,12 +86,6 @@ without its shortcomings related to scalability, efficiency, etc.
 
 ### Elixir Syntax
 
-#### Types
-
-| Type               | Status             | Comments                                                        |
-| :----------------- | :----------------: | :-------------------------------------------------------------- |                  
-| Tuple              | :white_check_mark: |                                                                 |
-
 #### Pattern Matching
 
 | Type               | Status             |

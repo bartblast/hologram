@@ -21,6 +21,7 @@ defmodule HologramFeatureTests.TypesPage do
       <button id="integer" $click="integer"> integer </button>
       <button id="list" $click="list"> list </button>
       <button id="map" $click="map"> map </button>
+      <button id="tuple" $click="tuple"> tuple </button>
     </p>
     <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
@@ -72,6 +73,11 @@ defmodule HologramFeatureTests.TypesPage do
 
   def action(:map, _params, component) do
     term = %{a: 123, b: "abc"}
+    put_command(component, :echo, term: term)
+  end
+
+  def action(:tuple, _params, component) do
+    term = {123, :abc}
     put_command(component, :echo, term: term)
   end
 
