@@ -9,6 +9,13 @@ defmodule HologramFeatureTests.TypesTest do
     |> assert_text(css("#result"), inspect(:abc))
   end
 
+  feature "binary", %{session: session} do
+    session
+    |> visit(TypesPage)
+    |> click(css("button[id='binary']"))
+    |> assert_text(css("#result"), inspect("abc"))
+  end
+
   feature "float", %{session: session} do
     session
     |> visit(TypesPage)

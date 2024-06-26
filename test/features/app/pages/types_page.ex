@@ -13,6 +13,7 @@ defmodule HologramFeatureTests.TypesPage do
     ~H"""
     <p>
       <button id="atom" $click="atom"> atom </button>
+      <button id="binary" $click="binary"> binary </button>
       <button id="float" $click="float"> float </button>
       <button id="integer" $click="integer"> integer </button>
     </p>
@@ -24,6 +25,11 @@ defmodule HologramFeatureTests.TypesPage do
 
   def action(:atom, _params, component) do
     term = :abc
+    put_command(component, :echo, term: term)
+  end
+
+  def action(:binary, _params, component) do
+    term = "abc"
     put_command(component, :echo, term: term)
   end
 
