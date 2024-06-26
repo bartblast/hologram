@@ -34,11 +34,11 @@ defmodule Mix.Tasks.Holo.Test.CheckFileNames do
   defp find_invalid_file_names(path) do
     path
     |> FileUtils.list_files_recursively()
-    |> Enum.reject(&String.ends_with?(&1, "_test.exs"))
     |> Enum.reject(
-      &String.starts_with?(&1, Path.join(path, "support") <> determine_os_dir_separator())
+      &(String.ends_with?(&1, "_test.exs") ||
+          String.starts_with?(&1, Path.join(path, "support") <> determine_os_dir_separator()) ||
+          &1 == Path.join(path, "test_helper.exs"))
     )
-    |> Enum.reject(&(&1 == Path.join(path, "test_helper.exs")))
   end
 
   defp green(text) do
