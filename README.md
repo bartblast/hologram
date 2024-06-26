@@ -80,12 +80,13 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 
 #### Types
 
-| Type        | Status             |
-| :---------- | :----------------: |
-| Atom        | :white_check_mark: |
-| Bitstring   | :white_check_mark: |
-| Float       | :white_check_mark: |
-| Integer     | :white_check_mark: |
+| Type                 | Status             |
+| :------------------- | :----------------: |
+| Anonymous Function   | :white_check_mark: |
+| Atom                 | :white_check_mark: |
+| Bitstring            | :white_check_mark: |
+| Float                | :white_check_mark: |
+| Integer              | :white_check_mark: |
 
 #### Operators
 
