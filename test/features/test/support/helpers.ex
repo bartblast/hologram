@@ -7,6 +7,9 @@ defmodule HologramFeatureTests.Helpers do
 
   defguard is_regex(term) when is_map(term) and term.__struct__ == Regex
 
+  defdelegate pid(str), to: IEx.Helpers
+  defdelegate port(str), to: IEx.Helpers
+  defdelegate ref(str), to: IEx.Helpers
   defdelegate wrap_term(term), to: HologramFeatureTests.Commons
 
   def assert_page(session, page_module, params \\ []) do
