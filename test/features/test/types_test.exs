@@ -16,6 +16,13 @@ defmodule HologramFeatureTests.TypesTest do
     |> assert_text(css("#result"), inspect("abc"))
   end
 
+  feature "bitstring (non-binary)", %{session: session} do
+    session
+    |> visit(TypesPage)
+    |> click(css("button[id='bitstring (non-binary)']"))
+    |> assert_text(css("#result"), inspect(<<1::1, 0::1, 1::1, 0::1>>))
+  end
+
   feature "float", %{session: session} do
     session
     |> visit(TypesPage)

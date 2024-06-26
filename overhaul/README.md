@@ -90,8 +90,7 @@ without its shortcomings related to scalability, efficiency, etc.
 
 | Type               | Status             | Comments                                                        |
 | :----------------- | :----------------: | :-------------------------------------------------------------- |
-| Anonymous Function | :construction:     | done: regular syntax, todo: shorthand syntax, multi-clause      |
-| Bitstring          | :x:                |                                                                 |                  
+| Anonymous Function | :construction:     | done: regular syntax, todo: shorthand syntax, multi-clause      |               
 | List               | :white_check_mark: |                                                                 |     
 | Map                | :white_check_mark: |                                                                 |     
 | Tuple              | :white_check_mark: |                                                                 |
