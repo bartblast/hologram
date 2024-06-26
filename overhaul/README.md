@@ -89,8 +89,7 @@ without its shortcomings related to scalability, efficiency, etc.
 #### Types
 
 | Type               | Status             | Comments                                                        |
-| :----------------- | :----------------: | :-------------------------------------------------------------- |             
-| List               | :white_check_mark: |                                                                 |     
+| :----------------- | :----------------: | :-------------------------------------------------------------- |               
 | Map                | :white_check_mark: |                                                                 |     
 | Tuple              | :white_check_mark: |                                                                 |
 

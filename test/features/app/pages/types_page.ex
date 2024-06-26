@@ -19,6 +19,7 @@ defmodule HologramFeatureTests.TypesPage do
       <button id="bitstring (non-binary)" $click="bitstring (non-binary)"> bitstring (non-binary) </button>
       <button id="float" $click="float"> float </button>
       <button id="integer" $click="integer"> integer </button>
+      <button id="list" $click="list"> list </button>
     </p>
     <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
@@ -60,6 +61,11 @@ defmodule HologramFeatureTests.TypesPage do
 
   def action(:integer, _params, component) do
     term = 123
+    put_command(component, :echo, term: term)
+  end
+
+  def action(:list, _params, component) do
+    term = [123, :abc]
     put_command(component, :echo, term: term)
   end
 

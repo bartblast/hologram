@@ -87,6 +87,7 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 | Bitstring            | :white_check_mark: |
 | Float                | :white_check_mark: |
 | Integer              | :white_check_mark: |
+| List                 | :white_check_mark: |
 
 #### Operators
 
