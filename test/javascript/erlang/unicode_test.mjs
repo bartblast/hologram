@@ -250,7 +250,7 @@ describe("Erlang_Unicode", () => {
   describe("characters_to_list/1", () => {
     const fun = Erlang_Unicode["characters_to_list/1"];
 
-    it("UTF8 text", () => {
+    it("UTF8 binary", () => {
       const result = fun(Type.bitstring("全息图"));
 
       const expected = Type.list([
@@ -262,18 +262,52 @@ describe("Erlang_Unicode", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("input other than UTF8 text", () => {
-      const data = Type.list([
+    it("list of UTF8 binaries", () => {
+      const result = fun(
+        Type.list([
+          Type.bitstring("abc"),
+          Type.bitstring("全息图"),
+          Type.bitstring("xyz"),
+        ]),
+      );
+
+      const expected = Type.list([
+        Type.integer(97),
+        Type.integer(98),
+        Type.integer(99),
         Type.integer(20840),
         Type.integer(24687),
         Type.integer(22270),
+        Type.integer(120),
+        Type.integer(121),
+        Type.integer(122),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("a list that contains some items that are not UTF8 binaries", () => {
+      const data = Type.list([
+        Type.bitstring("abc"),
+        Type.integer(123),
+        Type.bitstring("xyz"),
       ]);
 
       assert.throw(
         () => fun(data),
         HologramInterpreterError,
-        "Function :unicode.characters_to_list/1 is not yet fully ported and at the moment accepts only binary input.\n" +
-          "The following input was received: [20840, 24687, 22270]\n" +
+        "Function :unicode.characters_to_list/1 is not yet fully ported and at the moment accepts only UTF8 binary input.\n" +
+          `The following input was received: ["abc", 123, "xyz"]\n` +
+          "See what to do here: https://www.hologram.page/TODO",
+      );
+    });
+
+    it("input other than a list or UTF8 binary", () => {
+      assert.throw(
+        () => fun(Type.integer(123)),
+        HologramInterpreterError,
+        "Function :unicode.characters_to_list/1 is not yet fully ported and at the moment accepts only UTF8 binary input.\n" +
+          "The following input was received: 123\n" +
           "See what to do here: https://www.hologram.page/TODO",
       );
     });

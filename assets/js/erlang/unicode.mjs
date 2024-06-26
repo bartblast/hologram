@@ -85,23 +85,39 @@ const Erlang_Unicode = {
   // End characters_to_binary/3
   // Deps: [:lists.flatten/1]
 
-  // TODO: finish porting (at the moment only UTF8 input is accepted)
+  // TODO: finish porting (at the moment only UTF8 binary input is accepted)
   // Start characters_to_list/1
   "characters_to_list/1": (data) => {
-    if (!Bitstring.isText(data)) {
+    let isValidArg = true;
+
+    if (Type.isList(data)) {
+      isValidArg = data.data.every((item) => Bitstring.isText(item));
+    } else {
+      isValidArg = Bitstring.isText(data);
+    }
+
+    if (!isValidArg) {
       throw new HologramInterpreterError(
-        "Function :unicode.characters_to_list/1 is not yet fully ported and at the moment accepts only binary input.\n" +
+        "Function :unicode.characters_to_list/1 is not yet fully ported and at the moment accepts only UTF8 binary input.\n" +
           `The following input was received: ${Interpreter.inspect(data)}\n` +
           "See what to do here: https://www.hologram.page/TODO",
       );
     }
 
+    let bitstring;
+
+    if (Type.isList(data)) {
+      bitstring = Bitstring.merge(data.data);
+    } else {
+      bitstring = data;
+    }
+
     let offset = 0;
     const codePoints = [];
 
-    while (offset < data.bits.length) {
+    while (offset < bitstring.bits.length) {
       const codePointInfo = Bitstring.fetchNextCodePointFromUtf8BitstringChunk(
-        data.bits,
+        bitstring.bits,
         offset,
       );
 
