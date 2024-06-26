@@ -3,12 +3,13 @@ defmodule Mix.Tasks.Holo.Test.CheckFileNames do
   Checks if any test scripts have invalid file names.
   File name is valid if it ends with "_test" suffix and has ".exs" extension.
   If there are any invalid file names, the task exits with code 1.
+  Support dir and text_helper.exs file are ignored.
 
   Scripts not adhering to the aforementioned rules wouldn't be picked up by the mix test task.
 
   ## Examples
 
-      $ mix holo.test.check_file_names test/elixir/hologram/compiler test/elixir/hologram/template
+      $ mix holo.test.check_file_names test/elixir
   """
 
   use Mix.Task
@@ -20,14 +21,24 @@ defmodule Mix.Tasks.Holo.Test.CheckFileNames do
   @impl Mix.Task
   def run(args) do
     args
+    |> hd()
     |> find_invalid_file_names()
     |> print_result_and_exit()
   end
 
-  defp find_invalid_file_names(paths) do
-    paths
+  defp determine_os_separator do
+    <<_a::utf8, separator::utf8, _b::utf8>> = Path.join("a", "b")
+    <<separator>>
+  end
+
+  defp find_invalid_file_names(path) do
+    path
     |> FileUtils.list_files_recursively()
     |> Enum.reject(&String.ends_with?(&1, "_test.exs"))
+    |> Enum.reject(
+      &String.starts_with?(&1, Path.join(path, "support") <> determine_os_separator())
+    )
+    |> Enum.reject(&(&1 == Path.join(path, "test_helper.exs")))
   end
 
   defp green(text) do

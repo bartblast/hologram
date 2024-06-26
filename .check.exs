@@ -21,9 +21,7 @@
 
     # Feature tests app
     {:features_check_test_file_names,
-     command:
-       "mix holo.test.check_file_names test/hologram_feature_tests test/hologram_feature_tests_web",
-     cd: "test/features"},
+     command: "mix holo.test.check_file_names test", cd: "test/features"},
     {:features_compiler,
      command: "mix compile --all-warnings --warnings-as-errors", cd: "test/features"},
     {:features_credo, command: "mix credo --strict", cd: "test/features"},

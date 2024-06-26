@@ -153,7 +153,7 @@ jobs:
 
       # Step: Check that all lib test scripts have valid file names.
       - name: Check lib test file names
-        run: mix holo.test.check_file_names test/elixir/hologram
+        run: mix holo.test.check_file_names test/elixir
 
       # Step: Run lib JavaScript static code analysis with ESLint.
       - name: Run lib JavaScript static code analysis with ESLint
@@ -286,7 +286,7 @@ jobs:
 
       # Step: Check that all feature tests app test scripts have valid file names.
       - name: Check feature tests app test file names
-        run: mix holo.test.check_file_names test/hologram_feature_tests test/hologram_feature_tests_web
+        run: mix holo.test.check_file_names test
 
       # Step: Execute feature tests app Elixir unit tests.
       - name: Run feature tests app Elixir unit tests
