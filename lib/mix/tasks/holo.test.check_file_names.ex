@@ -26,7 +26,7 @@ defmodule Mix.Tasks.Holo.Test.CheckFileNames do
     |> print_result_and_exit()
   end
 
-  defp determine_os_separator do
+  defp determine_os_dir_separator do
     <<_a::utf8, separator::utf8, _b::utf8>> = Path.join("a", "b")
     <<separator>>
   end
@@ -36,7 +36,7 @@ defmodule Mix.Tasks.Holo.Test.CheckFileNames do
     |> FileUtils.list_files_recursively()
     |> Enum.reject(&String.ends_with?(&1, "_test.exs"))
     |> Enum.reject(
-      &String.starts_with?(&1, Path.join(path, "support") <> determine_os_separator())
+      &String.starts_with?(&1, Path.join(path, "support") <> determine_os_dir_separator())
     )
     |> Enum.reject(&(&1 == Path.join(path, "test_helper.exs")))
   end
