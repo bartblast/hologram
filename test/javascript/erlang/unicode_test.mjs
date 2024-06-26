@@ -272,7 +272,9 @@ describe("Erlang_Unicode", () => {
       assert.throw(
         () => fun(data),
         HologramInterpreterError,
-        "Function :unicode.characters_to_list/1 is not yet fully ported and at the moment accepts only binary input. See what to do here: https://www.hologram.page/TODO",
+        "Function :unicode.characters_to_list/1 is not yet fully ported and at the moment accepts only binary input.\n" +
+          "The following input was received: [20840, 24687, 22270]\n" +
+          "See what to do here: https://www.hologram.page/TODO",
       );
     });
   });

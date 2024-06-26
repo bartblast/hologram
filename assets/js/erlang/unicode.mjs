@@ -90,7 +90,9 @@ const Erlang_Unicode = {
   "characters_to_list/1": (data) => {
     if (!Bitstring.isText(data)) {
       throw new HologramInterpreterError(
-        "Function :unicode.characters_to_list/1 is not yet fully ported and at the moment accepts only binary input. See what to do here: https://www.hologram.page/TODO",
+        "Function :unicode.characters_to_list/1 is not yet fully ported and at the moment accepts only binary input.\n" +
+          `The following input was received: ${Interpreter.inspect(data)}\n` +
+          "See what to do here: https://www.hologram.page/TODO",
       );
     }
 
