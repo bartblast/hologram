@@ -91,18 +91,9 @@ without its shortcomings related to scalability, efficiency, etc.
 | Type               | Status             | Comments                                                        |
 | :----------------- | :----------------: | :-------------------------------------------------------------- |
 | Anonymous Function | :construction:     | done: regular syntax, todo: shorthand syntax, multi-clause      |
-| Binary             | :x:                |                                                                 |
-| Bitstring          | :x:                |                                                                 |     
-| Boolean            | :white_check_mark: |                                                                 |     
-| Exception          | :x:                |                                                                 |        
-| IO Data            | :x:                |                                                                 |     
+| Bitstring          | :x:                |                                                                 |                  
 | List               | :white_check_mark: |                                                                 |     
 | Map                | :white_check_mark: |                                                                 |     
-| Nil                | :white_check_mark: |                                                                 |    
-| Range              | :x:                |                                                                 |     
-| Regex              | :x:                |                                                                 |     
-| String             | :white_check_mark: |                                                                 |     
-| Struct             | :white_check_mark: |                                                                 |   
 | Tuple              | :white_check_mark: |                                                                 |
 
 #### Pattern Matching
