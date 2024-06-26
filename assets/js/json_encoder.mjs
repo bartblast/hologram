@@ -68,7 +68,7 @@ export default class JsonEncoder {
       return `"__binary__:${JsonEncoder.#escapeDoubleQuotes(Bitstring.toText(term))}"`;
     }
 
-    return JSON.stringify(term);
+    return JSON.stringify({type: "bitstring", bits: Array.from(term.bits)});
   }
 
   static #encodeEnumData(data) {

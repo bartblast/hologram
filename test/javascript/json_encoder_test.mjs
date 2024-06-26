@@ -41,9 +41,7 @@ describe("JsonEncoder", () => {
 
       it("non-binary", () => {
         const term = Type.bitstring([1, 0, 1, 0]);
-
-        const expected =
-          '{"type":"bitstring","bits":{"0":1,"1":0,"2":1,"3":0}}';
+        const expected = '{"type":"bitstring","bits":[1,0,1,0]}';
 
         assert.equal(JsonEncoder.encode(term), expected);
       });
