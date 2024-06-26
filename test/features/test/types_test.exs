@@ -58,4 +58,11 @@ defmodule HologramFeatureTests.TypesTest do
     |> click(css("button[id='list']"))
     |> assert_text(css("#result"), inspect([123, :abc]))
   end
+
+  feature "map", %{session: session} do
+    session
+    |> visit(TypesPage)
+    |> click(css("button[id='map']"))
+    |> assert_text(css("#result"), inspect(%{a: 123, b: "abc"}))
+  end
 end
