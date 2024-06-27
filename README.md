@@ -89,6 +89,7 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 | Integer              | :white_check_mark: |
 | List                 | :white_check_mark: |
 | Map                  | :white_check_mark: |
+| PID                  | :white_check_mark: |
 | Tuple                | :white_check_mark: |
 
 #### Operators
