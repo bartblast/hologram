@@ -40,7 +40,7 @@ defmodule HologramFeatureTests.MixProject do
       elixirc_options: [warnings_as_errors: true],
       elixirc_paths: elixirc_paths(Mix.env()),
       dialyzer: [
-        plt_add_apps: [:ex_unit, :mix],
+        plt_add_apps: [:ex_unit, :iex, :mix],
         plt_core_path: "priv/plts/core.plt",
         plt_local_path: "priv/plts/project.plt"
       ],
