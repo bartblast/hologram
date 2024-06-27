@@ -1,5 +1,6 @@
 defmodule HologramFeatureTests.TypesPage do
   use Hologram.Page
+  import HologramFeatureTests.Commons
 
   route "/types"
 
@@ -21,6 +22,8 @@ defmodule HologramFeatureTests.TypesPage do
       <button id="integer" $click="integer"> integer </button>
       <button id="list" $click="list"> list </button>
       <button id="map" $click="map"> map </button>
+      <button id="pid_client_origin" $click="pid_client_origin"> pid_client_origin </button>
+      <button id="pid_server_origin" $click={%Command{name: :pid_server_origin}}> pid_server_origin </button>
       <button id="tuple" $click="tuple"> tuple </button>
     </p>
     <p>
@@ -76,6 +79,15 @@ defmodule HologramFeatureTests.TypesPage do
     put_command(component, :echo, term: term)
   end
 
+  def action(:pid_client_origin, _params, component) do
+    term = pid("0.11.222")
+    put_command(component, :echo, term: term)
+  end
+
+  def action(:pid_server_origin, params, component) do
+    put_state(component, :result, params.term)
+  end
+
   def action(:tuple, _params, component) do
     term = {123, :abc}
     put_command(component, :echo, term: term)
@@ -87,5 +99,10 @@ defmodule HologramFeatureTests.TypesPage do
 
   def command(:echo, params, server) do
     put_action(server, :result, params)
+  end
+
+  def command(:pid_server_origin, _params, server) do
+    term = pid("0.11.222")
+    put_action(server, :pid_server_origin, term: term)
   end
 end
