@@ -1957,6 +1957,94 @@ describe("Erlang", () => {
     });
   });
 
+  describe("list_to_pid/1", () => {
+    const fun = Erlang["list_to_pid/1"];
+
+    it("valid textual representation of PID", () => {
+      // ~c"<0.11.222>"
+      const list = Type.list([
+        Type.integer(60),
+        Type.integer(48),
+        Type.integer(46),
+        Type.integer(49),
+        Type.integer(49),
+        Type.integer(46),
+        Type.integer(50),
+        Type.integer(50),
+        Type.integer(50),
+        Type.integer(62),
+      ]);
+
+      const result = fun(list);
+      const expected = Type.pid("client", [0, 11, 222], "client");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("invalid textual representation of PID", () => {
+      // ~c"<0.11>"
+      const list = Type.list([
+        Type.integer(60),
+        Type.integer(48),
+        Type.integer(46),
+        Type.integer(49),
+        Type.integer(49),
+        Type.integer(62),
+      ]);
+
+      assertBoxedError(
+        () => fun(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a pid",
+        ),
+      );
+    });
+
+    it("not a list", () => {
+      assertBoxedError(
+        () => fun(Type.integer(123)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("a list that contains a non-integer", () => {
+      const list = Type.list([
+        Type.integer(60),
+        Type.atom("abc"),
+        Type.integer(46),
+      ]);
+
+      assertBoxedError(
+        () => fun(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a pid",
+        ),
+      );
+    });
+
+    it("a list that contains an invalid codepoint", () => {
+      const list = Type.list([
+        Type.integer(60),
+        Type.integer(255),
+        Type.integer(46),
+      ]);
+
+      assertBoxedError(
+        () => fun(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a pid",
+        ),
+      );
+    });
+  });
+
   describe("map_size/1", () => {
     const map_size = Erlang["map_size/1"];
 

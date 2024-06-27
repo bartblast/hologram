@@ -1555,6 +1555,36 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "list_to_pid/1" do
+    test "valid textual representation of PID" do
+      assert :erlang.list_to_pid(~c"<0.11.222>") == pid("0.11.222")
+    end
+
+    test "invalid textual representation of PID" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a pid"),
+                   {:erlang, :list_to_pid, [~c"<0.11>"]}
+    end
+
+    test "not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:erlang, :list_to_pid, [123]}
+    end
+
+    test "a list that contains a non-integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a pid"),
+                   {:erlang, :list_to_pid, [[60, :abc, 46]]}
+    end
+
+    test "a list that contains an invalid codepoint" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a pid"),
+                   {:erlang, :list_to_pid, [[60, 255, 46]]}
+    end
+  end
+
   describe "map_size/1" do
     test "returns the number of items in the map" do
       assert :erlang.map_size(%{a: 1, b: 2}) == 2

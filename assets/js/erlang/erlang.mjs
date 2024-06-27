@@ -543,6 +543,52 @@ const Erlang = {
   // End length/1
   // Deps: []
 
+  // Start list_to_pid/1
+  "list_to_pid/1": (codePoints) => {
+    if (!Type.isList(codePoints)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    const areCodePointsValid = codePoints.data.every(
+      (item) => Type.isInteger(item) && Bitstring.validateCodePoint(item.value),
+    );
+
+    if (!areCodePointsValid) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a pid",
+        ),
+      );
+    }
+
+    const segments = codePoints.data.map((codePoint) =>
+      Type.bitstringSegment(codePoint, {type: "utf8"}),
+    );
+
+    const regex = /^<([0-9]+)\.([0-9]+)\.([0-9]+)>$/;
+    const matches = Bitstring.toText(Type.bitstring(segments)).match(regex);
+
+    if (matches === null) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a pid",
+        ),
+      );
+    }
+
+    return Type.pid(
+      "client",
+      [Number(matches[1]), Number(matches[2]), Number(matches[3])],
+      "client",
+    );
+  },
+  // End list_to_pid/1
+  // Deps: []
+
   // Start map_size/1
   "map_size/1": (map) => {
     if (!Type.isMap(map)) {
