@@ -161,7 +161,7 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
   describe "characters_to_list/1" do
     test "UTF8 binary" do
-      assert :unicode.characters_to_list("全息图") == [20840, 24687, 22270]
+      assert :unicode.characters_to_list("全息图") == [20_840, 24_687, 22_270]
     end
 
     test "list of UTF8 binaries" do
@@ -169,9 +169,9 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
                97,
                98,
                99,
-               20840,
-               24687,
-               22270,
+               20_840,
+               24_687,
+               22_270,
                120,
                121,
                122
