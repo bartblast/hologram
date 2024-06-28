@@ -573,6 +573,8 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert transform(ast, %Context{module: MyModule}) == %IR.AnonymousFunctionType{
                arity: 2,
+               captured_function: :my_fun,
+               captured_module: MyModule,
                clauses: [
                  %IR.FunctionClause{
                    params: [
@@ -592,8 +594,7 @@ defmodule Hologram.Compiler.TransformerTest do
                      ]
                    }
                  }
-               ],
-               mfa: {MyModule, :my_fun, 2}
+               ]
              }
     end
 
@@ -602,6 +603,8 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 2,
+               captured_function: :now,
+               captured_module: DateTime,
                clauses: [
                  %IR.FunctionClause{
                    params: [
@@ -622,8 +625,7 @@ defmodule Hologram.Compiler.TransformerTest do
                      ]
                    }
                  }
-               ],
-               mfa: {DateTime, :now, 2}
+               ]
              }
     end
 
@@ -632,6 +634,8 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 2,
+               captured_function: :parse_date,
+               captured_module: Calendar.ISO,
                clauses: [
                  %IR.FunctionClause{
                    params: [
@@ -652,8 +656,7 @@ defmodule Hologram.Compiler.TransformerTest do
                      ]
                    }
                  }
-               ],
-               mfa: {Calendar.ISO, :parse_date, 2}
+               ]
              }
     end
 
@@ -662,6 +665,8 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 2,
+               captured_function: nil,
+               captured_module: nil,
                clauses: [
                  %IR.FunctionClause{
                    params: [
@@ -682,8 +687,7 @@ defmodule Hologram.Compiler.TransformerTest do
                      ]
                    }
                  }
-               ],
-               mfa: nil
+               ]
              }
     end
 
@@ -692,6 +696,8 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 4,
+               captured_function: nil,
+               captured_module: nil,
                clauses: [
                  %IR.FunctionClause{
                    params: [
@@ -728,6 +734,8 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 4,
+               captured_function: nil,
+               captured_module: nil,
                clauses: [
                  %IR.FunctionClause{
                    params: [
@@ -765,6 +773,8 @@ defmodule Hologram.Compiler.TransformerTest do
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 3,
+               captured_function: nil,
+               captured_module: nil,
                clauses: [
                  %IR.FunctionClause{
                    params: [

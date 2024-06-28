@@ -54,7 +54,8 @@ defmodule Hologram.Compiler.Transformer do
   def transform({:&, meta, [{:/, _meta_2, [{function_ast, _meta_3, nil}, arity]}]}, context) do
     function_ast
     |> transform_function_capture(arity, meta, context)
-    |> Map.put(:mfa, {context.module, function_ast, arity})
+    |> Map.put(:captured_function, function_ast)
+    |> Map.put(:captured_module, context.module)
   end
 
   # Remote function capture with static module
@@ -72,7 +73,8 @@ defmodule Hologram.Compiler.Transformer do
       ) do
     function_ast
     |> transform_function_capture(arity, meta, context)
-    |> Map.put(:mfa, {Module.safe_concat(module_segments), function, arity})
+    |> Map.put(:captured_function, function)
+    |> Map.put(:captured_module, Module.safe_concat(module_segments))
   end
 
   # Remote function capture with variable module
