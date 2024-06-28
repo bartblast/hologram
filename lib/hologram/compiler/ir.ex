@@ -345,7 +345,7 @@ defmodule Hologram.Compiler.IR do
     input
     |> BeamFile.elixir_quoted!()
     |> Normalizer.normalize()
-    |> Transformer.transform(%Context{})
+    |> Transformer.transform(%Context{module: module})
   end
 
   @doc """

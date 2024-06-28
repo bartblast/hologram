@@ -18,12 +18,12 @@ defmodule Hologram.Compiler.IRTest do
   describe "for_module/1" do
     @expected %IR.ModuleDefinition{
       module: %IR.AtomType{
-        value: Module1
+        value: Hologram.Test.Fixtures.Compiler.IR.Module1
       },
       body: %IR.Block{
         expressions: [
           %IR.FunctionDefinition{
-            name: :my_fun,
+            name: :my_fun_1,
             arity: 2,
             visibility: :public,
             clause: %IR.FunctionClause{
@@ -40,6 +40,44 @@ defmodule Hologram.Compiler.IRTest do
                     args: [
                       %IR.Variable{name: :x},
                       %IR.Variable{name: :y}
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          %IR.FunctionDefinition{
+            name: :my_fun_2,
+            arity: 0,
+            visibility: :public,
+            clause: %IR.FunctionClause{
+              params: [],
+              guards: [],
+              body: %IR.Block{
+                expressions: [
+                  %IR.AnonymousFunctionType{
+                    arity: 2,
+                    captured_function: :my_fun_1,
+                    captured_module: Module1,
+                    clauses: [
+                      %IR.FunctionClause{
+                        params: [
+                          %IR.Variable{name: :"$1"},
+                          %IR.Variable{name: :"$2"}
+                        ],
+                        guards: [],
+                        body: %IR.Block{
+                          expressions: [
+                            %IR.LocalFunctionCall{
+                              function: :my_fun_1,
+                              args: [
+                                %IR.Variable{name: :"$1"},
+                                %IR.Variable{name: :"$2"}
+                              ]
+                            }
+                          ]
+                        }
+                      }
                     ]
                   }
                 ]
