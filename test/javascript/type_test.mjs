@@ -473,7 +473,7 @@ describe("Type", () => {
     const arity = 2;
     const clauses = ["clause_dummy_1", "clause_dummy_2"];
 
-    context = contextFixture({
+    const context = contextFixture({
       module: "Aaa.Bbb",
       vars: {a: Type.integer(1), b: Type.integer(2)},
     });
