@@ -38,6 +38,8 @@ export default class Type {
     return {
       type: "anonymous_function",
       arity: arity,
+      capturedFunction: null,
+      capturedModule: null,
       clauses: clauses,
       context: Utils.cloneDeep(context),
       uniqueId: Sequence.next(),

@@ -57,30 +57,27 @@ describe("Type", () => {
     assert.deepStrictEqual(result, expected);
   });
 
-  describe("anonymousFunction()", () => {
-    let arity, clauses, context;
+  it("anonymousFunction()", () => {
+    const arity = 3;
+    const clauses = ["clause_dummy_1", "clause_dummy_2"];
 
-    beforeEach(() => {
-      arity = 3;
-      clauses = ["clause_dummy_1", "clause_dummy_2"];
-      context = contextFixture({
-        vars: {a: Type.integer(1), b: Type.integer(2)},
-      });
+    const context = contextFixture({
+      vars: {a: Type.integer(1), b: Type.integer(2)},
     });
 
-    it("returns boxed anonymous function", () => {
-      const result = Type.anonymousFunction(arity, clauses, context);
+    const result = Type.anonymousFunction(arity, clauses, context);
 
-      const expected = {
-        type: "anonymous_function",
-        arity: arity,
-        clauses: clauses,
-        context: context,
-        uniqueId: Sequence.next() - 1,
-      };
+    const expected = {
+      type: "anonymous_function",
+      arity: arity,
+      capturedFunction: null,
+      capturedModule: null,
+      clauses: clauses,
+      context: context,
+      uniqueId: Sequence.next() - 1,
+    };
 
-      assert.deepStrictEqual(result, expected);
-    });
+    assert.deepStrictEqual(result, expected);
   });
 
   it("atom()", () => {
@@ -470,7 +467,7 @@ describe("Type", () => {
     assert.deepStrictEqual(result, expected);
   });
 
-  it.only("functionCapture()", () => {
+  it("functionCapture()", () => {
     const capturedModule = "MyModule";
     const capturedFunction = "my_fun";
     const arity = 2;
