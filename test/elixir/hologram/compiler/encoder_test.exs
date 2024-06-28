@@ -86,6 +86,7 @@ defmodule Hologram.Compiler.EncoderTest do
     end
 
     test "with module/function capture info" do
+      # credo:disable-for-lines:27 Credo.Check.Design.DuplicatedCode
       # &Calendar.ISO.parse_date/2
       ir = %IR.AnonymousFunctionType{
         arity: 2,

@@ -632,6 +632,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "remote function capture, multi-segment module name" do
       ast = ast("&Calendar.ISO.parse_date/2")
 
+      # credo:disable-for-lines:26 Credo.Check.Design.DuplicatedCode
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 2,
                captured_function: :parse_date,
@@ -732,6 +733,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "partially applied remote function" do
       ast = ast("&Aaa.Bbb.my_fun(&1, 2, [3, &4])")
 
+      # credo:disable-for-lines:34 Credo.Check.Design.DuplicatedCode
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 4,
                captured_function: nil,
