@@ -18,7 +18,7 @@ defmodule Hologram.Compiler.IRTest do
   describe "for_module/1" do
     @expected %IR.ModuleDefinition{
       module: %IR.AtomType{
-        value: Hologram.Test.Fixtures.Compiler.IR.Module1
+        value: Module1
       },
       body: %IR.Block{
         expressions: [
