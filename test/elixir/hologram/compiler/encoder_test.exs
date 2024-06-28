@@ -29,6 +29,8 @@ defmodule Hologram.Compiler.EncoderTest do
       # fn x -> :expr end
       ir = %IR.AnonymousFunctionType{
         arity: 1,
+        captured_function: nil,
+        captured_module: nil,
         clauses: [
           %IR.FunctionClause{
             params: [%IR.Variable{name: :x}],
@@ -54,6 +56,8 @@ defmodule Hologram.Compiler.EncoderTest do
       # end
       ir = %IR.AnonymousFunctionType{
         arity: 1,
+        captured_function: nil,
+        captured_module: nil,
         clauses: [
           %IR.FunctionClause{
             params: [%IR.Variable{name: :x}],
@@ -77,6 +81,42 @@ defmodule Hologram.Compiler.EncoderTest do
              return Type.atom("expr_a");
              }}, {params: (context) => [Type.variablePattern("y")], guards: [], body: (context) => {
              return Type.atom("expr_b");
+             }}], context)\
+             """
+    end
+
+    test "with module/function capture info" do
+      # &Calendar.ISO.parse_date/2
+      ir = %IR.AnonymousFunctionType{
+        arity: 2,
+        captured_function: :parse_date,
+        captured_module: Calendar.ISO,
+        clauses: [
+          %IR.FunctionClause{
+            params: [
+              %IR.Variable{name: :"$1"},
+              %IR.Variable{name: :"$2"}
+            ],
+            guards: [],
+            body: %IR.Block{
+              expressions: [
+                %IR.RemoteFunctionCall{
+                  module: %IR.AtomType{value: Calendar.ISO},
+                  function: :parse_date,
+                  args: [
+                    %IR.Variable{name: :"$1"},
+                    %IR.Variable{name: :"$2"}
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+
+      assert encode_ir(ir) == """
+             Type.functionCapture("Calendar.ISO", "parse_date", 2, [{params: (context) => [Type.variablePattern("$1"), Type.variablePattern("$2")], guards: [], body: (context) => {
+             return Elixir_Calendar_ISO["parse_date/2"](context.vars["$1"], context.vars["$2"]);
              }}], context)\
              """
     end

@@ -101,9 +101,38 @@ defmodule Hologram.Compiler.Encoder do
     "Interpreter.callAnonymousFunction(#{function_js}, #{args_js})"
   end
 
-  def encode_ir(%IR.AnonymousFunctionType{arity: arity, clauses: clauses}, context) do
+  def encode_ir(
+        %IR.AnonymousFunctionType{
+          arity: arity,
+          captured_function: nil,
+          captured_module: nil,
+          clauses: clauses
+        },
+        context
+      ) do
     clauses_js = encode_as_array(clauses, context)
     "Type.anonymousFunction(#{arity}, #{clauses_js}, context)"
+  end
+
+  def encode_ir(
+        %IR.AnonymousFunctionType{
+          arity: arity,
+          captured_function: captured_function,
+          captured_module: captured_module,
+          clauses: clauses
+        },
+        context
+      ) do
+    captured_function_js = encode_as_string(captured_function, true)
+
+    captured_module_js =
+      captured_module
+      |> Reflection.module_name()
+      |> encode_as_string(true)
+
+    clauses_js = encode_as_array(clauses, context)
+
+    "Type.functionCapture(#{captured_module_js}, #{captured_function_js}, #{arity}, #{clauses_js}, context)"
   end
 
   def encode_ir(%IR.AtomType{value: value}, _context) do
