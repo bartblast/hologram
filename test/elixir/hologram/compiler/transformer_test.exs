@@ -597,36 +597,6 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "remote function capture, multi-segment module name" do
-      ast = ast("&Calendar.ISO.parse_date/2")
-
-      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
-               arity: 2,
-               clauses: [
-                 %IR.FunctionClause{
-                   params: [
-                     %IR.Variable{name: :"$1"},
-                     %IR.Variable{name: :"$2"}
-                   ],
-                   guards: [],
-                   body: %IR.Block{
-                     expressions: [
-                       %IR.RemoteFunctionCall{
-                         module: %IR.AtomType{value: Calendar.ISO},
-                         function: :parse_date,
-                         args: [
-                           %IR.Variable{name: :"$1"},
-                           %IR.Variable{name: :"$2"}
-                         ]
-                       }
-                     ]
-                   }
-                 }
-               ],
-               mfa: {Calendar.ISO, :parse_date, 2}
-             }
-    end
-
     test "remote function capture, single-segment module name" do
       ast = ast("&DateTime.now/2")
 
@@ -654,6 +624,36 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ],
                mfa: {DateTime, :now, 2}
+             }
+    end
+
+    test "remote function capture, multi-segment module name" do
+      ast = ast("&Calendar.ISO.parse_date/2")
+
+      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
+               arity: 2,
+               clauses: [
+                 %IR.FunctionClause{
+                   params: [
+                     %IR.Variable{name: :"$1"},
+                     %IR.Variable{name: :"$2"}
+                   ],
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.RemoteFunctionCall{
+                         module: %IR.AtomType{value: Calendar.ISO},
+                         function: :parse_date,
+                         args: [
+                           %IR.Variable{name: :"$1"},
+                           %IR.Variable{name: :"$2"}
+                         ]
+                       }
+                     ]
+                   }
+                 }
+               ],
+               mfa: {Calendar.ISO, :parse_date, 2}
              }
     end
 
