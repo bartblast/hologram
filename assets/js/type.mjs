@@ -179,6 +179,18 @@ export default class Type {
     return {type: "float", value: value};
   }
 
+  static functionCapture(capturedModule, capturedFunction, arity, context) {
+    return {
+      type: "anonymous_function",
+      arity: arity,
+      capturedFunction: capturedFunction,
+      capturedModule: capturedModule,
+      clauses: null,
+      context: {...Utils.cloneDeep(context), vars: {}},
+      uniqueId: Sequence.next(),
+    };
+  }
+
   static improperList(data) {
     if (data.length < 2) {
       throw new HologramInterpreterError(

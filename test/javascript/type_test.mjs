@@ -470,6 +470,36 @@ describe("Type", () => {
     assert.deepStrictEqual(result, expected);
   });
 
+  it.only("functionCapture()", () => {
+    const capturedModule = "MyModule";
+    const capturedFunction = "my_fun";
+    const arity = 2;
+
+    context = contextFixture({
+      module: "Aaa.Bbb",
+      vars: {a: Type.integer(1), b: Type.integer(2)},
+    });
+
+    const result = Type.functionCapture(
+      capturedModule,
+      capturedFunction,
+      arity,
+      context,
+    );
+
+    const expected = {
+      type: "anonymous_function",
+      arity: arity,
+      capturedFunction: capturedFunction,
+      capturedModule: capturedModule,
+      clauses: null,
+      context: contextFixture({module: "Aaa.Bbb", vars: {}}),
+      uniqueId: Sequence.next() - 1,
+    };
+
+    assert.deepStrictEqual(result, expected);
+  });
+
   describe("improperList()", () => {
     it("empty list", () => {
       assert.throw(
