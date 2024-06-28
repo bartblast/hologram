@@ -181,13 +181,19 @@ export default class Type {
     return {type: "float", value: value};
   }
 
-  static functionCapture(capturedModule, capturedFunction, arity, context) {
+  static functionCapture(
+    capturedModule,
+    capturedFunction,
+    arity,
+    clauses,
+    context,
+  ) {
     return {
       type: "anonymous_function",
       arity: arity,
       capturedFunction: capturedFunction,
       capturedModule: capturedModule,
-      clauses: null,
+      clauses: clauses,
       context: {...Utils.cloneDeep(context), vars: {}},
       uniqueId: Sequence.next(),
     };

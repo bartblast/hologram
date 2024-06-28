@@ -471,6 +471,7 @@ describe("Type", () => {
     const capturedModule = "MyModule";
     const capturedFunction = "my_fun";
     const arity = 2;
+    const clauses = ["clause_dummy_1", "clause_dummy_2"];
 
     context = contextFixture({
       module: "Aaa.Bbb",
@@ -481,6 +482,7 @@ describe("Type", () => {
       capturedModule,
       capturedFunction,
       arity,
+      clauses,
       context,
     );
 
@@ -489,7 +491,7 @@ describe("Type", () => {
       arity: arity,
       capturedFunction: capturedFunction,
       capturedModule: capturedModule,
-      clauses: null,
+      clauses: clauses,
       context: contextFixture({module: "Aaa.Bbb", vars: {}}),
       uniqueId: Sequence.next() - 1,
     };
