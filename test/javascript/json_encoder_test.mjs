@@ -14,14 +14,31 @@ defineGlobalErlangAndElixirModules();
 
 describe("JsonEncoder", () => {
   describe("encode()", () => {
-    it("boxed anonymous function", () => {
-      const term = Type.anonymousFunction(2, [], contextFixture());
+    describe("boxed anonymous function", () => {
+      it("not having capture info", () => {
+        const term = Type.anonymousFunction(2, [], contextFixture());
 
-      assert.throw(
-        () => JsonEncoder.encode(term),
-        HologramRuntimeError,
-        "can't JSON encode boxed anonymous functions",
-      );
+        assert.throw(
+          () => JsonEncoder.encode(term),
+          HologramRuntimeError,
+          "can't JSON encode boxed anonymous functions",
+        );
+      });
+
+      it("having capture info", () => {
+        const term = Type.functionCapture(
+          "Calendar.ISO",
+          "parse_date",
+          2,
+          ["dummy_clause_1", "dummy_clause_2"],
+          contextFixture(),
+        );
+
+        const expected =
+          '{"type":"anonymous_function","module":"Calendar.ISO","function":"parse_date","arity":2}';
+
+        assert.equal(JsonEncoder.encode(term), expected);
+      });
     });
 
     it("boxed atom", () => {

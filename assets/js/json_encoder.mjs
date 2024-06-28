@@ -12,9 +12,7 @@ export default class JsonEncoder {
 
     switch (term.type) {
       case "anonymous_function":
-        throw new HologramRuntimeError(
-          "can't JSON encode boxed anonymous functions",
-        );
+        return JsonEncoder.#encodeAnonymousFunction(term);
 
       case "bitstring":
         return JsonEncoder.#encodeBitstring(term);
@@ -57,6 +55,21 @@ export default class JsonEncoder {
 
   static #escapeDoubleQuotes(str) {
     return str.replace(/"/g, '\\"');
+  }
+
+  static #encodeAnonymousFunction(term) {
+    if (term.capturedModule === null) {
+      throw new HologramRuntimeError(
+        "can't JSON encode boxed anonymous functions that are not local or remote function captures",
+      );
+    }
+
+    return JSON.stringify({
+      type: "anonymous_function",
+      module: term.capturedModule,
+      function: term.capturedFunction,
+      arity: term.arity,
+    });
   }
 
   static #encodeArray(term) {
