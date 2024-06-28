@@ -660,23 +660,23 @@ defmodule Hologram.Compiler.TransformerTest do
     test "remote function capture, variable module" do
       ast = ast("&my_module.my_fun/2")
 
-      assert transform(ast, %Context{}) == %Hologram.Compiler.IR.AnonymousFunctionType{
+      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 2,
                clauses: [
-                 %Hologram.Compiler.IR.FunctionClause{
+                 %IR.FunctionClause{
                    params: [
-                     %Hologram.Compiler.IR.Variable{name: :"$1"},
-                     %Hologram.Compiler.IR.Variable{name: :"$2"}
+                     %IR.Variable{name: :"$1"},
+                     %IR.Variable{name: :"$2"}
                    ],
                    guards: [],
-                   body: %Hologram.Compiler.IR.Block{
+                   body: %IR.Block{
                      expressions: [
-                       %Hologram.Compiler.IR.RemoteFunctionCall{
-                         module: %Hologram.Compiler.IR.Variable{name: :my_module},
+                       %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :my_module},
                          function: :my_fun,
                          args: [
-                           %Hologram.Compiler.IR.Variable{name: :"$1"},
-                           %Hologram.Compiler.IR.Variable{name: :"$2"}
+                           %IR.Variable{name: :"$1"},
+                           %IR.Variable{name: :"$2"}
                          ]
                        }
                      ]
