@@ -21,6 +21,18 @@ defmodule Hologram.Socket.Decoder do
   @spec decode(map | String.t()) :: any
   def decode(term)
 
+  def decode(%{
+        "type" => "anonymous_function",
+        "module" => module_str,
+        "function" => function_str,
+        "arity" => arity
+      }) do
+    module = Module.safe_concat([module_str])
+    function = String.to_existing_atom(function_str)
+
+    Function.capture(module, function, arity)
+  end
+
   def decode(%{"type" => "atom", "value" => value}) do
     String.to_existing_atom(value)
   end
