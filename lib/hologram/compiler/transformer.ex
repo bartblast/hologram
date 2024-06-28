@@ -72,7 +72,7 @@ defmodule Hologram.Compiler.Transformer do
       ) do
     function_ast
     |> transform_function_capture(arity, meta, context)
-    |> Map.put(:mfa, {Module.concat(module_segments), function, arity})
+    |> Map.put(:mfa, {Module.safe_concat(module_segments), function, arity})
   end
 
   # Partially applied function arg placeholder
