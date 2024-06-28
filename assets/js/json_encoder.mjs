@@ -53,10 +53,6 @@ export default class JsonEncoder {
     }
   }
 
-  static #escapeDoubleQuotes(str) {
-    return str.replace(/"/g, '\\"');
-  }
-
   static #encodeAnonymousFunction(term) {
     if (term.capturedModule === null) {
       throw new HologramRuntimeError(
@@ -135,5 +131,9 @@ export default class JsonEncoder {
 
   static #encodeTuple(term) {
     return `{"type":"tuple","data":[${JsonEncoder.#encodeEnumData(term.data)}]}`;
+  }
+
+  static #escapeDoubleQuotes(str) {
+    return str.replace(/"/g, '\\"');
   }
 }
