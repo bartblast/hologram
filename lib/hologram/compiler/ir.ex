@@ -52,9 +52,9 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule AnonymousFunctionType do
-    defstruct [:arity, :clauses]
+    defstruct [:arity, :clauses, :mfa]
 
-    @type t :: %__MODULE__{arity: integer, clauses: list(IR.FunctionClause.t())}
+    @type t :: %__MODULE__{arity: integer, clauses: list(IR.FunctionClause.t()), mfa: mfa | nil}
   end
 
   defmodule AtomType do

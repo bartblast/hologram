@@ -571,7 +571,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "local function capture" do
       ast = ast("&my_fun/2")
 
-      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
+      assert transform(ast, %Context{module: MyModule}) == %IR.AnonymousFunctionType{
                arity: 2,
                clauses: [
                  %IR.FunctionClause{
@@ -592,11 +592,12 @@ defmodule Hologram.Compiler.TransformerTest do
                      ]
                    }
                  }
-               ]
+               ],
+               mfa: {MyModule, :my_fun, 2}
              }
     end
 
-    test "remote function capture" do
+    test "remote function capture, multi-segment module name" do
       ast = ast("&Calendar.ISO.parse_date/2")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
@@ -621,7 +622,38 @@ defmodule Hologram.Compiler.TransformerTest do
                      ]
                    }
                  }
-               ]
+               ],
+               mfa: {Calendar.ISO, :parse_date, 2}
+             }
+    end
+
+    test "remote function capture, single-segment module name" do
+      ast = ast("&DateTime.now/2")
+
+      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
+               arity: 2,
+               clauses: [
+                 %IR.FunctionClause{
+                   params: [
+                     %IR.Variable{name: :"$1"},
+                     %IR.Variable{name: :"$2"}
+                   ],
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.RemoteFunctionCall{
+                         module: %IR.AtomType{value: DateTime},
+                         function: :now,
+                         args: [
+                           %IR.Variable{name: :"$1"},
+                           %IR.Variable{name: :"$2"}
+                         ]
+                       }
+                     ]
+                   }
+                 }
+               ],
+               mfa: {DateTime, :now, 2}
              }
     end
 

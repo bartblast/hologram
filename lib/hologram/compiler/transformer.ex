@@ -51,13 +51,28 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # Local function capture
-  def transform({:&, meta, [{:/, _meta_2, [{function, _meta_3, nil}, arity]}]}, context) do
-    transform_function_capture(function, arity, meta, context)
+  def transform({:&, meta, [{:/, _meta_2, [{function_ast, _meta_3, nil}, arity]}]}, context) do
+    function_ast
+    |> transform_function_capture(arity, meta, context)
+    |> Map.put(:mfa, {context.module, function_ast, arity})
   end
 
   # Remote function capture
-  def transform({:&, meta, [{:/, _meta_2, [{function, _meta_3, []}, arity]}]}, context) do
-    transform_function_capture(function, arity, meta, context)
+  def transform(
+        {:&, meta,
+         [
+           {:/, _meta_2,
+            [
+              {{:., _meta_3, [{:__aliases__, _meta_4, module_segments}, function]} = function_ast,
+               _meta_5, []},
+              arity
+            ]}
+         ]},
+        context
+      ) do
+    function_ast
+    |> transform_function_capture(arity, meta, context)
+    |> Map.put(:mfa, {Module.concat(module_segments), function, arity})
   end
 
   # Partially applied function arg placeholder
@@ -700,9 +715,9 @@ defmodule Hologram.Compiler.Transformer do
     %{acc | unique: transform(unique, context)}
   end
 
-  defp transform_function_capture(function, arity, meta, context) do
+  defp transform_function_capture(function_ast, arity, meta, context) do
     args = build_function_capture_args(arity, meta)
-    ast = {:fn, meta, [{:->, meta, [args, {:__block__, [], [{function, meta, args}]}]}]}
+    ast = {:fn, meta, [{:->, meta, [args, {:__block__, [], [{function_ast, meta, args}]}]}]}
     transform(ast, context)
   end
 
