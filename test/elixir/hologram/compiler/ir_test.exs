@@ -50,13 +50,13 @@ defmodule Hologram.Compiler.IRTest do
       }
     }
 
-    test "module argument" do
+    test "with BEAM path not specified" do
       assert for_module(Module1) == @expected
     end
 
-    test "BEAM path argument" do
+    test "with BEAM path specified" do
       beam_path = :code.which(Module1)
-      assert for_module(beam_path) == @expected
+      assert for_module(Module1, beam_path) == @expected
     end
   end
 

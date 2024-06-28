@@ -56,7 +56,7 @@ defmodule Hologram.Compiler do
       beam_path = get_module_beam_path(module_beam_path_plt, module)
 
       if beam_path != :non_existing do
-        ir = IR.for_module(beam_path)
+        ir = IR.for_module(module, beam_path)
         PLT.put(ir_plt, module, ir)
       end
     end)
@@ -582,7 +582,7 @@ defmodule Hologram.Compiler do
 
   defp rebuild_ir_plt_entry!(ir_plt, module, module_beam_path_plt) do
     beam_path = PLT.get!(module_beam_path_plt, module)
-    PLT.put(ir_plt, module, IR.for_module(beam_path))
+    PLT.put(ir_plt, module, IR.for_module(module, beam_path))
   end
 
   defp rebuild_module_digest_plt_entry!(module, module_digest_plt, module_beam_path_plt) do

@@ -331,15 +331,18 @@ defmodule Hologram.Compiler.IR do
 
   @doc """
   Returns Hologram IR for the given module.
+  Specifying the module's BEAM path makes the call faster.
 
   ## Examples
 
       iex> for_module(MyModule)
       %IR.ModuleDefinition{module: MyModule, body: %IR.Block{expressions: [...]}}
   """
-  @spec for_module(module | charlist) :: IR.t()
-  def for_module(module_or_beam_path) do
-    module_or_beam_path
+  @spec for_module(module, charlist | nil) :: IR.t()
+  def for_module(module, beam_path \\ nil) do
+    input = beam_path || :code.which(module)
+
+    input
     |> BeamFile.elixir_quoted!()
     |> Normalizer.normalize()
     |> Transformer.transform(%Context{})
