@@ -15,14 +15,14 @@ defmodule HologramFeatureTests.TypesPage do
     <p>
       <button id="anonymous function (client origin, non-capture)" $click="anonymous function (client origin, non-capture)"> anonymous function (client origin, non-capture) </button>
       <button id="atom" $click="atom"> atom </button>
-      <button id="binary" $click="binary"> binary </button>
+      <button id="bitstring (binary)" $click="bitstring (binary)"> bitstring (binary) </button>
       <button id="bitstring (non-binary)" $click="bitstring (non-binary)"> bitstring (non-binary) </button>
       <button id="float" $click="float"> float </button>
       <button id="integer" $click="integer"> integer </button>
       <button id="list" $click="list"> list </button>
       <button id="map" $click="map"> map </button>
-      <button id="pid_client_origin" $click="pid_client_origin"> pid_client_origin </button>
-      <button id="pid_server_origin" $click={%Command{name: :pid_server_origin}}> pid_server_origin </button>
+      <button id="pid (client origin)" $click="pid (client origin)"> pid (client origin) </button>
+      <button id="pid (server origin)" $click={%Command{name: :"pid (server origin)"}}> pid (server origin) </button>
       <button id="tuple" $click="tuple"> tuple </button>
     </p>
     <p>
@@ -45,7 +45,7 @@ defmodule HologramFeatureTests.TypesPage do
     put_command(component, :echo, term: term)
   end
 
-  def action(:binary, _params, component) do
+  def action(:"bitstring (binary)", _params, component) do
     term = "abc"
     put_command(component, :echo, term: term)
   end
@@ -75,12 +75,12 @@ defmodule HologramFeatureTests.TypesPage do
     put_command(component, :echo, term: term)
   end
 
-  def action(:pid_client_origin, _params, component) do
+  def action(:"pid (client origin)", _params, component) do
     term = pid("0.11.222")
     put_command(component, :echo, term: term)
   end
 
-  def action(:pid_server_origin, params, component) do
+  def action(:"pid (server origin)", params, component) do
     put_state(component, :result, params.term)
   end
 
@@ -97,8 +97,8 @@ defmodule HologramFeatureTests.TypesPage do
     put_action(server, :result, params)
   end
 
-  def command(:pid_server_origin, _params, server) do
+  def command(:"pid (server origin)", _params, server) do
     term = pid("0.11.222")
-    put_action(server, :pid_server_origin, term: term)
+    put_action(server, :"pid (server origin)", term: term)
   end
 end
