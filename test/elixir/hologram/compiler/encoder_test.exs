@@ -1746,6 +1746,20 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   describe "encode_term/1" do
+    test "anonymous function (non-capture)" do
+      assert_error ArgumentError,
+                   "can't encode server terms that are anonymous functions that are not local or remote function captures",
+                   fn -> encode_term(fn x, y -> x * y end) end
+    end
+
+    test "anonymous function (capture)" do
+      assert encode_term(&DateTime.now/2) == """
+             Type.functionCapture("DateTime", "now", 2, [{params: (context) => [Type.variablePattern("$1"), Type.variablePattern("$2")], guards: [], body: (context) => {
+             return Elixir_DateTime["now/2"](context.vars["$1"], context.vars["$2"]);
+             }}], context)\
+             """
+    end
+
     test "integer" do
       assert encode_term(123) == "Type.integer(123n)"
     end

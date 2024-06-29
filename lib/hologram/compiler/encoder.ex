@@ -428,6 +428,14 @@ defmodule Hologram.Compiler.Encoder do
     term
     |> IR.for_term()
     |> encode_ir(%Context{})
+  rescue
+    e in ArgumentError ->
+      cond do
+        e.message =~ ~r/cannot escape #Function/ ->
+          raise ArgumentError,
+            message:
+              "can't encode server terms that are anonymous functions that are not local or remote function captures"
+      end
   end
 
   @doc """
