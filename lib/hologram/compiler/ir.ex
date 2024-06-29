@@ -358,10 +358,50 @@ defmodule Hologram.Compiler.IR do
       %IR.IntegerType{value: 123}
   """
   @spec for_term(any) :: IR.t()
-  def for_term(term) do
+  def for_term(term)
+
+  def for_term(term) when is_function(term) do
+    if Function.info(term)[:type] == :external do
+      term
+      |> Macro.escape()
+      |> Transformer.transform(%Context{})
+    else
+      raise ArgumentError,
+        message: "term contains an anonymous function that is not a named function capture"
+    end
+  end
+
+  def for_term(term) when is_bitstring(term) do
     term
     |> Macro.escape()
-    |> Normalizer.normalize()
     |> Transformer.transform(%Context{})
+  end
+
+  def for_term(term) when is_list(term) do
+    data = Enum.map(term, &for_term/1)
+    %IR.ListType{data: data}
+  end
+
+  def for_term(term) when is_map(term) do
+    data =
+      term
+      |> Map.to_list()
+      |> Enum.map(fn {key, value} -> {for_term(key), for_term(value)} end)
+
+    %IR.MapType{data: data}
+  end
+
+  def for_term(term) when is_tuple(term) do
+    data =
+      term
+      |> Tuple.to_list()
+      |> Enum.map(&for_term/1)
+
+    %IR.TupleType{data: data}
+  end
+
+  # atom, float, integer, pid, port, reference
+  def for_term(term) do
+    Transformer.transform(term, %Context{})
   end
 end

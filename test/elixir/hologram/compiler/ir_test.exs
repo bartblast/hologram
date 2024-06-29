@@ -98,8 +98,130 @@ defmodule Hologram.Compiler.IRTest do
     end
   end
 
-  test "for_term/1" do
-    my_var = 123
-    assert for_term(my_var) == %IR.IntegerType{value: 123}
+  describe "for_term/1" do
+    test "anonymous function (non-capture)" do
+      term = fn x -> x end
+
+      assert_error ArgumentError,
+                   "term contains an anonymous function that is not a named function capture",
+                   fn ->
+                     for_term(term)
+                   end
+    end
+
+    test "anonymous function (capture)" do
+      term = &DateTime.now/2
+
+      assert for_term(term) == %IR.AnonymousFunctionType{
+               arity: 2,
+               captured_function: nil,
+               captured_module: nil,
+               clauses: [
+                 %IR.FunctionClause{
+                   params: [
+                     %IR.Variable{name: :"$1"},
+                     %IR.Variable{name: :"$2"}
+                   ],
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.RemoteFunctionCall{
+                         module: %IR.AtomType{value: DateTime},
+                         function: :now,
+                         args: [
+                           %IR.Variable{name: :"$1"},
+                           %IR.Variable{name: :"$2"}
+                         ]
+                       }
+                     ]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "atom" do
+      term = :abc
+      assert for_term(term) == %IR.AtomType{value: term}
+    end
+
+    test "bistring (binary)" do
+      term = "abc"
+      assert for_term(term) == %IR.StringType{value: "abc"}
+    end
+
+    test "bistring (non-binary)" do
+      term = <<1::1, 0::1>>
+
+      assert for_term(term) == %IR.BitstringType{
+               segments: [
+                 %IR.BitstringSegment{
+                   value: %IR.IntegerType{value: 2},
+                   modifiers: [
+                     type: :integer,
+                     size: %IR.IntegerType{value: 2}
+                   ]
+                 }
+               ]
+             }
+    end
+
+    test "float" do
+      term = 1.23
+      assert for_term(term) == %IR.FloatType{value: term}
+    end
+
+    test "integer" do
+      term = 123
+      assert for_term(term) == %IR.IntegerType{value: term}
+    end
+
+    test "list" do
+      term = [123, :abc]
+
+      assert for_term(term) == %IR.ListType{
+               data: [
+                 %IR.IntegerType{value: 123},
+                 %IR.AtomType{value: :abc}
+               ]
+             }
+    end
+
+    test "map" do
+      term = %{123 => :abc, "xyz" => 9.87}
+
+      assert for_term(term) == %IR.MapType{
+               data: [
+                 {%IR.IntegerType{value: 123}, %IR.AtomType{value: :abc}},
+                 {%IR.StringType{value: "xyz"}, %IR.FloatType{value: 9.87}}
+               ]
+             }
+    end
+
+    test "pid" do
+      term = pid("0.11.222")
+      assert for_term(term) == %IR.PIDType{value: term}
+    end
+
+    test "port" do
+      term = port("0.11")
+      assert for_term(term) == %IR.PortType{value: term}
+    end
+
+    test "reference" do
+      term = make_ref()
+      assert for_term(term) == %IR.ReferenceType{value: term}
+    end
+
+    test "tuple" do
+      term = {123, :abc}
+
+      assert for_term(term) == %IR.TupleType{
+               data: [
+                 %IR.IntegerType{value: 123},
+                 %IR.AtomType{value: :abc}
+               ]
+             }
+    end
   end
 end
