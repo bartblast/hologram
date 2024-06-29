@@ -111,6 +111,7 @@ defmodule Hologram.Compiler.Transformer do
       segments
       |> Enum.map(&transform_bitstring_segment(&1, context))
       |> flatten_bitstring_segments()
+      |> filter_out_empty_bitstring_segments()
 
     %IR.BitstringType{segments: segments_ir}
   end
@@ -526,6 +527,10 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   defp determine_partially_applied_function_arity(_ast, arity), do: arity
+
+  defp filter_out_empty_bitstring_segments(segments) do
+    Enum.reject(segments, &match?(%IR.BitstringSegment{value: %IR.StringType{value: ""}}, &1))
+  end
 
   defp flatten_bitstring_segments(segments) do
     segments

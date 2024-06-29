@@ -552,6 +552,21 @@ defmodule Hologram.Compiler.TransformerTest do
         ]
       } = transform(ast, %Context{})
     end
+
+    test "empty bitstring segments are filtered out" do
+      ast = ast(~s/<<1, "", 2, "">>/)
+
+      assert %IR.BitstringType{
+               segments: [
+                 %IR.BitstringSegment{
+                   value: %IR.IntegerType{value: 1}
+                 },
+                 %IR.BitstringSegment{
+                   value: %IR.IntegerType{value: 2}
+                 }
+               ]
+             } = transform(ast, %Context{})
+    end
   end
 
   test "block" do
