@@ -21,7 +21,7 @@ describe("JsonEncoder", () => {
         assert.throw(
           () => JsonEncoder.encode(term),
           HologramRuntimeError,
-          "can't encode client terms that are anonymous functions that are not local or remote function captures",
+          "can't encode client terms that are anonymous functions that are not named function captures",
         );
       });
 
