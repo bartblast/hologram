@@ -1745,8 +1745,9 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
-  test "encode_term/1" do
-    my_var = 123
-    assert encode_term(my_var) == "Type.integer(123n)"
+  describe "encode_term/1" do
+    test "integer" do
+      assert encode_term(123) == "Type.integer(123n)"
+    end
   end
 end
