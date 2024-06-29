@@ -1173,6 +1173,96 @@ describe("Bitstring", () => {
         );
       });
     });
+
+    describe("with empty string segments", () => {
+      it("the last segment is an empty string with utf8 modifier", () => {
+        // <<1, "">>
+        const result = Type.bitstring([
+          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+          Type.bitstringSegment(Type.string(""), {type: "utf8"}),
+        ]);
+
+        const expected = Type.bitstring([
+          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+        ]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("the last segment is an empty string with binary modifier", () => {
+        // <<1, "">>
+        const result = Type.bitstring([
+          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+          Type.bitstringSegment(Type.string(""), {type: "binary"}),
+        ]);
+
+        const expected = Type.bitstring([
+          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+        ]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("the first segment is an empty string with utf8 modifier", () => {
+        // <<"", 1>>
+        const result = Type.bitstring([
+          Type.bitstringSegment(Type.string(""), {type: "utf8"}),
+          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+        ]);
+
+        const expected = Type.bitstring([
+          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+        ]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("the first segment is an empty string with binary modifier", () => {
+        // <<"", 1>>
+        const result = Type.bitstring([
+          Type.bitstringSegment(Type.string(""), {type: "binary"}),
+          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+        ]);
+
+        const expected = Type.bitstring([
+          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+        ]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("the middle segment is an empty string with utf8 modifier", () => {
+        // <<1, "", 2>>
+        const result = Type.bitstring([
+          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+          Type.bitstringSegment(Type.string(""), {type: "utf8"}),
+          Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+        ]);
+
+        const expected = Type.bitstring([
+          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+          Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+        ]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("the middle segment is an empty string with binary modifier", () => {
+        // <<1, "", 2>>
+        const result = Type.bitstring([
+          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+          Type.bitstringSegment(Type.string(""), {type: "binary"}),
+          Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+        ]);
+
+        const expected = Type.bitstring([
+          Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+          Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+        ]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+    });
   });
 
   describe("isPrintableCodePoint()", () => {

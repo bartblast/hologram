@@ -664,4 +664,18 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
     # TODO: anonymous function, map, pid, port, reference
   end
+
+  describe "with empty string segments" do
+    test "the last segment is an empty string" do
+      assert <<1, "">> == <<1>>
+    end
+
+    test "the first segment is an empty string" do
+      assert <<"", 1>> == <<1>>
+    end
+
+    test "the middle segment is an empty string" do
+      assert <<1, "", 2>> == <<1, 2>>
+    end
+  end
 end
