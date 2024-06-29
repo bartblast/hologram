@@ -13,8 +13,6 @@ defmodule HologramFeatureTests.TypesPage do
   def template do
     ~H"""
     <p>
-      <button id="anonymous_function_client" $click="anonymous_function_client"> anonymous_function_client </button>
-      <button id="anonymous_function_transport" $click="anonymous_function_transport"> anonymous_function_transport </button>
       <button id="anonymous function (client origin, non-capture)" $click="anonymous function (client origin, non-capture)"> anonymous function (client origin, non-capture) </button>
       <button id="atom" $click="atom"> atom </button>
       <button id="binary" $click="binary"> binary </button>
@@ -31,18 +29,6 @@ defmodule HologramFeatureTests.TypesPage do
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>
     </p>
     """
-  end
-
-  def action(:anonymous_function_client, _params, component) do
-    term = fn x -> x * x end
-    result = term.(2)
-
-    put_state(component, :result, result)
-  end
-
-  def action(:anonymous_function_transport, _params, component) do
-    term = fn x -> x * x end
-    put_command(component, :echo, term: term)
   end
 
   def action(:"anonymous function (client origin, non-capture)", _params, component) do

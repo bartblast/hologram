@@ -2,21 +2,6 @@ defmodule HologramFeatureTests.TypesTest do
   use HologramFeatureTests.TestCase, async: true
   alias HologramFeatureTests.TypesPage
 
-  feature "anonymous_function_client", %{session: session} do
-    session
-    |> visit(TypesPage)
-    |> click(css("button[id='anonymous_function_client']"))
-    |> assert_text(css("#result"), inspect(4))
-  end
-
-  feature "anonymous_function_transport", %{session: session} do
-    assert_raise Wallaby.JSError, ~r/can't JSON encode boxed anonymous functions/, fn ->
-      session
-      |> visit(TypesPage)
-      |> click(css("button[id='anonymous_function_transport']"))
-    end
-  end
-
   feature "anonymous function (client origin, non-capture)", %{session: session} do
     assert_raise Wallaby.JSError, ~r/can't JSON encode anonymous functions originating/, fn ->
       session
