@@ -10,8 +10,14 @@ defmodule HologramFeatureTests.TypesTest do
         |> click(css("button[id='anonymous function (client origin, non-capture)']"))
       end
 
+      assert_text(session, css("#result"), inspect(6))
+    end
+
+    feature "(client origin, capture)", %{session: session} do
       session
-      |> assert_text(css("#result"), inspect(4))
+      |> visit(TypesPage)
+      |> click(css("button[id='anonymous function (client origin, capture)']"))
+      |> assert_text(css("#result"), inspect(6))
     end
   end
 
