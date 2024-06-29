@@ -102,7 +102,7 @@ export default class JsonEncoder {
   static #encodePid(term) {
     if (term.origin === "client") {
       throw new HologramRuntimeError(
-        "can't JSON encode PIDs originating in client",
+        "can't encode client terms that are PIDs originating in client",
       );
     }
 
@@ -112,7 +112,7 @@ export default class JsonEncoder {
   static #encodePort(term) {
     if (term.origin === "client") {
       throw new HologramRuntimeError(
-        "can't JSON encode ports originating in client",
+        "can't encode client terms that are ports originating in client",
       );
     }
 
@@ -122,7 +122,7 @@ export default class JsonEncoder {
   static #encodeReference(term) {
     if (term.origin === "client") {
       throw new HologramRuntimeError(
-        "can't JSON encode references originating in client",
+        "can't encode client terms that are references originating in client",
       );
     }
 

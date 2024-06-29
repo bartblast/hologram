@@ -106,7 +106,7 @@ describe("JsonEncoder", () => {
         assert.throw(
           () => JsonEncoder.encode(term),
           HologramRuntimeError,
-          "can't JSON encode PIDs originating in client",
+          "can't encode client terms that are PIDs originating in client",
         );
       });
 
@@ -125,7 +125,7 @@ describe("JsonEncoder", () => {
         assert.throw(
           () => JsonEncoder.encode(term),
           HologramRuntimeError,
-          "can't JSON encode ports originating in client",
+          "can't encode client terms that are ports originating in client",
         );
       });
 
@@ -144,7 +144,7 @@ describe("JsonEncoder", () => {
         assert.throw(
           () => JsonEncoder.encode(term),
           HologramRuntimeError,
-          "can't JSON encode references originating in client",
+          "can't encode client terms that are references originating in client",
         );
       });
 
