@@ -21,7 +21,7 @@ describe("JsonEncoder", () => {
         assert.throw(
           () => JsonEncoder.encode(term),
           HologramRuntimeError,
-          "can't JSON encode boxed anonymous functions",
+          "can't JSON encode anonymous functions originating in client, and that are not local or remote function captures",
         );
       });
 
