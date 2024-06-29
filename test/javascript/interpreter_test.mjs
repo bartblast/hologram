@@ -2336,7 +2336,7 @@ describe("Interpreter", () => {
   it("evaluateTranspiledCode()", () => {
     //  %{a: 1, b: 2}.a
     const code =
-      'Interpreter.dotOperator(Type.map([[Type.atom("a"), Type.integer(1n)], [Type.atom("b"), Type.integer(2n)]]), Type.atom("a"))';
+      'Interpreter.dotOperator(Type.map([[Type.atom("a"), Type.integer(1)], [Type.atom("b"), context.vars.x]]), Type.atom("a"))';
 
     const result = Interpreter.evaluateTranspiledCode(code);
 
