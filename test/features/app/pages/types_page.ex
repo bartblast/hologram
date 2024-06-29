@@ -15,6 +15,7 @@ defmodule HologramFeatureTests.TypesPage do
     <p>
       <button id="anonymous_function_client" $click="anonymous_function_client"> anonymous_function_client </button>
       <button id="anonymous_function_transport" $click="anonymous_function_transport"> anonymous_function_transport </button>
+      <button id="anonymous function (client origin, non-capture)" $click="anonymous function (client origin, non-capture)"> anonymous function (client origin, non-capture) </button>
       <button id="atom" $click="atom"> atom </button>
       <button id="binary" $click="binary"> binary </button>
       <button id="bitstring (non-binary)" $click="bitstring (non-binary)"> bitstring (non-binary) </button>
@@ -42,6 +43,15 @@ defmodule HologramFeatureTests.TypesPage do
   def action(:anonymous_function_transport, _params, component) do
     term = fn x -> x * x end
     put_command(component, :echo, term: term)
+  end
+
+  def action(:"anonymous function (client origin, non-capture)", _params, component) do
+    term = fn x -> x * x end
+    result = term.(2)
+
+    component
+    |> put_state(:result, result)
+    |> put_command(:echo, term: term)
   end
 
   def action(:atom, _params, component) do
