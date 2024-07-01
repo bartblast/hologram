@@ -421,21 +421,19 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   @doc """
-  Encodes Elixir data chunk into JavaScript.
+  Encodes Elixir term into JavaScript, erroring out if the term can't be encoded into JavaScript.
   """
-  @spec encode_term(any) :: String.t()
-  def encode_term(term) do
-    term
-    |> IR.for_term()
-    |> encode_ir(%Context{})
-  rescue
-    e in ArgumentError ->
-      cond do
-        e.message =~ ~r/cannot escape #Function/ ->
-          reraise ArgumentError,
-            message:
-              "can't encode server terms that are anonymous functions that are not local or remote function captures"
-      end
+  @spec encode_term!(any) :: String.t()
+  def encode_term!(term) do
+    case IR.for_term(term) do
+      {:ok, ir} ->
+        encode_ir(ir, %Context{})
+
+      {:error, "term contains an anonymous function that is not a named function capture"} ->
+        raise ArgumentError,
+          message:
+            "can't encode server terms that are anonymous functions that are not named function captures"
+    end
   end
 
   @doc """

@@ -1745,23 +1745,60 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
-  describe "encode_term/1" do
+  describe "encode_term!/1" do
     test "anonymous function (non-capture)" do
       assert_error ArgumentError,
-                   "can't encode server terms that are anonymous functions that are not local or remote function captures",
-                   fn -> encode_term(fn x, y -> x * y end) end
+                   "can't encode server terms that are anonymous functions that are not named function captures",
+                   fn -> encode_term!(fn x, y -> x * y end) end
     end
 
     test "anonymous function (capture)" do
-      assert encode_term(&DateTime.now/2) == """
+      assert encode_term!(&DateTime.now/2) == """
              Type.functionCapture("DateTime", "now", 2, [{params: (context) => [Type.variablePattern("$1"), Type.variablePattern("$2")], guards: [], body: (context) => {
              return Elixir_DateTime["now/2"](context.vars["$1"], context.vars["$2"]);
              }}], context)\
              """
     end
 
+    test "atom" do
+      assert encode_term!(:abc) == ~s/Type.atom("abc")/
+    end
+
+    test "bistring" do
+      assert encode_term!("abc") == ~s/Type.bitstring("abc")/
+    end
+
+    test "float" do
+      assert encode_term!(1.23) == "Type.float(1.23)"
+    end
+
     test "integer" do
-      assert encode_term(123) == "Type.integer(123n)"
+      assert encode_term!(123) == "Type.integer(123n)"
+    end
+
+    test "list" do
+      assert encode_term!([:abc, 123]) == ~s/Type.list([Type.atom("abc"), Type.integer(123n)])/
+    end
+
+    test "map" do
+      assert encode_term!(%{:a => 1, "b" => 2.0}) ==
+               ~s/Type.map([[Type.atom("a"), Type.integer(1n)], [Type.bitstring("b"), Type.float(2.0)]])/
+    end
+
+    test "pid" do
+      assert encode_term!(pid("0.11.222")) == ~s/Type.pid("nonode@nohost", [0, 11, 222])/
+    end
+
+    test "port" do
+      assert encode_term!(port("0.11")) == ~s/Type.port("0.11")/
+    end
+
+    test "reference" do
+      assert encode_term!(ref("0.1.2.3")) == ~s/Type.reference("0.1.2.3")/
+    end
+
+    test "tuple" do
+      assert encode_term!({:abc, 123}) == ~s/Type.tuple([Type.atom("abc"), Type.integer(123n)])/
     end
   end
 end
