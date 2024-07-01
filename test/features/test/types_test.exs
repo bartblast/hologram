@@ -4,11 +4,13 @@ defmodule HologramFeatureTests.TypesTest do
 
   describe "anonymous function" do
     feature "(client origin, non-capture)", %{session: session} do
-      assert_raise Wallaby.JSError, ~r/can't JSON encode anonymous functions originating/, fn ->
-        session
-        |> visit(TypesPage)
-        |> click(css("button[id='anonymous function (client origin, non-capture)']"))
-      end
+      assert_raise Wallaby.JSError,
+                   ~r/can't encode client terms that are anonymous functions that are not named function captures/,
+                   fn ->
+                     session
+                     |> visit(TypesPage)
+                     |> click(css("button[id='anonymous function (client origin, non-capture)']"))
+                   end
 
       assert_text(session, css("#result"), inspect(6))
     end
@@ -82,11 +84,13 @@ defmodule HologramFeatureTests.TypesTest do
 
   describe "PID" do
     feature "client origin", %{session: session} do
-      assert_raise Wallaby.JSError, ~r/can't JSON encode PIDs originating in client/, fn ->
-        session
-        |> visit(TypesPage)
-        |> click(css("button[id='pid (client origin)']"))
-      end
+      assert_raise Wallaby.JSError,
+                   ~r/can't encode client terms that are PIDs originating in client/,
+                   fn ->
+                     session
+                     |> visit(TypesPage)
+                     |> click(css("button[id='pid (client origin)']"))
+                   end
     end
 
     feature "server origin", %{session: session} do
