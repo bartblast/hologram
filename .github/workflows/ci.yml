@@ -205,7 +205,7 @@ jobs:
       run:
         working-directory: test/features
     strategy:
-      # Specify the OTP and Elixir versions to use when building
+      # Specify the Elixir and OTP versions to use when building
       # and running the workflow steps.
       matrix:
         elixir:
