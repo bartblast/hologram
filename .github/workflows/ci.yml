@@ -19,20 +19,58 @@ permissions:
 jobs:
   lib_tests:
     runs-on: ubuntu-latest
-    name: Lib Tests on OTP ${{ matrix.otp }} / Elixir ${{ matrix.elixir }}
+    name: Lib Tests on Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}
     strategy:
-      # Specify the OTP and Elixir versions to use when building
+      # Specify the Elixir and OTP versions to use when building
       # and running the workflow steps.
       matrix:
-        otp: ["26.2.5"]
-        elixir: ["1.16.3-otp-26"]
+        elixir:
+          - "1.13.4"
+          - "1.14.5"
+          - "1.15.8"
+          - "1.16.3"
+          - "1.17.1"
+        otp:
+          - "22.3.4"
+          - "23.3.4"
+          - "24.3.4"
+          - "25.3.2"
+          - "26.2.5"
+          - "27.0"
+        exclude:
+          - elixir: "1.13.4"
+            otp: "26.2.5"
+          - elixir: "1.13.4"
+            otp: "27.0"
+          - elixir: "1.14.5"
+            otp: "22.3.4"
+          - elixir: "1.14.5"
+            otp: "27.0"
+          - elixir: "1.15.8"
+            otp: "22.3.4"
+          - elixir: "1.15.8"
+            otp: "23.3.4"
+          - elixir: "1.15.8"
+            otp: "27.0"
+          - elixir: "1.16.3"
+            otp: "22.3.4"
+          - elixir: "1.16.3"
+            otp: "23.3.4"
+          - elixir: "1.16.3"
+            otp: "27.0"
+          - elixir: "1.17.1"
+            otp: "22.3.4"
+          - elixir: "1.17.1"
+            otp: "23.3.4"
+          - elixir: "1.17.1"
+            otp: "24.3.4"
     steps:
       # Step: Setup Elixir + Erlang image as the base.
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
         with:
-          otp-version: ${{ matrix.otp }}
           elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
 
       # Step: Checkout the code.
       - name: Checkout code
@@ -54,9 +92,7 @@ jobs:
           cache-name: cache-lib-elixir-deps
         with:
           path: deps
-          key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('mix.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-mix-${{ env.cache-name }}-
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
 
       # Step: Define how to cache the lib Elixir build.
       - name: Cache lib Elixir build
@@ -66,10 +102,7 @@ jobs:
           cache-name: cache-lib-elixir-build
         with:
           path: _build
-          key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('mix.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-mix-${{ env.cache-name }}-
-            ${{ runner.os }}-mix-
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
 
       # Step: Download lib Elixir dependencies.
       # If unchanged, uses the cached version.
@@ -123,9 +156,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           key: |
-            dialyzer-plt-lib-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('mix.lock') }}
-          restore-keys: |
-            dialyzer-plt-lib-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-
+            dialyzer-plt-lib-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
           path: |
             priv/plts
 
@@ -143,7 +174,7 @@ jobs:
         if: steps.restore-lib-dialyzer-plt-cache.outputs.cache-hit != 'true'
         with:
           key: |
-            dialyzer-plt-lib-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('mix.lock') }}
+            dialyzer-plt-lib-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
           path: |
             priv/plts
 
@@ -169,7 +200,7 @@ jobs:
 
   feature_tests:
     runs-on: ubuntu-latest
-    name: Feature Tests on OTP ${{ matrix.otp }} / Elixir ${{ matrix.elixir }}
+    name: Feature Tests on Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}
     defaults:
       run:
         working-directory: test/features
@@ -177,15 +208,53 @@ jobs:
       # Specify the OTP and Elixir versions to use when building
       # and running the workflow steps.
       matrix:
-        otp: ["26.2.5"]
-        elixir: ["1.16.3-otp-26"]
+        elixir:
+          - "1.13.4"
+          - "1.14.5"
+          - "1.15.8"
+          - "1.16.3"
+          - "1.17.1"
+        otp:
+          - "22.3.4"
+          - "23.3.4"
+          - "24.3.4"
+          - "25.3.2"
+          - "26.2.5"
+          - "27.0"
+        exclude:
+          - elixir: "1.13.4"
+            otp: "26.2.5"
+          - elixir: "1.13.4"
+            otp: "27.0"
+          - elixir: "1.14.5"
+            otp: "22.3.4"
+          - elixir: "1.14.5"
+            otp: "27.0"
+          - elixir: "1.15.8"
+            otp: "22.3.4"
+          - elixir: "1.15.8"
+            otp: "23.3.4"
+          - elixir: "1.15.8"
+            otp: "27.0"
+          - elixir: "1.16.3"
+            otp: "22.3.4"
+          - elixir: "1.16.3"
+            otp: "23.3.4"
+          - elixir: "1.16.3"
+            otp: "27.0"
+          - elixir: "1.17.1"
+            otp: "22.3.4"
+          - elixir: "1.17.1"
+            otp: "23.3.4"
+          - elixir: "1.17.1"
+            otp: "24.3.4"
     steps:
       # Step: Setup Elixir + Erlang image as the base.
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
         with:
-          otp-version: ${{ matrix.otp }}
           elixir-version: ${{ matrix.elixir }}
+          otp-version: ${{ matrix.otp }}
 
       # Step: Checkout the code.
       - name: Checkout code
@@ -207,9 +276,7 @@ jobs:
           cache-name: cache-feature-tests-app-elixir-deps
         with:
           path: test/features/deps
-          key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('test/features/mix.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-mix-${{ env.cache-name }}-
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/features/mix.lock') }}
 
       # Step: Define how to cache the feature tests app Elixir build.
       - name: Cache feature tests app Elixir build
@@ -219,10 +286,7 @@ jobs:
           cache-name: cache-feature-tests-app-elixir-build
         with:
           path: test/features/_build
-          key: ${{ runner.os }}-mix-${{ env.cache-name }}-${{ hashFiles('test/features/mix.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-mix-${{ env.cache-name }}-
-            ${{ runner.os }}-mix-
+          key: ${{ env.cache-name }}-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/features/mix.lock') }}
 
       # Step: Download feature tests app Elixir dependencies.
       # If unchanged, uses the cached version.
@@ -256,9 +320,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           key: |
-            dialyzer-plt-feature-tests-app-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('test/features/mix.lock') }}
-          restore-keys: |
-            dialyzer-plt-feature-tests-app--${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-
+            dialyzer-plt-feature-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/features/mix.lock') }}
           path: |
             test/features/priv/plts
 
@@ -276,7 +338,7 @@ jobs:
         if: steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true'
         with:
           key: |
-            dialyzer-plt-feature-tests-app-${{ runner.os }}-${{ steps.beam.outputs.otp-version }}-${{ steps.beam.outputs.elixir-version }}-${{ hashFiles('test/features/mix.lock') }}
+            dialyzer-plt-feature-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/features/mix.lock') }}
           path: |
             test/features/priv/plts
 
