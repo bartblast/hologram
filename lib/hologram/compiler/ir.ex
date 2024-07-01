@@ -349,18 +349,37 @@ defmodule Hologram.Compiler.IR do
   end
 
   @doc """
-  Returns Hologram IR for the given Elixir term (value).
+  Returns Hologram IR for the given Elixir term.
+  If the term can be represented in IR then its value is returned in the shape of {:ok, ir}.
+  If the term can't be represented in IR the an error message is returned in the shape of {:error, message}.
 
   ## Examples
 
       iex> my_var = 123
       iex> for_term(my_var)
+      {:ok, %IR.IntegerType{value: 123}}
+  """
+  @spec for_term(any) :: {:ok, IR.t()} | {:error, String.t()}
+  def for_term(term) do
+    {:ok, for_term!(term)}
+  rescue
+    e in ArgumentError ->
+      {:error, e.message}
+  end
+
+  @doc """
+  Returns Hologram IR for the given Elixir term, erroring out if the term can't be represented in IR.
+
+  ## Examples
+
+      iex> my_var = 123
+      iex> for_term!(my_var)
       %IR.IntegerType{value: 123}
   """
-  @spec for_term(any) :: IR.t()
-  def for_term(term)
+  @spec for_term!(any) :: IR.t()
+  def for_term!(term)
 
-  def for_term(term) when is_function(term) do
+  def for_term!(term) when is_function(term) do
     if Function.info(term)[:type] == :external do
       term
       |> Macro.escape()
@@ -371,37 +390,37 @@ defmodule Hologram.Compiler.IR do
     end
   end
 
-  def for_term(term) when is_bitstring(term) do
+  def for_term!(term) when is_bitstring(term) do
     term
     |> Macro.escape()
     |> Transformer.transform(%Context{})
   end
 
-  def for_term(term) when is_list(term) do
-    data = Enum.map(term, &for_term/1)
+  def for_term!(term) when is_list(term) do
+    data = Enum.map(term, &for_term!/1)
     %IR.ListType{data: data}
   end
 
-  def for_term(term) when is_map(term) do
+  def for_term!(term) when is_map(term) do
     data =
       term
       |> Map.to_list()
-      |> Enum.map(fn {key, value} -> {for_term(key), for_term(value)} end)
+      |> Enum.map(fn {key, value} -> {for_term!(key), for_term!(value)} end)
 
     %IR.MapType{data: data}
   end
 
-  def for_term(term) when is_tuple(term) do
+  def for_term!(term) when is_tuple(term) do
     data =
       term
       |> Tuple.to_list()
-      |> Enum.map(&for_term/1)
+      |> Enum.map(&for_term!/1)
 
     %IR.TupleType{data: data}
   end
 
   # atom, float, integer, pid, port, reference
-  def for_term(term) do
+  def for_term!(term) do
     Transformer.transform(term, %Context{})
   end
 end
