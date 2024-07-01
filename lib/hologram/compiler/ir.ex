@@ -380,10 +380,14 @@ defmodule Hologram.Compiler.IR do
   def for_term!(term)
 
   def for_term!(term) when is_function(term) do
-    if Function.info(term)[:type] == :external do
+    function_info = Function.info(term)
+
+    if function_info[:type] == :external do
       term
       |> Macro.escape()
       |> Transformer.transform(%Context{})
+      |> Map.put(:captured_module, function_info[:module])
+      |> Map.put(:captured_function, function_info[:name])
     else
       raise ArgumentError,
         message: "term contains an anonymous function that is not a named function capture"

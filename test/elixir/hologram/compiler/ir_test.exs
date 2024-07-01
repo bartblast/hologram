@@ -126,8 +126,8 @@ defmodule Hologram.Compiler.IRTest do
 
       assert for_term!(term) == %IR.AnonymousFunctionType{
                arity: 2,
-               captured_function: nil,
-               captured_module: nil,
+               captured_function: :now,
+               captured_module: DateTime,
                clauses: [
                  %IR.FunctionClause{
                    params: [
