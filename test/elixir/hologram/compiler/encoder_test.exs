@@ -1057,6 +1057,21 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) ==
                ~s/Type.map([[Type.atom("a"), Type.integer(1n)], [Type.atom("b"), Type.integer(2n)]])/
     end
+
+    test "keys are sorted" do
+      # %{x: 9, b: 1, a: 2, y: 8}
+      ir = %IR.MapType{
+        data: [
+          {%IR.AtomType{value: :x}, %IR.IntegerType{value: 9}},
+          {%IR.AtomType{value: :b}, %IR.IntegerType{value: 1}},
+          {%IR.AtomType{value: :a}, %IR.IntegerType{value: 2}},
+          {%IR.AtomType{value: :y}, %IR.IntegerType{value: 8}}
+        ]
+      }
+
+      assert encode_ir(ir) ==
+               ~s/Type.map([[Type.atom("a"), Type.integer(2n)], [Type.atom("b"), Type.integer(1n)], [Type.atom("x"), Type.integer(9n)], [Type.atom("y"), Type.integer(8n)]])/
+    end
   end
 
   describe "match operator" do

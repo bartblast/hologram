@@ -288,6 +288,7 @@ defmodule Hologram.Compiler.Encoder do
 
   def encode_ir(%IR.MapType{data: data}, context) do
     data
+    |> Enum.sort()
     |> Enum.map_join(", ", fn {key, value} ->
       "[" <> encode_ir(key, context) <> ", " <> encode_ir(value, context) <> "]"
     end)
