@@ -616,6 +616,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "remote function capture, single-segment module name" do
       ast = ast("&DateTime.now/2")
 
+      # credo:disable-for-lines:26 Credo.Check.Design.DuplicatedCode
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 2,
                captured_function: :now,

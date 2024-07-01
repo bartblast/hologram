@@ -124,6 +124,7 @@ defmodule Hologram.Compiler.IRTest do
     test "anonymous function (capture)" do
       term = &DateTime.now/2
 
+      # credo:disable-for-lines:26 Credo.Check.Design.DuplicatedCode
       assert for_term!(term) == %IR.AnonymousFunctionType{
                arity: 2,
                captured_function: :now,
