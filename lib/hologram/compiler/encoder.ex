@@ -421,6 +421,19 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   @doc """
+  Encodes Elixir term into JavaScript.
+  If the term can be encoded into JavaScript then the result is in the shape of {:ok, js}.
+  If the term can't be encoded into JavaScript then an error message is returned in the shape of {:error, message}.
+  """
+  @spec encode_term(any) :: {:ok, String.t()} | {:error, String.t()}
+  def encode_term(term) do
+    {:ok, encode_term!(term)}
+  rescue
+    e in ArgumentError ->
+      {:error, e.message}
+  end
+
+  @doc """
   Encodes Elixir term into JavaScript, erroring out if the term can't be encoded into JavaScript.
   """
   @spec encode_term!(any) :: String.t()

@@ -1745,6 +1745,18 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
+  describe "encode_term/1" do
+    test "can be encoded into JavaScript" do
+      assert encode_term(123) == {:ok, "Type.integer(123n)"}
+    end
+
+    test "can't be encoded into JavaScript" do
+      assert encode_term(fn x -> x end) ==
+               {:error,
+                "term contains an anonymous function that is not a named function capture"}
+    end
+  end
+
   describe "encode_term!/1" do
     test "anonymous function (non-capture)" do
       assert_error ArgumentError,
