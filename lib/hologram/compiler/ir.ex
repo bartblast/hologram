@@ -351,7 +351,7 @@ defmodule Hologram.Compiler.IR do
   @doc """
   Returns Hologram IR for the given Elixir term.
   If the term can be represented in IR then its value is returned in the shape of {:ok, ir}.
-  If the term can't be represented in IR the an error message is returned in the shape of {:error, message}.
+  If the term can't be represented in IR then an error message is returned in the shape of {:error, message}.
 
   ## Examples
 
