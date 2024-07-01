@@ -131,6 +131,7 @@ jobs:
 
       # Step: Check that the lib Elixir code has already been formatted.
       - name: Check lib Elixir code formatted
+        if: ${{ contains(matrix.elixir, '1.17.1') && contains(matrix.otp, '27.0') }}
         run: mix format --check-formatted
 
       # Step: Check that the lib JavaScript, JSON & YAML code has already been formatted.
@@ -307,6 +308,7 @@ jobs:
 
       # Step: Check that the feature tests app Elixir code has already been formatted.
       - name: Check feature tests app Elixir code formatted
+        if: ${{ contains(matrix.elixir, '1.17.1') && contains(matrix.otp, '27.0') }}
         run: mix format --check-formatted
 
       # Step: Run feature tests app Elixir static code analysis with Credo.
