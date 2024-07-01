@@ -1748,7 +1748,7 @@ defmodule Hologram.Compiler.EncoderTest do
   describe "encode_term!/1" do
     test "anonymous function (non-capture)" do
       assert_error ArgumentError,
-                   "can't encode server terms that are anonymous functions that are not named function captures",
+                   "term contains an anonymous function that is not a named function capture",
                    fn -> encode_term!(fn x, y -> x * y end) end
     end
 

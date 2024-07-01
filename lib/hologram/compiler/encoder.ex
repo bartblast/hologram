@@ -425,15 +425,9 @@ defmodule Hologram.Compiler.Encoder do
   """
   @spec encode_term!(any) :: String.t()
   def encode_term!(term) do
-    case IR.for_term(term) do
-      {:ok, ir} ->
-        encode_ir(ir, %Context{})
-
-      {:error, "term contains an anonymous function that is not a named function capture"} ->
-        raise ArgumentError,
-          message:
-            "can't encode server terms that are anonymous functions that are not named function captures"
-    end
+    term
+    |> IR.for_term!()
+    |> encode_ir(%Context{})
   end
 
   @doc """
