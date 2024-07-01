@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   lib_tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     name: Lib Tests on Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}
     strategy:
       # Specify the Elixir and OTP versions to use when building
@@ -199,7 +199,7 @@ jobs:
         run: mix test.js
 
   feature_tests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     name: Feature Tests on Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}
     defaults:
       run:
