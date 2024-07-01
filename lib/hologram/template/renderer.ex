@@ -273,17 +273,17 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp interpolate_component_registry_js(html, component_registry) do
-    component_registry_js = Encoder.encode_term(component_registry)
+    component_registry_js = Encoder.encode_term!(component_registry)
     String.replace(html, "$COMPONENT_REGISTRY_JS_PLACEHOLDER", component_registry_js)
   end
 
   defp interpolate_page_module_js(html, page_module) do
-    page_module_js = Encoder.encode_term(page_module)
+    page_module_js = Encoder.encode_term!(page_module)
     String.replace(html, "$PAGE_MODULE_JS_PLACEHOLDER", page_module_js)
   end
 
   defp interpolate_page_params_js(html, page_params) do
-    page_params_js = Encoder.encode_term(page_params)
+    page_params_js = Encoder.encode_term!(page_params)
     String.replace(html, "$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
   end
 
