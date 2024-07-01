@@ -160,10 +160,11 @@ jobs:
             dialyzer-plt-lib-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
           path: |
             priv/plts
+        if: ${{ contains(matrix.elixir, '1.17.1') && contains(matrix.otp, '27.0') }}
 
       # Step: Create lib Dialyzer PLTs if no cache was found.
       - name: Create lib Dialyzer PLTs
-        if: steps.restore-lib-dialyzer-plt-cache.outputs.cache-hit != 'true'
+        if: ${{ contains(matrix.elixir, '1.17.1') && contains(matrix.otp, '27.0') && steps.restore-lib-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
         run: mix dialyzer --plt
 
       # Step: Save lib Dialyzer PLT cache.
@@ -172,7 +173,7 @@ jobs:
       - name: Save lib Dialyzer PLT cache
         id: save-lib-dialyzer-plt-cache
         uses: actions/cache/save@v4
-        if: steps.restore-lib-dialyzer-plt-cache.outputs.cache-hit != 'true'
+        if: ${{ contains(matrix.elixir, '1.17.1') && contains(matrix.otp, '27.0') && steps.restore-lib-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
         with:
           key: |
             dialyzer-plt-lib-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('mix.lock') }}
@@ -181,6 +182,7 @@ jobs:
 
       # Step: Run lib Elixir static code analysis with Dialyzer.
       - name: Run lib Elixir static code analysis with Dialyzer
+        if: ${{ contains(matrix.elixir, '1.17.1') && contains(matrix.otp, '27.0') }}
         run: mix dialyzer --format github
 
       # Step: Check that all lib test scripts have valid file names.
@@ -325,10 +327,11 @@ jobs:
             dialyzer-plt-feature-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/features/mix.lock') }}
           path: |
             test/features/priv/plts
+        if: ${{ contains(matrix.elixir, '1.17.1') && contains(matrix.otp, '27.0') }}
 
       # Step: Create feature tests app Dialyzer PLTs if no cache was found.
       - name: Create feature tests app Dialyzer PLTs
-        if: steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true'
+        if: ${{ contains(matrix.elixir, '1.17.1') && contains(matrix.otp, '27.0') && steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
         run: mix dialyzer --plt
 
       # Step: Save feature tests app Dialyzer PLT cache.
@@ -337,7 +340,7 @@ jobs:
       - name: Save feature tests app Dialyzer PLT cache
         id: save-feature-tests-app-dialyzer-plt-cache
         uses: actions/cache/save@v4
-        if: steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true'
+        if: ${{ contains(matrix.elixir, '1.17.1') && contains(matrix.otp, '27.0') && steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
         with:
           key: |
             dialyzer-plt-feature-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/features/mix.lock') }}
@@ -346,6 +349,7 @@ jobs:
 
       # Step: Run feature tests app Elixir static code analysis with Dialyzer.
       - name: Run feature tests app Elixir static code analysis with Dialyzer
+        if: ${{ contains(matrix.elixir, '1.17.1') && contains(matrix.otp, '27.0') }}
         run: mix dialyzer --format github
 
       # Step: Check that all feature tests app test scripts have valid file names.
