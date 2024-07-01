@@ -15,6 +15,9 @@ defmodule HologramFeatureTests.TypesPage do
     <p>
       <button id="anonymous function (client origin, non-capture)" $click="anonymous function (client origin, non-capture)"> anonymous function (client origin, non-capture) </button>
       <button id="anonymous function (client origin, capture)" $click="anonymous function (client origin, capture)"> anonymous function (client origin, capture) </button>
+      <button id="anonymous function (server origin, non-capture)" $click={%Command{name: :"anonymous function (server origin, non-capture)"}}> anonymous function (server origin, non-capture) </button>
+    </p>
+    <p>
       <button id="atom" $click="atom"> atom </button>
       <button id="bitstring (binary)" $click="bitstring (binary)"> bitstring (binary) </button>
       <button id="bitstring (non-binary)" $click="bitstring (non-binary)"> bitstring (non-binary) </button>
@@ -114,6 +117,11 @@ defmodule HologramFeatureTests.TypesPage do
 
   def command(:"anonymous function (client origin, capture)", params, server) do
     put_action(server, :"anonymous function (client origin, capture) echo", params)
+  end
+
+  def command(:"anonymous function (server origin, non-capture)", _params, server) do
+    term = fn x, y -> x * y end
+    put_action(server, :result, term: term)
   end
 
   def command(:"pid (server origin)", _params, server) do

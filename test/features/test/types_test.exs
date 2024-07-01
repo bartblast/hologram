@@ -19,6 +19,14 @@ defmodule HologramFeatureTests.TypesTest do
       |> click(css("button[id='anonymous function (client origin, capture)']"))
       |> assert_text(css("#result"), inspect(6))
     end
+
+    feature "(server origin, non-capture)", %{session: session} do
+      assert_raise Wallaby.JSError, ~r/command failed/, fn ->
+        session
+        |> visit(TypesPage)
+        |> click(css("button[id='anonymous function (server origin, non-capture)']"))
+      end
+    end
   end
 
   feature "atom", %{session: session} do
