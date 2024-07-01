@@ -266,7 +266,11 @@ describe("CommandQueue", () => {
       CommandQueue.process();
 
       failureCallbacks.forEach((callback) => {
-        assert.throw(() => callback(), HologramRuntimeError, "command failed");
+        assert.throw(
+          () => callback("my_response"),
+          HologramRuntimeError,
+          "command failed: my_response",
+        );
       });
 
       assert.deepStrictEqual(CommandQueue.items, {

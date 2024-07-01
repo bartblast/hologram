@@ -53,9 +53,9 @@ export default class CommandQueue {
         })(item);
 
         const failureCallback = ((currentItem) => {
-          return () => {
+          return (resp) => {
             CommandQueue.fail(currentItem.id);
-            throw new HologramRuntimeError("command failed");
+            throw new HologramRuntimeError(`command failed: ${resp}`);
           };
         })(item);
 
