@@ -31,7 +31,7 @@ defmodule Hologram.Socket.Channel do
           nil
       end
 
-    {:reply, {:ok, Encoder.encode_term(next_action)}, socket}
+    {:reply, Encoder.encode_term(next_action), socket}
   end
 
   @impl Phoenix.Channel

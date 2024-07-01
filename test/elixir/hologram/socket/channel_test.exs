@@ -13,6 +13,7 @@ defmodule Hologram.Socket.ChannelTest do
 
   # Make sure String.to_existing_atom/1 recognizes atoms from the fixture component
   Code.ensure_loaded(Hologram.Test.Fixtures.Socket.Channel.Module1)
+  Code.ensure_loaded(Hologram.Test.Fixtures.Socket.Channel.Module6)
 
   use_module_stub :asset_path_registry
   use_module_stub :page_digest_registry
@@ -104,6 +105,36 @@ defmodule Hologram.Socket.ChannelTest do
                {:reply,
                 {:ok,
                  ~s/Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("my_action_c")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_2")]])/},
+                :dummy_socket}
+    end
+
+    test "next action params contain an anonymous function that is not a named function capture" do
+      payload = %{
+        "type" => "map",
+        "data" => [
+          [
+            %{"type" => "atom", "value" => "module"},
+            %{"type" => "atom", "value" => "Elixir.Hologram.Test.Fixtures.Socket.Channel.Module6"}
+          ],
+          [
+            %{"type" => "atom", "value" => "name"},
+            %{"type" => "atom", "value" => "my_command_6"}
+          ],
+          [
+            %{"type" => "atom", "value" => "params"},
+            %{
+              "type" => "map",
+              "data" => []
+            }
+          ],
+          [%{"type" => "atom", "value" => "target"}, "__binary__:my_target_1"]
+        ]
+      }
+
+      assert handle_in("command", payload, :dummy_socket) ==
+               {:reply,
+                {:error,
+                 "term contains an anonymous function that is not a named function capture"},
                 :dummy_socket}
     end
   end
