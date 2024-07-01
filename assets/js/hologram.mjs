@@ -400,8 +400,10 @@ export default class Hologram {
   // Executed only once, on the initial page load.
   static #init() {
     window.addEventListener("error", (event) => {
-      console.error(`${event.error.message}\n`, event.error);
-      event.preventDefault();
+      if (event.error instanceof HologramBoxedError) {
+        console.error(`${event.error.message}\n`, event.error);
+        event.preventDefault();
+      }
     });
 
     Client.connect();
