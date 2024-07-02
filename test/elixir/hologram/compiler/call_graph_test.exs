@@ -17,6 +17,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module15
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module16
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module17
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module18
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module2
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module3
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
@@ -911,6 +912,8 @@ defmodule Hologram.Compiler.CallGraphTest do
         start()
         |> build(module_17_ir)
         |> list_page_mfas(Module17)
+
+      assert {Module18, :my_fun_18, 2} in result
 
       assert {Inspect.Integer, :__impl__, 1} in result
       assert {Inspect.Integer, :inspect, 2} in result
