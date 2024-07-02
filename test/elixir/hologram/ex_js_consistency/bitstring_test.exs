@@ -366,7 +366,10 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with float value when size * unit results in 16, 32 or 64" do
-      assert <<123.45::size(16)>> == <<87, 183>>
+      # use var to prevent compilation error in OTP versions that don't support size 16
+      size = 16
+      
+      assert <<123.45::size(size)>> == <<87, 183>>
 
       # 87 == 0b01010111
       # 183 == 0b10110111
@@ -382,7 +385,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
         |> Code.eval_string()
         |> elem(0)
 
-      assert to_bit_list(<<123.45::size(16)>>) == bits
+      assert to_bit_list(<<123.45::size(size)>>) == bits
     end
 
     test "with float value when size * unit doesn't result in 16, 32 or 64" do
@@ -423,7 +426,10 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with float value when size * unit results in 16, 32 or 64" do
-      assert <<123.45::size(8)-unit(2)>> == <<87, 183>>
+      # use var to prevent compilation error
+      size = 8
+      
+      assert <<123.45::size(size)-unit(2)>> == <<87, 183>>
 
       # 87 == 0b01010111
       # 183 == 0b10110111
@@ -439,7 +445,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
         |> Code.eval_string()
         |> elem(0)
 
-      assert to_bit_list(<<123.45::size(8)-unit(2)>>) == bits
+      assert to_bit_list(<<123.45::size(size)-unit(2)>>) == bits
     end
 
     test "with float value when size * unit doesn't result in 16, 32 or 64" do

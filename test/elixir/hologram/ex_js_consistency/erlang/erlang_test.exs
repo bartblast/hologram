@@ -1211,15 +1211,17 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
-  describe "atom_to_binary/1" do
-    test "converts atom to (binary) bitstring" do
-      assert :erlang.atom_to_binary(:abc) == <<"abc">>
-    end
+  if System.otp_release() > "22" do
+    describe "atom_to_binary/1" do
+      test "converts atom to (binary) bitstring" do
+        assert :erlang.atom_to_binary(:abc) == <<"abc">>
+      end
 
-    test "raises ArgumentError if the argument is not an atom" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "not an atom"),
-                   {:erlang, :atom_to_binary, [123]}
+      test "raises ArgumentError if the argument is not an atom" do
+        assert_error ArgumentError,
+                    build_argument_error_msg(1, "not an atom"),
+                    {:erlang, :atom_to_binary, [123]}
+      end
     end
   end
 
@@ -1243,9 +1245,11 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
-  test "binary_to_atom/1" do
-    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-    assert :erlang.binary_to_atom("全息图") == :erlang.binary_to_atom("全息图", :utf8)
+  if System.otp_release() > "22" do
+    test "binary_to_atom/1" do
+      # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+      assert :erlang.binary_to_atom("全息图") == :erlang.binary_to_atom("全息图", :utf8)
+    end
   end
 
   describe "binary_to_atom/2" do
