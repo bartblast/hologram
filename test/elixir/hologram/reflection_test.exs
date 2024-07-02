@@ -25,22 +25,22 @@ defmodule Hologram.ReflectionTest do
   test "beam_defs/1" do
     beam_path = :code.which(Module1)
 
-    assert beam_defs(beam_path) == [
-             {{:fun_2, 2}, :def, [line: 7, column: 7],
+    assert [
+             {{:fun_2, 2}, :def, [{:line, 7} | _column_1],
               [
-                {[line: 7, column: 7],
+                {[{:line, 7} | _column_2],
                  [
-                   {:a, [version: 0, line: 7, column: 13], nil},
-                   {:b, [version: 1, line: 7, column: 16], nil}
+                   {:a, [{:version, 0}, {:line, 7} | _column_3], nil},
+                   {:b, [{:version, 1}, {:line, 7} | _column_4], nil}
                  ], [],
-                 {{:., [line: 8, column: 7], [:erlang, :+]}, [line: 8, column: 7],
+                 {{:., [{:line, 8} | _column_5], [:erlang, :+]}, [{:line, 8} | _column_6],
                   [
-                    {:a, [version: 0, line: 8, column: 5], nil},
-                    {:b, [version: 1, line: 8, column: 9], nil}
+                    {:a, [{:version, 0}, {:line, 8} | _column_7], nil},
+                    {:b, [{:version, 1}, {:line, 8} | _column_8], nil}
                   ]}}
               ]},
-             {{:fun_1, 0}, :def, [line: 3, column: 7], [{[line: 3, column: 7], [], [], :value_1}]}
-           ]
+             {{:fun_1, 0}, :def, [{:line, 3} | _column_9], [{[{:line, 3} | _column_10], [], [], :value_1}]}
+           ] = beam_defs(beam_path)
   end
 
   test "build_dir/0" do
