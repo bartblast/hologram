@@ -94,7 +94,15 @@ defmodule Hologram.MixProject do
       preferred_cli_env: preferred_cli_env(),
       start_permanent: Mix.env() == :prod,
       test_paths: ["test/elixir"],
-      version: "0.1.0"
+      version: "0.1.0",
+      xref: [
+        # These modules are used only in tests to test whether Hex.Solver's implementations for Inspect and String.Chars protocols
+        # are excluded when building runtime and pages JavaScript files.
+        exclude: [
+          Inspect.Hex.Solver.PackageRange,
+          String.Chars.Hex.Solver.PackageRange
+        ]
+      ]
     ]
   end
 

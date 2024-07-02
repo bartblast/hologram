@@ -16,6 +16,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module14
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module15
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module16
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module17
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module2
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module3
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
@@ -871,35 +872,58 @@ defmodule Hologram.Compiler.CallGraphTest do
            ]
   end
 
-  test "list_page_mfas/2" do
-    module_14_ir = IR.for_module(Module14)
-    module_15_ir = IR.for_module(Module15)
-    module_16_ir = IR.for_module(Module16)
+  describe "list_page_mfas/2" do
+    test "includes action/3, template/0 and other MFAs that should be included" do
+      module_14_ir = IR.for_module(Module14)
+      module_15_ir = IR.for_module(Module15)
+      module_16_ir = IR.for_module(Module16)
 
-    result =
-      start()
-      |> build(module_14_ir)
-      |> build(module_15_ir)
-      |> build(module_16_ir)
-      |> list_page_mfas(Module14)
+      result =
+        start()
+        |> build(module_14_ir)
+        |> build(module_15_ir)
+        |> build(module_16_ir)
+        |> list_page_mfas(Module14)
 
-    assert result == [
-             {Enum, :reverse, 1},
-             {Enum, :to_list, 1},
-             {Module14, :__layout_module__, 0},
-             {Module14, :__layout_props__, 0},
-             {Module14, :__props__, 0},
-             {Module14, :__route__, 0},
-             {Module14, :action, 3},
-             {Module14, :template, 0},
-             {Module15, :__props__, 0},
-             {Module15, :action, 3},
-             {Module15, :init, 2},
-             {Module15, :template, 0},
-             {Module16, :my_fun_16a, 2},
-             {Kernel, :inspect, 1},
-             {:erlang, :hd, 1}
-           ]
+      assert result == [
+              {Enum, :reverse, 1},
+              {Enum, :to_list, 1},
+              {Module14, :__layout_module__, 0},
+              {Module14, :__layout_props__, 0},
+              {Module14, :__props__, 0},
+              {Module14, :__route__, 0},
+              {Module14, :action, 3},
+              {Module14, :template, 0},
+              {Module15, :__props__, 0},
+              {Module15, :action, 3},
+              {Module15, :init, 2},
+              {Module15, :template, 0},
+              {Module16, :my_fun_16a, 2},
+              {Kernel, :inspect, 1},
+              {:erlang, :hd, 1}
+            ]
+    end
+    
+    test "excludes Hex.Solver's implementations for Inspect and String.Chars protocols" do
+      module_17_ir = IR.for_module(Module17)
+
+      result =
+        start()
+        |> build(module_17_ir)
+        |> list_page_mfas(Module17)
+        
+      assert {Inspect.Integer, :__impl__, 1} in result
+      assert {Inspect.Integer, :inspect, 2} in result
+      
+      refute {Inspect.Hex.Solver.PackageRange, :__impl__, 1} in result
+      refute {Inspect.Hex.Solver.PackageRange, :inspect, 2} in result
+    
+      assert {String.Chars.Integer, :__impl__, 1} in result
+      assert {String.Chars.Integer, :to_string, 1} in result
+    
+      refute {String.Chars.Hex.Solver.PackageRange, :__impl__, 1} in result
+      refute {String.Chars.Hex.Solver.PackageRange, :to_string, 1} in result 
+    end
   end
 
   describe "list_runtime_mfas/1" do
@@ -941,6 +965,22 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute {NonExistingModuleFixture, :dummy_function_2, 2} in result
       assert {:maps, :dummy_function_3, 3} in result
       refute {:non_existing_module_fixture, :dummy_function_4, 4} in result
+    end
+    
+    test "excludes Hex.Solver's implementations for Inspect and String.Chars protocols", %{
+      runtime_mfas: result
+    } do
+      assert {Inspect.Integer, :__impl__, 1} in result
+      assert {Inspect.Integer, :inspect, 2} in result
+      
+      refute {Inspect.Hex.Solver.PackageRange, :__impl__, 1} in result
+      refute {Inspect.Hex.Solver.PackageRange, :inspect, 2} in result
+    
+      assert {String.Chars.Integer, :__impl__, 1} in result
+      assert {String.Chars.Integer, :to_string, 1} in result
+    
+      refute {String.Chars.Hex.Solver.PackageRange, :__impl__, 1} in result
+      refute {String.Chars.Hex.Solver.PackageRange, :to_string, 1} in result 
     end
 
     test "sorts results", %{runtime_mfas: result} do

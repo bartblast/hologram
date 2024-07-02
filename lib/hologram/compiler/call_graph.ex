@@ -343,6 +343,7 @@ defmodule Hologram.Compiler.CallGraph do
       {page_module, {layout_module, :template, 0}}
     ])
     |> sorted_reachable_mfas(page_module)
+    |> reject_hex_module_inspect_and_string_chars_protocols_implementations()
   end
 
   @doc """
@@ -363,6 +364,7 @@ defmodule Hologram.Compiler.CallGraph do
     |> get_graph()
     |> add_edges_for_erlang_functions()
     |> sorted_reachable_mfas(entry_mfas)
+    |> reject_hex_module_inspect_and_string_chars_protocols_implementations()
   end
 
   @doc """
@@ -458,6 +460,13 @@ defmodule Hologram.Compiler.CallGraph do
 
   def reachable(graph, vertex) do
     reachable(graph, [vertex])
+  end
+  
+  defp reject_hex_module_inspect_and_string_chars_protocols_implementations(mfas) do
+    Enum.reject(mfas, fn {module, _function, _arity} ->
+      module_str = to_string(module)
+      String.starts_with?(module_str, "Elixir.String.Chars.Hex.Solver.") || String.starts_with?(module_str, "Elixir.Inspect.Hex.Solver.")
+    end)
   end
 
   @doc """
