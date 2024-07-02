@@ -68,7 +68,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
 
     test "float type modifier, 16-bit size modifier" do
-      # use var to prevent compilation error in OTP versions that don't support size 16
+      # Use `size` variable to prevent compilation error in Elixir/OTP versions that don't support size 16.
       size = 16
       
       result = <<value::float-size(size)-signed>> = <<123.45::size(size)>>
@@ -134,7 +134,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
 
     test "float type modifier, 16-bit size modifier" do
-      # use var to prevent compilation error in OTP versions that don't support size 16
+      # Use `size` variable to prevent compilation error in Elixir/OTP versions that don't support size 16.
       size = 16
       
       result = <<value::float-size(size)-unsigned>> = <<123.45::size(size)>>
