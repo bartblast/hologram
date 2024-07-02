@@ -984,7 +984,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
 
     test "sorts results", %{runtime_mfas: result} do
-      assert hd(result) == {Access, :get, 2}
+      assert result == Enum.sort(result)
     end
   end
 
