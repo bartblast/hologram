@@ -134,7 +134,12 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "non-empty map" do
-      assert :maps.keys(%{a: 1, b: 2}) == [:a, :b]
+      sorted_result =
+        %{a: 1, b: 2}
+        |> :maps.keys()
+        |> Enum.sort()
+
+      assert sorted_result == [:a, :b]
     end
 
     test "not a map" do
@@ -248,7 +253,12 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "returns a list of tuples containing key-value pairs if given a non-empty map" do
-      assert :maps.to_list(%{a: 1, b: 2}) == [{:a, 1}, {:b, 2}]
+      sorted_result =
+        %{a: 1, b: 2}
+        |> :maps.to_list()
+        |> Enum.sort()
+
+      assert sorted_result == [{:a, 1}, {:b, 2}]
     end
 
     test "raises BadMapError if the argument is not a map" do

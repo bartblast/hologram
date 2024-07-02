@@ -83,7 +83,10 @@ defmodule Hologram.ExJsConsistency.Elixir.KernelTest do
     end
 
     test "map, non-empty, with atom keys" do
-      assert Kernel.inspect(%{a: 1, b: "xyz"}, []) == ~s'%{a: 1, b: "xyz"}'
+      assert Kernel.inspect(%{a: 1, b: "xyz"}, []) in [
+               ~s'%{a: 1, b: "xyz"}',
+               ~s'%{b: "xyz", a: 1}'
+             ]
     end
 
     test "map, non-empty, with non-atom keys" do
