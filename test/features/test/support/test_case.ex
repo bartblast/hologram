@@ -7,9 +7,11 @@ defmodule HologramFeatureTests.TestCase do
     quote do
       ExUnit.Case.register_attribute(__MODULE__, :sessions)
 
+      # Hologram.Commons.KernelUtils.inspect/1 is used instead of Kernel.inspect/1
       # Kernel.tap/2 was introduced in 1.12 and conflicts with Browser.tap/2
-      import Kernel, except: [tap: 2]
+      import Kernel, except: [inspect: 1, tap: 2]
 
+      import Hologram.Commons.KernelUtils, only: [inspect: 1]
       import HologramFeatureTests.Helpers
       import Wallaby.Browser, except: [assert_text: 2, assert_text: 3, has_text?: 2, visit: 2]
       import Wallaby.Feature
