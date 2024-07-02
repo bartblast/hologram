@@ -7,7 +7,7 @@ defmodule Hologram.ExJsConsistency.Erlang.PersistentTermTest do
 
   use Hologram.Test.BasicCase, async: true
   alias Hologram.ExJsConsistency.Erlang.PersistentTermTest
-  
+
   @moduletag :consistency
 
   describe "get/2" do

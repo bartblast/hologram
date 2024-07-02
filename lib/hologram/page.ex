@@ -134,7 +134,8 @@ defmodule Hologram.Page do
 
       :error ->
         raise Hologram.ParamError,
-          message: ~s/can't cast param "#{name}" with value #{inspect(value, sort_maps: true)} to float/
+          message:
+            ~s/can't cast param "#{name}" with value #{inspect(value, sort_maps: true)} to float/
     end
   end
 
@@ -155,7 +156,8 @@ defmodule Hologram.Page do
 
       :error ->
         raise Hologram.ParamError,
-          message: ~s/can't cast param "#{name}" with value #{inspect(value, sort_maps: true)} to integer/
+          message:
+            ~s/can't cast param "#{name}" with value #{inspect(value, sort_maps: true)} to integer/
     end
   end
 

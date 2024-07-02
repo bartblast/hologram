@@ -7,7 +7,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
   use Hologram.Test.BasicCase, async: true
   import Hologram.Commons.BitstringUtils, only: [to_bit_list: 1]
-  
+
   @moduletag :consistency
 
   # The build_from_value/1 and build_from_value_with_*_*_modifier/1 helpers
@@ -368,7 +368,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     test "with float value when size * unit results in 16, 32 or 64" do
       # Use variable `size` to prevent compilation error in Elixir/OTP versions that don't support size 16.
       size = 16
-      
+
       assert <<123.45::size(size)>> == <<87, 183>>
 
       # 87 == 0b01010111
@@ -428,7 +428,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     test "with float value when size * unit results in 16, 32 or 64" do
       # Use variable `size` to prevent compilation error.
       size = 8
-      
+
       assert <<123.45::size(size)-unit(2)>> == <<87, 183>>
 
       # 87 == 0b01010111

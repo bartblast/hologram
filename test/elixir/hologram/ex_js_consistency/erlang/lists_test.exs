@@ -6,7 +6,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
   """
 
   use Hologram.Test.BasicCase, async: true
-  
+
   @moduletag :consistency
 
   describe "flatten/1" do

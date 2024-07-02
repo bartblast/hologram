@@ -7,7 +7,7 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
 
   use Hologram.Test.BasicCase, async: true
   import Hologram.Commons.BitstringUtils, only: [to_bit_list: 1]
-  
+
   @moduletag :consistency
 
   test "characters_to_binary/1" do

@@ -6,7 +6,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   """
   use Hologram.Test.BasicCase, async: true
   alias Hologram.Test.Fixtures.ExJsConsistency.MatchOperator.Module1
-  
+
   @moduletag :consistency
 
   # The wrap_match_operator/2 and wrap_term/1 helpers
@@ -70,7 +70,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     test "float type modifier, 16-bit size modifier" do
       # Use `size` variable to prevent compilation error in Elixir/OTP versions that don't support size 16.
       size = 16
-      
+
       result = <<value::float-size(size)-signed>> = <<123.45::size(size)>>
 
       assert result == <<123.45::size(size)>>
@@ -136,7 +136,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     test "float type modifier, 16-bit size modifier" do
       # Use `size` variable to prevent compilation error in Elixir/OTP versions that don't support size 16.
       size = 16
-      
+
       result = <<value::float-size(size)-unsigned>> = <<123.45::size(size)>>
 
       assert result == <<123.45::size(size)>>

@@ -53,15 +53,15 @@ defmodule Hologram.ComponentTest do
       template_path = "#{@fixtures_dir}/template/template_1.holo"
 
       assert {:__block__, [],
-                [
-                  {:@, [{:context, Component} | _imports_1],
-                   [{:impl, [context: Component], [Component]}]},
-                  {:def, [{:context, Component} |_imports_2],
-                   [
-                     {:template, [context: Component], Component},
-                     [do: {:sigil_H, [], ["My template 1", []]}]
-                   ]}
-                ]} = maybe_define_template_fun(template_path, Component)
+              [
+                {:@, [{:context, Component} | _imports_1],
+                 [{:impl, [context: Component], [Component]}]},
+                {:def, [{:context, Component} | _imports_2],
+                 [
+                   {:template, [context: Component], Component},
+                   [do: {:sigil_H, [], ["My template 1", []]}]
+                 ]}
+              ]} = maybe_define_template_fun(template_path, Component)
     end
 
     test "invalid template path" do

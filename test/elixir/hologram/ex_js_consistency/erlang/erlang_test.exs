@@ -6,7 +6,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   """
 
   use Hologram.Test.BasicCase, async: true
-  
+
   @moduletag :consistency
 
   describe "*/2" do
@@ -1219,8 +1219,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
       test "raises ArgumentError if the argument is not an atom" do
         assert_error ArgumentError,
-                    build_argument_error_msg(1, "not an atom"),
-                    {:erlang, :atom_to_binary, [123]}
+                     build_argument_error_msg(1, "not an atom"),
+                     {:erlang, :atom_to_binary, [123]}
       end
     end
   end

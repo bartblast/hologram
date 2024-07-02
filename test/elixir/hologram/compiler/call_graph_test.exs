@@ -886,24 +886,24 @@ defmodule Hologram.Compiler.CallGraphTest do
         |> list_page_mfas(Module14)
 
       assert result == [
-              {Enum, :reverse, 1},
-              {Enum, :to_list, 1},
-              {Module14, :__layout_module__, 0},
-              {Module14, :__layout_props__, 0},
-              {Module14, :__props__, 0},
-              {Module14, :__route__, 0},
-              {Module14, :action, 3},
-              {Module14, :template, 0},
-              {Module15, :__props__, 0},
-              {Module15, :action, 3},
-              {Module15, :init, 2},
-              {Module15, :template, 0},
-              {Module16, :my_fun_16a, 2},
-              {Kernel, :inspect, 1},
-              {:erlang, :hd, 1}
-            ]
+               {Enum, :reverse, 1},
+               {Enum, :to_list, 1},
+               {Module14, :__layout_module__, 0},
+               {Module14, :__layout_props__, 0},
+               {Module14, :__props__, 0},
+               {Module14, :__route__, 0},
+               {Module14, :action, 3},
+               {Module14, :template, 0},
+               {Module15, :__props__, 0},
+               {Module15, :action, 3},
+               {Module15, :init, 2},
+               {Module15, :template, 0},
+               {Module16, :my_fun_16a, 2},
+               {Kernel, :inspect, 1},
+               {:erlang, :hd, 1}
+             ]
     end
-    
+
     test "excludes Hex.Solver's implementations for Inspect and String.Chars protocols" do
       module_17_ir = IR.for_module(Module17)
 
@@ -911,18 +911,18 @@ defmodule Hologram.Compiler.CallGraphTest do
         start()
         |> build(module_17_ir)
         |> list_page_mfas(Module17)
-        
+
       assert {Inspect.Integer, :__impl__, 1} in result
       assert {Inspect.Integer, :inspect, 2} in result
-      
+
       refute {Inspect.Hex.Solver.PackageRange, :__impl__, 1} in result
       refute {Inspect.Hex.Solver.PackageRange, :inspect, 2} in result
-    
+
       assert {String.Chars.Integer, :__impl__, 1} in result
       assert {String.Chars.Integer, :to_string, 1} in result
-    
+
       refute {String.Chars.Hex.Solver.PackageRange, :__impl__, 1} in result
-      refute {String.Chars.Hex.Solver.PackageRange, :to_string, 1} in result 
+      refute {String.Chars.Hex.Solver.PackageRange, :to_string, 1} in result
     end
   end
 
@@ -966,21 +966,21 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert {:maps, :dummy_function_3, 3} in result
       refute {:non_existing_module_fixture, :dummy_function_4, 4} in result
     end
-    
+
     test "excludes Hex.Solver's implementations for Inspect and String.Chars protocols", %{
       runtime_mfas: result
     } do
       assert {Inspect.Integer, :__impl__, 1} in result
       assert {Inspect.Integer, :inspect, 2} in result
-      
+
       refute {Inspect.Hex.Solver.PackageRange, :__impl__, 1} in result
       refute {Inspect.Hex.Solver.PackageRange, :inspect, 2} in result
-    
+
       assert {String.Chars.Integer, :__impl__, 1} in result
       assert {String.Chars.Integer, :to_string, 1} in result
-    
+
       refute {String.Chars.Hex.Solver.PackageRange, :__impl__, 1} in result
-      refute {String.Chars.Hex.Solver.PackageRange, :to_string, 1} in result 
+      refute {String.Chars.Hex.Solver.PackageRange, :to_string, 1} in result
     end
 
     test "sorts results", %{runtime_mfas: result} do

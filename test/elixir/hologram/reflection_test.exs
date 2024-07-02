@@ -39,7 +39,8 @@ defmodule Hologram.ReflectionTest do
                     {:b, [{:version, 1}, {:line, 8} | _column_8], nil}
                   ]}}
               ]},
-             {{:fun_1, 0}, :def, [{:line, 3} | _column_9], [{[{:line, 3} | _column_10], [], [], :value_1}]}
+             {{:fun_1, 0}, :def, [{:line, 3} | _column_9],
+              [{[{:line, 3} | _column_10], [], [], :value_1}]}
            ] = beam_defs(beam_path)
   end
 

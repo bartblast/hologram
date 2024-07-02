@@ -6,7 +6,7 @@ defmodule Hologram.ExJsConsistency.Erlang.CodeTest do
   """
 
   use Hologram.Test.BasicCase, async: true
-  
+
   @moduletag :consistency
 
   describe "ensure_loaded/1" do

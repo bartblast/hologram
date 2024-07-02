@@ -6,7 +6,7 @@ defmodule Hologram.ExJsConsistency.Elixir.KernelTest do
   """
 
   use Hologram.Test.BasicCase, async: true
-  
+
   @moduletag :consistency
 
   describe "inspect/1" do

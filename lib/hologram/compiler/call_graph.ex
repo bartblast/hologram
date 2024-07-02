@@ -461,11 +461,13 @@ defmodule Hologram.Compiler.CallGraph do
   def reachable(graph, vertex) do
     reachable(graph, [vertex])
   end
-  
+
   defp reject_hex_module_inspect_and_string_chars_protocols_implementations(mfas) do
     Enum.reject(mfas, fn {module, _function, _arity} ->
       module_str = to_string(module)
-      String.starts_with?(module_str, "Elixir.String.Chars.Hex.Solver.") || String.starts_with?(module_str, "Elixir.Inspect.Hex.Solver.")
+
+      String.starts_with?(module_str, "Elixir.String.Chars.Hex.Solver.") ||
+        String.starts_with?(module_str, "Elixir.Inspect.Hex.Solver.")
     end)
   end
 

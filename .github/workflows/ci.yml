@@ -196,11 +196,11 @@ jobs:
       # Step: Execute lib Elixir unit tests.
       - name: Run lib Elixir unit tests
         run: mix test --warnings-as-errors --exclude consistency
-        
+
       # Step: Execute lib Elixir consistency tests.
       - name: Run lib Elixir consistency tests
         if: ${{ contains(matrix.elixir, '1.17.1') && contains(matrix.otp, '27.0') }}
-        run: mix test --warnings-as-errors --only consistency        
+        run: mix test --warnings-as-errors --only consistency
 
       # Step: Execute lib JavaScript unit tests.
       - name: Run lib JavaScript unit tests
