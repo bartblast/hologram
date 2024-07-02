@@ -14,15 +14,18 @@ defmodule Hologram.Test.Fixtures.Compiler.CallGraph.Module17 do
     Inspect.Integer.__impl__(:for)
     Inspect.Integer.inspect(123, %Inspect.Opts{})
 
+    # credo:disable-for-lines:2 Credo.Check.Refactor.Apply
     apply(Inspect.Hex.Solver.PackageRange, :__impl__, [:for])
     apply(Inspect.Hex.Solver.PackageRange, :inspect, [:dummy, %Inspect.Opts{}])
 
     String.Chars.Integer.__impl__(:for)
     String.Chars.Integer.to_string(123)
 
+    # credo:disable-for-lines:2 Credo.Check.Refactor.Apply
     apply(String.Chars.Hex.Solver.PackageRange, :__impl__, [:for])
     apply(String.Chars.Hex.Solver.PackageRange, :inspect, [:dummy, %Inspect.Opts{}])
 
+    # credo:disable-for-next-line Credo.Check.Refactor.Apply
     apply(Hologram.Test.Fixtures.Compiler.CallGraph.Module18, :my_fun_18, [1, 2])
 
     component
