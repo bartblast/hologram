@@ -366,7 +366,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with float value when size * unit results in 16, 32 or 64" do
-      # use var to prevent compilation error in OTP versions that don't support size 16
+      # Use variable `size` to prevent compilation error in Elixir/OTP versions that don't support size 16.
       size = 16
       
       assert <<123.45::size(size)>> == <<87, 183>>
@@ -426,7 +426,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with float value when size * unit results in 16, 32 or 64" do
-      # use var to prevent compilation error
+      # Use variable `size` to prevent compilation error.
       size = 8
       
       assert <<123.45::size(size)-unit(2)>> == <<87, 183>>
