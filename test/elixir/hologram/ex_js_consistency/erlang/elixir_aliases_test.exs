@@ -6,6 +6,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ElixirAliasesTest do
   """
 
   use Hologram.Test.BasicCase, async: true
+  
+  @moduletag :consistency
 
   describe "concat/1" do
     test "works with atom segments which are Elixir module aliases" do

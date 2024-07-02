@@ -6,6 +6,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   """
 
   use Hologram.Test.BasicCase, async: true
+  
+  @moduletag :consistency
 
   describe "*/2" do
     test "float * float" do

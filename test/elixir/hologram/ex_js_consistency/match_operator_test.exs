@@ -6,6 +6,8 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
   """
   use Hologram.Test.BasicCase, async: true
   alias Hologram.Test.Fixtures.ExJsConsistency.MatchOperator.Module1
+  
+  @moduletag :consistency
 
   # The wrap_match_operator/2 and wrap_term/1 helpers
   # prevent warnings about incompatible types.

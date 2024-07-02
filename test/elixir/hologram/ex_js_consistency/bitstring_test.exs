@@ -7,6 +7,8 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
   use Hologram.Test.BasicCase, async: true
   import Hologram.Commons.BitstringUtils, only: [to_bit_list: 1]
+  
+  @moduletag :consistency
 
   # The build_from_value/1 and build_from_value_with_*_*_modifier/1 helpers
   # enable to built bitstrings with specific value and modifier combinations,

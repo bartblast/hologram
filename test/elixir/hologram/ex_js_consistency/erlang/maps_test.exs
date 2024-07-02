@@ -6,6 +6,8 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
   """
 
   use Hologram.Test.BasicCase, async: true
+  
+  @moduletag :consistency
 
   describe "fold/3" do
     @map %{1 => 1, 10 => 2, 100 => 3}

@@ -9,6 +9,8 @@ defmodule Hologram.ExJsConsistency.TypeTest do
   alias Hologram.Component
   alias Hologram.Component.Action
   alias Hologram.Component.Command
+  
+  @moduletag :consistency
 
   test "action struct" do
     assert %Action{} == %{__struct__: Action, name: nil, params: %{}, target: nil}
