@@ -189,6 +189,8 @@ defmodule Hologram.CompilerTest do
 
   test "build_runtime_js/3", %{ir_plt: ir_plt, runtime_mfas: runtime_mfas} do
     js = build_runtime_js(runtime_mfas, ir_plt, @js_dir)
+    
+    File.write("tmp.js", js)
 
     assert String.contains?(
              js,
@@ -204,7 +206,7 @@ defmodule Hologram.CompilerTest do
 
     assert String.contains?(
              js,
-             ~s/Interpreter.defineNotImplementedErlangFunction("erpc", "call", 4/
+             ~s/Interpreter.defineNotImplementedErlangFunction("application", "get_application", 1/
            )
   end
 
