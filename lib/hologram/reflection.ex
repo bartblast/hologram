@@ -282,12 +282,12 @@ defmodule Hologram.Reflection do
   def list_protocol_implementations(protocol) do
     paths =
       Enum.reduce(list_loaded_otp_apps(), [], fn app, acc ->
-        case :code.lib_dir(app, :ebin) do
+        case :code.lib_dir(app) do
           {:error, :bad_name} ->
             acc
 
           path ->
-            [path | acc]
+            [Path.join(path, "ebin") | acc]
         end
       end)
 
