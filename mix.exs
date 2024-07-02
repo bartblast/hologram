@@ -96,8 +96,8 @@ defmodule Hologram.MixProject do
       test_paths: ["test/elixir"],
       version: "0.1.0",
       xref: [
-        # These modules are used only in tests to test whether Hex.Solver's implementations for Inspect and String.Chars protocols
-        # are excluded when building runtime and pages JavaScript files.
+        # These modules are used only in tests to test whether Hex.Solver's implementations
+        # for Inspect and String.Chars protocols are excluded when building runtime and pages JavaScript files.
         exclude: [
           Inspect.Hex.Solver.PackageRange,
           String.Chars.Hex.Solver.PackageRange
