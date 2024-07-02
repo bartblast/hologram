@@ -114,13 +114,13 @@ defmodule Hologram.Page do
     ArgumentError ->
       reraise Hologram.ParamError,
         message:
-          ~s/can't cast param "#{name}" with value #{inspect(value)} to atom, because it's not an already existing atom/
+          ~s/can't cast param "#{name}" with value #{inspect(value, sort_maps: true)} to atom, because it's not an already existing atom/
   end
 
   defp cast_param(:atom, value, name) do
     raise Hologram.ParamError,
       message:
-        ~s/can't cast param "#{name}" with value #{inspect(value)} to atom, because it's of invalid type/
+        ~s/can't cast param "#{name}" with value #{inspect(value, sort_maps: true)} to atom, because it's of invalid type/
   end
 
   defp cast_param(:float, value, _name) when is_float(value) do
@@ -134,14 +134,14 @@ defmodule Hologram.Page do
 
       :error ->
         raise Hologram.ParamError,
-          message: ~s/can't cast param "#{name}" with value #{inspect(value)} to float/
+          message: ~s/can't cast param "#{name}" with value #{inspect(value, sort_maps: true)} to float/
     end
   end
 
   defp cast_param(:float, value, name) do
     raise Hologram.ParamError,
       message:
-        ~s/can't cast param "#{name}" with value #{inspect(value)} to float, because it's of invalid type/
+        ~s/can't cast param "#{name}" with value #{inspect(value, sort_maps: true)} to float, because it's of invalid type/
   end
 
   defp cast_param(:integer, value, _name) when is_integer(value) do
@@ -155,14 +155,14 @@ defmodule Hologram.Page do
 
       :error ->
         raise Hologram.ParamError,
-          message: ~s/can't cast param "#{name}" with value #{inspect(value)} to integer/
+          message: ~s/can't cast param "#{name}" with value #{inspect(value, sort_maps: true)} to integer/
     end
   end
 
   defp cast_param(:integer, value, name) do
     raise Hologram.ParamError,
       message:
-        ~s/can't cast param "#{name}" with value #{inspect(value)} to integer, because it's of invalid type/
+        ~s/can't cast param "#{name}" with value #{inspect(value, sort_maps: true)} to integer, because it's of invalid type/
   end
 
   defp cast_param(:string, value, _name) when is_binary(value) do
@@ -172,7 +172,7 @@ defmodule Hologram.Page do
   defp cast_param(:string, value, name) do
     raise Hologram.ParamError,
       message:
-        ~s/can't cast param "#{name}" with value #{inspect(value)} to string, because it's of invalid type/
+        ~s/can't cast param "#{name}" with value #{inspect(value, sort_maps: true)} to string, because it's of invalid type/
   end
 
   @doc """
