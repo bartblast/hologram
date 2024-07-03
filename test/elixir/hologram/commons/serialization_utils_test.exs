@@ -39,7 +39,7 @@ defmodule Hologram.Commons.SerializationUtilsTest do
         else
           "argument error"
         end
-      
+
       assert_error ArgumentError, expected_msg, fn ->
         deserialize(serialized_atom_fixture)
       end
