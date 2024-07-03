@@ -34,7 +34,7 @@ defmodule Hologram.Commons.SerializationUtilsTest do
           111, 109, 95, 102, 105, 120, 116, 117, 114, 101, 95, 50>>
 
       expected_msg =
-        if Version.compare(System.version(), "1.14.5") == :gt do
+        if System.otp_release() > "24" do
           build_argument_error_msg(1, "invalid or unsafe external representation of a term")
         else
           "argument error"
