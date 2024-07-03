@@ -323,6 +323,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "aggregate segments test using AST loaded from BEAM file" do
       ast = AST.for_module(Module8)
 
+      # credo:disable-for-lines:32 Credo.Check.Design.DuplicatedCode
       assert %IR.ModuleDefinition{
                body: %IR.Block{
                  expressions: [
@@ -451,6 +452,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "aggregate signedness modifier test using AST loaded from BEAM file" do
       ast = AST.for_module(Module6)
 
+      # credo:disable-for-lines:3 Credo.Check.Design.DuplicatedCode
       assert %IR.ModuleDefinition{
                body: %IR.Block{
                  expressions: [
@@ -527,6 +529,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "aggregate size modifier test using AST loaded from BEAM file" do
       ast = AST.for_module(Module2)
 
+      # credo:disable-for-lines:44 Credo.Check.Design.DuplicatedCode
       assert %IR.ModuleDefinition{
                body: %IR.Block{
                  expressions: [
@@ -676,6 +679,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "aggregate type modifier test using AST loaded from BEAM file" do
       ast = AST.for_module(Module3)
 
+      # credo:disable-for-lines:64 Credo.Check.Design.DuplicatedCode
       assert %IR.ModuleDefinition{
                body: %IR.Block{
                  expressions: [
@@ -771,6 +775,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "aggregate unit modifier test using AST loaded from BEAM file" do
       ast = AST.for_module(Module4)
 
+      # credo:disable-for-lines:41 Credo.Check.Design.DuplicatedCode
       assert %IR.ModuleDefinition{
                body: %IR.Block{
                  expressions: [
@@ -871,6 +876,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "aggregate value test using AST loaded from BEAM file" do
       ast = AST.for_module(Module5)
 
+      # credo:disable-for-lines:57 Credo.Check.Design.DuplicatedCode
       assert %IR.ModuleDefinition{
                body: %IR.Block{
                  expressions: [
