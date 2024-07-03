@@ -69,7 +69,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
     test "float type modifier, 16-bit size modifier" do
       # Use `size` variable to prevent compilation error in Elixir/OTP versions that don't support size 16.
-      size = 16
+      size = wrap_term(16)
 
       result = <<value::float-size(size)-signed>> = <<123.45::size(size)>>
 
@@ -78,7 +78,8 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
 
     test "float type modifier, unsupported size modifier" do
-      size = 8
+      # Use `size` variable to prevent compilation error.
+      size = wrap_term(8)
 
       # 170 == 0b10101010
       assert_error MatchError, "no match of right hand side value: <<170>>", fn ->
@@ -135,7 +136,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
     test "float type modifier, 16-bit size modifier" do
       # Use `size` variable to prevent compilation error in Elixir/OTP versions that don't support size 16.
-      size = 16
+      size = wrap_term(16)
 
       result = <<value::float-size(size)-unsigned>> = <<123.45::size(size)>>
 
@@ -144,7 +145,8 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
 
     test "float type modifier, unsupported size modifier" do
-      size = 8
+      # Use `size` variable to prevent compilation error.
+      size = wrap_term(8)
 
       # 170 == 0b10101010
       assert_error MatchError, "no match of right hand side value: <<170>>", fn ->
