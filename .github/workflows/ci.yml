@@ -33,7 +33,7 @@ jobs:
         otp:
           # - "22.3"
           # - "23.3"
-          # - "24.3"
+          - "24.3"
           - "25.3"
           - "26.2"
           - "27.0"
@@ -58,12 +58,12 @@ jobs:
           #     otp: "23.3"
           - elixir: "1.16.3"
             otp: "27.0"
-        #   - elixir: "1.17.1"
-        #     otp: "22.3"
-        #   - elixir: "1.17.1"
-        #     otp: "23.3"
-        #   - elixir: "1.17.1"
-        #     otp: "24.3"
+          #   - elixir: "1.17.1"
+          #     otp: "22.3"
+          #   - elixir: "1.17.1"
+          #     otp: "23.3"
+          - elixir: "1.17.1"
+            otp: "24.3"
     steps:
       # Step: Setup Elixir + Erlang image as the base.
       - name: Set up Elixir
@@ -225,7 +225,7 @@ jobs:
         otp:
           # - "22.3"
           # - "23.3"
-          # - "24.3"
+          - "24.3"
           - "25.3"
           - "26.2"
           - "27.0"
@@ -250,12 +250,12 @@ jobs:
           #     otp: "23.3"
           - elixir: "1.16.3"
             otp: "27.0"
-        #   - elixir: "1.17.1"
-        #     otp: "22.3"
-        #   - elixir: "1.17.1"
-        #     otp: "23.3"
-        #   - elixir: "1.17.1"
-        #     otp: "24.3"
+          #   - elixir: "1.17.1"
+          #     otp: "22.3"
+          #   - elixir: "1.17.1"
+          #     otp: "23.3"
+          - elixir: "1.17.1"
+            otp: "24.3"
     steps:
       # Step: Setup Elixir + Erlang image as the base.
       - name: Set up Elixir
