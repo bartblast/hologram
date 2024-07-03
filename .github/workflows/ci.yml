@@ -25,7 +25,7 @@ jobs:
       # and running the workflow steps.
       matrix:
         elixir:
-          # - "1.13.4"
+          - "1.13.4"
           - "1.14.5"
           - "1.15.8"
           - "1.16.3"
@@ -38,10 +38,10 @@ jobs:
           - "26.2"
           - "27.0"
         exclude:
-          #   - elixir: "1.13.4"
-          #     otp: "26.2"
-          #   - elixir: "1.13.4"
-          #     otp: "27.0"
+          - elixir: "1.13.4"
+            otp: "26.2"
+          - elixir: "1.13.4"
+            otp: "27.0"
           #   - elixir: "1.14.5"
           #     otp: "22.3"
           - elixir: "1.14.5"
@@ -226,7 +226,7 @@ jobs:
       # and running the workflow steps.
       matrix:
         elixir:
-          # - "1.13.4"
+          - "1.13.4"
           - "1.14.5"
           - "1.15.8"
           - "1.16.3"
@@ -239,10 +239,10 @@ jobs:
           - "26.2"
           - "27.0"
         exclude:
-          #   - elixir: "1.13.4"
-          #     otp: "26.2"
-          #   - elixir: "1.13.4"
-          #     otp: "27.0"
+          - elixir: "1.13.4"
+            otp: "26.2"
+          - elixir: "1.13.4"
+            otp: "27.0"
           #   - elixir: "1.14.5"
           #     otp: "22.3"
           - elixir: "1.14.5"
