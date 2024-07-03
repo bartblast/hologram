@@ -2,8 +2,17 @@ defmodule Hologram.Compiler.TransformerTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.Transformer
 
+  alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
+  
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module2
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module3
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module4
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module5
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module6
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
 
   describe "anonymous function call" do
     test "without args" do
@@ -274,7 +283,10 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  # Consider: all sections have aggregate tests using AST loaded from BEAM file.
   describe "bitstring type" do
+    # --- SEGMENTS ---
+    
     test "empty" do
       ast = ast("<<>>")
 
@@ -307,6 +319,41 @@ defmodule Hologram.Compiler.TransformerTest do
                ]
              } = transform(ast, %Context{})
     end
+    
+    test "aggregate segments test using AST loaded from BEAM file" do
+      ast = AST.for_module(Module8)
+      
+      assert %IR.ModuleDefinition{
+        body: %IR.Block{
+          expressions: [
+            %IR.FunctionDefinition{
+              clause: %IR.FunctionClause{
+                body: %IR.Block{
+                  expressions: [
+                    %IR.ListType{
+                      data: [
+                        %IR.BitstringType{segments: []},
+                        %IR.BitstringType{segments: [%IR.BitstringSegment{}]},
+                        %IR.BitstringType{segments: [%IR.BitstringSegment{}, %IR.BitstringSegment{}]},
+                        %IR.BitstringType{
+                          segments: [
+                            %IR.BitstringSegment{value: %IR.IntegerType{value: 333}},
+                            %IR.BitstringSegment{value: %IR.IntegerType{value: 444}},
+                            %IR.BitstringSegment{value: %IR.IntegerType{value: 555}},
+                            %IR.BitstringSegment{value: %IR.IntegerType{value: 666}},
+                            %IR.BitstringSegment{value: %IR.IntegerType{value: 777}}
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      } = transform(ast, %Context{})
+    end
 
     # --- ENDIANNESS MODIFIER ---
 
@@ -333,6 +380,39 @@ defmodule Hologram.Compiler.TransformerTest do
                segments: [%IR.BitstringSegment{modifiers: [type: :integer, endianness: :native]}]
              } = transform(ast, %Context{})
     end
+    
+    test "aggregate endianness modifier test using AST loaded from BEAM file" do
+      ast = AST.for_module(Module7)
+      
+      assert %IR.ModuleDefinition{
+        body: %IR.Block{
+          expressions: [
+            %IR.FunctionDefinition{
+              clause: %IR.FunctionClause{
+                body: %IR.Block{
+                  expressions: [
+                    %IR.MatchOperator{},
+                    %IR.ListType{
+                      data: [
+                        %IR.BitstringType{
+                          segments: [%IR.BitstringSegment{modifiers: [endianness: :big, type: :integer]}]
+                        },
+                        %IR.BitstringType{
+                          segments: [%IR.BitstringSegment{modifiers: [endianness: :little, type: :integer]}]
+                        },
+                        %IR.BitstringType{
+                          segments: [%IR.BitstringSegment{modifiers: [endianness: :native, type: :integer]}]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      } = transform(ast, %Context{})
+    end
 
     # --- SIGNEDNESS MODIFIER ---
 
@@ -352,6 +432,38 @@ defmodule Hologram.Compiler.TransformerTest do
                  %IR.BitstringSegment{modifiers: [type: :integer, signedness: :unsigned]}
                ]
              } = transform(ast, %Context{})
+    end
+    
+    test "aggregate signedness modifier test using AST loaded from BEAM file" do
+      ast = AST.for_module(Module6)
+      
+      assert %IR.ModuleDefinition{
+        body: %IR.Block{
+          expressions: [
+            %IR.FunctionDefinition{
+              clause: %IR.FunctionClause{
+                body: %IR.Block{
+                  expressions: [
+                    %IR.MatchOperator{},
+                    %IR.ListType{
+                      data: [
+                        %IR.BitstringType{
+                          segments: [%IR.BitstringSegment{modifiers: [signedness: :signed, type: :integer]}]
+                        },
+                        %IR.BitstringType{
+                          segments: [
+                            %IR.BitstringSegment{modifiers: [signedness: :unsigned, type: :integer]}
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      } = transform(ast, %Context{})
     end
 
     # --- SIZE MODIFIER ---
@@ -392,6 +504,51 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform(ast, %Context{})
     end
 
+    test "aggregate size modifier test using AST loaded from BEAM file" do
+      ast = AST.for_module(Module2)
+      
+      assert %IR.ModuleDefinition{
+        body: %IR.Block{
+          expressions: [
+            %IR.FunctionDefinition{
+              clause: %IR.FunctionClause{
+                body: %IR.Block{
+                  expressions: [
+                    %IR.MatchOperator{},
+                    %IR.ListType{
+                      data: [
+                        %IR.BitstringType{
+                          segments: [
+                            %IR.BitstringSegment{
+                              modifiers: [size: %IR.IntegerType{value: 3}, type: :integer,]
+                            }
+                          ]
+                        },
+                        %IR.BitstringType{
+                          segments: [
+                            %IR.BitstringSegment{
+                              modifiers: [size: %IR.IntegerType{value: 3}, type: :integer]
+                            }
+                          ]
+                        },
+                        %IR.BitstringType{
+                          segments: [
+                            %IR.BitstringSegment{
+                              modifiers: [size: %IR.IntegerType{value: 3}, unit: 5, type: :integer]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      } = transform(ast, %Context{})
+    end
+    
     # --- TYPE MODIFIER ---
 
     test "default type for float literal" do
@@ -491,14 +648,55 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :utf32]}]} =
                transform(ast, %Context{})
     end
+    
+    test "aggregate type modifier test using AST loaded from BEAM file" do
+      ast = AST.for_module(Module3)
+      
+      assert %IR.ModuleDefinition{
+        body: %IR.Block{
+          expressions: [
+            %IR.FunctionDefinition{
+              clause: %IR.FunctionClause{
+                body: %IR.Block{
+                  expressions: [
+                    %IR.MatchOperator{},
+                    %IR.MatchOperator{},
+                    %IR.MatchOperator{},
+                    %IR.MatchOperator{},
+                    %IR.ListType{
+                      data: [
+                        %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :float]}]},
+                        %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :integer]}]},
+                        %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :binary]}]},
+                        %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :integer]}]},
+                        %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :integer]}]},
+                        %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :binary]}]},
+                        %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :bitstring]}]},
+                        %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :bitstring]}]},
+                        %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :binary]}]},
+                        %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :float]}]},
+                        %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :integer]}]},
+                        %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :utf8]}]},
+                        %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :utf16]}]},
+                        %IR.BitstringType{segments: [%IR.BitstringSegment{modifiers: [type: :utf32]}]}
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      } = transform(ast, %Context{})
+    end
 
     # --- UNIT MODIFIER ---
 
     test "explicit unit modifier syntax" do
-      ast = ast("<<xyz::unit(3)>>")
+      ast = ast("<<xyz::size(3)-unit(5)>>")
 
       assert %IR.BitstringType{
-               segments: [%IR.BitstringSegment{modifiers: [type: :integer, unit: 3]}]
+               segments: [%IR.BitstringSegment{modifiers: [type: :integer, unit: 5, size: %IR.IntegerType{value: 3}]}]
              } = transform(ast, %Context{})
     end
 
@@ -512,6 +710,40 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ]
              } = transform(ast, %Context{})
+    end
+    
+    test "aggregate unit modifier test using AST loaded from BEAM file" do
+      ast = AST.for_module(Module4)
+      
+      assert %IR.ModuleDefinition{
+        body: %IR.Block{
+          expressions: [
+            %IR.FunctionDefinition{
+              clause: %IR.FunctionClause{
+                body: %IR.Block{
+                  expressions: [
+                    %IR.MatchOperator{},
+                    %IR.ListType{
+                      data: [
+                        %IR.BitstringType{
+                          segments: [%IR.BitstringSegment{modifiers: [size: %IR.IntegerType{value: 3}, unit: 5, type: :integer]}]
+                        },
+                        %IR.BitstringType{
+                          segments: [
+                            %IR.BitstringSegment{
+                              modifiers: [size: %IR.IntegerType{value: 3}, unit: 5, type: :integer]
+                            }
+                          ]
+                        } 
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      } = transform(ast, %Context{})
     end
 
     # --- VALUE ---
@@ -566,6 +798,55 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ]
              } = transform(ast, %Context{})
+    end
+    
+    test "aggregate value test using AST loaded from BEAM file" do
+      ast = AST.for_module(Module5)
+      
+      assert %IR.ModuleDefinition{
+        body: %IR.Block{
+          expressions: [
+            %IR.FunctionDefinition{
+              clause: %IR.FunctionClause{
+                body: %IR.Block{
+                  expressions: [
+                    %IR.MatchOperator{},
+                    %IR.MatchOperator{},
+                    %IR.ListType{
+                      data: [
+                        %IR.BitstringType{segments: [%IR.BitstringSegment{value: %IR.IntegerType{value: 6}}]},
+                        %IR.BitstringType{segments: [%IR.BitstringSegment{value: %IR.StringType{value: "my_str"}}]},
+                        %IR.BitstringType{segments: [%IR.BitstringSegment{value: %IR.Variable{name: :xyz}}]},
+                        %IR.BitstringType{
+                          segments: [
+                            %IR.BitstringSegment{
+                              value: %IR.RemoteFunctionCall{
+                                module: %IR.AtomType{value: Map},
+                                function: :get,
+                                args: [%IR.Variable{name: :my_map}, %IR.AtomType{value: :my_key}]
+                              }
+                            }
+                          ]
+                        },
+                        %IR.BitstringType{
+                          segments: [
+                            %IR.BitstringSegment{
+                              value: %IR.IntegerType{value: 1}
+                            },
+                            %IR.BitstringSegment{
+                              value: %IR.IntegerType{value: 2}
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      } = transform(ast, %Context{})
     end
   end
 

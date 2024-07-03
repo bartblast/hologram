@@ -600,43 +600,43 @@ defmodule Hologram.Compiler.Transformer do
     [{:unit, unit} | [{:size, size} | modifiers]]
   end
 
-  defp transform_bitstring_modifiers({:big, _meta, nil}, _context, modifiers) do
+  defp transform_bitstring_modifiers({:big, _meta, _data}, _context, modifiers) do
     [{:endianness, :big} | modifiers]
   end
 
-  defp transform_bitstring_modifiers({:binary, _meta, nil}, _context, modifiers) do
+  defp transform_bitstring_modifiers({:binary, _meta, _data}, _context, modifiers) do
     [{:type, :binary} | modifiers]
   end
 
-  defp transform_bitstring_modifiers({:bits, _meta, nil}, _context, modifiers) do
+  defp transform_bitstring_modifiers({:bits, _meta, _data}, _context, modifiers) do
     [{:type, :bitstring} | modifiers]
   end
 
-  defp transform_bitstring_modifiers({:bitstring, _meta, nil}, _context, modifiers) do
+  defp transform_bitstring_modifiers({:bitstring, _meta, _data}, _context, modifiers) do
     [{:type, :bitstring} | modifiers]
   end
 
-  defp transform_bitstring_modifiers({:bytes, _meta, nil}, _context, modifiers) do
+  defp transform_bitstring_modifiers({:bytes, _meta, _data}, _context, modifiers) do
     [{:type, :binary} | modifiers]
   end
 
-  defp transform_bitstring_modifiers({:float, _meta, nil}, _context, modifiers) do
+  defp transform_bitstring_modifiers({:float, _meta, _data}, _context, modifiers) do
     [{:type, :float} | modifiers]
   end
 
-  defp transform_bitstring_modifiers({:integer, _meta, nil}, _context, modifiers) do
+  defp transform_bitstring_modifiers({:integer, _meta, _data}, _context, modifiers) do
     [{:type, :integer} | modifiers]
   end
 
-  defp transform_bitstring_modifiers({:little, _meta, nil}, _context, modifiers) do
+  defp transform_bitstring_modifiers({:little, _meta, _data}, _context, modifiers) do
     [{:endianness, :little} | modifiers]
   end
 
-  defp transform_bitstring_modifiers({:native, _meta, nil}, _context, modifiers) do
+  defp transform_bitstring_modifiers({:native, _meta, _data}, _context, modifiers) do
     [{:endianness, :native} | modifiers]
   end
 
-  defp transform_bitstring_modifiers({:signed, _meta, nil}, _context, modifiers) do
+  defp transform_bitstring_modifiers({:signed, _meta, _data}, _context, modifiers) do
     [{:signedness, :signed} | modifiers]
   end
 
@@ -648,19 +648,19 @@ defmodule Hologram.Compiler.Transformer do
     [{:unit, unit} | modifiers]
   end
 
-  defp transform_bitstring_modifiers({:unsigned, _meta, nil}, _context, modifiers) do
+  defp transform_bitstring_modifiers({:unsigned, _meta, _data}, _context, modifiers) do
     [{:signedness, :unsigned} | modifiers]
   end
 
-  defp transform_bitstring_modifiers({:utf8, _meta, nil}, _context, modifiers) do
+  defp transform_bitstring_modifiers({:utf8, _meta, _data}, _context, modifiers) do
     [{:type, :utf8} | modifiers]
   end
 
-  defp transform_bitstring_modifiers({:utf16, _meta, nil}, _context, modifiers) do
+  defp transform_bitstring_modifiers({:utf16, _meta, _data}, _context, modifiers) do
     [{:type, :utf16} | modifiers]
   end
 
-  defp transform_bitstring_modifiers({:utf32, _meta, nil}, _context, modifiers) do
+  defp transform_bitstring_modifiers({:utf32, _meta, _data}, _context, modifiers) do
     [{:type, :utf32} | modifiers]
   end
 
