@@ -8,7 +8,7 @@ defmodule HologramFeatureTests.MixProject do
   def application do
     [
       mod: {HologramFeatureTests.Application, []},
-      extra_applications: [:logger, :runtime_tools]
+      extra_applications: [:iex, :logger, :runtime_tools]
     ]
   end
 
