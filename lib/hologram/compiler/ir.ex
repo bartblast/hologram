@@ -2,7 +2,6 @@ defmodule Hologram.Compiler.IR do
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
-  alias Hologram.Compiler.Normalizer
   alias Hologram.Compiler.Transformer
 
   @type t ::
@@ -330,7 +329,7 @@ defmodule Hologram.Compiler.IR do
   end
 
   @doc """
-  Returns Hologram IR for the given module.
+  Returns Hologram IR of the given module.
   Specifying the module's BEAM path makes the call faster.
 
   ## Examples
@@ -340,11 +339,8 @@ defmodule Hologram.Compiler.IR do
   """
   @spec for_module(module, charlist | nil) :: IR.t()
   def for_module(module, beam_path \\ nil) do
-    input = beam_path || :code.which(module)
-
-    input
-    |> BeamFile.elixir_quoted!()
-    |> Normalizer.normalize()
+    module
+    |> AST.for_module(beam_path)
     |> Transformer.transform(%Context{module: module})
   end
 
