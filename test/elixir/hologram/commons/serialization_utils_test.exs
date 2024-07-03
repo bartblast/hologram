@@ -35,7 +35,7 @@ defmodule Hologram.Commons.SerializationUtilsTest do
 
       expected_msg =
         if Version.compare(System.version(), "1.14.5") == :gt do
-          ~r/invalid or unsafe external representation of a term/
+          build_argument_error_msg(1, "invalid or unsafe external representation of a term")
         else
           "argument error"
         end
