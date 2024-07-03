@@ -33,9 +33,9 @@ defmodule Hologram.Commons.SerializationUtilsTest do
         <<131, 119, 27, 110, 111, 110, 95, 101, 120, 105, 115, 116, 105, 110, 103, 95, 97, 116,
           111, 109, 95, 102, 105, 120, 116, 117, 114, 101, 95, 50>>
 
-      assert_error ArgumentError, fn ->
+      assert_error(ArgumentError, fn ->
         deserialize(serialized_atom_fixture)
-      end
+      end)
     end
   end
 

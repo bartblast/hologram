@@ -18,15 +18,15 @@ defmodule Hologram.Compiler.AST do
     |> Code.string_to_quoted!()
     |> Normalizer.normalize()
   end
-  
+
   @doc """
   Returns normalized AST of the given module.
   Specifying the module's BEAM path makes the call faster.
   """
-  @spec for_module(module, charlist | nil) :: AST.t
+  @spec for_module(module, charlist | nil) :: AST.t()
   def for_module(module, beam_path \\ nil) do
     input = beam_path || :code.which(module)
-    
+
     input
     |> BeamFile.elixir_quoted!()
     |> Normalizer.normalize()

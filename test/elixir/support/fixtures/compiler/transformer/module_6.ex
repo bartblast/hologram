@@ -2,7 +2,7 @@
 defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module6 do
   def data do
     xyz = 123
-    
+
     [
       <<xyz::signed>>,
       <<xyz::unsigned>>
