@@ -1114,7 +1114,10 @@ describe("Hologram", () => {
 
       Hologram.handlePrefetchPageSuccess("dummy_map_key", "my_html");
 
-      assert.deepStrictEqual(Hologram.prefetchedPages, new Map());
+      // Can't use assert.deepStrictEqual for Maps
+      assert.instanceOf(Hologram.prefetchedPages, Map);
+      assert.equal(Hologram.prefetchedPages.size, 0);
+
       sinon.assert.notCalled(loadPageStub);
     });
 
@@ -1133,7 +1136,9 @@ describe("Hologram", () => {
 
       Hologram.handlePrefetchPageSuccess("dummy_map_key", "my_html");
 
-      assert.deepStrictEqual(Hologram.prefetchedPages, new Map());
+      // Can't use assert.deepStrictEqual for Maps
+      assert.instanceOf(Hologram.prefetchedPages, Map);
+      assert.equal(Hologram.prefetchedPages.size, 0);
 
       sinon.assert.calledOnceWithExactly(
         loadPageStub,
@@ -1143,9 +1148,11 @@ describe("Hologram", () => {
     });
 
     it("navigate hasn't been confirmed", () => {
+      const mapKey = "dummy_map_key";
+
       Hologram.prefetchedPages = new Map([
         [
-          "dummy_map_key",
+          mapKey,
           {
             html: null,
             isNavigateConfirmed: false,
@@ -1155,22 +1162,21 @@ describe("Hologram", () => {
         ],
       ]);
 
-      Hologram.handlePrefetchPageSuccess("dummy_map_key", "my_html");
+      Hologram.handlePrefetchPageSuccess(mapKey, "my_html");
 
-      assert.deepStrictEqual(
-        Hologram.prefetchedPages,
-        new Map([
-          [
-            "dummy_map_key",
-            {
-              html: "my_html",
-              isNavigateConfirmed: false,
-              pagePath: "/my-page-path",
-              timestamp: Date.now(),
-            },
-          ],
-        ]),
-      );
+      // Can't use assert.deepStrictEqual for Maps
+      assert.instanceOf(Hologram.prefetchedPages, Map);
+      assert.equal(Hologram.prefetchedPages.size, 1);
+      assert.isTrue(Hologram.prefetchedPages.has(mapKey));
+
+      const mapValue = Hologram.prefetchedPages.get(mapKey);
+
+      assert.deepStrictEqual(mapValue, {
+        html: "my_html",
+        isNavigateConfirmed: false,
+        pagePath: "/my-page-path",
+        timestamp: Date.now(),
+      });
 
       sinon.assert.notCalled(loadPageStub);
     });
