@@ -33,14 +33,15 @@ defmodule Hologram.Commons.SerializationUtilsTest do
         <<131, 119, 27, 110, 111, 110, 95, 101, 120, 105, 115, 116, 105, 110, 103, 95, 97, 116,
           111, 109, 95, 102, 105, 120, 116, 117, 114, 101, 95, 50>>
 
-      if Version.compare(System.version(), "1.13.4") == :gt do
-        assert_raise ArgumentError, ~r/invalid or unsafe external representation of a term/, fn ->
-          deserialize(serialized_atom_fixture)
+      expected_msg =
+        if Version.compare(System.version(), "1.14.5") == :gt do
+          ~r/invalid or unsafe external representation of a term/
+        else
+          "argument error"
         end
-      else
-        assert_error ArgumentError, "argument error", fn ->
-          deserialize(serialized_atom_fixture)
-        end
+      
+      assert_error ArgumentError, expected_msg, fn ->
+        deserialize(serialized_atom_fixture)
       end
     end
   end
