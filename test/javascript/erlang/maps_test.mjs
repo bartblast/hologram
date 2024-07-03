@@ -585,4 +585,42 @@ describe("Erlang_Maps", () => {
       );
     });
   });
+
+  describe("update/3", () => {
+    const fun = Erlang_Maps["update/3"];
+
+    it("when the map doesn't have the given key", () => {
+      const map = Type.map([[Type.atom("a"), Type.integer(1)]]);
+
+      assertBoxedError(
+        () => fun(Type.atom("b"), Type.integer(2), map),
+        "KeyError",
+        "key :b not found in: %{a: 1}",
+      );
+    });
+
+    it("when the map already has the given key", () => {
+      const map = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
+
+      const result = fun(Type.atom("b"), Type.integer(3), map);
+
+      const expected = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(3)],
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises BadMapError if the third argument is not a map", () => {
+      assertBoxedError(
+        () => fun(Type.atom("a"), Type.integer(1), Type.atom("abc")),
+        "BadMapError",
+        "expected a map, got: :abc",
+      );
+    });
+  });
 });

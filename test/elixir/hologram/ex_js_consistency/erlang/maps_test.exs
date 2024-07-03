@@ -267,4 +267,22 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
       end
     end
   end
+
+  describe "update/3" do
+    test "when the map doesn't have the given key" do
+      assert_error KeyError, "key :b not found in: %{a: 1}", fn ->
+        :maps.update(:b, 2, %{a: 1})
+      end
+    end
+
+    test "when the map already has the given key" do
+      assert :maps.update(:b, 3, %{a: 1, b: 2}) == %{a: 1, b: 3}
+    end
+
+    test "raises BadMapError if the third argument is not a map" do
+      assert_error BadMapError, "expected a map, got: :abc", fn ->
+        :maps.update(:a, 1, :abc)
+      end
+    end
+  end
 end

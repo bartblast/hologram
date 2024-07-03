@@ -23,6 +23,8 @@ defmodule Hologram.Compiler.CallGraph do
     {{:erlang, :integer_to_binary, 1}, {:erlang, :integer_to_binary, 2}},
     {{:lists, :keymember, 3}, {:lists, :keyfind, 3}},
     {{:maps, :get, 2}, {:maps, :get, 3}},
+    {{:maps, :update, 3}, {:maps, :is_key, 2}},
+    {{:maps, :update, 3}, {:maps, :put, 3}},
     {{:unicode, :characters_to_binary, 1}, {:unicode, :characters_to_binary, 3}},
     {{:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1}}
   ]

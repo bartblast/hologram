@@ -184,6 +184,25 @@ const Erlang_Maps = {
   },
   // End to_list/1
   // Deps: []
+
+  // Start update/3
+  "update/3": (key, value, map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    if (Type.isFalse(Erlang_Maps["is_key/2"](key, map))) {
+      Interpreter.raiseKeyError(
+        `key ${Interpreter.inspect(key)} not found in: ${Interpreter.inspect(
+          map,
+        )}`,
+      );
+    }
+
+    return Erlang_Maps["put/3"](key, value, map);
+  },
+  // End update/3
+  // Deps: [:maps.is_key/2, :maps.put/3]
 };
 
 export default Erlang_Maps;
