@@ -1149,6 +1149,7 @@ describe("Hologram", () => {
 
     it("navigate hasn't been confirmed", () => {
       const mapKey = "dummy_map_key";
+      const timestamp = Date.now();
 
       Hologram.prefetchedPages = new Map([
         [
@@ -1157,7 +1158,7 @@ describe("Hologram", () => {
             html: null,
             isNavigateConfirmed: false,
             pagePath: "/my-page-path",
-            timestamp: Date.now(),
+            timestamp: timestamp,
           },
         ],
       ]);
@@ -1175,7 +1176,7 @@ describe("Hologram", () => {
         html: "my_html",
         isNavigateConfirmed: false,
         pagePath: "/my-page-path",
-        timestamp: Date.now(),
+        timestamp: timestamp,
       });
 
       sinon.assert.notCalled(loadPageStub);
