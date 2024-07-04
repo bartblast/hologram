@@ -8,7 +8,8 @@ import {
   sinon,
 } from "./support/helpers.mjs";
 
-import {defineModule1Fixture} from "./support/fixtures/ex_js_consistency/match_operator/module_1.mjs";
+import {defineModule1Fixture} from "./support/fixtures/ex_js_consistency/interpreter/module_1.mjs";
+import {defineModule1Fixture as defineMatchOperatorModule1Fixture} from "./support/fixtures/ex_js_consistency/match_operator/module_1.mjs";
 
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
@@ -20,6 +21,7 @@ import Utils from "../../assets/js/utils.mjs";
 defineGlobalErlangAndElixirModules();
 
 defineModule1Fixture();
+defineMatchOperatorModule1Fixture();
 
 describe("Interpreter", () => {
   describe("accessKeywordListElement()", () => {
@@ -400,54 +402,14 @@ describe("Interpreter", () => {
   });
 
   describe("callNamedFunction()", () => {
-    let alias, args, context;
+    const alias = Type.alias(
+      "Hologram.Test.Fixtures.ExJsConsistency.Interpreter.Module1",
+    );
 
-    beforeEach(() => {
-      Interpreter.defineElixirFunction(
-        "MyModule",
-        "my_public_fun",
-        2,
-        "public",
-        [
-          {
-            params: (_context) => [
-              Type.variablePattern("x"),
-              Type.variablePattern("y"),
-            ],
-            guards: [],
-            body: (context) => {
-              return Erlang["+/2"](context.vars.x, context.vars.y);
-            },
-          },
-        ],
-      );
+    const args = [Type.integer(1), Type.integer(2)];
 
-      Interpreter.defineElixirFunction(
-        "MyModule",
-        "my_private_fun",
-        2,
-        "private",
-        [
-          {
-            params: (_context) => [
-              Type.variablePattern("x"),
-              Type.variablePattern("y"),
-            ],
-            guards: [],
-            body: (context) => {
-              return Erlang["-/2"](context.vars.x, context.vars.y);
-            },
-          },
-        ],
-      );
-
-      alias = Type.alias("MyModule");
-      args = [Type.integer(1), Type.integer(2)];
-      context = contextFixture({module: "MyModule"});
-    });
-
-    afterEach(() => {
-      delete globalThis.Elixir_MyModule;
+    const context = contextFixture({
+      module: "Hologram.Test.Fixtures.ExJsConsistency.Interpreter.Module1",
     });
 
     it("local public function call", () => {
@@ -486,6 +448,8 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(result, Type.integer(-1));
     });
 
+    // Keep Elixir consistency test in sync: test/elixir/hologram/ex_js_consistency/interpreter_test.exs ("call named function" section).
+    // TODO: client error message is inconsistent with server error message (implement function name suggestions)
     it("remote private function call", () => {
       assertBoxedError(
         () =>
@@ -497,22 +461,76 @@ describe("Interpreter", () => {
             contextFixture({module: "MyOtherModule"}),
           ),
         "UndefinedFunctionError",
-        "function MyModule.my_private_fun/2 is undefined or private",
+        "function Hologram.Test.Fixtures.ExJsConsistency.Interpreter.Module1.my_private_fun/2 is undefined or private",
       );
     });
 
-    it("undefined function", () => {
+    // Keep Elixir consistency test in sync: test/elixir/hologram/ex_js_consistency/interpreter_test.exs ("call named function" section).
+    it("module is available, but function is undefined", () => {
       assertBoxedError(
         () =>
           Interpreter.callNamedFunction(
             alias,
-            "my_undefined_fun",
+            "undefined_function",
             2,
             args,
             context,
           ),
         "UndefinedFunctionError",
-        "function MyModule.my_undefined_fun/2 is undefined or private",
+        "function Hologram.Test.Fixtures.ExJsConsistency.Interpreter.Module1.undefined_function/2 is undefined or private",
+      );
+    });
+
+    // Keep Elixir consistency test in sync: test/elixir/hologram/ex_js_consistency/interpreter_test.exs ("call named function" section).
+    it("module is not available", () => {
+      assertBoxedError(
+        () =>
+          Interpreter.callNamedFunction(
+            Type.alias("MyModule"),
+            "my_fun",
+            2,
+            args,
+            context,
+          ),
+        "UndefinedFunctionError",
+        "function MyModule.my_fun/2 is undefined (module MyModule is not available)",
+      );
+    });
+
+    // Keep Elixir consistency test in sync: test/elixir/hologram/ex_js_consistency/interpreter_test.exs ("call named function" section).
+    // TODO: client error message is inconsistent with server error message (implement function name suggestions)
+    it("function with the same name and different arity is defined", () => {
+      assertBoxedError(
+        () =>
+          Interpreter.callNamedFunction(
+            alias,
+            "my_public_fun",
+            3,
+            [Type.integer(1), Type.integer(2), Type.integer(3)],
+            context,
+          ),
+        "UndefinedFunctionError",
+        "function Hologram.Test.Fixtures.ExJsConsistency.Interpreter.Module1.my_public_fun/3 is undefined or private",
+      );
+    });
+
+    // Keep Elixir consistency test in sync: test/elixir/hologram/ex_js_consistency/interpreter_test.exs ("call named function" section).
+    // TODO: client error message is inconsistent with server error message (implement function name suggestions)
+    it("function arity is correct, but args don't match the pattern", () => {
+      assertBoxedError(
+        () =>
+          Interpreter.callNamedFunction(
+            alias,
+            "my_public_fun",
+            2,
+            [Type.integer(1), Type.integer(3)],
+            context,
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(
+          "Hologram.Test.Fixtures.ExJsConsistency.Interpreter.Module1.my_public_fun/2",
+          [Type.integer(1), Type.integer(3)],
+        ),
       );
     });
   });
@@ -2039,7 +2057,9 @@ describe("Interpreter", () => {
       assertBoxedError(
         () => globalThis.Elixir_Aaa_Bbb["my_fun_b/1"](Type.integer(3)),
         "FunctionClauseError",
-        "no function clause matching in Aaa.Bbb.my_fun_b/1",
+        Interpreter.buildFunctionClauseErrorMsg("Aaa.Bbb.my_fun_b/1", [
+          Type.integer(3),
+        ]),
       );
     });
 
@@ -2076,7 +2096,9 @@ describe("Interpreter", () => {
       assertBoxedError(
         () => globalThis.Elixir_Aaa_Bbb["my_fun_a/1"](Type.integer(3)),
         "FunctionClauseError",
-        "no function clause matching in Aaa.Bbb.my_fun_a/1",
+        Interpreter.buildFunctionClauseErrorMsg("Aaa.Bbb.my_fun_a/1", [
+          Type.integer(3),
+        ]),
       );
     });
 

@@ -101,6 +101,12 @@ export default class Interpreter {
     const moduleRef = Interpreter.moduleRef(module);
     const functionArityStr = `${functionName}/${arity}`;
 
+    if (typeof moduleRef === "undefined") {
+      const moduleExName = Interpreter.inspect(module);
+      const message = `function ${moduleExName}.${functionName}/${arity} is undefined (module ${moduleExName} is not available)`;
+      Interpreter.raiseError("UndefinedFunctionError", message);
+    }
+
     if (
       !moduleRef.__exports__.has(functionArityStr) &&
       !Interpreter.isEqual(module, context.module)
@@ -280,8 +286,9 @@ export default class Interpreter {
         }
       }
 
-      const message = `no function clause matching in ${mfa}`;
-      Interpreter.raiseFunctionClauseError(message);
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(mfa, arguments),
+      );
     };
 
     if (visibility === "public") {

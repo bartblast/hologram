@@ -510,7 +510,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
     test "1 = 2 = x, (x = 2)" do
       assert_error MatchError, "no match of right hand side value: 2", fn ->
-        # Code.eval_string/3 used here, because this code wouldn't compile in some Elixir/OTP versions.
+        # Code.eval_string/2 used here, because this code wouldn't compile in some Elixir/OTP versions.
         Code.eval_string("1 = 2 = x", x: 2)
       end
     end
