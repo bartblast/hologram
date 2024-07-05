@@ -1,4 +1,5 @@
 defmodule Hologram.Compiler.IR do
+  alias Hologram.Commons.AtomUtils
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
@@ -383,13 +384,13 @@ defmodule Hologram.Compiler.IR do
         build_function_capture_ir(term, function_info[:module], function_info[:name])
 
       System.otp_release() >= "25" && function_info[:type] == :local &&
-          !function_name_starts_with?(function_info[:name], "-") ->
+          !AtomUtils.starts_with?(function_info[:name], "-") ->
         function_info[:module]
         |> Function.capture(function_info[:name], function_info[:arity])
         |> build_function_capture_ir(function_info[:module], function_info[:name])
 
       System.otp_release() < "25" && function_info[:type] == :local &&
-          function_name_starts_with?(function_info[:name], "-fun.") ->
+          AtomUtils.starts_with?(function_info[:name], "-fun.") ->
         regex = ~r'^\-fun\.(.+)/[0-9]+\-$'
         [_full_match, function_str] = Regex.run(regex, to_string(function_info[:name]))
         function = String.to_existing_atom(function_str)
@@ -436,12 +437,6 @@ defmodule Hologram.Compiler.IR do
   # atom, float, integer, pid, port, reference
   def for_term!(term) do
     Transformer.transform(term, %Context{})
-  end
-
-  defp function_name_starts_with?(name, prefix) do
-    name
-    |> to_string()
-    |> String.starts_with?(prefix)
   end
 
   defp build_function_capture_ir(function_capture, module, function) do
