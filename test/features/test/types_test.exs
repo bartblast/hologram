@@ -22,7 +22,7 @@ defmodule HologramFeatureTests.TypesTest do
         else
           ~r/command failed: term contains an anonymous function that is not a remote function capture/
         end
-      
+
       assert_raise Wallaby.JSError,
                    expected_msg,
                    fn ->
@@ -47,12 +47,12 @@ defmodule HologramFeatureTests.TypesTest do
         |> assert_text(css("#result"), inspect(6))
       else
         assert_raise Wallaby.JSError,
-          ~r/command failed: term contains an anonymous function that is not a remote function capture/,
-          fn ->
-            session
-            |> visit(TypesPage)
-            |> click(css("button[id='local function capture (server origin)']"))
-          end
+                     ~r/command failed: term contains an anonymous function that is not a remote function capture/,
+                     fn ->
+                       session
+                       |> visit(TypesPage)
+                       |> click(css("button[id='local function capture (server origin)']"))
+                     end
       end
     end
 

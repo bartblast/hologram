@@ -407,7 +407,7 @@ defmodule Hologram.Compiler.IR do
           else
             "term contains an anonymous function that is not a remote function capture"
           end
-        
+
         raise ArgumentError, message: message
     end
   end

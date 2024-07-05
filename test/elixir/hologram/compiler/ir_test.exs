@@ -112,7 +112,7 @@ defmodule Hologram.Compiler.IRTest do
         else
           "term contains an anonymous function that is not a remote function capture"
         end
-      
+
       assert for_term(fn x -> x end) == {:error, expected_msg}
     end
   end
@@ -193,10 +193,10 @@ defmodule Hologram.Compiler.IRTest do
 
     test "anonymous function (non-capture)" do
       term = fn x, y -> x + y end
-      
+
       expected_msg =
         if System.otp_release() >= "23" do
-          "term contains an anonymous function that is not a named function capture"        
+          "term contains an anonymous function that is not a named function capture"
         else
           "term contains an anonymous function that is not a remote function capture"
         end

@@ -1768,10 +1768,10 @@ defmodule Hologram.Compiler.EncoderTest do
     test "can't be encoded into JavaScript" do
       expected_msg =
         if System.otp_release() >= "23" do
-          "term contains an anonymous function that is not a named function capture"        
+          "term contains an anonymous function that is not a named function capture"
         else
           "term contains an anonymous function that is not a remote function capture"
-        end       
+        end
 
       assert encode_term(fn x -> x end) == {:error, expected_msg}
     end
@@ -1781,11 +1781,11 @@ defmodule Hologram.Compiler.EncoderTest do
     test "anonymous function (non-capture)" do
       expected_msg =
         if System.otp_release() >= "23" do
-          "term contains an anonymous function that is not a named function capture"        
+          "term contains an anonymous function that is not a named function capture"
         else
           "term contains an anonymous function that is not a remote function capture"
-        end      
-      
+        end
+
       assert_error ArgumentError, expected_msg, fn -> encode_term!(fn x, y -> x * y end) end
     end
 
