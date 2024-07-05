@@ -380,12 +380,23 @@ defmodule Hologram.Compiler.IR do
 
     cond do
       function_info[:type] == :external ->
-        build_function_capture_ir(term, function_info)
+        build_function_capture_ir(term, function_info[:module], function_info[:name])
 
-      function_info[:type] == :local && !function_name_starts_with_dash?(function_info[:name]) ->
+      System.otp_release() >= "25" && function_info[:type] == :local &&
+          !function_name_starts_with?(function_info[:name], "-") ->
         function_info[:module]
         |> Function.capture(function_info[:name], function_info[:arity])
-        |> build_function_capture_ir(function_info)
+        |> build_function_capture_ir(function_info[:module], function_info[:name])
+
+      System.otp_release() < "25" && function_info[:type] == :local &&
+          function_name_starts_with?(function_info[:name], "-fun.") ->
+        regex = ~r'^\-fun\.(.+)/[0-9]+\-$'
+        [_full_match, function_str] = Regex.run(regex, to_string(function_info[:name]))
+        function = String.to_existing_atom(function_str)
+
+        function_info[:module]
+        |> Function.capture(function, function_info[:arity])
+        |> build_function_capture_ir(function_info[:module], function)
 
       true ->
         raise ArgumentError,
@@ -427,17 +438,17 @@ defmodule Hologram.Compiler.IR do
     Transformer.transform(term, %Context{})
   end
 
-  defp function_name_starts_with_dash?(name) do
+  defp function_name_starts_with?(name, prefix) do
     name
     |> to_string()
-    |> String.starts_with?("-")
+    |> String.starts_with?(prefix)
   end
 
-  defp build_function_capture_ir(function_capture, function_info) do
+  defp build_function_capture_ir(function_capture, module, function) do
     function_capture
     |> Macro.escape()
     |> Transformer.transform(%Context{})
-    |> Map.put(:captured_module, function_info[:module])
-    |> Map.put(:captured_function, function_info[:name])
+    |> Map.put(:captured_module, module)
+    |> Map.put(:captured_function, function)
   end
 end
