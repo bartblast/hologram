@@ -15,8 +15,12 @@ defmodule HologramFeatureTests.TypesPage do
     <p>
       <button id="anonymous function (client origin, non-capture)" $click="anonymous function (client origin, non-capture)"> anonymous function (client origin, non-capture) </button>
       <button id="anonymous function (server origin, non-capture)" $click={%Command{name: :"anonymous function (server origin, non-capture)"}}> anonymous function (server origin, non-capture) </button>
+    </p>
+    <p>
       <button id="local function capture (client origin)" $click="local function capture (client origin)"> local function capture (client origin) </button>
       <button id="local function capture (server origin)" $click={%Command{name: :"local function capture (server origin)"}}> local function capture (server origin) </button>
+      <button id="remote function capture (client origin)" $click="remote function capture (client origin)"> remote function capture (client origin) </button>
+      <button id="remote function capture (server origin)" $click={%Command{name: :"remote function capture (server origin)"}}> remote function capture (server origin) </button>
     </p>
     <p>
       <button id="atom" $click="atom"> atom </button>
@@ -108,6 +112,25 @@ defmodule HologramFeatureTests.TypesPage do
     put_state(component, :result, params.term)
   end
 
+  def action(:"remote function capture (client origin)", _params, component) do
+    term = &HologramFeatureTests.TypesPage.my_fun/2
+    result = "client = #{term.(2, 3)}"
+
+    component
+    |> put_state(:result, result)
+    |> put_command(:"remote function capture (client origin) echo", term: term)
+  end
+
+  def action(:"remote function capture (client origin) result", params, component) do
+    result = component.state.result <> ", server = #{params.term.(2, 3)}"
+    put_state(component, :result, result)
+  end
+
+  def action(:"remote function capture (server origin) result", params, component) do
+    result = params.term.(2, 3)
+    put_state(component, :result, result)
+  end
+
   def action(:tuple, _params, component) do
     term = {123, :abc}
     put_command(component, :echo, term: term)
@@ -138,6 +161,15 @@ defmodule HologramFeatureTests.TypesPage do
   def command(:"pid (server origin)", _params, server) do
     term = pid("0.11.222")
     put_action(server, :"pid (server origin) result", term: term)
+  end
+
+  def command(:"remote function capture (client origin) echo", params, server) do
+    put_action(server, :"remote function capture (client origin) result", params)
+  end
+
+  def command(:"remote function capture (server origin)", _params, server) do
+    term = &HologramFeatureTests.TypesPage.my_fun/2
+    put_action(server, :"remote function capture (server origin) result", term: term)
   end
 
   def my_fun(x, y), do: x * y

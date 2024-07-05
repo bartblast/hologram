@@ -38,6 +38,20 @@ defmodule HologramFeatureTests.TypesTest do
       |> click(css("button[id='local function capture (server origin)']"))
       |> assert_text(css("#result"), inspect(6))
     end
+
+    feature "remote capture (client origin)", %{session: session} do
+      session
+      |> visit(TypesPage)
+      |> click(css("button[id='remote function capture (client origin)']"))
+      |> assert_text(css("#result"), "client = 6, server = 6")
+    end
+
+    feature "remote capture (server origin)", %{session: session} do
+      session
+      |> visit(TypesPage)
+      |> click(css("button[id='remote function capture (server origin)']"))
+      |> assert_text(css("#result"), inspect(6))
+    end
   end
 
   feature "atom", %{session: session} do
