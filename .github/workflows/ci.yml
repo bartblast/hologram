@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-20.04
     name: Lib Tests on Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}
     strategy:
+      fail-fast: false
       # Specify the Elixir and OTP versions to use when building
       # and running the workflow steps.
       matrix:
@@ -222,6 +223,7 @@ jobs:
       run:
         working-directory: test/features
     strategy:
+      fail-fast: false
       # Specify the Elixir and OTP versions to use when building
       # and running the workflow steps.
       matrix:
