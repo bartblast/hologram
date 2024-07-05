@@ -6,6 +6,8 @@ defmodule Hologram.Compiler.IRTest do
   alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Compiler.IR.Module1
 
+  defp my_fun(x, y), do: x + y
+
   test "for_code/1" do
     assert for_code("[1, :b]", %Context{}) == %IR.ListType{
              data: [
@@ -111,17 +113,40 @@ defmodule Hologram.Compiler.IRTest do
   end
 
   describe "for_term!/1" do
-    test "anonymous function (non-capture)" do
-      term = fn x -> x end
+    test "local function capture" do
+      term = &my_fun/2
 
-      assert_error ArgumentError,
-                   "term contains an anonymous function that is not a named function capture",
-                   fn ->
-                     for_term!(term)
-                   end
+      assert for_term!(term) == %IR.AnonymousFunctionType{
+               arity: 2,
+               captured_function: :my_fun,
+               captured_module: Hologram.Compiler.IRTest,
+               clauses: [
+                 %IR.FunctionClause{
+                   params: [
+                     %IR.Variable{name: :"$1"},
+                     %IR.Variable{name: :"$2"}
+                   ],
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.RemoteFunctionCall{
+                         module: %IR.AtomType{
+                           value: Hologram.Compiler.IRTest
+                         },
+                         function: :my_fun,
+                         args: [
+                           %IR.Variable{name: :"$1"},
+                           %IR.Variable{name: :"$2"}
+                         ]
+                       }
+                     ]
+                   }
+                 }
+               ]
+             }
     end
 
-    test "anonymous function (capture)" do
+    test "remote function capture" do
       term = &DateTime.now/2
 
       # credo:disable-for-lines:26 Credo.Check.Design.DuplicatedCode
@@ -151,6 +176,26 @@ defmodule Hologram.Compiler.IRTest do
                  }
                ]
              }
+    end
+
+    test "anonymous function (non-capture)" do
+      term = fn x, y -> x + y end
+
+      assert_error ArgumentError,
+                   "term contains an anonymous function that is not a named function capture",
+                   fn ->
+                     for_term!(term)
+                   end
+    end
+
+    test "anonymous function (capture)" do
+      term = &(&1 + &2)
+
+      assert_error ArgumentError,
+                   "term contains an anonymous function that is not a named function capture",
+                   fn ->
+                     for_term!(term)
+                   end
     end
 
     test "atom" do

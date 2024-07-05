@@ -378,15 +378,18 @@ defmodule Hologram.Compiler.IR do
   def for_term!(term) when is_function(term) do
     function_info = Function.info(term)
 
-    if function_info[:type] == :external do
-      term
-      |> Macro.escape()
-      |> Transformer.transform(%Context{})
-      |> Map.put(:captured_module, function_info[:module])
-      |> Map.put(:captured_function, function_info[:name])
-    else
-      raise ArgumentError,
-        message: "term contains an anonymous function that is not a named function capture"
+    cond do
+      function_info[:type] == :external ->
+        build_function_capture_ir(term, function_info)
+
+      function_info[:type] == :local && !function_name_starts_with_dash?(function_info[:name]) ->
+        function_info[:module]
+        |> Function.capture(function_info[:name], function_info[:arity])
+        |> build_function_capture_ir(function_info)
+
+      true ->
+        raise ArgumentError,
+          message: "term contains an anonymous function that is not a named function capture"
     end
   end
 
@@ -422,5 +425,19 @@ defmodule Hologram.Compiler.IR do
   # atom, float, integer, pid, port, reference
   def for_term!(term) do
     Transformer.transform(term, %Context{})
+  end
+
+  defp function_name_starts_with_dash?(name) do
+    name
+    |> to_string()
+    |> String.starts_with?("-")
+  end
+
+  defp build_function_capture_ir(function_capture, function_info) do
+    function_capture
+    |> Macro.escape()
+    |> Transformer.transform(%Context{})
+    |> Map.put(:captured_module, function_info[:module])
+    |> Map.put(:captured_function, function_info[:name])
   end
 end
