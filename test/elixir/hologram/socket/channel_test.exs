@@ -130,12 +130,15 @@ defmodule Hologram.Socket.ChannelTest do
           [%{"type" => "atom", "value" => "target"}, "__binary__:my_target_1"]
         ]
       }
+      
+      expected_msg =
+        if System.otp_release() >= "23" do
+          "term contains an anonymous function that is not a named function capture"        
+        else
+          "term contains an anonymous function that is not a remote function capture"
+        end       
 
-      assert handle_in("command", payload, :dummy_socket) ==
-               {:reply,
-                {:error,
-                 "term contains an anonymous function that is not a named function capture"},
-                :dummy_socket}
+      assert handle_in("command", payload, :dummy_socket) == {:reply, {:error, expected_msg}, :dummy_socket}
     end
   end
 

@@ -401,8 +401,14 @@ defmodule Hologram.Compiler.IR do
         |> build_function_capture_ir(function_info[:module], function)
 
       true ->
-        raise ArgumentError,
-          message: "term contains an anonymous function that is not a named function capture"
+        message =
+          if System.otp_release() >= "23" do
+            "term contains an anonymous function that is not a named function capture"
+          else
+            "term contains an anonymous function that is not a remote function capture"
+          end
+        
+        raise ArgumentError, message: message
     end
   end
 
