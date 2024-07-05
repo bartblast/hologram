@@ -116,34 +116,42 @@ defmodule Hologram.Compiler.IRTest do
     test "local function capture" do
       term = &my_fun/2
 
-      assert for_term!(term) == %IR.AnonymousFunctionType{
-               arity: 2,
-               captured_function: :my_fun,
-               captured_module: Hologram.Compiler.IRTest,
-               clauses: [
-                 %IR.FunctionClause{
-                   params: [
-                     %IR.Variable{name: :"$1"},
-                     %IR.Variable{name: :"$2"}
-                   ],
-                   guards: [],
-                   body: %IR.Block{
-                     expressions: [
-                       %IR.RemoteFunctionCall{
-                         module: %IR.AtomType{
-                           value: Hologram.Compiler.IRTest
-                         },
-                         function: :my_fun,
-                         args: [
-                           %IR.Variable{name: :"$1"},
-                           %IR.Variable{name: :"$2"}
-                         ]
-                       }
-                     ]
+      if System.otp_release() >= "23" do
+        assert for_term!(term) == %IR.AnonymousFunctionType{
+                 arity: 2,
+                 captured_function: :my_fun,
+                 captured_module: Hologram.Compiler.IRTest,
+                 clauses: [
+                   %IR.FunctionClause{
+                     params: [
+                       %IR.Variable{name: :"$1"},
+                       %IR.Variable{name: :"$2"}
+                     ],
+                     guards: [],
+                     body: %IR.Block{
+                       expressions: [
+                         %IR.RemoteFunctionCall{
+                           module: %IR.AtomType{
+                             value: Hologram.Compiler.IRTest
+                           },
+                           function: :my_fun,
+                           args: [
+                             %IR.Variable{name: :"$1"},
+                             %IR.Variable{name: :"$2"}
+                           ]
+                         }
+                       ]
+                     }
                    }
-                 }
-               ]
-             }
+                 ]
+               }
+      else
+        assert_error ArgumentError,
+                     "term contains an anonymous function that is not a named function capture",
+                     fn ->
+                       for_term!(term)
+                     end
+      end
     end
 
     test "remote function capture" do
