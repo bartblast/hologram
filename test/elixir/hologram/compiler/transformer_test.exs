@@ -981,7 +981,7 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "remote function capture, single-segment module name" do
+    test "remote Elixir function capture, single-segment module name" do
       ast = ast("&DateTime.now/2")
 
       # credo:disable-for-lines:26 Credo.Check.Design.DuplicatedCode
@@ -1013,7 +1013,7 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "remote function capture, multi-segment module name" do
+    test "remote Elixir function capture, multi-segment module name" do
       ast = ast("&Calendar.ISO.parse_date/2")
 
       # credo:disable-for-lines:26 Credo.Check.Design.DuplicatedCode
@@ -1033,6 +1033,37 @@ defmodule Hologram.Compiler.TransformerTest do
                        %IR.RemoteFunctionCall{
                          module: %IR.AtomType{value: Calendar.ISO},
                          function: :parse_date,
+                         args: [
+                           %IR.Variable{name: :"$1"},
+                           %IR.Variable{name: :"$2"}
+                         ]
+                       }
+                     ]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "remote Erlang function capture" do
+      ast = ast("&:erlang.binary_to_term/2")
+
+      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
+               arity: 2,
+               captured_function: :binary_to_term,
+               captured_module: :erlang,
+               clauses: [
+                 %IR.FunctionClause{
+                   params: [
+                     %IR.Variable{name: :"$1"},
+                     %IR.Variable{name: :"$2"}
+                   ],
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.RemoteFunctionCall{
+                         module: %IR.AtomType{value: :erlang},
+                         function: :binary_to_term,
                          args: [
                            %IR.Variable{name: :"$1"},
                            %IR.Variable{name: :"$2"}

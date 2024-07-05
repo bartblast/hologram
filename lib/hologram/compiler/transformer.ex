@@ -58,7 +58,7 @@ defmodule Hologram.Compiler.Transformer do
     |> Map.put(:captured_module, context.module)
   end
 
-  # Remote function capture with static module
+  # Remote Elixir function capture
   def transform(
         {:&, meta,
          [
@@ -75,6 +75,26 @@ defmodule Hologram.Compiler.Transformer do
     |> transform_function_capture(arity, meta, context)
     |> Map.put(:captured_function, function)
     |> Map.put(:captured_module, Module.safe_concat(module_segments))
+  end
+
+  # Remote Erlang function capture
+  def transform(
+        {:&, meta,
+         [
+           {:/, _meta_2,
+            [
+              {{:., _meta_3, [module, function]} = function_ast, [{:no_parens, true} | _meta_4],
+               []},
+              arity
+            ]}
+         ]},
+        context
+      )
+      when is_atom(module) and is_atom(function) do
+    function_ast
+    |> transform_function_capture(arity, meta, context)
+    |> Map.put(:captured_function, function)
+    |> Map.put(:captured_module, module)
   end
 
   # Remote function capture with variable module
