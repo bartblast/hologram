@@ -2,6 +2,7 @@ defmodule Hologram.Compiler.EncoderTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.Encoder, except: [encode_ir: 2]
 
+  alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
@@ -1767,7 +1768,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
     test "can't be encoded into JavaScript" do
       expected_msg =
-        if System.otp_release() >= "23" do
+        if SystemUtils.otp_version() >= 23 do
           "term contains an anonymous function that is not a named function capture"
         else
           "term contains an anonymous function that is not a remote function capture"
@@ -1780,7 +1781,7 @@ defmodule Hologram.Compiler.EncoderTest do
   describe "encode_term!/1" do
     test "anonymous function (non-capture)" do
       expected_msg =
-        if System.otp_release() >= "23" do
+        if SystemUtils.otp_version() >= 23 do
           "term contains an anonymous function that is not a named function capture"
         else
           "term contains an anonymous function that is not a remote function capture"

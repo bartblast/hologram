@@ -2,6 +2,7 @@ defmodule Hologram.Compiler.IRTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.IR
 
+  alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
   alias Hologram.Test.Fixtures.Compiler.IR.Module1
@@ -107,7 +108,7 @@ defmodule Hologram.Compiler.IRTest do
 
     test "can't be represented in IR" do
       expected_msg =
-        if System.otp_release() >= "23" do
+        if SystemUtils.otp_version() >= 23 do
           "term contains an anonymous function that is not a named function capture"
         else
           "term contains an anonymous function that is not a remote function capture"
@@ -121,7 +122,7 @@ defmodule Hologram.Compiler.IRTest do
     test "local function capture" do
       term = &my_fun/2
 
-      if System.otp_release() >= "23" do
+      if SystemUtils.otp_version() >= 23 do
         assert for_term!(term) == %IR.AnonymousFunctionType{
                  arity: 2,
                  captured_function: :my_fun,
@@ -195,7 +196,7 @@ defmodule Hologram.Compiler.IRTest do
       term = fn x, y -> x + y end
 
       expected_msg =
-        if System.otp_release() >= "23" do
+        if SystemUtils.otp_version() >= 23 do
           "term contains an anonymous function that is not a named function capture"
         else
           "term contains an anonymous function that is not a remote function capture"

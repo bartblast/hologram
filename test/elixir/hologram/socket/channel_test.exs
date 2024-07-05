@@ -7,6 +7,7 @@ defmodule Hologram.Socket.ChannelTest do
 
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
+  alias Hologram.Commons.SystemUtils
   alias Hologram.Test.Fixtures.Socket.Channel.Module2
   alias Hologram.Test.Fixtures.Socket.Channel.Module3
   alias Hologram.Test.Fixtures.Socket.Channel.Module5
@@ -132,7 +133,7 @@ defmodule Hologram.Socket.ChannelTest do
       }
 
       expected_msg =
-        if System.otp_release() >= "23" do
+        if SystemUtils.otp_version() >= 23 do
           "term contains an anonymous function that is not a named function capture"
         else
           "term contains an anonymous function that is not a remote function capture"

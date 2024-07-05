@@ -1,5 +1,6 @@
 defmodule Hologram.Compiler.IR do
   alias Hologram.Commons.AtomUtils
+  alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
@@ -376,7 +377,6 @@ defmodule Hologram.Compiler.IR do
   @spec for_term!(any) :: IR.t()
   def for_term!(term)
 
-  # credo:disable-for-lines:28 Credo.Check.Refactor.ABCSize
   def for_term!(term) when is_function(term) do
     function_info = Function.info(term)
 
@@ -384,13 +384,13 @@ defmodule Hologram.Compiler.IR do
       function_info[:type] == :external ->
         build_function_capture_ir(term, function_info[:module], function_info[:name])
 
-      System.otp_release() >= "25" && function_info[:type] == :local &&
+      SystemUtils.otp_version() >= 25 && function_info[:type] == :local &&
           !AtomUtils.starts_with?(function_info[:name], "-") ->
         function_info[:module]
         |> Function.capture(function_info[:name], function_info[:arity])
         |> build_function_capture_ir(function_info[:module], function_info[:name])
 
-      System.otp_release() < "25" && function_info[:type] == :local &&
+      SystemUtils.otp_version() < 25 && function_info[:type] == :local &&
           AtomUtils.starts_with?(function_info[:name], "-fun.") ->
         regex = ~r'^\-fun\.(.+)/[0-9]+\-$'
         [_full_match, function_str] = Regex.run(regex, to_string(function_info[:name]))
@@ -402,7 +402,7 @@ defmodule Hologram.Compiler.IR do
 
       true ->
         message =
-          if System.otp_release() >= "23" do
+          if SystemUtils.otp_version() >= 23 do
             "term contains an anonymous function that is not a named function capture"
           else
             "term contains an anonymous function that is not a remote function capture"

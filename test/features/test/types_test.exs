@@ -1,5 +1,7 @@
 defmodule HologramFeatureTests.TypesTest do
   use HologramFeatureTests.TestCase, async: true
+
+  alias Hologram.Commons.SystemUtils
   alias HologramFeatureTests.TypesPage
 
   describe "function" do
@@ -17,7 +19,7 @@ defmodule HologramFeatureTests.TypesTest do
 
     feature "anonymous (server origin, non-capture)", %{session: session} do
       expected_msg =
-        if System.otp_release() >= "23" do
+        if SystemUtils.otp_version() >= 23 do
           ~r/command failed: term contains an anonymous function that is not a named function capture/
         else
           ~r/command failed: term contains an anonymous function that is not a remote function capture/
@@ -40,7 +42,7 @@ defmodule HologramFeatureTests.TypesTest do
     end
 
     feature "local capture (server origin)", %{session: session} do
-      if System.otp_release() >= "23" do
+      if SystemUtils.otp_version() >= 23 do
         session
         |> visit(TypesPage)
         |> click(css("button[id='local function capture (server origin)']"))

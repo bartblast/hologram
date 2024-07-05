@@ -6,6 +6,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   """
 
   use Hologram.Test.BasicCase, async: true
+  alias Hologram.Commons.SystemUtils
 
   @moduletag :consistency
 
@@ -1211,7 +1212,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
-  if System.otp_release() > "22" do
+  if SystemUtils.otp_version() >= 23 do
     describe "atom_to_binary/1" do
       test "converts atom to (binary) bitstring" do
         assert :erlang.atom_to_binary(:abc) == <<"abc">>
@@ -1245,7 +1246,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
-  if System.otp_release() > "22" do
+  if SystemUtils.otp_version() >= 23 do
     test "binary_to_atom/1" do
       # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
       assert :erlang.binary_to_atom("全息图") == :erlang.binary_to_atom("全息图", :utf8)
