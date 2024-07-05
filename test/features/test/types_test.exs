@@ -16,8 +16,15 @@ defmodule HologramFeatureTests.TypesTest do
     end
 
     feature "anonymous (server origin, non-capture)", %{session: session} do
+      expected_msg =
+        if System.otp_release() >= "23" do
+          ~r/command failed: term contains an anonymous function that is not a named function capture/
+        else
+          ~r/command failed: term contains an anonymous function that is not a remote function capture/
+        end
+      
       assert_raise Wallaby.JSError,
-                   ~r/command failed: term contains an anonymous function that is not a named function capture/,
+                   expected_msg,
                    fn ->
                      session
                      |> visit(TypesPage)
@@ -33,10 +40,20 @@ defmodule HologramFeatureTests.TypesTest do
     end
 
     feature "local capture (server origin)", %{session: session} do
-      session
-      |> visit(TypesPage)
-      |> click(css("button[id='local function capture (server origin)']"))
-      |> assert_text(css("#result"), inspect(6))
+      if System.otp_release() >= "23" do
+        session
+        |> visit(TypesPage)
+        |> click(css("button[id='local function capture (server origin)']"))
+        |> assert_text(css("#result"), inspect(6))
+      else
+        assert_raise Wallaby.JSError,
+          ~r/command failed: term contains an anonymous function that is not a remote function capture/,
+          fn ->
+            session
+            |> visit(TypesPage)
+            |> click(css("button[id='local function capture (server origin)']"))
+          end
+      end
     end
 
     feature "remote capture (client origin)", %{session: session} do
