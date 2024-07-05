@@ -30,8 +30,8 @@ defmodule Hologram.Compiler.EncoderTest do
       # fn x -> :expr end
       ir = %IR.AnonymousFunctionType{
         arity: 1,
-        captured_function: nil,
         captured_module: nil,
+        captured_function: nil,
         clauses: [
           %IR.FunctionClause{
             params: [%IR.Variable{name: :x}],
@@ -57,8 +57,8 @@ defmodule Hologram.Compiler.EncoderTest do
       # end
       ir = %IR.AnonymousFunctionType{
         arity: 1,
-        captured_function: nil,
         captured_module: nil,
+        captured_function: nil,
         clauses: [
           %IR.FunctionClause{
             params: [%IR.Variable{name: :x}],
@@ -86,13 +86,13 @@ defmodule Hologram.Compiler.EncoderTest do
              """
     end
 
-    test "with module/function capture info" do
+    test "with Elixir module/function capture info" do
       # credo:disable-for-lines:27 Credo.Check.Design.DuplicatedCode
       # &Calendar.ISO.parse_date/2
       ir = %IR.AnonymousFunctionType{
         arity: 2,
-        captured_function: :parse_date,
         captured_module: Calendar.ISO,
+        captured_function: :parse_date,
         clauses: [
           %IR.FunctionClause{
             params: [
@@ -119,6 +119,42 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == """
              Type.functionCapture("Calendar.ISO", "parse_date", 2, [{params: (context) => [Type.variablePattern("$1"), Type.variablePattern("$2")], guards: [], body: (context) => {
              return Elixir_Calendar_ISO["parse_date/2"](context.vars["$1"], context.vars["$2"]);
+             }}], context)\
+             """
+    end
+
+    test "with Erlang module/function capture info" do
+      # &:persistent_term.get/2
+      ir = %IR.AnonymousFunctionType{
+        arity: 2,
+        captured_module: :persistent_term,
+        captured_function: :get,
+        clauses: [
+          %IR.FunctionClause{
+            params: [
+              %IR.Variable{name: :"$1"},
+              %IR.Variable{name: :"$2"}
+            ],
+            guards: [],
+            body: %IR.Block{
+              expressions: [
+                %IR.RemoteFunctionCall{
+                  module: %IR.AtomType{value: :persistent_term},
+                  function: :get,
+                  args: [
+                    %IR.Variable{name: :"$1"},
+                    %IR.Variable{name: :"$2"}
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+
+      assert encode_ir(ir) == """
+             Type.functionCapture(":persistent_term", "get", 2, [{params: (context) => [Type.variablePattern("$1"), Type.variablePattern("$2")], guards: [], body: (context) => {
+             return Erlang_Persistent_Term["get/2"](context.vars["$1"], context.vars["$2"]);
              }}], context)\
              """
     end

@@ -125,10 +125,14 @@ defmodule Hologram.Compiler.Encoder do
       ) do
     captured_function_js = encode_as_string(captured_function, true)
 
-    captured_module_js =
-      captured_module
-      |> Reflection.module_name()
-      |> encode_as_string(true)
+    captured_module_str =
+      if Reflection.alias?(captured_module) do
+        Reflection.module_name(captured_module)
+      else
+        ":#{captured_module}"
+      end
+
+    captured_module_js = encode_as_string(captured_module_str, true)
 
     clauses_js = encode_as_array(clauses, context)
 
