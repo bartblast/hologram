@@ -2,8 +2,8 @@ defmodule HologramFeatureTests.TypesTest do
   use HologramFeatureTests.TestCase, async: true
   alias HologramFeatureTests.TypesPage
 
-  describe "anonymous function" do
-    feature "(client origin, non-capture)", %{session: session} do
+  describe "function" do
+    feature "anonymous (client origin, non-capture)", %{session: session} do
       assert_raise Wallaby.JSError,
                    ~r/can't encode client terms that are anonymous functions that are not named function captures/,
                    fn ->
@@ -15,19 +15,28 @@ defmodule HologramFeatureTests.TypesTest do
       assert_text(session, css("#result"), inspect(6))
     end
 
-    feature "(client origin, capture)", %{session: session} do
-      session
-      |> visit(TypesPage)
-      |> click(css("button[id='anonymous function (client origin, capture)']"))
-      |> assert_text(css("#result"), inspect(6))
+    feature "anonymous (server origin, non-capture)", %{session: session} do
+      assert_raise Wallaby.JSError,
+                   ~r/command failed: term contains an anonymous function that is not a named function capture/,
+                   fn ->
+                     session
+                     |> visit(TypesPage)
+                     |> click(css("button[id='anonymous function (server origin, non-capture)']"))
+                   end
     end
 
-    feature "(server origin, non-capture)", %{session: session} do
-      assert_raise Wallaby.JSError, ~r/command failed/, fn ->
-        session
-        |> visit(TypesPage)
-        |> click(css("button[id='anonymous function (server origin, non-capture)']"))
-      end
+    feature "local capture (client origin)", %{session: session} do
+      session
+      |> visit(TypesPage)
+      |> click(css("button[id='local function capture (client origin)']"))
+      |> assert_text(css("#result"), "client = 6, server = 6")
+    end
+
+    feature "local capture (server origin)", %{session: session} do
+      session
+      |> visit(TypesPage)
+      |> click(css("button[id='local function capture (server origin)']"))
+      |> assert_text(css("#result"), inspect(6))
     end
   end
 

@@ -14,8 +14,9 @@ defmodule HologramFeatureTests.TypesPage do
     ~H"""
     <p>
       <button id="anonymous function (client origin, non-capture)" $click="anonymous function (client origin, non-capture)"> anonymous function (client origin, non-capture) </button>
-      <button id="anonymous function (client origin, capture)" $click="anonymous function (client origin, capture)"> anonymous function (client origin, capture) </button>
       <button id="anonymous function (server origin, non-capture)" $click={%Command{name: :"anonymous function (server origin, non-capture)"}}> anonymous function (server origin, non-capture) </button>
+      <button id="local function capture (client origin)" $click="local function capture (client origin)"> local function capture (client origin) </button>
+      <button id="local function capture (server origin)" $click={%Command{name: :"local function capture (server origin)"}}> local function capture (server origin) </button>
     </p>
     <p>
       <button id="atom" $click="atom"> atom </button>
@@ -42,20 +43,6 @@ defmodule HologramFeatureTests.TypesPage do
     component
     |> put_state(:result, result)
     |> put_command(:echo, term: term)
-  end
-
-  def action(:"anonymous function (client origin, capture)", _params, component) do
-    term = &my_fun/2
-    result = term.(2, 3)
-
-    component
-    |> put_state(:result, result)
-    |> put_command(:"anonymous function (client origin, capture)", term: term)
-  end
-
-  def action(:"anonymous function (client origin, capture) echo", params, component) do
-    result = params.term.(2, 3)
-    put_state(component, :result, result)
   end
 
   def action(:atom, _params, component) do
@@ -88,6 +75,25 @@ defmodule HologramFeatureTests.TypesPage do
     put_command(component, :echo, term: term)
   end
 
+  def action(:"local function capture (client origin)", _params, component) do
+    term = &my_fun/2
+    result = "client = #{term.(2, 3)}"
+
+    component
+    |> put_state(:result, result)
+    |> put_command(:"local function capture (client origin) echo", term: term)
+  end
+
+  def action(:"local function capture (client origin) result", params, component) do
+    result = component.state.result <> ", server = #{params.term.(2, 3)}"
+    put_state(component, :result, result)
+  end
+
+  def action(:"local function capture (server origin) result", params, component) do
+    result = params.term.(2, 3)
+    put_state(component, :result, result)
+  end
+
   def action(:map, _params, component) do
     term = %{a: 123, b: "abc"}
     put_command(component, :echo, term: term)
@@ -98,7 +104,7 @@ defmodule HologramFeatureTests.TypesPage do
     put_command(component, :echo, term: term)
   end
 
-  def action(:"pid (server origin)", params, component) do
+  def action(:"pid (server origin) result", params, component) do
     put_state(component, :result, params.term)
   end
 
@@ -115,18 +121,23 @@ defmodule HologramFeatureTests.TypesPage do
     put_action(server, :result, params)
   end
 
-  def command(:"anonymous function (client origin, capture)", params, server) do
-    put_action(server, :"anonymous function (client origin, capture) echo", params)
-  end
-
   def command(:"anonymous function (server origin, non-capture)", _params, server) do
     term = fn x, y -> x * y end
     put_action(server, :result, term: term)
   end
 
+  def command(:"local function capture (client origin) echo", params, server) do
+    put_action(server, :"local function capture (client origin) result", params)
+  end
+
+  def command(:"local function capture (server origin)", _params, server) do
+    term = &my_fun/2
+    put_action(server, :"local function capture (server origin) result", term: term)
+  end
+
   def command(:"pid (server origin)", _params, server) do
     term = pid("0.11.222")
-    put_action(server, :"pid (server origin)", term: term)
+    put_action(server, :"pid (server origin) result", term: term)
   end
 
   def my_fun(x, y), do: x * y
