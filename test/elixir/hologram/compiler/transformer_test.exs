@@ -112,7 +112,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "single param (AST from source code)" do
       ast = ast("fn x -> x end")
 
-      assert %IR.AnonymousFunctionType{
+      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 1,
                clauses: [
                  %IR.FunctionClause{
@@ -123,7 +123,7 @@ defmodule Hologram.Compiler.TransformerTest do
                    }
                  }
                ]
-             } == transform(ast, %Context{})
+             }
     end
 
     test "single param (AST from BEAM file)" do
@@ -145,7 +145,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "multiple params (AST from source code)" do
       ast = ast("fn x, y -> {x, y} end")
 
-      assert %IR.AnonymousFunctionType{
+      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 2,
                clauses: [
                  %IR.FunctionClause{
@@ -161,7 +161,7 @@ defmodule Hologram.Compiler.TransformerTest do
                    ]
                  }
                ]
-             } == transform(ast, %Context{})
+             }
     end
 
     test "multiple params (AST from BEAM file)" do
