@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module10
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module11
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module12
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module13
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module2
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module3
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module4
@@ -141,20 +142,46 @@ defmodule Hologram.Compiler.TransformerTest do
                }
     end
 
-    test "multiple params" do
-      ast = ast("fn x, y -> :expr_1 end")
+    test "multiple params (AST from source code)" do
+      ast = ast("fn x, y -> {x, y} end")
 
       assert %IR.AnonymousFunctionType{
                arity: 2,
                clauses: [
                  %IR.FunctionClause{
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.TupleType{data: [%IR.Variable{name: :x}, %IR.Variable{name: :y}]}
+                     ]
+                   },
+                   guards: [],
                    params: [
                      %IR.Variable{name: :x},
                      %IR.Variable{name: :y}
                    ]
                  }
                ]
-             } = transform(ast, %Context{})
+             } == transform(ast, %Context{})
+    end
+
+    test "multiple params (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module13) == %IR.AnonymousFunctionType{
+               arity: 2,
+               clauses: [
+                 %IR.FunctionClause{
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.TupleType{data: [%IR.Variable{name: :x}, %IR.Variable{name: :y}]}
+                     ]
+                   },
+                   guards: [],
+                   params: [
+                     %IR.Variable{name: :x},
+                     %IR.Variable{name: :y}
+                   ]
+                 }
+               ]
+             }
     end
 
     test "multiple expressions body" do
