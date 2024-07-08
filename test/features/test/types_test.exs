@@ -51,6 +51,7 @@ defmodule HologramFeatureTests.TypesTest do
                    end
     end
 
+    # TODO: enable
     # feature "anonymous (client origin, capture)", %{session: session} do
     #   assert_raise Wallaby.JSError,
     #                ~r/can't encode client terms that are anonymous functions that are not named function captures/,
