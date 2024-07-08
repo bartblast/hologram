@@ -2,11 +2,13 @@ defmodule Hologram.Compiler.TransformerTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.Transformer
 
+  alias Hologram.Test.Fixtures.Template.Renderer.Module11
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
 
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module10
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module11
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module2
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module3
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module4
@@ -89,7 +91,7 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "anonymous function type" do
-    test "single clause / single expression body / no params / clause without guards" do
+    test "single clause / single expression body / no params / clause without guards (AST from source code)" do
       ast = ast("fn -> :expr_1 end")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
@@ -104,6 +106,37 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ]
              }
+    end
+
+    test "single clause / single expression body / no params / clause without guards (AST from BEAM file)" do
+      ast = AST.for_module(Module11)
+
+      assert %IR.ModuleDefinition{
+               body: %IR.Block{
+                 expressions: [
+                   %IR.FunctionDefinition{
+                     clause: %IR.FunctionClause{
+                       body: %IR.Block{
+                         expressions: [
+                           %IR.AnonymousFunctionType{
+                             arity: 0,
+                             clauses: [
+                               %IR.FunctionClause{
+                                 params: [],
+                                 guards: [],
+                                 body: %IR.Block{
+                                   expressions: [%IR.AtomType{value: :expr_1}]
+                                 }
+                               }
+                             ]
+                           }
+                         ]
+                       }
+                     }
+                   }
+                 ]
+               }
+             } = transform(ast, %Context{})
     end
 
     test "single param" do
