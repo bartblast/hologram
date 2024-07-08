@@ -18,6 +18,22 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module9
 
+  defp fetch_expression(module_ir) do
+    module_ir.body.expressions
+    |> hd()
+    |> Map.get(:clause)
+    |> Map.get(:body)
+    |> Map.get(:expressions)
+    |> hd()
+  end
+
+  defp transform_module_and_fetch_expr(module) do
+    module
+    |> AST.for_module()
+    |> transform(%Context{})
+    |> fetch_expression()
+  end
+
   describe "anonymous function call" do
     test "without args (AST from source code)" do
       ast = ast("my_fun.()")
@@ -29,26 +45,11 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "without args (AST from BEAM file)" do
-      ast = AST.for_module(Module9)
-
-      assert %IR.ModuleDefinition{
-               body: %IR.Block{
-                 expressions: [
-                   %IR.FunctionDefinition{
-                     clause: %IR.FunctionClause{
-                       body: %IR.Block{
-                         expressions: [
-                           %IR.AnonymousFunctionCall{
-                             function: %IR.Variable{name: :my_fun},
-                             args: []
-                           }
-                         ]
-                       }
-                     }
-                   }
-                 ]
+      assert transform_module_and_fetch_expr(Module9) ==
+               %IR.AnonymousFunctionCall{
+                 function: %IR.Variable{name: :my_fun},
+                 args: []
                }
-             } = transform(ast, %Context{})
     end
 
     test "with args (AST from source code)" do
@@ -64,35 +65,19 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "with args (AST from BEAM file)" do
-      ast = AST.for_module(Module10)
-
-      assert %IR.ModuleDefinition{
-               body: %IR.Block{
-                 expressions: [
-                   %IR.FunctionDefinition{
-                     clause: %IR.FunctionClause{
-                       body: %IR.Block{
-                         expressions: [
-                           %IR.AnonymousFunctionCall{
-                             function: %IR.Variable{name: :my_fun},
-                             args: [
-                               %IR.IntegerType{value: 1},
-                               %IR.IntegerType{value: 2}
-                             ]
-                           }
-                         ]
-                       }
-                     }
-                   }
-                 ]
-               }
-             } = transform(ast, %Context{})
+      assert transform_module_and_fetch_expr(Module10) == %IR.AnonymousFunctionCall{
+               function: %IR.Variable{name: :my_fun},
+               args: [
+                 %IR.IntegerType{value: 1},
+                 %IR.IntegerType{value: 2}
+               ]
+             }
     end
   end
 
   describe "anonymous function type" do
     test "single clause / single expression body / no params / clause without guards (AST from source code)" do
-      ast = ast("fn -> :expr_1 end")
+      ast = ast("fn -> :ok end")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 0,
@@ -101,7 +86,7 @@ defmodule Hologram.Compiler.TransformerTest do
                    params: [],
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :expr_1}]
+                     expressions: [%IR.AtomType{value: :ok}]
                    }
                  }
                ]
@@ -109,34 +94,18 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "single clause / single expression body / no params / clause without guards (AST from BEAM file)" do
-      ast = AST.for_module(Module11)
-
-      assert %IR.ModuleDefinition{
-               body: %IR.Block{
-                 expressions: [
-                   %IR.FunctionDefinition{
-                     clause: %IR.FunctionClause{
-                       body: %IR.Block{
-                         expressions: [
-                           %IR.AnonymousFunctionType{
-                             arity: 0,
-                             clauses: [
-                               %IR.FunctionClause{
-                                 params: [],
-                                 guards: [],
-                                 body: %IR.Block{
-                                   expressions: [%IR.AtomType{value: :expr_1}]
-                                 }
-                               }
-                             ]
-                           }
-                         ]
-                       }
-                     }
+      assert transform_module_and_fetch_expr(Module11) == %IR.AnonymousFunctionType{
+               arity: 0,
+               clauses: [
+                 %IR.FunctionClause{
+                   params: [],
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :ok}]
                    }
-                 ]
-               }
-             } = transform(ast, %Context{})
+                 }
+               ]
+             }
     end
 
     test "single param (AST from source code)" do
@@ -157,34 +126,19 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "single param (AST from BEAM file)" do
-      ast = AST.for_module(Module12)
-
-      assert %IR.ModuleDefinition{
-               body: %IR.Block{
-                 expressions: [
-                   %IR.FunctionDefinition{
-                     clause: %IR.FunctionClause{
-                       body: %IR.Block{
-                         expressions: [
-                           %IR.AnonymousFunctionType{
-                             arity: 1,
-                             clauses: [
-                               %IR.FunctionClause{
-                                 params: [%IR.Variable{name: :x}],
-                                 guards: [],
-                                 body: %IR.Block{
-                                   expressions: [%IR.Variable{name: :x}]
-                                 }
-                               }
-                             ]
-                           }
-                         ]
-                       }
+      assert transform_module_and_fetch_expr(Module12) ==
+               %IR.AnonymousFunctionType{
+                 arity: 1,
+                 clauses: [
+                   %IR.FunctionClause{
+                     params: [%IR.Variable{name: :x}],
+                     guards: [],
+                     body: %IR.Block{
+                       expressions: [%IR.Variable{name: :x}]
                      }
                    }
                  ]
                }
-             } = transform(ast, %Context{})
     end
 
     test "multiple params" do
