@@ -34,6 +34,23 @@ defmodule HologramFeatureTests.TypesTest do
                    end
     end
 
+    feature "anonymous (server origin, capture)", %{session: session} do
+      expected_msg =
+        if SystemUtils.otp_version() >= 23 do
+          ~r/command failed: term contains an anonymous function that is not a named function capture/
+        else
+          ~r/command failed: term contains an anonymous function that is not a remote function capture/
+        end
+
+      assert_raise Wallaby.JSError,
+                   expected_msg,
+                   fn ->
+                     session
+                     |> visit(TypesPage)
+                     |> click(css("button[id='anonymous function (server origin, capture)']"))
+                   end
+    end
+
     feature "anonymous (client origin, capture)", %{session: session} do
       assert_raise Wallaby.JSError,
                    ~r/can't encode client terms that are anonymous functions that are not named function captures/,
