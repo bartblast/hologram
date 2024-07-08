@@ -34,6 +34,18 @@ defmodule HologramFeatureTests.TypesTest do
                    end
     end
 
+    feature "anonymous (client origin, capture)", %{session: session} do
+      assert_raise Wallaby.JSError,
+                   ~r/can't encode client terms that are anonymous functions that are not named function captures/,
+                   fn ->
+                     session
+                     |> visit(TypesPage)
+                     |> click(css("button[id='anonymous function (client origin, capture)']"))
+                   end
+
+      assert_text(session, css("#result"), inspect(8))
+    end
+
     feature "local capture (client origin)", %{session: session} do
       session
       |> visit(TypesPage)
