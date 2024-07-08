@@ -2,7 +2,6 @@ defmodule Hologram.Compiler.TransformerTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.Transformer
 
-  alias Hologram.Test.Fixtures.Template.Renderer.Module11
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
@@ -31,24 +30,24 @@ defmodule Hologram.Compiler.TransformerTest do
     test "without args (AST from BEAM file)" do
       ast = AST.for_module(Module9)
 
-      %IR.ModuleDefinition{
-        body: %IR.Block{
-          expressions: [
-            %IR.FunctionDefinition{
-              clause: %IR.FunctionClause{
-                body: %IR.Block{
-                  expressions: [
-                    %IR.AnonymousFunctionCall{
-                      function: %IR.Variable{name: :my_fun},
-                      args: []
-                    }
-                  ]
-                }
-              }
-            }
-          ]
-        }
-      } = transform(ast, %Context{})
+      assert %IR.ModuleDefinition{
+               body: %IR.Block{
+                 expressions: [
+                   %IR.FunctionDefinition{
+                     clause: %IR.FunctionClause{
+                       body: %IR.Block{
+                         expressions: [
+                           %IR.AnonymousFunctionCall{
+                             function: %IR.Variable{name: :my_fun},
+                             args: []
+                           }
+                         ]
+                       }
+                     }
+                   }
+                 ]
+               }
+             } = transform(ast, %Context{})
     end
 
     test "with args (AST from source code)" do
@@ -66,27 +65,27 @@ defmodule Hologram.Compiler.TransformerTest do
     test "with args (AST from BEAM file)" do
       ast = AST.for_module(Module10)
 
-      %IR.ModuleDefinition{
-        body: %IR.Block{
-          expressions: [
-            %IR.FunctionDefinition{
-              clause: %IR.FunctionClause{
-                body: %IR.Block{
-                  expressions: [
-                    %IR.AnonymousFunctionCall{
-                      function: %IR.Variable{name: :my_fun},
-                      args: [
-                        %IR.IntegerType{value: 1},
-                        %IR.IntegerType{value: 2}
-                      ]
-                    }
-                  ]
-                }
-              }
-            }
-          ]
-        }
-      } = transform(ast, %Context{})
+      assert %IR.ModuleDefinition{
+               body: %IR.Block{
+                 expressions: [
+                   %IR.FunctionDefinition{
+                     clause: %IR.FunctionClause{
+                       body: %IR.Block{
+                         expressions: [
+                           %IR.AnonymousFunctionCall{
+                             function: %IR.Variable{name: :my_fun},
+                             args: [
+                               %IR.IntegerType{value: 1},
+                               %IR.IntegerType{value: 2}
+                             ]
+                           }
+                         ]
+                       }
+                     }
+                   }
+                 ]
+               }
+             } = transform(ast, %Context{})
     end
   end
 
