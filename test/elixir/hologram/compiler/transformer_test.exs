@@ -13,15 +13,39 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module6
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module9
 
   describe "anonymous function call" do
-    test "without args" do
-      ast = ast("test.()")
+    test "without args (AST from source code)" do
+      ast = ast("my_fun.()")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionCall{
-               function: %IR.Variable{name: :test},
+               function: %IR.Variable{name: :my_fun},
                args: []
              }
+    end
+
+    test "without args (AST from BEAM file)" do
+      ast = AST.for_module(Module9)
+
+      %IR.ModuleDefinition{
+        body: %IR.Block{
+          expressions: [
+            %IR.FunctionDefinition{
+              clause: %IR.FunctionClause{
+                body: %IR.Block{
+                  expressions: [
+                    %IR.AnonymousFunctionCall{
+                      function: %IR.Variable{name: :my_fun},
+                      args: []
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      } = transform(ast, %Context{})
     end
 
     test "with args" do
