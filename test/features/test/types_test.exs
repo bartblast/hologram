@@ -14,7 +14,7 @@ defmodule HologramFeatureTests.TypesTest do
                      |> click(css("button[id='anonymous function (client origin, non-capture)']"))
                    end
 
-      assert_text(session, css("#result"), inspect(6))
+      assert_text(session, css("#result"), inspect(8))
     end
 
     feature "anonymous (server origin, non-capture)", %{session: session} do
@@ -50,7 +50,7 @@ defmodule HologramFeatureTests.TypesTest do
       session
       |> visit(TypesPage)
       |> click(css("button[id='local function capture (client origin)']"))
-      |> assert_text(css("#result"), "client = 6, server = 6")
+      |> assert_text(css("#result"), "client = 8, server = 8")
     end
 
     feature "local capture (server origin)", %{session: session} do
@@ -58,7 +58,7 @@ defmodule HologramFeatureTests.TypesTest do
         session
         |> visit(TypesPage)
         |> click(css("button[id='local function capture (server origin)']"))
-        |> assert_text(css("#result"), inspect(6))
+        |> assert_text(css("#result"), inspect(8))
       else
         assert_raise Wallaby.JSError,
                      ~r/command failed: term contains an anonymous function that is not a remote function capture/,
@@ -74,14 +74,14 @@ defmodule HologramFeatureTests.TypesTest do
       session
       |> visit(TypesPage)
       |> click(css("button[id='remote function capture (client origin)']"))
-      |> assert_text(css("#result"), "client = 6, server = 6")
+      |> assert_text(css("#result"), "client = 8, server = 8")
     end
 
     feature "remote capture (server origin)", %{session: session} do
       session
       |> visit(TypesPage)
       |> click(css("button[id='remote function capture (server origin)']"))
-      |> assert_text(css("#result"), inspect(6))
+      |> assert_text(css("#result"), inspect(8))
     end
   end
 

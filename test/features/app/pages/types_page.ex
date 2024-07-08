@@ -42,7 +42,7 @@ defmodule HologramFeatureTests.TypesPage do
   end
 
   def action(:"anonymous function (client origin, non-capture)", _params, component) do
-    term = fn x, y -> x * y end
+    term = fn x, y -> x * y + x end
     result = term.(2, 3)
 
     component
@@ -155,7 +155,7 @@ defmodule HologramFeatureTests.TypesPage do
   end
 
   def command(:"anonymous function (server origin, non-capture)", _params, server) do
-    term = fn x, y -> x * y end
+    term = fn x, y -> x * y + x end
     put_action(server, :result, term: term)
   end
 
@@ -182,5 +182,5 @@ defmodule HologramFeatureTests.TypesPage do
     put_action(server, :"remote function capture (server origin) result", term: term)
   end
 
-  def my_fun(x, y), do: x * y
+  def my_fun(x, y), do: x * y + x
 end
