@@ -6,6 +6,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
 
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module10
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module2
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module3
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module4
@@ -48,16 +49,42 @@ defmodule Hologram.Compiler.TransformerTest do
       } = transform(ast, %Context{})
     end
 
-    test "with args" do
-      ast = ast("test.(1, 2)")
+    test "with args (AST from source code)" do
+      ast = ast("my_fun.(1, 2)")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionCall{
-               function: %IR.Variable{name: :test},
+               function: %IR.Variable{name: :my_fun},
                args: [
                  %IR.IntegerType{value: 1},
                  %IR.IntegerType{value: 2}
                ]
              }
+    end
+
+    test "with args (AST from BEAM file)" do
+      ast = AST.for_module(Module10)
+
+      %IR.ModuleDefinition{
+        body: %IR.Block{
+          expressions: [
+            %IR.FunctionDefinition{
+              clause: %IR.FunctionClause{
+                body: %IR.Block{
+                  expressions: [
+                    %IR.AnonymousFunctionCall{
+                      function: %IR.Variable{name: :my_fun},
+                      args: [
+                        %IR.IntegerType{value: 1},
+                        %IR.IntegerType{value: 2}
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      } = transform(ast, %Context{})
     end
   end
 
