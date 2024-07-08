@@ -149,16 +149,16 @@ defmodule Hologram.Compiler.TransformerTest do
                arity: 2,
                clauses: [
                  %IR.FunctionClause{
+                   params: [
+                     %IR.Variable{name: :x},
+                     %IR.Variable{name: :y}
+                   ],
+                   guards: [],
                    body: %IR.Block{
                      expressions: [
                        %IR.TupleType{data: [%IR.Variable{name: :x}, %IR.Variable{name: :y}]}
                      ]
-                   },
-                   guards: [],
-                   params: [
-                     %IR.Variable{name: :x},
-                     %IR.Variable{name: :y}
-                   ]
+                   }
                  }
                ]
              }
@@ -169,16 +169,16 @@ defmodule Hologram.Compiler.TransformerTest do
                arity: 2,
                clauses: [
                  %IR.FunctionClause{
+                   params: [
+                     %IR.Variable{name: :x},
+                     %IR.Variable{name: :y}
+                   ],
+                   guards: [],
                    body: %IR.Block{
                      expressions: [
                        %IR.TupleType{data: [%IR.Variable{name: :x}, %IR.Variable{name: :y}]}
                      ]
-                   },
-                   guards: [],
-                   params: [
-                     %IR.Variable{name: :x},
-                     %IR.Variable{name: :y}
-                   ]
+                   }
                  }
                ]
              }
