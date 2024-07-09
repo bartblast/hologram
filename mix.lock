@@ -1,5 +1,5 @@
 %{
-  "beam_file": {:hex, :beam_file, "0.6.1", "ce7d58c60357f324c314779fb9b39a71e490a1adfe90fdcfd4c05b204bebf4a5", [:mix], [], "hexpm", "b6f05db569a8ffa4f91d7787f7a78cfb05292d2bc8b8250cd3a3d3ba07ec3b50"},
+  "beam_file": {:hex, :beam_file, "0.6.2", "efd54ec60be6a03f0a8f96f72b0353427196613289c46032d3500f0ab6c34d32", [:mix], [], "hexpm", "09a99e8e5aad674edcad7213b0d7602375dfd3c7d02f8e3136e3efae0bcc9c56"},
   "benchee": {:hex, :benchee, "1.3.1", "c786e6a76321121a44229dde3988fc772bca73ea75170a73fd5f4ddf1af95ccf", [:mix], [{:deep_merge, "~> 1.0", [hex: :deep_merge, repo: "hexpm", optional: false]}, {:statistex, "~> 1.0", [hex: :statistex, repo: "hexpm", optional: false]}, {:table, "~> 0.1.0", [hex: :table, repo: "hexpm", optional: true]}], "hexpm", "76224c58ea1d0391c8309a8ecbfe27d71062878f59bd41a390266bf4ac1cc56d"},
   "benchee_markdown": {:hex, :benchee_markdown, "0.3.3", "d48a1d9782693fae6c294fdb12f653bb90088172d467996bedb9887ff41cf4ef", [:mix], [{:benchee, ">= 1.1.0 and < 2.0.0", [hex: :benchee, repo: "hexpm", optional: false]}], "hexpm", "106dab9ae0b448747da89b9af7285b71841f5d8131f37c6612b7370a157860a4"},
   "bunt": {:hex, :bunt, "1.0.0", "081c2c665f086849e6d57900292b3a161727ab40431219529f13c4ddcf3e7a44", [:mix], [], "hexpm", "dc5f86aa08a5f6fa6b8096f0735c4e76d54ae5c9fa2c143e5a1fc7c1cd9bb6b5"},
