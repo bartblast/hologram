@@ -19,20 +19,12 @@ defmodule Hologram.Compiler.Normalizer do
   @spec normalize(AST.t()) :: AST.t()
   def normalize(ast)
 
-  def normalize({:__aliases__, meta, [module]} = ast) do
-    maybe_normalize_alias(module, meta, ast)
-  end
-
-  def normalize(ast) when is_atom(ast) do
-    maybe_normalize_alias(ast, [alias: false], ast)
-  end
-
   def normalize({:->, meta, [pattern, block]}) do
     {:->, meta, [normalize(pattern), normalize_block(block)]}
   end
 
-  def normalize({:for, meta, parts}) when is_list(parts) do
-    {:for, meta, Enum.map(parts, &normalize_comprehension_part/1)}
+  def normalize({:__aliases__, meta, [module]} = ast) do
+    maybe_normalize_alias(module, meta, ast)
   end
 
   def normalize({marker, meta, [name, [do: block]]}) when marker in [:def, :defp] do
@@ -43,12 +35,20 @@ defmodule Hologram.Compiler.Normalizer do
     {:defmodule, meta, [normalize(name), [do: normalize_block(block)]]}
   end
 
+  def normalize({:for, meta, parts}) when is_list(parts) do
+    {:for, meta, Enum.map(parts, &normalize_comprehension_part/1)}
+  end
+
   def normalize({:try, meta, [opts]}) do
     {:try, meta, [Enum.map(opts, &normalize_try_opt/1)]}
   end
 
   def normalize({{:unquote, _meta_1, [marker]}, meta_2, children}) do
     {marker, meta_2, normalize(children)}
+  end
+
+  def normalize(ast) when is_atom(ast) do
+    maybe_normalize_alias(ast, [alias: false], ast)
   end
 
   def normalize(ast) when is_list(ast) do
