@@ -1311,6 +1311,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "anonymous function capture (AST from source code)" do
       ast = ast("&(&1 * &2 + &1)")
 
+      # credo:disable-for-lines:31 Credo.Check.Design.DuplicatedCode
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 2,
                captured_function: nil,
