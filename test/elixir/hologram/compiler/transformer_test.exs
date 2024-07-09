@@ -1346,39 +1346,78 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "anonymous function capture (AST from BEAM file)" do
-      assert transform_module_and_fetch_expr(Module15) == %IR.AnonymousFunctionType{
-               arity: 2,
-               captured_function: nil,
-               captured_module: nil,
-               clauses: [
-                 %IR.FunctionClause{
-                   params: [
-                     %IR.Variable{name: :"$2"},
-                     %IR.Variable{name: :"$3"}
-                   ],
-                   guards: [],
-                   body: %IR.Block{
-                     expressions: [
-                       %IR.RemoteFunctionCall{
-                         module: %IR.AtomType{value: :erlang},
-                         function: :+,
-                         args: [
-                           %IR.RemoteFunctionCall{
-                             module: %IR.AtomType{value: :erlang},
-                             function: :*,
-                             args: [
-                               %IR.Variable{name: :"$2"},
-                               %IR.Variable{name: :"$3"}
-                             ]
-                           },
-                           %IR.Variable{name: :"$2"}
-                         ]
-                       }
-                     ]
-                   }
-                 }
-               ]
-             }
+      expected_ir =
+        if Version.compare(System.version(), "1.17.0") in [:gt, :eq] do
+          %IR.AnonymousFunctionType{
+            arity: 2,
+            captured_function: nil,
+            captured_module: nil,
+            clauses: [
+              %IR.FunctionClause{
+                params: [
+                  %IR.Variable{name: :"$2"},
+                  %IR.Variable{name: :"$3"}
+                ],
+                guards: [],
+                body: %IR.Block{
+                  expressions: [
+                    %IR.RemoteFunctionCall{
+                      module: %IR.AtomType{value: :erlang},
+                      function: :+,
+                      args: [
+                        %IR.RemoteFunctionCall{
+                          module: %IR.AtomType{value: :erlang},
+                          function: :*,
+                          args: [
+                            %IR.Variable{name: :"$2"},
+                            %IR.Variable{name: :"$3"}
+                          ]
+                        },
+                        %IR.Variable{name: :"$2"}
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        else
+          %IR.AnonymousFunctionType{
+            arity: 2,
+            captured_function: nil,
+            captured_module: nil,
+            clauses: [
+              %IR.FunctionClause{
+                params: [
+                  %IR.Variable{name: :x1},
+                  %IR.Variable{name: :x2}
+                ],
+                guards: [],
+                body: %IR.Block{
+                  expressions: [
+                    %IR.RemoteFunctionCall{
+                      module: %IR.AtomType{value: :erlang},
+                      function: :+,
+                      args: [
+                        %IR.RemoteFunctionCall{
+                          module: %IR.AtomType{value: :erlang},
+                          function: :*,
+                          args: [
+                            %IR.Variable{name: :x1},
+                            %IR.Variable{name: :x2}
+                          ]
+                        },
+                        %IR.Variable{name: :x1}
+                      ]
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        end
+
+      assert transform_module_and_fetch_expr(Module15) == expected_ir
     end
   end
 
