@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Design.DuplicatedCode
 defmodule Hologram.Compiler.TransformerTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.Transformer
@@ -12,6 +13,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module13
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module14
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module15
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module16
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module2
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module3
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module4
@@ -230,14 +232,12 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "multiple clauses" do
+    test "multiple clauses (AST from source code)" do
       ast =
         ast("""
         fn
-          x ->
-            :expr_1
-          y ->
-            :expr_2
+          1 -> :ok
+          2 -> :error
         end
         """)
 
@@ -245,17 +245,39 @@ defmodule Hologram.Compiler.TransformerTest do
                arity: 1,
                clauses: [
                  %IR.FunctionClause{
-                   params: [%IR.Variable{name: :x}],
+                   params: [%IR.IntegerType{value: 1}],
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :expr_1}]
+                     expressions: [%IR.AtomType{value: :ok}]
                    }
                  },
                  %IR.FunctionClause{
-                   params: [%IR.Variable{name: :y}],
+                   params: [%IR.IntegerType{value: 2}],
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :expr_2}]
+                     expressions: [%IR.AtomType{value: :error}]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "multiple clauses (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module16) == %IR.AnonymousFunctionType{
+               arity: 1,
+               clauses: [
+                 %IR.FunctionClause{
+                   params: [%IR.IntegerType{value: 1}],
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :ok}]
+                   }
+                 },
+                 %IR.FunctionClause{
+                   params: [%IR.IntegerType{value: 2}],
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :error}]
                    }
                  }
                ]
