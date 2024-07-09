@@ -105,7 +105,7 @@ defmodule Hologram.Compiler.Transformer do
     transform_function_capture(function_ast, arity, meta, context)
   end
 
-  # Partially applied function arg placeholder
+  # Param capture
   # sobelow_skip ["DOS.BinToAtom"]
   def transform({:&, meta, [index]}, context) when is_integer(index) do
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
@@ -113,7 +113,21 @@ defmodule Hologram.Compiler.Transformer do
     transform(ast, context)
   end
 
-  # Partially applied anonymous function
+  # Param capture
+  # sobelow_skip ["DOS.BinToAtom"]
+  def transform({:capture, meta, nil}, context) do
+    case Keyword.get(meta, :counter) do
+      {_module, index} ->
+        # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
+        ast = {:"$#{index}", meta, nil}
+        transform(ast, context)
+
+      _fallback ->
+        transform_variable(:capture)
+    end
+  end
+
+  # Anonymous function capture
   def transform({:&, meta, body}, context) do
     arity = determine_partially_applied_function_arity(body, 0)
     args = build_function_capture_args(arity, meta)
