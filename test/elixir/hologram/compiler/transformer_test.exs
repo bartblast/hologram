@@ -342,7 +342,6 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 1,
                clauses: [
-                 # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
                  %IR.FunctionClause{
                    params: [
                      %IR.Variable{name: :x}
@@ -468,7 +467,6 @@ defmodule Hologram.Compiler.TransformerTest do
     test "aggregate segments test using AST loaded from BEAM file" do
       ast = AST.for_module(Module8)
 
-      # credo:disable-for-lines:32 Credo.Check.Design.DuplicatedCode
       assert %IR.ModuleDefinition{
                body: %IR.Block{
                  expressions: [
@@ -597,7 +595,6 @@ defmodule Hologram.Compiler.TransformerTest do
     test "aggregate signedness modifier test using AST loaded from BEAM file" do
       ast = AST.for_module(Module6)
 
-      # credo:disable-for-lines:3 Credo.Check.Design.DuplicatedCode
       assert %IR.ModuleDefinition{
                body: %IR.Block{
                  expressions: [
@@ -674,7 +671,6 @@ defmodule Hologram.Compiler.TransformerTest do
     test "aggregate size modifier test using AST loaded from BEAM file" do
       ast = AST.for_module(Module2)
 
-      # credo:disable-for-lines:44 Credo.Check.Design.DuplicatedCode
       assert %IR.ModuleDefinition{
                body: %IR.Block{
                  expressions: [
@@ -824,7 +820,6 @@ defmodule Hologram.Compiler.TransformerTest do
     test "aggregate type modifier test using AST loaded from BEAM file" do
       ast = AST.for_module(Module3)
 
-      # credo:disable-for-lines:64 Credo.Check.Design.DuplicatedCode
       assert %IR.ModuleDefinition{
                body: %IR.Block{
                  expressions: [
@@ -920,7 +915,6 @@ defmodule Hologram.Compiler.TransformerTest do
     test "aggregate unit modifier test using AST loaded from BEAM file" do
       ast = AST.for_module(Module4)
 
-      # credo:disable-for-lines:41 Credo.Check.Design.DuplicatedCode
       assert %IR.ModuleDefinition{
                body: %IR.Block{
                  expressions: [
@@ -1021,7 +1015,6 @@ defmodule Hologram.Compiler.TransformerTest do
     test "aggregate value test using AST loaded from BEAM file" do
       ast = AST.for_module(Module5)
 
-      # credo:disable-for-lines:57 Credo.Check.Design.DuplicatedCode
       assert %IR.ModuleDefinition{
                body: %IR.Block{
                  expressions: [
@@ -1129,7 +1122,6 @@ defmodule Hologram.Compiler.TransformerTest do
     test "remote Elixir function capture, single-segment module name" do
       ast = ast("&DateTime.now/2")
 
-      # credo:disable-for-lines:26 Credo.Check.Design.DuplicatedCode
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 2,
                captured_function: :now,
@@ -1161,7 +1153,6 @@ defmodule Hologram.Compiler.TransformerTest do
     test "remote Elixir function capture, multi-segment module name" do
       ast = ast("&Calendar.ISO.parse_date/2")
 
-      # credo:disable-for-lines:26 Credo.Check.Design.DuplicatedCode
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 2,
                captured_function: :parse_date,
@@ -1293,7 +1284,6 @@ defmodule Hologram.Compiler.TransformerTest do
     test "partially applied remote function" do
       ast = ast("&Aaa.Bbb.my_fun(&1, 2, [3, &4])")
 
-      # credo:disable-for-lines:34 Credo.Check.Design.DuplicatedCode
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 4,
                captured_function: nil,
@@ -1333,7 +1323,6 @@ defmodule Hologram.Compiler.TransformerTest do
     test "anonymous function capture (AST from source code)" do
       ast = ast("&(&1 * &2 + &1)")
 
-      # credo:disable-for-lines:31 Credo.Check.Design.DuplicatedCode
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 2,
                captured_function: nil,
@@ -2409,7 +2398,6 @@ defmodule Hologram.Compiler.TransformerTest do
                name: :my_fun,
                arity: 1,
                visibility: :public,
-               # credo:disable-for-next-line Credo.Check.Design.DuplicatedCode
                clause: %IR.FunctionClause{
                  params: [
                    %IR.Variable{name: :x}
