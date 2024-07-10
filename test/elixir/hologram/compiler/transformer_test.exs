@@ -16,6 +16,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module16
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module17
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module18
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module19
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module2
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module3
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module4
@@ -414,32 +415,77 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "clause with 3 guards" do
-      ast = ast("fn x when guard_1(:a) when guard_2(:b) when guard_3(:c) -> :expr end")
+    test "clause with 3 guards (AST from source code)" do
+      ast = ast("fn x when is_integer(x) when x > 1 when x < 9 -> x end")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 1,
+               captured_function: nil,
+               captured_module: nil,
                clauses: [
                  %IR.FunctionClause{
-                   params: [
-                     %IR.Variable{name: :x}
-                   ],
+                   params: [%IR.Variable{name: :x}],
                    guards: [
                      %IR.LocalFunctionCall{
-                       function: :guard_1,
-                       args: [%IR.AtomType{value: :a}]
+                       function: :is_integer,
+                       args: [%IR.Variable{name: :x}]
                      },
                      %IR.LocalFunctionCall{
-                       function: :guard_2,
-                       args: [%IR.AtomType{value: :b}]
+                       function: :>,
+                       args: [
+                         %IR.Variable{name: :x},
+                         %IR.IntegerType{value: 1}
+                       ]
                      },
                      %IR.LocalFunctionCall{
-                       function: :guard_3,
-                       args: [%IR.AtomType{value: :c}]
+                       function: :<,
+                       args: [
+                         %IR.Variable{name: :x},
+                         %IR.IntegerType{value: 9}
+                       ]
                      }
                    ],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :expr}]
+                     expressions: [%IR.Variable{name: :x}]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "clause with 3 guards (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module19) == %IR.AnonymousFunctionType{
+               arity: 1,
+               captured_function: nil,
+               captured_module: nil,
+               clauses: [
+                 %IR.FunctionClause{
+                   params: [%IR.Variable{name: :x}],
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :is_integer,
+                       args: [%IR.Variable{name: :x}]
+                     },
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :>,
+                       args: [
+                         %IR.Variable{name: :x},
+                         %IR.IntegerType{value: 1}
+                       ]
+                     },
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :<,
+                       args: [
+                         %IR.Variable{name: :x},
+                         %IR.IntegerType{value: 9}
+                       ]
+                     }
+                   ],
+                   body: %IR.Block{
+                     expressions: [%IR.Variable{name: :x}]
                    }
                  }
                ]
