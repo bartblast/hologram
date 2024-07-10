@@ -18,6 +18,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module18
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module19
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module2
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module20
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module3
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module4
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module5
@@ -473,20 +474,52 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "params are transformed as patterns in clauses without guards" do
-      ast = ast("fn %x{} -> :ok end")
+    test "params are transformed as patterns in clauses without guards (AST from source code)" do
+      ast = ast("fn %x{} -> x end")
 
-      assert %IR.AnonymousFunctionType{
+      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
+               arity: 1,
+               captured_function: nil,
+               captured_module: nil,
                clauses: [
                  %IR.FunctionClause{
                    params: [
                      %IR.MapType{
-                       data: [{%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x}}]
+                       data: [
+                         {%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x}}
+                       ]
                      }
-                   ]
+                   ],
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.Variable{name: :x}]
+                   }
                  }
                ]
-             } = transform(ast, %Context{})
+             }
+    end
+
+    test "params are transformed as patterns in clauses without guards (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module20) == %IR.AnonymousFunctionType{
+               arity: 1,
+               captured_function: nil,
+               captured_module: nil,
+               clauses: [
+                 %IR.FunctionClause{
+                   params: [
+                     %IR.MapType{
+                       data: [
+                         {%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x}}
+                       ]
+                     }
+                   ],
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.Variable{name: :x}]
+                   }
+                 }
+               ]
+             }
     end
 
     test "params are transformed as patterns in clauses with guards" do
