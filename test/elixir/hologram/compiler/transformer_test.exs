@@ -20,6 +20,10 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module2
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module20
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module21
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module22
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module23
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module24
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module25
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module3
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module4
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module5
@@ -590,28 +594,44 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "atom type" do
-    test "boolean" do
+    test "boolean (AST from source code)" do
       ast = ast("true")
 
       assert transform(ast, %Context{}) == %IR.AtomType{value: true}
     end
 
-    test "nil" do
+    test "boolean (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module22) == %IR.AtomType{value: true}
+    end
+
+    test "nil (AST from source code)" do
       ast = ast("nil")
 
       assert transform(ast, %Context{}) == %IR.AtomType{value: nil}
     end
 
-    test "other than boolean or nil" do
+    test "nil (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module23) == %IR.AtomType{value: nil}
+    end
+
+    test "other than boolean or nil (AST from source code)" do
       ast = ast(":test")
 
       assert transform(ast, %Context{}) == %IR.AtomType{value: :test}
     end
 
-    test "double quoted" do
+    test "other than boolean or nil (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module24) == %IR.AtomType{value: :test}
+    end
+
+    test "double quoted (AST from source code)" do
       ast = ast(":\"aaa bbb\"")
 
       assert transform(ast, %Context{}) == %IR.AtomType{value: :"aaa bbb"}
+    end
+
+    test "double quoted (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module25) == %IR.AtomType{value: :"aaa bbb"}
     end
   end
 
