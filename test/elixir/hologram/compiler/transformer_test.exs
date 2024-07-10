@@ -335,7 +335,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "clause with 2 guards (AST from source code)" do
-      ast = ast("fn x when is_integer(x) when x in [1, 2] -> x end")
+      ast = ast("fn x when is_integer(x) when x > 1 -> x end")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
                arity: 1,
@@ -350,15 +350,10 @@ defmodule Hologram.Compiler.TransformerTest do
                        args: [%IR.Variable{name: :x}]
                      },
                      %IR.LocalFunctionCall{
-                       function: :in,
+                       function: :>,
                        args: [
                          %IR.Variable{name: :x},
-                         %IR.ListType{
-                           data: [
-                             %IR.IntegerType{value: 1},
-                             %IR.IntegerType{value: 2}
-                           ]
-                         }
+                         %IR.IntegerType{value: 1}
                        ]
                      }
                    ],
@@ -386,24 +381,10 @@ defmodule Hologram.Compiler.TransformerTest do
                      },
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
-                       function: :orelse,
+                       function: :>,
                        args: [
-                         %IR.RemoteFunctionCall{
-                           module: %IR.AtomType{value: :erlang},
-                           function: :"=:=",
-                           args: [
-                             %IR.Variable{name: :x},
-                             %IR.IntegerType{value: 1}
-                           ]
-                         },
-                         %IR.RemoteFunctionCall{
-                           module: %IR.AtomType{value: :erlang},
-                           function: :"=:=",
-                           args: [
-                             %IR.Variable{name: :x},
-                             %IR.IntegerType{value: 2}
-                           ]
-                         }
+                         %IR.Variable{name: :x},
+                         %IR.IntegerType{value: 1}
                        ]
                      }
                    ],
