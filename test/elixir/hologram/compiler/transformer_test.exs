@@ -29,6 +29,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module28
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module29
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module3
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module30
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module4
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module5
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module6
@@ -1540,10 +1541,39 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "remote function capture, variable module" do
+    test "remote function capture, variable module (AST from source code)" do
       ast = ast("&my_module.my_fun/2")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
+               arity: 2,
+               captured_function: nil,
+               captured_module: nil,
+               clauses: [
+                 %IR.FunctionClause{
+                   params: [
+                     %IR.Variable{name: :"$1"},
+                     %IR.Variable{name: :"$2"}
+                   ],
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.RemoteFunctionCall{
+                         module: %IR.Variable{name: :my_module},
+                         function: :my_fun,
+                         args: [
+                           %IR.Variable{name: :"$1"},
+                           %IR.Variable{name: :"$2"}
+                         ]
+                       }
+                     ]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "remote function capture, variable module (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module30) == %IR.AnonymousFunctionType{
                arity: 2,
                captured_function: nil,
                captured_module: nil,
