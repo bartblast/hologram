@@ -25,6 +25,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module24
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module25
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module26
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module27
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module3
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module4
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module5
@@ -1357,10 +1358,39 @@ defmodule Hologram.Compiler.TransformerTest do
                }
     end
 
-    test "remote Elixir function capture, single-segment module name" do
+    test "remote Elixir function capture, single-segment module name (AST from source file)" do
       ast = ast("&DateTime.now/2")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
+               arity: 2,
+               captured_function: :now,
+               captured_module: DateTime,
+               clauses: [
+                 %IR.FunctionClause{
+                   params: [
+                     %IR.Variable{name: :"$1"},
+                     %IR.Variable{name: :"$2"}
+                   ],
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.RemoteFunctionCall{
+                         module: %IR.AtomType{value: DateTime},
+                         function: :now,
+                         args: [
+                           %IR.Variable{name: :"$1"},
+                           %IR.Variable{name: :"$2"}
+                         ]
+                       }
+                     ]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "remote Elixir function capture, single-segment module name (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module27) == %IR.AnonymousFunctionType{
                arity: 2,
                captured_function: :now,
                captured_module: DateTime,
