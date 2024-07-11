@@ -83,8 +83,7 @@ defmodule Hologram.Compiler.Transformer do
          [
            {:/, _meta_2,
             [
-              {{:., _meta_3, [module, function]} = function_ast, [{:no_parens, true} | _meta_4],
-               []},
+              {{:., _meta_3, [module, function]} = function_ast, _meta_4, []},
               arity
             ]}
          ]},
@@ -98,10 +97,7 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   # Remote function capture with variable module
-  def transform(
-        {:&, meta, [{:/, _meta_2, [{function_ast, [{:no_parens, true} | _meta_3], []}, arity]}]},
-        context
-      ) do
+  def transform({:&, meta, [{:/, _meta_2, [{function_ast, _meta_3, []}, arity]}]}, context) do
     transform_function_capture(function_ast, arity, meta, context)
   end
 
