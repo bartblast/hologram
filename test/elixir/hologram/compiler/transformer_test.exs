@@ -1641,6 +1641,13 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "partially applied local function (AST from BEAM file)" do
+      {param_1_name, param_2_name} =
+        if Version.compare(System.version(), "1.17.0") in [:gt, :eq] do
+          {:"$3", :"$4"}
+        else
+          {:x1, :x2}
+        end
+
       assert transform_module_and_fetch_expr(Module31) ==
                %IR.AnonymousFunctionType{
                  arity: 2,
@@ -1649,8 +1656,8 @@ defmodule Hologram.Compiler.TransformerTest do
                  clauses: [
                    %IR.FunctionClause{
                      params: [
-                       %IR.Variable{name: :"$3"},
-                       %IR.Variable{name: :"$4"}
+                       %IR.Variable{name: param_1_name},
+                       %IR.Variable{name: param_2_name}
                      ],
                      guards: [],
                      body: %IR.Block{
@@ -1658,12 +1665,12 @@ defmodule Hologram.Compiler.TransformerTest do
                          %IR.LocalFunctionCall{
                            function: :my_fun,
                            args: [
-                             %IR.Variable{name: :"$3"},
+                             %IR.Variable{name: param_1_name},
                              %IR.IntegerType{value: 2},
                              %IR.ListType{
                                data: [
                                  %IR.IntegerType{value: 3},
-                                 %IR.Variable{name: :"$4"}
+                                 %IR.Variable{name: param_2_name}
                                ]
                              }
                            ]
@@ -1713,6 +1720,13 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "partially applied remote function (AST from BEAM file)" do
+      {param_1_name, param_2_name} =
+        if Version.compare(System.version(), "1.17.0") in [:gt, :eq] do
+          {:"$2", :"$3"}
+        else
+          {:x1, :x2}
+        end
+
       assert transform_module_and_fetch_expr(Module33) == %IR.AnonymousFunctionType{
                arity: 2,
                captured_function: nil,
@@ -1720,8 +1734,8 @@ defmodule Hologram.Compiler.TransformerTest do
                clauses: [
                  %IR.FunctionClause{
                    params: [
-                     %IR.Variable{name: :"$2"},
-                     %IR.Variable{name: :"$3"}
+                     %IR.Variable{name: param_1_name},
+                     %IR.Variable{name: param_2_name}
                    ],
                    guards: [],
                    body: %IR.Block{
@@ -1730,12 +1744,12 @@ defmodule Hologram.Compiler.TransformerTest do
                          module: %IR.AtomType{value: Module32},
                          function: :my_fun,
                          args: [
-                           %IR.Variable{name: :"$2"},
+                           %IR.Variable{name: param_1_name},
                            %IR.IntegerType{value: 2},
                            %IR.ListType{
                              data: [
                                %IR.IntegerType{value: 3},
-                               %IR.Variable{name: :"$3"}
+                               %IR.Variable{name: param_2_name}
                              ]
                            }
                          ]
