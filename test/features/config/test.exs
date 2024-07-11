@@ -9,5 +9,6 @@ config :logger, level: :warning
 
 config :wallaby,
   driver: Wallaby.Chrome,
+  hackney_options: [timeout: 60_000, recv_timeout: 60_000],
   otp_app: :hologram_feature_tests,
   screenshot_dir: "./tmp/screenshots"
