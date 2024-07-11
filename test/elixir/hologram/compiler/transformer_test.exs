@@ -31,6 +31,8 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module3
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module30
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module31
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module32
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module33
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module4
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module5
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module6
@@ -1673,26 +1675,24 @@ defmodule Hologram.Compiler.TransformerTest do
                }
     end
 
-    test "partially applied remote function" do
-      ast = ast("&Aaa.Bbb.my_fun(&1, 2, [3, &4])")
+    test "partially applied remote function (AST from source code)" do
+      ast = ast("&Hologram.Test.Fixtures.Compiler.Tranformer.Module32.my_fun(&1, 2, [3, &2])")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
-               arity: 4,
+               arity: 2,
                captured_function: nil,
                captured_module: nil,
                clauses: [
                  %IR.FunctionClause{
                    params: [
                      %IR.Variable{name: :"$1"},
-                     %IR.Variable{name: :"$2"},
-                     %IR.Variable{name: :"$3"},
-                     %IR.Variable{name: :"$4"}
+                     %IR.Variable{name: :"$2"}
                    ],
                    guards: [],
                    body: %IR.Block{
                      expressions: [
                        %IR.RemoteFunctionCall{
-                         module: %IR.AtomType{value: Aaa.Bbb},
+                         module: %IR.AtomType{value: Module32},
                          function: :my_fun,
                          args: [
                            %IR.Variable{name: :"$1"},
@@ -1700,7 +1700,42 @@ defmodule Hologram.Compiler.TransformerTest do
                            %IR.ListType{
                              data: [
                                %IR.IntegerType{value: 3},
-                               %IR.Variable{name: :"$4"}
+                               %IR.Variable{name: :"$2"}
+                             ]
+                           }
+                         ]
+                       }
+                     ]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "partially applied remote function (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module33) == %IR.AnonymousFunctionType{
+               arity: 2,
+               captured_function: nil,
+               captured_module: nil,
+               clauses: [
+                 %IR.FunctionClause{
+                   params: [
+                     %IR.Variable{name: :"$2"},
+                     %IR.Variable{name: :"$3"}
+                   ],
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.RemoteFunctionCall{
+                         module: %IR.AtomType{value: Module32},
+                         function: :my_fun,
+                         args: [
+                           %IR.Variable{name: :"$2"},
+                           %IR.IntegerType{value: 2},
+                           %IR.ListType{
+                             data: [
+                               %IR.IntegerType{value: 3},
+                               %IR.Variable{name: :"$3"}
                              ]
                            }
                          ]
