@@ -203,8 +203,8 @@ jobs:
         if: ${{ contains(matrix.elixir, '1.17.2') && contains(matrix.otp, '27.0') }}
         run: mix eslint
 
-      # Step: Execute lib Elixir unit tests.
-      - name: Run lib Elixir unit tests
+      # Step: Execute lib Elixir tests.
+      - name: Run lib Elixir tests
         run: mix test --warnings-as-errors --exclude consistency
 
       # Step: Execute lib Elixir consistency tests.
@@ -212,8 +212,8 @@ jobs:
         if: ${{ contains(matrix.elixir, '1.17.2') && contains(matrix.otp, '27.0') }}
         run: mix test --warnings-as-errors --only consistency
 
-      # Step: Execute lib JavaScript unit tests.
-      - name: Run lib JavaScript unit tests
+      # Step: Execute lib JavaScript tests.
+      - name: Run lib JavaScript tests
         run: mix test.js
 
   feature_tests:
@@ -376,6 +376,6 @@ jobs:
         if: ${{ contains(matrix.elixir, '1.17.2') && contains(matrix.otp, '27.0') }}
         run: mix holo.test.check_file_names test
 
-      # Step: Execute feature tests app Elixir unit tests.
-      - name: Run feature tests app Elixir unit tests
+      # Step: Execute feature tests app Elixir tests.
+      - name: Run feature tests app Elixir tests
         run: mix test --warnings-as-errors
