@@ -30,6 +30,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module29
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module3
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module30
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module31
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module4
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module5
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module6
@@ -1601,20 +1602,18 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "partially applied local function" do
-      ast = ast("&my_fun(&1, 2, [3, &4])")
+    test "partially applied local function (AST from source code)" do
+      ast = ast("&my_fun(&1, 2, [3, &2])")
 
-      assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
-               arity: 4,
+      assert transform(ast, %Context{module: MyModule}) == %IR.AnonymousFunctionType{
+               arity: 2,
                captured_function: nil,
                captured_module: nil,
                clauses: [
                  %IR.FunctionClause{
                    params: [
                      %IR.Variable{name: :"$1"},
-                     %IR.Variable{name: :"$2"},
-                     %IR.Variable{name: :"$3"},
-                     %IR.Variable{name: :"$4"}
+                     %IR.Variable{name: :"$2"}
                    ],
                    guards: [],
                    body: %IR.Block{
@@ -1627,7 +1626,7 @@ defmodule Hologram.Compiler.TransformerTest do
                            %IR.ListType{
                              data: [
                                %IR.IntegerType{value: 3},
-                               %IR.Variable{name: :"$4"}
+                               %IR.Variable{name: :"$2"}
                              ]
                            }
                          ]
@@ -1637,6 +1636,41 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ]
              }
+    end
+
+    test "partially applied local function (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module31) ==
+               %IR.AnonymousFunctionType{
+                 arity: 2,
+                 captured_function: nil,
+                 captured_module: nil,
+                 clauses: [
+                   %IR.FunctionClause{
+                     params: [
+                       %IR.Variable{name: :"$3"},
+                       %IR.Variable{name: :"$4"}
+                     ],
+                     guards: [],
+                     body: %IR.Block{
+                       expressions: [
+                         %IR.LocalFunctionCall{
+                           function: :my_fun,
+                           args: [
+                             %IR.Variable{name: :"$3"},
+                             %IR.IntegerType{value: 2},
+                             %IR.ListType{
+                               data: [
+                                 %IR.IntegerType{value: 3},
+                                 %IR.Variable{name: :"$4"}
+                               ]
+                             }
+                           ]
+                         }
+                       ]
+                     }
+                   }
+                 ]
+               }
     end
 
     test "partially applied remote function" do
