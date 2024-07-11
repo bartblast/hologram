@@ -5,6 +5,6 @@ defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module31 do
   end
 
   def my_fun(a, b, c) do
-    a * b + c
+    [a] ++ [b] ++ c
   end
 end
