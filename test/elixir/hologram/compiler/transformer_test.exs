@@ -2184,12 +2184,13 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "comprehension" do
-    @ast ast("for a <- [1, 2], do: a * a")
+    @ast ast("for x <- [1, 2], do: x * x")
+    @result_from_source_code transform(@ast, %Context{})
 
     test "single generator" do
       assert %IR.Comprehension{
-               generators: [%IR.Clause{match: %IR.Variable{name: :a}}]
-             } = transform(@ast, %Context{})
+               generators: [%IR.Clause{match: %IR.Variable{name: :x}}]
+             } = @result_from_source_code
     end
 
     test "multiple generators" do
@@ -2215,17 +2216,17 @@ defmodule Hologram.Compiler.TransformerTest do
                    }
                  }
                ]
-             } = transform(@ast, %Context{})
+             } = @result_from_source_code
     end
 
     test "single variable in generator match" do
       assert %IR.Comprehension{
                generators: [
                  %IR.Clause{
-                   match: %IR.Variable{name: :a}
+                   match: %IR.Variable{name: :x}
                  }
                ]
-             } = transform(@ast, %Context{})
+             } = @result_from_source_code
     end
 
     test "multiple variables in generator match" do
@@ -2309,7 +2310,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "no filters" do
-      assert %IR.Comprehension{filters: []} = transform(@ast, %Context{})
+      assert %IR.Comprehension{filters: []} = @result_from_source_code
     end
 
     test "single filter" do
@@ -2349,7 +2350,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "default collectable" do
-      assert %IR.Comprehension{collectable: %IR.ListType{data: []}} = transform(@ast, %Context{})
+      assert %IR.Comprehension{collectable: %IR.ListType{data: []}} = @result_from_source_code
     end
 
     test "custom collectable" do
@@ -2364,7 +2365,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "default unique" do
-      assert %IR.Comprehension{unique: %IR.AtomType{value: false}} = transform(@ast, %Context{})
+      assert %IR.Comprehension{unique: %IR.AtomType{value: false}} = @result_from_source_code
     end
 
     test "custom unique" do
