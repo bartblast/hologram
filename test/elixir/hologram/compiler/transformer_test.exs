@@ -42,6 +42,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module4
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module40
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module41
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module42
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module5
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module6
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
@@ -2283,21 +2284,36 @@ defmodule Hologram.Compiler.TransformerTest do
              } = @result_from_beam_file
     end
 
-    test "multiple variables in generator match" do
-      ast = ast("for {a, b} <- [{1, 2}, {3, 4}], do: a * b")
+    test "multiple variables in generator match (AST from source code)" do
+      ast = ast("for {x, y} <- [{1, 2}, {3, 4}], do: x * y")
 
       assert %IR.Comprehension{
                generators: [
                  %IR.Clause{
                    match: %IR.TupleType{
                      data: [
-                       %IR.Variable{name: :a},
-                       %IR.Variable{name: :b}
+                       %IR.Variable{name: :x},
+                       %IR.Variable{name: :y}
                      ]
                    }
                  }
                ]
              } = transform(ast, %Context{})
+    end
+
+    test "multiple variables in generator match (AST from BEAM file)" do
+      assert %IR.Comprehension{
+               generators: [
+                 %IR.Clause{
+                   match: %IR.TupleType{
+                     data: [
+                       %IR.Variable{name: :x},
+                       %IR.Variable{name: :y}
+                     ]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module42)
     end
 
     test "generator with single guard" do
