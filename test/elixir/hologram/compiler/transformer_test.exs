@@ -2263,7 +2263,7 @@ defmodule Hologram.Compiler.TransformerTest do
              } = @result_from_beam_file
     end
 
-    test "single variable in generator match" do
+    test "single variable in generator match (AST from source code)" do
       assert %IR.Comprehension{
                generators: [
                  %IR.Clause{
@@ -2271,6 +2271,16 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ]
              } = @result_from_source_code
+    end
+
+    test "single variable in generator match (AST from BEAM file)" do
+      assert %IR.Comprehension{
+               generators: [
+                 %IR.Clause{
+                   match: %IR.Variable{name: :x}
+                 }
+               ]
+             } = @result_from_beam_file
     end
 
     test "multiple variables in generator match" do
