@@ -43,6 +43,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module40
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module41
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module42
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module43
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module5
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module6
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
@@ -2316,21 +2317,37 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform_module_and_fetch_expr(Module42)
     end
 
-    test "generator with single guard" do
-      ast = ast("for a when guard_1(:x) <- [1, 2], do: a * a")
+    test "generator with single guard (AST from source code)" do
+      ast = ast("for x when is_integer(x) <- [1, 2], do: x * x")
 
       assert %IR.Comprehension{
                generators: [
                  %IR.Clause{
                    guards: [
                      %IR.LocalFunctionCall{
-                       function: :guard_1,
-                       args: [%IR.AtomType{value: :x}]
+                       function: :is_integer,
+                       args: [%IR.Variable{name: :x}]
                      }
                    ]
                  }
                ]
              } = transform(ast, %Context{})
+    end
+
+    test "generator with single guard (AST from BEAM file)" do
+      assert %IR.Comprehension{
+               generators: [
+                 %IR.Clause{
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :is_integer,
+                       args: [%IR.Variable{name: :x}]
+                     }
+                   ]
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module43)
     end
 
     test "generator with 2 guards" do
