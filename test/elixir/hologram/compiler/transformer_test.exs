@@ -40,6 +40,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module38
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module39
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module4
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module40
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module5
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module6
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
@@ -2187,10 +2188,28 @@ defmodule Hologram.Compiler.TransformerTest do
     @ast ast("for x <- [1, 2], do: x * x")
     @result_from_source_code transform(@ast, %Context{})
 
-    test "single generator" do
+    # Can't use transform_module_and_fetch_expr(Module40) here
+    @result_from_beam_file Module40
+                           |> AST.for_module()
+                           |> transform(%Context{})
+                           |> Map.get(:body)
+                           |> Map.get(:expressions)
+                           |> hd()
+                           |> Map.get(:clause)
+                           |> Map.get(:body)
+                           |> Map.get(:expressions)
+                           |> hd()
+
+    test "single generator (AST from source code)" do
       assert %IR.Comprehension{
                generators: [%IR.Clause{match: %IR.Variable{name: :x}}]
              } = @result_from_source_code
+    end
+
+    test "single generator (AST from BEAM file)" do
+      assert %IR.Comprehension{
+               generators: [%IR.Clause{match: %IR.Variable{name: :x}}]
+             } = @result_from_beam_file
     end
 
     test "multiple generators" do
