@@ -2233,7 +2233,7 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform_module_and_fetch_expr(Module41)
     end
 
-    test "generator enumerable" do
+    test "generator enumerable (AST from source code)" do
       assert %IR.Comprehension{
                generators: [
                  %IR.Clause{
@@ -2246,6 +2246,21 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ]
              } = @result_from_source_code
+    end
+
+    test "generator enumerable (AST from BEAM file)" do
+      assert %IR.Comprehension{
+               generators: [
+                 %IR.Clause{
+                   body: %IR.ListType{
+                     data: [
+                       %IR.IntegerType{value: 1},
+                       %IR.IntegerType{value: 2}
+                     ]
+                   }
+                 }
+               ]
+             } = @result_from_beam_file
     end
 
     test "single variable in generator match" do
