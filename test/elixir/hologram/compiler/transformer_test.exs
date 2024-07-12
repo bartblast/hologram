@@ -33,6 +33,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module31
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module32
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module33
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module34
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module4
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module5
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module6
@@ -1841,11 +1842,11 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "case" do
-    test "single clause / clause with single expression body" do
+    test "single clause / clause with single expression body (AST from source code)" do
       ast =
         ast("""
         case x do
-          1 -> :expr
+          1 -> x
         end
         """)
 
@@ -1856,7 +1857,22 @@ defmodule Hologram.Compiler.TransformerTest do
                    match: %IR.IntegerType{value: 1},
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :expr}]
+                     expressions: [%IR.Variable{name: :x}]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "single clause / clause with single expression body (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module34) == %IR.Case{
+               condition: %IR.Variable{name: :x},
+               clauses: [
+                 %IR.Clause{
+                   match: %IR.IntegerType{value: 1},
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.Variable{name: :x}]
                    }
                  }
                ]
