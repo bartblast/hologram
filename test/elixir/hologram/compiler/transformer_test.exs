@@ -41,6 +41,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module39
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module4
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module40
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module41
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module5
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module6
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
@@ -2212,15 +2213,24 @@ defmodule Hologram.Compiler.TransformerTest do
              } = @result_from_beam_file
     end
 
-    test "multiple generators" do
-      ast = ast("for a <- [1, 2], b <- [3, 4], do: a * b")
+    test "multiple generators (AST from source code)" do
+      ast = ast("for x <- [1, 2], y <- [3, 4], do: x * y")
 
       assert %IR.Comprehension{
                generators: [
-                 %IR.Clause{match: %IR.Variable{name: :a}},
-                 %IR.Clause{match: %IR.Variable{name: :b}}
+                 %IR.Clause{match: %IR.Variable{name: :x}},
+                 %IR.Clause{match: %IR.Variable{name: :y}}
                ]
              } = transform(ast, %Context{})
+    end
+
+    test "multiple generators (AST from BEAM file)" do
+      assert %IR.Comprehension{
+               generators: [
+                 %IR.Clause{match: %IR.Variable{name: :x}},
+                 %IR.Clause{match: %IR.Variable{name: :y}}
+               ]
+             } = transform_module_and_fetch_expr(Module41)
     end
 
     test "generator enumerable" do
