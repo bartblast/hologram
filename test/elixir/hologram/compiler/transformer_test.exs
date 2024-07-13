@@ -46,6 +46,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module43
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module44
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module45
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module46
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module5
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module6
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
@@ -2453,19 +2454,32 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Comprehension{filters: []} = @result_from_beam_file
     end
 
-    test "single filter" do
-      ast = ast("for a <- [1, 2], my_filter(a), do: a * a")
+    test "single filter (AST from source code)" do
+      ast = ast("for x <- [1, 2], my_filter(x), do: x * x")
 
       assert %IR.Comprehension{
                filters: [
                  %IR.ComprehensionFilter{
                    expression: %IR.LocalFunctionCall{
                      function: :my_filter,
-                     args: [%IR.Variable{name: :a}]
+                     args: [%IR.Variable{name: :x}]
                    }
                  }
                ]
              } = transform(ast, %Context{})
+    end
+
+    test "single filter (AST from BEAM file)" do
+      assert %IR.Comprehension{
+               filters: [
+                 %IR.ComprehensionFilter{
+                   expression: %IR.LocalFunctionCall{
+                     function: :my_filter,
+                     args: [%IR.Variable{name: :x}]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module46)
     end
 
     test "multiple filters" do
