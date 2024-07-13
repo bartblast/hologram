@@ -2445,8 +2445,12 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform_module_and_fetch_expr(Module45)
     end
 
-    test "no filters" do
+    test "no filters (AST from source code)" do
       assert %IR.Comprehension{filters: []} = @result_from_source_code
+    end
+
+    test "no filters (AST from BEAM file)" do
+      assert %IR.Comprehension{filters: []} = @result_from_beam_file
     end
 
     test "single filter" do
