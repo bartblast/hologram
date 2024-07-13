@@ -2523,8 +2523,12 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform_module_and_fetch_expr(Module47)
     end
 
-    test "default collectable" do
+    test "default collectable (AST from source code)" do
       assert %IR.Comprehension{collectable: %IR.ListType{data: []}} = @result_from_source_code
+    end
+
+    test "default collectable (AST from BEAM file)" do
+      assert %IR.Comprehension{collectable: %IR.ListType{data: []}} = @result_from_beam_file
     end
 
     test "custom collectable" do
