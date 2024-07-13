@@ -48,6 +48,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module45
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module46
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module47
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module48
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module5
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module6
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
@@ -2531,8 +2532,8 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Comprehension{collectable: %IR.ListType{data: []}} = @result_from_beam_file
     end
 
-    test "custom collectable" do
-      ast = ast("for a <- [1, 2], into: my_collectable(123), do: a * a")
+    test "custom collectable (AST from source code)" do
+      ast = ast("for x <- [1, 2], into: my_collectable(123), do: x * x")
 
       assert %IR.Comprehension{
                collectable: %IR.LocalFunctionCall{
@@ -2540,6 +2541,15 @@ defmodule Hologram.Compiler.TransformerTest do
                  args: [%IR.IntegerType{value: 123}]
                }
              } = transform(ast, %Context{})
+    end
+
+    test "custom collectable (AST from BEAM file)" do
+      assert %IR.Comprehension{
+               collectable: %IR.LocalFunctionCall{
+                 function: :my_collectable,
+                 args: [%IR.IntegerType{value: 123}]
+               }
+             } = transform_module_and_fetch_expr(Module48)
     end
 
     test "default unique" do
