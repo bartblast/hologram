@@ -49,6 +49,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module46
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module47
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module48
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module49
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module5
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module6
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
@@ -2560,10 +2561,15 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Comprehension{unique: %IR.AtomType{value: false}} = @result_from_beam_file
     end
 
-    test "custom unique" do
-      ast = ast("for a <- [1, 2], uniq: true, do: a * a")
+    test "custom unique (AST from source code)" do
+      ast = ast("for x <- [1, 2], uniq: true, do: x * x")
 
       assert %IR.Comprehension{unique: %IR.AtomType{value: true}} = transform(ast, %Context{})
+    end
+
+    test "custom unique (AST from BEAM file)" do
+      assert %IR.Comprehension{unique: %IR.AtomType{value: true}} =
+               transform_module_and_fetch_expr(Module49)
     end
 
     test "mapper with single expression body" do
