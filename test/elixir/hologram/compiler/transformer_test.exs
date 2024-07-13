@@ -2552,8 +2552,12 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform_module_and_fetch_expr(Module48)
     end
 
-    test "default unique" do
+    test "default unique (AST from source code)" do
       assert %IR.Comprehension{unique: %IR.AtomType{value: false}} = @result_from_source_code
+    end
+
+    test "default unique (AST from BEAM file)" do
+      assert %IR.Comprehension{unique: %IR.AtomType{value: false}} = @result_from_beam_file
     end
 
     test "custom unique" do
