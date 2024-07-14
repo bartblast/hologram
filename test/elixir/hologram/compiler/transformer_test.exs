@@ -52,6 +52,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module49
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module5
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module50
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module51
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module6
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
@@ -2589,24 +2590,36 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform_module_and_fetch_expr(Module50)
     end
 
-    test "mapper with multiple expressions body" do
+    test "mapper with multiple expressions body (AST from source code)" do
       ast =
         ast("""
-        for a <- [1, 2] do
-          :expr_1
-          :expr_2
+        for x <- [1, 2] do
+          :expr
+          x
         end
         """)
 
       assert %IR.Comprehension{
                mapper: %IR.Block{
                  expressions: [
-                   %IR.AtomType{value: :expr_1},
-                   %IR.AtomType{value: :expr_2}
+                   %IR.AtomType{value: :expr},
+                   %IR.Variable{name: :x}
                  ]
                },
                reducer: nil
              } = transform(ast, %Context{})
+    end
+
+    test "mapper with multiple expressions body (AST from BEAM file)" do
+      assert %IR.Comprehension{
+               mapper: %IR.Block{
+                 expressions: [
+                   %IR.AtomType{value: :expr},
+                   %IR.Variable{name: :x}
+                 ]
+               },
+               reducer: nil
+             } = transform_module_and_fetch_expr(Module51)
     end
 
     test "reducer with single clause" do
