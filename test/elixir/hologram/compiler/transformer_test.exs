@@ -54,6 +54,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module50
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module51
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module52
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module53
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module6
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
@@ -2676,12 +2677,12 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform_module_and_fetch_expr(Module52)
     end
 
-    test "reducer with multiple clauses" do
+    test "reducer with multiple clauses (AST from source code)" do
       ast =
         ast("""
-        for x <- [1, 2], reduce: 0 do
-          1 -> my_reducer_1(acc, x)
-          2 -> my_reducer_2(acc, x)
+        for x <- [1, 2], reduce: {1, 9} do
+          {1, a} -> my_reducer_1(a, x)
+          {2, b} -> my_reducer_2(b, x)
         end
         """)
 
@@ -2690,14 +2691,16 @@ defmodule Hologram.Compiler.TransformerTest do
                reducer: %{
                  clauses: [
                    %IR.Clause{
-                     match: %IR.IntegerType{value: 1},
+                     match: %IR.TupleType{
+                       data: [%IR.IntegerType{value: 1}, %IR.Variable{name: :a}]
+                     },
                      guards: [],
                      body: %IR.Block{
                        expressions: [
                          %IR.LocalFunctionCall{
                            function: :my_reducer_1,
                            args: [
-                             %IR.Variable{name: :acc},
+                             %IR.Variable{name: :a},
                              %IR.Variable{name: :x}
                            ]
                          }
@@ -2705,14 +2708,16 @@ defmodule Hologram.Compiler.TransformerTest do
                      }
                    },
                    %IR.Clause{
-                     match: %IR.IntegerType{value: 2},
+                     match: %IR.TupleType{
+                       data: [%IR.IntegerType{value: 2}, %IR.Variable{name: :b}]
+                     },
                      guards: [],
                      body: %IR.Block{
                        expressions: [
                          %IR.LocalFunctionCall{
                            function: :my_reducer_2,
                            args: [
-                             %IR.Variable{name: :acc},
+                             %IR.Variable{name: :b},
                              %IR.Variable{name: :x}
                            ]
                          }
@@ -2720,9 +2725,58 @@ defmodule Hologram.Compiler.TransformerTest do
                      }
                    }
                  ],
-                 initial_value: %IR.IntegerType{value: 0}
+                 initial_value: %IR.TupleType{
+                   data: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 9}]
+                 }
                }
              } = transform(ast, %Context{})
+    end
+
+    test "reducer with multiple clauses (AST from BEAM file)" do
+      assert %IR.Comprehension{
+               mapper: nil,
+               reducer: %{
+                 clauses: [
+                   %IR.Clause{
+                     match: %IR.TupleType{
+                       data: [%IR.IntegerType{value: 1}, %IR.Variable{name: :a}]
+                     },
+                     guards: [],
+                     body: %IR.Block{
+                       expressions: [
+                         %IR.LocalFunctionCall{
+                           function: :my_reducer_1,
+                           args: [
+                             %IR.Variable{name: :a},
+                             %IR.Variable{name: :x}
+                           ]
+                         }
+                       ]
+                     }
+                   },
+                   %IR.Clause{
+                     match: %IR.TupleType{
+                       data: [%IR.IntegerType{value: 2}, %IR.Variable{name: :b}]
+                     },
+                     guards: [],
+                     body: %IR.Block{
+                       expressions: [
+                         %IR.LocalFunctionCall{
+                           function: :my_reducer_2,
+                           args: [
+                             %IR.Variable{name: :b},
+                             %IR.Variable{name: :x}
+                           ]
+                         }
+                       ]
+                     }
+                   }
+                 ],
+                 initial_value: %IR.TupleType{
+                   data: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 9}]
+                 }
+               }
+             } = transform_module_and_fetch_expr(Module53)
     end
 
     test "reducer clause with single guard" do
