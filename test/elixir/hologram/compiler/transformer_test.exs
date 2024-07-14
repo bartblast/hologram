@@ -53,6 +53,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module5
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module50
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module51
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module52
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module6
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
@@ -2622,11 +2623,11 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform_module_and_fetch_expr(Module51)
     end
 
-    test "reducer with single clause" do
+    test "reducer with single clause (AST from source code)" do
       ast =
         ast("""
         for x <- [1, 2], reduce: 0 do
-          acc -> my_reducer(acc)
+          acc -> my_reducer(acc, x)
         end
         """)
 
@@ -2641,7 +2642,7 @@ defmodule Hologram.Compiler.TransformerTest do
                        expressions: [
                          %IR.LocalFunctionCall{
                            function: :my_reducer,
-                           args: [%IR.Variable{name: :acc}]
+                           args: [%IR.Variable{name: :acc}, %IR.Variable{name: :x}]
                          }
                        ]
                      }
@@ -2650,6 +2651,29 @@ defmodule Hologram.Compiler.TransformerTest do
                  initial_value: %IR.IntegerType{value: 0}
                }
              } = transform(ast, %Context{})
+    end
+
+    test "reducer with single clause (AST from BEAM file)" do
+      assert %IR.Comprehension{
+               mapper: nil,
+               reducer: %{
+                 clauses: [
+                   %IR.Clause{
+                     match: %IR.Variable{name: :acc},
+                     guards: [],
+                     body: %IR.Block{
+                       expressions: [
+                         %IR.LocalFunctionCall{
+                           function: :my_reducer,
+                           args: [%IR.Variable{name: :acc}, %IR.Variable{name: :x}]
+                         }
+                       ]
+                     }
+                   }
+                 ],
+                 initial_value: %IR.IntegerType{value: 0}
+               }
+             } = transform_module_and_fetch_expr(Module52)
     end
 
     test "reducer with multiple clauses" do
