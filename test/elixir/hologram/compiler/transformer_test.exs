@@ -57,6 +57,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module53
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module54
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module55
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module56
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module6
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
@@ -2920,11 +2921,11 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform_module_and_fetch_expr(Module55)
     end
 
-    test "reducer clause with 3 guards" do
+    test "reducer clause with 3 guards (AST from source code)" do
       ast =
         ast("""
         for x <- [1, 2], reduce: 0 do
-          acc when guard_1(:a) when guard_2(:b) when guard_3(:c) -> :expr
+          acc when is_integer(x) when x > 1 when x < 9 -> acc + x
         end
         """)
 
@@ -2936,20 +2937,25 @@ defmodule Hologram.Compiler.TransformerTest do
                      match: %IR.Variable{name: :acc},
                      guards: [
                        %IR.LocalFunctionCall{
-                         function: :guard_1,
-                         args: [%IR.AtomType{value: :a}]
+                         function: :is_integer,
+                         args: [%IR.Variable{name: :x}]
                        },
                        %IR.LocalFunctionCall{
-                         function: :guard_2,
-                         args: [%IR.AtomType{value: :b}]
+                         function: :>,
+                         args: [%IR.Variable{name: :x}, %IR.IntegerType{value: 1}]
                        },
                        %IR.LocalFunctionCall{
-                         function: :guard_3,
-                         args: [%IR.AtomType{value: :c}]
+                         function: :<,
+                         args: [%IR.Variable{name: :x}, %IR.IntegerType{value: 9}]
                        }
                      ],
                      body: %IR.Block{
-                       expressions: [%IR.AtomType{value: :expr}]
+                       expressions: [
+                         %IR.LocalFunctionCall{
+                           function: :+,
+                           args: [%IR.Variable{name: :acc}, %IR.Variable{name: :x}]
+                         }
+                       ]
                      }
                    }
                  ],
@@ -2957,6 +2963,46 @@ defmodule Hologram.Compiler.TransformerTest do
                }
              } = transform(ast, %Context{})
     end
+  end
+
+  test "reducer clause with 3 guards (AST from BEAM file)" do
+    assert %IR.Comprehension{
+             mapper: nil,
+             reducer: %{
+               clauses: [
+                 %IR.Clause{
+                   match: %IR.Variable{name: :acc},
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :is_integer,
+                       args: [%IR.Variable{name: :x}]
+                     },
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :>,
+                       args: [%IR.Variable{name: :x}, %IR.IntegerType{value: 1}]
+                     },
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :<,
+                       args: [%IR.Variable{name: :x}, %IR.IntegerType{value: 9}]
+                     }
+                   ],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.RemoteFunctionCall{
+                         module: %IR.AtomType{value: :erlang},
+                         function: :+,
+                         args: [%IR.Variable{name: :acc}, %IR.Variable{name: :x}]
+                       }
+                     ]
+                   }
+                 }
+               ],
+               initial_value: %IR.IntegerType{value: 0}
+             }
+           } = transform_module_and_fetch_expr(Module56)
   end
 
   describe "cond" do
