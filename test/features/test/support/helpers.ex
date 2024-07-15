@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.Helpers do
-  import ExUnit.Assertions, only: [assert: 1]
+  import ExUnit.Assertions, only: [assert: 1, assert_raise: 3]
 
   alias Hologram.Router
   alias Wallaby.Browser
@@ -11,6 +11,16 @@ defmodule HologramFeatureTests.Helpers do
   defdelegate port(str), to: IEx.Helpers
   defdelegate ref(str), to: IEx.Helpers
   defdelegate wrap_term(term), to: HologramFeatureTests.Commons
+
+  def assert_js_error(expected_msg, fun) do
+    assert_raise Wallaby.JSError, expected_msg, fn ->
+      fun.()
+
+      :wallaby
+      |> Application.get_env(:max_wait_time, 3_000)
+      |> :timer.sleep()
+    end
+  end
 
   def assert_page(session, page_module, params \\ []) do
     path = Router.Helpers.page_path(page_module, params)
