@@ -6,13 +6,14 @@ defmodule HologramFeatureTests.TypesTest do
 
   describe "function" do
     feature "anonymous (client origin, non-capture)", %{session: session} do
-      assert_raise Wallaby.JSError,
-                   ~r/can't encode client terms that are anonymous functions that are not named function captures/,
-                   fn ->
-                     session
-                     |> visit(TypesPage)
-                     |> click(css("button[id='anonymous function (client origin, non-capture)']"))
-                   end
+      assert_js_error ~r/can't encode client terms that are anonymous functions that are not named function captures/,
+                      fn ->
+                        session
+                        |> visit(TypesPage)
+                        |> click(
+                          css("button[id='anonymous function (client origin, non-capture)']")
+                        )
+                      end
 
       assert_text(session, css("#result"), inspect(8))
     end
@@ -25,13 +26,14 @@ defmodule HologramFeatureTests.TypesTest do
           ~r/command failed: term contains an anonymous function that is not a remote function capture/
         end
 
-      assert_raise Wallaby.JSError,
-                   expected_msg,
-                   fn ->
-                     session
-                     |> visit(TypesPage)
-                     |> click(css("button[id='anonymous function (server origin, non-capture)']"))
-                   end
+      assert_js_error expected_msg,
+                      fn ->
+                        session
+                        |> visit(TypesPage)
+                        |> click(
+                          css("button[id='anonymous function (server origin, non-capture)']")
+                        )
+                      end
     end
 
     feature "anonymous (server origin, capture)", %{session: session} do
@@ -42,23 +44,21 @@ defmodule HologramFeatureTests.TypesTest do
           ~r/command failed: term contains an anonymous function that is not a remote function capture/
         end
 
-      assert_raise Wallaby.JSError,
-                   expected_msg,
-                   fn ->
-                     session
-                     |> visit(TypesPage)
-                     |> click(css("button[id='anonymous function (server origin, capture)']"))
-                   end
+      assert_js_error expected_msg,
+                      fn ->
+                        session
+                        |> visit(TypesPage)
+                        |> click(css("button[id='anonymous function (server origin, capture)']"))
+                      end
     end
 
     feature "anonymous (client origin, capture)", %{session: session} do
-      assert_raise Wallaby.JSError,
-                   ~r/can't encode client terms that are anonymous functions that are not named function captures/,
-                   fn ->
-                     session
-                     |> visit(TypesPage)
-                     |> click(css("button[id='anonymous function (client origin, capture)']"))
-                   end
+      assert_js_error ~r/can't encode client terms that are anonymous functions that are not named function captures/,
+                      fn ->
+                        session
+                        |> visit(TypesPage)
+                        |> click(css("button[id='anonymous function (client origin, capture)']"))
+                      end
 
       assert_text(session, css("#result"), inspect(8))
     end
@@ -77,13 +77,12 @@ defmodule HologramFeatureTests.TypesTest do
         |> click(css("button[id='local function capture (server origin)']"))
         |> assert_text(css("#result"), inspect(8))
       else
-        assert_raise Wallaby.JSError,
-                     ~r/command failed: term contains an anonymous function that is not a remote function capture/,
-                     fn ->
-                       session
-                       |> visit(TypesPage)
-                       |> click(css("button[id='local function capture (server origin)']"))
-                     end
+        assert_js_error ~r/command failed: term contains an anonymous function that is not a remote function capture/,
+                        fn ->
+                          session
+                          |> visit(TypesPage)
+                          |> click(css("button[id='local function capture (server origin)']"))
+                        end
       end
     end
 
@@ -155,13 +154,12 @@ defmodule HologramFeatureTests.TypesTest do
 
   describe "PID" do
     feature "client origin", %{session: session} do
-      assert_raise Wallaby.JSError,
-                   ~r/can't encode client terms that are PIDs originating in client/,
-                   fn ->
-                     session
-                     |> visit(TypesPage)
-                     |> click(css("button[id='pid (client origin)']"))
-                   end
+      assert_js_error ~r/can't encode client terms that are PIDs originating in client/,
+                      fn ->
+                        session
+                        |> visit(TypesPage)
+                        |> click(css("button[id='pid (client origin)']"))
+                      end
     end
 
     feature "server origin", %{session: session} do
