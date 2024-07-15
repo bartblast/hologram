@@ -59,6 +59,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module55
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module56
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module57
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module58
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module6
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
@@ -3011,16 +3012,16 @@ defmodule Hologram.Compiler.TransformerTest do
       ast =
         ast("""
         cond do
-          true -> :ok
+          1 -> :expr
         end
         """)
 
       assert transform(ast, %Context{}) == %IR.Cond{
                clauses: [
                  %IR.CondClause{
-                   condition: %IR.AtomType{value: true},
+                   condition: %IR.IntegerType{value: 1},
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :ok}]
+                     expressions: [%IR.AtomType{value: :expr}]
                    }
                  }
                ]
@@ -3031,16 +3032,16 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform_module_and_fetch_expr(Module57) == %IR.Cond{
                clauses: [
                  %IR.CondClause{
-                   condition: %IR.AtomType{value: true},
+                   condition: %IR.IntegerType{value: 1},
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :ok}]
+                     expressions: [%IR.AtomType{value: :expr}]
                    }
                  }
                ]
              }
     end
 
-    test "multiple clauses" do
+    test "multiple clauses (AST from source code)" do
       ast =
         ast("""
         cond do
@@ -3050,6 +3051,25 @@ defmodule Hologram.Compiler.TransformerTest do
         """)
 
       assert transform(ast, %Context{}) == %IR.Cond{
+               clauses: [
+                 %IR.CondClause{
+                   condition: %IR.IntegerType{value: 1},
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :expr_1}]
+                   }
+                 },
+                 %IR.CondClause{
+                   condition: %IR.IntegerType{value: 2},
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :expr_2}]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "multiple clauses (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module58) == %IR.Cond{
                clauses: [
                  %IR.CondClause{
                    condition: %IR.IntegerType{value: 1},
