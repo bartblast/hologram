@@ -58,6 +58,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module54
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module55
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module56
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module57
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module6
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
@@ -3006,20 +3007,33 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "cond" do
-    test "single clause, single expression body" do
+    test "single clause, single expression body (AST from source code)" do
       ast =
         ast("""
         cond do
-          1 -> :expr_1
+          true -> :ok
         end
         """)
 
       assert transform(ast, %Context{}) == %IR.Cond{
                clauses: [
                  %IR.CondClause{
-                   condition: %IR.IntegerType{value: 1},
+                   condition: %IR.AtomType{value: true},
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :expr_1}]
+                     expressions: [%IR.AtomType{value: :ok}]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "single clause, single expression body (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module57) == %IR.Cond{
+               clauses: [
+                 %IR.CondClause{
+                   condition: %IR.AtomType{value: true},
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :ok}]
                    }
                  }
                ]
