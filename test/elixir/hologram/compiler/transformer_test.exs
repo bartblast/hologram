@@ -68,6 +68,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module63
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module64
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module65
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module66
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module9
@@ -3259,13 +3260,20 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "dot operator" do
-    test "third tuple elem is nil" do
-      # {{:., [line: 1], [{:abc, [line: 1], nil}, :x]}, [no_parens: true, line: 1], []}
-      ast = ast("abc.x")
+    test "third tuple elem is nil (AST from source code)" do
+      # {{:., [line: 1], [{:my_var, [line: 1], nil}, :my_key]}, [no_parens: true, line: 1], []}
+      ast = ast("my_var.my_key")
 
       assert transform(ast, %Context{}) == %IR.DotOperator{
-               left: %IR.Variable{name: :abc},
-               right: %IR.AtomType{value: :x}
+               left: %IR.Variable{name: :my_var},
+               right: %IR.AtomType{value: :my_key}
+             }
+    end
+
+    test "third tuple elem is nil (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module66) == %IR.DotOperator{
+               left: %IR.Variable{name: :my_var},
+               right: %IR.AtomType{value: :my_key}
              }
     end
 
