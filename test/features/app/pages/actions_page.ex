@@ -2,6 +2,9 @@ defmodule HologramFeatureTests.ActionsPage do
   use Hologram.Page
   alias HologramFeatureTests.Components.Component1
 
+  import Hologram.Commons.KernelUtils, only: [inspect: 1]
+  import Kernel, except: [inspect: 1]
+
   route "/actions"
 
   layout HologramFeatureTests.Components.ActionsLayout

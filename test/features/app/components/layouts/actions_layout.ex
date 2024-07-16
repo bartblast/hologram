@@ -2,6 +2,9 @@ defmodule HologramFeatureTests.Components.ActionsLayout do
   use Hologram.Component
   alias Hologram.UI.Runtime
 
+  import Hologram.Commons.KernelUtils, only: [inspect: 1]
+  import Kernel, except: [inspect: 1]
+
   def init(_params, component, _server) do
     put_state(component, :result, nil)
   end

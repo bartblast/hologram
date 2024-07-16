@@ -2,6 +2,9 @@ defmodule HologramFeatureTests.CommandsPage do
   use Hologram.Page
   alias HologramFeatureTests.Components.Component2
 
+  import Hologram.Commons.KernelUtils, only: [inspect: 1]
+  import Kernel, except: [inspect: 1]
+
   route "/commands"
 
   layout HologramFeatureTests.Components.CommandsLayout

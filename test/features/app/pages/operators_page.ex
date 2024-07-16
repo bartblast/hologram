@@ -1,9 +1,10 @@
 defmodule HologramFeatureTests.OperatorsPage do
   use Hologram.Page
 
+  import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import HologramFeatureTests.Commons, only: [wrap_term: 1]
   import HologramFeatureTests.Operators, only: [+++: 2]
-  import Kernel, except: [+: 2]
+  import Kernel, except: [+: 2, inspect: 1]
 
   route "/operators"
 

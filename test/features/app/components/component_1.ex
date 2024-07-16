@@ -1,6 +1,9 @@
 defmodule HologramFeatureTests.Components.Component1 do
   use Hologram.Component
 
+  import Hologram.Commons.KernelUtils, only: [inspect: 1]
+  import Kernel, except: [inspect: 1]
+
   prop :prop_1, :atom, from_context: :my_context_key
 
   def init(_params, component, _server) do
