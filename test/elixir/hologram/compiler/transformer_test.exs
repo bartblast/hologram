@@ -70,9 +70,14 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module65
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module66
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module67
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module68
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module9
+
+  defp fetch_def(module_ir) do
+    hd(module_ir.body.expressions)
+  end
 
   defp fetch_expression(module_ir) do
     module_ir.body.expressions
@@ -83,10 +88,21 @@ defmodule Hologram.Compiler.TransformerTest do
     |> hd()
   end
 
-  defp transform_module_and_fetch_expr(module, context \\ %Context{}) do
+  defp transform_module(module, context) do
     module
     |> AST.for_module()
     |> transform(context)
+  end
+
+  defp transform_module_and_fetch_def(module, context \\ %Context{}) do
+    module
+    |> transform_module(context)
+    |> fetch_def()
+  end
+
+  defp transform_module_and_fetch_expr(module, context \\ %Context{}) do
+    module
+    |> transform_module(context)
     |> fetch_expression()
   end
 
@@ -3301,7 +3317,7 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "function definition" do
-    test "name" do
+    test "name (AST from source code)" do
       ast =
         ast("""
         def my_fun do
@@ -3309,6 +3325,10 @@ defmodule Hologram.Compiler.TransformerTest do
         """)
 
       assert %IR.FunctionDefinition{name: :my_fun} = transform(ast, %Context{})
+    end
+
+    test "name (AST from BEAM file)" do
+      assert %IR.FunctionDefinition{name: :my_fun} = transform_module_and_fetch_def(Module68)
     end
 
     test "no params, third tuple elem is nil" do
