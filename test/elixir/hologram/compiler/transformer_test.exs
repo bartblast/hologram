@@ -69,6 +69,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module64
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module65
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module66
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module67
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module9
@@ -3287,10 +3288,16 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  test "float type" do
-    ast = ast("1.0")
+  describe "float type" do
+    test "AST from source code" do
+      ast = ast("1.0")
 
-    assert transform(ast, %Context{}) == %IR.FloatType{value: 1.0}
+      assert transform(ast, %Context{}) == %IR.FloatType{value: 1.0}
+    end
+
+    test "AST from BEAM file" do
+      assert transform_module_and_fetch_expr(Module67) == %IR.FloatType{value: 1.0}
+    end
   end
 
   describe "function definition" do
