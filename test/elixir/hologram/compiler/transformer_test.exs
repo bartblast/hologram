@@ -3307,6 +3307,7 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "function definition" do
+    # {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], []}]]}
     @ast ast("""
          def my_fun do
          end
@@ -3314,6 +3315,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     @result_from_source_code transform(@ast, %Context{})
 
+    # {:def, [line: 3, column: 7], [{:my_fun, [], Elixir}, [do: {:__block__, [], [nil]}]]}
     # Can't use transform_module_and_fetch_def(Module68) here
     @result_from_beam_file Module68
                            |> AST.for_module()
@@ -3330,23 +3332,14 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.FunctionDefinition{name: :my_fun} = @result_from_beam_file
     end
 
-    test "no params, third tuple elem is nil" do
-      # {:def, [line: 1], [{:my_fun, [line: 1], nil}, [do: {:__block__, [], []}]]}
-      ast =
-        ast("""
-        def my_fun do
-        end
-        """)
-
+    test "no params (AST from source code)" do
       assert %IR.FunctionDefinition{arity: 0, clause: %IR.FunctionClause{params: []}} =
-               transform(ast, %Context{})
+               @result_from_source_code
     end
 
-    test "no params, third tuple elem is an empty list" do
-      ast = {:def, [line: 1], [{:my_fun, [line: 1], []}, [do: {:__block__, [], []}]]}
-
+    test "no params (AST from BEAM file)" do
       assert %IR.FunctionDefinition{arity: 0, clause: %IR.FunctionClause{params: []}} =
-               transform(ast, %Context{})
+               @result_from_beam_file
     end
 
     test "no params, third tuple elem is a module alias" do
