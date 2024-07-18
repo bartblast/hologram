@@ -3400,16 +3400,13 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform_module_and_fetch_def(Module70)
     end
 
-    test "empty body" do
-      ast =
-        ast("""
-        def my_fun do
-        end
-        """)
-
+    test "empty body (AST from source code)" do
       assert %IR.FunctionDefinition{clause: %IR.FunctionClause{body: %IR.Block{expressions: []}}} =
-               transform(ast, %Context{})
+               @result_from_source_code
     end
+
+    # This case is impossible because the compiler will inject nil expression by default.
+    # test "empty body (AST from BEAM file)"
 
     test "single expression body" do
       ast =
