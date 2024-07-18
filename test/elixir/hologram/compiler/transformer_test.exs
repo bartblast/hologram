@@ -71,9 +71,14 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module66
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module67
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module68
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module69
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module9
+
+  defp fetch_def(module_ir) do
+    hd(module_ir.body.expressions)
+  end
 
   defp fetch_expression(module_ir) do
     module_ir.body.expressions
@@ -88,6 +93,12 @@ defmodule Hologram.Compiler.TransformerTest do
     module
     |> AST.for_module()
     |> transform(context)
+  end
+
+  defp transform_module_and_fetch_def(module, context \\ %Context{}) do
+    module
+    |> transform_module(context)
+    |> fetch_def()
   end
 
   defp transform_module_and_fetch_expr(module, context \\ %Context{}) do
@@ -3342,10 +3353,11 @@ defmodule Hologram.Compiler.TransformerTest do
                @result_from_beam_file
     end
 
-    test "single param" do
+    test "single param (AST from source code)" do
       ast =
         ast("""
         def my_fun(x) do
+          x
         end
         """)
 
@@ -3353,6 +3365,13 @@ defmodule Hologram.Compiler.TransformerTest do
                arity: 1,
                clause: %IR.FunctionClause{params: [%IR.Variable{name: :x}]}
              } = transform(ast, %Context{})
+    end
+
+    test "single param (AST from BEAM file)" do
+      assert %IR.FunctionDefinition{
+               arity: 1,
+               clause: %IR.FunctionClause{params: [%IR.Variable{name: :x}]}
+             } = transform_module_and_fetch_def(Module69)
     end
 
     test "multiple params" do
