@@ -75,10 +75,6 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module9
 
-  defp fetch_def(module_ir) do
-    hd(module_ir.body.expressions)
-  end
-
   defp fetch_expression(module_ir) do
     module_ir.body.expressions
     |> hd()
@@ -92,12 +88,6 @@ defmodule Hologram.Compiler.TransformerTest do
     module
     |> AST.for_module()
     |> transform(context)
-  end
-
-  defp transform_module_and_fetch_def(module, context \\ %Context{}) do
-    module
-    |> transform_module(context)
-    |> fetch_def()
   end
 
   defp transform_module_and_fetch_expr(module, context \\ %Context{}) do
@@ -3317,18 +3307,27 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "function definition" do
-    test "name (AST from source code)" do
-      ast =
-        ast("""
-        def my_fun do
-        end
-        """)
+    @ast ast("""
+         def my_fun do
+         end
+         """)
 
-      assert %IR.FunctionDefinition{name: :my_fun} = transform(ast, %Context{})
+    @result_from_source_code transform(@ast, %Context{})
+
+    # Can't use transform_module_and_fetch_def(Module68) here
+    @result_from_beam_file Module68
+                           |> AST.for_module()
+                           |> transform(%Context{})
+                           |> Map.get(:body)
+                           |> Map.get(:expressions)
+                           |> hd()
+
+    test "name (AST from source code)" do
+      assert %IR.FunctionDefinition{name: :my_fun} = @result_from_source_code
     end
 
     test "name (AST from BEAM file)" do
-      assert %IR.FunctionDefinition{name: :my_fun} = transform_module_and_fetch_def(Module68)
+      assert %IR.FunctionDefinition{name: :my_fun} = @result_from_beam_file
     end
 
     test "no params, third tuple elem is nil" do
