@@ -76,6 +76,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module70
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module71
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module72
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module73
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module9
 
@@ -92,7 +93,7 @@ defmodule Hologram.Compiler.TransformerTest do
     |> hd()
   end
 
-  defp transform_module(module, context) do
+  defp transform_module(module, context \\ %Context{}) do
     module
     |> AST.for_module()
     |> transform(context)
@@ -3461,17 +3462,15 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform_module_and_fetch_def(Module72)
     end
 
-    test "public visibility" do
-      ast =
-        ast("""
-        def my_fun do
-        end
-        """)
-
-      assert %IR.FunctionDefinition{visibility: :public} = transform(ast, %Context{})
+    test "public visibility (AST from source code)" do
+      assert %IR.FunctionDefinition{visibility: :public} = @result_from_source_code
     end
 
-    test "private visibility" do
+    test "public visibility (AST from BEAM file)" do
+      assert %IR.FunctionDefinition{visibility: :public} = @result_from_beam_file
+    end
+
+    test "private visibility (AST from source code)" do
       ast =
         ast("""
         defp my_fun do
@@ -3479,6 +3478,19 @@ defmodule Hologram.Compiler.TransformerTest do
         """)
 
       assert %IR.FunctionDefinition{visibility: :private} = transform(ast, %Context{})
+    end
+
+    test "private visibility (AST from BEAM file)" do
+      fun_defs =
+        Module73
+        |> transform_module()
+        |> Map.get(:body)
+        |> Map.get(:expressions)
+
+      assert [
+               %IR.FunctionDefinition{name: :my_fun_1, visibility: :public},
+               %IR.FunctionDefinition{name: :my_fun_2, visibility: :private}
+             ] = fun_defs
     end
 
     test "with single guard" do
