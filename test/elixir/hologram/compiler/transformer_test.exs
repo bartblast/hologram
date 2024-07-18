@@ -73,6 +73,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module68
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module69
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module70
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module9
 
@@ -3374,10 +3375,11 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform_module_and_fetch_def(Module69)
     end
 
-    test "multiple params" do
+    test "multiple params (AST from source code)" do
       ast =
         ast("""
         def my_fun(x, y) do
+          x + y
         end
         """)
 
@@ -3387,6 +3389,15 @@ defmodule Hologram.Compiler.TransformerTest do
                  params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}]
                }
              } = transform(ast, %Context{})
+    end
+
+    test "multiple params (AST from BEAM file)" do
+      assert %IR.FunctionDefinition{
+               arity: 2,
+               clause: %IR.FunctionClause{
+                 params: [%IR.Variable{name: :x}, %IR.Variable{name: :y}]
+               }
+             } = transform_module_and_fetch_def(Module70)
     end
 
     test "empty body" do
