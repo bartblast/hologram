@@ -74,6 +74,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module69
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module7
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module70
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module71
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module9
 
@@ -3405,22 +3406,30 @@ defmodule Hologram.Compiler.TransformerTest do
                @result_from_source_code
     end
 
-    # This case is impossible because the compiler will inject nil expression by default.
+    # This case is impossible because the compiler injects nil expression by default.
     # test "empty body (AST from BEAM file)"
 
-    test "single expression body" do
+    test "single expression body (AST from source code)" do
       ast =
         ast("""
         def my_fun do
-          :expr_1
+          :ok
         end
         """)
 
       assert %IR.FunctionDefinition{
                clause: %IR.FunctionClause{
-                 body: %IR.Block{expressions: [%IR.AtomType{value: :expr_1}]}
+                 body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]}
                }
              } = transform(ast, %Context{})
+    end
+
+    test "single expression body (AST from BEAM file)" do
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{expressions: [%IR.AtomType{value: :ok}]}
+               }
+             } = transform_module_and_fetch_def(Module71)
     end
 
     test "multiple expressions body" do
