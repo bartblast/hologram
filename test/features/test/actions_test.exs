@@ -144,21 +144,21 @@ defmodule HologramFeatureTests.ActionsTest do
   end
 
   describe "component struct mutations" do
-    test "emitted context", %{session: session} do
+    feature "emitted context", %{session: session} do
       session
       |> visit(ActionsPage)
       |> click(css("button[id='page_action_8']"))
       |> assert_text(css("#component_1_prop_1"), ":updated_value")
     end
 
-    test "next action", %{session: session} do
+    feature "next action", %{session: session} do
       session
       |> visit(ActionsPage)
       |> click(css("button[id='page_action_9']"))
       |> assert_text(css("#page_result"), ~s/{"page_action_10", %{x: 10, y: 20}}/)
     end
 
-    test "next command", %{session: session} do
+    feature "next command", %{session: session} do
       session
       |> visit(ActionsPage)
       |> click(css("button[id='page_action_11']"))
