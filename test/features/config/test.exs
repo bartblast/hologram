@@ -29,4 +29,5 @@ config :wallaby,
   hackney_options: [timeout: 60_000, recv_timeout: 60_000],
   max_wait_time: 30_000,
   otp_app: :hologram_feature_tests,
-  screenshot_dir: "./tmp/screenshots"
+  screenshot_dir: "./tmp/screenshots",
+  screenshot_on_failure: true
