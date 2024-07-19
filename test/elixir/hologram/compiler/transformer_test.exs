@@ -80,6 +80,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module74
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module75
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module76
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module77
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module9
 
@@ -3691,8 +3692,8 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "params are transformed as patterns" do
-      ast = ast("def my_fun(%x{}), do: :ok")
+    test "params are transformed as patterns (AST from source code)" do
+      ast = ast("def my_fun(%x{}), do: x")
 
       assert %IR.FunctionDefinition{
                clause: %IR.FunctionClause{
@@ -3701,6 +3702,16 @@ defmodule Hologram.Compiler.TransformerTest do
                  ]
                }
              } = transform(ast, %Context{})
+    end
+
+    test "params are transformed as patterns (AST from BEAM file)" do
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.MapType{data: [{%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x}}]}
+                 ]
+               }
+             } = transform_module_and_fetch_def(Module77)
     end
   end
 
