@@ -82,6 +82,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module76
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module77
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module78
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module79
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module9
 
@@ -3729,10 +3730,14 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "list type" do
-    test "empty" do
+    test "empty (AST from source code)" do
       ast = ast("[]")
 
       assert transform(ast, %Context{}) == %IR.ListType{data: []}
+    end
+
+    test "empty (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module79) == %IR.ListType{data: []}
     end
 
     test "1 item" do
