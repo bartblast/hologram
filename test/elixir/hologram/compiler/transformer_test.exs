@@ -78,6 +78,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module72
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module73
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module74
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module75
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module9
 
@@ -3550,11 +3551,11 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "with 2 guards" do
+    test "with 2 guards (AST from source code)" do
       ast =
         ast("""
-        def my_fun(x) when guard_1(:a) when guard_2(:b) do
-          :expr
+        def my_fun(x) when is_integer(x) when x > 1 do
+          x
         end
         """)
 
@@ -3568,17 +3569,47 @@ defmodule Hologram.Compiler.TransformerTest do
                  ],
                  guards: [
                    %IR.LocalFunctionCall{
-                     function: :guard_1,
-                     args: [%IR.AtomType{value: :a}]
+                     function: :is_integer,
+                     args: [%IR.Variable{name: :x}]
                    },
                    %IR.LocalFunctionCall{
-                     function: :guard_2,
-                     args: [%IR.AtomType{value: :b}]
+                     function: :>,
+                     args: [%IR.Variable{name: :x}, %IR.IntegerType{value: 1}]
                    }
                  ],
                  body: %IR.Block{
                    expressions: [
-                     %IR.AtomType{value: :expr}
+                     %IR.Variable{name: :x}
+                   ]
+                 }
+               }
+             }
+    end
+
+    test "with 2 guards (AST from BEAM file)" do
+      assert transform_module_and_fetch_def(Module75) == %IR.FunctionDefinition{
+               name: :my_fun,
+               arity: 1,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [
+                   %IR.Variable{name: :x}
+                 ],
+                 guards: [
+                   %IR.RemoteFunctionCall{
+                     module: %IR.AtomType{value: :erlang},
+                     function: :is_integer,
+                     args: [%IR.Variable{name: :x}]
+                   },
+                   %IR.RemoteFunctionCall{
+                     module: %IR.AtomType{value: :erlang},
+                     function: :>,
+                     args: [%IR.Variable{name: :x}, %IR.IntegerType{value: 1}]
+                   }
+                 ],
+                 body: %IR.Block{
+                   expressions: [
+                     %IR.Variable{name: :x}
                    ]
                  }
                }
