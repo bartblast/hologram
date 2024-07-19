@@ -379,3 +379,10 @@ jobs:
       # Step: Execute feature tests app Elixir tests.
       - name: Run feature tests app Elixir tests
         run: mix test --warnings-as-errors
+
+      # Step: Archive the browser screenshots of tests that failed.
+      - name: Archive fail screenshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: fail-screenshots
+          path: tmp/screenshots
