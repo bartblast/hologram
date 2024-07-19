@@ -81,6 +81,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module75
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module76
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module77
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module78
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module9
 
@@ -3715,10 +3716,16 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  test "integer type" do
-    ast = ast("1")
+  describe "integer type" do
+    test "AST from source code" do
+      ast = ast("1")
 
-    assert transform(ast, %Context{}) == %IR.IntegerType{value: 1}
+      assert transform(ast, %Context{}) == %IR.IntegerType{value: 1}
+    end
+
+    test "AST from BEAM file" do
+      assert transform_module_and_fetch_expr(Module78) == %IR.IntegerType{value: 1}
+    end
   end
 
   describe "list type" do
