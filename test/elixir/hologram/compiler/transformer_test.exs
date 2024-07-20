@@ -89,6 +89,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module82
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module83
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module84
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module85
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module9
 
   defp fetch_def(module_ir) do
@@ -3871,10 +3872,26 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "with cons operator" do
+    test "with cons operator (AST from source code)" do
       ast = ast("%{x | a: 1, b: 2}")
 
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
+               module: %IR.AtomType{value: Map},
+               function: :merge,
+               args: [
+                 %IR.Variable{name: :x},
+                 %IR.MapType{
+                   data: [
+                     {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+                     {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+                   ]
+                 }
+               ]
+             }
+    end
+
+    test "with cons operator (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module85) == %IR.RemoteFunctionCall{
                module: %IR.AtomType{value: Map},
                function: :merge,
                args: [
