@@ -91,6 +91,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module84
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module85
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module86
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module87
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module9
 
   defp fetch_def(module_ir) do
@@ -3947,16 +3948,17 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "match placeholder" do
-    test "with nil value for module" do
+    test "AST from source code" do
       ast = ast("_abc")
 
       assert transform(ast, %Context{}) == %IR.MatchPlaceholder{}
     end
 
-    test "with non-nil value for module" do
-      ast = {:_abc, [line: 1], {:__aliases__, [alias: false], [:Application]}}
-
-      assert transform(ast, %Context{}) == %IR.MatchPlaceholder{}
+    test "AST from BEAM file" do
+      %IR.MatchOperator{
+        left: %IR.MatchPlaceholder{},
+        right: _right
+      } = transform_module_and_fetch_expr(Module87)
     end
   end
 
