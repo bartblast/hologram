@@ -84,6 +84,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module78
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module79
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module8
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module80
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module9
 
   defp fetch_def(module_ir) do
@@ -3740,10 +3741,18 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform_module_and_fetch_expr(Module79) == %IR.ListType{data: []}
     end
 
-    test "1 item" do
+    test "1 item (AST from source code)" do
       ast = ast("[1]")
 
       assert transform(ast, %Context{}) == %IR.ListType{
+               data: [
+                 %IR.IntegerType{value: 1}
+               ]
+             }
+    end
+
+    test "1 item (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module80) == %IR.ListType{
                data: [
                  %IR.IntegerType{value: 1}
                ]
