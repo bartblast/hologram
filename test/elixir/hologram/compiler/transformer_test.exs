@@ -3820,7 +3820,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  describe "macro definition" do
+  describe "macro definition (AST from code)" do
     test "public" do
       ast =
         ast("""
