@@ -3820,6 +3820,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
+  # BEAM files contain expanded AST, so only "AST from code" tests make sense here.
   describe "macro definition (AST from code)" do
     test "public" do
       ast =
