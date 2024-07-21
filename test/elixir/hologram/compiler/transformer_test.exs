@@ -93,6 +93,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module86
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module87
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module88
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module89
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module9
 
   defp fetch_def(module_ir) do
@@ -3964,20 +3965,24 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "module" do
-    test "when first alias segment is not 'Elixir' (AST from source code)" do
+    test "when the first alias segment is not 'Elixir' (AST from source code)" do
       ast = ast("Aaa.Bbb")
 
       assert transform(ast, %Context{}) == %IR.AtomType{value: :"Elixir.Aaa.Bbb"}
     end
 
-    test "when first alias segment is not 'Elixir' (AST from BEAM file)" do
+    test "when the first alias segment is not 'Elixir' (AST from BEAM file)" do
       assert transform_module_and_fetch_expr(Module88) == %IR.AtomType{value: :"Elixir.Aaa.Bbb"}
     end
 
-    test "when first alias segment is 'Elixir'" do
+    test "when the first alias segment is 'Elixir' (AST from source code)" do
       ast = ast("Elixir.Aaa.Bbb")
 
       assert transform(ast, %Context{}) == %IR.AtomType{value: :"Elixir.Aaa.Bbb"}
+    end
+
+    test "when the first alias segment is 'Elixir' (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module89) == %IR.AtomType{value: :"Elixir.Aaa.Bbb"}
     end
   end
 
