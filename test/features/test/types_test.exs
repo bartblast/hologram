@@ -176,4 +176,11 @@ defmodule HologramFeatureTests.TypesTest do
     |> click(css("button[id='tuple']"))
     |> assert_text(css("#result"), inspect({123, :abc}))
   end
+
+  feature "fail" do
+    session
+    |> visit(TypesPage)
+    |> click(css("button[id='tuple']"))
+    |> assert_text(css("#result"), "fail")
+  end
 end
