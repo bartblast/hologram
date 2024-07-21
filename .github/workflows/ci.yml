@@ -382,6 +382,8 @@ jobs:
 
       # Step: Archive the browser screenshots of tests that failed.
       - name: Archive fail screenshots
+        # Execute the step even if the job has already failed, but don't execute it if the job has been canceled.
+        if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
           name: fail-screenshots
