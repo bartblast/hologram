@@ -386,5 +386,5 @@ jobs:
         if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
-          name: fail-screenshots
+          name: fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}
           path: test/features/tmp/screenshots
