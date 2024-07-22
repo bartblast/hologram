@@ -27,7 +27,6 @@ config :wallaby,
   driver: Wallaby.Chrome,
   # Fixes occasional HTTPoison timeouts, see: https://github.com/elixir-wallaby/wallaby/issues/365
   hackney_options: [timeout: 60_000, recv_timeout: 60_000],
-  js_logger: File.open!(Path.join("tmp", "console.log"), [:write]),
   max_wait_time: 30_000,
   otp_app: :hologram_feature_tests,
   screenshot_dir: "./tmp/screenshots",
