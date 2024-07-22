@@ -1,6 +1,7 @@
 "use strict";
 
 import Config from "./config.mjs";
+import HologramRuntimeError from "./errors/runtime_error.mjs";
 import JsonEncoder from "./json_encoder.mjs";
 
 import {Socket} from "phoenix";
@@ -30,7 +31,10 @@ export default class Client {
         console.debug("Hologram: connected to a server");
       })
       .receive("error", (_resp) => {
-        console.error("Hologram: unable to connect to a server");
+        throw new HologramRuntimeError("unable to connect to a server");
+      })
+      .receive("timeout", (_resp) => {
+        throw new HologramRuntimeError("unable to connect to a server");
       });
 
     Client.#channel.on("reload", (_payload) => document.location.reload());
