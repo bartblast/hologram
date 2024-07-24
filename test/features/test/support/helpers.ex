@@ -84,7 +84,7 @@ defmodule HologramFeatureTests.Helpers do
   def wait_for_server_connection(session, start_time \\ DateTime.utc_now()) do
     callback = fn connected? ->
       if !connected? &&
-           DateTime.diff(DateTime.utc_now(), start_time, :millisecond) < @max_wait_time do
+           DateTime.diff(DateTime.utc_now(), start_time, :millisecond) < @max_wait_time - 100 do
         :timer.sleep(100)
         wait_for_server_connection(session, start_time)
       end
