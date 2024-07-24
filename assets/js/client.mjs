@@ -1,6 +1,7 @@
 "use strict";
 
 import Config from "./config.mjs";
+import GlobalRegistry from "./global_registry.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import JsonEncoder from "./json_encoder.mjs";
 
@@ -29,11 +30,14 @@ export default class Client {
       .join()
       .receive("ok", (_resp) => {
         console.debug("Hologram: connected to a server");
+        GlobalRegistry.set("connected?", true);
       })
       .receive("error", (_resp) => {
+        GlobalRegistry.set("connected?", false);
         throw new HologramRuntimeError("unable to connect to a server");
       })
       .receive("timeout", (_resp) => {
+        GlobalRegistry.set("connected?", false);
         throw new HologramRuntimeError("unable to connect to a server");
       });
 
