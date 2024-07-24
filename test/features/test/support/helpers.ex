@@ -5,6 +5,8 @@ defmodule HologramFeatureTests.Helpers do
   alias Wallaby.Browser
   alias Wallaby.Element
 
+  @max_wait_time Application.compile_env(:wallaby, :max_wait_time, 3_000)
+
   defguard is_regex(term) when is_map(term) and term.__struct__ == Regex
 
   defdelegate pid(str), to: IEx.Helpers
@@ -15,10 +17,7 @@ defmodule HologramFeatureTests.Helpers do
   def assert_js_error(expected_msg, fun) do
     assert_raise Wallaby.JSError, expected_msg, fn ->
       fun.()
-
-      :wallaby
-      |> Application.get_env(:max_wait_time, 3_000)
-      |> :timer.sleep()
+      :timer.sleep(@max_wait_time)
     end
   end
 
@@ -76,6 +75,23 @@ defmodule HologramFeatureTests.Helpers do
 
   def visit(session, page_module, params \\ []) do
     path = Router.Helpers.page_path(page_module, params)
-    Browser.visit(session, path)
+
+    session
+    |> Browser.visit(path)
+    |> wait_for_server_connection()
+  end
+
+  def wait_for_server_connection(session, start_time \\ DateTime.utc_now()) do
+    callback = fn connected? ->
+      if !connected? &&
+           DateTime.diff(DateTime.utc_now(), start_time, :millisecond) < @max_wait_time do
+        :timer.sleep(100)
+        wait_for_server_connection(session, start_time)
+      end
+    end
+
+    script = "return window?.hologram?.['connected?'];"
+
+    Browser.execute_script(session, script, [], callback)
   end
 end
