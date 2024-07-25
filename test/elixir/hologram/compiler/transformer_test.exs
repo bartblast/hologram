@@ -96,6 +96,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module89
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module9
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module90
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module91
 
   defp fetch_def(module_ir) do
     hd(module_ir.body.expressions)
@@ -4015,20 +4016,29 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "single expression body" do
+    test "single expression body (AST from source code)" do
       ast =
         ast("""
-        defmodule Aaa.Bbb do
-          :expr_1
+        defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module91 do
+          def my_fun, do: :ok
         end
         """)
 
-      assert transform(ast, %Context{}) == %IR.ModuleDefinition{
-               module: %IR.AtomType{value: Aaa.Bbb},
+      assert %IR.ModuleDefinition{
+               module: %IR.AtomType{value: Module91},
                body: %IR.Block{
-                 expressions: [%IR.AtomType{value: :expr_1}]
+                 expressions: [%IR.FunctionDefinition{name: :my_fun}]
                }
-             }
+             } = transform(ast, %Context{})
+    end
+
+    test "single expression body (AST from BEAM file)" do
+      assert %IR.ModuleDefinition{
+               module: %IR.AtomType{value: Module91},
+               body: %IR.Block{
+                 expressions: [%IR.FunctionDefinition{name: :my_fun}]
+               }
+             } = transform_module(Module91)
     end
 
     test "multiple expressions body" do
