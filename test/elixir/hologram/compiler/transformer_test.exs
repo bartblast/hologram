@@ -3987,7 +3987,7 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  # BEAM files contain expanded AST, so only "AST from code" test makes sense here.
+  # BEAM files contain expanded AST, so only "AST from source code" test makes sense here.
   test "module attribute operator (AST from source code)" do
     ast = ast("@my_attr")
 
