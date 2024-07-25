@@ -98,6 +98,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module90
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module91
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module92
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module93
 
   defp fetch_def(module_ir) do
     hd(module_ir.body.expressions)
@@ -4083,10 +4084,19 @@ defmodule Hologram.Compiler.TransformerTest do
     assert transform(ast, %Context{}) == %IR.PIDType{value: pid}
   end
 
-  test "pin operator" do
-    ast = ast("^my_var")
+  describe "pin operator" do
+    test "AST from source code" do
+      ast = ast("^my_var")
 
-    assert transform(ast, %Context{}) == %IR.PinOperator{name: :my_var}
+      assert transform(ast, %Context{}) == %IR.PinOperator{name: :my_var}
+    end
+
+    test "AST from BEAM file" do
+      %IR.MatchOperator{
+        left: %IR.PinOperator{name: :my_var},
+        right: _right
+      } = transform_module_and_fetch_expr(Module93)
+    end
   end
 
   test "port" do
