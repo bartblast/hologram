@@ -4076,10 +4076,11 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  test "pid" do
-    pid = self()
+  # Can't compile PID inside quoted expression, so only "AST from source code" test makes sense here.
+  test "pid type (AST from source code)" do
+    ast = pid = self()
 
-    assert transform(pid, %Context{}) == %IR.PIDType{value: pid}
+    assert transform(ast, %Context{}) == %IR.PIDType{value: pid}
   end
 
   test "pin operator" do
