@@ -101,6 +101,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module93
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module94
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module95
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module96
 
   defp fetch_def(module_ir) do
     hd(module_ir.body.expressions)
@@ -4163,12 +4164,20 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "on alias, without args, without parenthesis" do
-      ast = ast("Abc.my_fun")
+    test "on alias, without args, without parenthesis (AST from source code)" do
+      ast = ast("DateTime.utc_now")
 
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
-               module: %IR.AtomType{value: :"Elixir.Abc"},
-               function: :my_fun,
+               module: %IR.AtomType{value: :"Elixir.DateTime"},
+               function: :utc_now,
+               args: []
+             }
+    end
+
+    test "on alias, without args, without parenthesis (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module96) == %IR.RemoteFunctionCall{
+               module: %IR.AtomType{value: :"Elixir.DateTime"},
+               function: :utc_now,
                args: []
              }
     end
