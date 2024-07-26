@@ -99,7 +99,6 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module91
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module92
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module93
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module94
 
   defp fetch_def(module_ir) do
     hd(module_ir.body.expressions)
@@ -4107,10 +4106,11 @@ defmodule Hologram.Compiler.TransformerTest do
     assert transform(ast, %Context{}) == %IR.PortType{value: port}
   end
 
-  test "reference" do
-    reference = make_ref()
+  # Can't inject a module attribute with reference value into a function, so only "AST from source code" test makes sense here.
+  test "reference (AST from source code)" do
+    ast = reference = make_ref()
 
-    assert transform(reference, %Context{}) == %IR.ReferenceType{value: reference}
+    assert transform(ast, %Context{}) == %IR.ReferenceType{value: reference}
   end
 
   describe "remote function call" do
