@@ -99,6 +99,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module91
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module92
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module93
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module94
 
   defp fetch_def(module_ir) do
     hd(module_ir.body.expressions)
@@ -4119,12 +4120,20 @@ defmodule Hologram.Compiler.TransformerTest do
     # Remote call on variable, without args, without parenthesis case
     # is tested as part of the dot operator tests.
 
-    test "on variable, without args, with parenthesis" do
-      ast = ast("a.x()")
+    test "on variable, without args, with parenthesis (AST from source code)" do
+      ast = ast("x.my_fun()")
 
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
-               module: %IR.Variable{name: :a},
-               function: :x,
+               module: %IR.Variable{name: :x},
+               function: :my_fun,
+               args: []
+             }
+    end
+
+    test "on variable, without args, with parenthesis (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module94) == %IR.RemoteFunctionCall{
+               module: %IR.Variable{name: :x},
+               function: :my_fun,
                args: []
              }
     end
