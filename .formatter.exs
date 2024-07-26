@@ -19,10 +19,14 @@ test_locals_without_parens = [
 [
   export: [locals_without_parens: exported_locals_without_parens],
   import_deps: [:phoenix],
-  inputs: [
-    "*.{ex,exs}",
-    "{benchmarks,config,lib}/**/*.{ex,exs}",
-    "test/elixir/**/*.{ex,exs}"
-  ],
+  inputs:
+    Enum.flat_map(
+      [
+        "*.{ex,exs}",
+        "{benchmarks,config,lib}/**/*.{ex,exs}",
+        "test/elixir/**/*.{ex,exs}"
+      ],
+      &Path.wildcard(&1, match_dot: true)
+    ) -- ["test/elixir/support/fixtures/compiler/transformer/module_96.ex"],
   locals_without_parens: exported_locals_without_parens ++ test_locals_without_parens
 ]
