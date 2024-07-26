@@ -4099,14 +4099,16 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  # Can't inject a module attribute with port value into a function, so only "AST from source code" test makes sense here.
+  # Can't inject a module attribute with port value into a function,
+  # so only "AST from source code" test makes sense here.
   test "port (AST from source code)" do
     ast = port = port("0.11")
 
     assert transform(ast, %Context{}) == %IR.PortType{value: port}
   end
 
-  # Can't inject a module attribute with reference value into a function, so only "AST from source code" test makes sense here.
+  # Can't inject a module attribute with reference value into a function,
+  # so only "AST from source code" test makes sense here.
   test "reference (AST from source code)" do
     ast = reference = make_ref()
 
