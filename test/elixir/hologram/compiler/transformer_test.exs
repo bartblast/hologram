@@ -99,6 +99,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module91
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module92
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module93
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module94
 
   defp fetch_def(module_ir) do
     hd(module_ir.body.expressions)
@@ -4099,10 +4100,11 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  test "port" do
-    port = port("0.11")
+  # Can't inject a module attribute with port value into a function, so only "AST from source code" test makes sense here.
+  test "port (AST from source code)" do
+    ast = port = port("0.11")
 
-    assert transform(port, %Context{}) == %IR.PortType{value: port}
+    assert transform(ast, %Context{}) == %IR.PortType{value: port}
   end
 
   test "reference" do
