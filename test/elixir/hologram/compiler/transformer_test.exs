@@ -8,6 +8,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Compiler.IR
 
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module10
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module100
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module11
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module12
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module13
@@ -4288,10 +4289,27 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "on expression, with args" do
+    test "on expression, with args (AST from source code)" do
       ast = ast("(anon_fun.(1, 2)).remote_fun(3, 4)")
 
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
+               module: %IR.AnonymousFunctionCall{
+                 function: %IR.Variable{name: :anon_fun},
+                 args: [
+                   %IR.IntegerType{value: 1},
+                   %IR.IntegerType{value: 2}
+                 ]
+               },
+               function: :remote_fun,
+               args: [
+                 %IR.IntegerType{value: 3},
+                 %IR.IntegerType{value: 4}
+               ]
+             }
+    end
+
+    test "on expression, with args (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module100) == %IR.RemoteFunctionCall{
                module: %IR.AnonymousFunctionCall{
                  function: %IR.Variable{name: :anon_fun},
                  args: [
