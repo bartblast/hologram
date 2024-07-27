@@ -103,6 +103,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module95
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module96
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module97
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module98
 
   defp fetch_def(module_ir) do
     hd(module_ir.body.expressions)
@@ -4201,15 +4202,26 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "on alias, with args" do
-      ast = ast("Abc.my_fun(1, 2)")
+    test "on alias, with args (AST from source code)" do
+      ast = ast("Integer.digits(123, 10)")
 
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
-               module: %IR.AtomType{value: :"Elixir.Abc"},
-               function: :my_fun,
+               module: %IR.AtomType{value: :"Elixir.Integer"},
+               function: :digits,
                args: [
-                 %IR.IntegerType{value: 1},
-                 %IR.IntegerType{value: 2}
+                 %IR.IntegerType{value: 123},
+                 %IR.IntegerType{value: 10}
+               ]
+             }
+    end
+
+    test "on alias, with args (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module98) == %IR.RemoteFunctionCall{
+               module: %IR.AtomType{value: :"Elixir.Integer"},
+               function: :digits,
+               args: [
+                 %IR.IntegerType{value: 123},
+                 %IR.IntegerType{value: 10}
                ]
              }
     end
