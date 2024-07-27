@@ -104,6 +104,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module96
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module97
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module98
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module99
 
   defp fetch_def(module_ir) do
     hd(module_ir.body.expressions)
@@ -4257,10 +4258,24 @@ defmodule Hologram.Compiler.TransformerTest do
     # Remote call on expression, without args, without parenthesis case
     # is tested as part of the dot operator tests.
 
-    test "on expression, without args" do
+    test "on expression, without args (AST from source code)" do
       ast = ast("(anon_fun.(1, 2)).remote_fun()")
 
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
+               module: %IR.AnonymousFunctionCall{
+                 function: %IR.Variable{name: :anon_fun},
+                 args: [
+                   %IR.IntegerType{value: 1},
+                   %IR.IntegerType{value: 2}
+                 ]
+               },
+               function: :remote_fun,
+               args: []
+             }
+    end
+
+    test "on expression, without args (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module99) == %IR.RemoteFunctionCall{
                module: %IR.AnonymousFunctionCall{
                  function: %IR.Variable{name: :anon_fun},
                  args: [
