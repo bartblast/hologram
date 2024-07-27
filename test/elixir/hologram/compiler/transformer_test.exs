@@ -2274,6 +2274,7 @@ defmodule Hologram.Compiler.TransformerTest do
     @result_from_source_code transform(@ast, %Context{})
 
     # Can't use transform_module_and_fetch_expr(Module40) here
+    # credo:disable-for-lines:13 Credo.Check.Warning.MapGetUnsafePass
     @result_from_beam_file Module40
                            |> AST.for_module()
                            |> transform(%Context{})
