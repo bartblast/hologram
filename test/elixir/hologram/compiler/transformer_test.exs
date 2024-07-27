@@ -117,6 +117,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
   defp fetch_expression(module_ir) do
     module_ir.body.expressions
+    |> Enum.filter(fn %IR.FunctionDefinition{name: name} -> name == :test end)
     |> hd()
     |> Map.get(:clause)
     |> Map.get(:body)
@@ -2273,6 +2274,9 @@ defmodule Hologram.Compiler.TransformerTest do
                            |> transform(%Context{})
                            |> Map.get(:body)
                            |> Map.get(:expressions)
+                           |> Enum.filter(fn %IR.FunctionDefinition{name: name} ->
+                             name == :test
+                           end)
                            |> hd()
                            |> Map.get(:clause)
                            |> Map.get(:body)
