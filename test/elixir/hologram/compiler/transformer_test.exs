@@ -4240,7 +4240,8 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "on module attribute, with args" do
+    # BEAM files contain expanded AST, so only "AST from source code" tests make sense here.
+    test "on module attribute, with args (AST from source code)" do
       ast = ast("@my_attr.my_fun(1, 2)")
 
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
