@@ -11,6 +11,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module100
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module101
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module102
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module103
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module11
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module12
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module13
@@ -4363,15 +4364,26 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "on Erlang module, with args" do
-      ast = ast(":my_module.my_fun(1, 2)")
+    test "on Erlang module, with args (AST from source code)" do
+      ast = ast(":math.pow(2, 3)")
 
       assert transform(ast, %Context{}) == %IR.RemoteFunctionCall{
-               module: %IR.AtomType{value: :my_module},
-               function: :my_fun,
+               module: %IR.AtomType{value: :math},
+               function: :pow,
                args: [
-                 %IR.IntegerType{value: 1},
-                 %IR.IntegerType{value: 2}
+                 %IR.IntegerType{value: 2},
+                 %IR.IntegerType{value: 3}
+               ]
+             }
+    end
+
+    test "on Erlang module, with args (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module103) == %IR.RemoteFunctionCall{
+               module: %IR.AtomType{value: :math},
+               function: :pow,
+               args: [
+                 %IR.IntegerType{value: 2},
+                 %IR.IntegerType{value: 3}
                ]
              }
     end
