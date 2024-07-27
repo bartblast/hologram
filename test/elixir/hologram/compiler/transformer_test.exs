@@ -13,6 +13,11 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module102
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module103
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module104
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module105
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module106
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module107
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module108
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module109
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module11
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module12
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module13
@@ -4407,13 +4412,13 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "struct" do
-    @ast ast("%Aaa.Bbb{a: 1, b: 2}")
+    @ast ast("%Hologram.Test.Fixtures.Compiler.Tranformer.Module105{a: 1, b: 2}")
 
-    test "without cons operator, not in pattern" do
+    test "without cons operator, not in pattern (AST from source code)" do
       context = %Context{pattern?: false}
 
       assert transform(@ast, context) == %IR.RemoteFunctionCall{
-               module: %IR.AtomType{value: Aaa.Bbb},
+               module: %IR.AtomType{value: Module105},
                function: :__struct__,
                args: [
                  %IR.ListType{
@@ -4436,19 +4441,57 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "without cons operator, in pattern, with module specified" do
+    test "without cons operator, not in pattern (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module105) == %IR.RemoteFunctionCall{
+               module: %IR.AtomType{value: Module105},
+               function: :__struct__,
+               args: [
+                 %IR.ListType{
+                   data: [
+                     %IR.TupleType{
+                       data: [
+                         %IR.AtomType{value: :a},
+                         %IR.IntegerType{value: 1}
+                       ]
+                     },
+                     %IR.TupleType{
+                       data: [
+                         %IR.AtomType{value: :b},
+                         %IR.IntegerType{value: 2}
+                       ]
+                     }
+                   ]
+                 }
+               ]
+             }
+    end
+
+    test "without cons operator, in pattern, with module specified (AST from source code)" do
       context = %Context{pattern?: true}
 
       assert transform(@ast, context) == %IR.MapType{
                data: [
-                 {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Aaa.Bbb}},
+                 {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module105}},
                  {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
                  {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
                ]
              }
     end
 
-    test "without cons operator, in pattern, with variable pattern instead of module" do
+    test "without cons operator, in pattern, with module specified (AST from BEAM file)" do
+      assert %IR.MatchOperator{
+               left: %IR.MapType{
+                 data: [
+                   {%IR.AtomType{value: :__struct__}, %IR.AtomType{value: Module106}},
+                   {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+                   {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+                 ]
+               },
+               right: _
+             } = transform_module_and_fetch_expr(Module106)
+    end
+
+    test "without cons operator, in pattern, with variable pattern instead of module (AST from source code)" do
       ast = ast("%x{a: 1, b: 2}")
 
       context = %Context{pattern?: true}
@@ -4462,7 +4505,20 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "without cons operator, in pattern, with match placeholder instead of module" do
+    test "without cons operator, in pattern, with variable pattern instead of module (AST from BEAM file)" do
+      assert %IR.MatchOperator{
+               left: %IR.MapType{
+                 data: [
+                   {%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x}},
+                   {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+                   {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+                 ]
+               },
+               right: _right
+             } = transform_module_and_fetch_expr(Module107)
+    end
+
+    test "without cons operator, in pattern, with match placeholder instead of module (AST from source code)" do
       ast = ast("%_{a: 1, b: 2}")
 
       context = %Context{pattern?: true}
@@ -4476,11 +4532,24 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
+    test "without cons operator, in pattern, with match placeholder instead of module (AST from BEAM file)" do
+      assert %IR.MatchOperator{
+               left: %IR.MapType{
+                 data: [
+                   {%IR.AtomType{value: :__struct__}, %IR.MatchPlaceholder{}},
+                   {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
+                   {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
+                 ]
+               },
+               right: _right
+             } = transform_module_and_fetch_expr(Module108)
+    end
+
     # Case not possible, since it wouldn't compile:
     # test "without cons operator, not in pattern, with match placeholder instead of module"
 
-    test "with cons operator, not in pattern" do
-      ast = ast("%Aaa.Bbb{x | a: 1, b: 2}")
+    test "with cons operator, not in pattern (AST from source code)" do
+      ast = ast("%Hologram.Test.Fixtures.Compiler.Tranformer.Module109{x | a: 1, b: 2}")
 
       context = %Context{pattern?: false}
 
@@ -4490,7 +4559,39 @@ defmodule Hologram.Compiler.TransformerTest do
                args: [
                  %IR.Variable{name: :x},
                  %IR.RemoteFunctionCall{
-                   module: %IR.AtomType{value: Aaa.Bbb},
+                   module: %IR.AtomType{value: Module109},
+                   function: :__struct__,
+                   args: [
+                     %IR.ListType{
+                       data: [
+                         %IR.TupleType{
+                           data: [
+                             %IR.AtomType{value: :a},
+                             %IR.IntegerType{value: 1}
+                           ]
+                         },
+                         %IR.TupleType{
+                           data: [
+                             %IR.AtomType{value: :b},
+                             %IR.IntegerType{value: 2}
+                           ]
+                         }
+                       ]
+                     }
+                   ]
+                 }
+               ]
+             }
+    end
+
+    test "with cons operator, not in pattern (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module109) == %IR.RemoteFunctionCall{
+               module: %IR.AtomType{value: Map},
+               function: :merge,
+               args: [
+                 %IR.Variable{name: :x},
+                 %IR.RemoteFunctionCall{
+                   module: %IR.AtomType{value: Module109},
                    function: :__struct__,
                    args: [
                      %IR.ListType{
