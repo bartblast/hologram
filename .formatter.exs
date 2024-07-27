@@ -27,6 +27,10 @@ test_locals_without_parens = [
         "test/elixir/**/*.{ex,exs}"
       ],
       &Path.wildcard(&1, match_dot: true)
-    ) -- ["test/elixir/support/fixtures/compiler/transformer/module_96.ex"],
+    ) --
+      [
+        "test/elixir/support/fixtures/compiler/transformer/module_96.ex",
+        "test/elixir/support/fixtures/compiler/transformer/module_101.ex"
+      ],
   locals_without_parens: exported_locals_without_parens ++ test_locals_without_parens
 ]
