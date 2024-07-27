@@ -12,6 +12,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module101
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module102
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module103
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module104
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module11
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module12
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module13
@@ -4389,10 +4390,16 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  test "string type" do
-    ast = ast("\"abc\"")
+  describe "string type" do
+    test "AST from source code" do
+      ast = ast("\"abc\"")
 
-    assert transform(ast, %Context{}) == %IR.StringType{value: "abc"}
+      assert transform(ast, %Context{}) == %IR.StringType{value: "abc"}
+    end
+
+    test "AST from BEAM file" do
+      assert transform_module_and_fetch_expr(Module104) == %IR.StringType{value: "abc"}
+    end
   end
 
   describe "struct" do
