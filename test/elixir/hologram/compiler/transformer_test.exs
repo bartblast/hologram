@@ -20,6 +20,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module109
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module110
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module111
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module112
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module11
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module12
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module13
@@ -4699,13 +4700,13 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform_module_and_fetch_expr(Module111)
     end
 
-    test "rescue clause with multiple modules" do
+    test "rescue clause with multiple modules (AST from source code)" do
       ast =
         ast("""
         try do
           1
         rescue
-          [Aaa, Bbb] -> :c
+          [ArgumentError, RuntimeError] -> :ok
         end
         """)
 
@@ -4713,13 +4714,33 @@ defmodule Hologram.Compiler.TransformerTest do
                rescue_clauses: [
                  %IR.TryRescueClause{
                    variable: nil,
-                   modules: [%IR.AtomType{value: Aaa}, %IR.AtomType{value: Bbb}],
+                   modules: [
+                     %IR.AtomType{value: ArgumentError},
+                     %IR.AtomType{value: RuntimeError}
+                   ],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :c}]
+                     expressions: [%IR.AtomType{value: :ok}]
                    }
                  }
                ]
              } = transform(ast, %Context{})
+    end
+
+    test "rescue clause with multiple modules (AST from BEAM file)" do
+      assert %IR.Try{
+               rescue_clauses: [
+                 %IR.TryRescueClause{
+                   variable: %IR.MatchPlaceholder{},
+                   modules: [
+                     %IR.AtomType{value: ArgumentError},
+                     %IR.AtomType{value: RuntimeError}
+                   ],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :ok}]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module112)
     end
 
     test "rescue clause with variable" do
