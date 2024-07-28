@@ -18,10 +18,10 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module107
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module108
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module109
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module11
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module110
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module111
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module112
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module11
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module12
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module13
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module14
