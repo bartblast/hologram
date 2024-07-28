@@ -18,6 +18,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module107
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module108
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module109
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module110
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module11
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module12
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module13
@@ -4622,25 +4623,42 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "try" do
-    test "body" do
+    test "body (AST from source code)" do
       ast =
         ast("""
         try do
-          1
-          2
+          x = 1
+          x
         rescue
-          x -> nil
+          e -> e
         end
         """)
 
       assert %IR.Try{
                body: %IR.Block{
                  expressions: [
-                   %IR.IntegerType{value: 1},
-                   %IR.IntegerType{value: 2}
+                   %IR.MatchOperator{
+                     left: %IR.Variable{name: :x},
+                     right: %IR.IntegerType{value: 1}
+                   },
+                   %IR.Variable{name: :x}
                  ]
                }
              } = transform(ast, %Context{})
+    end
+
+    test "body (AST from BEAM file)" do
+      assert %IR.Try{
+               body: %IR.Block{
+                 expressions: [
+                   %IR.MatchOperator{
+                     left: %IR.Variable{name: :x},
+                     right: %IR.IntegerType{value: 1}
+                   },
+                   %IR.Variable{name: :x}
+                 ]
+               }
+             } = transform_module_and_fetch_expr(Module110)
     end
 
     test "rescue clause with single module / single rescue clause" do
