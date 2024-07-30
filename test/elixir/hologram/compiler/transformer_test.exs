@@ -23,6 +23,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module111
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module112
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module113
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module114
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module12
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module13
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module14
@@ -5227,12 +5228,11 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "try (implicit)" do
-    test "public function def, without guards, without params (AST from source code)" do
+    test "function def, public, without guards, without params (AST from source code)" do
       ast =
         ast("""
         def test do
-          x = 1
-          x
+          :ok
         rescue
           e -> e
         end
@@ -5249,7 +5249,7 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform(ast, %Context{})
     end
 
-    test "public function def, without guards, without params (AST from BEAM file)" do
+    test "function def, public, without guards, without params (AST from BEAM file)" do
       assert %IR.FunctionDefinition{
                name: :test,
                arity: 0,
@@ -5259,6 +5259,39 @@ defmodule Hologram.Compiler.TransformerTest do
                  guards: []
                }
              } = transform_module_and_fetch_def(Module113)
+    end
+
+    test "private function def (AST from source code)" do
+      ast =
+        ast("""
+        defp test do
+          :ok
+        rescue
+          e -> e
+        end
+        """)
+
+      assert %IR.FunctionDefinition{
+               name: :test,
+               arity: 0,
+               visibility: :private,
+               clause: %IR.FunctionClause{
+                 params: [],
+                 guards: []
+               }
+             } = transform(ast, %Context{})
+    end
+
+    test "private function def (AST from BEAM file)" do
+      assert %IR.FunctionDefinition{
+               name: :test,
+               arity: 0,
+               visibility: :private,
+               clause: %IR.FunctionClause{
+                 params: [],
+                 guards: []
+               }
+             } = transform_module_and_fetch_def(Module114)
     end
   end
 
