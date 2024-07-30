@@ -22,6 +22,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module110
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module111
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module112
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module113
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module12
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module13
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module14
@@ -4624,7 +4625,7 @@ defmodule Hologram.Compiler.TransformerTest do
     # test "with cons operator, in pattern"
   end
 
-  describe "try" do
+  describe "try (explicit)" do
     test "body (AST from source code)" do
       ast =
         ast("""
@@ -5222,6 +5223,42 @@ defmodule Hologram.Compiler.TransformerTest do
                  ]
                }
              } = transform(ast, %Context{})
+    end
+  end
+
+  describe "try (implicit)" do
+    test "public function def, without guards, without params (AST from source code)" do
+      ast =
+        ast("""
+        def test do
+          x = 1
+          x
+        rescue
+          e -> e
+        end
+        """)
+
+      assert %IR.FunctionDefinition{
+               name: :test,
+               arity: 0,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [],
+                 guards: []
+               }
+             } = transform(ast, %Context{})
+    end
+
+    test "public function def, without guards, without params (AST from BEAM file)" do
+      assert %IR.FunctionDefinition{
+               name: :test,
+               arity: 0,
+               visibility: :public,
+               clause: %IR.FunctionClause{
+                 params: [],
+                 guards: []
+               }
+             } = transform_module_and_fetch_def(Module113)
     end
   end
 
