@@ -258,33 +258,19 @@ defmodule Hologram.Compiler.Transformer do
   end
 
   def transform(
-        {marker, _meta_1,
-         [{:when, _meta_2, [{name, _meta_3, params}, guards]}, [{:do, body} | _rest]]},
+        {marker, _meta_1, [{:when, _meta_2, [{name, _meta_3, params}, guards]}, [do: body]]},
         context
       )
       when marker in [:def, :defp] do
     transform_function_definition(marker, name, params, guards, body, context)
   end
 
-  def transform(
-        {marker, meta_1,
-         [{name, meta_2, params}, [{:do, _do}, {:rescue, _rescue} | _rest] = blocks]},
-        context
-      )
-      when marker in [:def, :defp] and (is_list(params) or is_nil(params)) do
-    rewritten_ast =
-      {marker, meta_1,
-       [{name, meta_2, params}, [do: {:__block__, [], [{:try, meta_2, [blocks]}]}]]}
-
-    transform(rewritten_ast, context)
-  end
-
-  def transform({marker, _meta_1, [{name, _meta_2, params}, [{:do, body} | _rest]]}, context)
+  def transform({marker, _meta_1, [{name, _meta_2, params}, [do: body]]}, context)
       when marker in [:def, :defp] and (is_list(params) or is_nil(params)) do
     transform_function_definition(marker, name, List.wrap(params), nil, body, context)
   end
 
-  def transform({marker, _meta_1, [{name, _meta_2, module}, [{:do, body} | _rest]]}, context)
+  def transform({marker, _meta_1, [{name, _meta_2, module}, [do: body]]}, context)
       when marker in [:def, :defp] and is_atom(module) do
     transform_function_definition(marker, name, [], nil, body, context)
   end
