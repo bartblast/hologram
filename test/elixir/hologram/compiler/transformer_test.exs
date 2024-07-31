@@ -25,6 +25,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module113
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module114
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module115
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module116
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module12
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module13
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module14
@@ -4746,27 +4747,41 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform_module_and_fetch_expr(Module112)
     end
 
-    test "rescue clause with variable" do
+    test "rescue clause with variable (AST from source code)" do
       ast =
         ast("""
         try do
           1
         rescue
-          x -> :a
+          e -> e
         end
         """)
 
       assert %IR.Try{
                rescue_clauses: [
                  %IR.TryRescueClause{
-                   variable: %IR.Variable{name: :x},
+                   variable: %IR.Variable{name: :e},
                    modules: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :a}]
+                     expressions: [%IR.Variable{name: :e}]
                    }
                  }
                ]
              } = transform(ast, %Context{})
+    end
+
+    test "rescue clause with variable (AST from BEAM file)" do
+      assert %IR.Try{
+               rescue_clauses: [
+                 %IR.TryRescueClause{
+                   variable: %IR.Variable{name: :e},
+                   modules: [],
+                   body: %IR.Block{
+                     expressions: [%IR.Variable{name: :e}]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module116)
     end
 
     test "rescue clause with variable and single module" do
