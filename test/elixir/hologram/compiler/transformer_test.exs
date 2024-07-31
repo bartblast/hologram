@@ -23,6 +23,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module111
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module112
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module113
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module114
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module12
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module13
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module14
@@ -5242,6 +5243,20 @@ defmodule Hologram.Compiler.TransformerTest do
                  ]
                }
              } = transform_module_and_fetch_expr(Module113)
+    end
+
+    test "rescue clause with single module / single rescue clause (AST from BEAM file)" do
+      assert %IR.Try{
+               rescue_clauses: [
+                 %IR.TryRescueClause{
+                   variable: %IR.MatchPlaceholder{},
+                   modules: [%IR.AtomType{value: RuntimeError}],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :ok}]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module114)
     end
   end
 
