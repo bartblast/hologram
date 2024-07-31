@@ -34,6 +34,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module121
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module122
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module123
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module124
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module13
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module14
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module15
@@ -4923,13 +4924,13 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform_module_and_fetch_expr(Module122)
     end
 
-    test "catch clause with value / single catch clause" do
+    test "catch clause with value / single catch clause (AST from source code)" do
       ast =
         ast("""
         try do
           1
         catch
-          :a -> :b
+          e -> e
         end
         """)
 
@@ -4937,14 +4938,29 @@ defmodule Hologram.Compiler.TransformerTest do
                catch_clauses: [
                  %IR.TryCatchClause{
                    kind: nil,
-                   value: %IR.AtomType{value: :a},
+                   value: %IR.Variable{name: :e},
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :b}]
+                     expressions: [%IR.Variable{name: :e}]
                    }
                  }
                ]
              } = transform(ast, %Context{})
+    end
+
+    test "catch clause with value / single catch clause (AST from BEAM file)" do
+      assert %IR.Try{
+               catch_clauses: [
+                 %IR.TryCatchClause{
+                   kind: nil,
+                   value: %IR.Variable{name: :e},
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.Variable{name: :e}]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module124)
     end
 
     test "catch clause with value and single guard" do
