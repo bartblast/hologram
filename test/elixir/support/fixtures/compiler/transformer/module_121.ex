@@ -3,6 +3,6 @@ defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module121 do
   def test do
     1
   rescue
-    x in [ArgumentError, RuntimeError] -> x
+    e in [ArgumentError, RuntimeError] -> {e, :ok}
   end
 end

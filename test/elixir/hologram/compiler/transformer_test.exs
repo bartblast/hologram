@@ -4645,7 +4645,7 @@ defmodule Hologram.Compiler.TransformerTest do
           x = 1
           x
         rescue
-          e -> e
+          e -> {e, :ok}
         end
         """)
 
@@ -4762,7 +4762,7 @@ defmodule Hologram.Compiler.TransformerTest do
         try do
           1
         rescue
-          e -> e
+          e -> {e, :ok}
         end
         """)
 
@@ -4772,7 +4772,9 @@ defmodule Hologram.Compiler.TransformerTest do
                    variable: %IR.Variable{name: :e},
                    modules: [],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :e}]
+                     expressions: [
+                       %IR.TupleType{data: [%IR.Variable{name: :e}, %IR.AtomType{value: :ok}]}
+                     ]
                    }
                  }
                ]
@@ -4786,7 +4788,9 @@ defmodule Hologram.Compiler.TransformerTest do
                    variable: %IR.Variable{name: :e},
                    modules: [],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :e}]
+                     expressions: [
+                       %IR.TupleType{data: [%IR.Variable{name: :e}, %IR.AtomType{value: :ok}]}
+                     ]
                    }
                  }
                ]
@@ -4799,17 +4803,19 @@ defmodule Hologram.Compiler.TransformerTest do
         try do
           1
         rescue
-          x in [RuntimeError] -> x
+          e in [RuntimeError] -> {e, :ok}
         end
         """)
 
       assert %IR.Try{
                rescue_clauses: [
                  %IR.TryRescueClause{
-                   variable: %IR.Variable{name: :x},
+                   variable: %IR.Variable{name: :e},
                    modules: [%IR.AtomType{value: RuntimeError}],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :x}]
+                     expressions: [
+                       %IR.TupleType{data: [%IR.Variable{name: :e}, %IR.AtomType{value: :ok}]}
+                     ]
                    }
                  }
                ]
@@ -4820,10 +4826,12 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Try{
                rescue_clauses: [
                  %IR.TryRescueClause{
-                   variable: %IR.Variable{name: :x},
+                   variable: %IR.Variable{name: :e},
                    modules: [%IR.AtomType{value: RuntimeError}],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :x}]
+                     expressions: [
+                       %IR.TupleType{data: [%IR.Variable{name: :e}, %IR.AtomType{value: :ok}]}
+                     ]
                    }
                  }
                ]
@@ -4836,20 +4844,22 @@ defmodule Hologram.Compiler.TransformerTest do
         try do
           1
         rescue
-          x in [ArgumentError, RuntimeError] -> x
+          e in [ArgumentError, RuntimeError] -> {e, :ok}
         end
         """)
 
       assert %IR.Try{
                rescue_clauses: [
                  %IR.TryRescueClause{
-                   variable: %IR.Variable{name: :x},
+                   variable: %IR.Variable{name: :e},
                    modules: [
                      %IR.AtomType{value: ArgumentError},
                      %IR.AtomType{value: RuntimeError}
                    ],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :x}]
+                     expressions: [
+                       %IR.TupleType{data: [%IR.Variable{name: :e}, %IR.AtomType{value: :ok}]}
+                     ]
                    }
                  }
                ]
@@ -4860,13 +4870,15 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Try{
                rescue_clauses: [
                  %IR.TryRescueClause{
-                   variable: %IR.Variable{name: :x},
+                   variable: %IR.Variable{name: :e},
                    modules: [
                      %IR.AtomType{value: ArgumentError},
                      %IR.AtomType{value: RuntimeError}
                    ],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :x}]
+                     expressions: [
+                       %IR.TupleType{data: [%IR.Variable{name: :e}, %IR.AtomType{value: :ok}]}
+                     ]
                    }
                  }
                ]
@@ -4879,8 +4891,8 @@ defmodule Hologram.Compiler.TransformerTest do
         try do
           1
         rescue
-          x in [ArgumentError] -> x
-          y in [RuntimeError] -> y
+          x in [ArgumentError] -> {x, :ok}
+          y in [RuntimeError] -> {y, :ok}
         end
         """)
 
@@ -4890,14 +4902,18 @@ defmodule Hologram.Compiler.TransformerTest do
                    variable: %IR.Variable{name: :x},
                    modules: [%IR.AtomType{value: ArgumentError}],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :x}]
+                     expressions: [
+                       %IR.TupleType{data: [%IR.Variable{name: :x}, %IR.AtomType{value: :ok}]}
+                     ]
                    }
                  },
                  %IR.TryRescueClause{
                    variable: %IR.Variable{name: :y},
                    modules: [%IR.AtomType{value: RuntimeError}],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :y}]
+                     expressions: [
+                       %IR.TupleType{data: [%IR.Variable{name: :y}, %IR.AtomType{value: :ok}]}
+                     ]
                    }
                  }
                ]
@@ -4911,14 +4927,18 @@ defmodule Hologram.Compiler.TransformerTest do
                    variable: %IR.Variable{name: :x},
                    modules: [%IR.AtomType{value: ArgumentError}],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :x}]
+                     expressions: [
+                       %IR.TupleType{data: [%IR.Variable{name: :x}, %IR.AtomType{value: :ok}]}
+                     ]
                    }
                  },
                  %IR.TryRescueClause{
                    variable: %IR.Variable{name: :y},
                    modules: [%IR.AtomType{value: RuntimeError}],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :y}]
+                     expressions: [
+                       %IR.TupleType{data: [%IR.Variable{name: :y}, %IR.AtomType{value: :ok}]}
+                     ]
                    }
                  }
                ]
@@ -4931,7 +4951,7 @@ defmodule Hologram.Compiler.TransformerTest do
         try do
           1
         catch
-          e -> e
+          e -> {e, :ok}
         end
         """)
 
@@ -4942,7 +4962,9 @@ defmodule Hologram.Compiler.TransformerTest do
                    value: %IR.Variable{name: :e},
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :e}]
+                     expressions: [
+                       %IR.TupleType{data: [%IR.Variable{name: :e}, %IR.AtomType{value: :ok}]}
+                     ]
                    }
                  }
                ]
@@ -4957,7 +4979,9 @@ defmodule Hologram.Compiler.TransformerTest do
                    value: %IR.Variable{name: :e},
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :e}]
+                     expressions: [
+                       %IR.TupleType{data: [%IR.Variable{name: :e}, %IR.AtomType{value: :ok}]}
+                     ]
                    }
                  }
                ]
@@ -5378,7 +5402,9 @@ defmodule Hologram.Compiler.TransformerTest do
                    variable: %IR.Variable{name: :e},
                    modules: [],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :e}]
+                     expressions: [
+                       %IR.TupleType{data: [%IR.Variable{name: :e}, %IR.AtomType{value: :ok}]}
+                     ]
                    }
                  }
                ]
@@ -5389,10 +5415,12 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Try{
                rescue_clauses: [
                  %IR.TryRescueClause{
-                   variable: %IR.Variable{name: :x},
+                   variable: %IR.Variable{name: :e},
                    modules: [%IR.AtomType{value: RuntimeError}],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :x}]
+                     expressions: [
+                       %IR.TupleType{data: [%IR.Variable{name: :e}, %IR.AtomType{value: :ok}]}
+                     ]
                    }
                  }
                ]
@@ -5403,13 +5431,15 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Try{
                rescue_clauses: [
                  %IR.TryRescueClause{
-                   variable: %IR.Variable{name: :x},
+                   variable: %IR.Variable{name: :e},
                    modules: [
                      %IR.AtomType{value: ArgumentError},
                      %IR.AtomType{value: RuntimeError}
                    ],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :x}]
+                     expressions: [
+                       %IR.TupleType{data: [%IR.Variable{name: :e}, %IR.AtomType{value: :ok}]}
+                     ]
                    }
                  }
                ]
@@ -5423,14 +5453,18 @@ defmodule Hologram.Compiler.TransformerTest do
                    variable: %IR.Variable{name: :x},
                    modules: [%IR.AtomType{value: ArgumentError}],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :x}]
+                     expressions: [
+                       %IR.TupleType{data: [%IR.Variable{name: :x}, %IR.AtomType{value: :ok}]}
+                     ]
                    }
                  },
                  %IR.TryRescueClause{
                    variable: %IR.Variable{name: :y},
                    modules: [%IR.AtomType{value: RuntimeError}],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :y}]
+                     expressions: [
+                       %IR.TupleType{data: [%IR.Variable{name: :y}, %IR.AtomType{value: :ok}]}
+                     ]
                    }
                  }
                ]
@@ -5445,7 +5479,9 @@ defmodule Hologram.Compiler.TransformerTest do
                    value: %IR.Variable{name: :e},
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :e}]
+                     expressions: [
+                       %IR.TupleType{data: [%IR.Variable{name: :e}, %IR.AtomType{value: :ok}]}
+                     ]
                    }
                  }
                ]

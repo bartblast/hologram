@@ -5,7 +5,7 @@ defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module120 do
     try do
       1
     rescue
-      x in [ArgumentError, RuntimeError] -> x
+      e in [ArgumentError, RuntimeError] -> {e, :ok}
     end
   end
 end

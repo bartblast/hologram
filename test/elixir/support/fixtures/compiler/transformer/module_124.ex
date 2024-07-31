@@ -5,7 +5,7 @@ defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module124 do
     try do
       1
     catch
-      e -> e
+      e -> {e, :ok}
     end
   end
 end

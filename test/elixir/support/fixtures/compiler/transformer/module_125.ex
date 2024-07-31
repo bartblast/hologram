@@ -3,6 +3,6 @@ defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module125 do
   def test do
     1
   catch
-    e -> e
+    e -> {e, :ok}
   end
 end

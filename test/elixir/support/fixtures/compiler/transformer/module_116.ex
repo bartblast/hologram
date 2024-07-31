@@ -5,7 +5,7 @@ defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module116 do
     try do
       1
     rescue
-      e -> e
+      e -> {e, :ok}
     end
   end
 end
