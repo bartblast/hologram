@@ -36,6 +36,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module123
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module124
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module125
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module126
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module13
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module14
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module15
@@ -4988,13 +4989,13 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform_module_and_fetch_expr(Module124)
     end
 
-    test "catch clause with value and single guard" do
+    test "catch clause with value and single guard (AST from source code)" do
       ast =
         ast("""
         try do
           1
         catch
-          :a when :b -> :c
+          x when is_integer(x) -> :ok
         end
         """)
 
@@ -5002,14 +5003,40 @@ defmodule Hologram.Compiler.TransformerTest do
                catch_clauses: [
                  %IR.TryCatchClause{
                    kind: nil,
-                   value: %IR.AtomType{value: :a},
-                   guards: [%IR.AtomType{value: :b}],
+                   value: %IR.Variable{name: :x},
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :is_integer,
+                       args: [%IR.Variable{name: :x}]
+                     }
+                   ],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :c}]
+                     expressions: [%IR.AtomType{value: :ok}]
                    }
                  }
                ]
              } = transform(ast, %Context{})
+    end
+
+    test "catch clause with value and single guard (AST from BEAM file)" do
+      assert %IR.Try{
+               catch_clauses: [
+                 %IR.TryCatchClause{
+                   kind: nil,
+                   value: %IR.Variable{name: :x},
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :is_integer,
+                       args: [%IR.Variable{name: :x}]
+                     }
+                   ],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :ok}]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module126)
     end
 
     test "catch clause with value and 2 guards" do
