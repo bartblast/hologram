@@ -44,6 +44,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module130
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module131
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module132
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module133
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module14
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module15
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module16
@@ -5687,6 +5688,21 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ]
              } = transform_module_and_fetch_expr(Module131)
+    end
+
+    test "catch clause with kind and value (AST from BEAM file)" do
+      assert %IR.Try{
+               catch_clauses: [
+                 %IR.TryCatchClause{
+                   kind: %IR.AtomType{value: :exit},
+                   value: %IR.AtomType{value: :timeout},
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :error}]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module133)
     end
   end
 
