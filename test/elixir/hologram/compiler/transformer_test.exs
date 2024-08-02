@@ -52,6 +52,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module138
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module139
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module14
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module140
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module15
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module16
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module17
@@ -5395,14 +5396,14 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform_module_and_fetch_expr(Module138)
     end
 
-    test "multiple catch clauses" do
+    test "multiple catch clauses (AST from source code)" do
       ast =
         ast("""
         try do
           1
         catch
-          :a -> :b
-          :c -> :d
+          :error -> :a
+          :warning -> :b
         end
         """)
 
@@ -5410,22 +5411,45 @@ defmodule Hologram.Compiler.TransformerTest do
                catch_clauses: [
                  %IR.TryCatchClause{
                    kind: nil,
-                   value: %IR.AtomType{value: :a},
+                   value: %IR.AtomType{value: :error},
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :b}]
+                     expressions: [%IR.AtomType{value: :a}]
                    }
                  },
                  %IR.TryCatchClause{
                    kind: nil,
-                   value: %IR.AtomType{value: :c},
+                   value: %IR.AtomType{value: :warning},
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :d}]
+                     expressions: [%IR.AtomType{value: :b}]
                    }
                  }
                ]
              } = transform(ast, %Context{})
+    end
+
+    test "multiple catch clauses (AST from BEAM file)" do
+      assert %IR.Try{
+               catch_clauses: [
+                 %IR.TryCatchClause{
+                   kind: nil,
+                   value: %IR.AtomType{value: :error},
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :a}]
+                   }
+                 },
+                 %IR.TryCatchClause{
+                   kind: nil,
+                   value: %IR.AtomType{value: :warning},
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :b}]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module140)
     end
 
     test "single else clause" do
