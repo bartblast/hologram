@@ -48,6 +48,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module134
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module135
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module136
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module137
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module14
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module15
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module16
@@ -5788,6 +5789,32 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ]
              } = transform_module_and_fetch_expr(Module135)
+    end
+
+    test "catch clause with kind, value and 2 guards (AST from BEAM file)" do
+      assert %IR.Try{
+               catch_clauses: [
+                 %IR.TryCatchClause{
+                   kind: %IR.AtomType{value: :error},
+                   value: %IR.Variable{name: :x},
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :is_integer,
+                       args: [%IR.Variable{name: :x}]
+                     },
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :>,
+                       args: [%IR.Variable{name: :x}, %IR.IntegerType{value: 1}]
+                     }
+                   ],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :ok}]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module137)
     end
   end
 
