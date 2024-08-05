@@ -58,6 +58,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module143
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module144
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module145
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module146
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module15
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module16
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module17
@@ -5550,27 +5551,54 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform_module_and_fetch_expr(Module144)
     end
 
-    test "else clause with single guard" do
+    test "else clause with single guard (AST from source code)" do
       ast =
         ast("""
         try do
-          1
+          x
+        catch
+          :error -> :a
         else
-          :a when :b -> :c
+          y when is_integer(y) -> :b
         end
         """)
 
       assert %IR.Try{
                else_clauses: [
                  %IR.Clause{
-                   match: %IR.AtomType{value: :a},
-                   guards: [%IR.AtomType{value: :b}],
+                   match: %IR.Variable{name: :y},
+                   guards: [
+                     %IR.LocalFunctionCall{
+                       function: :is_integer,
+                       args: [%IR.Variable{name: :y}]
+                     }
+                   ],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :c}]
+                     expressions: [%IR.AtomType{value: :b}]
                    }
                  }
                ]
              } = transform(ast, %Context{})
+    end
+
+    test "else clause with single guard (AST from BEAM file)" do
+      assert %IR.Try{
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.Variable{name: :y},
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :is_integer,
+                       args: [%IR.Variable{name: :y}]
+                     }
+                   ],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :b}]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module146)
     end
 
     test "else clause with 2 guards" do
