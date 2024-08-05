@@ -56,6 +56,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module141
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module142
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module143
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module144
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module15
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module16
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module17
@@ -5494,35 +5495,58 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform_module_and_fetch_expr(Module142)
     end
 
-    test "multiple else clauses" do
+    test "multiple else clauses (AST from source code)" do
       ast =
         ast("""
         try do
-          1
+          x
+        catch
+          :error -> :a
         else
-          :a -> :b
-          :c -> :d
+          :b -> :c
+          :d -> :e
         end
         """)
 
       assert %IR.Try{
                else_clauses: [
                  %IR.Clause{
-                   match: %IR.AtomType{value: :a},
+                   match: %IR.AtomType{value: :b},
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :b}]
+                     expressions: [%IR.AtomType{value: :c}]
                    }
                  },
                  %IR.Clause{
-                   match: %IR.AtomType{value: :c},
+                   match: %IR.AtomType{value: :d},
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :d}]
+                     expressions: [%IR.AtomType{value: :e}]
                    }
                  }
                ]
              } = transform(ast, %Context{})
+    end
+
+    test "multiple else clauses (AST from BEAM file)" do
+      assert %IR.Try{
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.AtomType{value: :b},
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :c}]
+                   }
+                 },
+                 %IR.Clause{
+                   match: %IR.AtomType{value: :d},
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :e}]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module144)
     end
 
     test "else clause with single guard" do
