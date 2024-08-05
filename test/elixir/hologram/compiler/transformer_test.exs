@@ -54,6 +54,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module14
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module140
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module141
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module142
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module15
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module16
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module17
@@ -5453,27 +5454,43 @@ defmodule Hologram.Compiler.TransformerTest do
              } = transform_module_and_fetch_expr(Module140)
     end
 
-    test "single else clause" do
+    test "single else clause (AST from source code)" do
       ast =
         ast("""
         try do
-          1
+          x
+        catch
+          :error -> :a
         else
-          :a -> :b
+          :b -> :c
         end
         """)
 
       assert %IR.Try{
                else_clauses: [
                  %IR.Clause{
-                   match: %IR.AtomType{value: :a},
+                   match: %IR.AtomType{value: :b},
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.AtomType{value: :b}]
+                     expressions: [%IR.AtomType{value: :c}]
                    }
                  }
                ]
              } = transform(ast, %Context{})
+    end
+
+    test "single else clause (AST from BEAM file)" do
+      assert %IR.Try{
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.AtomType{value: :b},
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :c}]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module142)
     end
 
     test "multiple else clauses" do
