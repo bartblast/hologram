@@ -57,6 +57,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module142
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module143
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module144
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module145
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module15
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module16
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module17
@@ -5992,6 +5993,27 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ]
              } = transform_module_and_fetch_expr(Module143)
+    end
+
+    test "multiple else clauses (AST from BEAM file)" do
+      assert %IR.Try{
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.AtomType{value: :b},
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :c}]
+                   }
+                 },
+                 %IR.Clause{
+                   match: %IR.AtomType{value: :d},
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :e}]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module145)
     end
   end
 
