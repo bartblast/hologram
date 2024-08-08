@@ -66,6 +66,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module150
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module151
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module152
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module153
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module16
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module17
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module18
@@ -6217,6 +6218,20 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ]
              } = transform_module_and_fetch_expr(Module151)
+    end
+
+    test "after block (AST from BEAM file)" do
+      assert %IR.Try{
+               after_block: %IR.Block{
+                 expressions: [
+                   %IR.MatchOperator{
+                     left: %IR.Variable{name: :x},
+                     right: %IR.IntegerType{value: 1}
+                   },
+                   %IR.Variable{name: :x}
+                 ]
+               }
+             } = transform_module_and_fetch_expr(Module153)
     end
   end
 
