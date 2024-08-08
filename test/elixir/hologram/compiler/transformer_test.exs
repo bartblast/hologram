@@ -64,6 +64,7 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module149
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module15
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module150
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module151
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module16
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module17
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module18
@@ -6168,6 +6169,36 @@ defmodule Hologram.Compiler.TransformerTest do
                  }
                ]
              } = transform_module_and_fetch_expr(Module149)
+    end
+
+    test "else clause with 3 guards (AST from BEAM file)" do
+      assert %IR.Try{
+               else_clauses: [
+                 %IR.Clause{
+                   match: %IR.Variable{name: :y},
+                   guards: [
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :is_integer,
+                       args: [%IR.Variable{name: :y}]
+                     },
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :>,
+                       args: [%IR.Variable{name: :y}, %IR.IntegerType{value: 1}]
+                     },
+                     %IR.RemoteFunctionCall{
+                       module: %IR.AtomType{value: :erlang},
+                       function: :<,
+                       args: [%IR.Variable{name: :y}, %IR.IntegerType{value: 9}]
+                     }
+                   ],
+                   body: %IR.Block{
+                     expressions: [%IR.AtomType{value: :b}]
+                   }
+                 }
+               ]
+             } = transform_module_and_fetch_expr(Module151)
     end
   end
 
