@@ -60,7 +60,8 @@ defmodule Hologram.Test.Helpers do
     quote do
       error_msg = resolve_error_msg(unquote(error), __STACKTRACE__)
 
-      if is_regex(unquote(expected_msg)) do
+      # is_regex/1 is a guard, so we need to wrap the arg to prevent compilation warnings.
+      if is_regex(wrap_term(unquote(expected_msg))) do
         assert error_msg =~ unquote(expected_msg)
       else
         assert error_msg == unquote(expected_msg)
