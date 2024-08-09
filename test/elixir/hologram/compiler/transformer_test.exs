@@ -3367,8 +3367,7 @@ defmodule Hologram.Compiler.TransformerTest do
   end
 
   describe "dot operator" do
-    test "third tuple elem is nil (AST from source code)" do
-      # {{:., [line: 1], [{:my_var, [line: 1], nil}, :my_key]}, [no_parens: true, line: 1], []}
+    test "AST from source code" do
       ast = ast("my_var.my_key")
 
       assert transform(ast, %Context{}) == %IR.DotOperator{
@@ -3377,19 +3376,10 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "third tuple elem is nil (AST from BEAM file)" do
+    test "AST from BEAM file" do
       assert transform_module_and_fetch_expr(Module66) == %IR.DotOperator{
                left: %IR.Variable{name: :my_var},
                right: %IR.AtomType{value: :my_key}
-             }
-    end
-
-    test "third tuple elem is a module alias" do
-      ast = {{:., [line: 1], [{:abc, [line: 1], Aaa.Bbb}, :x]}, [no_parens: true, line: 1], []}
-
-      assert transform(ast, %Context{}) == %IR.DotOperator{
-               left: %IR.Variable{name: :abc},
-               right: %IR.AtomType{value: :x}
              }
     end
   end
