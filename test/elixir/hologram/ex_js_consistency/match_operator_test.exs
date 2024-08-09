@@ -541,7 +541,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
       end
     end
 
-    # TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/javascript/interpreter_test.mjs)
+    # TODO: client error message for this case is inconsistent with server error message (see test/javascript/interpreter_test.mjs)
     test "[1 = 2] = [1 = 1]" do
       assert_error MatchError, "no match of right hand side value: [1]", fn ->
         x = wrap_term(2)
@@ -549,7 +549,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
       end
     end
 
-    # TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/javascript/interpreter_test.mjs)
+    # TODO: client error message for this case is inconsistent with server error message (see test/javascript/interpreter_test.mjs)
     test "[2 = 1] = [1 = 1]" do
       assert_error MatchError, "no match of right hand side value: [1]", fn ->
         x = wrap_term(2)

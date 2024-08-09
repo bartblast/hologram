@@ -4892,7 +4892,7 @@ describe("Interpreter", () => {
         );
       });
 
-      // TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/elixir/hologram/ex_js_consistency/match_operator_test.exs)
+      // TODO: client error message for this case is inconsistent with server error message (see test/elixir/hologram/ex_js_consistency/match_operator_test.exs)
       it("[1 = 2] = [1 = 1]", () => {
         assertBoxedError(
           () =>
@@ -4918,7 +4918,7 @@ describe("Interpreter", () => {
         );
       });
 
-      // TODO: JavaScript error message for this case is inconsistent with Elixir error message (see test/elixir/hologram/ex_js_consistency/match_operator_test.exs)
+      // TODO: client error message for this case is inconsistent with server error message (see test/elixir/hologram/ex_js_consistency/match_operator_test.exs)
       it("[2 = 1] = [1 = 1]", () => {
         assertBoxedError(
           () =>
