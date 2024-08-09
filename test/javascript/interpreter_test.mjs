@@ -139,6 +139,7 @@ describe("Interpreter", () => {
         "MyModule.my_fun/2",
         [Type.integer(123)],
       );
+
       const expected =
         "no function clause matching in MyModule.my_fun/2\n\nThe following arguments were given to MyModule.my_fun/2:\n\n    # 1\n    123\n";
 
@@ -150,6 +151,7 @@ describe("Interpreter", () => {
         "MyModule.my_fun/2",
         [Type.integer(123), Type.atom("abc")],
       );
+
       const expected =
         "no function clause matching in MyModule.my_fun/2\n\nThe following arguments were given to MyModule.my_fun/2:\n\n    # 1\n    123\n\n    # 2\n    :abc\n";
 
@@ -297,7 +299,9 @@ describe("Interpreter", () => {
       assertBoxedError(
         () => Interpreter.callAnonymousFunction(anonFun, [Type.integer(3)]),
         "FunctionClauseError",
-        "no function clause matching in anonymous fn/1",
+        Interpreter.buildFunctionClauseErrorMsg("anonymous fn/1", [
+          Type.integer(3),
+        ]),
       );
     });
 
@@ -404,7 +408,9 @@ describe("Interpreter", () => {
       assertBoxedError(
         () => Interpreter.callAnonymousFunction(anonFun, [Type.integer(9)]),
         "FunctionClauseError",
-        "no function clause matching in anonymous fn/1\n\nThe following arguments were given to anonymous fn/1:\n\n    # 1\n    9\n",
+        Interpreter.buildFunctionClauseErrorMsg("anonymous fn/1", [
+          Type.integer(9),
+        ]),
       );
     });
 

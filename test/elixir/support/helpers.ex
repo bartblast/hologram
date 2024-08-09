@@ -97,11 +97,11 @@ defmodule Hologram.Test.Helpers do
   Builds an error message for FunctionClauseError.
   """
   @spec build_function_clause_error_msg(String.t(), list) :: String.t()
-  def build_function_clause_error_msg(mfa, args) do
+  def build_function_clause_error_msg(fun_name, args) do
     initial_str = """
-    no function clause matching in #{mfa}
+    no function clause matching in #{fun_name}
 
-    The following arguments were given to #{mfa}:
+    The following arguments were given to #{fun_name}:
     """
 
     args

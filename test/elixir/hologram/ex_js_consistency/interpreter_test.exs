@@ -59,16 +59,12 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
         2 -> :expr_2
       end
 
-      expected_msg = """
-      no function clause matching in anonymous fn/1 in Hologram.ExJsConsistency.InterpreterTest."test call anonymous function arity is valid, but args don't match the pattern"/1
-
-      The following arguments were given to anonymous fn/1 in Hologram.ExJsConsistency.InterpreterTest."test call anonymous function arity is valid, but args don't match the pattern"/1:
-
-          # 1
-          9
-      """
-
-      assert_error FunctionClauseError, expected_msg, fn -> fun.(9) end
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(
+                     ~s(anonymous fn/1 in Hologram.ExJsConsistency.InterpreterTest."test call anonymous function arity is valid, but args don't match the pattern in any of the clauses"/1),
+                     [9]
+                   ),
+                   fn -> fun.(9) end
     end
   end
 
