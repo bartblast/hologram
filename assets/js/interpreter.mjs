@@ -598,6 +598,27 @@ export default class Interpreter {
     );
   }
 
+  static raiseBadArityError(arity, args) {
+    const numArgs = args.length === 0 ? "no" : args.length;
+
+    const argumentNounPluralized = Utils.naiveNounPlural(
+      "argument",
+      args.length,
+    );
+
+    const inspectedArgs = args.map((arg) => Interpreter.inspect(arg));
+
+    let maybeInspectedArgs = "";
+    if (args.length > 0) {
+      maybeInspectedArgs = ` (${inspectedArgs.join(", ")})`;
+    }
+
+    return Interpreter.raiseError(
+      "BadArityError",
+      `anonymous function with arity ${arity} called with ${numArgs} ${argumentNounPluralized}${maybeInspectedArgs}`,
+    );
+  }
+
   static raiseBadMapError(arg) {
     const message = "expected a map, got: " + Interpreter.inspect(arg);
 

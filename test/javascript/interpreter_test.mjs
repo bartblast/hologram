@@ -6097,6 +6097,33 @@ describe("Interpreter", () => {
     });
   });
 
+  describe("raiseBadArityError()", () => {
+    it("called with no args", () => {
+      assertBoxedError(
+        () => Interpreter.raiseBadArityError(1, []),
+        "BadArityError",
+        "anonymous function with arity 1 called with no arguments",
+      );
+    });
+
+    it("called with a single arg", () => {
+      assertBoxedError(
+        () => Interpreter.raiseBadArityError(2, [Type.integer(9)]),
+        "BadArityError",
+        "anonymous function with arity 2 called with 1 argument (9)",
+      );
+    });
+
+    it("called with multiple args", () => {
+      assertBoxedError(
+        () =>
+          Interpreter.raiseBadArityError(1, [Type.integer(9), Type.integer(8)]),
+        "BadArityError",
+        "anonymous function with arity 1 called with 2 arguments (9, 8)",
+      );
+    });
+  });
+
   it("raiseBadMapError()", () => {
     assertBoxedError(
       () => Interpreter.raiseBadMapError(Type.atom("abc")),
