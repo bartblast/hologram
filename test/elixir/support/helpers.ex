@@ -1,5 +1,6 @@
 defmodule Hologram.Test.Helpers do
   import ExUnit.Assertions
+  import Hologram.Commons.Guards, only: [is_regex: 1]
   import Hologram.Template, only: [sigil_H: 2]
 
   alias Hologram.Assets.PageDigestRegistry
@@ -37,7 +38,7 @@ defmodule Hologram.Test.Helpers do
         unquote(fun).()
       rescue
         error in unquote(error_module) ->
-          assert resolve_error_msg(error, __STACKTRACE__) == unquote(expected_msg)
+          assert_error_msg(error, unquote(expected_msg))
       end
     end
   end
@@ -50,7 +51,19 @@ defmodule Hologram.Test.Helpers do
         apply(module, fun, wrap_term(args))
       rescue
         error in unquote(error_module) ->
-          assert resolve_error_msg(error, __STACKTRACE__) == unquote(expected_msg)
+          assert_error_msg(error, unquote(expected_msg))
+      end
+    end
+  end
+
+  defmacro assert_error_msg(error, expected_msg) do
+    quote do
+      error_msg = resolve_error_msg(unquote(error), __STACKTRACE__)
+
+      if is_regex(unquote(expected_msg)) do
+        assert error_msg =~ unquote(expected_msg)
+      else
+        assert error_msg == unquote(expected_msg)
       end
     end
   end
@@ -232,13 +245,13 @@ defmodule Hologram.Test.Helpers do
     |> elem(0)
   end
 
-  @doc """
-  Given an error and its stacktrace resolves the error message.
-  """
-  @spec resolve_error_msg(struct, list(tuple)) :: String.t()
-  def resolve_error_msg(error, stacktrace) do
-    {error_with_blame, _stacktrace} = Exception.blame(:error, error, stacktrace)
-    Exception.message(error_with_blame)
+  defmacro resolve_error_msg(error, stacktrace) do
+    quote do
+      {error_with_blame, _stacktrace} =
+        Exception.blame(:error, unquote(error), unquote(stacktrace))
+
+      Exception.message(error_with_blame)
+    end
   end
 
   @doc """
