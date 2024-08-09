@@ -7,8 +7,7 @@ defmodule HologramFeatureTests.Helpers do
 
   @max_wait_time Application.compile_env(:wallaby, :max_wait_time, 3_000)
 
-  defguard is_regex(term) when is_map(term) and term.__struct__ == Regex
-
+  defdelegate is_regex(term), to: Hologram.Commons.Guards
   defdelegate pid(str), to: IEx.Helpers
   defdelegate port(str), to: IEx.Helpers
   defdelegate ref(str), to: IEx.Helpers
