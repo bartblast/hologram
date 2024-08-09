@@ -45,4 +45,10 @@ export default class Utils {
       return mergedArr;
     }, new Uint8Array());
   }
+
+  static naiveNounPlural(noun, count) {
+    const enPluralRules = new Intl.PluralRules("en-US");
+
+    return `${noun}${enPluralRules.select(count) === "one" ? "" : "s"}`;
+  }
 }
