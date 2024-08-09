@@ -3483,8 +3483,15 @@ defmodule Hologram.Compiler.TransformerTest do
                @result_from_source_code
     end
 
-    # This case is impossible because the compiler injects nil expression by default.
-    # test "empty body (AST from BEAM file)"
+    test "empty body (AST from BEAM file)" do
+      # Compiler injects nil expression by default if the body is empty.
+      assert %IR.FunctionDefinition{
+               clause: %IR.FunctionClause{
+                 body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
+               }
+             } =
+               @result_from_beam_file
+    end
 
     test "single expression body (AST from source code)" do
       ast =
