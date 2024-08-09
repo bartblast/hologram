@@ -1,5 +1,6 @@
 defmodule HologramFeatureTests.Helpers do
   import ExUnit.Assertions, only: [assert: 1, assert_raise: 3]
+  import Hologram.Commons.Guards, only: [is_regex: 1]
 
   alias Hologram.Router
   alias Wallaby.Browser
@@ -7,7 +8,6 @@ defmodule HologramFeatureTests.Helpers do
 
   @max_wait_time Application.compile_env(:wallaby, :max_wait_time, 3_000)
 
-  defdelegate is_regex(term), to: Hologram.Commons.Guards
   defdelegate pid(str), to: IEx.Helpers
   defdelegate port(str), to: IEx.Helpers
   defdelegate ref(str), to: IEx.Helpers
