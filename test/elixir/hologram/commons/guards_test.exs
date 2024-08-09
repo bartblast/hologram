@@ -8,7 +8,7 @@ defmodule Hologram.Commons.GuardsTest do
     end
 
     test "not regex" do
-      refute is_regex(123)
+      refute is_regex(wrap_term(123))
     end
   end
 end
