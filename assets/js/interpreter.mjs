@@ -77,6 +77,10 @@ export default class Interpreter {
   }
 
   static callAnonymousFunction(fun, argsArray) {
+    if (argsArray.length !== fun.arity) {
+      Interpreter.raiseBadArityError(fun.arity, argsArray);
+    }
+
     const args = Type.list(argsArray);
 
     for (const clause of fun.clauses) {
@@ -92,9 +96,12 @@ export default class Interpreter {
       }
     }
 
-    // TODO: include parent module and function info, once context for error reporting is implemented.
-    const message = "no function clause matching in anonymous fn/" + fun.arity;
-    return Interpreter.raiseFunctionClauseError(message);
+    Interpreter.raiseFunctionClauseError(
+      Interpreter.buildFunctionClauseErrorMsg(
+        `anonymous fn/${fun.arity}`,
+        argsArray,
+      ),
+    );
   }
 
   static callNamedFunction(module, functionName, arity, args, context) {

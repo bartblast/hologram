@@ -339,11 +339,72 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(result, Type.integer(9));
     });
 
-    it("raises FunctionClauseError error if none of the clauses is matched", () => {
+    // Keep Elixir consistency test in sync: test/elixir/hologram/ex_js_consistency/interpreter_test.exs ("call anonymous function" section).
+    // TODO: client error message for this case is inconsistent with server error message
+    it("arity is invalid, called with no args", () => {
       assertBoxedError(
-        () => Interpreter.callAnonymousFunction(anonFun, [Type.integer(3)]),
+        () => Interpreter.callAnonymousFunction(anonFun, []),
+        "BadArityError",
+        "anonymous function with arity 1 called with no arguments",
+      );
+    });
+
+    // Keep Elixir consistency test in sync: test/elixir/hologram/ex_js_consistency/interpreter_test.exs ("call anonymous function" section).
+    // TODO: client error message for this case is inconsistent with server error message
+    it("arity is invalid, called with a single arg", () => {
+      // fn
+      //   1, 2 -> :expr_1
+      //   3, 4 -> :expr_2
+      // end
+      anonFun = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (_context) => [Type.integer(1), Type.integer(2)],
+            guards: [],
+            body: (_context) => {
+              return Type.atom("expr_1");
+            },
+          },
+          {
+            params: (_context) => [Type.integer(3), Type.integer(4)],
+            guards: [],
+            body: (_context) => {
+              return Type.atom("expr_2");
+            },
+          },
+        ],
+        context,
+      );
+
+      assertBoxedError(
+        () => Interpreter.callAnonymousFunction(anonFun, [Type.integer(9)]),
+        "BadArityError",
+        "anonymous function with arity 2 called with 1 argument (9)",
+      );
+    });
+
+    // Keep Elixir consistency test in sync: test/elixir/hologram/ex_js_consistency/interpreter_test.exs ("call anonymous function" section).
+    // TODO: client error message for this case is inconsistent with server error message
+    it("arity is invalid, called with multiple args", () => {
+      assertBoxedError(
+        () =>
+          Interpreter.callAnonymousFunction(anonFun, [
+            Type.integer(9),
+            Type.integer(8),
+          ]),
+        "BadArityError",
+        "anonymous function with arity 1 called with 2 arguments (9, 8)",
+      );
+    });
+
+    // Keep Elixir consistency test in sync: test/elixir/hologram/ex_js_consistency/interpreter_test.exs ("call anonymous function" section).
+    // TODO: client error message for this case is inconsistent with server error message
+    it("arity is valid, but args don't match the pattern in any of the clauses", () => {
+      assertBoxedError(
+        () => Interpreter.callAnonymousFunction(anonFun, [Type.integer(9)]),
         "FunctionClauseError",
-        "no function clause matching in anonymous fn/1",
+        "no function clause matching in anonymous fn/1\n\nThe following arguments were given to anonymous fn/1:\n\n    # 1\n    9\n",
       );
     });
 

@@ -12,6 +12,66 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
     aliases: [{Module1, Hologram.Test.Fixtures.ExJsConsistency.Interpreter.Module1}]
   }
 
+  describe "call anonymous function" do
+    # TODO: client error message for this case is inconsistent with server error message (see test/javascript/interpreter_test.mjs)
+    test "arity is invalid, called with no args" do
+      fun = fn
+        1 -> :expr_1
+        2 -> :expr_2
+      end
+
+      expected_msg =
+        ~r'#Function<[0-9]+\.[0-9]+/1 in Hologram.ExJsConsistency\.InterpreterTest\."test call anonymous function arity is invalid, called with no args"/1> with arity 1 called with no arguments'
+
+      assert_error BadArityError, expected_msg, fn -> fun.() end
+    end
+
+    # TODO: client error message for this case is inconsistent with server error message (see test/javascript/interpreter_test.mjs)
+    test "arity is invalid, called with a single arg" do
+      fun = fn
+        1, 2 -> :expr_1
+        3, 4 -> :expr_2
+      end
+
+      expected_msg =
+        ~r'#Function<[0-9]+\.[0-9]+/2 in Hologram.ExJsConsistency\.InterpreterTest\."test call anonymous function arity is invalid, called with a single arg"/1> with arity 2 called with 1 argument \(9\)'
+
+      assert_error BadArityError, expected_msg, fn -> fun.(9) end
+    end
+
+    # TODO: client error message for this case is inconsistent with server error message (see test/javascript/interpreter_test.mjs)
+    test "arity is invalid, called with multiple args" do
+      fun = fn
+        1 -> :expr_1
+        2 -> :expr_2
+      end
+
+      expected_msg =
+        ~r'#Function<[0-9]+\.[0-9]+/1 in Hologram.ExJsConsistency\.InterpreterTest\."test call anonymous function arity is invalid, called with multiple args"/1> with arity 1 called with 2 arguments \(9, 8\)'
+
+      assert_error BadArityError, expected_msg, fn -> fun.(9, 8) end
+    end
+
+    # TODO: client error message for this case is inconsistent with server error message (see test/javascript/interpreter_test.mjs)
+    test "arity is valid, but args don't match the pattern in any of the clauses" do
+      fun = fn
+        1 -> :expr_1
+        2 -> :expr_2
+      end
+
+      expected_msg = """
+      no function clause matching in anonymous fn/1 in Hologram.ExJsConsistency.InterpreterTest."test call anonymous function arity is valid, but args don't match the pattern"/1
+
+      The following arguments were given to anonymous fn/1 in Hologram.ExJsConsistency.InterpreterTest."test call anonymous function arity is valid, but args don't match the pattern"/1:
+
+          # 1
+          9
+      """
+
+      assert_error FunctionClauseError, expected_msg, fn -> fun.(9) end
+    end
+  end
+
   describe "call named function" do
     test "remote private function call" do
       assert_error UndefinedFunctionError,
