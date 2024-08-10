@@ -39,7 +39,7 @@ describe("Elixir_Code", () => {
       assertBoxedError(
         () => ensure_compiled(Type.integer(1)),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":Code.ensure_compiled/1", [
+        Interpreter.buildFunctionClauseErrorMsg("Code.ensure_compiled/1", [
           Type.integer(1),
         ]),
       );

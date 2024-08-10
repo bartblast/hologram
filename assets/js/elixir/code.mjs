@@ -9,7 +9,7 @@ const Elixir_Code = {
   "ensure_compiled/1": (module) => {
     if (!Type.isAtom(module)) {
       Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":Code.ensure_compiled/1", [
+        Interpreter.buildFunctionClauseErrorMsg("Code.ensure_compiled/1", [
           module,
         ]),
       );
