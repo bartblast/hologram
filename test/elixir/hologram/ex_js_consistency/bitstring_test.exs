@@ -191,19 +191,19 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     test "with bitstring value when number of bits is not divisible by 8" do
       # 5 == 0b101
 
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'binary': the size of the value <<5::size(3)>> is not a multiple of the unit for the segment",
                    fn -> build_from_value_with_binary_type_modifier(<<1::1, 0::1, 1::1>>) end
     end
 
     test "with float value" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'binary': expected a binary but got: 123.45",
                    fn -> build_from_value_with_binary_type_modifier(123.45) end
     end
 
     test "with integer value" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'binary': expected a binary but got: 170",
                    fn -> build_from_value_with_binary_type_modifier(170) end
     end
@@ -221,13 +221,13 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with float value" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'binary': expected a binary but got: 123.45",
                    fn -> build_from_value_with_bitstring_type_modifier(123.45) end
     end
 
     test "with integer value" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'binary': expected a binary but got: 170",
                    fn -> build_from_value_with_bitstring_type_modifier(170) end
     end
@@ -240,7 +240,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
   describe "float type modifier" do
     test "with bitstring value" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'float': expected a float or an integer but got: <<5::size(3)>>",
                    fn -> build_from_value_with_float_type_modifier(<<1::1, 0::1, 1::1>>) end
     end
@@ -284,13 +284,13 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with string value consisting of a single ASCI character" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'float': expected a float or an integer but got: \"a\"",
                    fn -> build_from_value_with_float_type_modifier("a") end
     end
 
     test "with string value consisting of multiple ASCI characters" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'float': expected a float or an integer but got: \"abc\"",
                    fn -> build_from_value_with_float_type_modifier("abc") end
     end
@@ -298,13 +298,13 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
   describe "integer type modifier" do
     test "with bitstring value" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: <<5::size(3)>>",
                    fn -> build_from_value_with_integer_type_modifier(<<1::1, 0::1, 1::1>>) end
     end
 
     test "with float value" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: 123.45",
                    fn -> build_from_value_with_integer_type_modifier(123.45) end
     end
@@ -318,13 +318,13 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with string value consisting of a single ASCI character" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: \"a\"",
                    fn -> build_from_value_with_integer_type_modifier("a") end
     end
 
     test "with string value consisting of multiple ASCI characters" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: \"abc\"",
                    fn -> build_from_value_with_integer_type_modifier("abc") end
     end
@@ -332,7 +332,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
   describe "signed signedness modifier" do
     test "with bitstring value" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: <<10::size(4)>>",
                    fn ->
                      build_from_value_with_signed_signedness_modifier(<<1::1, 0::1, 1::1, 0::1>>)
@@ -348,7 +348,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with string value" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: \"abc\"",
                    fn ->
                      build_from_value_with_signed_signedness_modifier("abc")
@@ -358,7 +358,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
   describe "size modifier" do
     test "with bitstring value" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: <<10::size(4)>>",
                    fn ->
                      build_from_value_with_size_modifier(<<1::1, 0::1, 1::1, 0::1>>, 3)
@@ -389,7 +389,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with float value when size * unit doesn't result in 16, 32 or 64" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: 123.45",
                    fn ->
                      build_from_value_with_size_modifier(123.45, 7)
@@ -404,7 +404,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with string value" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: \"abc\"",
                    fn ->
                      build_from_value_with_size_modifier("abc", 7)
@@ -414,7 +414,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
   describe "unit modifier (with size modifier)" do
     test "with bitstring value" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: <<170>>",
                    fn ->
                      # 170 == 0b10101010
@@ -449,7 +449,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with float value when size * unit doesn't result in 16, 32 or 64" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: 123.45",
                    fn ->
                      build_from_value_with_size_and_unit_modifier(123.45, 7)
@@ -464,7 +464,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with string value" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: \"abc\"",
                    fn ->
                      build_from_value_with_size_and_unit_modifier("abc", 7)
@@ -474,7 +474,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
   describe "unsigned signedness modifier" do
     test "with bitstring value" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: <<10::size(4)>>",
                    fn ->
                      build_from_value_with_unsigned_signedness_modifier(
@@ -492,7 +492,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with string value" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: \"abc\"",
                    fn ->
                      build_from_value_with_unsigned_signedness_modifier("abc")
@@ -504,7 +504,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     test "with bitstring value" do
       assert <<"a">> == <<0::1, 1::1, 1::1, 0::1, 0::1, 0::1, 0::1, 1::1>>
 
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer encodable as utf8 but got: \"a\"",
                    fn ->
                      build_from_value_with_utf8_type_modifier(
@@ -514,7 +514,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with float value" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer encodable as utf8 but got: 123.45",
                    fn -> build_from_value_with_utf8_type_modifier(123.45) end
     end
@@ -544,7 +544,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with integer value that is not a valid Unicode code point" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer encodable as utf8 but got: 1114113",
                    fn -> build_from_value_with_utf8_type_modifier(1_114_113) end
     end
@@ -555,7 +555,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with runtime string value" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer encodable as utf8 but got: \"abc\"",
                    fn -> build_from_value_with_utf8_type_modifier("abc") end
     end
@@ -565,7 +565,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     test "with bitstring value" do
       assert <<"a">> == <<0::1, 1::1, 1::1, 0::1, 0::1, 0::1, 0::1, 1::1>>
 
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'utf16': expected a non-negative integer encodable as utf16 but got: \"a\"",
                    fn ->
                      build_from_value_with_utf16_type_modifier(
@@ -597,7 +597,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with integer value that is not a valid Unicode code point" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'utf16': expected a non-negative integer encodable as utf16 but got: 1114113",
                    fn -> build_from_value_with_utf16_type_modifier(1_114_113) end
     end
@@ -631,7 +631,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "with runtime string value" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'utf16': expected a non-negative integer encodable as utf16 but got: \"abc\"",
                    fn -> build_from_value_with_utf16_type_modifier("abc") end
     end
@@ -639,7 +639,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
   describe "utf32 type modifier" do
     test "with runtime string value" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'utf32': expected a non-negative integer encodable as utf32 but got: \"abc\"",
                    fn -> build_from_value_with_utf32_type_modifier("abc") end
     end
@@ -647,7 +647,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
 
   describe "values of not supported data types" do
     test "atom values are not supported" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: :abc",
                    fn ->
                      build_from_value(:abc)
@@ -655,7 +655,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "list values are not supported" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: [1, 2]",
                    fn ->
                      build_from_value([1, 2])
@@ -663,7 +663,7 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
     end
 
     test "tuple values are not supported" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    "construction of binary failed: segment 1 of type 'integer': expected an integer but got: {1, 2}",
                    fn ->
                      build_from_value({1, 2})
