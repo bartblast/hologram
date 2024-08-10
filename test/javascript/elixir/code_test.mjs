@@ -5,6 +5,7 @@ import {
 } from "../support/helpers.mjs";
 
 import Elixir_Code from "../../../assets/js/elixir/code.mjs";
+import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
@@ -33,11 +34,14 @@ describe("Elixir_Code", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    // TODO: client error message for this case is inconsistent with server error message
     it("raises FunctionClauseError if the argument is not an atom", () => {
       assertBoxedError(
         () => ensure_compiled(Type.integer(1)),
         "FunctionClauseError",
-        "no function clause matching in Code.ensure_compiled/1",
+        Interpreter.buildFunctionClauseErrorMsg(":Code.ensure_compiled/1", [
+          Type.integer(1),
+        ]),
       );
     });
   });

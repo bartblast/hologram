@@ -64,6 +64,7 @@ export default class Interpreter {
     return context;
   }
 
+  // TODO: include attempted function clauses info
   static buildFunctionClauseErrorMsg(funName, args) {
     return Array.from(args).reduce(
       (acc, arg, idx) =>

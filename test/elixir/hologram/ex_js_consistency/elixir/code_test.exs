@@ -18,12 +18,22 @@ defmodule Hologram.ExJsConsistency.Elixir.CodeTest do
       assert Code.ensure_compiled(MyModule) == {:error, :nofile}
     end
 
+    # TODO: client error message for this case is inconsistent with server error message
     test "raises FunctionClauseError if the argument is not an atom" do
-      assert_raise FunctionClauseError,
-                   "no function clause matching in Code.ensure_compiled/1",
-                   fn ->
-                     Code.ensure_compiled(1)
-                   end
+      expected_msg = """
+      no function clause matching in Code.ensure_compiled/1
+
+      The following arguments were given to Code.ensure_compiled/1:
+
+          # 1
+          1
+
+      Attempted function clauses (showing 1 out of 1):
+
+          def ensure_compiled(module) when -is_atom(module)-
+      """
+
+      assert_error FunctionClauseError, expected_msg, fn -> Code.ensure_compiled(1) end
     end
   end
 end
