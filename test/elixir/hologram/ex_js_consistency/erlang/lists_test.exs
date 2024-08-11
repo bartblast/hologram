@@ -30,6 +30,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       end
     end
 
+    # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the argument is an improper list" do
       expected_msg = build_function_clause_error_msg(":lists.do_flatten/2", [5, []])
 
@@ -40,11 +41,14 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
                    end
     end
 
+    # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the argument contains a nested improper list" do
-      assert_raise FunctionClauseError,
-                   "no function clause matching in :lists.do_flatten/2",
+      expected_msg = build_function_clause_error_msg(":lists.do_flatten/2", [4, [5]])
+
+      assert_error FunctionClauseError,
+                   expected_msg,
                    fn ->
-                     :lists.flatten([1, 2, [3, 4 | 5], 6, 7])
+                     :lists.flatten([1, [2, 3 | 4], 5])
                    end
     end
   end

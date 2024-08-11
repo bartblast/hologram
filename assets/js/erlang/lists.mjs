@@ -18,10 +18,7 @@ const Erlang_Lists = {
 
     if (!Type.isProperList(list)) {
       Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.do_flatten/2", [
-          list.data.at(-1),
-          Type.list([]),
-        ]),
+        Interpreter.buildFunctionClauseErrorMsg(":lists.flatten/1", [list]),
       );
     }
 

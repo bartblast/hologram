@@ -80,30 +80,12 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the argument is not a list", () => {
+      const arg = Type.atom("abc");
+
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
         ":lists.flatten/1",
-        [Type.atom("abc")],
+        [arg],
       );
-
-      assertBoxedError(
-        () => flatten(Type.atom("abc")),
-        "FunctionClauseError",
-        expectedMessage,
-      );
-    });
-
-    it("raises FunctionClauseError if the argument is an improper list", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.do_flatten/2",
-        [Type.integer(5), Type.list()],
-      );
-
-      const arg = Type.improperList([
-        Type.integer(1),
-        Type.list([Type.integer(2), Type.integer(3)]),
-        Type.integer(4),
-        Type.integer(5),
-      ]);
 
       assertBoxedError(
         () => flatten(arg),
@@ -112,24 +94,50 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    it("raises FunctionClauseError if the argument contains a nested improper list", () => {
+    // Client error message is intentionally different than server error message.
+    it("raises FunctionClauseError if the argument is an improper list", () => {
+      const arg = Type.improperList([
+        Type.integer(1),
+        Type.list([Type.integer(2), Type.integer(3)]),
+        Type.integer(4),
+        Type.integer(5),
+      ]);
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.flatten/1",
+        [arg],
+      );
+
       assertBoxedError(
-        () =>
-          flatten(
-            Type.list([
-              Type.integer(1),
-              Type.integer(2),
-              Type.improperList([
-                Type.integer(3),
-                Type.integer(4),
-                Type.integer(5),
-              ]),
-              Type.integer(6),
-              Type.integer(7),
-            ]),
-          ),
+        () => flatten(arg),
         "FunctionClauseError",
-        "no function clause matching in :lists.do_flatten/2",
+        expectedMessage,
+      );
+    });
+
+    // Client error message is intentionally different than server error message.
+    it("raises FunctionClauseError if the argument contains a nested improper list", () => {
+      const nestedImproperList = Type.improperList([
+        Type.integer(2),
+        Type.integer(3),
+        Type.integer(4),
+      ]);
+
+      const arg = Type.list([
+        Type.integer(1),
+        nestedImproperList,
+        Type.integer(5),
+      ]);
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.flatten/1",
+        [nestedImproperList],
+      );
+
+      assertBoxedError(
+        () => flatten(arg),
+        "FunctionClauseError",
+        expectedMessage,
       );
     });
   });
