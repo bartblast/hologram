@@ -18,7 +18,10 @@ const Erlang_Lists = {
 
     if (!Type.isProperList(list)) {
       Interpreter.raiseFunctionClauseError(
-        "no function clause matching in :lists.do_flatten/2",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.do_flatten/2", [
+          list.data.at(-1),
+          Type.list([]),
+        ]),
       );
     }
 

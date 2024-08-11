@@ -92,7 +92,27 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    it("raises FunctionClauseError if the argument (or any nested item) is an improper list", () => {
+    it("raises FunctionClauseError if the argument is an improper list", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.do_flatten/2",
+        [Type.integer(5), Type.list()],
+      );
+
+      const arg = Type.improperList([
+        Type.integer(1),
+        Type.list([Type.integer(2), Type.integer(3)]),
+        Type.integer(4),
+        Type.integer(5),
+      ]);
+
+      assertBoxedError(
+        () => flatten(arg),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the argument contains a nested improper list", () => {
       assertBoxedError(
         () =>
           flatten(
