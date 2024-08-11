@@ -12,7 +12,7 @@ const Erlang_Lists = {
   "flatten/1": (list) => {
     if (!Type.isList(list)) {
       Interpreter.raiseFunctionClauseError(
-        "no function clause matching in :lists.flatten/1",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.flatten/1", [list]),
       );
     }
 

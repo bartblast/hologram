@@ -23,7 +23,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "raises FunctionClauseError if the argument is not a list" do
-      assert_raise FunctionClauseError, "no function clause matching in :lists.flatten/1", fn ->
+      expected_msg = build_function_clause_error_msg(":lists.flatten/1", [:abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
         :lists.flatten(:abc)
       end
     end

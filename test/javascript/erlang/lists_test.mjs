@@ -80,10 +80,15 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the argument is not a list", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.flatten/1",
+        [Type.atom("abc")],
+      );
+
       assertBoxedError(
         () => flatten(Type.atom("abc")),
         "FunctionClauseError",
-        "no function clause matching in :lists.flatten/1",
+        expectedMessage,
       );
     });
 
