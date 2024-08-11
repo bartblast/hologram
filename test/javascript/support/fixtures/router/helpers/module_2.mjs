@@ -16,16 +16,8 @@ export function defineModule2Fixture() {
         body: (_context) => {
           return Elixir_Enum["reverse/1"](
             Type.list([
-              Type.tuple([
-                Type.atom("param_2"),
-                Type.atom("nil"),
-                Type.list([]),
-              ]),
-              Type.tuple([
-                Type.atom("param_1"),
-                Type.atom("nil"),
-                Type.list([]),
-              ]),
+              Type.tuple([Type.atom("param_2"), Type.atom("nil"), Type.list()]),
+              Type.tuple([Type.atom("param_1"), Type.atom("nil"), Type.list()]),
             ]),
           );
         },

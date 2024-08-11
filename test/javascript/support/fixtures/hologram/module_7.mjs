@@ -31,7 +31,7 @@ export function defineModule7Fixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Elixir_Enum["reverse/1"](Type.list([]));
+          return Elixir_Enum["reverse/1"](Type.list());
         },
       },
     ],

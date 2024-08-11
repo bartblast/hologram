@@ -16,11 +16,7 @@ export function defineModule64Fixture() {
         body: (_context) => {
           return Elixir_Enum["reverse/1"](
             Type.list([
-              Type.tuple([
-                Type.atom("my_prop"),
-                Type.atom("any"),
-                Type.list([]),
-              ]),
+              Type.tuple([Type.atom("my_prop"), Type.atom("any"), Type.list()]),
             ]),
           );
         },
