@@ -180,11 +180,17 @@ describe("Erlang_Lists", () => {
       assert.deepStrictEqual(result, Type.integer(6));
     });
 
+    // Client error message is intentionally different than server error message.
     it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.foldl/3",
+        [Type.atom("abc"), acc, emptyList],
+      );
+
       assertBoxedError(
         () => foldl(Type.atom("abc"), acc, emptyList),
         "FunctionClauseError",
-        "no function clause matching in :lists.foldl/3",
+        expectedMessage,
       );
     });
 

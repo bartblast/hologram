@@ -37,10 +37,10 @@ const Erlang_Lists = {
   // Deps: []
 
   // Start foldl/3
-  "foldl/3": (fun, initialAcc, list) => {
+  "foldl/3": function (fun, initialAcc, list) {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
       Interpreter.raiseFunctionClauseError(
-        "no function clause matching in :lists.foldl/3",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldl/3", arguments),
       );
     }
 
