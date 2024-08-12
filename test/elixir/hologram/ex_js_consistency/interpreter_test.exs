@@ -106,12 +106,16 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
     end
 
     test "function arity is correct, but args don't match the pattern" do
-      assert_error FunctionClauseError,
-                   "no function clause matching in Hologram.Test.Fixtures.ExJsConsistency.Interpreter.Module1.my_public_fun/2\n\nThe following arguments were given to Hologram.Test.Fixtures.ExJsConsistency.Interpreter.Module1.my_public_fun/2:\n\n    # 1\n    1\n\n    # 2\n    3\n\nAttempted function clauses (showing 1 out of 1):\n\n    def my_public_fun(x, -2-)\n",
-                   fn ->
-                     # Code.eval_string/3 used here, because this code wouldn't compile.
-                     Code.eval_string("Module1.my_public_fun(1, 3)", [], @env)
-                   end
+      expected_msg =
+        build_function_clause_error_msg(
+          "Hologram.Test.Fixtures.ExJsConsistency.Interpreter.Module1.my_public_fun/2",
+          [1, 3],
+          ["def my_public_fun(x, -2-)"]
+        )
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        Code.eval_string("Module1.my_public_fun(1, 3)", [], @env)
+      end
     end
   end
 end
