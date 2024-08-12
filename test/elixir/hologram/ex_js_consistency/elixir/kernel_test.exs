@@ -9,6 +9,10 @@ defmodule Hologram.ExJsConsistency.Elixir.KernelTest do
 
   @moduletag :consistency
 
+  def my_local_fun(x, y) do
+    x + y * x
+  end
+
   describe "inspect/1" do
     test "delegates to inspect/2" do
       assert Kernel.inspect(true) == "true"
@@ -17,6 +21,23 @@ defmodule Hologram.ExJsConsistency.Elixir.KernelTest do
 
   # Important: keep Interpreter.inspect() consistency tests in sync.
   describe "inspect/2" do
+    # Client result for non-capture anonymous function is intentionally different than server result.
+    test "anonymous function, non-capture" do
+      anon_fun = fn x, y -> x + y * x end
+
+      Kernel.inspect(anon_fun, []) =~
+        ~r'#Function<[0-9]+\.[0-9]/2 in Hologram\.ExJsConsistency\.Elixir\.KernelTest\."test inspect/2 anonymous function, non-capture"/1>'
+    end
+
+    test "anonymous function, local function capture" do
+      assert Kernel.inspect(&my_local_fun/2, []) =~
+               ~r'^#Function<[0-9]+\.[0-9]+/2 in Hologram\.ExJsConsistency\.Elixir\.KernelTest\.my_local_fun>$'
+    end
+
+    test "anonymous function, remote function capture" do
+      assert Kernel.inspect(&DateTime.now/2) == "&DateTime.now/2"
+    end
+
     test "atom, true" do
       assert Kernel.inspect(true, []) == "true"
     end

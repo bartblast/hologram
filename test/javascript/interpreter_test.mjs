@@ -2476,6 +2476,33 @@ describe("Interpreter", () => {
 
   // Important: keep Kernel.inspect/2 consistency tests in sync.
   describe("inspect()", () => {
+    describe("anonymous function", () => {
+      const clauses = ["clause_dummy_1", "clause_dummy_2"];
+      const context = contextFixture();
+
+      // Client result for non-capture anonymous function is intentionally different than server result.
+      it("non-capture", () => {
+        const anonFun = Type.anonymousFunction(2, clauses, context);
+
+        assert.equal(Interpreter.inspect(anonFun), "anonymous function fn/2");
+      });
+
+      // Case not possible on the client - function captures are always encoded as remote function captures.
+      // it("local function capture")
+
+      it("remote function capture", () => {
+        const anonFun = Type.functionCapture(
+          "MyModule",
+          "my_fun",
+          2,
+          clauses,
+          context,
+        );
+
+        assert.equal(Interpreter.inspect(anonFun), "&MyModule.my_fun/2");
+      });
+    });
+
     describe("atom", () => {
       it("true", () => {
         const result = Interpreter.inspect(Type.boolean(true), {});

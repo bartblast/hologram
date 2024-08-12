@@ -419,6 +419,9 @@ export default class Interpreter {
   // TODO: implement all types
   static inspect(term, opts = {}) {
     switch (term.type) {
+      case "anonymous_function":
+        return Interpreter.#inspectAnonymousFunction(term, opts);
+
       case "atom":
         return Interpreter.#inspectAtom(term, opts);
 
@@ -842,6 +845,14 @@ export default class Interpreter {
     }
 
     return false;
+  }
+
+  static #inspectAnonymousFunction(term, _opts) {
+    if (term.capturedModule) {
+      return `&${term.capturedModule}.${term.capturedFunction}/${term.arity}`;
+    }
+
+    return `anonymous function fn/${term.arity}`;
   }
 
   // TODO: handle correctly atoms which need to be double quoted, e.g. :"1"
