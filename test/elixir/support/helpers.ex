@@ -96,23 +96,44 @@ defmodule Hologram.Test.Helpers do
   @doc """
   Builds an error message for FunctionClauseError.
   """
-  @spec build_function_clause_error_msg(String.t(), list) :: String.t()
-  def build_function_clause_error_msg(fun_name, args) do
-    initial_str = """
+  @spec build_function_clause_error_msg(String.t(), list, list) :: String.t()
+  def build_function_clause_error_msg(fun_name, args, attempted_clauses \\ []) do
+    args_info =
+      args
+      |> Enum.with_index()
+      |> Enum.reduce("", fn {arg, idx}, acc ->
+        """
+        #{acc}
+            # #{idx + 1}
+            #{inspect(arg)}
+        """
+      end)
+
+    attempted_clauses_count = Enum.count(attempted_clauses)
+
+    attempted_clauses_info =
+      if attempted_clauses_count > 0 do
+        initial_acc = """
+
+        Attempted function clauses (showing #{attempted_clauses_count} out of #{attempted_clauses_count}):
+        """
+
+        Enum.reduce(attempted_clauses, initial_acc, fn attempted_clause, acc ->
+          """
+          #{acc}
+              #{attempted_clause}
+          """
+        end)
+      else
+        ""
+      end
+
+    """
     no function clause matching in #{fun_name}
 
     The following arguments were given to #{fun_name}:
+    #{args_info}#{attempted_clauses_info}\
     """
-
-    args
-    |> Enum.with_index()
-    |> Enum.reduce(initial_str, fn {arg, idx}, acc ->
-      """
-      #{acc}
-          # #{idx + 1}
-          #{inspect(arg)}
-      """
-    end)
   end
 
   @doc """
