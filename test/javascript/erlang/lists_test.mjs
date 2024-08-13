@@ -194,6 +194,7 @@ describe("Erlang_Lists", () => {
       );
     });
 
+    // Client error message is intentionally different than server error message.
     it("raises FunctionClauseError if the first argument is an anonymous function with arity different than 2", () => {
       const fun = Type.anonymousFunction(
         1,
@@ -209,10 +210,15 @@ describe("Erlang_Lists", () => {
         contextFixture(),
       );
 
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.foldl/3",
+        [fun, acc, emptyList],
+      );
+
       assertBoxedError(
         () => foldl(fun, acc, emptyList),
         "FunctionClauseError",
-        "no function clause matching in :lists.foldl/3",
+        expectedMessage,
       );
     });
 
