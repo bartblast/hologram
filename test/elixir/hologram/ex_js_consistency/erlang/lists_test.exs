@@ -103,6 +103,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       end
     end
 
+    # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the third argument is an improper list", %{fun: fun} do
       expected_msg = ~r"""
       no function clause matching in :lists\.foldl_1/3
