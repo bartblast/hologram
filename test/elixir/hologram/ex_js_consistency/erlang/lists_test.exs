@@ -98,7 +98,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "raises CaseClauseError if the third argument is not a list", %{fun: fun} do
-      assert_raise CaseClauseError, "no case clause matching: :abc", fn ->
+      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
         :lists.foldl(fun, 0, :abc)
       end
     end
