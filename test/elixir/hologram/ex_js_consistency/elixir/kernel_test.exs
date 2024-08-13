@@ -9,6 +9,7 @@ defmodule Hologram.ExJsConsistency.Elixir.KernelTest do
 
   @moduletag :consistency
 
+  @spec my_local_fun(integer, integer) :: integer
   def my_local_fun(x, y) do
     x + y * x
   end
