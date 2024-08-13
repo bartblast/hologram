@@ -104,8 +104,23 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "raises FunctionClauseError if the third argument is an improper list", %{fun: fun} do
-      assert_raise FunctionClauseError,
-                   "no function clause matching in :lists.foldl_1/3",
+      expected_msg = ~r"""
+      no function clause matching in :lists\.foldl_1/3
+
+      The following arguments were given to :lists\.foldl_1/3:
+
+          # 1
+          #Function<[0-9]+.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\.__ex_unit_setup_1_0/1>
+
+          # 2
+          3
+
+          # 3
+          3
+      """s
+
+      assert_error FunctionClauseError,
+                   expected_msg,
                    fn ->
                      :lists.foldl(fun, 0, [1, 2 | 3])
                    end

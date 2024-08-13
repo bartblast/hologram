@@ -230,6 +230,7 @@ describe("Erlang_Lists", () => {
       );
     });
 
+    // Client error message is intentionally different than server error message.
     it("raises FunctionClauseError if the third argument is an improper list", () => {
       assertBoxedError(
         () =>
