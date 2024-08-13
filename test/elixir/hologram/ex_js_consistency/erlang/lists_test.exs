@@ -226,25 +226,51 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "raises FunctionClauseError if the first argument is not an anonymous function" do
-      assert_raise FunctionClauseError, "no function clause matching in :lists.map/2", fn ->
-        :lists.map(:abc, [])
-      end
+      expected_msg = build_function_clause_error_msg(":lists.map/2", [:abc, []])
+
+      assert_error FunctionClauseError, expected_msg, fn -> :lists.map(:abc, []) end
     end
 
+    # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the first argument is an anonymous function with arity different than 1" do
-      assert_raise FunctionClauseError, "no function clause matching in :lists.map/2", fn ->
+      expected_msg = ~r"""
+      no function clause matching in :lists\.map/2
+
+      The following arguments were given to :lists\.map/2:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\."test map/2 raises FunctionClauseError if the first argument is an anonymous function with arity different than 1"/1>
+
+          # 2
+          \[\]
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
         :lists.map(fn x, y -> x + y end, [])
       end
     end
 
     test "raises CaseClauseError if the second argument is not a list", %{fun: fun} do
-      assert_raise CaseClauseError, "no case clause matching: :abc", fn ->
+      assert_error CaseClauseError, "no case clause matching: :abc", fn ->
         :lists.map(fun, :abc)
       end
     end
 
+    # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the second argument is an improper list", %{fun: fun} do
-      assert_raise FunctionClauseError, "no function clause matching in :lists.map_1/2", fn ->
+      expected_msg = ~r"""
+      no function clause matching in :lists\.map_1/2
+
+      The following arguments were given to :lists\.map_1/2:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/1 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\.__ex_unit_setup_4_0/1>
+
+          # 2
+          3
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
         :lists.map(fun, [1, 2 | 3])
       end
     end

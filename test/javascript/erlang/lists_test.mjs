@@ -435,13 +435,19 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.map/2",
+        [Type.atom("abc"), emptyList],
+      );
+
       assertBoxedError(
         () => map(Type.atom("abc"), emptyList),
         "FunctionClauseError",
-        "no function clause matching in :lists.map/2",
+        expectedMessage,
       );
     });
 
+    // Client error message is intentionally different than server error message.
     it("raises FunctionClauseError if the first argument is an anonymous function with arity different than 1", () => {
       const fun = Type.anonymousFunction(
         2,
@@ -460,10 +466,15 @@ describe("Erlang_Lists", () => {
         contextFixture(),
       );
 
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.map/2",
+        [fun, emptyList],
+      );
+
       assertBoxedError(
         () => map(fun, emptyList),
         "FunctionClauseError",
-        "no function clause matching in :lists.map/2",
+        expectedMessage,
       );
     });
 
@@ -475,6 +486,7 @@ describe("Erlang_Lists", () => {
       );
     });
 
+    // Client error message is intentionally different than server error message.
     it("raises FunctionClauseError if the second argument is an improper list", () => {
       assertBoxedError(
         () =>

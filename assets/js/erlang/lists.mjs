@@ -114,10 +114,10 @@ const Erlang_Lists = {
   // Deps: [:lists.keyfind/3]
 
   // Start map/2
-  "map/2": (fun, list) => {
+  "map/2": function (fun, list) {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
       Interpreter.raiseFunctionClauseError(
-        "no function clause matching in :lists.map/2",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.map/2", arguments),
       );
     }
 
