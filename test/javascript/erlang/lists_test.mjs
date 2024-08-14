@@ -12,6 +12,7 @@ import {
 import Erlang_Lists from "../../../assets/js/erlang/lists.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
+import exp from "constants";
 
 defineGlobalErlangAndElixirModules();
 
@@ -574,10 +575,15 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the argument is not a list", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.reverse/1",
+        [Type.atom("abc")],
+      );
+
       assertBoxedError(
         () => reverse(Type.atom("abc")),
         "FunctionClauseError",
-        "no function clause matching in :lists.reverse/1",
+        expectedMessage,
       );
     });
 

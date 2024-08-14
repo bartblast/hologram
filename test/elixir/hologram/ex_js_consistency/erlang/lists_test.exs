@@ -320,13 +320,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "raises FunctionClauseError if the argument is not a list" do
-      assert_raise FunctionClauseError, "no function clause matching in :lists.reverse/1", fn ->
+      expected_msg = build_function_clause_error_msg(":lists.reverse/1", [:abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
         :lists.reverse(:abc)
       end
     end
 
     test "raises ArgumentError if the argument is not a proper list" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_argument_error_msg(1, "not a list"),
                    fn ->
                      :lists.reverse([1, 2 | 3])

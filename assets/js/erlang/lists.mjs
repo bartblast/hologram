@@ -175,7 +175,7 @@ const Erlang_Lists = {
   "reverse/1": (list) => {
     if (!Type.isList(list)) {
       Interpreter.raiseFunctionClauseError(
-        "no function clause matching in :lists.reverse/1",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.reverse/1", [list]),
       );
     }
 
