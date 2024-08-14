@@ -72,7 +72,7 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
     test "input is a non-binary bitstring" do
       input = <<1::1, 0::1, 1::1>>
 
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_argument_error_msg(1, "not valid character data (an iodata term)"),
                    fn ->
                      :unicode.characters_to_binary(input, :utf8, :utf8)
@@ -91,7 +91,7 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
         <<0::1, 1::1, 1::1>>
       ]
 
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_argument_error_msg(1, "not valid character data (an iodata term)"),
                    fn ->
                      :unicode.characters_to_binary(input, :utf8, :utf8)
@@ -113,7 +113,7 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
     test "input is a list of elements of types other than a list or a bitstring" do
       input = [123.45, :abc]
 
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_argument_error_msg(1, "not valid character data (an iodata term)"),
                    fn ->
                      :unicode.characters_to_binary(input, :utf8, :utf8)
@@ -121,7 +121,7 @@ defmodule Hologram.ExJsConsistency.Erlang.UnicodeTest do
     end
 
     test "input is not a list or a bitstring" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_argument_error_msg(1, "not valid character data (an iodata term)"),
                    fn ->
                      :unicode.characters_to_binary(:abc, :utf8, :utf8)
