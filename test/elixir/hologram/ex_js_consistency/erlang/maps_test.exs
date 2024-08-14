@@ -25,7 +25,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "raises ArgumentError if the first argument is not an anonymous function" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_argument_error_msg(1, "not a fun that takes three arguments"),
                    fn ->
                      :maps.fold(:abc, 10, %{})
@@ -33,7 +33,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "raises ArgumentError if the first argument is an anonymous function with arity different than 3" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_argument_error_msg(1, "not a fun that takes three arguments"),
                    fn ->
                      :maps.fold(fn -> :abc end, 10, %{})
@@ -41,7 +41,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "raises BadMapError if the third argument is not a map", %{fun: fun} do
-      assert_raise BadMapError, "expected a map, got: :abc", fn ->
+      assert_error BadMapError, "expected a map, got: :abc", fn ->
         :maps.fold(fun, 10, :abc)
       end
     end
@@ -66,7 +66,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "raises ArgumentError if the argument is not a list" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_argument_error_msg(1, "not a list"),
                    fn ->
                      :maps.from_list(123)
@@ -80,13 +80,13 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "raises BadMapError if the second argument is not a map" do
-      assert_raise BadMapError, "expected a map, got: 1", fn ->
+      assert_error BadMapError, "expected a map, got: 1", fn ->
         :maps.get(:a, wrap_term(1))
       end
     end
 
     test "raises KeyError if the map doesn't contain the given key" do
-      assert_raise KeyError, "key :a not found in: %{}", fn ->
+      assert_error KeyError, "key :a not found in: %{}", fn ->
         :a
         |> wrap_term()
         |> :maps.get(%{})
@@ -100,7 +100,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "raises BadMapError if the second argument is not a map" do
-      assert_raise BadMapError, "expected a map, got: 1", fn ->
+      assert_error BadMapError, "expected a map, got: 1", fn ->
         :maps.get(:a, 1, :default_value)
       end
     end
@@ -120,7 +120,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "raises BadMapError if the second argument is not a map" do
-      assert_raise BadMapError, "expected a map, got: :abc", fn ->
+      assert_error BadMapError, "expected a map, got: :abc", fn ->
         :x
         |> wrap_term()
         |> :maps.is_key(:abc)
@@ -143,7 +143,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "not a map" do
-      assert_raise BadMapError, "expected a map, got: :abc", fn ->
+      assert_error BadMapError, "expected a map, got: :abc", fn ->
         :maps.keys(:abc)
       end
     end
@@ -163,7 +163,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "raises ArgumentError if the first argument is not an anonymous function" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_argument_error_msg(1, "not a fun that takes two arguments"),
                    fn ->
                      :maps.map(:abc, %{})
@@ -171,7 +171,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "raises ArgumentError if the first argument is an anonymous function with arity different than 2" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_argument_error_msg(1, "not a fun that takes two arguments"),
                    fn ->
                      :maps.map(fn x -> x end, %{})
@@ -179,7 +179,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "raises BadMapError if the second argument is not a map", %{fun: fun} do
-      assert_raise BadMapError, "expected a map, got: :abc", fn ->
+      assert_error BadMapError, "expected a map, got: :abc", fn ->
         :maps.map(fun, :abc)
       end
     end
@@ -201,7 +201,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "raises BadMapError if the first argument is not a map" do
-      assert_raise BadMapError, "expected a map, got: 123", fn ->
+      assert_error BadMapError, "expected a map, got: 123", fn ->
         123
         |> wrap_term()
         |> :maps.merge(%{a: 1})
@@ -209,7 +209,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "raises BadMapError if the second argument is not a map" do
-      assert_raise BadMapError, "expected a map, got: 123", fn ->
+      assert_error BadMapError, "expected a map, got: 123", fn ->
         :maps.merge(%{a: 1}, 123)
       end
     end
@@ -225,7 +225,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "raises BadMapError if the third argument is not a map" do
-      assert_raise BadMapError, "expected a map, got: :abc", fn ->
+      assert_error BadMapError, "expected a map, got: :abc", fn ->
         :maps.put(:a, 1, wrap_term(:abc))
       end
     end
@@ -241,7 +241,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "raises BadMapError if the second argument is not a map" do
-      assert_raise BadMapError, "expected a map, got: 123", fn ->
+      assert_error BadMapError, "expected a map, got: 123", fn ->
         :maps.remove(:b, 123)
       end
     end
@@ -262,7 +262,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "raises BadMapError if the argument is not a map" do
-      assert_raise BadMapError, "expected a map, got: :abc", fn ->
+      assert_error BadMapError, "expected a map, got: :abc", fn ->
         :maps.to_list(:abc)
       end
     end
