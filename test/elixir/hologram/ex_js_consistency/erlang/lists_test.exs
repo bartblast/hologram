@@ -286,7 +286,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "is the last member of an improper list" do
-      assert_raise ArgumentError, build_argument_error_msg(2, "not a proper list"), fn ->
+      assert_error ArgumentError, build_argument_error_msg(2, "not a proper list"), fn ->
         :lists.member(3, [1, 2 | 3])
       end
     end
@@ -296,7 +296,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "is not a member of an improper list" do
-      assert_raise ArgumentError, build_argument_error_msg(2, "not a proper list"), fn ->
+      assert_error ArgumentError, build_argument_error_msg(2, "not a proper list"), fn ->
         :lists.member(4, [1, 2 | 3])
       end
     end
@@ -306,7 +306,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "raises ArgumentError if the second argument is not a list" do
-      assert_raise ArgumentError,
+      assert_error ArgumentError,
                    build_argument_error_msg(2, "not a list"),
                    fn ->
                      :lists.member(2, :abc)
