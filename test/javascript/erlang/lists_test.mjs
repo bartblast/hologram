@@ -244,7 +244,7 @@ describe("Erlang_Lists", () => {
             ]),
           ),
         "FunctionClauseError",
-        "no function clause matching in :lists.foldl_1/3",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldl_1/3"),
       );
     });
   });
@@ -499,7 +499,7 @@ describe("Erlang_Lists", () => {
             ]),
           ),
         "FunctionClauseError",
-        "no function clause matching in :lists.map_1/2",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.map_1/2"),
       );
     });
   });
@@ -719,7 +719,7 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => sort(improperList),
         "FunctionClauseError",
-        "no function clause matching in :lists.split_1/5",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.split_1/5"),
       );
     });
   });
