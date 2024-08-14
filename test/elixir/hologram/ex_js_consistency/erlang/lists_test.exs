@@ -388,13 +388,18 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "raises FunctionClauseError if the argument is not a list" do
-      assert_raise FunctionClauseError, "no function clause matching in :lists.sort/1", fn ->
+      expected_msg = build_function_clause_error_msg(":lists.sort/1", [:abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
         :lists.sort(:abc)
       end
     end
 
+    # Client error message is intentionally different than server error message.
     test "raises FunctionClauseError if the argument is an improper list" do
-      assert_raise FunctionClauseError, "no function clause matching in :lists.split_1/5", fn ->
+      expected_msg = build_function_clause_error_msg(":lists.split_1/5", [1, 2, 3, [], []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
         :lists.sort([1, 2 | 3])
       end
     end

@@ -221,7 +221,7 @@ const Erlang_Lists = {
   "sort/1": (list) => {
     if (!Type.isList(list)) {
       Interpreter.raiseFunctionClauseError(
-        "no function clause matching in :lists.sort/1",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sort/1", [list]),
       );
     }
 

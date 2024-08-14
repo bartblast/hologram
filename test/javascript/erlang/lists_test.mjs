@@ -702,13 +702,19 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the argument is not a list", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.sort/1",
+        [Type.atom("abc")],
+      );
+
       assertBoxedError(
         () => sort(Type.atom("abc")),
         "FunctionClauseError",
-        "no function clause matching in :lists.sort/1",
+        expectedMessage,
       );
     });
 
+    // Client error message is intentionally different than server error message.
     it("raises FunctionClauseError if the argument is an improper list", () => {
       assertBoxedError(
         () => sort(improperList),
