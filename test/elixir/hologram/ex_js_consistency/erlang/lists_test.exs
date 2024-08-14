@@ -354,7 +354,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "1st arg is an improper list" do
-      assert_raise ArgumentError, build_argument_error_msg(1, "not a proper list"), fn ->
+      assert_error ArgumentError, build_argument_error_msg(1, "not a proper list"), fn ->
         :lists.reverse([1 | 2], [3, 4])
       end
     end
@@ -376,7 +376,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "1st arg is not a list" do
-      assert_raise ArgumentError, build_argument_error_msg(1, "not a list"), fn ->
+      assert_error ArgumentError, build_argument_error_msg(1, "not a list"), fn ->
         :lists.reverse(5, [3, 4])
       end
     end
