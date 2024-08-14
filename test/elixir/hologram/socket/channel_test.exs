@@ -212,7 +212,7 @@ defmodule Hologram.Socket.ChannelTest do
 
     test "invalid topic name" do
       assert_raise FunctionClauseError,
-                   "no function clause matching in Hologram.Socket.Channel.join/3",
+                   build_function_clause_error_msg("Hologram.Socket.Channel.join/3"),
                    fn ->
                      join("invalid", :dummy_payload, :dummy_socket)
                    end
