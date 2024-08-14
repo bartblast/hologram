@@ -12,7 +12,6 @@ import {
 import Erlang_Lists from "../../../assets/js/erlang/lists.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
-import exp from "constants";
 
 defineGlobalErlangAndElixirModules();
 
