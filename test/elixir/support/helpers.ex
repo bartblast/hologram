@@ -97,17 +97,23 @@ defmodule Hologram.Test.Helpers do
   Builds an error message for FunctionClauseError.
   """
   @spec build_function_clause_error_msg(String.t(), list, list) :: String.t()
-  def build_function_clause_error_msg(fun_name, args, attempted_clauses \\ []) do
+  def build_function_clause_error_msg(fun_name, args \\ [], attempted_clauses \\ []) do
     args_info =
-      args
-      |> Enum.with_index()
-      |> Enum.reduce("", fn {arg, idx}, acc ->
-        """
-        #{acc}
-            # #{idx + 1}
-            #{inspect(arg)}
-        """
-      end)
+      if Enum.any?(args) do
+        initial_acc = "\n\nThe following arguments were given to #{fun_name}:\n"
+
+        args
+        |> Enum.with_index()
+        |> Enum.reduce(initial_acc, fn {arg, idx}, acc ->
+          """
+          #{acc}
+              # #{idx + 1}
+              #{inspect(arg)}
+          """
+        end)
+      else
+        ""
+      end
 
     attempted_clauses_count = Enum.count(attempted_clauses)
 
@@ -129,10 +135,7 @@ defmodule Hologram.Test.Helpers do
       end
 
     """
-    no function clause matching in #{fun_name}
-
-    The following arguments were given to #{fun_name}:
-    #{args_info}#{attempted_clauses_info}\
+    no function clause matching in #{fun_name}#{args_info}#{attempted_clauses_info}\
     """
   end
 
