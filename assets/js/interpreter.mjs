@@ -65,12 +65,18 @@ export default class Interpreter {
   }
 
   // TODO: include attempted function clauses info
-  static buildFunctionClauseErrorMsg(funName, args) {
-    return Array.from(args).reduce(
-      (acc, arg, idx) =>
-        `${acc}\n    # ${idx + 1}\n    ${Interpreter.inspect(arg)}\n`,
-      `no function clause matching in ${funName}\n\nThe following arguments were given to ${funName}:\n`,
-    );
+  static buildFunctionClauseErrorMsg(funName, args = []) {
+    let argsInfo = "";
+
+    if (args.length > 0) {
+      argsInfo = Array.from(args).reduce(
+        (acc, arg, idx) =>
+          `${acc}\n    # ${idx + 1}\n    ${Interpreter.inspect(arg)}\n`,
+        `\n\nThe following arguments were given to ${funName}:\n`,
+      );
+    }
+
+    return `no function clause matching in ${funName}${argsInfo}`;
   }
 
   static buildMatchErrorMsg(right) {

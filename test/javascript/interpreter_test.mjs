@@ -134,6 +134,26 @@ describe("Interpreter", () => {
   });
 
   describe("buildFunctionClauseErrorMsg()", () => {
+    it("no args param given", () => {
+      const result =
+        Interpreter.buildFunctionClauseErrorMsg("MyModule.my_fun/2");
+
+      const expected = "no function clause matching in MyModule.my_fun/2";
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("0 args", () => {
+      const result = Interpreter.buildFunctionClauseErrorMsg(
+        "MyModule.my_fun/2",
+        [],
+      );
+
+      const expected = "no function clause matching in MyModule.my_fun/2";
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("1 arg", () => {
       const result = Interpreter.buildFunctionClauseErrorMsg(
         "MyModule.my_fun/2",
