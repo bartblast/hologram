@@ -578,7 +578,7 @@ describe("Interpreter", () => {
             contextFixture({module: "MyOtherModule"}),
           ),
         "UndefinedFunctionError",
-        "function Hologram.Test.Fixtures.ExJsConsistency.Interpreter.Module1.my_private_fun/2 is undefined or private",
+        Interpreter.buildUndefinedFunctionErrorMsg(alias, "my_private_fun", 2),
       );
     });
 
@@ -594,23 +594,22 @@ describe("Interpreter", () => {
             context,
           ),
         "UndefinedFunctionError",
-        "function Hologram.Test.Fixtures.ExJsConsistency.Interpreter.Module1.undefined_function/2 is undefined or private",
+        Interpreter.buildUndefinedFunctionErrorMsg(
+          alias,
+          "undefined_function",
+          2,
+        ),
       );
     });
 
     // Keep Elixir consistency test in sync: test/elixir/hologram/ex_js_consistency/interpreter_test.exs ("call named function" section).
     it("module is not available", () => {
+      const alias = Type.alias("MyModule");
+
       assertBoxedError(
-        () =>
-          Interpreter.callNamedFunction(
-            Type.alias("MyModule"),
-            "my_fun",
-            2,
-            args,
-            context,
-          ),
+        () => Interpreter.callNamedFunction(alias, "my_fun", 2, args, context),
         "UndefinedFunctionError",
-        "function MyModule.my_fun/2 is undefined (module MyModule is not available)",
+        Interpreter.buildUndefinedFunctionErrorMsg(alias, "my_fun", 2, false),
       );
     });
 
@@ -627,7 +626,7 @@ describe("Interpreter", () => {
             context,
           ),
         "UndefinedFunctionError",
-        "function Hologram.Test.Fixtures.ExJsConsistency.Interpreter.Module1.my_public_fun/3 is undefined or private",
+        Interpreter.buildUndefinedFunctionErrorMsg(alias, "my_public_fun", 3),
       );
     });
 
@@ -2287,7 +2286,11 @@ describe("Interpreter", () => {
       assertBoxedError(
         () => globalThis.Elixir_Aaa_Bbb["my_fun_x/5"],
         "UndefinedFunctionError",
-        "function Aaa.Bbb.my_fun_x/5 is undefined or private",
+        Interpreter.buildUndefinedFunctionErrorMsg(
+          Type.alias("Aaa.Bbb"),
+          "my_fun_x",
+          5,
+        ),
       );
     });
   });
@@ -2345,7 +2348,11 @@ describe("Interpreter", () => {
       assertBoxedError(
         () => globalThis.Elixir_MyModuleExName["my_undefined_fun/3"],
         "UndefinedFunctionError",
-        "function MyModuleExName.my_undefined_fun/3 is undefined or private",
+        Interpreter.buildUndefinedFunctionErrorMsg(
+          Type.alias("MyModuleExName"),
+          "my_undefined_fun",
+          3,
+        ),
       );
     });
 
@@ -6101,7 +6108,11 @@ describe("Interpreter", () => {
       assertBoxedError(
         () => globalThis.Elixir_MyModuleExName["my_undefined_fun/3"](),
         "UndefinedFunctionError",
-        "function MyModuleExName.my_undefined_fun/3 is undefined or private",
+        Interpreter.buildUndefinedFunctionErrorMsg(
+          Type.alias("MyModuleExName"),
+          "my_undefined_fun",
+          3,
+        ),
       );
     });
 
@@ -6322,10 +6333,9 @@ describe("Interpreter", () => {
 
   it("raiseUndefinedFunctionError()", () => {
     assertBoxedError(
-      () =>
-        Interpreter.raiseUndefinedFunctionError("MyModule", "my_function", 2),
+      () => Interpreter.raiseUndefinedFunctionError("my_message"),
       "UndefinedFunctionError",
-      "function MyModule.my_function/2 is undefined or private",
+      "my_message",
     );
   });
 

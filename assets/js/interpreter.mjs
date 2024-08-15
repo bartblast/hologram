@@ -131,9 +131,14 @@ export default class Interpreter {
     const functionArityStr = `${functionName}/${arity}`;
 
     if (typeof moduleRef === "undefined") {
-      const moduleExName = Interpreter.inspect(module);
-      const message = `function ${moduleExName}.${functionName}/${arity} is undefined (module ${moduleExName} is not available)`;
-      Interpreter.raiseError("UndefinedFunctionError", message);
+      Interpreter.raiseUndefinedFunctionError(
+        Interpreter.buildUndefinedFunctionErrorMsg(
+          module,
+          functionName,
+          arity,
+          false,
+        ),
+      );
     }
 
     if (
@@ -141,9 +146,7 @@ export default class Interpreter {
       !Interpreter.isEqual(module, context.module)
     ) {
       Interpreter.raiseUndefinedFunctionError(
-        Interpreter.inspect(moduleRef.__exModule__),
-        functionName,
-        arity,
+        Interpreter.buildUndefinedFunctionErrorMsg(module, functionName, arity),
       );
     }
 
@@ -584,9 +587,11 @@ export default class Interpreter {
           const [functionName, arity] = functionArityStr.split("/");
 
           Interpreter.raiseUndefinedFunctionError(
-            Interpreter.inspect(moduleRef.__exModule__),
-            functionName,
-            arity,
+            Interpreter.buildUndefinedFunctionErrorMsg(
+              moduleRef.__exModule__,
+              functionName,
+              arity,
+            ),
           );
         },
       };
@@ -685,8 +690,7 @@ export default class Interpreter {
     return Interpreter.raiseError("MatchError", message);
   }
 
-  static raiseUndefinedFunctionError(moduleExName, functionName, arity) {
-    const message = `function ${moduleExName}.${functionName}/${arity} is undefined or private`;
+  static raiseUndefinedFunctionError(message) {
     return Interpreter.raiseError("UndefinedFunctionError", message);
   }
 
