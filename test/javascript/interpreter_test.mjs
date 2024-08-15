@@ -195,6 +195,7 @@ describe("Interpreter", () => {
         "my_fun",
         2,
       );
+
       const expected = "function Aaa.Bbb.my_fun/2 is undefined or private";
 
       assert.equal(result, expected);
@@ -207,6 +208,7 @@ describe("Interpreter", () => {
         2,
         false,
       );
+
       const expected =
         "function Aaa.Bbb.my_fun/2 is undefined (module Aaa.Bbb is not available)";
 
