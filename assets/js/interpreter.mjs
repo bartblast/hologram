@@ -83,6 +83,21 @@ export default class Interpreter {
     return "no match of right hand side value: " + Interpreter.inspect(right);
   }
 
+  static buildUndefinedFunctionErrorMsg(
+    module,
+    functionName,
+    arity,
+    isModuleAvailable = true,
+  ) {
+    const moduleName = Interpreter.inspect(module);
+
+    if (isModuleAvailable) {
+      return `function ${moduleName}.${functionName}/${arity} is undefined or private`;
+    }
+
+    return `function ${moduleName}.${functionName}/${arity} is undefined (module ${moduleName} is not available)`;
+  }
+
   static callAnonymousFunction(fun, argsArray) {
     if (argsArray.length !== fun.arity) {
       Interpreter.raiseBadArityError(fun.arity, argsArray);

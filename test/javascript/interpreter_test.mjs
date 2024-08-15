@@ -186,6 +186,34 @@ describe("Interpreter", () => {
     assert.deepStrictEqual(result, expected);
   });
 
+  describe("buildUndefinedFunctionErrorMsg", () => {
+    const module = Type.alias("Aaa.Bbb");
+
+    it("module is available", () => {
+      const result = Interpreter.buildUndefinedFunctionErrorMsg(
+        module,
+        "my_fun",
+        2,
+      );
+      const expected = "function Aaa.Bbb.my_fun/2 is undefined or private";
+
+      assert.equal(result, expected);
+    });
+
+    it("module is not available", () => {
+      const result = Interpreter.buildUndefinedFunctionErrorMsg(
+        module,
+        "my_fun",
+        2,
+        false,
+      );
+      const expected =
+        "function Aaa.Bbb.my_fun/2 is undefined (module Aaa.Bbb is not available)";
+
+      assert.equal(result, expected);
+    });
+  });
+
   describe("callAnonymousFunction()", () => {
     let anonFun, context;
 
