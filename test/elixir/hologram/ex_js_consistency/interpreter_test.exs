@@ -5,11 +5,12 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
   Always update both together.
   """
   use Hologram.Test.BasicCase, async: true
+  alias Hologram.Test.Fixtures.ExJsConsistency.Interpreter.Module1
 
   @moduletag :consistency
 
   @env %Macro.Env{
-    aliases: [{Module1, Hologram.Test.Fixtures.ExJsConsistency.Interpreter.Module1}]
+    aliases: [{:"Elixir.Module1", Hologram.Test.Fixtures.ExJsConsistency.Interpreter.Module1}]
   }
 
   describe "call anonymous function" do
@@ -70,8 +71,14 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
 
   describe "call named function" do
     test "remote private function call" do
+      expected_msg =
+        build_undefined_function_error({Module1, :my_private_fun, 2}, [
+          {:my_public_fun, 1},
+          {:my_public_fun, 2}
+        ])
+
       assert_error UndefinedFunctionError,
-                   "function Hologram.Test.Fixtures.ExJsConsistency.Interpreter.Module1.my_private_fun/2 is undefined or private. Did you mean:\n\n      * my_public_fun/1\n      * my_public_fun/2\n",
+                   expected_msg,
                    fn ->
                      # Code.eval_string/3 used here, because this code wouldn't compile.
                      Code.eval_string("Module1.my_private_fun(1, 2)", [], @env)
@@ -79,8 +86,10 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
     end
 
     test "module is available, but function is undefined" do
+      expected_msg = build_undefined_function_error({Module1, :undefined_function, 2})
+
       assert_error UndefinedFunctionError,
-                   "function Hologram.Test.Fixtures.ExJsConsistency.Interpreter.Module1.undefined_function/2 is undefined or private",
+                   expected_msg,
                    fn ->
                      # Code.eval_string/3 used here, because this code wouldn't compile.
                      Code.eval_string("Module1.undefined_function(1, 2)", [], @env)
@@ -88,8 +97,10 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
     end
 
     test "module is not available" do
+      expected_msg = build_undefined_function_error({MyModule, :my_fun, 2}, [], false)
+
       assert_error UndefinedFunctionError,
-                   "function MyModule.my_fun/2 is undefined (module MyModule is not available)",
+                   expected_msg,
                    fn ->
                      # Code.eval_string/3 used here, because this code wouldn't compile.
                      Code.eval_string("MyModule.my_fun(1, 2)", [], @env)
@@ -97,8 +108,14 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
     end
 
     test "function with the same name and different arity is defined" do
+      expected_msg =
+        build_undefined_function_error({Module1, :my_public_fun, 3}, [
+          {:my_public_fun, 1},
+          {:my_public_fun, 2}
+        ])
+
       assert_error UndefinedFunctionError,
-                   "function Hologram.Test.Fixtures.ExJsConsistency.Interpreter.Module1.my_public_fun/3 is undefined or private. Did you mean:\n\n      * my_public_fun/1\n      * my_public_fun/2\n",
+                   expected_msg,
                    fn ->
                      # Code.eval_string/3 used here, because this code wouldn't compile.
                      Code.eval_string("Module1.my_public_fun(1, 2, 3)", [], @env)
