@@ -2562,44 +2562,44 @@ describe("Interpreter", () => {
 
     describe("atom", () => {
       it("true", () => {
-        const result = Interpreter.inspect(Type.boolean(true), {});
+        const result = Interpreter.inspect(Type.boolean(true));
         assert.equal(result, "true");
       });
 
       it("false", () => {
-        const result = Interpreter.inspect(Type.boolean(false), {});
+        const result = Interpreter.inspect(Type.boolean(false));
         assert.equal(result, "false");
       });
 
       it("nil", () => {
-        const result = Interpreter.inspect(Type.nil(), {});
+        const result = Interpreter.inspect(Type.nil());
         assert.equal(result, "nil");
       });
 
       it("module alias", () => {
-        const result = Interpreter.inspect(Type.alias("Aaa.Bbb"), {});
+        const result = Interpreter.inspect(Type.alias("Aaa.Bbb"));
         assert.equal(result, "Aaa.Bbb");
       });
 
       it("non-boolean and non-nil", () => {
-        const result = Interpreter.inspect(Type.atom("abc"), {});
+        const result = Interpreter.inspect(Type.atom("abc"));
         assert.equal(result, ":abc");
       });
     });
 
     describe("bitstring", () => {
       it("empty text", () => {
-        const result = Interpreter.inspect(Type.bitstring(""), {});
+        const result = Interpreter.inspect(Type.bitstring(""));
         assert.equal(result, '""');
       });
 
       it("ASCII text", () => {
-        const result = Interpreter.inspect(Type.bitstring("abc"), {});
+        const result = Interpreter.inspect(Type.bitstring("abc"));
         assert.equal(result, '"abc"');
       });
 
       it("Unicode text", () => {
-        const result = Interpreter.inspect(Type.bitstring("全息图"), {});
+        const result = Interpreter.inspect(Type.bitstring("全息图"));
         assert.equal(result, '"全息图"');
       });
 
@@ -2611,7 +2611,6 @@ describe("Interpreter", () => {
             1, 0, 1, 0, 1, 0, 1, 0,
             1, 1,
           ]),
-          {},
         );
 
         assert.equal(result, "<<204, 170, 3::size(2)>>");
@@ -2620,18 +2619,18 @@ describe("Interpreter", () => {
 
     describe("float", () => {
       it("integer-representable", () => {
-        const result = Interpreter.inspect(Type.float(123.0), {});
+        const result = Interpreter.inspect(Type.float(123.0));
         assert.equal(result, "123.0");
       });
 
       it("not integer-representable", () => {
-        const result = Interpreter.inspect(Type.float(123.45), {});
+        const result = Interpreter.inspect(Type.float(123.45));
         assert.equal(result, "123.45");
       });
     });
 
     it("integer", () => {
-      const result = Interpreter.inspect(Type.integer(123), {});
+      const result = Interpreter.inspect(Type.integer(123));
       assert.equal(result, "123");
     });
 
@@ -2639,7 +2638,7 @@ describe("Interpreter", () => {
       it("single item", () => {
         const term = Type.keywordList([[Type.atom("a"), Type.integer(1)]]);
 
-        const result = Interpreter.inspect(term, {});
+        const result = Interpreter.inspect(term);
 
         assert.equal(result, "[a: 1]");
       });
@@ -2650,7 +2649,7 @@ describe("Interpreter", () => {
           [Type.atom("b"), Type.integer(2)],
         ]);
 
-        const result = Interpreter.inspect(term, {});
+        const result = Interpreter.inspect(term);
 
         assert.equal(result, "[a: 1, b: 2]");
       });
@@ -2658,14 +2657,13 @@ describe("Interpreter", () => {
 
     describe("list", () => {
       it("empty", () => {
-        const result = Interpreter.inspect(Type.list(), {});
+        const result = Interpreter.inspect(Type.list());
         assert.equal(result, "[]");
       });
 
       it("non-empty, proper", () => {
         const result = Interpreter.inspect(
           Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
-          {},
         );
 
         assert.equal(result, "[1, 2, 3]");
@@ -2678,7 +2676,6 @@ describe("Interpreter", () => {
             Type.integer(2),
             Type.integer(3),
           ]),
-          {},
         );
 
         assert.equal(result, "[1, 2 | 3]");
@@ -2772,31 +2769,30 @@ describe("Interpreter", () => {
 
     describe("string", () => {
       it("empty text", () => {
-        const result = Interpreter.inspect(Type.string(""), {});
+        const result = Interpreter.inspect(Type.string(""));
         assert.equal(result, '""');
       });
 
       it("ASCII text", () => {
-        const result = Interpreter.inspect(Type.string("abc"), {});
+        const result = Interpreter.inspect(Type.string("abc"));
         assert.equal(result, '"abc"');
       });
 
       it("Unicode text", () => {
-        const result = Interpreter.inspect(Type.string("全息图"), {});
+        const result = Interpreter.inspect(Type.string("全息图"));
         assert.equal(result, '"全息图"');
       });
     });
 
     describe("tuple", () => {
       it("empty", () => {
-        const result = Interpreter.inspect(Type.tuple([]), {});
+        const result = Interpreter.inspect(Type.tuple([]));
         assert.equal(result, "{}");
       });
 
       it("non-empty", () => {
         const result = Interpreter.inspect(
           Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
-          {},
         );
 
         assert.equal(result, "{1, 2, 3}");
@@ -2805,7 +2801,7 @@ describe("Interpreter", () => {
 
     // TODO: remove when all types are supported
     it("default", () => {
-      const result = Interpreter.inspect({type: "x"}, {});
+      const result = Interpreter.inspect({type: "x"});
       assert.equal(result, '{"type":"x"}');
     });
   });

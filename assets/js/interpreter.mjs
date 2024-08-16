@@ -914,15 +914,15 @@ export default class Interpreter {
     return term.value.toString();
   }
 
-  static #inspectKeywordList(term) {
+  static #inspectKeywordList(term, opts) {
     return (
       "[" +
       term.data
         .map(
           (item) =>
-            Interpreter.inspect(item.data[0]).substring(1) +
+            Interpreter.inspect(item.data[0], opts).substring(1) +
             ": " +
-            Interpreter.inspect(item.data[1]),
+            Interpreter.inspect(item.data[1], opts),
         )
         .join(", ") +
       "]"
@@ -931,7 +931,7 @@ export default class Interpreter {
 
   static #inspectList(term, opts) {
     if (term.data.length !== 0 && Type.isKeywordList(term)) {
-      return Interpreter.#inspectKeywordList(term);
+      return Interpreter.#inspectKeywordList(term, opts);
     }
 
     if (term.isProper) {
@@ -949,7 +949,7 @@ export default class Interpreter {
         .map((elem) => Interpreter.inspect(elem, opts))
         .join(", ") +
       " | " +
-      Interpreter.inspect(term.data.slice(-1)[0]) +
+      Interpreter.inspect(term.data.slice(-1)[0], opts) +
       "]"
     );
   }

@@ -6,12 +6,12 @@ import Type from "../type.mjs";
 const Elixir_Kernel = {
   // Deps: [Kernel.inspect/2]
   "inspect/1": (term) => {
-    return Elixir_Kernel["inspect/2"](term, Type.list());
+    return Elixir_Kernel["inspect/2"](term, Type.keywordList());
   },
 
   // TODO: support opts param
-  "inspect/2": (term, _opts) => {
-    return Type.bitstring(Interpreter.inspect(term, {}));
+  "inspect/2": (term, opts) => {
+    return Type.bitstring(Interpreter.inspect(term, opts));
   },
 };
 
