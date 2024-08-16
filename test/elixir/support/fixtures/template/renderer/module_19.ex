@@ -1,4 +1,5 @@
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module19 do
+  alias Hex.Package
   use Hologram.Page
 
   route "/hologram-test-fixtures-template-renderer-module19"
@@ -13,8 +14,10 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module19 do
     put_state(component, params)
   end
 
+  # Can't use Hologram.Commons.KernelUtils.inspect/1 here,
+  # because this module is used in client renderer tests. 
   @impl Page
   def template do
-    ~H"page vars = {vars |> :maps.to_list() |> :lists.sort() |> inspect()}"
+    ~H"page vars = {inspect(vars, custom_options: [sort_maps: true])}"
   end
 end

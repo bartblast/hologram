@@ -6,6 +6,7 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Commons.ETS
   alias Hologram.Commons.FileUtils
+  alias Hologram.Commons.KernelUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.ProcessUtils
   alias Hologram.Compiler.AST
@@ -109,7 +110,7 @@ defmodule Hologram.Test.Helpers do
           """
           #{acc}
               # #{idx + 1}
-              #{inspect(arg)}
+              #{KernelUtils.inspect(arg)}
           """
         end)
       else

@@ -338,7 +338,7 @@ defmodule Hologram.Template.RendererTest do
            {"prop_4", [text: "value_4"]}
          ], []}
 
-      assert {~s'component vars = [cid: &quot;my_component&quot;, prop_1: &quot;value_1&quot;, prop_2: 2, prop_3: &quot;aaa2bbb&quot;]',
+      assert {~s'component vars = %{cid: &quot;my_component&quot;, prop_1: &quot;value_1&quot;, prop_2: 2, prop_3: &quot;aaa2bbb&quot;}',
               _} = render_dom(node, @env)
     end
   end

@@ -96,10 +96,16 @@ export function defineModule21Fixture() {
                     Type.tuple([
                       Type.atom("expression"),
                       Type.tuple([
-                        Elixir_Kernel["inspect/1"](
-                          Erlang_Lists["sort/1"](
-                            Erlang_Maps["to_list/1"](context.vars.vars),
-                          ),
+                        Elixir_Kernel["inspect/2"](
+                          context.vars.vars,
+                          Type.keywordList([
+                            [
+                              Type.atom("custom_options"),
+                              Type.keywordList([
+                                [Type.atom("sort_maps"), Type.boolean(true)],
+                              ]),
+                            ],
+                          ]),
                         ),
                       ]),
                     ]),

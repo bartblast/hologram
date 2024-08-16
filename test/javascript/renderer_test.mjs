@@ -1599,7 +1599,7 @@ describe("Renderer", () => {
 
       assert.equal(
         result,
-        'component vars = [cid: "my_component", prop_1: "value_1", prop_2: 2, prop_3: "aaa2bbb"]',
+        'component vars = %{cid: "my_component", prop_1: "value_1", prop_2: 2, prop_3: "aaa2bbb"}',
       );
     });
 
@@ -2019,7 +2019,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          'layout vars = [cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"]',
+          'layout vars = %{cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}',
         ]),
       ]);
 
@@ -2046,7 +2046,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          'layout vars = [cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"]',
+          'layout vars = %{cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}',
         ]),
       ]);
 
@@ -2075,7 +2075,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          'page vars = [key_1: "param_value_1", key_2: "state_value_2", key_3: "state_value_3"]',
+          'page vars = %{key_1: "param_value_1", key_2: "state_value_2", key_3: "state_value_3"}',
         ]),
       ]);
 
@@ -2101,7 +2101,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          'layout vars = [cid: "layout", key_1: "prop_value_1", key_2: "state_value_2", key_3: "state_value_3"]',
+          'layout vars = %{cid: "layout", key_1: "prop_value_1", key_2: "state_value_2", key_3: "state_value_3"}',
         ]),
       ]);
 
