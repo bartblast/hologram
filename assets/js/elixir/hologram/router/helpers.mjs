@@ -14,7 +14,7 @@ const Elixir_Hologram_Router_Helpers = {
         staticPath,
       )}"`;
 
-      return Interpreter.raiseError("Hologram.AssetNotFoundError", message);
+      Interpreter.raiseError("Hologram.AssetNotFoundError", message);
     }
 
     return assetPath;

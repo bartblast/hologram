@@ -175,7 +175,7 @@ export default class Interpreter {
       }
     }
 
-    return Interpreter.raiseCaseClauseError(condition);
+    Interpreter.raiseCaseClauseError(condition);
   }
 
   // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
@@ -270,7 +270,7 @@ export default class Interpreter {
       }
     }
 
-    return Interpreter.#raiseCondClauseError();
+    Interpreter.#raiseCondClauseError();
   }
 
   static consOperator(head, tail) {
@@ -625,11 +625,11 @@ export default class Interpreter {
   }
 
   static raiseArgumentError(message) {
-    return Interpreter.raiseError("ArgumentError", message);
+    Interpreter.raiseError("ArgumentError", message);
   }
 
   static raiseArithmeticError(blame = null) {
-    return Interpreter.raiseError(
+    Interpreter.raiseError(
       "ArithmeticError",
       `bad argument in arithmetic expression${blame ? `: ${blame}` : ""}`,
     );
@@ -650,7 +650,7 @@ export default class Interpreter {
       maybeInspectedArgs = ` (${inspectedArgs.join(", ")})`;
     }
 
-    return Interpreter.raiseError(
+    Interpreter.raiseError(
       "BadArityError",
       `anonymous function with arity ${arity} called with ${numArgs} ${argumentNounPluralized}${maybeInspectedArgs}`,
     );
@@ -659,39 +659,39 @@ export default class Interpreter {
   static raiseBadMapError(arg) {
     const message = "expected a map, got: " + Interpreter.inspect(arg);
 
-    return Interpreter.raiseError("BadMapError", message);
+    Interpreter.raiseError("BadMapError", message);
   }
 
   static raiseCaseClauseError(arg) {
     const message = "no case clause matching: " + Interpreter.inspect(arg);
 
-    return Interpreter.raiseError("CaseClauseError", message);
+    Interpreter.raiseError("CaseClauseError", message);
   }
 
   static raiseCompileError(message) {
-    return Interpreter.raiseError("CompileError", message);
+    Interpreter.raiseError("CompileError", message);
   }
 
   // Deps: [:erlang.error/1]
   static raiseError(aliasStr, message) {
     const errorStruct = Type.errorStruct(aliasStr, message);
-    return Erlang["error/1"](errorStruct);
+    Erlang["error/1"](errorStruct);
   }
 
   static raiseFunctionClauseError(message) {
-    return Interpreter.raiseError("FunctionClauseError", message);
+    Interpreter.raiseError("FunctionClauseError", message);
   }
 
   static raiseKeyError(message) {
-    return Interpreter.raiseError("KeyError", message);
+    Interpreter.raiseError("KeyError", message);
   }
 
   static raiseMatchError(message) {
-    return Interpreter.raiseError("MatchError", message);
+    Interpreter.raiseError("MatchError", message);
   }
 
   static raiseUndefinedFunctionError(message) {
-    return Interpreter.raiseError("UndefinedFunctionError", message);
+    Interpreter.raiseError("UndefinedFunctionError", message);
   }
 
   static try(
@@ -1162,7 +1162,7 @@ export default class Interpreter {
   }
 
   static #raiseCondClauseError() {
-    return Interpreter.raiseError(
+    Interpreter.raiseError(
       "CondClauseError",
       "no cond clause evaluated to a truthy value",
     );
