@@ -40,7 +40,8 @@ jobs:
           - "27.0"
         node:
           - "18.20.4"
-          - "19.9.0"
+          # Version 19 is not supported by a few JS libs used by Hologram.
+          # - "19.9.0"
           - "20.16.0"
           - "21.7.3"
           - "22.6.0"
@@ -248,7 +249,8 @@ jobs:
           - "27.0"
         node:
           - "18.20.4"
-          - "19.9.0"
+          # Version 19 is not supported by a few JS libs used by Hologram.
+          # - "19.9.0"
           - "20.16.0"
           - "21.7.3"
           - "22.6.0"
