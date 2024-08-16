@@ -1,5 +1,4 @@
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module19 do
-  alias Hex.Package
   use Hologram.Page
 
   route "/hologram-test-fixtures-template-renderer-module19"
