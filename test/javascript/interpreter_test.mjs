@@ -2686,8 +2686,13 @@ describe("Interpreter", () => {
     });
 
     describe("map", () => {
+      const map = Type.map([
+        [Type.atom("b"), Type.integer(2)],
+        [Type.atom("a"), Type.integer(1)],
+      ]);
+
       it("empty", () => {
-        const result = Interpreter.inspect(Type.map(), {});
+        const result = Interpreter.inspect(Type.map());
         assert.equal(result, "%{}");
       });
 
@@ -2697,7 +2702,7 @@ describe("Interpreter", () => {
           [Type.atom("b"), Type.bitstring("xyz")],
         ]);
 
-        const result = Interpreter.inspect(map, {});
+        const result = Interpreter.inspect(map);
 
         assert.equal(result, '%{a: 1, b: "xyz"}');
       });
@@ -2708,9 +2713,41 @@ describe("Interpreter", () => {
           [Type.bitstring("abc"), Type.float(2.3)],
         ]);
 
-        const result = Interpreter.inspect(map, {});
+        const result = Interpreter.inspect(map);
 
         assert.equal(result, '%{9 => "xyz", "abc" => 2.3}');
+      });
+
+      it("sort_maps opt is not defined", () => {
+        const result = Interpreter.inspect(map);
+
+        assert.equal(result, "%{b: 2, a: 1}");
+      });
+
+      it("sort_maps opt is set to true", () => {
+        const opts = Type.keywordList([
+          [
+            Type.atom("custom_options"),
+            Type.keywordList([[Type.atom("sort_maps"), Type.boolean(true)]]),
+          ],
+        ]);
+
+        const result = Interpreter.inspect(map, opts);
+
+        assert.equal(result, "%{a: 1, b: 2}");
+      });
+
+      it("sort_maps opt is set to false", () => {
+        const opts = Type.keywordList([
+          [
+            Type.atom("custom_options"),
+            Type.keywordList([[Type.atom("sort_maps"), Type.boolean(false)]]),
+          ],
+        ]);
+
+        const result = Interpreter.inspect(map, opts);
+
+        assert.equal(result, "%{b: 2, a: 1}");
       });
     });
 

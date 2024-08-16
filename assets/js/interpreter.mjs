@@ -441,7 +441,7 @@ export default class Interpreter {
 
   // Important: keep Kernel.inspect/2 consistency tests in sync.
   // TODO: implement all types
-  static inspect(term, opts = {}) {
+  static inspect(term, opts = Type.keywordList()) {
     switch (term.type) {
       case "anonymous_function":
         return Interpreter.#inspectAnonymousFunction(term, opts);
@@ -955,9 +955,28 @@ export default class Interpreter {
   }
 
   // TODO: inspect structs
+  // Deps: [:lists.sort/1, :maps.to_list/1]
   static #inspectMap(term, opts) {
     if (Type.isRange(term)) {
       return Interpreter.#inspectRange(term, opts);
+    }
+
+    const optCustomOptions =
+      Interpreter.accessKeywordListElement(opts, Type.atom("custom_options")) ||
+      Type.keywordList();
+
+    const optSortMaps =
+      Interpreter.accessKeywordListElement(
+        optCustomOptions,
+        Type.atom("sort_maps"),
+      ) || Type.boolean(false);
+
+    if (Type.isTrue(optSortMaps)) {
+      term = Type.map(
+        Erlang_Lists["sort/1"](Erlang_Maps["to_list/1"](term)).data.map(
+          (tuple) => tuple.data,
+        ),
+      );
     }
 
     const isAtomKeyMap = Object.values(term.data).every(([key, _value]) =>
