@@ -70,7 +70,9 @@ defmodule Hologram.Compiler.CallGraph do
       {:erlang, :hd, 1},
       {:erlang, :tl, 1},
       {:lists, :keyfind, 3},
-      {:maps, :get, 2}
+      {:lists, :sort, 1},
+      {:maps, :get, 2},
+      {:maps, :to_list, 1}
     ],
     manually_ported_code_module: [
       {:code, :ensure_loaded, 1}
