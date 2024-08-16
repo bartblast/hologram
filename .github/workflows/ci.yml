@@ -39,7 +39,8 @@ jobs:
           - "26.2"
           - "27.0"
         node:
-          - "18.20.4"
+          # Version 18 doesn't support Web Crypto API.
+          # - "18.20.4"
           # Version 19 is not supported by a few JS libs used by Hologram.
           # - "19.9.0"
           - "20.16.0"
@@ -248,7 +249,8 @@ jobs:
           - "26.2"
           - "27.0"
         node:
-          - "18.20.4"
+          # Version 18 doesn't support Web Crypto API.
+          # - "18.20.4"
           # Version 19 is not supported by a few JS libs used by Hologram.
           # - "19.9.0"
           - "20.16.0"
