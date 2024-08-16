@@ -55,7 +55,7 @@ export function defineModule64Fixture() {
                     Type.tuple([
                       Type.atom("expression"),
                       Type.tuple([
-                        Elixir_Kernel["inspect/2"](
+                        Elixir_Kernel["inspect/1"](
                           Interpreter.dotOperator(
                             context.vars.vars,
                             Type.atom("my_prop"),
