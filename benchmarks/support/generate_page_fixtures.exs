@@ -1,3 +1,6 @@
+# Run in the project root dir:
+# $ mix run benchmarks/support/generate_page_fixtures.exs
+
 alias Hologram.Reflection
 
 Enum.each(1..100, fn i ->
@@ -5,6 +8,9 @@ Enum.each(1..100, fn i ->
   # credo:disable-for-this-file Credo.Check.Readability.Specs
   defmodule Hologram.Benchmarks.Fixtures.Page#{i} do
     use Hologram.Page
+    
+    import Hologram.Commons.KernelUtils, only: [inspect: 1]
+    import Kernel, except: [inspect: 1]
 
     route "/page-#{i}"
 

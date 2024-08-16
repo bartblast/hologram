@@ -2,6 +2,9 @@
 defmodule Hologram.Benchmarks.Fixtures.Page93 do
   use Hologram.Page
 
+  import Hologram.Commons.KernelUtils, only: [inspect: 1]
+  import Kernel, except: [inspect: 1]
+
   route "/page-93"
 
   layout Hologram.Benchmarks.Fixtures.Components.DefaultLayout
