@@ -140,6 +140,14 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Builds an error message for KeyError.
+  """
+  @spec build_key_error_msg(any, map) :: String.t()
+  def build_key_error_msg(key, map) do
+    "key #{inspect(key)} not found in: #{inspect(custom_options: [sort_maps: true])}"
+  end
+
+  @doc """
   Builds empty server struct.
   """
   @spec build_server_struct() :: Server.t()
