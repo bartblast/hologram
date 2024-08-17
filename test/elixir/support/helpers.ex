@@ -144,7 +144,7 @@ defmodule Hologram.Test.Helpers do
   """
   @spec build_key_error_msg(any, map) :: String.t()
   def build_key_error_msg(key, map) do
-    "key #{inspect(key)} not found in: #{inspect(custom_options: [sort_maps: true])}"
+    "key #{inspect(key)} not found in: #{inspect(map, custom_options: [sort_maps: true])}"
   end
 
   @doc """
