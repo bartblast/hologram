@@ -431,7 +431,7 @@ defmodule Hologram.CompilerTest do
       opts = [formatter_bin_path: Path.join([@assets_dir, "node_modules", ".bin", "biome"])]
 
       assert Compiler.format_files([file_path_1, file_path_2], opts) =~
-               ~r"Formatted 2 files in [0-9]+ms\. Fixed 2 files.\n"s
+               ~r"Formatted 2 files in [0-9]+[mµ]?s\. Fixed 2 files\.\n"u
 
       assert File.read!(file_path_1) == formatted_js_code
       assert File.read!(file_path_2) == formatted_js_code
