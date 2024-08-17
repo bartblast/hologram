@@ -730,14 +730,14 @@ defmodule Hologram.Template.RendererTest do
 
       params = %{param_1: "abc", param_3: "123"}
 
-      assert {~s'page vars = [param_1: &quot;abc&quot;, param_3: 123]', _} =
+      assert {~s'page vars = %{param_1: &quot;abc&quot;, param_3: 123}', _} =
                render_page(Module19, params, @opts)
     end
 
     test "cast layout explicit static props" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module25, :dummy_module_25_digest)
 
-      assert {~s'layout vars = [cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;]',
+      assert {~s'layout vars = %{cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;}',
               _} =
                render_page(Module25, @params, @opts)
     end
@@ -745,7 +745,7 @@ defmodule Hologram.Template.RendererTest do
     test "cast layout props passed implicitely from page state" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module27, :dummy_module_27_digest)
 
-      assert {~s'layout vars = [cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;]',
+      assert {~s'layout vars = %{cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;}',
               _} =
                render_page(Module27, @params, @opts)
     end
@@ -755,7 +755,7 @@ defmodule Hologram.Template.RendererTest do
 
       params = %{key_1: "param_value_1", key_2: "param_value_2"}
 
-      assert {~s'page vars = [key_1: &quot;param_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;]',
+      assert {~s'page vars = %{key_1: &quot;param_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;}',
               _} =
                render_page(Module21, params, @opts)
     end
@@ -763,7 +763,7 @@ defmodule Hologram.Template.RendererTest do
     test "aggregate layout vars, giving state vars priority over prop vars when there are name conflicts" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module24, :dummy_module_24_digest)
 
-      assert {~s'layout vars = [cid: &quot;layout&quot;, key_1: &quot;prop_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;]',
+      assert {~s'layout vars = %{cid: &quot;layout&quot;, key_1: &quot;prop_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;}',
               _} = render_page(Module24, @params, @opts)
     end
 
