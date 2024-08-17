@@ -353,11 +353,13 @@ defmodule Hologram.Compiler do
   # sobelow_skip ["CI.System"]
   def format_files(file_paths, opts) do
     cmd = ["format", "--write" | file_paths]
-    {_exit_msg, exit_status} = System.cmd(opts[:formatter_bin_path], cmd, parallelism: true)
+    {exit_msg, exit_status} = System.cmd(opts[:formatter_bin_path], cmd, parallelism: true)
 
     if exit_status != 0 do
       raise RuntimeError, message: "There were JavaScript syntax errors in the input files."
     end
+
+    exit_msg
   end
 
   @doc """
