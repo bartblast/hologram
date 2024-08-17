@@ -25,9 +25,6 @@ defmodule Hologram.Test.Helpers do
   defdelegate clean_dir(file_path), to: FileUtils, as: :recreate_dir
   defdelegate ir(code, context \\ %Context{}), to: IR, as: :for_code
   defdelegate parsed_tags(markup), to: Parser, as: :parse_markup
-  defdelegate pid(str), to: IEx.Helpers
-  defdelegate port(str), to: IEx.Helpers
-  defdelegate ref(str), to: IEx.Helpers
 
   @doc """
   Asserts that the given module function call raises the given error (with the given error message).
