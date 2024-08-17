@@ -412,25 +412,56 @@ defmodule Hologram.CompilerTest do
            }
   end
 
-  test "format_files/2" do
-    test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "test_format_files_2"])
-    clean_dir(test_tmp_dir)
+  describe "format_files/2" do
+    test "valid JS code" do
+      test_tmp_dir =
+        Path.join([@tmp_dir, "tests", "compiler", "test_format_files_2_valid_js_code"])
 
-    unformatted_js_code = "const myVar  =  123"
-    formatted_js_code = "const myVar = 123;\n"
+      clean_dir(test_tmp_dir)
 
-    file_path_1 = Path.join(test_tmp_dir, "file_1.js")
-    File.write!(file_path_1, unformatted_js_code)
+      unformatted_js_code = "const myVar  =  123"
+      formatted_js_code = "const myVar = 123;\n"
 
-    file_path_2 = Path.join(test_tmp_dir, "file_2.js")
-    File.write!(file_path_2, unformatted_js_code)
+      file_path_1 = Path.join(test_tmp_dir, "file_1.js")
+      File.write!(file_path_1, unformatted_js_code)
 
-    opts = [formatter_bin_path: Path.join([@assets_dir, "node_modules", ".bin", "biome"])]
+      file_path_2 = Path.join(test_tmp_dir, "file_2.js")
+      File.write!(file_path_2, unformatted_js_code)
 
-    Compiler.format_files([file_path_1, file_path_2], opts)
+      opts = [formatter_bin_path: Path.join([@assets_dir, "node_modules", ".bin", "biome"])]
 
-    assert File.read!(file_path_1) == formatted_js_code
-    assert File.read!(file_path_2) == formatted_js_code
+      Compiler.format_files([file_path_1, file_path_2], opts)
+
+      assert File.read!(file_path_1) == formatted_js_code
+      assert File.read!(file_path_2) == formatted_js_code
+    end
+
+    test "invalid JS code" do
+      test_tmp_dir =
+        Path.join([@tmp_dir, "tests", "compiler", "test_format_files_2_invalid_js_code"])
+
+      clean_dir(test_tmp_dir)
+
+      unformatted_invalid_js_code = "const myVar  123"
+
+      unformatted_valid_js_code = "const myVar  =  123"
+      formatted_valid_js_code = "const myVar = 123;\n"
+
+      file_path_1 = Path.join(test_tmp_dir, "file_1.js")
+      File.write!(file_path_1, unformatted_invalid_js_code)
+
+      file_path_2 = Path.join(test_tmp_dir, "file_2.js")
+      File.write!(file_path_2, unformatted_valid_js_code)
+
+      opts = [formatter_bin_path: Path.join([@assets_dir, "node_modules", ".bin", "biome"])]
+
+      assert_raise RuntimeError, "There were JavaScript syntax errors in the input files.", fn ->
+        Compiler.format_files([file_path_1, file_path_2], opts)
+      end
+
+      assert File.read!(file_path_1) == unformatted_invalid_js_code
+      assert File.read!(file_path_2) == formatted_valid_js_code
+    end
   end
 
   test "group_mfas_by_module/1" do
