@@ -3,6 +3,7 @@ defmodule Hologram.Test.ComponentCase do
 
   using do
     quote do
+      import Hologram.Commons.TestUtils
       import Hologram.Template, only: [sigil_H: 2]
       import Hologram.Test.Helpers
 

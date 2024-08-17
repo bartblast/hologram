@@ -1,6 +1,7 @@
 defmodule Hologram.Test.Helpers do
   import ExUnit.Assertions
   import Hologram.Commons.Guards, only: [is_regex: 1]
+  import Hologram.Commons.TestUtils, only: [wrap_term: 1]
   import Hologram.Template, only: [sigil_H: 2]
 
   alias Hologram.Assets.PageDigestRegistry
@@ -428,14 +429,5 @@ defmodule Hologram.Test.Helpers do
     else
       :ok
     end
-  end
-
-  @doc """
-  Returns the given argument.
-  It prevents compiler warnings in tests when the given value is not permitted is specific situation.
-  """
-  @spec wrap_term(any) :: any
-  def wrap_term(value) do
-    value
   end
 end

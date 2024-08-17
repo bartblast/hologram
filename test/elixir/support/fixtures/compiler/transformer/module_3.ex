@@ -1,6 +1,6 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module3 do
-  import Hologram.Test.Helpers, only: [wrap_term: 1]
+  import Hologram.Commons.TestUtils, only: [wrap_term: 1]
 
   def data do
     iii = 123
