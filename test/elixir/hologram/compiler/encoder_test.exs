@@ -900,11 +900,7 @@ defmodule Hologram.Compiler.EncoderTest do
                    return value;
                  }
 
-                 Interpreter.raiseKeyError(
-                   `key ${Interpreter.inspect(key)} not found in: ${Interpreter.inspect(
-                     map,
-                   )}`,
-                 );
+                 Interpreter.raiseKeyError(Interpreter.buildKeyErrorMsg(key, map));
                });\
              """
     end
