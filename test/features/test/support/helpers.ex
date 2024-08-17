@@ -8,11 +8,6 @@ defmodule HologramFeatureTests.Helpers do
 
   @max_wait_time Application.compile_env(:wallaby, :max_wait_time, 3_000)
 
-  defdelegate pid(str), to: IEx.Helpers
-  defdelegate port(str), to: IEx.Helpers
-  defdelegate ref(str), to: IEx.Helpers
-  defdelegate wrap_term(term), to: HologramFeatureTests.Commons
-
   def assert_js_error(expected_msg, fun) do
     assert_raise Wallaby.JSError, expected_msg, fn ->
       fun.()

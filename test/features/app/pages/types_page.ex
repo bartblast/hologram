@@ -2,7 +2,7 @@ defmodule HologramFeatureTests.TypesPage do
   use Hologram.Page
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
-  import HologramFeatureTests.Commons
+  import Hologram.Commons.TestUtils, only: [pid: 1]
   import Kernel, except: [inspect: 1]
 
   route "/types"
