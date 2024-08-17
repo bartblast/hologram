@@ -365,7 +365,9 @@ defmodule Hologram.Template.RendererTest do
     test "with unregistered var used" do
       node = {:component, Module17, [{"a", [text: "111"]}, {"b", [text: "222"]}], []}
 
-      assert_raise KeyError, "key :b not found in: %{a: \"111\"}", fn ->
+      expected_msg = build_key_error_msg(:b, %{a: "111"})
+
+      assert_raise KeyError, expected_msg, fn ->
         render_dom(node, @env)
       end
     end
@@ -451,7 +453,7 @@ defmodule Hologram.Template.RendererTest do
          [{"cid", [text: "my_component"]}, {"a", [text: "111"]}, {"c", [text: "333"]}], []}
 
       assert_raise KeyError,
-                   ~r/key :c not found in:/,
+                   ~r/^key :c not found in: %\{.+\}$/,
                    fn ->
                      render_dom(node, @env)
                    end

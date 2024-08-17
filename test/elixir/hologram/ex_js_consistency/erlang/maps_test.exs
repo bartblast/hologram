@@ -86,7 +86,9 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "raises KeyError if the map doesn't contain the given key" do
-      assert_error KeyError, "key :a not found in: %{}", fn ->
+      expected_msg = build_key_error_msg(:a, %{})
+
+      assert_error KeyError, expected_msg, fn ->
         :a
         |> wrap_term()
         |> :maps.get(%{})
@@ -270,7 +272,9 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
 
   describe "update/3" do
     test "when the map doesn't have the given key" do
-      assert_error KeyError, "key :b not found in: %{a: 1}", fn ->
+      expected_msg = build_key_error_msg(:b, %{a: 1})
+
+      assert_error KeyError, expected_msg, fn ->
         :maps.update(:b, 2, %{a: 1})
       end
     end
