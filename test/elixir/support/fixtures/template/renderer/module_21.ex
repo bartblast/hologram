@@ -14,7 +14,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module21 do
   end
 
   # Can't use Hologram.Commons.KernelUtils.inspect/1 here,
-  # because this module is used in client renderer tests. 
+  # because this module is used in client renderer tests.
   @impl Page
   def template do
     ~H"page vars = {inspect(vars, custom_options: [sort_maps: true])}"
