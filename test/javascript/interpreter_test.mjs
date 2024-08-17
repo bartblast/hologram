@@ -179,6 +179,20 @@ describe("Interpreter", () => {
     });
   });
 
+  it("buildKeyErrorMsg()", () => {
+    const key = Type.atom("c");
+
+    const map = Type.map([
+      [Type.atom("b"), Type.integer(2)],
+      [Type.atom("a"), Type.integer(1)],
+    ]);
+
+    const result = Interpreter.buildKeyErrorMsg(key, map);
+    const expected = "key :c not found in: %{a: 1, b: 2}";
+
+    assert.equal(result, expected);
+  });
+
   it("buildMatchErrorMsg()", () => {
     const result = Interpreter.buildMatchErrorMsg(Type.atom("abc"));
     const expected = "no match of right hand side value: :abc";

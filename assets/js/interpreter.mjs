@@ -79,6 +79,17 @@ export default class Interpreter {
     return `no function clause matching in ${funName}${argsInfo}`;
   }
 
+  static buildKeyErrorMsg(key, map) {
+    const opts = Type.keywordList([
+      [
+        Type.atom("custom_options"),
+        Type.keywordList([[Type.atom("sort_maps"), Type.boolean(true)]]),
+      ],
+    ]);
+
+    return `key ${Interpreter.inspect(key)} not found in: ${Interpreter.inspect(map, opts)}`;
+  }
+
   static buildMatchErrorMsg(right) {
     return "no match of right hand side value: " + Interpreter.inspect(right);
   }
