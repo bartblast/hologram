@@ -61,7 +61,7 @@ defmodule Hologram.MixProject do
 
   def package do
     [
-      files: ["lib", "mix.exs", "README.md"],
+      files: ["lib", "mix.exs", "README.md", "test/elixir/support/helpers.ex"],
       licenses: ["MIT"],
       links: %{"GitHub" => "https://github.com/bartblast/hologram"},
       maintainers: ["Bart Blast"]
