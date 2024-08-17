@@ -66,6 +66,7 @@ import {defineModule9Fixture} from "./support/fixtures/renderer/module_9.mjs";
 
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
+import Interpreter from "../../assets/js/interpreter.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -1321,7 +1322,10 @@ describe("Renderer", () => {
       assertBoxedError(
         () => Renderer.renderDom(node, context, slots, defaultTarget),
         "KeyError",
-        'key :b not found in: %{a: "111"}',
+        Interpreter.buildKeyErrorMsg(
+          Type.atom("b"),
+          Type.map([[Type.atom("a"), Type.bitstring("111")]]),
+        ),
       );
     });
   });
@@ -1630,10 +1634,19 @@ describe("Renderer", () => {
 
       ComponentRegistry.putEntry(cid, entry);
 
+      const expectedMessage = Interpreter.buildKeyErrorMsg(
+        Type.atom("c"),
+        Type.map([
+          [Type.atom("a"), Type.bitstring("111")],
+          [Type.atom("b"), Type.integer(222)],
+          [Type.atom("cid"), Type.bitstring("my_component")],
+        ]),
+      );
+
       assertBoxedError(
         () => Renderer.renderDom(node, context, slots, defaultTarget),
         "KeyError",
-        'key :c not found in: %{cid: "my_component", a: "111", b: 222}',
+        expectedMessage,
       );
     });
   });

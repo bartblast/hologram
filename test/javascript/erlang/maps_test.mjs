@@ -195,10 +195,13 @@ describe("Erlang_Maps", () => {
     });
 
     it("raises KeyError if the map doesn't contain the given key", () => {
+      const key = Type.atom("a");
+      const map = Type.map();
+
       assertBoxedError(
-        () => get(Type.atom("a"), Type.map()),
+        () => get(key, map),
         "KeyError",
-        "key :a not found in: %{}",
+        Interpreter.buildKeyErrorMsg(key, map),
       );
     });
   });
@@ -590,12 +593,13 @@ describe("Erlang_Maps", () => {
     const fun = Erlang_Maps["update/3"];
 
     it("when the map doesn't have the given key", () => {
+      const key = Type.atom("b");
       const map = Type.map([[Type.atom("a"), Type.integer(1)]]);
 
       assertBoxedError(
-        () => fun(Type.atom("b"), Type.integer(2), map),
+        () => fun(key, Type.integer(2), map),
         "KeyError",
-        "key :b not found in: %{a: 1}",
+        Interpreter.buildKeyErrorMsg(key, map),
       );
     });
 

@@ -54,11 +54,7 @@ const Erlang_Maps = {
       return value;
     }
 
-    Interpreter.raiseKeyError(
-      `key ${Interpreter.inspect(key)} not found in: ${Interpreter.inspect(
-        map,
-      )}`,
-    );
+    Interpreter.raiseKeyError(Interpreter.buildKeyErrorMsg(key, map));
   },
   // End get/2
   // Deps: [:maps.get/3]
@@ -192,11 +188,7 @@ const Erlang_Maps = {
     }
 
     if (Type.isFalse(Erlang_Maps["is_key/2"](key, map))) {
-      Interpreter.raiseKeyError(
-        `key ${Interpreter.inspect(key)} not found in: ${Interpreter.inspect(
-          map,
-        )}`,
-      );
+      Interpreter.raiseKeyError(Interpreter.buildKeyErrorMsg(key, map));
     }
 
     return Erlang_Maps["put/3"](key, value, map);
