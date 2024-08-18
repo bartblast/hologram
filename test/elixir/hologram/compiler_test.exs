@@ -536,6 +536,27 @@ defmodule Hologram.CompilerTest do
       package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
       assert File.exists?(package_json_digest_path)
     end
+
+    test "raises RuntimeError if npm install command fails", %{
+      assets_dir: assets_dir,
+      build_dir: build_dir
+    } do
+      fixture_package_json_path = Path.join(assets_dir, "package.json")
+      File.rm!(fixture_package_json_path)
+
+      assert_raise RuntimeError, "npm install command failed", fn ->
+        install_js_deps(assets_dir, build_dir)
+      end
+
+      node_modules_dir = Path.join(assets_dir, "node_modules")
+      refute File.exists?(node_modules_dir)
+
+      package_lock_json_path = Path.join(assets_dir, "package-lock.json")
+      assert File.exists?(package_lock_json_path)
+
+      package_json_digest_path = Path.join(build_dir, "package_json_digest.bin")
+      refute File.exists?(package_json_digest_path)
+    end
   end
 
   describe "maybe_install_js_deps/1" do
