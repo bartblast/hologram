@@ -6,7 +6,7 @@ defmodule HologramFeatureTests.TypesTest do
 
   describe "function" do
     feature "anonymous (client origin, non-capture)", %{session: session} do
-      assert_js_error ~r/can't encode client terms that are anonymous functions that are not named function captures/,
+      assert_js_error "can't encode client terms that are anonymous functions that are not named function captures",
                       fn ->
                         session
                         |> visit(TypesPage)
@@ -21,9 +21,9 @@ defmodule HologramFeatureTests.TypesTest do
     feature "anonymous (server origin, non-capture)", %{session: session} do
       expected_msg =
         if SystemUtils.otp_version() >= 23 do
-          ~r/command failed: term contains an anonymous function that is not a named function capture/
+          "command failed: term contains an anonymous function that is not a named function capture"
         else
-          ~r/command failed: term contains an anonymous function that is not a remote function capture/
+          "command failed: term contains an anonymous function that is not a remote function capture"
         end
 
       assert_js_error expected_msg,
@@ -39,9 +39,9 @@ defmodule HologramFeatureTests.TypesTest do
     feature "anonymous (server origin, capture)", %{session: session} do
       expected_msg =
         if SystemUtils.otp_version() >= 23 do
-          ~r/command failed: term contains an anonymous function that is not a named function capture/
+          "command failed: term contains an anonymous function that is not a named function capture"
         else
-          ~r/command failed: term contains an anonymous function that is not a remote function capture/
+          "command failed: term contains an anonymous function that is not a remote function capture"
         end
 
       assert_js_error expected_msg,
@@ -53,7 +53,7 @@ defmodule HologramFeatureTests.TypesTest do
     end
 
     feature "anonymous (client origin, capture)", %{session: session} do
-      assert_js_error ~r/can't encode client terms that are anonymous functions that are not named function captures/,
+      assert_js_error "can't encode client terms that are anonymous functions that are not named function captures",
                       fn ->
                         session
                         |> visit(TypesPage)
@@ -77,7 +77,7 @@ defmodule HologramFeatureTests.TypesTest do
         |> click(css("button[id='local function capture (server origin)']"))
         |> assert_text(css("#result"), inspect(8))
       else
-        assert_js_error ~r/command failed: term contains an anonymous function that is not a remote function capture/,
+        assert_js_error "command failed: term contains an anonymous function that is not a remote function capture",
                         fn ->
                           session
                           |> visit(TypesPage)
@@ -154,7 +154,7 @@ defmodule HologramFeatureTests.TypesTest do
 
   describe "PID" do
     feature "client origin", %{session: session} do
-      assert_js_error ~r/can't encode client terms that are PIDs originating in client/,
+      assert_js_error "can't encode client terms that are PIDs originating in client",
                       fn ->
                         session
                         |> visit(TypesPage)

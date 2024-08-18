@@ -8,11 +8,18 @@ defmodule HologramFeatureTests.Helpers do
 
   @max_wait_time Application.compile_env(:wallaby, :max_wait_time, 3_000)
 
-  def assert_js_error(expected_msg, fun) do
+  def assert_js_error(expected_msg, fun) when is_regex(expected_msg) do
     assert_raise Wallaby.JSError, expected_msg, fn ->
       fun.()
       :timer.sleep(@max_wait_time)
     end
+  end
+
+  def assert_js_error(expected_msg, fun) when is_binary(expected_msg) do
+    regex =
+      ~r/^There was an uncaught JavaScript error:\n\n.+Uncaught rr: #{Regex.escape(expected_msg)}\n$/su
+
+    assert_js_error(regex, fun)
   end
 
   def assert_page(session, page_module, params \\ []) do
