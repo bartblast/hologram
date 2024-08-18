@@ -413,28 +413,28 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "format_files/2" do
+    @unformatted_valid_js_code "const myVar  =  123"
+    @formatted_valid_js_code "const myVar = 123;\n"
+
     test "valid JS code" do
       test_tmp_dir =
         Path.join([@tmp_dir, "tests", "compiler", "test_format_files_2_valid_js_code"])
 
       clean_dir(test_tmp_dir)
 
-      unformatted_js_code = "const myVar  =  123"
-      formatted_js_code = "const myVar = 123;\n"
-
       file_path_1 = Path.join(test_tmp_dir, "file_1.js")
-      File.write!(file_path_1, unformatted_js_code)
+      File.write!(file_path_1, @unformatted_valid_js_code)
 
       file_path_2 = Path.join(test_tmp_dir, "file_2.js")
-      File.write!(file_path_2, unformatted_js_code)
+      File.write!(file_path_2, @unformatted_valid_js_code)
 
       opts = [formatter_bin_path: Path.join([@assets_dir, "node_modules", ".bin", "biome"])]
 
       assert Compiler.format_files([file_path_1, file_path_2], opts) =~
                ~r"Formatted 2 files in [0-9]+[mµ]?s\. Fixed 2 files\.\n"u
 
-      assert File.read!(file_path_1) == formatted_js_code
-      assert File.read!(file_path_2) == formatted_js_code
+      assert File.read!(file_path_1) == @formatted_valid_js_code
+      assert File.read!(file_path_2) == @formatted_valid_js_code
     end
 
     test "invalid JS code" do
@@ -445,14 +445,11 @@ defmodule Hologram.CompilerTest do
 
       unformatted_invalid_js_code = "const myVar  123"
 
-      unformatted_valid_js_code = "const myVar  =  123"
-      formatted_valid_js_code = "const myVar = 123;\n"
-
       file_path_1 = Path.join(test_tmp_dir, "file_1.js")
       File.write!(file_path_1, unformatted_invalid_js_code)
 
       file_path_2 = Path.join(test_tmp_dir, "file_2.js")
-      File.write!(file_path_2, unformatted_valid_js_code)
+      File.write!(file_path_2, @unformatted_valid_js_code)
 
       opts = [formatter_bin_path: Path.join([@assets_dir, "node_modules", ".bin", "biome"])]
 
@@ -461,7 +458,7 @@ defmodule Hologram.CompilerTest do
       end
 
       assert File.read!(file_path_1) == unformatted_invalid_js_code
-      assert File.read!(file_path_2) == formatted_valid_js_code
+      assert File.read!(file_path_2) == @formatted_valid_js_code
     end
   end
 
