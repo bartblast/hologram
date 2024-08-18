@@ -364,7 +364,7 @@ defmodule Hologram.CompilerTest do
       File.write(entry_file_path, "export const myVar 123;\n")
 
       assert_raise RuntimeError,
-                   "esbuild failed for entry file: #{entry_file_path} (probably there were JavaScript syntax errors)",
+                   "esbuild bundler failed for entry file: #{entry_file_path} (probably there were JavaScript syntax errors)",
                    fn ->
                      bundle(MyPage, entry_file_path, "my_bundle_name", opts)
                    end

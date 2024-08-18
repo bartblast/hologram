@@ -242,7 +242,7 @@ defmodule Hologram.Compiler do
     if exit_status != 0 do
       raise RuntimeError,
         message:
-          "esbuild failed for entry file: #{entry_file_path} (probably there were JavaScript syntax errors)"
+          "esbuild bundler failed for entry file: #{entry_file_path} (probably there were JavaScript syntax errors)"
     end
 
     digest =
