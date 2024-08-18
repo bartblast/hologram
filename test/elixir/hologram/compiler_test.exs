@@ -446,7 +446,7 @@ defmodule Hologram.CompilerTest do
 
     test "valid JS code" do
       test_tmp_dir =
-        Path.join([@tmp_dir, "tests", "compiler", "test_format_files_2_valid_js_code"])
+        Path.join([@tmp_dir, "tests", "compiler", "format_files_2_valid_input_files"])
 
       clean_dir(test_tmp_dir)
 
@@ -467,7 +467,7 @@ defmodule Hologram.CompilerTest do
 
     test "invalid JS code" do
       test_tmp_dir =
-        Path.join([@tmp_dir, "tests", "compiler", "test_format_files_2_invalid_js_code"])
+        Path.join([@tmp_dir, "tests", "compiler", "format_files_2_invalid_js_code"])
 
       clean_dir(test_tmp_dir)
 
@@ -481,9 +481,11 @@ defmodule Hologram.CompilerTest do
 
       opts = [formatter_bin_path: Path.join([@assets_dir, "node_modules", ".bin", "biome"])]
 
-      assert_raise RuntimeError, "There were JavaScript syntax errors in the input files.", fn ->
-        Compiler.format_files([file_path_1, file_path_2], opts)
-      end
+      assert_raise RuntimeError,
+                   "Biome formatter failed (probably there were JavaScript syntax errors)",
+                   fn ->
+                     Compiler.format_files([file_path_1, file_path_2], opts)
+                   end
 
       assert File.read!(file_path_1) == unformatted_invalid_js_code
       assert File.read!(file_path_2) == @formatted_valid_js_code

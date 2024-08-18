@@ -362,7 +362,8 @@ defmodule Hologram.Compiler do
     {exit_msg, exit_status} = System.cmd(opts[:formatter_bin_path], cmd, parallelism: true)
 
     if exit_status != 0 do
-      raise RuntimeError, message: "There were JavaScript syntax errors in the input files."
+      raise RuntimeError,
+        message: "Biome formatter failed (probably there were JavaScript syntax errors)"
     end
 
     exit_msg
