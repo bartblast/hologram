@@ -297,52 +297,80 @@ defmodule Hologram.CompilerTest do
     assert File.read!(expected_static_source_map_path_2) == expected_source_map_js_2
   end
 
-  test "bundle/4" do
-    tmp_dir = Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4"])
+  describe "bundle/4" do
+    test "valid entry file" do
+      tmp_dir =
+        Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_valid_entry_file"])
 
-    opts = [
-      esbuild_bin_path: Path.join([@root_dir, "assets", "node_modules", ".bin", "esbuild"]),
-      static_dir: Path.join(tmp_dir, "static"),
-      tmp_dir: tmp_dir
-    ]
+      opts = [
+        esbuild_bin_path: Path.join([@root_dir, "assets", "node_modules", ".bin", "esbuild"]),
+        static_dir: Path.join(tmp_dir, "static"),
+        tmp_dir: tmp_dir
+      ]
 
-    clean_dir(tmp_dir)
-    File.mkdir!(opts[:static_dir])
+      clean_dir(tmp_dir)
+      File.mkdir!(opts[:static_dir])
 
-    entry_file_path = Path.join(tmp_dir, "MyPage.entry.js")
-    File.write(entry_file_path, "export const myVar = 123;\n")
+      entry_file_path = Path.join(tmp_dir, "MyPage.entry.js")
+      File.write(entry_file_path, "export const myVar = 123;\n")
 
-    expected_static_bundle_path =
-      Path.join(opts[:static_dir], "my_bundle_name-76f1f092f95a34da067e35caad5e3317.js")
+      expected_static_bundle_path =
+        Path.join(opts[:static_dir], "my_bundle_name-76f1f092f95a34da067e35caad5e3317.js")
 
-    expected_static_source_map_path = "#{expected_static_bundle_path}.map"
+      expected_static_source_map_path = "#{expected_static_bundle_path}.map"
 
-    assert bundle(MyPage, entry_file_path, "my_bundle_name", opts) == %{
-             bundle_name: "my_bundle_name",
-             digest: "76f1f092f95a34da067e35caad5e3317",
-             entry_name: MyPage,
-             static_bundle_path: expected_static_bundle_path,
-             static_source_map_path: expected_static_source_map_path
-           }
+      assert bundle(MyPage, entry_file_path, "my_bundle_name", opts) == %{
+               bundle_name: "my_bundle_name",
+               digest: "76f1f092f95a34da067e35caad5e3317",
+               entry_name: MyPage,
+               static_bundle_path: expected_static_bundle_path,
+               static_source_map_path: expected_static_source_map_path
+             }
 
-    expected_bundle_js = """
-    (()=>{var o=123;})();
-    //# sourceMappingURL=my_bundle_name-76f1f092f95a34da067e35caad5e3317.js.map
-    """
+      expected_bundle_js = """
+      (()=>{var o=123;})();
+      //# sourceMappingURL=my_bundle_name-76f1f092f95a34da067e35caad5e3317.js.map
+      """
 
-    assert File.read!(expected_static_bundle_path) == expected_bundle_js
+      assert File.read!(expected_static_bundle_path) == expected_bundle_js
 
-    expected_source_map_js = """
-    {
-      "version": 3,
-      "sources": ["MyPage.entry.js"],
-      "sourcesContent": ["export const myVar = 123;\\n"],
-      "mappings": "MAAO,IAAMA,EAAQ",
-      "names": ["myVar"]
-    }
-    """
+      expected_source_map_js = """
+      {
+        "version": 3,
+        "sources": ["MyPage.entry.js"],
+        "sourcesContent": ["export const myVar = 123;\\n"],
+        "mappings": "MAAO,IAAMA,EAAQ",
+        "names": ["myVar"]
+      }
+      """
 
-    assert File.read!(expected_static_source_map_path) == expected_source_map_js
+      assert File.read!(expected_static_source_map_path) == expected_source_map_js
+    end
+
+    test "invalid entry file" do
+      tmp_dir =
+        Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_invalid_entry_file"])
+
+      opts = [
+        esbuild_bin_path: Path.join([@root_dir, "assets", "node_modules", ".bin", "esbuild"]),
+        static_dir: Path.join(tmp_dir, "static"),
+        tmp_dir: tmp_dir
+      ]
+
+      clean_dir(tmp_dir)
+      File.mkdir!(opts[:static_dir])
+
+      entry_file_path = Path.join(tmp_dir, "MyPage.entry.js")
+      File.write(entry_file_path, "export const myVar 123;\n")
+
+      assert_raise RuntimeError,
+                   "esbuild failed for entry file: #{entry_file_path} (probably there were JavaScript syntax errors)",
+                   fn ->
+                     bundle(MyPage, entry_file_path, "my_bundle_name", opts)
+                   end
+
+      assert File.ls!(opts[:static_dir]) == []
+    end
   end
 
   test "create_page_entry_files/4", %{call_graph: call_graph, ir_plt: ir_plt} do

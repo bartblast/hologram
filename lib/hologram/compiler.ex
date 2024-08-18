@@ -237,7 +237,13 @@ defmodule Hologram.Compiler do
       "--target=es2020"
     ]
 
-    System.cmd(opts[:esbuild_bin_path], esbuild_cmd, parallelism: true)
+    {_exit_msg, exit_status} = System.cmd(opts[:esbuild_bin_path], esbuild_cmd, parallelism: true)
+
+    if exit_status != 0 do
+      raise RuntimeError,
+        message:
+          "esbuild failed for entry file: #{entry_file_path} (probably there were JavaScript syntax errors)"
+    end
 
     digest =
       output_bundle_path
