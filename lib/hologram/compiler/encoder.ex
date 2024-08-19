@@ -590,10 +590,9 @@ defmodule Hologram.Compiler.Encoder do
 
   defp encode_dynamic_named_function_call(module, function, args, context) do
     module_js = encode_ir(module, context)
-    arity = Enum.count(args)
     args_js = encode_as_array(args, context)
 
-    "Interpreter.callNamedFunction(#{module_js}, \"#{function}\", #{arity}, #{args_js}, context)"
+    "Interpreter.callNamedFunction(#{module_js}, \"#{function}\", #{args_js}, context)"
   end
 
   defp encode_named_function_call(%IR.AtomType{value: :erlang}, :andalso, [left, right], context) do

@@ -137,8 +137,9 @@ export default class Interpreter {
     );
   }
 
-  static callNamedFunction(module, functionName, arity, args, context) {
+  static callNamedFunction(module, functionName, args, context) {
     const moduleRef = Interpreter.moduleRef(module);
+    const arity = args.length;
     const functionArityStr = `${functionName}/${arity}`;
 
     if (typeof moduleRef === "undefined") {

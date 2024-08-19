@@ -547,7 +547,6 @@ describe("Interpreter", () => {
       const result = Interpreter.callNamedFunction(
         alias,
         "my_public_fun",
-        2,
         args,
         context,
       );
@@ -559,7 +558,6 @@ describe("Interpreter", () => {
       const result = Interpreter.callNamedFunction(
         alias,
         "my_public_fun",
-        2,
         args,
         contextFixture({module: "MyOtherModule"}),
       );
@@ -571,7 +569,6 @@ describe("Interpreter", () => {
       const result = Interpreter.callNamedFunction(
         alias,
         "my_private_fun",
-        2,
         args,
         context,
       );
@@ -587,7 +584,6 @@ describe("Interpreter", () => {
           Interpreter.callNamedFunction(
             alias,
             "my_private_fun",
-            2,
             args,
             contextFixture({module: "MyOtherModule"}),
           ),
@@ -603,7 +599,6 @@ describe("Interpreter", () => {
           Interpreter.callNamedFunction(
             alias,
             "undefined_function",
-            2,
             args,
             context,
           ),
@@ -621,7 +616,7 @@ describe("Interpreter", () => {
       const alias = Type.alias("MyModule");
 
       assertBoxedError(
-        () => Interpreter.callNamedFunction(alias, "my_fun", 2, args, context),
+        () => Interpreter.callNamedFunction(alias, "my_fun", args, context),
         "UndefinedFunctionError",
         Interpreter.buildUndefinedFunctionErrorMsg(alias, "my_fun", 2, false),
       );
@@ -635,7 +630,6 @@ describe("Interpreter", () => {
           Interpreter.callNamedFunction(
             alias,
             "my_public_fun",
-            3,
             [Type.integer(1), Type.integer(2), Type.integer(3)],
             context,
           ),
@@ -652,7 +646,6 @@ describe("Interpreter", () => {
           Interpreter.callNamedFunction(
             alias,
             "my_public_fun",
-            2,
             [Type.integer(1), Type.integer(3)],
             context,
           ),
@@ -6062,7 +6055,7 @@ describe("Interpreter", () => {
         );
 
         const args = [Type.integer(1)];
-        const result = Interpreter.callNamedFunction(alias, "test_a", 1, args);
+        const result = Interpreter.callNamedFunction(alias, "test_a", args);
 
         assert.deepStrictEqual(
           result,
@@ -6076,7 +6069,7 @@ describe("Interpreter", () => {
         );
 
         const args = [Type.integer(1)];
-        const result = Interpreter.callNamedFunction(alias, "test_b", 1, args);
+        const result = Interpreter.callNamedFunction(alias, "test_b", args);
 
         assert.deepStrictEqual(
           result,
@@ -6090,7 +6083,7 @@ describe("Interpreter", () => {
         );
 
         const args = [Type.integer(1)];
-        const result = Interpreter.callNamedFunction(alias, "test_c", 1, args);
+        const result = Interpreter.callNamedFunction(alias, "test_c", args);
 
         assert.deepStrictEqual(
           result,
@@ -6107,7 +6100,7 @@ describe("Interpreter", () => {
         );
 
         const args = [Type.integer(1)];
-        const result = Interpreter.callNamedFunction(alias, "test_d", 1, args);
+        const result = Interpreter.callNamedFunction(alias, "test_d", args);
 
         assert.deepStrictEqual(
           result,
