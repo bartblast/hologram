@@ -145,7 +145,7 @@ defmodule Hologram.Compiler do
     """
     "use strict";
 
-    window.__hologramPageReachableFunctionDefs__ = (deps) => {
+    window.hologram.pageReachableFunctionDefs = (deps) => {
       const {
         Bitstring,
         HologramBoxedError,
@@ -157,7 +157,7 @@ defmodule Hologram.Compiler do
       } = deps;#{erlang_function_defs}#{elixir_function_defs}
     }
 
-    window.__hologramPageScriptLoaded__ = true;
+    globalThis.hologram.pageScriptLoaded = true;
     document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));
 
     console.debug("Hologram: executed page script");\
@@ -193,7 +193,7 @@ defmodule Hologram.Compiler do
 
     document.addEventListener("hologram:pageScriptLoaded", () => Hologram.run());
 
-    if (window.__hologramPageScriptLoaded__) {
+    if (globalThis.hologram.pageScriptLoaded) {
       document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));
     }
 

@@ -820,7 +820,7 @@ defmodule Hologram.Template.RendererTest do
 
       assert {html, _} = render_page(Module53, @params, initial_page?: true)
 
-      assert String.contains?(html, "window.__hologramAssetManifest__")
+      assert String.contains?(html, "window.hologram.assetManifest")
     end
 
     test "doesn't inject asset manifest when the initial_page? opt is set to false" do
@@ -828,7 +828,7 @@ defmodule Hologram.Template.RendererTest do
 
       assert {html, _} = render_page(Module53, @params, initial_page?: false)
 
-      refute String.contains?(html, "window.__hologramAssetManifest__")
+      refute String.contains?(html, "window.hologram.assetManifest")
     end
 
     test "interpolate component structs JS" do

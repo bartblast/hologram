@@ -433,7 +433,7 @@ export default class Hologram {
   }
 
   static #loadMountData() {
-    const mountData = window.__hologramPageMountData__(Hologram.#deps);
+    const mountData = window.hologram.pageMountData(Hologram.#deps);
 
     Hologram.#mountData = mountData;
     Hologram.#pageModule = mountData.pageModule;
@@ -442,12 +442,12 @@ export default class Hologram {
 
   static #maybeInitAssetPathRegistry() {
     if (AssetPathRegistry.entries === null) {
-      AssetPathRegistry.hydrate(window.__hologramAssetManifest__);
+      AssetPathRegistry.hydrate(window.hologram.assetManifest);
     }
   }
 
   static #mountPage() {
-    window.__hologramPageReachableFunctionDefs__(Hologram.#deps);
+    window.hologram.pageReachableFunctionDefs(Hologram.#deps);
 
     Hologram.#loadMountData();
 
@@ -477,7 +477,7 @@ export default class Hologram {
   }
 
   static #patchPage(html) {
-    window.__hologramPageScriptLoaded__ = false;
+    globalThis.hologram.pageScriptLoaded = false;
 
     const newVirtualDocument = Vdom.from(html);
 

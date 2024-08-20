@@ -10,13 +10,16 @@ defmodule Hologram.UI.Runtime do
   def template do
     ~H"""
     {%if @initial_page? && !@page_mounted?}
-      <script>{AssetManifestCache.get_manifest_js()}</script>
+      <script>
+        window.hologram ??= \{\};
+        {AssetManifestCache.get_manifest_js()}
+      </script>
     {/if}
 
     {%if !@page_mounted?}
       <script>
         {%raw}
-          window.__hologramPageMountData__ = (deps) => {
+          window.hologram.pageMountData = (deps) => {
             const Type = deps.Type;
             
             return {
