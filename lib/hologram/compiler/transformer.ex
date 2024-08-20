@@ -125,7 +125,7 @@ defmodule Hologram.Compiler.Transformer do
 
   # Anonymous function capture
   def transform({:&, meta, body}, context) do
-    arity = determine_partially_applied_function_arity(body, 0)
+    arity = determine_function_capture_arity(body, 0)
     args = build_function_capture_args(arity, meta)
     ast = {:fn, meta, [{:->, meta, [args, {:__block__, [], body}]}]}
 
@@ -543,20 +543,20 @@ defmodule Hologram.Compiler.Transformer do
     %IR.TupleType{data: transform_list(data, context)}
   end
 
-  defp determine_partially_applied_function_arity({:&, _meta, [index]}, arity)
+  defp determine_function_capture_arity({:&, _meta, [index]}, arity)
        when is_integer(index) and index > arity,
        do: index
 
-  defp determine_partially_applied_function_arity(ast, arity) when is_list(ast) do
-    Enum.reduce(ast, arity, &determine_partially_applied_function_arity/2)
+  defp determine_function_capture_arity(ast, arity) when is_list(ast) do
+    Enum.reduce(ast, arity, &determine_function_capture_arity/2)
   end
 
-  defp determine_partially_applied_function_arity({_marker, _meta, children}, arity)
+  defp determine_function_capture_arity({_marker, _meta, children}, arity)
        when is_list(children) do
-    determine_partially_applied_function_arity(children, arity)
+    determine_function_capture_arity(children, arity)
   end
 
-  defp determine_partially_applied_function_arity(_ast, arity), do: arity
+  defp determine_function_capture_arity(_ast, arity), do: arity
 
   defp filter_out_empty_bitstring_segments(segments) do
     Enum.reject(segments, &match?(%IR.BitstringSegment{value: %IR.StringType{value: ""}}, &1))
