@@ -51,4 +51,22 @@ export default class Utils {
 
     return `${noun}${enPluralRules.select(count) === "one" ? "" : "s"}`;
   }
+
+  static ordinal(number) {
+    const enOrdinalRules = new Intl.PluralRules("en-US", {type: "ordinal"});
+
+    switch (enOrdinalRules.select(number)) {
+      case "one":
+        return `${number}st`;
+
+      case "two":
+        return `${number}nd`;
+
+      case "few":
+        return `${number}rd`;
+
+      case "other":
+        return `${number}th`;
+    }
+  }
 }

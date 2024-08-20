@@ -134,4 +134,30 @@ describe("Utils", () => {
       assert.equal(result, "cars");
     });
   });
+
+  describe("ordinal", () => {
+    it("1st", () => {
+      assert.equal(Utils.ordinal(1), "1st");
+    });
+
+    it("2nd", () => {
+      assert.equal(Utils.ordinal(2), "2nd");
+    });
+
+    it("3rd", () => {
+      assert.equal(Utils.ordinal(3), "3rd");
+    });
+
+    it("4th", () => {
+      assert.equal(Utils.ordinal(4), "4th");
+    });
+
+    it("15th", () => {
+      assert.equal(Utils.ordinal(15), "15th");
+    });
+
+    it("21st", () => {
+      assert.equal(Utils.ordinal(21), "21st");
+    });
+  });
 });
