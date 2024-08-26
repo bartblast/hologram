@@ -170,15 +170,15 @@ function defineElixirHologramRouterHelpersModule() {
 
       const requiredParams = Interpreter.callNamedFunction(
         pageModule,
-        "__params__",
-        [],
+        Type.atom("__params__"),
+        Type.list(),
         context,
       );
 
       const route = Interpreter.callNamedFunction(
         pageModule,
-        "__route__",
-        [],
+        Type.atom("__route__"),
+        Type.list(),
         context,
       );
 

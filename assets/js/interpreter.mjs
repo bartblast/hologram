@@ -136,14 +136,14 @@ export default class Interpreter {
 
   static callNamedFunction(module, functionName, args, context) {
     const moduleRef = Interpreter.moduleRef(module);
-    const arity = args.length;
-    const functionArityStr = `${functionName}/${arity}`;
+    const arity = args.data.length;
+    const functionArityStr = `${functionName.value}/${arity}`;
 
     if (typeof moduleRef === "undefined") {
       Interpreter.raiseUndefinedFunctionError(
         Interpreter.buildUndefinedFunctionErrorMsg(
           module,
-          functionName,
+          functionName.value,
           arity,
           false,
         ),
@@ -155,11 +155,15 @@ export default class Interpreter {
       !Interpreter.isEqual(module, context.module)
     ) {
       Interpreter.raiseUndefinedFunctionError(
-        Interpreter.buildUndefinedFunctionErrorMsg(module, functionName, arity),
+        Interpreter.buildUndefinedFunctionErrorMsg(
+          module,
+          functionName.value,
+          arity,
+        ),
       );
     }
 
-    return moduleRef[functionArityStr](...args);
+    return moduleRef[functionArityStr](...args.data);
   }
 
   static case(condition, clauses, context) {

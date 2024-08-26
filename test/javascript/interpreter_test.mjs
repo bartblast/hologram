@@ -499,7 +499,7 @@ describe("Interpreter", () => {
       "Hologram.Test.Fixtures.ExJsConsistency.Interpreter.Module1",
     );
 
-    const args = [Type.integer(1), Type.integer(2)];
+    const args = Type.list([Type.integer(1), Type.integer(2)]);
 
     const context = contextFixture({
       module: "Hologram.Test.Fixtures.ExJsConsistency.Interpreter.Module1",
@@ -508,7 +508,7 @@ describe("Interpreter", () => {
     it("local public function call", () => {
       const result = Interpreter.callNamedFunction(
         alias,
-        "my_public_fun",
+        Type.atom("my_public_fun"),
         args,
         context,
       );
@@ -519,7 +519,7 @@ describe("Interpreter", () => {
     it("remote public function call", () => {
       const result = Interpreter.callNamedFunction(
         alias,
-        "my_public_fun",
+        Type.atom("my_public_fun"),
         args,
         contextFixture({module: "MyOtherModule"}),
       );
@@ -530,7 +530,7 @@ describe("Interpreter", () => {
     it("local private function call", () => {
       const result = Interpreter.callNamedFunction(
         alias,
-        "my_private_fun",
+        Type.atom("my_private_fun"),
         args,
         context,
       );
@@ -545,7 +545,7 @@ describe("Interpreter", () => {
         () =>
           Interpreter.callNamedFunction(
             alias,
-            "my_private_fun",
+            Type.atom("my_private_fun"),
             args,
             contextFixture({module: "MyOtherModule"}),
           ),
@@ -560,7 +560,7 @@ describe("Interpreter", () => {
         () =>
           Interpreter.callNamedFunction(
             alias,
-            "undefined_function",
+            Type.atom("undefined_function"),
             args,
             context,
           ),
@@ -578,7 +578,13 @@ describe("Interpreter", () => {
       const alias = Type.alias("MyModule");
 
       assertBoxedError(
-        () => Interpreter.callNamedFunction(alias, "my_fun", args, context),
+        () =>
+          Interpreter.callNamedFunction(
+            alias,
+            Type.atom("my_fun"),
+            args,
+            context,
+          ),
         "UndefinedFunctionError",
         Interpreter.buildUndefinedFunctionErrorMsg(alias, "my_fun", 2, false),
       );
@@ -591,8 +597,8 @@ describe("Interpreter", () => {
         () =>
           Interpreter.callNamedFunction(
             alias,
-            "my_public_fun",
-            [Type.integer(1), Type.integer(2), Type.integer(3)],
+            Type.atom("my_public_fun"),
+            Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
             context,
           ),
         "UndefinedFunctionError",
@@ -607,8 +613,8 @@ describe("Interpreter", () => {
         () =>
           Interpreter.callNamedFunction(
             alias,
-            "my_public_fun",
-            [Type.integer(1), Type.integer(3)],
+            Type.atom("my_public_fun"),
+            Type.list([Type.integer(1), Type.integer(3)]),
             context,
           ),
         "FunctionClauseError",
@@ -6016,8 +6022,9 @@ describe("Interpreter", () => {
           "Hologram.Test.Fixtures.ExJsConsistency.MatchOperator.Module1",
         );
 
-        const args = [Type.integer(1)];
-        const result = Interpreter.callNamedFunction(alias, "test_a", args);
+        const fun = Type.atom("test_a");
+        const args = Type.list([Type.integer(1)]);
+        const result = Interpreter.callNamedFunction(alias, fun, args);
 
         assert.deepStrictEqual(
           result,
@@ -6030,8 +6037,9 @@ describe("Interpreter", () => {
           "Hologram.Test.Fixtures.ExJsConsistency.MatchOperator.Module1",
         );
 
-        const args = [Type.integer(1)];
-        const result = Interpreter.callNamedFunction(alias, "test_b", args);
+        const fun = Type.atom("test_b");
+        const args = Type.list([Type.integer(1)]);
+        const result = Interpreter.callNamedFunction(alias, fun, args);
 
         assert.deepStrictEqual(
           result,
@@ -6044,8 +6052,9 @@ describe("Interpreter", () => {
           "Hologram.Test.Fixtures.ExJsConsistency.MatchOperator.Module1",
         );
 
-        const args = [Type.integer(1)];
-        const result = Interpreter.callNamedFunction(alias, "test_c", args);
+        const fun = Type.atom("test_c");
+        const args = Type.list([Type.integer(1)]);
+        const result = Interpreter.callNamedFunction(alias, fun, args);
 
         assert.deepStrictEqual(
           result,
@@ -6061,8 +6070,9 @@ describe("Interpreter", () => {
           "Hologram.Test.Fixtures.ExJsConsistency.MatchOperator.Module1",
         );
 
-        const args = [Type.integer(1)];
-        const result = Interpreter.callNamedFunction(alias, "test_d", args);
+        const fun = Type.atom("test_d");
+        const args = Type.list([Type.integer(1)]);
+        const result = Interpreter.callNamedFunction(alias, fun, args);
 
         assert.deepStrictEqual(
           result,

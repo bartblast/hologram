@@ -70,8 +70,8 @@ export default class Hologram {
 
     const resultComponentStruct = Interpreter.callNamedFunction(
       componentModule,
-      "action",
-      args,
+      Type.atom("action"),
+      Type.list(args),
       context,
     );
 
