@@ -1621,6 +1621,15 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir) == ~s/Type.bitstring("\\a \\b \\e \\f \\n \\r \\t \\v")/
     end
+
+    test "raises RuntimeError if an Elixir string can't be encoded as a JavaScript string" do
+      # "\xaa"
+      ir = %IR.StringType{value: "\xaa"}
+
+      assert_raise RuntimeError, "can't encode <<170>> as a JavaScript string", fn ->
+        encode_ir(ir)
+      end
+    end
   end
 
   describe "try" do

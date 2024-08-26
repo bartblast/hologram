@@ -526,8 +526,13 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   defp encode_as_string(value, false) do
-    value
-    |> to_string()
+    str = to_string(value)
+
+    if !String.printable?(str) do
+      raise RuntimeError, message: "can't encode #{inspect(str)} as a JavaScript string"
+    end
+
+    str
     |> String.replace("\"", "\\\"")
     |> String.replace("\a", "\\a")
     |> String.replace("\b", "\\b")
