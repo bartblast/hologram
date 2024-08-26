@@ -1607,11 +1607,20 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
-  test "string type" do
-    # "aa\"bb\ncc"
-    ir = %IR.StringType{value: "aa\"bb\ncc"}
+  describe "string type" do
+    test "printable characters" do
+      # "abc"
+      ir = %IR.StringType{value: "abc"}
 
-    assert encode_ir(ir) == ~s/Type.bitstring("aa\\"bb\\ncc")/
+      assert encode_ir(ir) == ~s/Type.bitstring("abc")/
+    end
+
+    test "non-printable characters" do
+      # "\b \f \n \r \t \v"
+      ir = %IR.StringType{value: "\b \f \n \r \t \v"}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\\b \\f \\n \\r \\t \\v")/
+    end
   end
 
   describe "try" do
