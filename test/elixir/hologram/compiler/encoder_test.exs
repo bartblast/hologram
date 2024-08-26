@@ -1425,8 +1425,8 @@ defmodule Hologram.Compiler.EncoderTest do
                       function: :apply,
                       args: [
                         %IR.AtomType{value: MyModule},
-                        # intentional error (it should be %IR.AtomType{value: :my_fun})
-                        %IR.Variable{name: :my_fun},
+                        # intentional error (it should be %IR.AtomType{value: :my_fun} or %IR.Variable{name: :my_fun})
+                        :my_fun,
                         %IR.ListType{data: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]}
                       ]
                     }
@@ -1440,7 +1440,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
       expected_msg = """
       can't encode Aaa.Bbb module definition
-      key :value not found in: %Hologram.Compiler.IR.Variable{name: :my_fun}\
+      no function clause matching in Hologram.Compiler.Encoder.encode_ir/2\
       """
 
       assert_raise RuntimeError, expected_msg, fn -> encode_ir(ir) end
@@ -1495,7 +1495,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) ==
-               "Interpreter.callNamedFunction(context.vars.x, \"my_fun!\", [Type.integer(1n), Type.integer(2n)], context)"
+               ~s'Interpreter.callNamedFunction(context.vars.x, Type.atom("my_fun!"), Type.list([Type.integer(1n), Type.integer(2n)]), context)'
     end
 
     test "called on expression" do
@@ -1535,7 +1535,7 @@ defmodule Hologram.Compiler.EncoderTest do
              return Type.atom("Elixir.MyModule1");
              }}, {match: Type.atom("b"), guards: [], body: (context) => {
              return Type.atom("Elixir.MyModule2");
-             }}], context), "my_fun!", [Type.integer(1n), Type.integer(2n)], context)\
+             }}], context), Type.atom("my_fun!"), Type.list([Type.integer(1n), Type.integer(2n)]), context)\
              """
     end
 
@@ -1554,7 +1554,7 @@ defmodule Hologram.Compiler.EncoderTest do
                ~s'Erlang["andalso/2"]((context) => Type.integer(1n), (context) => Type.integer(2n), context)'
     end
 
-    test ":erlang.apply/3 call" do
+    test ":erlang.apply/3 call with non-variable args" do
       # :erlang.apply(MyModule, :my_fun, [1, 2])
       ir = %IR.RemoteFunctionCall{
         module: %IR.AtomType{value: :erlang},
@@ -1572,7 +1572,23 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) ==
-               ~s'Interpreter.callNamedFunction(Type.atom("Elixir.MyModule"), "my_fun", [Type.integer(1n), Type.integer(2n)], context)'
+               ~s'Interpreter.callNamedFunction(Type.atom("Elixir.MyModule"), Type.atom("my_fun"), Type.list([Type.integer(1n), Type.integer(2n)]), context)'
+    end
+
+    test ":erlang.apply/3 call with variable args" do
+      # :erlang.apply(module, fun, args)
+      ir = %IR.RemoteFunctionCall{
+        module: %IR.AtomType{value: :erlang},
+        function: :apply,
+        args: [
+          %IR.Variable{name: :module},
+          %IR.Variable{name: :fun},
+          %IR.Variable{name: :args}
+        ]
+      }
+
+      assert encode_ir(ir) ==
+               "Interpreter.callNamedFunction(context.vars.module, context.vars.fun, context.vars.args, context)"
     end
 
     test ":erlang.orelse/2 call" do
