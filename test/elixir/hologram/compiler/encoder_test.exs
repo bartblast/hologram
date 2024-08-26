@@ -1242,164 +1242,209 @@ defmodule Hologram.Compiler.EncoderTest do
     end
   end
 
-  test "module definition" do
-    # defmodule Aaa.Bbb do
-    #   def fun_1(9, 8), :expr_1
+  describe "module definition" do
+    test "valid IR" do
+      # defmodule Aaa.Bbb do
+      #   def fun_1(9, 8), :expr_1
 
-    #   def fun_1(c) when :erlang.is_integer(c), do: c
+      #   def fun_1(c) when :erlang.is_integer(c), do: c
 
-    #   def fun_1(a, b) do
-    #     :erlang.+(a, b)
-    #   end
+      #   def fun_1(a, b) do
+      #     :erlang.+(a, b)
+      #   end
 
-    #   defp fun_2(x, y) do
-    #     :erlang.*(x, y)
-    #   end
+      #   defp fun_2(x, y) do
+      #     :erlang.*(x, y)
+      #   end
 
-    #   defp fun_2(9), do: :expr_2
+      #   defp fun_2(9), do: :expr_2
 
-    #   defp fun_2(z) when :erlang.is_float(z), do: z
-    # end
-    ir = %IR.ModuleDefinition{
-      module: %IR.AtomType{value: Aaa.Bbb},
-      body: %IR.Block{
-        expressions: [
-          %IR.FunctionDefinition{
-            name: :fun_1,
-            arity: 2,
-            visibility: :public,
-            clause: %IR.FunctionClause{
-              params: [
-                %IR.IntegerType{value: 9},
-                %IR.IntegerType{value: 8}
-              ],
-              guards: [],
-              body: %IR.Block{
-                expressions: [%IR.AtomType{value: :expr_1}]
-              }
-            }
-          },
-          %IR.FunctionDefinition{
-            name: :fun_1,
-            arity: 1,
-            visibility: :public,
-            clause: %IR.FunctionClause{
-              params: [%IR.Variable{name: :c}],
-              guards: [
-                %IR.RemoteFunctionCall{
-                  module: %IR.AtomType{value: :erlang},
-                  function: :is_integer,
-                  args: [%IR.Variable{name: :c}]
+      #   defp fun_2(z) when :erlang.is_float(z), do: z
+      # end
+      ir = %IR.ModuleDefinition{
+        module: %IR.AtomType{value: Aaa.Bbb},
+        body: %IR.Block{
+          expressions: [
+            %IR.FunctionDefinition{
+              name: :fun_1,
+              arity: 2,
+              visibility: :public,
+              clause: %IR.FunctionClause{
+                params: [
+                  %IR.IntegerType{value: 9},
+                  %IR.IntegerType{value: 8}
+                ],
+                guards: [],
+                body: %IR.Block{
+                  expressions: [%IR.AtomType{value: :expr_1}]
                 }
-              ],
-              body: %IR.Block{
-                expressions: [%IR.Variable{name: :c}]
               }
-            }
-          },
-          %IR.FunctionDefinition{
-            name: :fun_1,
-            arity: 2,
-            visibility: :public,
-            clause: %IR.FunctionClause{
-              params: [
-                %IR.Variable{name: :a},
-                %IR.Variable{name: :b}
-              ],
-              guards: [],
-              body: %IR.Block{
-                expressions: [
+            },
+            %IR.FunctionDefinition{
+              name: :fun_1,
+              arity: 1,
+              visibility: :public,
+              clause: %IR.FunctionClause{
+                params: [%IR.Variable{name: :c}],
+                guards: [
                   %IR.RemoteFunctionCall{
                     module: %IR.AtomType{value: :erlang},
-                    function: :+,
-                    args: [
-                      %IR.Variable{name: :a},
-                      %IR.Variable{name: :b}
-                    ]
+                    function: :is_integer,
+                    args: [%IR.Variable{name: :c}]
                   }
-                ]
+                ],
+                body: %IR.Block{
+                  expressions: [%IR.Variable{name: :c}]
+                }
               }
-            }
-          },
-          %IR.FunctionDefinition{
-            name: :fun_2,
-            arity: 2,
-            visibility: :private,
-            clause: %IR.FunctionClause{
-              params: [
-                %IR.Variable{name: :x},
-                %IR.Variable{name: :y}
-              ],
-              guards: [],
-              body: %IR.Block{
-                expressions: [
+            },
+            %IR.FunctionDefinition{
+              name: :fun_1,
+              arity: 2,
+              visibility: :public,
+              clause: %IR.FunctionClause{
+                params: [
+                  %IR.Variable{name: :a},
+                  %IR.Variable{name: :b}
+                ],
+                guards: [],
+                body: %IR.Block{
+                  expressions: [
+                    %IR.RemoteFunctionCall{
+                      module: %IR.AtomType{value: :erlang},
+                      function: :+,
+                      args: [
+                        %IR.Variable{name: :a},
+                        %IR.Variable{name: :b}
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            %IR.FunctionDefinition{
+              name: :fun_2,
+              arity: 2,
+              visibility: :private,
+              clause: %IR.FunctionClause{
+                params: [
+                  %IR.Variable{name: :x},
+                  %IR.Variable{name: :y}
+                ],
+                guards: [],
+                body: %IR.Block{
+                  expressions: [
+                    %IR.RemoteFunctionCall{
+                      module: %IR.AtomType{value: :erlang},
+                      function: :*,
+                      args: [
+                        %IR.Variable{name: :x},
+                        %IR.Variable{name: :y}
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            %IR.FunctionDefinition{
+              name: :fun_2,
+              arity: 1,
+              visibility: :private,
+              clause: %IR.FunctionClause{
+                params: [%IR.IntegerType{value: 9}],
+                guards: [],
+                body: %IR.Block{
+                  expressions: [%IR.AtomType{value: :expr_2}]
+                }
+              }
+            },
+            %IR.FunctionDefinition{
+              name: :fun_2,
+              arity: 1,
+              visibility: :private,
+              clause: %IR.FunctionClause{
+                params: [%IR.Variable{name: :z}],
+                guards: [
                   %IR.RemoteFunctionCall{
                     module: %IR.AtomType{value: :erlang},
-                    function: :*,
-                    args: [
-                      %IR.Variable{name: :x},
-                      %IR.Variable{name: :y}
-                    ]
+                    function: :is_float,
+                    args: [%IR.Variable{name: :z}]
                   }
-                ]
-              }
-            }
-          },
-          %IR.FunctionDefinition{
-            name: :fun_2,
-            arity: 1,
-            visibility: :private,
-            clause: %IR.FunctionClause{
-              params: [%IR.IntegerType{value: 9}],
-              guards: [],
-              body: %IR.Block{
-                expressions: [%IR.AtomType{value: :expr_2}]
-              }
-            }
-          },
-          %IR.FunctionDefinition{
-            name: :fun_2,
-            arity: 1,
-            visibility: :private,
-            clause: %IR.FunctionClause{
-              params: [%IR.Variable{name: :z}],
-              guards: [
-                %IR.RemoteFunctionCall{
-                  module: %IR.AtomType{value: :erlang},
-                  function: :is_float,
-                  args: [%IR.Variable{name: :z}]
+                ],
+                body: %IR.Block{
+                  expressions: [%IR.Variable{name: :z}]
                 }
-              ],
-              body: %IR.Block{
-                expressions: [%IR.Variable{name: :z}]
               }
             }
-          }
-        ]
+          ]
+        }
       }
-    }
 
-    assert encode_ir(ir) == """
-           Interpreter.defineElixirFunction("Aaa.Bbb", "fun_1", 1, "public", [{params: (context) => [Type.variablePattern("c")], guards: [(context) => Erlang["is_integer/1"](context.vars.c)], body: (context) => {
-           return context.vars.c;
-           }}]);
+      assert encode_ir(ir) == """
+             Interpreter.defineElixirFunction("Aaa.Bbb", "fun_1", 1, "public", [{params: (context) => [Type.variablePattern("c")], guards: [(context) => Erlang["is_integer/1"](context.vars.c)], body: (context) => {
+             return context.vars.c;
+             }}]);
 
-           Interpreter.defineElixirFunction("Aaa.Bbb", "fun_1", 2, "public", [{params: (context) => [Type.integer(9n), Type.integer(8n)], guards: [], body: (context) => {
-           return Type.atom("expr_1");
-           }}, {params: (context) => [Type.variablePattern("a"), Type.variablePattern("b")], guards: [], body: (context) => {
-           return Erlang["+/2"](context.vars.a, context.vars.b);
-           }}]);
+             Interpreter.defineElixirFunction("Aaa.Bbb", "fun_1", 2, "public", [{params: (context) => [Type.integer(9n), Type.integer(8n)], guards: [], body: (context) => {
+             return Type.atom("expr_1");
+             }}, {params: (context) => [Type.variablePattern("a"), Type.variablePattern("b")], guards: [], body: (context) => {
+             return Erlang["+/2"](context.vars.a, context.vars.b);
+             }}]);
 
-           Interpreter.defineElixirFunction("Aaa.Bbb", "fun_2", 1, "private", [{params: (context) => [Type.integer(9n)], guards: [], body: (context) => {
-           return Type.atom("expr_2");
-           }}, {params: (context) => [Type.variablePattern("z")], guards: [(context) => Erlang["is_float/1"](context.vars.z)], body: (context) => {
-           return context.vars.z;
-           }}]);
+             Interpreter.defineElixirFunction("Aaa.Bbb", "fun_2", 1, "private", [{params: (context) => [Type.integer(9n)], guards: [], body: (context) => {
+             return Type.atom("expr_2");
+             }}, {params: (context) => [Type.variablePattern("z")], guards: [(context) => Erlang["is_float/1"](context.vars.z)], body: (context) => {
+             return context.vars.z;
+             }}]);
 
-           Interpreter.defineElixirFunction("Aaa.Bbb", "fun_2", 2, "private", [{params: (context) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (context) => {
-           return Erlang["*/2"](context.vars.x, context.vars.y);
-           }}]);\
-           """
+             Interpreter.defineElixirFunction("Aaa.Bbb", "fun_2", 2, "private", [{params: (context) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (context) => {
+             return Erlang["*/2"](context.vars.x, context.vars.y);
+             }}]);\
+             """
+    end
+
+    test "invalid IR" do
+      ir = %IR.ModuleDefinition{
+        module: %IR.AtomType{value: Aaa.Bbb},
+        body: %IR.Block{
+          expressions: [
+            %IR.FunctionDefinition{
+              name: :fun_1,
+              arity: 2,
+              visibility: :public,
+              clause: %IR.FunctionClause{
+                params: [
+                  %IR.IntegerType{value: 9},
+                  %IR.IntegerType{value: 8}
+                ],
+                guards: [],
+                body: %IR.Block{
+                  expressions: [
+                    %IR.RemoteFunctionCall{
+                      module: %IR.AtomType{value: :erlang},
+                      function: :apply,
+                      args: [
+                        %IR.AtomType{value: MyModule},
+                        # intentional error (it should be %IR.AtomType{value: :my_fun})
+                        %IR.Variable{name: :my_fun},
+                        %IR.ListType{data: [%IR.IntegerType{value: 1}, %IR.IntegerType{value: 2}]}
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      }
+
+      expected_msg = """
+      can't encode Aaa.Bbb module definition
+      key :value not found in: %Hologram.Compiler.IR.Variable{name: :my_fun}\
+      """
+
+      assert_raise RuntimeError, expected_msg, fn -> encode_ir(ir) end
+    end
   end
 
   test "pid" do

@@ -336,6 +336,14 @@ defmodule Hologram.Compiler.Encoder do
     end)
     |> Enum.reverse()
     |> Enum.join("\n\n")
+  rescue
+    error ->
+      message = """
+      can't encode #{Reflection.module_name(module.value)} module definition
+      #{Exception.message(error)}\
+      """
+
+      reraise RuntimeError, [message: message], __STACKTRACE__
   end
 
   # See info about the internal structure of PIDs: https://stackoverflow.com/a/262179/13040586
