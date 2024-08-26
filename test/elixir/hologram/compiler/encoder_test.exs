@@ -1616,10 +1616,10 @@ defmodule Hologram.Compiler.EncoderTest do
     end
 
     test "non-printable characters" do
-      # "\b \f \n \r \t \v"
-      ir = %IR.StringType{value: "\b \f \n \r \t \v"}
+      # "\a \b \e \f \n \r \t \v"
+      ir = %IR.StringType{value: "\a \b \e \f \n \r \t \v"}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("\\b \\f \\n \\r \\t \\v")/
+      assert encode_ir(ir) == ~s/Type.bitstring("\\a \\b \\e \\f \\n \\r \\t \\v")/
     end
   end
 

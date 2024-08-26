@@ -529,7 +529,9 @@ defmodule Hologram.Compiler.Encoder do
     value
     |> to_string()
     |> String.replace("\"", "\\\"")
+    |> String.replace("\a", "\\a")
     |> String.replace("\b", "\\b")
+    |> String.replace("\e", "\\e")
     |> String.replace("\f", "\\f")
     |> String.replace("\n", "\\n")
     |> String.replace("\r", "\\r")
