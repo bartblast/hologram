@@ -24,6 +24,7 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       assert String.downcase("ŹRÓDŁO", :default) == "źródło"
     end
 
+    # TODO: client error message for this case is inconsistent with server error message
     test "raises FunctionClauseError if the first arg is not a bitstring" do
       expected_msg =
         build_function_clause_error_msg("String.downcase/2", [:abc, :default], [
@@ -38,6 +39,7 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       end
     end
 
+    # TODO: client error message for this case is inconsistent with server error message
     test "raises FunctionClauseError if the first arg is a non-binary bitstring" do
       arg_1 = <<1::1, 0::1, 1::1, 0::1>>
 
@@ -54,6 +56,7 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       end
     end
 
+    # TODO: client error message for this case is inconsistent with server error message
     test "raises FunctionClauseError if the second arg is not an atom" do
       expected_msg =
         build_function_clause_error_msg("String.downcase/2", ["HoLoGrAm", 123], [
@@ -68,6 +71,7 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       end
     end
 
+    # TODO: client error message for this case is inconsistent with server error message
     test "raises FunctionClauseError if the second arg is an atom, but is not a valid mode" do
       expected_msg =
         build_function_clause_error_msg("String.downcase/2", ["HoLoGrAm", :abc], [

@@ -49,6 +49,7 @@ describe("Elixir_String", () => {
       });
     });
 
+    // TODO: client error message for this case is inconsistent with server error message
     it("raises FunctionClauseError if the first arg is not a bitstring", () => {
       const arg1 = Type.atom("abc");
 
@@ -62,6 +63,7 @@ describe("Elixir_String", () => {
       );
     });
 
+    // TODO: client error message for this case is inconsistent with server error message
     it("raises FunctionClauseError if the first arg is a non-binary bitstring", () => {
       const arg1 = Type.bitstring([1, 0, 1, 0]);
 
@@ -75,6 +77,7 @@ describe("Elixir_String", () => {
       );
     });
 
+    // TODO: client error message for this case is inconsistent with server error message
     it("raises FunctionClauseError if the second arg is not an atom", () => {
       const arg2 = Type.integer(123);
 
@@ -88,6 +91,7 @@ describe("Elixir_String", () => {
       );
     });
 
+    // TODO: client error message for this case is inconsistent with server error message
     it("raises FunctionClauseError if the second arg is an atom, but is not a valid mode", () => {
       const arg2 = Type.atom("abc");
 
