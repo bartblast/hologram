@@ -33,7 +33,9 @@ defmodule Hologram.Compiler.CallGraph do
     {Code, :ensure_loaded, 1},
     {Hologram.Router.Helpers, :asset_path, 1},
     {Kernel, :inspect, 1},
-    {Kernel, :inspect, 2}
+    {Kernel, :inspect, 2},
+    {String, :downcase, 1},
+    {String, :downcase, 2}
   ]
 
   @mfas_used_by_all_pages_and_components [

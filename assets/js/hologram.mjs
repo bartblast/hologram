@@ -24,6 +24,7 @@ import PointerEvent from "./events/pointer_event.mjs";
 import ManuallyPortedElixirCode from "./elixir/code.mjs";
 import ManuallyPortedElixirHologramRouterHelpers from "./elixir/hologram/router/helpers.mjs";
 import ManuallyPortedElixirKernel from "./elixir/kernel.mjs";
+import ManuallyPortedElixirString from "./elixir/string.mjs";
 
 import {attributesModule, eventListenersModule, init, toVNode} from "snabbdom";
 const patch = init([attributesModule, eventListenersModule]);
@@ -349,6 +350,20 @@ export default class Hologram {
       "inspect/2",
       "public",
       ManuallyPortedElixirKernel["inspect/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "String",
+      "downcase/1",
+      "public",
+      ManuallyPortedElixirString["downcase/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "String",
+      "downcase/2",
+      "public",
+      ManuallyPortedElixirString["downcase/2"],
     );
   }
 
