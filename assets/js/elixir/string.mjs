@@ -1,0 +1,38 @@
+"use strict";
+
+import Bitstring from "../bitstring.mjs";
+import HologramInterpreterError from "../errors/interpreter_error.mjs";
+import Interpreter from "../interpreter.mjs";
+import Type from "../type.mjs";
+
+const Elixir_String = {
+  // Deps: [String.downcase/2]
+  "downcase/1": (string) => {
+    return Elixir_String["downcase/2"](string, Type.atom("default"));
+  },
+
+  // TODO: support mode param
+  "downcase/2": function (string, mode) {
+    const allowedModes = ["default", "ascii", "greek", "turkic"];
+
+    if (
+      !Type.isBinary(string) ||
+      !Type.isAtom(mode) ||
+      !allowedModes.includes(mode.value)
+    ) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg("String.downcase/2", arguments),
+      );
+    }
+
+    if (mode.value !== "default") {
+      throw new HologramInterpreterError(
+        "modes other than :default are not yet implemented in Hologram",
+      );
+    }
+
+    return Type.bitstring(Bitstring.toText(string).toLowerCase());
+  },
+};
+
+export default Elixir_String;
