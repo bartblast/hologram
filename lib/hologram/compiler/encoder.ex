@@ -526,22 +526,9 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   defp encode_as_string(value, false) do
-    str = to_string(value)
-
-    if !String.printable?(str) do
-      raise RuntimeError, message: "can't encode #{inspect(str)} as a JavaScript string"
-    end
-
-    str
-    |> String.replace("\"", "\\\"")
-    |> String.replace("\a", "\\a")
-    |> String.replace("\b", "\\b")
-    |> String.replace("\e", "\\e")
-    |> String.replace("\f", "\\f")
-    |> String.replace("\n", "\\n")
-    |> String.replace("\r", "\\r")
-    |> String.replace("\t", "\\t")
-    |> String.replace("\v", "\\v")
+    value
+    |> to_string()
+    |> escape_non_printable_and_special_chars()
   end
 
   defp encode_as_string(value, true) do
@@ -685,6 +672,55 @@ defmodule Hologram.Compiler.Encoder do
       "context.vars.#{var_name}"
     end
   end
+
+  defp escape_non_printable_and_special_chars(str)
+
+  defp escape_non_printable_and_special_chars("\\" <> rest) do
+    "\\\\" <> escape_non_printable_and_special_chars(rest)
+  end
+
+  defp escape_non_printable_and_special_chars("\"" <> rest) do
+    "\\\"" <> escape_non_printable_and_special_chars(rest)
+  end
+
+  defp escape_non_printable_and_special_chars("\b" <> rest) do
+    "\\b" <> escape_non_printable_and_special_chars(rest)
+  end
+
+  defp escape_non_printable_and_special_chars("\f" <> rest) do
+    "\\f" <> escape_non_printable_and_special_chars(rest)
+  end
+
+  defp escape_non_printable_and_special_chars("\n" <> rest) do
+    "\\n" <> escape_non_printable_and_special_chars(rest)
+  end
+
+  defp escape_non_printable_and_special_chars("\r" <> rest) do
+    "\\r" <> escape_non_printable_and_special_chars(rest)
+  end
+
+  defp escape_non_printable_and_special_chars("\t" <> rest) do
+    "\\t" <> escape_non_printable_and_special_chars(rest)
+  end
+
+  defp escape_non_printable_and_special_chars("\v" <> rest) do
+    "\\v" <> escape_non_printable_and_special_chars(rest)
+  end
+
+  defp escape_non_printable_and_special_chars(<<code::utf8, rest::binary>>) do
+    char = <<code::utf8>>
+
+    escaped_char =
+      if String.printable?(char) do
+        char
+      else
+        "\\u{#{Integer.to_string(code, 16)}}"
+      end
+
+    escaped_char <> escape_non_printable_and_special_chars(rest)
+  end
+
+  defp escape_non_printable_and_special_chars(""), do: ""
 
   defp extract_erlang_function_source_code(file_path, function, arity) do
     key = "#{function}/#{arity}"

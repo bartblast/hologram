@@ -1608,27 +1608,109 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   describe "string type" do
-    test "printable characters" do
-      # "abc"
-      ir = %IR.StringType{value: "abc"}
+    test "printable ASCII char" do
+      # "a"
+      ir = %IR.StringType{value: "a"}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("abc")/
+      assert encode_ir(ir) == ~s/Type.bitstring("a")/
     end
 
-    test "non-printable characters" do
-      # "\a \b \e \f \n \r \t \v"
-      ir = %IR.StringType{value: "\a \b \e \f \n \r \t \v"}
+    test "printable Unicode char" do
+      # "全"
+      ir = %IR.StringType{value: "全"}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("\\a \\b \\e \\f \\n \\r \\t \\v")/
+      assert encode_ir(ir) == ~s/Type.bitstring("全")/
     end
 
-    test "raises RuntimeError if an Elixir string can't be encoded as a JavaScript string" do
-      # "\xaa"
-      ir = %IR.StringType{value: "\xaa"}
+    test "multiple printable chars" do
+      # "abc全息图"
+      ir = %IR.StringType{value: "abc全息图"}
 
-      assert_raise RuntimeError, "can't encode <<170>> as a JavaScript string", fn ->
-        encode_ir(ir)
-      end
+      assert encode_ir(ir) == ~s/Type.bitstring("abc全息图")/
+    end
+
+    test "backslash char" do
+      # "\\"
+      ir = %IR.StringType{value: "\\"}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\\\\")/
+    end
+
+    test "double quote char" do
+      # "\""
+      ir = %IR.StringType{value: "\""}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\\\"")/
+    end
+
+    test "backspace (non-printable) char" do
+      # "\b"
+      ir = %IR.StringType{value: "\b"}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\\b")/
+    end
+
+    test "form feed (non-printable) char" do
+      # "\f"
+      ir = %IR.StringType{value: "\f"}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\\f")/
+    end
+
+    test "line feed (non-printable) char" do
+      # "\n"
+      ir = %IR.StringType{value: "\n"}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\\n")/
+    end
+
+    test "carriage return (non-printable) char" do
+      # "\r"
+      ir = %IR.StringType{value: "\r"}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\\r")/
+    end
+
+    test "horizontal tab (non-printable) char" do
+      # "\t"
+      ir = %IR.StringType{value: "\t"}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\\t")/
+    end
+
+    test "vertical tab (non-printable) char" do
+      # "\v"
+      ir = %IR.StringType{value: "\v"}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\\v")/
+    end
+
+    test "non-printable Unicode char" do
+      # <<133::utf8>> (equivalent to <<194, 133>>)
+      ir = %IR.StringType{value: <<133::utf8>>}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\\u{85}")/
+    end
+
+    test "multiple non-printable Unicode chars" do
+      # <<133::utf8, 134::utf8, 135::utf8>>
+      # equivalent to: <<194, 133, 194, 134, 194, 135>>
+      ir = %IR.StringType{value: <<133::utf8, 134::utf8, 135::utf8>>}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\\u{85}\\u{86}\\u{87}")/
+    end
+
+    test "multiple printable and non-printable chars" do
+      # "abc\n全息图\t" <> <<133::utf8, 134::utf8, 135::utf8>>
+      # equivalent to: <<97, 98, 99, 10, 229, 133, 168, 230, 129, 175, 229, 155, 190, 9, 194, 133, 194, 134, 194, 135>>
+
+      ir = %IR.StringType{
+        value:
+          <<97, 98, 99, 10, 229, 133, 168, 230, 129, 175, 229, 155, 190, 9, 194, 133, 194, 134,
+            194, 135>>
+      }
+
+      assert encode_ir(ir) == ~s/Type.bitstring("abc\\n全息图\\t\\u{85}\\u{86}\\u{87}")/
     end
   end
 
