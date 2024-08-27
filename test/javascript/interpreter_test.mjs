@@ -607,7 +607,7 @@ describe("Interpreter", () => {
     });
 
     // Keep Elixir consistency test in sync: test/elixir/hologram/ex_js_consistency/interpreter_test.exs ("call named function" section).
-    // TODO: client error message is inconsistent with server error message (implement function name suggestions)
+    // TODO: client error message for this case is inconsistent with server error message
     it("function arity is correct, but args don't match the pattern", () => {
       assertBoxedError(
         () =>

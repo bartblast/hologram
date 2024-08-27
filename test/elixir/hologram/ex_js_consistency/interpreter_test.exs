@@ -122,6 +122,7 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
                    end
     end
 
+    # TODO: client error message for this case is inconsistent with server error message
     test "function arity is correct, but args don't match the pattern" do
       expected_msg =
         build_function_clause_error_msg(
