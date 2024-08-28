@@ -46,6 +46,7 @@ defmodule Hologram.MixProject do
       {:file_system, "~> 1.0", only: [:dev, :test]},
       {:html_entities, "~> 0.5"},
       {:interceptor, "~> 0.5"},
+      # It seems that libgraph is not mainted - there are pending pull requests and not released commits.
       {:libgraph,
        git: "https://github.com/bitwalker/libgraph",
        ref: "460cdfd9a163a533bdab0a160ba7ccf888047927"},
