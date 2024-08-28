@@ -360,8 +360,8 @@ defmodule Hologram.Compiler.CallGraph do
   and client MFAs used by all pages and components.
   The returned MFAs are sorted.
   """
-  @spec list_runtime_entry_mfas() :: list(mfa)
-  def list_runtime_entry_mfas() do
+  @spec list_runtime_entry_mfas :: list(mfa)
+  def list_runtime_entry_mfas do
     @mfas_used_by_client_runtime
     |> Enum.reduce(@mfas_used_by_all_pages_and_components, fn {_key, mfas}, acc ->
       mfas ++ acc

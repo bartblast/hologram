@@ -24,6 +24,7 @@ defmodule Mix.Tasks.Holo.Compiler.RuntimeToMfaPaths do
       shortest_path = Graph.get_shortest_path(graph, entry_mfa, dest_mfa)
 
       if shortest_path do
+        # credo:disable-for-next-line Credo.Check.Refactor.IoPuts
         IO.puts("\n#{inspect(entry_mfa)} -> #{inspect(dest_mfa)}\n#{inspect(shortest_path)}\n")
       end
     end)
