@@ -119,17 +119,17 @@ defmodule Hologram.Test.Helpers do
 
     attempted_clauses_info =
       if attempted_clauses_count > 0 do
-        initial_acc = """
+        attempted_clauses_list =
+          Enum.map_join(attempted_clauses, "\n", fn attempted_clause ->
+            "    #{attempted_clause}"
+          end)
 
-        Attempted function clauses (showing #{attempted_clauses_count} out of #{attempted_clauses_count}):
         """
 
-        Enum.reduce(attempted_clauses, initial_acc, fn attempted_clause, acc ->
-          """
-          #{acc}
-              #{attempted_clause}
-          """
-        end)
+        Attempted function clauses (showing #{attempted_clauses_count} out of #{attempted_clauses_count}):
+
+        #{attempted_clauses_list}
+        """
       else
         ""
       end
@@ -285,8 +285,7 @@ defmodule Hologram.Test.Helpers do
   """
   @spec render_component(module, %{atom => any}, %{(atom | {any, atom}) => any}) :: String.t()
   def render_component(module, props, context) do
-    props_dom =
-      Enum.map(props, fn {name, value} -> {to_string(name), [expression: {value}]} end)
+    props_dom = Enum.map(props, fn {name, value} -> {to_string(name), [expression: {value}]} end)
 
     node = {:component, module, props_dom, []}
     {html, _component_structs} = Renderer.render_dom(node, %Renderer.Env{context: context})
