@@ -30,10 +30,10 @@ describe("Elixir_String", () => {
   describe("downcase/2", () => {
     const downcase = Elixir_String["downcase/2"];
 
-    describe("default mode", () => {
-      const string = Type.bitstring("HoLoGrAm");
-      const mode = Type.atom("default");
+    const string = Type.bitstring("HoLoGrAm");
+    const mode = Type.atom("default");
 
+    describe("default mode", () => {
       it("ASCII string", () => {
         const result = downcase(string, mode);
         const expected = Type.bitstring("hologram");
