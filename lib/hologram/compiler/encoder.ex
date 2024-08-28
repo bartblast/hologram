@@ -707,6 +707,18 @@ defmodule Hologram.Compiler.Encoder do
     "\\v" <> escape_non_printable_and_special_chars(rest)
   end
 
+  # Line separator character (LS)
+  # (JavaScript editors have problems with this char)
+  defp escape_non_printable_and_special_chars(<<8_232::utf8>> <> rest) do
+    "\\u{2028}" <> escape_non_printable_and_special_chars(rest)
+  end
+
+  # Paragraph separator character (PS)
+  # (JavaScript editors have problems with this char)
+  defp escape_non_printable_and_special_chars(<<8_233::utf8>> <> rest) do
+    "\\u{2029}" <> escape_non_printable_and_special_chars(rest)
+  end
+
   defp escape_non_printable_and_special_chars(<<code::utf8, rest::binary>>) do
     char = <<code::utf8>>
 

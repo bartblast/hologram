@@ -1685,6 +1685,20 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == ~s/Type.bitstring("\\v")/
     end
 
+    test "line seperator char" do
+      # <<8_232::utf8>>
+      ir = %IR.StringType{value: <<8_232::utf8>>}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\\u{2028}")/
+    end
+
+    test "paragraph seperator char" do
+      # <<8_233::utf8>>
+      ir = %IR.StringType{value: <<8_233::utf8>>}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\\u{2029}")/
+    end
+
     test "non-printable Unicode char" do
       # <<133::utf8>> (equivalent to <<194, 133>>)
       ir = %IR.StringType{value: <<133::utf8>>}
