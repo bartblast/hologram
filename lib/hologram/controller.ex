@@ -30,8 +30,7 @@ defmodule Hologram.Controller do
   def handle_request(conn, page_module) do
     params = extract_params(conn.request_path, page_module)
 
-    {html, _component_structs} =
-      Renderer.render_page(page_module, params, initial_page?: true)
+    {html, _component_structs} = Renderer.render_page(page_module, params, initial_page?: true)
 
     conn
     |> Controller.html(html)

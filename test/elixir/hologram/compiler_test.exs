@@ -466,8 +466,7 @@ defmodule Hologram.CompilerTest do
     end
 
     test "invalid JS code" do
-      test_tmp_dir =
-        Path.join([@tmp_dir, "tests", "compiler", "format_files_2_invalid_js_code"])
+      test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "format_files_2_invalid_js_code"])
 
       clean_dir(test_tmp_dir)
 

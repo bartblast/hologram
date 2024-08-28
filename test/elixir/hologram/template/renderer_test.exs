@@ -740,16 +740,14 @@ defmodule Hologram.Template.RendererTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module25, :dummy_module_25_digest)
 
       assert {~s'layout vars = %{cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;}',
-              _} =
-               render_page(Module25, @params, @opts)
+              _} = render_page(Module25, @params, @opts)
     end
 
     test "cast layout props passed implicitely from page state" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module27, :dummy_module_27_digest)
 
       assert {~s'layout vars = %{cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;}',
-              _} =
-               render_page(Module27, @params, @opts)
+              _} = render_page(Module27, @params, @opts)
     end
 
     test "aggregate page vars, giving state vars priority over param vars when there are name conflicts" do
@@ -758,8 +756,7 @@ defmodule Hologram.Template.RendererTest do
       params = %{key_1: "param_value_1", key_2: "param_value_2"}
 
       assert {~s'page vars = %{key_1: &quot;param_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;}',
-              _} =
-               render_page(Module21, params, @opts)
+              _} = render_page(Module21, params, @opts)
     end
 
     test "aggregate layout vars, giving state vars priority over prop vars when there are name conflicts" do

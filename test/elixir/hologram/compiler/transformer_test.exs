@@ -3489,8 +3489,7 @@ defmodule Hologram.Compiler.TransformerTest do
                clause: %IR.FunctionClause{
                  body: %IR.Block{expressions: [%IR.AtomType{value: nil}]}
                }
-             } =
-               @result_from_beam_file
+             } = @result_from_beam_file
     end
 
     test "single expression body (AST from source code)" do

@@ -250,8 +250,7 @@ defmodule Hologram.Compiler do
       |> File.read!()
       |> CryptographicUtils.digest(:md5, :hex)
 
-    static_bundle_path_with_digest =
-      Path.join(opts[:static_dir], "#{bundle_name}-#{digest}.js")
+    static_bundle_path_with_digest = Path.join(opts[:static_dir], "#{bundle_name}-#{digest}.js")
 
     output_source_map_path = output_bundle_path <> ".map"
     static_source_map_path_with_digest = static_bundle_path_with_digest <> ".map"
