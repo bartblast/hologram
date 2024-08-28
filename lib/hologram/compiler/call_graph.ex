@@ -30,6 +30,9 @@ defmodule Hologram.Compiler.CallGraph do
   ]
 
   @manually_ported_mfas [
+    # {Cldr.Validity.U, :encode_key, 2} transpiles to a huge, deeply nested JS code,
+    # so only a placeholder which raises an error is used instead.
+    {Cldr.Validity.U, :encode_key, 2},
     {Code, :ensure_loaded, 1},
     {Hologram.Router.Helpers, :asset_path, 1},
     {Kernel, :inspect, 1},

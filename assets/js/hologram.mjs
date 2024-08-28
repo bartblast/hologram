@@ -21,6 +21,7 @@ import Vdom from "./vdom.mjs";
 import MouseEvent from "./events/mouse_event.mjs";
 import PointerEvent from "./events/pointer_event.mjs";
 
+import ManuallyPortedElixirCldrValidityU from "./elixir/cldr/validity/u.mjs";
 import ManuallyPortedElixirCode from "./elixir/code.mjs";
 import ManuallyPortedElixirHologramRouterHelpers from "./elixir/hologram/router/helpers.mjs";
 import ManuallyPortedElixirKernel from "./elixir/kernel.mjs";
@@ -324,6 +325,13 @@ export default class Hologram {
   }
 
   static #defineManuallyPortedFunctions() {
+    Interpreter.defineManuallyPortedFunction(
+      "Cldr.Validity.U",
+      "encode_key/2",
+      "public",
+      ManuallyPortedElixirCldrValidityU["encode_key/2"],
+    );
+
     Interpreter.defineManuallyPortedFunction(
       "Code",
       "ensure_compiled/1",
