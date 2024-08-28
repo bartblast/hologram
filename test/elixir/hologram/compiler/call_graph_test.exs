@@ -929,6 +929,18 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
   end
 
+  test "list_runtime_entry_mfas/0" do
+    result = list_runtime_entry_mfas()
+
+    assert {:erlang, :error, 1} in result
+    assert {String.Chars, :to_string, 1} in result
+
+    assert {Hologram.Router.Helpers, :page_path, 1} in result
+
+    refute {:unicode, :characters_to_binary, 1} in result
+    refute {Hologram.Router.Helpers, :asset_path, 1} in result
+  end
+
   describe "list_runtime_mfas/1" do
     setup %{full_call_graph: call_graph} do
       [runtime_mfas: list_runtime_mfas(call_graph)]

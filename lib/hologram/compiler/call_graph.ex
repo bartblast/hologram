@@ -353,18 +353,28 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Lists entry runtime MFAs, which include MFAs used by the client runtime JS classes
+  and client MFAs used by all pages and components.
+  The returned MFAs are sorted.
+  """
+  @spec list_runtime_entry_mfas() :: list(mfa)
+  def list_runtime_entry_mfas() do
+    @mfas_used_by_client_runtime
+    |> Enum.reduce(@mfas_used_by_all_pages_and_components, fn {_key, mfas}, acc ->
+      mfas ++ acc
+    end)
+    |> Enum.uniq()
+    |> Enum.sort()
+  end
+
+  @doc """
   Lists MFAs required by the runtime JS script.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/list_runtime_mfas_1/README.md
   """
   @spec list_runtime_mfas(CallGraph.t()) :: list(mfa)
   def list_runtime_mfas(call_graph) do
-    entry_mfas =
-      @mfas_used_by_client_runtime
-      |> Enum.reduce(@mfas_used_by_all_pages_and_components, fn {_key, mfas}, acc ->
-        mfas ++ acc
-      end)
-      |> Enum.uniq()
+    entry_mfas = list_runtime_entry_mfas()
 
     call_graph
     |> get_graph()
