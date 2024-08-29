@@ -45,9 +45,14 @@ defmodule Hologram.Assets.PathRegistryTest do
       :ok
     end
 
-    test "asset exists" do
+    test "asset exists, has digest suffix" do
       assert lookup("test_dir_1/test_dir_2/test_file_1.css") ==
                {:ok, "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css"}
+    end
+
+    test "asset exists, doesn't have digest suffix" do
+      assert lookup("test_dir_3/test_file_10.css") ==
+               {:ok, "/test_dir_3/test_file_10.css"}
     end
 
     test "asset doesn't exist" do

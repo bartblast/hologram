@@ -109,10 +109,24 @@ defmodule Hologram.Assets.PathRegistry do
   end
 
   defp find_assets(static_dir) do
-    regex = ~r"#{Regex.escape(static_dir)}/(.+)\-([0-9a-f]{32})(.+)$"
+    static_files = FileUtils.list_files_recursively(static_dir)
 
-    static_dir
-    |> FileUtils.list_files_recursively()
+    assets_with_digest_suffix = find_assets_with_digest_suffix(static_dir, static_files)
+
+    already_used_registry_keys = Enum.map(assets_with_digest_suffix, &elem(&1, 0))
+
+    assets_without_digest_suffix =
+      static_dir
+      |> find_assets_without_digest_suffix(static_files)
+      |> Enum.reject(fn {key, _path} -> key in already_used_registry_keys end)
+
+    assets_with_digest_suffix ++ assets_without_digest_suffix
+  end
+
+  defp find_assets_with_digest_suffix(static_dir, static_files) do
+    regex = static_file_path_with_digest_suffix_regex(static_dir)
+
+    static_files
     |> Stream.map(&Regex.run(regex, &1))
     |> Stream.filter(& &1)
     |> Stream.map(&List.to_tuple/1)
@@ -120,6 +134,17 @@ defmodule Hologram.Assets.PathRegistry do
     |> stream_reject_source_maps()
     |> stream_build_asset_entries()
     |> Enum.to_list()
+  end
+
+  defp find_assets_without_digest_suffix(static_dir, static_files) do
+    regex = static_file_path_with_digest_suffix_regex(static_dir)
+
+    static_files
+    |> Enum.reject(&Regex.run(regex, &1))
+    |> Enum.map(fn absolute_file_path ->
+      relative_file_path = String.replace_prefix(absolute_file_path, "#{static_dir}/", "")
+      {relative_file_path, "/#{relative_file_path}"}
+    end)
   end
 
   defp impl do
@@ -130,6 +155,10 @@ defmodule Hologram.Assets.PathRegistry do
     impl().static_dir()
     |> find_assets()
     |> Enum.each(fn {key, value} -> ETS.put(ets_table_name, key, value) end)
+  end
+
+  defp static_file_path_with_digest_suffix_regex(static_dir) do
+    ~r"#{Regex.escape(static_dir)}/(.+)\-([0-9a-f]{32})(.+)$"
   end
 
   defp stream_build_asset_entries(file_infos) do
