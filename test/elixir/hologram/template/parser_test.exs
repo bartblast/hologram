@@ -239,6 +239,15 @@ defmodule Hologram.Template.ParserTest do
         end
       end
     )
+
+    test "attribute with a dash char" do
+      assert parse_markup(~s'<div aria-modal="true">') == [
+               start_tag: {"div", [{"aria-modal", [text: "true"]}]}
+             ]
+    end
+
+    # TODO: allow dash chars only in attributes
+    # test "property with a dash char"
   end
 
   describe "public comment" do

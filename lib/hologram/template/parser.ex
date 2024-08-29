@@ -179,6 +179,7 @@ defmodule Hologram.Template.Parser do
 
   def parse_tokens(context, :attribute_name, [{:whitespace, _value} = token | rest]) do
     context
+    |> set_attribute_name()
     |> flush_attribute()
     |> add_processed_token(token)
     |> set_prev_status(:attribute_name)
@@ -187,6 +188,8 @@ defmodule Hologram.Template.Parser do
 
   def parse_tokens(context, :attribute_name, [{:symbol, "="} = token | rest]) do
     context
+    |> set_attribute_name()
+    |> reset_token_buffer()
     |> add_processed_token(token)
     |> set_prev_status(:attribute_name)
     |> set_node_type(:attribute)
@@ -195,18 +198,17 @@ defmodule Hologram.Template.Parser do
 
   def parse_tokens(context, :attribute_name, [{:symbol, ">"} = token | rest]) do
     context
+    |> set_attribute_name()
     |> flush_attribute()
     |> parse_start_tag_end(token, rest, false)
   end
 
+  def parse_tokens(context, :attribute_name, [{:symbol, "-"} = token | rest]) do
+    parse_attribute_name(context, token, rest)
+  end
+
   def parse_tokens(context, :attribute_name, [{:string, _str} = token | rest]) do
-    context
-    |> buffer_token(token)
-    |> set_attribute_name()
-    |> reset_token_buffer()
-    |> add_processed_token(token)
-    |> set_prev_status(:start_tag)
-    |> parse_tokens(:attribute_name, rest)
+    parse_attribute_name(context, token, rest)
   end
 
   # --- DOCTYPE ---
@@ -472,24 +474,20 @@ defmodule Hologram.Template.Parser do
     parse_start_tag_end(context, token, rest, false)
   end
 
-  def parse_tokens(context, :start_tag, [{:string, str} = token | rest]) do
+  def parse_tokens(context, :start_tag, [{:string, _str} = token | rest]) do
     context
-    |> set_attribute_name(str)
     |> reset_attribute_value()
-    |> add_processed_token(token)
     |> reset_token_buffer()
     |> set_prev_status(:start_tag)
-    |> parse_tokens(:attribute_name, rest)
+    |> parse_attribute_name(token, rest)
   end
 
   def parse_tokens(context, :start_tag, [{:symbol, "$"} = token | rest]) do
     context
-    |> reset_token_buffer()
-    |> buffer_token(token)
     |> reset_attribute_value()
-    |> add_processed_token(token)
+    |> reset_token_buffer()
     |> set_prev_status(:start_tag)
-    |> parse_tokens(:attribute_name, rest)
+    |> parse_attribute_name(token, rest)
   end
 
   # --- TEXT ---
@@ -918,6 +916,13 @@ defmodule Hologram.Template.Parser do
 
   defp maybe_enable_script_mode(context, _tag_name), do: context
 
+  defp parse_attribute_name(context, token, rest) do
+    context
+    |> buffer_token(token)
+    |> add_processed_token(token)
+    |> parse_tokens(:attribute_name, rest)
+  end
+
   defp parse_block_end(context, block_name, token, rest) do
     context
     |> maybe_add_text_tag()
@@ -1041,10 +1046,6 @@ defmodule Hologram.Template.Parser do
 
   defp set_attribute_name(context) do
     %{context | attribute_name: encode_tokens(context.token_buffer)}
-  end
-
-  defp set_attribute_name(context, name) do
-    %{context | attribute_name: name}
   end
 
   defp set_block_name(context, name) do
