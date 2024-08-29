@@ -15,6 +15,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
   @static_dir Path.join(@test_dir, "static")
   @tmp_dir Path.join(@test_dir, "tmp")
 
+  defp generate_old_bundle(name) do
+    @static_dir
+    |> Path.join("#{name}.js")
+    |> File.write!(name)
+  end
+
   defp test_build_artifacts do
     test_dirs()
     test_js_deps()
@@ -45,6 +51,16 @@ defmodule Mix.Tasks.Compile.HologramTest do
     module_beam_path_plt = PLT.start()
     PLT.load(module_beam_path_plt, module_beam_path_plt_dump_path)
     assert PLT.get!(module_beam_path_plt, Module2) == :code.which(Module2)
+  end
+
+  defp test_old_build_static_artifacts_cleanup do
+    refute @static_dir
+           |> Path.join("old_bundle_1.js")
+           |> File.exists?()
+
+    refute @static_dir
+           |> Path.join("old_bundle_2.js")
+           |> File.exists?()
   end
 
   defp test_page_bundles do
@@ -131,7 +147,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test_build_artifacts()
 
     # Test case 2: when there are previous build artifacts
+    generate_old_bundle("old_bundle_1")
+    generate_old_bundle("old_bundle_2")
     run(opts)
     test_build_artifacts()
+    test_old_build_static_artifacts_cleanup()
   end
 end

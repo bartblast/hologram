@@ -85,13 +85,25 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     entry_files_info = [{"runtime", runtime_entry_file_path, "runtime"} | page_entry_files_info]
 
-    bundle_info = Compiler.bundle(entry_files_info, opts)
+    old_build_static_artifacts =
+      opts[:static_dir]
+      |> File.ls!()
+      |> Enum.map(fn file_name -> Path.join(opts[:static_dir], file_name) end)
+
+    bundles_info = Compiler.bundle(entry_files_info, opts)
+
+    new_build_static_artifacts =
+      Enum.reduce(bundles_info, [], fn bundle_info, acc ->
+        [bundle_info.static_bundle_path, bundle_info.static_source_map_path | acc]
+      end)
 
     {page_digest_plt, page_digest_plt_dump_path} =
-      Compiler.build_page_digest_plt(bundle_info, opts)
+      Compiler.build_page_digest_plt(bundles_info, opts)
 
     PLT.dump(page_digest_plt, page_digest_plt_dump_path)
     PLT.dump(module_beam_path_plt, module_beam_path_plt_dump_path)
+
+    Enum.each(old_build_static_artifacts -- new_build_static_artifacts, &File.rm!/1)
 
     Logger.info("Hologram: compiler finished")
 
