@@ -20,6 +20,7 @@ import Vdom from "./vdom.mjs";
 // Events
 import MouseEvent from "./events/mouse_event.mjs";
 import PointerEvent from "./events/pointer_event.mjs";
+import TransitionEvent from "./events/transition_event.mjs";
 
 import ManuallyPortedElixirCldrValidityU from "./elixir/cldr/validity/u.mjs";
 import ManuallyPortedElixirCode from "./elixir/code.mjs";
@@ -398,6 +399,12 @@ export default class Hologram {
       case "pointerdown":
       case "pointerup":
         return PointerEvent;
+
+      case "transitioncancel":
+      case "transitionend":
+      case "transitionrun":
+      case "transitionstart":
+        return TransitionEvent;
     }
   }
 
