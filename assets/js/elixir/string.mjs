@@ -11,7 +11,7 @@ const Elixir_String = {
     return Elixir_String["downcase/2"](string, Type.atom("default"));
   },
 
-  // TODO: support mode param
+  // TODO: support mode param (see: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/toLocaleLowerCase)
   "downcase/2": function (string, mode) {
     const allowedModes = ["default", "ascii", "greek", "turkic"];
 
