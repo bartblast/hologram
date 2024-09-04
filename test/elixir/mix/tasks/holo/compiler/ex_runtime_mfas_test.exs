@@ -1,4 +1,4 @@
-defmodule Mix.Tasks.Holo.CompilerExRuntimeMfasTest do
+defmodule Mix.Tasks.Holo.Compiler.ExRuntimeMfasTest do
   use Hologram.Test.BasicCase, async: true
   import ExUnit.CaptureIO
   alias Mix.Tasks.Holo.Compiler.ExRuntimeMfas, as: Task
