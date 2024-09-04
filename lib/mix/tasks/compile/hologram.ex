@@ -126,6 +126,5 @@ defmodule Mix.Tasks.Compile.Hologram do
       static_dir: Path.join([root_dir, "priv", "static", "hologram"]),
       tmp_dir: Path.join(build_dir, "tmp")
     ]
-    |> IO.inspect()
   end
 end
