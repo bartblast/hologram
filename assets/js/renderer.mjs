@@ -245,6 +245,27 @@ export default class Renderer {
     return "atom(cid)" in props.data;
   }
 
+  // Based on inject_props_from_context/3
+  // Deps: [:maps.from_list/1, :maps.get/2, :maps.merge/2]
+  static #injectPropsFromContext(propsFromTemplate, moduleRef, context) {
+    const propsFromContextTuples = moduleRef["__props__/0"]()
+      .data.filter((prop) => Renderer.#contextKey(prop.data[2]) !== null)
+      .map((prop) => {
+        const contextKey = Renderer.#contextKey(prop.data[2]);
+
+        return Type.tuple([
+          prop.data[0],
+          Erlang_Maps["get/2"](contextKey, context),
+        ]);
+      });
+
+    const propsFromContext = Erlang_Maps["from_list/1"](
+      Type.list(propsFromContextTuples),
+    );
+
+    return Erlang_Maps["merge/2"](propsFromTemplate, propsFromContext);
+  }
+
   // Deps: [Hologram.Component.__struct__/0, :maps.get/2]
   static #maybeInitComponent(cid, moduleRef, props) {
     let componentState = ComponentRegistry.getComponentState(cid);
@@ -289,27 +310,6 @@ export default class Renderer {
     }
 
     return [componentState, componentEmittedContext];
-  }
-
-  // Based on inject_props_from_context/3
-  // Deps: [:maps.from_list/1, :maps.get/2, :maps.merge/2]
-  static #injectPropsFromContext(propsFromTemplate, moduleRef, context) {
-    const propsFromContextTuples = moduleRef["__props__/0"]()
-      .data.filter((prop) => Renderer.#contextKey(prop.data[2]) !== null)
-      .map((prop) => {
-        const contextKey = Renderer.#contextKey(prop.data[2]);
-
-        return Type.tuple([
-          prop.data[0],
-          Erlang_Maps["get/2"](contextKey, context),
-        ]);
-      });
-
-    const propsFromContext = Erlang_Maps["from_list/1"](
-      Type.list(propsFromContextTuples),
-    );
-
-    return Erlang_Maps["merge/2"](propsFromTemplate, propsFromContext);
   }
 
   static #mergeNeighbouringTextNodes(nodes) {
