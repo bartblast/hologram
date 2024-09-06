@@ -8,6 +8,7 @@ import Hologram from "./hologram.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
+import Utils from "./utils.mjs";
 
 import {h as vnode} from "snabbdom";
 import vnodeToHtml from "snabbdom-to-html";
@@ -245,6 +246,35 @@ export default class Renderer {
     return "atom(cid)" in props.data;
   }
 
+  // Based on inject_default_prop_values/2
+  // Deps: [:lists.keyfind/3, :lists.keymember/3, :maps.is_key/2]
+  static #injectDefaultPropValues(props, moduleRef) {
+    return moduleRef["__props__/0"]().data.reduce((acc, prop) => {
+      if (
+        Type.isFalse(Erlang_Maps["is_key/2"](prop.data[0], acc)) &&
+        Type.isTrue(
+          Erlang_Lists["keymember/3"](
+            Type.atom("default"),
+            Type.integer(1),
+            prop.data[2],
+          ),
+        )
+      ) {
+        // Optimized (mutates map)
+        acc.data[Type.encodeMapKey(prop.data[0])] = [
+          prop.data[0],
+          Erlang_Lists["keyfind/3"](
+            Type.atom("default"),
+            Type.integer(1),
+            prop.data[2],
+          ).data[1],
+        ];
+      }
+
+      return acc;
+    }, Utils.cloneDeep(props));
+  }
+
   // Based on inject_props_from_context/3
   // Deps: [:maps.from_list/1, :maps.get/2, :maps.merge/2]
   static #injectPropsFromContext(propsFromTemplate, moduleRef, context) {
@@ -378,11 +408,13 @@ export default class Renderer {
 
     const expandedChildrenDom = Renderer.#expandSlots(childrenDom, slots);
 
-    const props = Renderer.#injectPropsFromContext(
+    let props = Renderer.#injectPropsFromContext(
       Renderer.#castProps(propsDom, moduleRef),
       moduleRef,
       context,
     );
+
+    props = Renderer.#injectDefaultPropValues(props, moduleRef);
 
     if (Renderer.#hasCidProp(props)) {
       return Renderer.#renderStatefulComponent(

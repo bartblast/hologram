@@ -60,6 +60,8 @@ import {defineModule61Fixture} from "./support/fixtures/renderer/module_61.mjs";
 import {defineModule62Fixture} from "./support/fixtures/renderer/module_62.mjs";
 import {defineModule63Fixture} from "./support/fixtures/renderer/module_63.mjs";
 import {defineModule64Fixture} from "./support/fixtures/renderer/module_64.mjs";
+import {defineModule65Fixture} from "./support/fixtures/renderer/module_65.mjs";
+import {defineModule66Fixture} from "./support/fixtures/renderer/module_66.mjs";
 import {defineModule7Fixture} from "./support/fixtures/renderer/module_7.mjs";
 import {defineModule8Fixture} from "./support/fixtures/renderer/module_8.mjs";
 import {defineModule9Fixture} from "./support/fixtures/renderer/module_9.mjs";
@@ -120,6 +122,8 @@ defineModule61Fixture();
 defineModule62Fixture();
 defineModule63Fixture();
 defineModule64Fixture();
+defineModule65Fixture();
+defineModule66Fixture();
 defineModule7Fixture();
 defineModule8Fixture();
 defineModule9Fixture();
@@ -1240,6 +1244,50 @@ describe("Renderer", () => {
 
       const result = Renderer.renderDom(node, context, slots, defaultTarget);
       const expected = ["my_prop = {1, 2, 3}"];
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("default value specified", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module65"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("prop_2"),
+            Type.keywordList([
+              [Type.atom("expression"), Type.tuple([Type.atom("xyz")])],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const expected = [
+        'component vars = %{prop_1: "abc", prop_2: :xyz, prop_3: 123}',
+      ];
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("default value not specified", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module66"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("prop_2"),
+            Type.keywordList([
+              [Type.atom("expression"), Type.tuple([Type.atom("xyz")])],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const expected = ["component vars = %{prop_2: :xyz}"];
 
       assert.deepStrictEqual(result, expected);
     });

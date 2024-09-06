@@ -92,8 +92,11 @@ defmodule Hologram.Compiler.CallGraph do
       {String.Chars, :to_string, 1},
       {:erlang, :binary_to_atom, 1},
       {:lists, :flatten, 1},
+      {:lists, :keyfind, 3},
+      {:lists, :keymember, 3},
       {:maps, :from_list, 1},
       {:maps, :get, 2},
+      {:maps, :is_key, 2},
       {:maps, :merge, 2}
     ],
     type_class: [
