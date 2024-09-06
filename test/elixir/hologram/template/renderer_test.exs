@@ -53,6 +53,8 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module6
   alias Hologram.Test.Fixtures.Template.Renderer.Module62
   alias Hologram.Test.Fixtures.Template.Renderer.Module64
+  alias Hologram.Test.Fixtures.Template.Renderer.Module65
+  alias Hologram.Test.Fixtures.Template.Renderer.Module66
   alias Hologram.Test.Fixtures.Template.Renderer.Module7
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
@@ -340,6 +342,19 @@ defmodule Hologram.Template.RendererTest do
 
       assert {~s'component vars = %{cid: &quot;my_component&quot;, prop_1: &quot;value_1&quot;, prop_2: 2, prop_3: &quot;aaa2bbb&quot;}',
               _} = render_dom(node, @env)
+    end
+
+    test "default value specified" do
+      node = {:component, Module65, [{"prop_2", [expression: {:xyz}]}], []}
+
+      assert {~s'component vars = %{prop_1: &quot;abc&quot;, prop_2: :xyz, prop_3: 123}', _} =
+               render_dom(node, @env)
+    end
+
+    test "default value not specified" do
+      node = {:component, Module66, [{"prop_2", [expression: {:xyz}]}], []}
+
+      assert {~s'component vars = %{prop_2: :xyz}', _} = render_dom(node, @env)
     end
   end
 

@@ -46,6 +46,7 @@ defmodule Hologram.Template.Renderer do
       props_dom
       |> cast_props(module)
       |> inject_props_from_context(module, env.context)
+      |> inject_default_prop_values(module)
 
     if has_cid_prop?(props) do
       render_stateful_component(module, props, expanded_children_dom, env.context)
@@ -262,14 +263,24 @@ defmodule Hologram.Template.Renderer do
     end
   end
 
-  defp inject_props_from_context(props_from_template, module, context) do
+  defp inject_default_prop_values(props, module) do
+    Enum.reduce(module.__props__(), props, fn {name, _type, opts}, acc ->
+      if !Map.has_key?(acc, name) && Keyword.has_key?(opts, :default) do
+        Map.put(acc, name, Keyword.get(opts, :default))
+      else
+        acc
+      end
+    end)
+  end
+
+  defp inject_props_from_context(props, module, context) do
     props_from_context =
       module.__props__()
       |> Enum.filter(fn {_name, _type, opts} -> opts[:from_context] end)
       |> Enum.map(fn {name, _type, opts} -> {name, context[opts[:from_context]]} end)
       |> Enum.into(%{})
 
-    Map.merge(props_from_template, props_from_context)
+    Map.merge(props, props_from_context)
   end
 
   defp interpolate_component_registry_js(html, component_registry) do
