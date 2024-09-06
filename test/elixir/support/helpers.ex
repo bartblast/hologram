@@ -317,6 +317,7 @@ defmodule Hologram.Test.Helpers do
   Sets up asset fixtures.
   """
   @spec setup_asset_fixtures(String.t()) :: [mapping: %{String.t() => String.t()}]
+  # credo:disable-for-lines:71 Credo.Check.Refactor.ABCSize
   def setup_asset_fixtures(static_dir) do
     clean_dir(static_dir)
 
