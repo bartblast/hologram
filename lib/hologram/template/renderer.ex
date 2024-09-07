@@ -330,6 +330,8 @@ defmodule Hologram.Template.Renderer do
 
   defp render_attribute(name, []), do: name
 
+  defp render_attribute(_name, expression: {nil}), do: ""
+
   defp render_attribute(name, value_dom) do
     {value_str, %{}} = render_dom(value_dom, %Env{node_type: :attribute})
 
@@ -347,9 +349,9 @@ defmodule Hologram.Template.Renderer do
   defp render_attributes(attrs_dom) do
     attrs_dom
     |> Enum.reject(fn {name, _value_dom} -> String.starts_with?(name, "$") end)
-    |> Enum.map_join(" ", fn {name, value_dom} ->
-      render_attribute(name, value_dom)
-    end)
+    |> Enum.map(fn {name, value_dom} -> render_attribute(name, value_dom) end)
+    |> Enum.reject(&(&1 == ""))
+    |> Enum.join(" ")
     |> StringUtils.prepend(" ")
   end
 
