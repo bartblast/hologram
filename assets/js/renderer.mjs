@@ -371,8 +371,19 @@ export default class Renderer {
   static #renderAttribute(name, valueDom) {
     const nameText = Bitstring.toText(name);
 
+    // []
     if (valueDom.data.length === 0) {
       return [nameText, true];
+    }
+
+    // [expression: {nil}]
+    if (
+      valueDom.data.length === 1 &&
+      Type.isTuple(valueDom.data[0].data[1]) &&
+      valueDom.data[0].data[1].data.length === 1 &&
+      Type.isNil(valueDom.data[0].data[1].data[0])
+    ) {
+      return [nameText, null];
     }
 
     const valueText = Renderer.#valueDomToText(valueDom);

@@ -12,6 +12,8 @@ import {
   vnode,
 } from "./support/helpers.mjs";
 
+import vnodeToHtml from "../../assets/node_modules/snabbdom-to-html/index.js";
+
 import {defineLayoutFixture} from "./support/fixtures/layout_fixture.mjs";
 import {defineModule1Fixture} from "./support/fixtures/renderer/module_1.mjs";
 import {defineModule10Fixture} from "./support/fixtures/renderer/module_10.mjs";
@@ -441,6 +443,42 @@ describe("Renderer", () => {
       const expected = vnode(
         "img",
         {attrs: {attr_1: true, attr_2: true}, on: {}},
+        [],
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("attributes that evaluate to nil are not rendered", () => {
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("img"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("attr_1"),
+            Type.keywordList([
+              [Type.atom("expression"), Type.tuple([Type.nil()])],
+            ]),
+          ]),
+          Type.tuple([
+            Type.bitstring("attr_2"),
+            Type.keywordList([[Type.atom("text"), Type.bitstring("value_2")]]),
+          ]),
+          Type.tuple([
+            Type.bitstring("attr_3"),
+            Type.keywordList([
+              [Type.atom("expression"), Type.tuple([Type.nil()])],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+
+      const expected = vnode(
+        "img",
+        {attrs: {attr_1: null, attr_2: "value_2", attr_3: null}, on: {}},
         [],
       );
 
