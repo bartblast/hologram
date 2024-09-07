@@ -209,7 +209,7 @@ defmodule Hologram.Template.RendererTest do
       assert render_dom(node, @env) == {~s(<img attr_1 attr_2 />), %{}}
     end
 
-    test "atributes that evaluate to nil are not rendered" do
+    test "attributes that evaluate to nil are not rendered" do
       node =
         {:element, "img",
          [
