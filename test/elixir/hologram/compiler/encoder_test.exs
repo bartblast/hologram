@@ -349,7 +349,7 @@ defmodule Hologram.Compiler.EncoderTest do
                """
                ((context) => {
                return Type.atom("nil");
-               })(Utils.cloneDeep(context))\
+               })(context)\
                """
     end
 
@@ -367,7 +367,7 @@ defmodule Hologram.Compiler.EncoderTest do
                """
                ((context) => {
                return Type.integer(1n);
-               })(Utils.cloneDeep(context))\
+               })(context)\
                """
     end
 
@@ -388,7 +388,7 @@ defmodule Hologram.Compiler.EncoderTest do
                ((context) => {
                Type.integer(1n);
                return Type.integer(2n);
-               })(Utils.cloneDeep(context))\
+               })(context)\
                """
     end
 
@@ -412,7 +412,7 @@ defmodule Hologram.Compiler.EncoderTest do
              window.hologram.return = Erlang["+/2"](context.vars.x, Interpreter.matchOperator(Type.integer(123n), Type.variablePattern("y"), context));
              Interpreter.updateVarsToMatchedValues(context);
              return window.hologram.return;
-             })(Utils.cloneDeep(context))\
+             })(context)\
              """
     end
 
@@ -434,7 +434,7 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == """
              ((context) => {
              return Erlang["+/2"](context.vars.x, context.vars.y);
-             })(Utils.cloneDeep(context))\
+             })(context)\
              """
     end
 
@@ -460,7 +460,7 @@ defmodule Hologram.Compiler.EncoderTest do
              Erlang["+/2"](context.vars.x, Interpreter.matchOperator(Type.integer(123n), Type.variablePattern("y"), context));
              Interpreter.updateVarsToMatchedValues(context);
              return Type.atom("ok");
-             })(Utils.cloneDeep(context))\
+             })(context)\
              """
     end
 
@@ -485,7 +485,7 @@ defmodule Hologram.Compiler.EncoderTest do
              ((context) => {
              Erlang["+/2"](context.vars.x, context.vars.y);
              return Type.atom("ok");
-             })(Utils.cloneDeep(context))\
+             })(context)\
              """
     end
 
@@ -519,7 +519,7 @@ defmodule Hologram.Compiler.EncoderTest do
              Interpreter.matchOperator(Type.integer(2n), Type.variablePattern("x"), context);
              Interpreter.updateVarsToMatchedValues(context);
              return Erlang["+/2"](context.vars.x, Type.integer(3n));
-             })(Utils.cloneDeep(context)))\
+             })(context))\
              """
     end
   end

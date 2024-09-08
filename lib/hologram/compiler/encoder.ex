@@ -174,7 +174,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode_ir(%IR.Block{} = block, context) do
-    "(#{encode_closure(block, context)})(Utils.cloneDeep(context))"
+    "(#{encode_closure(block, context)})(context)"
   end
 
   def encode_ir(%IR.Case{condition: condition, clauses: clauses}, context) do
