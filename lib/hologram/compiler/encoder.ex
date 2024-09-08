@@ -173,29 +173,8 @@ defmodule Hologram.Compiler.Encoder do
     |> StringUtils.wrap("Type.bitstring([", "])")
   end
 
-  def encode_ir(%IR.Block{expressions: exprs}, context) do
-    exprs =
-      if exprs == [] do
-        [%IR.AtomType{value: nil}]
-      else
-        exprs
-      end
-
-    expr_count = Enum.count(exprs)
-
-    body =
-      exprs
-      |> Enum.with_index()
-      |> Enum.map_join("", fn {expr, idx} ->
-        expr_js = encode_ir(expr, context)
-
-        last_expr? = idx == expr_count - 1
-        has_match_operator? = has_match_operator?(expr)
-
-        encode_block_expr(expr_js, last_expr?, has_match_operator?)
-      end)
-
-    "{#{body}\n}"
+  def encode_ir(%IR.Block{} = block, context) do
+    "(#{encode_closure(block, context)})(Utils.cloneDeep(context))"
   end
 
   def encode_ir(%IR.Case{condition: condition, clauses: clauses}, context) do
@@ -562,6 +541,31 @@ defmodule Hologram.Compiler.Encoder do
     Enum.map_join(segments, ", ", &encode_ir(&1, context))
   end
 
+  defp encode_block_body(%IR.Block{expressions: exprs}, context) do
+    exprs =
+      if exprs == [] do
+        [%IR.AtomType{value: nil}]
+      else
+        exprs
+      end
+
+    expr_count = Enum.count(exprs)
+
+    body =
+      exprs
+      |> Enum.with_index()
+      |> Enum.map_join("", fn {expr, idx} ->
+        expr_js = encode_ir(expr, context)
+
+        last_expr? = idx == expr_count - 1
+        has_match_operator? = has_match_operator?(expr)
+
+        encode_block_expr(expr_js, last_expr?, has_match_operator?)
+      end)
+
+    "{#{body}\n}"
+  end
+
   defp encode_block_expr(expr_js, last_expr?, has_match_operator?)
 
   defp encode_block_expr(expr_js, true, true) do
@@ -589,7 +593,13 @@ defmodule Hologram.Compiler.Encoder do
     "\n#{expr_js};"
   end
 
+  defp encode_closure(ir, context)
+
   defp encode_closure(nil, _context), do: "null"
+
+  defp encode_closure(%IR.Block{} = ir, context) do
+    "(context) => #{encode_block_body(ir, context)}"
+  end
 
   defp encode_closure(ir, context) do
     "(context) => #{encode_ir(ir, context)}"

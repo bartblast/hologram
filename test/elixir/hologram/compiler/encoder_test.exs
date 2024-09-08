@@ -347,9 +347,9 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir) ==
                """
-               {
+               ((context) => {
                return Type.atom("nil");
-               }\
+               })(Utils.cloneDeep(context))\
                """
     end
 
@@ -365,9 +365,9 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir) ==
                """
-               {
+               ((context) => {
                return Type.integer(1n);
-               }\
+               })(Utils.cloneDeep(context))\
                """
     end
 
@@ -385,10 +385,10 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir) ==
                """
-               {
+               ((context) => {
                Type.integer(1n);
                return Type.integer(2n);
-               }\
+               })(Utils.cloneDeep(context))\
                """
     end
 
@@ -408,11 +408,11 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) == """
-             {
+             ((context) => {
              window.hologram.return = Erlang["+/2"](context.vars.x, Interpreter.matchOperator(Type.integer(123n), Type.variablePattern("y"), context));
              Interpreter.updateVarsToMatchedValues(context);
              return window.hologram.return;
-             }\
+             })(Utils.cloneDeep(context))\
              """
     end
 
@@ -432,9 +432,9 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) == """
-             {
+             ((context) => {
              return Erlang["+/2"](context.vars.x, context.vars.y);
-             }\
+             })(Utils.cloneDeep(context))\
              """
     end
 
@@ -456,11 +456,11 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) == """
-             {
+             ((context) => {
              Erlang["+/2"](context.vars.x, Interpreter.matchOperator(Type.integer(123n), Type.variablePattern("y"), context));
              Interpreter.updateVarsToMatchedValues(context);
              return Type.atom("ok");
-             }\
+             })(Utils.cloneDeep(context))\
              """
     end
 
@@ -482,10 +482,10 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir) == """
-             {
+             ((context) => {
              Erlang["+/2"](context.vars.x, context.vars.y);
              return Type.atom("ok");
-             }\
+             })(Utils.cloneDeep(context))\
              """
     end
   end
@@ -2046,4 +2046,42 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_term!({:abc, 123}) == ~s/Type.tuple([Type.atom("abc"), Type.integer(123n)])/
     end
   end
+
+  # test "test" do
+  #   encode_code("""
+  #   defmodule Elixir.MyModule do
+  #     def test do
+  #       var = 234
+
+  #       :erlang.andalso(
+  #         :erlang.is_integer(var),
+  #         :erlang.andalso(:erlang.>=(var, 123), :erlang."=<"(var, 345))
+  #       )
+  #     end
+  #   end
+  #   """)
+  #   |> IO.puts()
+  # end
+
+  # test "test" do
+  #   encode_code("""
+  #   defmodule Elixir.MyModule do
+  #     def test do
+  #       add_custom(
+  #         1,
+  #         (
+  #           a = 5
+  #           b = 6
+  #           :erlang.+(a, b)
+  #         )
+  #       )
+  #     end
+
+  #     def add_custom(x, y) do
+  #       :erlang.+(x, y)
+  #     end
+  #   end
+  #   """)
+  #   |> IO.puts()
+  # end
 end
