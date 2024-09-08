@@ -488,6 +488,40 @@ defmodule Hologram.Compiler.EncoderTest do
              })(Utils.cloneDeep(context))\
              """
     end
+
+    test "as a function argument" do
+      # my_fun(1, (x = 2; x + 3))
+      ir = %IR.LocalFunctionCall{
+        function: :my_fun,
+        args: [
+          %IR.IntegerType{value: 1},
+          %IR.Block{
+            expressions: [
+              %IR.MatchOperator{
+                left: %IR.Variable{name: :x},
+                right: %IR.IntegerType{value: 2}
+              },
+              %IR.RemoteFunctionCall{
+                module: %IR.AtomType{value: :erlang},
+                function: :+,
+                args: [
+                  %IR.Variable{name: :x},
+                  %IR.IntegerType{value: 3}
+                ]
+              }
+            ]
+          }
+        ]
+      }
+
+      assert encode_ir(ir) == """
+             Erlang_["my_fun/2"](Type.integer(1n), ((context) => {
+             Interpreter.matchOperator(Type.integer(2n), Type.variablePattern("x"), context);
+             Interpreter.updateVarsToMatchedValues(context);
+             return Erlang["+/2"](context.vars.x, Type.integer(3n));
+             })(Utils.cloneDeep(context)))\
+             """
+    end
   end
 
   describe "case" do
@@ -2046,42 +2080,4 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_term!({:abc, 123}) == ~s/Type.tuple([Type.atom("abc"), Type.integer(123n)])/
     end
   end
-
-  # test "test" do
-  #   encode_code("""
-  #   defmodule Elixir.MyModule do
-  #     def test do
-  #       var = 234
-
-  #       :erlang.andalso(
-  #         :erlang.is_integer(var),
-  #         :erlang.andalso(:erlang.>=(var, 123), :erlang."=<"(var, 345))
-  #       )
-  #     end
-  #   end
-  #   """)
-  #   |> IO.puts()
-  # end
-
-  # test "test" do
-  #   encode_code("""
-  #   defmodule Elixir.MyModule do
-  #     def test do
-  #       add_custom(
-  #         1,
-  #         (
-  #           a = 5
-  #           b = 6
-  #           :erlang.+(a, b)
-  #         )
-  #       )
-  #     end
-
-  #     def add_custom(x, y) do
-  #       :erlang.+(x, y)
-  #     end
-  #   end
-  #   """)
-  #   |> IO.puts()
-  # end
 end
