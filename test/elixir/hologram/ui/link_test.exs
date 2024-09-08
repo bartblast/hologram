@@ -19,4 +19,16 @@ defmodule Hologram.UI.LinkTest do
     assert render_markup(~H"<Link to={Module2, abc: 123, xyz: 987}>my anchor text</Link>") ==
              ~s'<a href="/hologram-test-fixtures-ui-link-module2/123/987">my anchor text</a>'
   end
+
+  describe "class prop" do
+    test "without class prop" do
+      assert render_markup(~H"<Link to={Module1}>my anchor text</Link>") ==
+               ~s'<a href="/hologram-test-fixtures-ui-link-module1">my anchor text</a>'
+    end
+
+    test "with class prop" do
+      assert render_markup(~H'<Link to={Module1} class="my_class">my anchor text</Link>') ==
+               ~s'<a href="/hologram-test-fixtures-ui-link-module1" class="my_class">my anchor text</a>'
+    end
+  end
 end
