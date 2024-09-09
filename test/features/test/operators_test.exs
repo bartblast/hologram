@@ -14,6 +14,10 @@ defmodule HologramFeatureTests.OperatorsTest do
   @list_a [1, 2, 3]
   @list_b [2, 3, 4]
 
+  @map_a %{a: @integer_a, b: @integer_b}
+
+  @range_a @integer_a..@integer_c
+
   @string_a "aaa"
   @string_b "bbb"
 
@@ -116,11 +120,25 @@ defmodule HologramFeatureTests.OperatorsTest do
       |> assert_text(css("#result"), inspect(!wrap_term(@boolean_a)))
     end
 
-    feature "in", %{session: session} do
+    feature "in (list)", %{session: session} do
       session
       |> visit(OperatorsPage)
-      |> click(css("button[id='in']"))
+      |> click(css("button[id='in (list)']"))
       |> assert_text(css("#result"), inspect(@integer_a in @list_a))
+    end
+
+    feature "in (map)", %{session: session} do
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='in (map)']"))
+      |> assert_text(css("#result"), inspect({:a, @integer_a} in @map_a))
+    end
+
+    feature "in (range)", %{session: session} do
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='in (range)']"))
+      |> assert_text(css("#result"), inspect(@integer_b in @range_a))
     end
 
     feature "not in", %{session: session} do
