@@ -1401,19 +1401,39 @@ describe("Erlang", () => {
   });
 
   describe("atom_to_binary/1", () => {
-    const atom_to_binary = Erlang["atom_to_binary/1"];
+    it("delegates to atom_to_binary/2", () => {
+      const atom = Type.atom("全息图");
+      const result = Erlang["atom_to_binary/1"](atom);
+      const expected = Erlang["atom_to_binary/2"](atom, Type.atom("utf8"));
 
-    it("converts atom to (binary) bitstring", () => {
-      const result = atom_to_binary(Type.atom("abc"));
+      assert.deepStrictEqual(result, expected);
+    });
+  });
 
-      assert.deepStrictEqual(result, Type.bitstring("abc"));
+  describe("atom_to_binary/2", () => {
+    const atom = Type.atom("全息图");
+    const encoding = Type.atom("utf8");
+    const testedFun = Erlang["atom_to_binary/2"];
+
+    it("utf8 encoding", () => {
+      const result = testedFun(atom, encoding);
+
+      assert.deepStrictEqual(result, Type.bitstring("全息图"));
     });
 
-    it("raises ArgumentError if the argument is not an atom", () => {
+    it("raises ArgumentError if the first arg is not an atom", () => {
       assertBoxedError(
-        () => atom_to_binary(Type.integer(123)),
+        () => testedFun(Type.integer(123), encoding),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    });
+
+    it("raises ArgumentError if the second arg is not equal to :utf8", () => {
+      assert.throw(
+        () => testedFun(atom, Type.atom("latin1")),
+        HologramInterpreterError,
+        "encodings other than utf8 are not yet implemented in Hologram",
       );
     });
   });

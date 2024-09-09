@@ -16,6 +16,7 @@ defmodule Hologram.Compiler.CallGraph do
     {{:erlang, :"=<", 2}, {:erlang, :==, 2}},
     {{:erlang, :>=, 2}, {:erlang, :==, 2}},
     {{:erlang, :>=, 2}, {:erlang, :>, 2}},
+    {{:erlang, :atom_to_binary, 1}, {:erlang, :atom_to_binary, 2}},
     {{:erlang, :binary_to_atom, 1}, {:erlang, :binary_to_atom, 2}},
     {{:erlang, :binary_to_existing_atom, 1}, {:erlang, :binary_to_atom, 1}},
     {{:erlang, :binary_to_existing_atom, 2}, {:erlang, :binary_to_atom, 2}},

@@ -256,15 +256,31 @@ const Erlang = {
 
   // Start atom_to_binary/1
   "atom_to_binary/1": (atom) => {
+    return Erlang["atom_to_binary/2"](atom, Type.atom("utf8"));
+  },
+  // End atom_to_binary/1
+  // Deps: [:erlang.atom_to_binary/2]
+
+  // Start atom_to_binary/2
+  "atom_to_binary/2": (atom, encoding) => {
     if (!Type.isAtom(atom)) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(1, "not an atom"),
       );
     }
 
+    // TODO: implement encoding argument validation
+
+    // TODO: implement other encodings for encoding param
+    if (!Interpreter.isStrictlyEqual(encoding, Type.atom("utf8"))) {
+      throw new HologramInterpreterError(
+        "encodings other than utf8 are not yet implemented in Hologram",
+      );
+    }
+
     return Type.bitstring(atom.value);
   },
-  // End atom_to_binary/1
+  // End atom_to_binary/2
   // Deps: []
 
   // Start atom_to_list/1
