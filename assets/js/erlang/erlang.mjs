@@ -451,6 +451,13 @@ const Erlang = {
   // End is_bitstring/1
   // Deps: []
 
+  // Start is_boolean/1
+  "is_boolean/1": (term) => {
+    return Type.boolean(Type.isBoolean(term));
+  },
+  // End is_boolean/1
+  // Deps: []
+
   // Start is_float/1
   "is_float/1": (term) => {
     return Type.boolean(Type.isFloat(term));

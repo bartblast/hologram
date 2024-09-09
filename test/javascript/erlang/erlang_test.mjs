@@ -1783,6 +1783,18 @@ describe("Erlang", () => {
     });
   });
 
+  describe("is_boolean/1", () => {
+    const testedFun = Erlang["is_boolean/1"];
+
+    it("boolean", () => {
+      assertBoxedTrue(testedFun(Type.boolean(true)));
+    });
+
+    it("non-boolean", () => {
+      assertBoxedFalse(testedFun(Type.nil()));
+    });
+  });
+
   describe("is_float/1", () => {
     const is_float = Erlang["is_float/1"];
 
