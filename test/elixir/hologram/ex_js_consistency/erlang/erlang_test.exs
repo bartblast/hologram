@@ -1429,6 +1429,16 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "is_boolean/1" do
+    test "boolean" do
+      assert :erlang.is_boolean(true) == true
+    end
+
+    test "non-boolean" do
+      assert :erlang.is_boolean(nil) == false
+    end
+  end
+
   describe "is_float/1" do
     test "float" do
       assert :erlang.is_float(1.0) == true
