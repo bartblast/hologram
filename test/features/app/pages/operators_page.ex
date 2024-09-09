@@ -54,7 +54,9 @@ defmodule HologramFeatureTests.OperatorsPage do
       <button id="in (list)" $click="in (list)"> in (list) </button>
       <button id="in (map)" $click="in (map)"> in (map) </button>
       <button id="in (range)" $click="in (range)"> in (range) </button>
-      <button id="not in" $click="not in"> not in </button>
+      <button id="not in (list)" $click="not in (list)"> not in (list) </button>
+      <button id="not in (map)" $click="not in (map)"> not in (map) </button>
+      <button id="not in (range)" $click="not in (range)"> not in (range) </button>
       <button id="@" $click="@"> @ </button>
       <button id=".." $click=".."> .. </button>
       <button id="..//" $click="..//"> ..// </button>
@@ -164,8 +166,16 @@ defmodule HologramFeatureTests.OperatorsPage do
     put_state(component, :result, @integer_b in @range_a)
   end
 
-  def action(:"not in", _params, component) do
+  def action(:"not in (list)", _params, component) do
     put_state(component, :result, @integer_a not in @list_a)
+  end
+
+  def action(:"not in (map)", _params, component) do
+    put_state(component, :result, {:a, @integer_a} not in @map_a)
+  end
+
+  def action(:"not in (range)", _params, component) do
+    put_state(component, :result, @integer_b not in @range_a)
   end
 
   def action(:@, _params, component) do

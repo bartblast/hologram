@@ -141,11 +141,25 @@ defmodule HologramFeatureTests.OperatorsTest do
       |> assert_text(css("#result"), inspect(@integer_b in @range_a))
     end
 
-    feature "not in", %{session: session} do
+    feature "not in (list)", %{session: session} do
       session
       |> visit(OperatorsPage)
-      |> click(css("button[id='not in']"))
+      |> click(css("button[id='not in (list)']"))
       |> assert_text(css("#result"), inspect(@integer_a not in @list_a))
+    end
+
+    feature "not in (map)", %{session: session} do
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='not in (map)']"))
+      |> assert_text(css("#result"), inspect({:a, @integer_a} not in @map_a))
+    end
+
+    feature "not in (range)", %{session: session} do
+      session
+      |> visit(OperatorsPage)
+      |> click(css("button[id='not in (range)']"))
+      |> assert_text(css("#result"), inspect(@integer_b not in @range_a))
     end
 
     feature "@", %{session: session} do
