@@ -348,7 +348,7 @@ defmodule Hologram.Compiler.CallGraph do
     |> Graph.add_edges([
       {page_module, {page_module, :__layout_module__, 0}},
       {page_module, {page_module, :__layout_props__, 0}},
-      {page_module, {page_module, :__props__, 0}},
+      {page_module, {page_module, :__params__, 0}},
       {page_module, {page_module, :action, 3}},
       {page_module, {page_module, :template, 0}},
       {page_module, {layout_module, :__props__, 0}},
@@ -633,7 +633,7 @@ defmodule Hologram.Compiler.CallGraph do
 
   # __props__/0 and __route__/0 functions are needed to build page link href (e.g. in Hologram.UI.Link component).
   defp add_page_call_graph_edges(call_graph, module) do
-    add_edge(call_graph, module, {module, :__props__, 0})
+    add_edge(call_graph, module, {module, :__params__, 0})
     add_edge(call_graph, module, {module, :__route__, 0})
   end
 
