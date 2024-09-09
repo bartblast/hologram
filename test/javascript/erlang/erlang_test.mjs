@@ -1429,6 +1429,7 @@ describe("Erlang", () => {
       );
     });
 
+    // TODO: remove this test when other encodings are implemented
     it("raises ArgumentError if the second arg is not equal to :utf8", () => {
       assert.throw(
         () => testedFun(atom, Type.atom("latin1")),

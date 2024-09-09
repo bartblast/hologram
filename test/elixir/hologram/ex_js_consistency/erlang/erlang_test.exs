@@ -1214,15 +1214,21 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   if SystemUtils.otp_version() >= 23 do
     describe "atom_to_binary/1" do
-      test "converts atom to (binary) bitstring" do
-        assert :erlang.atom_to_binary(:abc) == <<"abc">>
+      test "delegates to atom_to_binary/2" do
+        assert :erlang.atom_to_binary(:全息图) == :erlang.atom_to_binary(:全息图, :utf8)
       end
+    end
+  end
 
-      test "raises ArgumentError if the argument is not an atom" do
-        assert_error ArgumentError,
-                     build_argument_error_msg(1, "not an atom"),
-                     {:erlang, :atom_to_binary, [123]}
-      end
+  describe "atom_to_binary/2" do
+    test "utf8 encoding" do
+      assert :erlang.atom_to_binary(:全息图, :utf8) == "全息图"
+    end
+
+    test "raises ArgumentError if the first arg is not an atom" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an atom"),
+                   {:erlang, :atom_to_binary, [123, :utf8]}
     end
   end
 
