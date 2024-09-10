@@ -8,6 +8,9 @@ defmodule Hologram.LiveReload do
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
 
+  # in milliseconds
+  @debounce_delay 1_000
+
   @doc """
   Starts live reload process.
   """
@@ -25,7 +28,7 @@ defmodule Hologram.LiveReload do
 
     FileSystem.subscribe(pid)
 
-    {:ok, Reflection.phoenix_endpoint()}
+    {:ok, %{endpoint: Reflection.phoenix_endpoint(), timer_ref: nil}}
   end
 
   @impl GenServer
@@ -39,7 +42,16 @@ defmodule Hologram.LiveReload do
   end
 
   @impl GenServer
-  def handle_info({:file_event, _pid, {modified_file_path, _events}}, endpoint) do
+  def handle_info({:file_event, _pid, {file_path, _events}}, state) do
+    if state.timer_ref, do: Process.cancel_timer(state.timer_ref)
+
+    timer_ref = Process.send_after(self(), {:debounced_reload, file_path}, @debounce_delay)
+
+    {:noreply, %{state | timer_ref: timer_ref}}
+  end
+
+  @impl GenServer
+  def handle_info({:debounced_reload, modified_file_path}, state) do
     recompiled_file_path =
       case Path.extname(modified_file_path) do
         ".ex" ->
@@ -54,22 +66,26 @@ defmodule Hologram.LiveReload do
       end
 
     if recompiled_file_path do
-      Code.put_compiler_option(:ignore_module_conflict, true)
-      Kernel.ParallelCompiler.compile_to_path([recompiled_file_path], Mix.Project.compile_path())
-      Code.put_compiler_option(:ignore_module_conflict, false)
-
-      # credo:disable-for-next-line Credo.Check.Design.AliasUsage
-      Mix.Tasks.Compile.Hologram.run([])
-
-      PageModuleResolver.reload()
-      PathRegistry.reload()
-      ManifestCache.reload()
-      PageDigestRegistry.reload()
-
-      endpoint.broadcast!("hologram", "reload", %{})
+      reload(recompiled_file_path, state.endpoint)
     end
 
-    {:noreply, endpoint}
+    {:noreply, %{state | timer_ref: nil}}
+  end
+
+  defp reload(file_path, endpoint) do
+    Code.put_compiler_option(:ignore_module_conflict, true)
+    Kernel.ParallelCompiler.compile_to_path([file_path], Mix.Project.compile_path())
+    Code.put_compiler_option(:ignore_module_conflict, false)
+
+    # credo:disable-for-next-line Credo.Check.Design.AliasUsage
+    Mix.Tasks.Compile.Hologram.run([])
+
+    PageModuleResolver.reload()
+    PathRegistry.reload()
+    ManifestCache.reload()
+    PageDigestRegistry.reload()
+
+    endpoint.broadcast!("hologram", "reload", %{})
   end
 
   defp watched_dirs do
