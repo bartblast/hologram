@@ -218,16 +218,93 @@ describe("Vdom", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    describe("script element vnode key", () => {
-      it("not a script element", () => {
+    describe("link element vnode key", () => {
+      it("not a link element", () => {
         const result = Vdom.from(
-          '<html><body><img src="my_source" /></body></html>',
+          '<html><body><a href="my_href"></a></body></html>',
         );
 
         const expected = vnode("html", {attrs: {}}, [
           vnode("head", {attrs: {}}, []),
           vnode("body", {attrs: {}}, [
-            vnode("img", {attrs: {src: "my_source"}}, []),
+            vnode("a", {attrs: {href: "my_href"}}, []),
+          ]),
+        ]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("link element without href attribute", () => {
+        const result = Vdom.from(
+          '<html><head><link ref="stylesheet" /></head></html>',
+        );
+
+        const expected = vnode("html", {attrs: {}}, [
+          vnode("head", {attrs: {}}, [
+            vnode("link", {attrs: {ref: "stylesheet"}}, []),
+          ]),
+          vnode("body", {attrs: {}}, []),
+        ]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("link element with empty string href attribute", () => {
+        const result = Vdom.from('<html><head><link href="" /></head></html>');
+
+        const expected = vnode("html", {attrs: {}}, [
+          vnode("head", {attrs: {}}, [
+            vnode("link", {attrs: {href: true}}, []),
+          ]),
+          vnode("body", {attrs: {}}, []),
+        ]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("link element with boolean href attribute", () => {
+        const result = Vdom.from("<html><head><link href /></head></html>");
+
+        const expected = vnode("html", {attrs: {}}, [
+          vnode("head", {attrs: {}}, [
+            vnode("link", {attrs: {href: true}}, []),
+          ]),
+          vnode("body", {attrs: {}}, []),
+        ]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("link element with non-empty href attribute", () => {
+        const result = Vdom.from(
+          '<html><head><link href="my_href" /></head></html>',
+        );
+
+        const expected = vnode("html", {attrs: {}}, [
+          vnode("head", {attrs: {}}, [
+            vnode(
+              "link",
+              {key: "__hologramLink__:my_href", attrs: {href: "my_href"}},
+              [],
+            ),
+          ]),
+          vnode("body", {attrs: {}}, []),
+        ]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+    });
+
+    describe("script element vnode key", () => {
+      it("not a script element", () => {
+        const result = Vdom.from(
+          '<html><body><img src="my_src" /></body></html>',
+        );
+
+        const expected = vnode("html", {attrs: {}}, [
+          vnode("head", {attrs: {}}, []),
+          vnode("body", {attrs: {}}, [
+            vnode("img", {attrs: {src: "my_src"}}, []),
           ]),
         ]);
 
@@ -281,14 +358,14 @@ describe("Vdom", () => {
 
       it("script element with non-empty src attribute", () => {
         const result = Vdom.from(
-          '<html><head><script src="my_source"></script></head></html>',
+          '<html><head><script src="my_src"></script></head></html>',
         );
 
         const expected = vnode("html", {attrs: {}}, [
           vnode("head", {attrs: {}}, [
             vnode(
               "script",
-              {key: "__hologramScript__:my_source", attrs: {src: "my_source"}},
+              {key: "__hologramScript__:my_src", attrs: {src: "my_src"}},
               [],
             ),
           ]),
