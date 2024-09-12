@@ -15,13 +15,10 @@ registerWebApis();
 describe("Vdom", () => {
   describe("addKeysToLinkAndScriptVnodes()", () => {
     it("element node that is not a link or script", () => {
-      const node = vnode("img", {attrs: {src: "my_source"}}, []);
+      const node = vnode("img", {attrs: {src: "my_src"}}, []);
       Vdom.addKeysToLinkAndScriptVnodes(node);
 
-      assert.deepStrictEqual(
-        node,
-        vnode("img", {attrs: {src: "my_source"}}, []),
-      );
+      assert.deepStrictEqual(node, vnode("img", {attrs: {src: "my_src"}}, []));
     });
 
     it("text node", () => {
@@ -91,7 +88,7 @@ describe("Vdom", () => {
       it("nested link nodes", () => {
         const node = vnode("div", {}, [
           vnode("link", {attrs: {href: "my_link_1"}}, []),
-          vnode("img", {attrs: {src: "my_source"}}, []),
+          vnode("img", {attrs: {src: "my_src"}}, []),
           vnode("link", {attrs: {href: "my_link_2"}}, []),
         ]);
 
@@ -108,7 +105,7 @@ describe("Vdom", () => {
               },
               [],
             ),
-            vnode("img", {attrs: {src: "my_source"}}, []),
+            vnode("img", {attrs: {src: "my_src"}}, []),
             vnode(
               "link",
               {
@@ -148,7 +145,7 @@ describe("Vdom", () => {
       });
 
       it("with non-empty string src attribute", () => {
-        const node = vnode("script", {attrs: {src: "my_script"}}, []);
+        const node = vnode("script", {attrs: {src: "my_src"}}, []);
         Vdom.addKeysToLinkAndScriptVnodes(node);
 
         assert.deepStrictEqual(
@@ -156,8 +153,8 @@ describe("Vdom", () => {
           vnode(
             "script",
             {
-              key: "__hologramScript__:my_script",
-              attrs: {src: "my_script"},
+              key: "__hologramScript__:my_src",
+              attrs: {src: "my_src"},
             },
             [],
           ),
@@ -166,9 +163,9 @@ describe("Vdom", () => {
 
       it("nested script nodes", () => {
         const node = vnode("div", {}, [
-          vnode("script", {attrs: {src: "my_script_1"}}, []),
-          vnode("img", {attrs: {src: "my_source"}}, []),
-          vnode("script", {attrs: {src: "my_script_2"}}, []),
+          vnode("script", {attrs: {src: "my_src_1"}}, []),
+          vnode("img", {attrs: {src: "my_src"}}, []),
+          vnode("script", {attrs: {src: "my_src_2"}}, []),
         ]);
 
         Vdom.addKeysToLinkAndScriptVnodes(node);
@@ -179,17 +176,17 @@ describe("Vdom", () => {
             vnode(
               "script",
               {
-                key: "__hologramScript__:my_script_1",
-                attrs: {src: "my_script_1"},
+                key: "__hologramScript__:my_src_1",
+                attrs: {src: "my_src_1"},
               },
               [],
             ),
-            vnode("img", {attrs: {src: "my_source"}}, []),
+            vnode("img", {attrs: {src: "my_src"}}, []),
             vnode(
               "script",
               {
-                key: "__hologramScript__:my_script_2",
-                attrs: {src: "my_script_2"},
+                key: "__hologramScript__:my_src_2",
+                attrs: {src: "my_src_2"},
               },
               [],
             ),
