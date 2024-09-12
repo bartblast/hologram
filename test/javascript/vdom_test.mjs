@@ -13,10 +13,10 @@ defineGlobalErlangAndElixirModules();
 registerWebApis();
 
 describe("Vdom", () => {
-  describe("addKeysToScriptVnodes()", () => {
-    it("element node that is not a script", () => {
+  describe("addKeysToLinkAndScriptVnodes()", () => {
+    it("element node that is not a link or script", () => {
       const node = vnode("img", {attrs: {src: "my_source"}}, []);
-      Vdom.addKeysToScriptVnodes(node);
+      Vdom.addKeysToLinkAndScriptVnodes(node);
 
       assert.deepStrictEqual(
         node,
@@ -34,7 +34,7 @@ describe("Vdom", () => {
         key: undefined,
       };
 
-      Vdom.addKeysToScriptVnodes(node);
+      Vdom.addKeysToLinkAndScriptVnodes(node);
 
       assert.deepStrictEqual(node, {
         sel: undefined,
@@ -46,78 +46,156 @@ describe("Vdom", () => {
       });
     });
 
-    it("script element without attrs field", () => {
-      const node = vnode("script", {}, []);
-      Vdom.addKeysToScriptVnodes(node);
+    describe("link element", () => {
+      it("without attrs field", () => {
+        const node = vnode("link", {}, []);
+        Vdom.addKeysToLinkAndScriptVnodes(node);
 
-      assert.deepStrictEqual(node, vnode("script", {}, []));
-    });
+        assert.deepStrictEqual(node, vnode("link", {}, []));
+      });
 
-    it("script element without src attribute (inline script), but with some other attribute", () => {
-      const node = vnode("script", {attrs: {type: "text/javascript"}}, []);
-      Vdom.addKeysToScriptVnodes(node);
+      it("without href attribute, but with some other attribute", () => {
+        const node = vnode("link", {attrs: {rel: "stylesheet"}}, []);
+        Vdom.addKeysToLinkAndScriptVnodes(node);
 
-      assert.deepStrictEqual(
-        node,
-        vnode("script", {attrs: {type: "text/javascript"}}, []),
-      );
-    });
+        assert.deepStrictEqual(
+          node,
+          vnode("link", {attrs: {rel: "stylesheet"}}, []),
+        );
+      });
 
-    it("script element with boolean src attribute", () => {
-      const node = vnode("script", {attrs: {src: true}}, []);
-      Vdom.addKeysToScriptVnodes(node);
+      it("with boolean href attribute", () => {
+        const node = vnode("link", {attrs: {href: true}}, []);
+        Vdom.addKeysToLinkAndScriptVnodes(node);
 
-      assert.deepStrictEqual(node, vnode("script", {attrs: {src: true}}, []));
-    });
+        assert.deepStrictEqual(node, vnode("link", {attrs: {href: true}}, []));
+      });
 
-    it("script element with non-empty string src attribute", () => {
-      const node = vnode("script", {attrs: {src: "my_script"}}, []);
-      Vdom.addKeysToScriptVnodes(node);
+      it("with non-empty string href attribute", () => {
+        const node = vnode("link", {attrs: {href: "my_link"}}, []);
+        Vdom.addKeysToLinkAndScriptVnodes(node);
 
-      assert.deepStrictEqual(
-        node,
-        vnode(
-          "script",
-          {
-            key: "__hologramScript__:my_script",
-            attrs: {src: "my_script"},
-          },
-          [],
-        ),
-      );
-    });
-
-    it("nested script nodes", () => {
-      const node = vnode("div", {}, [
-        vnode("script", {attrs: {src: "my_script_1"}}, []),
-        vnode("img", {attrs: {src: "my_source"}}, []),
-        vnode("script", {attrs: {src: "my_script_2"}}, []),
-      ]);
-
-      Vdom.addKeysToScriptVnodes(node);
-
-      assert.deepStrictEqual(
-        node,
-        vnode("div", {}, [
+        assert.deepStrictEqual(
+          node,
           vnode(
-            "script",
+            "link",
             {
-              key: "__hologramScript__:my_script_1",
-              attrs: {src: "my_script_1"},
+              key: "__hologramLink__:my_link",
+              attrs: {href: "my_link"},
             },
             [],
           ),
+        );
+      });
+
+      it("nested link nodes", () => {
+        const node = vnode("div", {}, [
+          vnode("link", {attrs: {href: "my_link_1"}}, []),
           vnode("img", {attrs: {src: "my_source"}}, []),
+          vnode("link", {attrs: {href: "my_link_2"}}, []),
+        ]);
+
+        Vdom.addKeysToLinkAndScriptVnodes(node);
+
+        assert.deepStrictEqual(
+          node,
+          vnode("div", {}, [
+            vnode(
+              "link",
+              {
+                key: "__hologramLink__:my_link_1",
+                attrs: {href: "my_link_1"},
+              },
+              [],
+            ),
+            vnode("img", {attrs: {src: "my_source"}}, []),
+            vnode(
+              "link",
+              {
+                key: "__hologramLink__:my_link_2",
+                attrs: {href: "my_link_2"},
+              },
+              [],
+            ),
+          ]),
+        );
+      });
+    });
+
+    describe("script element", () => {
+      it("without attrs field", () => {
+        const node = vnode("script", {}, []);
+        Vdom.addKeysToLinkAndScriptVnodes(node);
+
+        assert.deepStrictEqual(node, vnode("script", {}, []));
+      });
+
+      it("without src attribute (inline script), but with some other attribute", () => {
+        const node = vnode("script", {attrs: {type: "text/javascript"}}, []);
+        Vdom.addKeysToLinkAndScriptVnodes(node);
+
+        assert.deepStrictEqual(
+          node,
+          vnode("script", {attrs: {type: "text/javascript"}}, []),
+        );
+      });
+
+      it("with boolean src attribute", () => {
+        const node = vnode("script", {attrs: {src: true}}, []);
+        Vdom.addKeysToLinkAndScriptVnodes(node);
+
+        assert.deepStrictEqual(node, vnode("script", {attrs: {src: true}}, []));
+      });
+
+      it("with non-empty string src attribute", () => {
+        const node = vnode("script", {attrs: {src: "my_script"}}, []);
+        Vdom.addKeysToLinkAndScriptVnodes(node);
+
+        assert.deepStrictEqual(
+          node,
           vnode(
             "script",
             {
-              key: "__hologramScript__:my_script_2",
-              attrs: {src: "my_script_2"},
+              key: "__hologramScript__:my_script",
+              attrs: {src: "my_script"},
             },
             [],
           ),
-        ]),
-      );
+        );
+      });
+
+      it("nested script nodes", () => {
+        const node = vnode("div", {}, [
+          vnode("script", {attrs: {src: "my_script_1"}}, []),
+          vnode("img", {attrs: {src: "my_source"}}, []),
+          vnode("script", {attrs: {src: "my_script_2"}}, []),
+        ]);
+
+        Vdom.addKeysToLinkAndScriptVnodes(node);
+
+        assert.deepStrictEqual(
+          node,
+          vnode("div", {}, [
+            vnode(
+              "script",
+              {
+                key: "__hologramScript__:my_script_1",
+                attrs: {src: "my_script_1"},
+              },
+              [],
+            ),
+            vnode("img", {attrs: {src: "my_source"}}, []),
+            vnode(
+              "script",
+              {
+                key: "__hologramScript__:my_script_2",
+                attrs: {src: "my_script_2"},
+              },
+              [],
+            ),
+          ]),
+        );
+      });
     });
   });
 

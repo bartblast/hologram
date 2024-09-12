@@ -3,19 +3,34 @@
 import {h as vnode} from "snabbdom";
 
 export default class Vdom {
-  static addKeysToScriptVnodes(node) {
-    if (
-      node.sel === "script" &&
-      node.data?.attrs?.src &&
-      typeof node.data.attrs.src === "string"
-    ) {
-      node.key = `__hologramScript__:${node.data.attrs.src}`;
-      node.data.key = node.key;
+  static addKeysToLinkAndScriptVnodes(node) {
+    let key;
+
+    switch (node.sel) {
+      case "link":
+        if (
+          node.data?.attrs?.href &&
+          typeof node.data.attrs.href === "string"
+        ) {
+          key = `__hologramLink__:${node.data.attrs.href}`;
+        }
+        break;
+
+      case "script":
+        if (node.data?.attrs?.src && typeof node.data.attrs.src === "string") {
+          key = `__hologramScript__:${node.data.attrs.src}`;
+        }
+        break;
+    }
+
+    if (key) {
+      node.key = key;
+      node.data.key = key;
     }
 
     if (Array.isArray(node.children)) {
       for (const childNode of node.children) {
-        Vdom.addKeysToScriptVnodes(childNode);
+        Vdom.addKeysToLinkAndScriptVnodes(childNode);
       }
     }
   }

@@ -449,7 +449,7 @@ export default class Hologram {
     });
 
     Hologram.virtualDocument = toVNode(document.documentElement);
-    Vdom.addKeysToScriptVnodes(Hologram.virtualDocument);
+    Vdom.addKeysToLinkAndScriptVnodes(Hologram.virtualDocument);
 
     console.inspect = (term) => console.log(Interpreter.inspect(term));
 
