@@ -65,7 +65,9 @@ export default class Vdom {
 
     let data;
 
-    if (tagName === "script" && typeof attrs.src === "string") {
+    if (tagName === "link" && typeof attrs.href === "string") {
+      data = {key: `__hologramLink__:${attrs.href}`, attrs: attrs};
+    } else if (tagName === "script" && typeof attrs.src === "string") {
       data = {key: `__hologramScript__:${attrs.src}`, attrs: attrs};
     } else {
       data = {attrs: attrs};

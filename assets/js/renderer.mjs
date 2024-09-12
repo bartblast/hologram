@@ -470,20 +470,20 @@ export default class Renderer {
       defaultTarget,
     );
 
-    let data;
+    const data = {attrs: attrsVdom, on: eventListenersVdom};
 
     if (
+      tagName === "link" &&
+      typeof attrsVdom.href === "string" &&
+      attrsVdom.href
+    ) {
+      data.key = `__hologramLink__:${attrsVdom.href}`;
+    } else if (
       tagName === "script" &&
       typeof attrsVdom.src === "string" &&
       attrsVdom.src
     ) {
-      data = {
-        key: `__hologramScript__:${attrsVdom.src}`,
-        attrs: attrsVdom,
-        on: eventListenersVdom,
-      };
-    } else {
-      data = {attrs: attrsVdom, on: eventListenersVdom};
+      data.key = `__hologramScript__:${attrsVdom.src}`;
     }
 
     return vnode(tagName, data, childrenVdom);

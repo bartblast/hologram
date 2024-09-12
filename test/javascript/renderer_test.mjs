@@ -912,16 +912,42 @@ describe("Renderer", () => {
         });
       });
 
-      describe("script element vnode key", () => {
-        it("not a script element", () => {
+      describe("link element vnode key", () => {
+        it("not a link element", () => {
           const node = Type.tuple([
             Type.atom("element"),
-            Type.bitstring("img"),
+            Type.bitstring("a"),
             Type.list([
               Type.tuple([
-                Type.bitstring("src"),
+                Type.bitstring("href"),
                 Type.keywordList([
-                  [Type.atom("text"), Type.bitstring("my_source")],
+                  [Type.atom("text"), Type.bitstring("my_href")],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+          );
+          const expected = vnode("a", {attrs: {href: "my_href"}, on: {}}, []);
+
+          assert.deepStrictEqual(result, expected);
+        });
+
+        it("link element without href attribute", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("link"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("rel"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("stylesheet")],
                 ]),
               ]),
             ]),
@@ -935,10 +961,117 @@ describe("Renderer", () => {
             defaultTarget,
           );
           const expected = vnode(
-            "img",
-            {attrs: {src: "my_source"}, on: {}},
+            "link",
+            {attrs: {rel: "stylesheet"}, on: {}},
             [],
           );
+
+          assert.deepStrictEqual(result, expected);
+        });
+
+        it("link element with empty string href attribute", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("link"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("href"),
+                Type.keywordList([[Type.atom("text"), Type.bitstring("")]]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+          );
+          const expected = vnode("link", {attrs: {href: true}, on: {}}, []);
+
+          assert.deepStrictEqual(result, expected);
+        });
+
+        it("link element with boolean href attribute", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("link"),
+            Type.list([
+              Type.tuple([Type.bitstring("href"), Type.keywordList()]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+          );
+          const expected = vnode("link", {attrs: {href: true}, on: {}}, []);
+
+          assert.deepStrictEqual(result, expected);
+        });
+
+        it("link element with non-empty href attribute", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("link"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("href"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("my_href")],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+          );
+          const expected = vnode(
+            "link",
+            {
+              key: "__hologramLink__:my_href",
+              attrs: {href: "my_href"},
+              on: {},
+            },
+            [],
+          );
+
+          assert.deepStrictEqual(result, expected);
+        });
+      });
+
+      describe("script element vnode key", () => {
+        it("not a script element", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("img"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("src"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("my_src")],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+          );
+          const expected = vnode("img", {attrs: {src: "my_src"}, on: {}}, []);
 
           assert.deepStrictEqual(result, expected);
         });
@@ -1026,7 +1159,7 @@ describe("Renderer", () => {
               Type.tuple([
                 Type.bitstring("src"),
                 Type.keywordList([
-                  [Type.atom("text"), Type.bitstring("my_script")],
+                  [Type.atom("text"), Type.bitstring("my_src")],
                 ]),
               ]),
             ]),
@@ -1042,8 +1175,8 @@ describe("Renderer", () => {
           const expected = vnode(
             "script",
             {
-              key: "__hologramScript__:my_script",
-              attrs: {src: "my_script"},
+              key: "__hologramScript__:my_src",
+              attrs: {src: "my_src"},
               on: {},
             },
             [],
