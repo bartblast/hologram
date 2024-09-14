@@ -72,6 +72,7 @@ export default class Vdom {
     } else if (tagName === "script" && typeof attrs.src === "string") {
       data.key = `__hologramScript__:${attrs.src}`;
     } else if (tagName === "script") {
+      // Make sure the script is executed if the code changes.
       data.key = `__hologramScript__:${node.textContent}`;
     }
 
