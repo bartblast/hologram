@@ -29,10 +29,36 @@ import ManuallyPortedElixirKernel from "./elixir/kernel.mjs";
 import ManuallyPortedElixirString from "./elixir/string.mjs";
 
 import {attributesModule, eventListenersModule, init, toVNode} from "snabbdom";
-const patch = init([attributesModule, eventListenersModule]);
+
+const patch = init([
+  attributesModule,
+  eventListenersModule,
+  {
+    create: function (_emptyVnode, vnode) {
+      const key = vnode.key;
+
+      if (key && Hologram.vnodeWithKeyElms.has(key)) {
+        vnode.elm = Hologram.vnodeWithKeyElms.get(key);
+        Hologram.vnodeWithKeyElms.delete(key);
+      }
+    },
+
+    remove: function (vnode, removeCallback) {
+      const key = vnode.key;
+
+      if (key) {
+        Hologram.vnodeWithKeyElms.set(key, vnode.elm);
+      }
+
+      removeCallback();
+    },
+  },
+]);
 
 // TODO: test
 export default class Hologram {
+  static vnodeWithKeyElms = new Map();
+
   // Made public to make tests easier
   static prefetchedPages = new Map();
 
