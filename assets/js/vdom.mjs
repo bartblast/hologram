@@ -19,6 +19,9 @@ export default class Vdom {
       case "script":
         if (node.data?.attrs?.src && typeof node.data.attrs.src === "string") {
           key = `__hologramScript__:${node.data.attrs.src}`;
+        } else {
+          // Make sure the script is executed if the code changes.
+          key = `__hologramScript__:${node.textContent}`;
         }
         break;
     }
@@ -62,15 +65,14 @@ export default class Vdom {
     }
 
     const tagName = node.tagName.toLowerCase();
-
-    let data;
+    const data = {attrs: attrs};
 
     if (tagName === "link" && typeof attrs.href === "string") {
-      data = {key: `__hologramLink__:${attrs.href}`, attrs: attrs};
+      data.key = `__hologramLink__:${attrs.href}`;
     } else if (tagName === "script" && typeof attrs.src === "string") {
-      data = {key: `__hologramScript__:${attrs.src}`, attrs: attrs};
-    } else {
-      data = {attrs: attrs};
+      data.key = `__hologramScript__:${attrs.src}`;
+    } else if (tagName === "script") {
+      data.key = `__hologramScript__:${node.textContent}`;
     }
 
     return vnode(tagName, data, children);

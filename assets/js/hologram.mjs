@@ -30,35 +30,10 @@ import ManuallyPortedElixirString from "./elixir/string.mjs";
 
 import {attributesModule, eventListenersModule, init, toVNode} from "snabbdom";
 
-const patch = init([
-  attributesModule,
-  eventListenersModule,
-  {
-    create: function (_emptyVnode, vnode) {
-      const key = vnode.key;
-
-      if (key && Hologram.vnodeWithKeyElms.has(key)) {
-        vnode.elm = Hologram.vnodeWithKeyElms.get(key);
-        Hologram.vnodeWithKeyElms.delete(key);
-      }
-    },
-
-    remove: function (vnode, removeCallback) {
-      const key = vnode.key;
-
-      if (key) {
-        Hologram.vnodeWithKeyElms.set(key, vnode.elm);
-      }
-
-      removeCallback();
-    },
-  },
-]);
+const patch = init([attributesModule, eventListenersModule]);
 
 // TODO: test
 export default class Hologram {
-  static vnodeWithKeyElms = new Map();
-
   // Made public to make tests easier
   static prefetchedPages = new Map();
 
@@ -533,14 +508,41 @@ export default class Hologram {
     }
   }
 
+  // TODO: raise error if there is no head or body
   static #patchPage(html) {
     globalThis.hologram.pageScriptLoaded = false;
 
     const newVirtualDocument = Vdom.from(html);
 
-    Hologram.virtualDocument = patch(
-      Hologram.virtualDocument,
-      newVirtualDocument,
+    const oldBody = Hologram.virtualDocument.children.find(
+      (child) => child.sel === "body",
+    );
+
+    const newBody = newVirtualDocument.children.find(
+      (child) => child.sel === "body",
+    );
+
+    const oldHead = Hologram.virtualDocument.children.find(
+      (child) => child.sel === "head",
+    );
+
+    const newHead = newVirtualDocument.children.find(
+      (child) => child.sel === "head",
+    );
+
+    Hologram.virtualDocument.children = Hologram.virtualDocument.children.map(
+      (child) => {
+        switch (child.sel) {
+          case "body":
+            return patch(oldBody, newBody);
+
+          case "head":
+            return patch(oldHead, newHead);
+
+          default:
+            return child;
+        }
+      },
     );
   }
 
