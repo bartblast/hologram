@@ -13,6 +13,26 @@ defmodule Hologram.Commons.StringUtils do
   end
 
   @doc """
+  Prepends the prefix to the given string if the string is not empty.
+
+  ## Examples
+
+      iex> prepend_if_not_empty("abc", "xyz")
+      "xyzabc"
+      
+      iex> prepend_if_not_empty("", "xyz")
+      ""
+  """
+  @spec prepend_if_not_empty(String.t(), String.t()) :: String.t()
+  def prepend_if_not_empty(str, prefix) do
+    if str != "" do
+      prepend(str, prefix)
+    else
+      ""
+    end
+  end
+
+  @doc """
   Checks whether a string starts with a lowercase letter.
 
   - This function uses the `String.next_grapheme/1` function to extract the first letter of the string.
