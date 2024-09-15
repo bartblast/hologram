@@ -1246,7 +1246,7 @@ describe("Type", () => {
     assert.deepStrictEqual(result, expected);
   });
 
-  describe.only("tuple()", () => {
+  describe("tuple()", () => {
     it("non-empty", () => {
       const data = [Type.integer(1), Type.integer(2)];
       const result = Type.tuple(data);
