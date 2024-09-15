@@ -474,11 +474,7 @@ describe("Renderer", () => {
 
       const result = Renderer.renderDom(node, context, slots, defaultTarget);
 
-      const expected = vnode(
-        "img",
-        {attrs: {attr_1: null, attr_2: "value_2", attr_3: null}, on: {}},
-        [],
-      );
+      const expected = vnode("img", {attrs: {attr_2: "value_2"}, on: {}}, []);
 
       assert.deepStrictEqual(result, expected);
     });

@@ -405,7 +405,9 @@ export default class Renderer {
           attrDom.data[1],
         );
 
-        acc[nameText] = valueText;
+        if (valueText !== null) {
+          acc[nameText] = valueText;
+        }
 
         return acc;
       }, {});
