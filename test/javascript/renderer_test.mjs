@@ -483,6 +483,12 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    // This test case doesn't apply to the client renderer
+    // it("if there are no attributes to render there is no whitespace inside the tag, non-void element")
+
+    // This test case doesn't apply to the client renderer
+    // it("if there are no attributes to render there is no whitespace inside the tag, void element")
+
     it("filters out attributes that specify event handlers (starting with '$' character)", () => {
       const node = Type.tuple([
         Type.atom("element"),
