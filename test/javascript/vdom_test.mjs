@@ -371,6 +371,36 @@ describe("Vdom", () => {
 
         assert.deepStrictEqual(result, expected);
       });
+
+      it("script element with non-empty text content", () => {
+        const result = Vdom.from(
+          "<html><head><script>const x = 123;</script></head></html>",
+        );
+
+        const expected = vnode("html", {attrs: {}}, [
+          vnode("head", {attrs: {}}, [
+            vnode(
+              "script",
+              {key: "__hologramScript__:const x = 123;", attrs: {}},
+              ["const x = 123;"],
+            ),
+          ]),
+          vnode("body", {attrs: {}}, []),
+        ]);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("script element with empty text content", () => {
+        const result = Vdom.from("<html><head><script></script></head></html>");
+
+        const expected = vnode("html", {attrs: {}}, [
+          vnode("head", {attrs: {}}, [vnode("script", {attrs: {}}, [])]),
+          vnode("body", {attrs: {}}, []),
+        ]);
+
+        assert.deepStrictEqual(result, expected);
+      });
     });
   });
 });

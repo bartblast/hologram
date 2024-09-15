@@ -8,6 +8,7 @@ import {
   componentRegistryEntryFixture,
   defineGlobalErlangAndElixirModules,
   initComponentRegistryEntry,
+  inspectEx,
   sinon,
   vnode,
 } from "./support/helpers.mjs";
@@ -1146,6 +1147,7 @@ describe("Renderer", () => {
             slots,
             defaultTarget,
           );
+
           const expected = vnode("script", {attrs: {src: true}, on: {}}, []);
 
           assert.deepStrictEqual(result, expected);
@@ -1172,6 +1174,7 @@ describe("Renderer", () => {
             slots,
             defaultTarget,
           );
+
           const expected = vnode(
             "script",
             {
@@ -1181,6 +1184,56 @@ describe("Renderer", () => {
             },
             [],
           );
+
+          assert.deepStrictEqual(result, expected);
+        });
+
+        it("script element with non-empty text content", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("script"),
+            Type.list(),
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("const x = 123;")]),
+            ]),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+          );
+
+          const expected = vnode(
+            "script",
+            {
+              key: "__hologramScript__:const x = 123;",
+              attrs: {},
+              on: {},
+            },
+            ["const x = 123;"],
+          );
+
+          assert.deepStrictEqual(result, expected);
+        });
+
+        it("script element with empty text content", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("script"),
+            Type.list(),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+          );
+
+          const expected = vnode("script", {attrs: {}, on: {}}, []);
 
           assert.deepStrictEqual(result, expected);
         });

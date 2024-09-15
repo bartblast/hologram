@@ -17,9 +17,9 @@ export default class Vdom {
         break;
 
       case "script":
-        if (node.data?.attrs?.src && typeof node.data.attrs.src === "string") {
+        if (typeof node.data?.attrs?.src === "string" && node.data.attrs.src) {
           key = `__hologramScript__:${node.data.attrs.src}`;
-        } else {
+        } else if (node.textContent) {
           // Make sure the script is executed if the code changes.
           key = `__hologramScript__:${node.textContent}`;
         }
@@ -69,9 +69,13 @@ export default class Vdom {
 
     if (tagName === "link" && typeof attrs.href === "string") {
       data.key = `__hologramLink__:${attrs.href}`;
-    } else if (tagName === "script" && typeof attrs.src === "string") {
+    } else if (
+      tagName === "script" &&
+      typeof attrs.src === "string" &&
+      attrs.src
+    ) {
       data.key = `__hologramScript__:${attrs.src}`;
-    } else if (tagName === "script") {
+    } else if (tagName === "script" && node.textContent) {
       // Make sure the script is executed if the code changes.
       data.key = `__hologramScript__:${node.textContent}`;
     }

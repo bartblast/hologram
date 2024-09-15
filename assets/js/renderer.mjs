@@ -484,9 +484,9 @@ export default class Renderer {
       attrsVdom.src
     ) {
       data.key = `__hologramScript__:${attrsVdom.src}`;
-    } else if (tagName === "script") {
+    } else if (tagName === "script" && childrenVdom[0]) {
       // Make sure the script is executed if the code changes.
-      data.key = `__hologramScript__:${childrenVdom[0].text}`;
+      data.key = `__hologramScript__:${childrenVdom[0]}`;
     }
 
     return vnode(tagName, data, childrenVdom);
