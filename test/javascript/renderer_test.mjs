@@ -8,7 +8,6 @@ import {
   componentRegistryEntryFixture,
   defineGlobalErlangAndElixirModules,
   initComponentRegistryEntry,
-  inspectEx,
   sinon,
   vnode,
 } from "./support/helpers.mjs";
