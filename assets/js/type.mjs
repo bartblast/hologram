@@ -429,7 +429,7 @@ export default class Type {
     return Type.map(data.concat([[key, value]]));
   }
 
-  static tuple(data) {
+  static tuple(data = []) {
     return {type: "tuple", data: data};
   }
 

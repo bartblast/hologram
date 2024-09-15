@@ -1246,12 +1246,21 @@ describe("Type", () => {
     assert.deepStrictEqual(result, expected);
   });
 
-  it("tuple()", () => {
-    const data = [Type.integer(1), Type.integer(2)];
-    const result = Type.tuple(data);
-    const expected = {type: "tuple", data: data};
+  describe.only("tuple()", () => {
+    it("non-empty", () => {
+      const data = [Type.integer(1), Type.integer(2)];
+      const result = Type.tuple(data);
+      const expected = {type: "tuple", data: data};
 
-    assert.deepStrictEqual(result, expected);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("empty", () => {
+      const result = Type.tuple();
+      const expected = {type: "tuple", data: []};
+
+      assert.deepStrictEqual(result, expected);
+    });
   });
 
   it("variablePattern()", () => {
