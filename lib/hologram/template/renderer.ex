@@ -352,7 +352,7 @@ defmodule Hologram.Template.Renderer do
     |> Enum.map(fn {name, value_dom} -> render_attribute(name, value_dom) end)
     |> Enum.reject(&(&1 == ""))
     |> Enum.join(" ")
-    |> StringUtils.prepend(" ")
+    |> StringUtils.prepend_if_not_empty(" ")
   end
 
   defp render_page_inside_layout(page_module, params, %{
