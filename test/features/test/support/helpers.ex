@@ -8,17 +8,17 @@ defmodule HologramFeatureTests.Helpers do
 
   @max_wait_time Application.compile_env(:wallaby, :max_wait_time, 3_000)
 
-  def assert_js_error(expected_msg, fun) when is_binary(expected_msg) do
+  def assert_js_error(session, expected_msg, fun) when is_binary(expected_msg) do
     regex =
-      ~r/^There was an uncaught JavaScript error:\n\n.+Uncaught rr: #{Regex.escape(expected_msg)}\n$/su
+      ~r/^There was an uncaught JavaScript error:.+: #{Regex.escape(expected_msg)}\n$/su
 
-    assert_js_error(regex, fun)
+    assert_js_error(session, regex, fun)
   end
 
-  def assert_js_error(expected_msg, fun) when is_regex(expected_msg) do
+  def assert_js_error(session, expected_msg, fun) when is_regex(expected_msg) do
     assert_raise Wallaby.JSError, expected_msg, fn ->
       fun.()
-      :timer.sleep(@max_wait_time)
+      wait_for_js_error(session)
     end
   end
 
@@ -94,5 +94,14 @@ defmodule HologramFeatureTests.Helpers do
     script = "return window?.hologram?.['connected?'];"
 
     Browser.execute_script(session, script, [], callback)
+  end
+
+  defp wait_for_js_error(session, start_time \\ DateTime.utc_now()) do
+    Browser.execute_script(session, "1 + 1")
+
+    if DateTime.diff(DateTime.utc_now(), start_time, :millisecond) < @max_wait_time - 100 do
+      :timer.sleep(100)
+      wait_for_js_error(session, start_time)
+    end
   end
 end
