@@ -977,51 +977,69 @@ describe("Hologram", () => {
     });
   });
 
-  it("loadPage()", () => {
-    const historyPushStateStub = sinon
-      .stub(history, "pushState")
-      .callsFake((_state, _unused, _url) => null);
-
-    const windowScrollToStub = sinon
-      .stub(window, "scrollTo")
-      .callsFake((_x, _y) => null);
-
-    globalThis.hologram.pageScriptLoaded = true;
-
-    const parser = new DOMParser();
-
-    const doc = parser.parseFromString(
-      "<DOCTYPE html><html><head></head><body><div></div></body></html>",
-      "text/html",
-    );
-
-    Hologram.virtualDocument = toVNode(doc.documentElement);
+  describe("loadPage()", () => {
+    let historyPushStateStub, windowScrollToStub;
 
     const pagePath = "/my-page-path";
 
     const html =
-      "<!DOCTYPE html><html><head></head><body><span></span></body></html>";
+      '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8" /></head><body><div></div></body></html>';
 
-    Hologram.loadPage(pagePath, html);
+    beforeEach(() => {
+      historyPushStateStub = sinon
+        .stub(history, "pushState")
+        .callsFake((_state, _unused, _url) => null);
 
-    assert.isFalse(globalThis.hologram.pageScriptLoaded);
+      windowScrollToStub = sinon
+        .stub(window, "scrollTo")
+        .callsFake((_x, _y) => null);
 
-    assert.deepStrictEqual(
-      vnodeToHtml(Hologram.virtualDocument),
-      "<html><head></head><body><span></span></body></html>",
-    );
+      globalThis.hologram.pageScriptLoaded = true;
 
-    sinon.assert.calledOnceWithExactly(
-      historyPushStateStub,
-      null,
-      null,
-      pagePath,
-    );
+      const parser = new DOMParser();
 
-    sinon.assert.calledOnceWithExactly(windowScrollToStub, 0, 0);
+      const doc = parser.parseFromString(
+        "<DOCTYPE html><html><head></head><body></body></html>",
+        "text/html",
+      );
 
-    history.pushState.restore();
-    window.scrollTo.restore();
+      Hologram.virtualDocument = toVNode(doc.documentElement);
+    });
+
+    afterEach(() => {
+      history.pushState.restore();
+      window.scrollTo.restore();
+    });
+
+    it("patches the page", () => {
+      Hologram.loadPage(pagePath, html);
+
+      assert.deepStrictEqual(
+        vnodeToHtml(Hologram.virtualDocument),
+        '<html lang="en"><head><meta charset="utf-8"></head><body><div></div></body></html>',
+      );
+    });
+
+    it("sets pageScriptLoaded flag to false", () => {
+      Hologram.loadPage(pagePath, html);
+      assert.isFalse(globalThis.hologram.pageScriptLoaded);
+    });
+
+    it("adds an entry to the browser's session history stack", () => {
+      Hologram.loadPage(pagePath, html);
+
+      sinon.assert.calledOnceWithExactly(
+        historyPushStateStub,
+        null,
+        null,
+        pagePath,
+      );
+    });
+
+    it("scrolls to the beginning of the page", () => {
+      Hologram.loadPage(pagePath, html);
+      sinon.assert.calledOnceWithExactly(windowScrollToStub, 0, 0);
+    });
   });
 
   it("navigateToPage()", () => {
