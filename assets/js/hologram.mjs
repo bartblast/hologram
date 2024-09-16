@@ -514,6 +514,8 @@ export default class Hologram {
 
     const newVirtualDocument = Vdom.from(html);
 
+    Hologram.virtualDocument.data = newVirtualDocument.data;
+
     const oldBody = Hologram.virtualDocument.children.find(
       (child) => child.sel === "body",
     );
