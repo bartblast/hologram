@@ -235,9 +235,16 @@ defmodule Hologram.Component do
   end
 
   @doc """
-  Puts the given key-value pair to the component state.
+  If the second arg is a list of keys representing a component state path
+  it puts the value in the nested component state path,
+  otherwise it puts the given key-value pair to the component state.
   """
-  @spec put_state(Component.t(), atom, any) :: Component.t()
+  @spec put_state(Component.t(), atom | list(atom), any) :: Component.t()
+
+  def put_state(component, keys, value) when is_list(keys) do
+    %{component | state: put_in(component.state, keys, value)}
+  end
+
   def put_state(%{state: state} = component, key, value) do
     %{component | state: Map.put(state, key, value)}
   end

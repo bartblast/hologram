@@ -201,12 +201,30 @@ defmodule Hologram.ComponentTest do
     end
   end
 
-  test "put_state/3" do
-    component = %Component{state: %{a: 1}}
+  describe "put_state/3" do
+    test "non-nested path" do
+      component = %Component{state: %{a: 1}}
 
-    assert put_state(component, :b, 2) == %Component{
-             state: %{a: 1, b: 2}
-           }
+      assert put_state(component, :b, 2) == %Component{
+               state: %{a: 1, b: 2}
+             }
+    end
+
+    test "nested path, key exists" do
+      component = %Component{state: %{a: 1, b: %{d: 4, e: %{g: 6, h: 7}, f: 5}, c: 3}}
+
+      assert put_state(component, [:b, :e, :g], 123) == %Component{
+               state: %{a: 1, b: %{d: 4, e: %{g: 123, h: 7}, f: 5}, c: 3}
+             }
+    end
+
+    test "nested path, key doesn't exist" do
+      component = %Component{state: %{a: 1, b: %{d: 4, e: %{g: 6, h: 7}, f: 5}, c: 3}}
+
+      assert put_state(component, [:b, :e, :i], 123) == %Component{
+               state: %{a: 1, b: %{d: 4, e: %{g: 6, h: 7, i: 123}, f: 5}, c: 3}
+             }
+    end
   end
 
   describe "template/0" do
