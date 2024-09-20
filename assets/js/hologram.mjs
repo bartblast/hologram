@@ -19,6 +19,7 @@ import Vdom from "./vdom.mjs";
 
 // Events
 import ChangeEvent from "./events/change_event.mjs";
+import FocusEvent from "./events/focus_event.mjs";
 import MouseEvent from "./events/mouse_event.mjs";
 import PointerEvent from "./events/pointer_event.mjs";
 import SubmitEvent from "./events/submit_event.mjs";
@@ -392,6 +393,10 @@ export default class Hologram {
 
   static #getEventImplementation(eventType) {
     switch (eventType) {
+      case "blur":
+      case "focus":
+        return FocusEvent;
+
       case "change":
         return ChangeEvent;
 
