@@ -18,6 +18,7 @@ import Utils from "./utils.mjs";
 import Vdom from "./vdom.mjs";
 
 // Events
+import ChangeEvent from "./events/change_event.mjs";
 import MouseEvent from "./events/mouse_event.mjs";
 import PointerEvent from "./events/pointer_event.mjs";
 import TransitionEvent from "./events/transition_event.mjs";
@@ -390,6 +391,9 @@ export default class Hologram {
 
   static #getEventImplementation(eventType) {
     switch (eventType) {
+      case "change":
+        return ChangeEvent;
+
       case "click":
         // TODO: change to PointerEvent when Firefox and Safari bugs are fixed:
         // See: https://stackoverflow.com/a/76900433
