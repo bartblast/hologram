@@ -1677,6 +1677,13 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == ~s/Type.bitstring("\\\"")/
     end
 
+    test "beep (special) char" do
+      # "\a"
+      ir = %IR.StringType{value: "\a"}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\\x07")/
+    end
+
     test "backspace (non-printable) char" do
       # "\b"
       ir = %IR.StringType{value: "\b"}

@@ -693,6 +693,10 @@ defmodule Hologram.Compiler.Encoder do
     "\\\"" <> escape_non_printable_and_special_chars(rest)
   end
 
+  defp escape_non_printable_and_special_chars("\a" <> rest) do
+    "\\x07" <> escape_non_printable_and_special_chars(rest)
+  end
+
   defp escape_non_printable_and_special_chars("\b" <> rest) do
     "\\b" <> escape_non_printable_and_special_chars(rest)
   end
