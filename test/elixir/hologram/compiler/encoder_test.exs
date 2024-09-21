@@ -1755,6 +1755,18 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_ir(ir) == ~s/Type.bitstring("\\u{85}\\u{86}\\u{87}")/
     end
 
+    test "single-byte char outside of the standard ASCII range" do
+      ir = %IR.StringType{value: <<240>>}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\\xF0")/
+    end
+
+    test "multiple single-byte chars outside of the standard ASCII range" do
+      ir = %IR.StringType{value: <<240, 145, 163>>}
+
+      assert encode_ir(ir) == ~s/Type.bitstring("\\xF0\\x91\\xA3")/
+    end
+
     test "multiple printable and non-printable chars" do
       # "abc\n全息图\t" <> <<133::utf8, 134::utf8, 135::utf8>>
       # equivalent to: <<97, 98, 99, 10, 229, 133, 168, 230, 129, 175, 229, 155, 190, 9, 194, 133, 194, 134, 194, 135>>

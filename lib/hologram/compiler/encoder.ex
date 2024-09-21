@@ -746,6 +746,11 @@ defmodule Hologram.Compiler.Encoder do
     escaped_char <> escape_non_printable_and_special_chars(rest)
   end
 
+  defp escape_non_printable_and_special_chars(<<char::integer, rest::binary>>) do
+    # No need to pad with 0, becasue chars smaller that 16 will be encoded differently
+    "\\x#{Integer.to_string(char, 16)}" <> escape_non_printable_and_special_chars(rest)
+  end
+
   defp escape_non_printable_and_special_chars(""), do: ""
 
   defp extract_erlang_function_source_code(file_path, function, arity) do
