@@ -300,18 +300,13 @@ defmodule Hologram.Compiler.Encoder do
     encode_var_value("@#{name}")
   end
 
-  def encode_ir(%IR.ModuleDefinition{module: module, body: body}, context) do
+  def encode_ir(%IR.ModuleDefinition{module: module} = module_def, context) do
     module_name = Reflection.module_name(module.value)
 
-    body.expressions
-    |> aggregate_module_functions()
-    |> Enum.reduce([], fn {{function, arity, visibility}, clauses}, acc ->
-      clauses_js = encode_as_array(clauses, context)
-
-      [
-        ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js});/
-        | acc
-      ]
+    module_def
+    |> IR.aggregate_module_funs()
+    |> Enum.reduce([], fn {{function, arity}, {visibility, clauses}}, acc ->
+      [encode_ex_fun(module_name, function, arity, visibility, clauses, context) | acc]
     end)
     |> Enum.reverse()
     |> Enum.join("\n\n")
@@ -457,25 +452,6 @@ defmodule Hologram.Compiler.Encoder do
     IO.puts("\n........................................\n")
   end
 
-  defp aggregate_module_functions(exprs) do
-    exprs
-    |> Enum.reduce(%{}, fn
-      %IR.FunctionDefinition{name: name, arity: arity, visibility: visibility, clause: clause},
-      acc ->
-        key = {name, arity, visibility}
-
-        if acc[key] do
-          %{acc | key => [clause | acc[key]]}
-        else
-          Map.put(acc, key, [clause])
-        end
-
-      _expr, acc ->
-        acc
-    end)
-    |> Enum.map(fn {key, value} -> {key, Enum.reverse(value)} end)
-  end
-
   defp encode_as_array(data, context, encoder \\ &encode_ir/2) do
     data
     |> Enum.map_join(", ", &encoder.(&1, context))
@@ -611,6 +587,12 @@ defmodule Hologram.Compiler.Encoder do
     args_js = encode_ir(args, context)
 
     "Interpreter.callNamedFunction(#{module_js}, #{function_js}, #{args_js}, context)"
+  end
+
+  defp encode_ex_fun(module_name, function, arity, visibility, clauses, context) do
+    clauses_js = encode_as_array(clauses, context)
+
+    ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js});/
   end
 
   defp encode_named_function_call(%IR.AtomType{value: :erlang}, :andalso, [left, right], context) do

@@ -9,6 +9,69 @@ defmodule Hologram.Compiler.IRTest do
 
   defp my_fun(x, y), do: x + y
 
+  describe "aggregate_module_funs/1" do
+    test "module doesn't have any functions" do
+      module_def = %IR.ModuleDefinition{
+        module: %IR.AtomType{value: MyModule},
+        body: %IR.Block{expressions: []}
+      }
+
+      assert aggregate_module_funs(module_def) == []
+    end
+
+    test "module has functions" do
+      fun_clause_1 = %IR.FunctionClause{
+        params: [%IR.Variable{name: :a}, %IR.Variable{name: :b}],
+        guards: [],
+        body: %IR.Block{expressions: [%IR.Variable{name: :a}]}
+      }
+
+      fun_clause_2 = %IR.FunctionClause{
+        params: [%IR.Variable{name: :a}, %IR.Variable{name: :b}],
+        guards: [%IR.LocalFunctionCall{function: :is_integer, args: [%IR.Variable{name: :a}]}],
+        body: %IR.Block{expressions: [%IR.Variable{name: :b}]}
+      }
+
+      fun_clause_3 = %IR.FunctionClause{
+        params: [%IR.Variable{name: :x}],
+        guards: [],
+        body: %IR.Block{expressions: [%IR.Variable{name: :x}]}
+      }
+
+      module_def = %IR.ModuleDefinition{
+        module: %IR.AtomType{value: MyModule},
+        body: %IR.Block{
+          expressions: [
+            %IR.FunctionDefinition{
+              name: :my_fun_a,
+              arity: 2,
+              visibility: :public,
+              clause: fun_clause_1
+            },
+            %IR.FunctionDefinition{
+              name: :my_fun_a,
+              arity: 2,
+              visibility: :public,
+              clause: fun_clause_2
+            },
+            %IR.FunctionDefinition{
+              name: :my_fun_b,
+              arity: 1,
+              visibility: :private,
+              clause: fun_clause_3
+            },
+            %IR.IgnoredExpression{type: :public_macro_definition}
+          ]
+        }
+      }
+
+      assert aggregate_module_funs(module_def) == [
+               {{:my_fun_a, 2}, {:public, [fun_clause_1, fun_clause_2]}},
+               {{:my_fun_b, 1}, {:private, [fun_clause_3]}}
+             ]
+    end
+  end
+
   test "for_code/1" do
     assert for_code("[1, :b]", %Context{}) == %IR.ListType{
              data: [

@@ -316,6 +316,49 @@ defmodule Hologram.Compiler.IR do
   end
 
   @doc """
+  Aggregates function definitions from a module definition into a map.
+
+  This function takes a module definition IR and returns a map where:
+  - Keys are tuples of {function_name, arity}
+  - Values are tuples of {visibility, list_of_clauses}
+
+  ## Returns
+
+  A map of function definitions, where each entry is in the format:
+  {{function_name, arity}, {visibility, [clause_1, clause_2, ...]}}
+
+  ## Example
+
+      iex> module_def = %ModuleDefinition{...}
+      iex> aggregate_module_funs(module_def)
+      %{
+        {:my_function_1, 3} => {:public, [%IR.FunctionClause{...}, %IR.FunctionClause{...}]},
+        {:my_function_2, 1} => {:private, [%IR.FunctionClause{...}]}
+      }
+  """
+  @spec aggregate_module_funs(ModuleDefinition.t()) ::
+          list({{atom, non_neg_integer}, {:public | :private, list(FunctionClause.t())}})
+  def aggregate_module_funs(module_def) do
+    module_def.body.expressions
+    |> Enum.reduce(%{}, fn
+      %IR.FunctionDefinition{name: name, arity: arity, visibility: visibility, clause: clause},
+      acc ->
+        key = {name, arity}
+
+        if acc[key] do
+          {visibility, clauses} = acc[key]
+          %{acc | key => {visibility, [clause | clauses]}}
+        else
+          Map.put(acc, key, {visibility, [clause]})
+        end
+
+      _expr, acc ->
+        acc
+    end)
+    |> Enum.map(fn {key, {visibility, clauses}} -> {key, {visibility, Enum.reverse(clauses)}} end)
+  end
+
+  @doc """
   Returns Hologram IR for the given Elixir source code.
 
   ## Examples
