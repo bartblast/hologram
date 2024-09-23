@@ -39,7 +39,9 @@ defmodule Hologram.Compiler.CallGraph do
     {Kernel, :inspect, 1},
     {Kernel, :inspect, 2},
     {String, :downcase, 1},
-    {String, :downcase, 2}
+    {String, :downcase, 2},
+    {String, :upcase, 1},
+    {String, :upcase, 2}
   ]
 
   @mfas_used_by_all_pages_and_components [

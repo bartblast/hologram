@@ -116,4 +116,105 @@ describe("Elixir_String", () => {
       );
     });
   });
+
+  describe("upcase/1", () => {
+    const upcase = Elixir_String["upcase/1"];
+
+    it("delegates to upcase/2", () => {
+      const result = upcase(Type.bitstring("HoLoGrAm"));
+      const expected = Type.bitstring("HOLOGRAM");
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("upcase/2", () => {
+    const upcase = Elixir_String["upcase/2"];
+
+    const string = Type.bitstring("HoLoGrAm");
+    const mode = Type.atom("default");
+
+    describe("default mode", () => {
+      it("ASCII string", () => {
+        const result = upcase(string, mode);
+        const expected = Type.bitstring("HOLOGRAM");
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("Unicode string", () => {
+        const result = upcase(Type.bitstring("źródło"), mode);
+        const expected = Type.bitstring("ŹRÓDŁO");
+
+        assert.deepStrictEqual(result, expected);
+      });
+    });
+
+    // TODO: client error message for this case is inconsistent with server error message
+    it("raises FunctionClauseError if the first arg is not a bitstring", () => {
+      const arg1 = Type.atom("abc");
+
+      assertBoxedError(
+        () => upcase(arg1, mode),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg("String.upcase/2", [
+          arg1,
+          mode,
+        ]),
+      );
+    });
+
+    // TODO: client error message for this case is inconsistent with server error message
+    it("raises FunctionClauseError if the first arg is a non-binary bitstring", () => {
+      const arg1 = Type.bitstring([1, 0, 1, 0]);
+
+      assertBoxedError(
+        () => upcase(arg1, mode),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg("String.upcase/2", [
+          arg1,
+          mode,
+        ]),
+      );
+    });
+
+    // TODO: client error message for this case is inconsistent with server error message
+    it("raises FunctionClauseError if the second arg is not an atom", () => {
+      const arg2 = Type.integer(123);
+
+      assertBoxedError(
+        () => upcase(string, arg2),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg("String.upcase/2", [
+          string,
+          arg2,
+        ]),
+      );
+    });
+
+    // TODO: client error message for this case is inconsistent with server error message
+    it("raises FunctionClauseError if the second arg is an atom, but is not a valid mode", () => {
+      const arg2 = Type.atom("abc");
+
+      assertBoxedError(
+        () => upcase(string, arg2),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg("String.upcase/2", [
+          string,
+          arg2,
+        ]),
+      );
+    });
+
+    // TODO: remove once modes other than :default are implemented
+    it("raises HologramInterpreterError if mode is different than :default", () => {
+      const arg2 = Type.atom("ascii");
+
+      assert.throw(
+        () => upcase(string, arg2),
+        HologramInterpreterError,
+        "String.upcase/2 modes other than :default are not yet implemented in Hologram",
+      );
+    });
+  });
 });

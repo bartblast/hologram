@@ -378,6 +378,20 @@ export default class Hologram {
       "public",
       ManuallyPortedElixirString["downcase/2"],
     );
+
+    Interpreter.defineManuallyPortedFunction(
+      "String",
+      "upcase/1",
+      "public",
+      ManuallyPortedElixirString["upcase/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "String",
+      "upcase/2",
+      "public",
+      ManuallyPortedElixirString["upcase/2"],
+    );
   }
 
   static #ensureDomNodeHasHologramId(eventNode) {
