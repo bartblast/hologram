@@ -27,7 +27,7 @@ const Elixir_String = {
 
     if (mode.value !== "default") {
       throw new HologramInterpreterError(
-        "modes other than :default are not yet implemented in Hologram",
+        "String.downcase/2 modes other than :default are not yet implemented in Hologram",
       );
     }
 

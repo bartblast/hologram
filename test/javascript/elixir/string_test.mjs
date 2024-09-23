@@ -112,7 +112,7 @@ describe("Elixir_String", () => {
       assert.throw(
         () => downcase(string, arg2),
         HologramInterpreterError,
-        "modes other than :default are not yet implemented in Hologram",
+        "String.downcase/2 modes other than :default are not yet implemented in Hologram",
       );
     });
   });
