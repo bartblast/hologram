@@ -86,4 +86,82 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
       end
     end
   end
+
+  describe "upcase/1" do
+    test "delegates to upcase/2" do
+      assert String.upcase("HoLoGrAm") == "HOLOGRAM"
+    end
+  end
+
+  describe "upcase/2" do
+    test "default mode, ASCII string" do
+      assert String.upcase("HoLoGrAm", :default) == "HOLOGRAM"
+    end
+
+    test "default mode, Unicode string" do
+      assert String.upcase("źródło", :default) == "ŹRÓDŁO"
+    end
+
+    # TODO: client error message for this case is inconsistent with server error message
+    test "raises FunctionClauseError if the first arg is not a bitstring" do
+      expected_msg =
+        build_function_clause_error_msg("String.upcase/2", [:abc, :default], [
+          "def upcase(-\"\"-, _mode)",
+          "def upcase(string, :default) when -is_binary(string)-",
+          "def upcase(string, -:ascii-) when -is_binary(string)-",
+          "def upcase(string, mode) when -is_binary(string)- and (-mode === :greek- or -mode === :turkic-)"
+        ])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        String.upcase(:abc, :default)
+      end
+    end
+
+    # TODO: client error message for this case is inconsistent with server error message
+    test "raises FunctionClauseError if the first arg is a non-binary bitstring" do
+      arg_1 = <<1::1, 0::1, 1::1, 0::1>>
+
+      expected_msg =
+        build_function_clause_error_msg("String.upcase/2", [arg_1, :default], [
+          "def upcase(-\"\"-, _mode)",
+          "def upcase(string, :default) when -is_binary(string)-",
+          "def upcase(string, -:ascii-) when -is_binary(string)-",
+          "def upcase(string, mode) when -is_binary(string)- and (-mode === :greek- or -mode === :turkic-)"
+        ])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        String.upcase(arg_1, :default)
+      end
+    end
+
+    # TODO: client error message for this case is inconsistent with server error message
+    test "raises FunctionClauseError if the second arg is not an atom" do
+      expected_msg =
+        build_function_clause_error_msg("String.upcase/2", ["HoLoGrAm", 123], [
+          "def upcase(-\"\"-, _mode)",
+          "def upcase(string, -:default-) when is_binary(string)",
+          "def upcase(string, -:ascii-) when is_binary(string)",
+          "def upcase(string, mode) when is_binary(string) and (-mode === :greek- or -mode === :turkic-)"
+        ])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        String.upcase("HoLoGrAm", 123)
+      end
+    end
+
+    # TODO: client error message for this case is inconsistent with server error message
+    test "raises FunctionClauseError if the second arg is an atom, but is not a valid mode" do
+      expected_msg =
+        build_function_clause_error_msg("String.upcase/2", ["HoLoGrAm", :abc], [
+          "def upcase(-\"\"-, _mode)",
+          "def upcase(string, -:default-) when is_binary(string)",
+          "def upcase(string, -:ascii-) when is_binary(string)",
+          "def upcase(string, mode) when is_binary(string) and (-mode === :greek- or -mode === :turkic-)"
+        ])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        String.upcase("HoLoGrAm", :abc)
+      end
+    end
+  end
 end
