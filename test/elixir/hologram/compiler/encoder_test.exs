@@ -893,6 +893,39 @@ defmodule Hologram.Compiler.EncoderTest do
              "Interpreter.dotOperator(context.vars.my_module, Type.atom(\"my_key\"))"
   end
 
+  test "encode_elixir_function/6" do
+    clauses = [
+      %IR.FunctionClause{
+        params: [%IR.IntegerType{value: 9}],
+        guards: [],
+        body: %IR.Block{
+          expressions: [%IR.AtomType{value: :expr_2}]
+        }
+      },
+      %IR.FunctionClause{
+        params: [%IR.Variable{name: :z}],
+        guards: [
+          %IR.RemoteFunctionCall{
+            module: %IR.AtomType{value: :erlang},
+            function: :is_float,
+            args: [%IR.Variable{name: :z}]
+          }
+        ],
+        body: %IR.Block{
+          expressions: [%IR.Variable{name: :z}]
+        }
+      }
+    ]
+
+    assert encode_elixir_function("Aaa.Bbb", :fun_2, 1, :private, clauses, %Context{}) == """
+           Interpreter.defineElixirFunction("Aaa.Bbb", "fun_2", 1, "private", [{params: (context) => [Type.integer(9n)], guards: [], body: (context) => {
+           return Type.atom("expr_2");
+           }}, {params: (context) => [Type.variablePattern("z")], guards: [(context) => Erlang["is_float/1"](context.vars.z)], body: (context) => {
+           return context.vars.z;
+           }}]);\
+           """
+  end
+
   describe "encode_erlang_function/4" do
     test ":erlang module function that is implemented" do
       output = encode_erlang_function(:erlang, :+, 2, @erlang_source_dir)

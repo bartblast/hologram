@@ -9,6 +9,7 @@ defmodule Hologram.Compiler.Encoder do
       }
   end
 
+  alias Hologram.Compiler.IR.FunctionClause
   alias Hologram.Commons.IntegerUtils
   alias Hologram.Commons.StringUtils
   alias Hologram.Compiler.Context
@@ -48,6 +49,23 @@ defmodule Hologram.Compiler.Encoder do
       end
 
     Enum.map_join(class_segments, "_", &:string.titlecase/1)
+  end
+
+  @doc """
+  Encodes an Elixir function into a JavaScript statement.
+  """
+  @spec encode_elixir_function(
+          String.t(),
+          atom,
+          non_neg_integer,
+          :public | :private,
+          list(FunctionClause.t()),
+          Context.t()
+        ) :: String.t()
+  def encode_elixir_function(module_name, function, arity, visibility, clauses, context) do
+    clauses_js = encode_as_array(clauses, context)
+
+    ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js});/
   end
 
   @doc """
@@ -306,7 +324,7 @@ defmodule Hologram.Compiler.Encoder do
     module_def
     |> IR.aggregate_module_funs()
     |> Enum.reduce([], fn {{function, arity}, {visibility, clauses}}, acc ->
-      [encode_ex_fun(module_name, function, arity, visibility, clauses, context) | acc]
+      [encode_elixir_function(module_name, function, arity, visibility, clauses, context) | acc]
     end)
     |> Enum.reverse()
     |> Enum.join("\n\n")
@@ -587,12 +605,6 @@ defmodule Hologram.Compiler.Encoder do
     args_js = encode_ir(args, context)
 
     "Interpreter.callNamedFunction(#{module_js}, #{function_js}, #{args_js}, context)"
-  end
-
-  defp encode_ex_fun(module_name, function, arity, visibility, clauses, context) do
-    clauses_js = encode_as_array(clauses, context)
-
-    ~s/Interpreter.defineElixirFunction("#{module_name}", "#{function}", #{arity}, "#{visibility}", #{clauses_js});/
   end
 
   defp encode_named_function_call(%IR.AtomType{value: :erlang}, :andalso, [left, right], context) do
