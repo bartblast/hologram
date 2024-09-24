@@ -9,7 +9,6 @@ defmodule Hologram.Compiler.Encoder do
       }
   end
 
-  alias Hologram.Compiler.IR.FunctionClause
   alias Hologram.Commons.IntegerUtils
   alias Hologram.Commons.StringUtils
   alias Hologram.Compiler.Context
@@ -59,7 +58,7 @@ defmodule Hologram.Compiler.Encoder do
           atom,
           non_neg_integer,
           :public | :private,
-          list(FunctionClause.t()),
+          list(IR.FunctionClause.t()),
           Context.t()
         ) :: String.t()
   def encode_elixir_function(module_name, function, arity, visibility, clauses, context) do
