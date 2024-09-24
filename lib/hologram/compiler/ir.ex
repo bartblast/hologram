@@ -320,7 +320,7 @@ defmodule Hologram.Compiler.IR do
 
   ## Returns
 
-  A list, where each entry is in the format:
+  A list, where each item is in the format:
   {{function_name, arity}, {visibility, [clause_1, clause_2, ...]}}
 
   ## Example
