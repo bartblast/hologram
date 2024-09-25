@@ -18,7 +18,9 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module16
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module17
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module18
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module19
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module2
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module20
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module3
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module5
@@ -870,6 +872,20 @@ defmodule Hologram.Compiler.CallGraphTest do
                weight: 1,
                label: nil
              }
+           ]
+  end
+
+  test "list_page_entry_mfas/1" do
+    assert list_page_entry_mfas(Module19) == [
+             {Module19, :__layout_module__, 0},
+             {Module19, :__layout_props__, 0},
+             {Module19, :__params__, 0},
+             {Module19, :__route__, 0},
+             {Module19, :action, 3},
+             {Module19, :template, 0},
+             {Module20, :__props__, 0},
+             {Module20, :action, 3},
+             {Module20, :template, 0}
            ]
   end
 
