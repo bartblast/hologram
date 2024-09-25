@@ -460,7 +460,8 @@ export default class Interpreter {
   }
 
   // Important: keep Kernel.inspect/2 consistency tests in sync.
-  // TODO: implement all types
+  // TODO: implement other types (e.g. ports, structs)
+  // TODO: implement opts param
   static inspect(term, opts = Type.keywordList()) {
     switch (term.type) {
       case "anonymous_function":
