@@ -15,6 +15,8 @@ defmodule Hologram.ExJsConsistency.Elixir.KernelTest do
     end
   end
 
-  # See interpreter "inspect" consistency tests
-  # describe "inspect/2"
+  # Also see interpreter "inspect" consistency tests
+  test "inspect/2" do
+    assert Kernel.inspect(%{b: 2, a: 1}, custom_options: [sort_maps: true]) == "%{a: 1, b: 2}"
+  end
 end
