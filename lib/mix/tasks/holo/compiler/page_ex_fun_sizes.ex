@@ -37,6 +37,8 @@ defmodule Mix.Tasks.Holo.Compiler.PageExFunSizes do
     |> sort_by_size_and_mfa()
     # credo:disable-for-next-line Credo.Check.Warning.IoInspect
     |> IO.inspect(limit: :infinity)
+
+    :ok
   end
 
   defp aggregate_funs(ir_plt) do

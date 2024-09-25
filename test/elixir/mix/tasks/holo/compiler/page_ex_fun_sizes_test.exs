@@ -6,7 +6,12 @@ defmodule Mix.Tasks.Holo.Compiler.PageExFunSizesTest do
   test "run/1" do
     arg = "Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageExFunSizes.Module1"
 
-    assert capture_io(fn -> Task.run([arg]) end) === """
+    output =
+      capture_io(fn ->
+        assert Task.run([arg]) == :ok
+      end)
+
+    assert output === """
            [
              {{Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageExFunSizes.Module1,
                :template, 0}, 853},
