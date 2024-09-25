@@ -30,9 +30,13 @@ defmodule Hologram.Compiler.CallGraph do
     {{:unicode, :characters_to_binary, 3}, {:lists, :flatten, 1}}
   ]
 
+  # These functions are transpiled manually for at least one of the following reasons:
+  # * the transpiled output is too large
+  # * the transpiled output is deeply nested
+  # * the function doesn't make sense on the client side
+  # * the function must access the Hologram client runtime
   @manually_ported_mfas [
-    # {Cldr.Validity.U, :encode_key, 2} transpiles to a huge, deeply nested JS code,
-    # so only a placeholder which raises an error is used instead.
+    {Cldr.Locale, :language_data, 0},
     {Cldr.Validity.U, :encode_key, 2},
     {Code, :ensure_loaded, 1},
     {Hologram.Router.Helpers, :asset_path, 1},

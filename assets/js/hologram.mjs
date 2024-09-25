@@ -25,6 +25,7 @@ import PointerEvent from "./events/pointer_event.mjs";
 import SubmitEvent from "./events/submit_event.mjs";
 import TransitionEvent from "./events/transition_event.mjs";
 
+import ManuallyPortedElixirCldrLocale from "./elixir/cldr/locale.mjs";
 import ManuallyPortedElixirCldrValidityU from "./elixir/cldr/validity/u.mjs";
 import ManuallyPortedElixirCode from "./elixir/code.mjs";
 import ManuallyPortedElixirHologramRouterHelpers from "./elixir/hologram/router/helpers.mjs";
@@ -330,6 +331,13 @@ export default class Hologram {
   }
 
   static #defineManuallyPortedFunctions() {
+    Interpreter.defineManuallyPortedFunction(
+      "Cldr.Locale",
+      "language_data/0",
+      "public",
+      ManuallyPortedElixirCldrLocale["language_data/0"],
+    );
+
     Interpreter.defineManuallyPortedFunction(
       "Cldr.Validity.U",
       "encode_key/2",
