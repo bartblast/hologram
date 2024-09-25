@@ -29,6 +29,7 @@ import ManuallyPortedElixirCldrLocale from "./elixir/cldr/locale.mjs";
 import ManuallyPortedElixirCldrValidityU from "./elixir/cldr/validity/u.mjs";
 import ManuallyPortedElixirCode from "./elixir/code.mjs";
 import ManuallyPortedElixirHologramRouterHelpers from "./elixir/hologram/router/helpers.mjs";
+import ManuallyPortedElixirIO from "./elixir/io.mjs";
 import ManuallyPortedElixirKernel from "./elixir/kernel.mjs";
 import ManuallyPortedElixirString from "./elixir/string.mjs";
 
@@ -357,6 +358,27 @@ export default class Hologram {
       "asset_path/1",
       "public",
       ManuallyPortedElixirHologramRouterHelpers["asset_path/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "IO",
+      "inspect/1",
+      "public",
+      ManuallyPortedElixirIO["inspect/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "IO",
+      "inspect/2",
+      "public",
+      ManuallyPortedElixirIO["inspect/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "IO",
+      "inspect/3",
+      "public",
+      ManuallyPortedElixirIO["inspect/3"],
     );
 
     Interpreter.defineManuallyPortedFunction(
