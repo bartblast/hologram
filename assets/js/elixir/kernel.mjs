@@ -9,7 +9,6 @@ const Elixir_Kernel = {
     return Elixir_Kernel["inspect/2"](term, Type.keywordList());
   },
 
-  // TODO: support opts param
   "inspect/2": (term, opts) => {
     return Type.bitstring(Interpreter.inspect(term, opts));
   },
