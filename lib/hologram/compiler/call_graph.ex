@@ -379,7 +379,6 @@ defmodule Hologram.Compiler.CallGraph do
 
     call_graph
     |> get_graph()
-    # |> Graph.add_edges(Enum.map(entry_mfas, &{page_module, &1}))
     |> sorted_reachable_mfas(entry_mfas)
     |> reject_hex_module_inspect_and_string_chars_protocols_implementations()
   end
