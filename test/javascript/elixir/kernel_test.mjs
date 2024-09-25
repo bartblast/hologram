@@ -27,8 +27,22 @@ describe("Elixir_Kernel", () => {
     const inspect = Elixir_Kernel["inspect/2"];
 
     it("delegates to Interpreter.inspect()", () => {
-      const result = inspect(Type.integer(123));
-      assert.deepStrictEqual(result, Type.bitstring("123"));
+      const term = Type.map([
+        [Type.atom("b"), Type.integer(2)],
+        [Type.atom("a"), Type.integer(1)],
+      ]);
+
+      const opts = Type.keywordList([
+        [
+          Type.atom("custom_options"),
+          Type.keywordList([[Type.atom("sort_maps"), Type.boolean(true)]]),
+        ],
+      ]);
+
+      const result = inspect(term, opts);
+      const expected = Type.bitstring("%{a: 1, b: 2}");
+
+      assert.deepStrictEqual(result, expected);
     });
   });
 });
