@@ -162,6 +162,18 @@ describe("Interpreter", () => {
     assert.deepStrictEqual(result, expected);
   });
 
+  it("buildTooBigOutputErrorMsg()", () => {
+    const result = Interpreter.buildTooBigOutputErrorMsg(
+      "{MyModule, :my_fun, 3}",
+    );
+
+    const expected =
+      "{MyModule, :my_fun, 3} can't be transpiled automatically to JavaScript, because its output is too big.\n" +
+      "See what to do here: https://www.hologram.page/TODO";
+
+    assert.deepStrictEqual(result, expected);
+  });
+
   describe("buildUndefinedFunctionErrorMsg", () => {
     const module = Type.alias("Aaa.Bbb");
 

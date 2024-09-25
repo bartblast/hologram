@@ -91,6 +91,13 @@ export default class Interpreter {
     return "no match of right hand side value: " + Interpreter.inspect(right);
   }
 
+  static buildTooBigOutputErrorMsg(mfa) {
+    return (
+      `${mfa} can't be transpiled automatically to JavaScript, because its output is too big.\n` +
+      "See what to do here: https://www.hologram.page/TODO"
+    );
+  }
+
   static buildUndefinedFunctionErrorMsg(
     module,
     functionName,
