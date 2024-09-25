@@ -5,6 +5,7 @@ import {
 
 import Elixir_Cldr_Validity_U from "../../../../../assets/js/elixir/cldr/validity/u.mjs";
 import HologramInterpreterError from "../../../../../assets/js/errors/interpreter_error.mjs";
+import Interpreter from "../../../../../assets/js/interpreter.mjs";
 
 defineGlobalErlangAndElixirModules();
 
@@ -15,8 +16,9 @@ describe("Elixir_Cldr_Validity_U", () => {
     assert.throw(
       () => encode_key("dummy_key", "dummy_value"),
       HologramInterpreterError,
-      "{Cldr.Validity.U, :encode_key, 2} is not supported in Hologram.\n" +
-        "See what to do here: https://www.hologram.page/TODO",
+      Interpreter.buildTooBigOutputErrorMsg(
+        "{Cldr.Validity.U, :encode_key, 2}",
+      ),
     );
   });
 });
