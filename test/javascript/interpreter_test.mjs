@@ -2518,7 +2518,7 @@ describe("Interpreter", () => {
     });
   });
 
-  // Important: keep Kernel.inspect/2 consistency tests in sync.
+  // Keep Elixir consistency tests in sync: test/elixir/hologram/ex_js_consistency/interpreter_test.exs ("inspect" section).
   describe("inspect()", () => {
     describe("anonymous function", () => {
       const clauses = ["clause_dummy_1", "clause_dummy_2"];
