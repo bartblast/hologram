@@ -687,7 +687,7 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp maybe_add_ecto_schema_call_graph_edges(call_graph, module) do
     if Reflection.ecto_schema?(module) do
-      add_edge(call_graph, {Ecto.Changeset, :cast, 4}, {module, :__changeset__, 0})
+      add_edge(call_graph, module, {module, :__changeset__, 0})
     end
   end
 

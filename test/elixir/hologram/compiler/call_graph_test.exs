@@ -704,12 +704,13 @@ defmodule Hologram.Compiler.CallGraphTest do
              )
     end
 
-    # TODO: verify programatically that __changeset__/0 is still used by cast/4 (maybe in consistency tests)
+    # TODO: verify programatically that "use Ecto.Schema"
+    # still adds __changeset__/0 (maybe in consistency tests)
     test "Ecto schema (__changeset__/0 edge is added)", %{empty_call_graph: call_graph} do
       ir = IR.for_module(Module21)
       build(call_graph, ir)
 
-      assert has_edge?(call_graph, {Ecto.Changeset, :cast, 4}, {Module21, :__changeset__, 0})
+      assert has_edge?(call_graph, Module21, {Module21, :__changeset__, 0})
     end
   end
 
