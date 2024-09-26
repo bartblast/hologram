@@ -21,6 +21,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module19
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module2
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module20
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module21
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module3
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module5
@@ -701,6 +702,13 @@ defmodule Hologram.Compiler.CallGraphTest do
                from_vertex,
                {String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, :to_string, 1}
              )
+    end
+
+    test "Ecto schema (__changeset__/0 edge is added)", %{empty_call_graph: call_graph} do
+      ir = IR.for_module(Module21)
+      build(call_graph, ir)
+
+      assert has_edge?(call_graph, {Module21, :cast, 4}, {Module21, :__changeset__, 0})
     end
   end
 

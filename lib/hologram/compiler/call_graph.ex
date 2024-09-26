@@ -153,6 +153,7 @@ defmodule Hologram.Compiler.CallGraph do
       add_edge(call_graph, from_vertex, value)
       maybe_add_protocol_call_graph_edges(call_graph, value)
       maybe_add_templatable_call_graph_edges(call_graph, value)
+      maybe_add_ecto_schema_call_graph_edges(call_graph, value)
     end
 
     call_graph
@@ -682,6 +683,12 @@ defmodule Hologram.Compiler.CallGraph do
 
   defp inbound_edges(%CallGraph{pid: pid}, vertex) do
     Agent.get(pid, &Graph.in_edges(&1, vertex), :infinity)
+  end
+
+  defp maybe_add_ecto_schema_call_graph_edges(call_graph, module) do
+    if Reflection.ecto_schema?(module) do
+      add_edge(call_graph, {module, :cast, 4}, {module, :__changeset__, 0})
+    end
   end
 
   defp maybe_add_protocol_call_graph_edges(call_graph, module) do
