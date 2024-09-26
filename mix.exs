@@ -41,6 +41,7 @@ defmodule Hologram.MixProject do
       {:credo, "~> 1.0", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
       {:doctor, "~> 0.21", only: [:dev, :test], runtime: false},
+      {:ecto, "~> 3.0", only: :test, runtime: false},
       {:ex_check, "~> 0.15", only: [:dev, :test], runtime: false},
       # file_system test env is required by credo
       {:file_system, "~> 1.0", only: [:dev, :test]},

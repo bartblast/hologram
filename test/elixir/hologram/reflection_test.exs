@@ -7,6 +7,7 @@ defmodule Hologram.ReflectionTest do
   alias Hologram.Test.Fixtures.Reflection.Module3
   alias Hologram.Test.Fixtures.Reflection.Module4
   alias Hologram.Test.Fixtures.Reflection.Module7
+  alias Hologram.Test.Fixtures.Reflection.Module8
 
   describe "alias?/1" do
     test "atom which is an alias" do
@@ -63,6 +64,20 @@ defmodule Hologram.ReflectionTest do
 
     test "is not a component module" do
       refute component?(__MODULE__)
+    end
+  end
+
+  describe "ecto_schema?/1" do
+    test "module which is an Ecto schema" do
+      assert ecto_schema?(Module8)
+    end
+
+    test "module which is not an Ecto schema" do
+      refute ecto_schema?(Calendar.ISO)
+    end
+
+    test "non-module" do
+      refute ecto_schema?(123)
     end
   end
 
