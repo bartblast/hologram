@@ -338,6 +338,24 @@ defmodule Hologram.ReflectionTest do
     assert source_path(__MODULE__) == __ENV__.file
   end
 
+  describe "templatable?" do
+    test "is a component module" do
+      assert templatable?(Module3)
+    end
+
+    test "is a page module" do
+      assert templatable?(Module2)
+    end
+
+    test "is not a module" do
+      refute templatable?(123)
+    end
+
+    test "is not a component or page module" do
+      refute templatable?(__MODULE__)
+    end
+  end
+
   test "tmp_dir/0" do
     assert tmp_dir() == File.cwd!() <> "/tmp"
   end

@@ -484,6 +484,27 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Returns true if the given term is a component (a module that has a "use Hologram.Component" directive)
+  or a page (a module that has a "use Hologram.Page" directive).
+  Otherwise false is returned.
+
+  ## Examples
+
+      iex> component?(MyComponent)
+      true
+      
+      iex> component?(MyPage)
+      true
+
+      iex> component?(Hologram.Reflection)
+      false
+  """
+  @spec templatable?(term) :: boolean
+  def templatable?(term) do
+    component?(term) || page?(term)
+  end
+
+  @doc """
   Returns the absolute path of the tmp directory.
 
   ## Examples
