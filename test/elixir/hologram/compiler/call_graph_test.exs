@@ -709,7 +709,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       ir = IR.for_module(Module21)
       build(call_graph, ir)
 
-      assert has_edge?(call_graph, {Module21, :cast, 4}, {Module21, :__changeset__, 0})
+      assert has_edge?(call_graph, {Ecto.Changeset, :cast, 4}, {Module21, :__changeset__, 0})
     end
   end
 
