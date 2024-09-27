@@ -14,6 +14,7 @@ defmodule Hologram.ExJsConsistency.Elixir.IOTest do
     test "delegates to inspect/2" do
       output =
         capture_io(fn ->
+          # credo:disable-for-next-line Credo.Check.Warning.IoInspect
           assert IO.inspect(true) == true
         end)
 
@@ -25,6 +26,7 @@ defmodule Hologram.ExJsConsistency.Elixir.IOTest do
     test "delegates to inspect/3" do
       output =
         capture_io(fn ->
+          # credo:disable-for-next-line Credo.Check.Warning.IoInspect
           assert IO.inspect(%{b: 2, a: 1}, custom_options: [sort_maps: true]) == %{
                    a: 1,
                    b: 2
@@ -40,6 +42,7 @@ defmodule Hologram.ExJsConsistency.Elixir.IOTest do
     test "outputs inspected term to the :stdio device" do
       output =
         capture_io(fn ->
+          # credo:disable-for-next-line Credo.Check.Warning.IoInspect
           assert IO.inspect(:stdio, %{b: 2, a: 1}, custom_options: [sort_maps: true]) == %{
                    a: 1,
                    b: 2
@@ -57,6 +60,7 @@ defmodule Hologram.ExJsConsistency.Elixir.IOTest do
         ])
 
       assert_error FunctionClauseError, expected_msg, fn ->
+        # credo:disable-for-next-line Credo.Check.Warning.IoInspect
         IO.inspect(123, :abc, [])
       end
     end

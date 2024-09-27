@@ -22,7 +22,9 @@ defmodule Mix.Tasks.Holo.Compiler.PageToMfaPaths do
       |> remove_runtime_mfas()
       |> CallGraph.get_graph()
 
-    Enum.each(CallGraph.list_page_entry_mfas(page_module), fn entry_mfa ->
+    page_module
+    |> CallGraph.list_page_entry_mfas()
+    |> Enum.each(fn entry_mfa ->
       shortest_path = Graph.get_shortest_path(graph, entry_mfa, dest_mfa)
 
       if shortest_path do
