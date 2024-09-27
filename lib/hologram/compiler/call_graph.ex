@@ -686,8 +686,13 @@ defmodule Hologram.Compiler.CallGraph do
     end)
   end
 
-  # Adds reflection MFAs, i.e. __changeset__/0, __struct__/0 and __struct__/1
-  # that are reachable from server inits (init/3) of components used by the page.
+  # Adds reflection MFAs, i.e.:
+  # * __changeset__/0
+  # * __schema__/1
+  # * __schema__/2
+  # * __struct__/0
+  # * __struct__/1
+  # that are reachable from server inits (init/3) of the components used by the page.
   defp add_reflection_mfas_reachable_from_server_inits(page_mfas, page_module, graph) do
     templatables = [page_module | extract_uniq_components(page_mfas)]
 
