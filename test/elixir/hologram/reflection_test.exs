@@ -8,6 +8,7 @@ defmodule Hologram.ReflectionTest do
   alias Hologram.Test.Fixtures.Reflection.Module4
   alias Hologram.Test.Fixtures.Reflection.Module7
   alias Hologram.Test.Fixtures.Reflection.Module8
+  alias Hologram.Test.Fixtures.Reflection.Module9
 
   describe "alias?/1" do
     test "atom which is an alias" do
@@ -140,6 +141,16 @@ defmodule Hologram.ReflectionTest do
 
     test "returns false if the module doesn't have a function with the given name and arity" do
       refute has_function?(Module4, :test_fun, 3)
+    end
+  end
+
+  describe "has_struct?/1" do
+    test "has a struct defined" do
+      assert has_struct?(Module9)
+    end
+
+    test "doesn't have a struct defined" do
+      refute has_struct?(__MODULE__)
     end
   end
 

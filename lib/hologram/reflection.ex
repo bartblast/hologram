@@ -198,6 +198,14 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Determines whether the given module defines its struct.
+  """
+  @spec has_struct?(module) :: boolean
+  def has_struct?(module) do
+    has_function?(module, :__struct__, 0) && has_function?(module, :__struct__, 1)
+  end
+
+  @doc """
   Returns the IR PLT dump file name.
   """
   @spec ir_plt_dump_file_name() :: String.t()
