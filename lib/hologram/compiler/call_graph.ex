@@ -150,10 +150,12 @@ defmodule Hologram.Compiler.CallGraph do
 
   def build(call_graph, %IR.AtomType{value: value}, from_vertex) do
     if Reflection.elixir_module?(value) do
-      add_edge(call_graph, from_vertex, value)
-      maybe_add_protocol_call_graph_edges(call_graph, value)
-      maybe_add_templatable_call_graph_edges(call_graph, value)
-      maybe_add_ecto_schema_call_graph_edges(call_graph, value)
+      call_graph
+      |> add_edge(from_vertex, value)
+      |> maybe_add_protocol_call_graph_edges(value)
+      |> maybe_add_struct_call_graph_edges(value)
+      |> maybe_add_ecto_schema_call_graph_edges(value)
+      |> maybe_add_templatable_call_graph_edges(value)
     end
 
     call_graph
@@ -384,11 +386,14 @@ defmodule Hologram.Compiler.CallGraph do
   @spec list_page_mfas(CallGraph.t(), module) :: list(mfa)
   def list_page_mfas(call_graph, page_module) do
     entry_mfas = list_page_entry_mfas(page_module)
+    graph = get_graph(call_graph)
 
-    call_graph
-    |> get_graph()
+    graph
     |> sorted_reachable_mfas(entry_mfas)
     |> reject_hex_module_inspect_and_string_chars_protocols_implementations()
+    |> add_reflection_mfas_reachable_from_server_inits(page_module, graph)
+    |> Enum.uniq()
+    |> Enum.sort()
   end
 
   @doc """
@@ -502,7 +507,7 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Lists vertices that are reachable from the given call graph vertex or vertices.
+  Lists vertices that are reachable from the given graph vertex or vertices.
   """
   @spec reachable(Graph.t(), vertex | list(vertex)) :: list(vertex)
   def reachable(graph, vertex_or_vertices)
@@ -681,20 +686,74 @@ defmodule Hologram.Compiler.CallGraph do
     end)
   end
 
+  # Adds reflection MFAs, i.e. __changeset__/0, __struct__/0 and __struct__/1
+  # that are reachable from server inits (init/3) of components used by the page.
+  defp add_reflection_mfas_reachable_from_server_inits(page_mfas, page_module, graph) do
+    templatables = [page_module | extract_uniq_components(page_mfas)]
+
+    added_mfas =
+      Enum.reduce(templatables, [], fn templetable, acc ->
+        acc ++ list_reflection_mfas_reachable_from_server_init(templetable, graph)
+      end)
+
+    page_mfas ++ added_mfas
+  end
+
+  defp extract_uniq_components(mfas) do
+    mfas
+    |> Enum.map(fn {module, _function, _arity} -> module end)
+    |> Enum.uniq()
+    |> Enum.filter(&Reflection.component?/1)
+  end
+
   defp inbound_edges(%CallGraph{pid: pid}, vertex) do
     Agent.get(pid, &Graph.in_edges(&1, vertex), :infinity)
   end
 
+  defp list_reflection_mfas_reachable_from_server_init(templetable, graph) do
+    graph
+    |> reachable({templetable, :init, 3})
+    |> Enum.filter(fn mfa ->
+      case mfa do
+        {_module, :__changeset__, 0} -> true
+        {_module, :__schema__, 1} -> true
+        {_module, :__schema__, 2} -> true
+        {_module, :__struct__, 0} -> true
+        {_module, :__struct__, 1} -> true
+        _falback -> false
+      end
+    end)
+  end
+
   defp maybe_add_ecto_schema_call_graph_edges(call_graph, module) do
     if Reflection.ecto_schema?(module) do
-      add_edge(call_graph, module, {module, :__changeset__, 0})
+      add_edges(call_graph, [
+        Graph.Edge.new(module, {module, :__changeset__, 0}),
+        Graph.Edge.new(module, {module, :__schema__, 1}),
+        Graph.Edge.new(module, {module, :__schema__, 2})
+      ])
     end
+
+    call_graph
   end
 
   defp maybe_add_protocol_call_graph_edges(call_graph, module) do
     if Reflection.protocol?(module) do
       add_protocol_call_graph_edges(call_graph, module)
     end
+
+    call_graph
+  end
+
+  defp maybe_add_struct_call_graph_edges(call_graph, module) do
+    if Reflection.has_struct?(module) do
+      add_edges(call_graph, [
+        Graph.Edge.new(module, {module, :__struct__, 0}),
+        Graph.Edge.new(module, {module, :__struct__, 1})
+      ])
+    end
+
+    call_graph
   end
 
   defp maybe_add_templatable_call_graph_edges(call_graph, module) do
@@ -705,6 +764,8 @@ defmodule Hologram.Compiler.CallGraph do
     if Reflection.component?(module) do
       add_component_call_graph_edges(call_graph, module)
     end
+
+    call_graph
   end
 
   defp remove_module_vertices(call_graph, module) do

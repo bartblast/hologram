@@ -22,7 +22,19 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module2
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module20
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module21
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module22
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module24
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module25
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module27
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module28
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module3
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module30
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module31
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module32
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module33
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module35
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module36
+  alias Hologram.Test.Fixtures.Compiler.CallGraph.Module37
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module4
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module5
   alias Hologram.Test.Fixtures.Compiler.CallGraph.Module6
@@ -35,10 +47,12 @@ defmodule Hologram.Compiler.CallGraphTest do
   setup_all do
     ir_plt = Compiler.build_ir_plt()
     full_call_graph = Compiler.build_call_graph(ir_plt)
+    runtime_mfas = CallGraph.list_runtime_mfas(full_call_graph)
 
     [
       full_call_graph: full_call_graph,
-      ir_plt: ir_plt
+      ir_plt: ir_plt,
+      runtime_mfas: runtime_mfas
     ]
   end
 
@@ -593,11 +607,25 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_vertices(call_graph) == [
                Calendar.ISO,
                DateTime,
+               {DateTime, :__struct__, 0},
+               {DateTime, :__struct__, 1},
                {Module1, :my_fun_1, 4},
                {:erlang, :apply, 3}
              ]
 
       assert sorted_edges(call_graph) == [
+               %Graph.Edge{
+                 v1: DateTime,
+                 v2: {DateTime, :__struct__, 0},
+                 weight: 1,
+                 label: nil
+               },
+               %Graph.Edge{
+                 v1: DateTime,
+                 v2: {DateTime, :__struct__, 1},
+                 weight: 1,
+                 label: nil
+               },
                %Graph.Edge{
                  v1: {Module1, :my_fun_1, 4},
                  v2: Calendar.ISO,
@@ -952,6 +980,74 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       refute {String.Chars.Hex.Solver.PackageRange, :__impl__, 1} in result
       refute {String.Chars.Hex.Solver.PackageRange, :to_string, 1} in result
+    end
+
+    test "includes reflection MFAs reachable from server inits of components used by the page", %{
+      full_call_graph: full_call_graph,
+      runtime_mfas: runtime_mfas
+    } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> remove_runtime_mfas!(runtime_mfas)
+        |> list_page_mfas(Module22)
+
+      assert {Module24, :__changeset__, 0} in result
+      assert {Module24, :__schema__, 1} in result
+      assert {Module24, :__schema__, 2} in result
+
+      assert {Module25, :__struct__, 0} in result
+      assert {Module25, :__struct__, 1} in result
+
+      assert {Module27, :__changeset__, 0} in result
+      assert {Module27, :__schema__, 1} in result
+      assert {Module27, :__schema__, 2} in result
+
+      assert {Module28, :__struct__, 0} in result
+      assert {Module28, :__struct__, 1} in result
+
+      assert {Module30, :__changeset__, 0} in result
+      assert {Module30, :__schema__, 1} in result
+      assert {Module30, :__schema__, 2} in result
+
+      assert {Module31, :__struct__, 0} in result
+      assert {Module31, :__struct__, 1} in result
+
+      assert {Module32, :__changeset__, 0} in result
+      assert {Module32, :__schema__, 1} in result
+      assert {Module32, :__schema__, 2} in result
+
+      assert {Module33, :__struct__, 0} in result
+      assert {Module33, :__struct__, 1} in result
+
+      assert {Module35, :__changeset__, 0} in result
+      assert {Module35, :__schema__, 1} in result
+      assert {Module35, :__schema__, 2} in result
+
+      assert {Module36, :__struct__, 0} in result
+      assert {Module36, :__struct__, 1} in result
+
+      assert {Module37, :__struct__, 0} in result
+      assert {Module37, :__struct__, 1} in result
+    end
+
+    test "removes duplicate reflection MFAs reachable from server inits of components used by the page",
+         %{
+           full_call_graph: full_call_graph,
+           runtime_mfas: runtime_mfas
+         } do
+      result =
+        full_call_graph
+        |> CallGraph.clone()
+        |> remove_runtime_mfas!(runtime_mfas)
+        |> list_page_mfas(Module22)
+
+      assert Enum.count(result, &(&1 == {Module32, :__changeset__, 0})) == 1
+      assert Enum.count(result, &(&1 == {Module32, :__schema__, 1})) == 1
+      assert Enum.count(result, &(&1 == {Module32, :__schema__, 2})) == 1
+
+      assert Enum.count(result, &(&1 == {Module37, :__struct__, 0})) == 1
+      assert Enum.count(result, &(&1 == {Module37, :__struct__, 1})) == 1
     end
   end
 
