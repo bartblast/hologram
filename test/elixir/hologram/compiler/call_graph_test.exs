@@ -1044,7 +1044,11 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert Enum.count(result, &(&1 == {Module37, :__struct__, 1})) == 1
     end
 
-    test "sorts results", %{page_module_22_mfas: result} do
+    test "results are deduped", %{page_module_22_mfas: result} do
+      assert result == Enum.uniq(result)
+    end
+
+    test "results are sorted", %{page_module_22_mfas: result} do
       assert result == Enum.sort(result)
     end
   end
@@ -1118,7 +1122,11 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute {String.Chars.Hex.Solver.PackageRange, :to_string, 1} in result
     end
 
-    test "sorts results", %{runtime_mfas: result} do
+    test "results are deduped", %{runtime_mfas: result} do
+      assert result == Enum.uniq(result)
+    end
+
+    test "results are sorted", %{runtime_mfas: result} do
       assert result == Enum.sort(result)
     end
   end
