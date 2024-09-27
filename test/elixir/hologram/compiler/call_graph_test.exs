@@ -928,6 +928,16 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   describe "list_page_mfas/2" do
+    setup %{full_call_graph: full_call_graph, runtime_mfas: runtime_mfas} do
+      page_module_22_mfas =
+        full_call_graph
+        |> CallGraph.clone()
+        |> remove_runtime_mfas!(runtime_mfas)
+        |> list_page_mfas(Module22)
+
+      [page_module_22_mfas: page_module_22_mfas]
+    end
+
     test "includes action/3, template/0 and other MFAs that should be included" do
       module_14_ir = IR.for_module(Module14)
       module_15_ir = IR.for_module(Module15)
@@ -983,15 +993,8 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
 
     test "includes reflection MFAs reachable from server inits of components used by the page", %{
-      full_call_graph: full_call_graph,
-      runtime_mfas: runtime_mfas
+      page_module_22_mfas: result
     } do
-      result =
-        full_call_graph
-        |> CallGraph.clone()
-        |> remove_runtime_mfas!(runtime_mfas)
-        |> list_page_mfas(Module22)
-
       assert {Module24, :__changeset__, 0} in result
       assert {Module24, :__schema__, 1} in result
       assert {Module24, :__schema__, 2} in result
@@ -1032,22 +1035,17 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
 
     test "removes duplicate reflection MFAs reachable from server inits of components used by the page",
-         %{
-           full_call_graph: full_call_graph,
-           runtime_mfas: runtime_mfas
-         } do
-      result =
-        full_call_graph
-        |> CallGraph.clone()
-        |> remove_runtime_mfas!(runtime_mfas)
-        |> list_page_mfas(Module22)
-
+         %{page_module_22_mfas: result} do
       assert Enum.count(result, &(&1 == {Module32, :__changeset__, 0})) == 1
       assert Enum.count(result, &(&1 == {Module32, :__schema__, 1})) == 1
       assert Enum.count(result, &(&1 == {Module32, :__schema__, 2})) == 1
 
       assert Enum.count(result, &(&1 == {Module37, :__struct__, 0})) == 1
       assert Enum.count(result, &(&1 == {Module37, :__struct__, 1})) == 1
+    end
+
+    test "sorts results", %{page_module_22_mfas: result} do
+      assert result == Enum.sort(result)
     end
   end
 
