@@ -1,6 +1,7 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module1 do
   use Hologram.Page
+  alias Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module2
 
   route "/hologram-test-fixtures-mix-tasks-holo-compiler-pagetomfapaths-module1"
 
@@ -10,11 +11,11 @@ defmodule Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module1 
   def template do
     ~H"""
     Module1 template
-    {fun_1()}, {fun_2()}
+    {fun_1a()}, {fun_1b()}
     """
   end
 
-  def fun_2, do: :b
+  def fun_1a, do: Module2.fun_2b()
 
-  def fun_1, do: DateTime.utc_now()
+  def fun_1b, do: :b
 end

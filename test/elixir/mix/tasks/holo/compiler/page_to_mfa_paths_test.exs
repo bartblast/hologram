@@ -5,7 +5,9 @@ defmodule Mix.Tasks.Holo.Compiler.PageToMfaPathsTest do
 
   test "run/1" do
     page_module_arg = "Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module1"
-    dest_mfa_arg = "{System, :normalize_time_unit, 1}"
+
+    dest_mfa_arg =
+      "{Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module3, :fun_3c, 0}"
 
     output =
       capture_io(fn ->
@@ -14,8 +16,8 @@ defmodule Mix.Tasks.Holo.Compiler.PageToMfaPathsTest do
 
     assert output == """
 
-           {Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module1, :template, 0} -> {System, :normalize_time_unit, 1}
-           [{Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module1, :template, 0}, {Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module1, :fun_1, 0}, {DateTime, :utc_now, 0}, {DateTime, :utc_now, 1}, {DateTime, :utc_now, 2}, {System, :os_time, 1}, {System, :normalize_time_unit, 1}]
+           {Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module1, :template, 0} -> {Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module3, :fun_3c, 0}
+           [{Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module1, :template, 0}, {Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module1, :fun_1a, 0}, {Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module2, :fun_2b, 0}, {Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module3, :fun_3c, 0}]
 
            """
   end
