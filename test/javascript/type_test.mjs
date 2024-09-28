@@ -735,6 +735,23 @@ describe("Type", () => {
     });
   });
 
+  describe("isImproperList()", () => {
+    it("improper list", () => {
+      const term = Type.improperList([Type.integer(1), Type.integer(2)]);
+      assert.isTrue(Type.isImproperList(term));
+    });
+
+    it("proper list", () => {
+      const term = Type.list([Type.integer(1), Type.integer(2)]);
+      assert.isFalse(Type.isImproperList(term));
+    });
+
+    it("not a list", () => {
+      const term = Type.atom("abc");
+      assert.isFalse(Type.isImproperList(term));
+    });
+  });
+
   describe("isInteger()", () => {
     it("returns true for boxed integer value", () => {
       const result = Type.isInteger(Type.integer(123));

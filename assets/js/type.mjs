@@ -264,6 +264,10 @@ export default class Type {
     return term.type === "float";
   }
 
+  static isImproperList(term) {
+    return Type.isList(term) && term.isProper === false;
+  }
+
   static isInteger(term) {
     return term.type === "integer";
   }
