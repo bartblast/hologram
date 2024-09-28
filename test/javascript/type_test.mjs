@@ -764,6 +764,69 @@ describe("Type", () => {
     });
   });
 
+  describe("isIterator()", () => {
+    const map = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+    ]);
+
+    it("returns true for a tuple with 3 elements", () => {
+      const term = Type.tuple([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assert.isTrue(Type.isIterator(term));
+    });
+
+    it("returns false for a tuple with less than 3 elements", () => {
+      const term = Type.tuple([Type.integer(1), Type.integer(2)]);
+      assert.isFalse(Type.isIterator(term));
+    });
+
+    it("returns false for a tuple with more than 3 elements", () => {
+      const term = Type.tuple([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+        Type.integer(4),
+      ]);
+
+      assert.isFalse(Type.isIterator(term));
+    });
+
+    it("returns true for an improper list with specific structure", () => {
+      const term = Type.improperList([Type.integer(0), map]);
+      assert.isTrue(Type.isIterator(term));
+    });
+
+    it("returns false for an improper list with incorrect structure", () => {
+      const term = Type.improperList([Type.atom("key"), Type.integer(123)]);
+      assert.isFalse(Type.isIterator(term));
+    });
+
+    it("returns false for a proper list", () => {
+      const term = Type.list([Type.integer(0), map]);
+      assert.isFalse(Type.isIterator(term));
+    });
+
+    it("returns true for atom 'none'", () => {
+      const term = Type.atom("none");
+      assert.isTrue(Type.isIterator(term));
+    });
+
+    it("returns false for a non-iterator atom", () => {
+      const term = Type.atom("not_none");
+      assert.isFalse(Type.isIterator(term));
+    });
+
+    it("returns false for a term that is not a tuple, a list or an atom", () => {
+      const term = Type.integer(123);
+      assert.isFalse(Type.isIterator(term));
+    });
+  });
+
   describe("isKeywordList()", () => {
     it("empty keyword list", () => {
       const term = Type.keywordList();
