@@ -258,6 +258,38 @@ describe("Erlang_Maps", () => {
     });
   });
 
+  describe("iterator/1", () => {
+    const iterator = Erlang_Maps["iterator/1"];
+
+    it("empty map", () => {
+      const map = Type.map();
+      const result = iterator(map);
+      const expected = Type.improperList([Type.integer(0), map]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("non-empty map", () => {
+      const map = Type.map([
+        [atomA, integer1],
+        [atomB, integer2],
+      ]);
+
+      const result = iterator(map);
+      const expected = Type.improperList([Type.integer(0), map]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("not a map", () => {
+      assertBoxedError(
+        () => iterator(atomAbc),
+        "BadMapError",
+        "expected a map, got: :abc",
+      );
+    });
+  });
+
   describe("keys/1", () => {
     const keys = Erlang_Maps["keys/1"];
 

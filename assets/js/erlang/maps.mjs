@@ -87,6 +87,17 @@ const Erlang_Maps = {
   // End is_key/2
   // Deps: []
 
+  // Start iterator/1
+  "iterator/1": (map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    return Type.improperList([Type.integer(0), map]);
+  },
+  // End iterator/1
+  // Deps: []
+
   // Start keys/1
   "keys/1": (map) => {
     if (!Type.isMap(map)) {
