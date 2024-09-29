@@ -179,9 +179,10 @@ defmodule Hologram.Compiler.CallGraph do
         {module, _function, _arity} = from_vertex
       ) do
     to_vertex = {module, function, Enum.count(args)}
-    add_edge(call_graph, from_vertex, to_vertex)
 
-    build(call_graph, args, from_vertex)
+    call_graph
+    |> add_edge(from_vertex, to_vertex)
+    |> build(args, from_vertex)
   end
 
   def build(
@@ -189,8 +190,9 @@ defmodule Hologram.Compiler.CallGraph do
         %IR.ModuleDefinition{module: %IR.AtomType{value: module}, body: body},
         _from_vertex
       ) do
-    maybe_add_templatable_call_graph_edges(call_graph, module)
-    build(call_graph, body, module)
+    call_graph
+    |> maybe_add_templatable_call_graph_edges(module)
+    |> build(body, module)
   end
 
   def build(
@@ -236,8 +238,9 @@ defmodule Hologram.Compiler.CallGraph do
     map
     |> Map.to_list()
     |> Enum.each(fn {key, value} ->
-      build(call_graph, key, from_vertex)
-      build(call_graph, value, from_vertex)
+      call_graph
+      |> build(key, from_vertex)
+      |> build(value, from_vertex)
     end)
 
     call_graph
@@ -482,9 +485,11 @@ defmodule Hologram.Compiler.CallGraph do
     update_tasks =
       TaskUtils.async_many(diff.updated_modules, fn module ->
         inbound_remote_edges = inbound_remote_edges(call_graph, module)
-        remove_module_vertices(call_graph, module)
-        build_for_module(call_graph, ir_plt, module)
-        add_edges(call_graph, inbound_remote_edges)
+
+        call_graph
+        |> remove_module_vertices(module)
+        |> build_for_module(ir_plt, module)
+        |> add_edges(inbound_remote_edges)
       end)
 
     add_tasks =
@@ -682,8 +687,9 @@ defmodule Hologram.Compiler.CallGraph do
 
     Enum.each(impls, fn impl ->
       Enum.each(funs, fn {name, arity} ->
-        add_edge(call_graph, {module, name, arity}, {impl, :__impl__, 1})
-        add_edge(call_graph, {module, name, arity}, {impl, name, arity})
+        call_graph
+        |> add_edge({module, name, arity}, {impl, :__impl__, 1})
+        |> add_edge({module, name, arity}, {impl, name, arity})
       end)
     end)
   end
