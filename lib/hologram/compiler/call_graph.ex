@@ -662,16 +662,18 @@ defmodule Hologram.Compiler.CallGraph do
   # to include the entire component on the client side.
   # This is because we lack precise information about which specific component functions will be used.
   defp add_component_call_graph_edges(call_graph, module) do
-    add_edge(call_graph, module, {module, :__props__, 0})
-    add_edge(call_graph, module, {module, :action, 3})
-    add_edge(call_graph, module, {module, :init, 2})
-    add_edge(call_graph, module, {module, :template, 0})
+    call_graph
+    |> add_edge(module, {module, :__props__, 0})
+    |> add_edge(module, {module, :action, 3})
+    |> add_edge(module, {module, :init, 2})
+    |> add_edge(module, {module, :template, 0})
   end
 
   # __props__/0 and __route__/0 functions are needed to build page link href (e.g. in Hologram.UI.Link component).
   defp add_page_call_graph_edges(call_graph, module) do
-    add_edge(call_graph, module, {module, :__params__, 0})
-    add_edge(call_graph, module, {module, :__route__, 0})
+    call_graph
+    |> add_edge(module, {module, :__params__, 0})
+    |> add_edge(module, {module, :__route__, 0})
   end
 
   defp add_protocol_call_graph_edges(call_graph, module) do
