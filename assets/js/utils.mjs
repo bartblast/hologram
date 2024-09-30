@@ -36,7 +36,7 @@ export default class Utils {
     return cloneDeep(context);
   }
 
-  static cloneShallow(obj) {
+  static shallowCloneObject(obj) {
     // Use {...obj} instead of Object.assign({}, obj) for shallow copying,
     // see benchmarks here: https://thecodebarbarian.com/object-assign-vs-object-spread.html
     return {...obj};

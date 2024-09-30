@@ -99,9 +99,9 @@ describe("Utils", () => {
     });
   });
 
-  it("cloneShallow()", () => {
+  it("shallowCloneObject()", () => {
     const obj = {a: 1, b: {c: 3, d: 4}};
-    const clone = Utils.cloneShallow(obj);
+    const clone = Utils.shallowCloneObject(obj);
 
     assert.deepStrictEqual(clone, {a: 1, b: {c: 3, d: 4}});
 
