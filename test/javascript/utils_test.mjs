@@ -99,19 +99,6 @@ describe("Utils", () => {
     });
   });
 
-  it("shallowCloneObject()", () => {
-    const obj = {a: 1, b: {c: 3, d: 4}};
-    const clone = Utils.shallowCloneObject(obj);
-
-    assert.deepStrictEqual(clone, {a: 1, b: {c: 3, d: 4}});
-
-    clone.a = 10;
-    clone.b.c = 30;
-
-    assert.deepStrictEqual(obj, {a: 1, b: {c: 30, d: 4}});
-    assert.deepStrictEqual(clone, {a: 10, b: {c: 30, d: 4}});
-  });
-
   describe("concatUint8Arrays()", () => {
     it("concatenates multiple 8-bit unsigned integer arrays", () => {
       const arrays = [
@@ -172,5 +159,18 @@ describe("Utils", () => {
     it("21st", () => {
       assert.equal(Utils.ordinal(21), "21st");
     });
+  });
+
+  it("shallowCloneObject()", () => {
+    const obj = {a: 1, b: {c: 3, d: 4}};
+    const clone = Utils.shallowCloneObject(obj);
+
+    assert.deepStrictEqual(clone, {a: 1, b: {c: 3, d: 4}});
+
+    clone.a = 10;
+    clone.b.c = 30;
+
+    assert.deepStrictEqual(obj, {a: 1, b: {c: 30, d: 4}});
+    assert.deepStrictEqual(clone, {a: 10, b: {c: 30, d: 4}});
   });
 });

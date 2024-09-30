@@ -36,12 +36,6 @@ export default class Utils {
     return cloneDeep(context);
   }
 
-  static shallowCloneObject(obj) {
-    // Use {...obj} instead of Object.assign({}, obj) for shallow copying,
-    // see benchmarks here: https://thecodebarbarian.com/object-assign-vs-object-spread.html
-    return {...obj};
-  }
-
   static concatUint8Arrays(arrays) {
     return arrays.reduce((acc, arr) => {
       const mergedArr = new Uint8Array(acc.length + arr.length);
@@ -74,5 +68,11 @@ export default class Utils {
       case "other":
         return `${number}th`;
     }
+  }
+
+  static shallowCloneObject(obj) {
+    // Use {...obj} instead of Object.assign({}, obj) for shallow copying,
+    // see benchmarks here: https://thecodebarbarian.com/object-assign-vs-object-spread.html
+    return {...obj};
   }
 }
