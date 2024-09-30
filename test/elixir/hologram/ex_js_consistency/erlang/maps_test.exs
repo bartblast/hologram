@@ -217,6 +217,62 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
   end
 
+  describe "next/1" do
+    test "initial iterator with empty map" do
+      result =
+        %{}
+        |> :maps.iterator()
+        |> :maps.next()
+
+      assert result == :none
+    end
+
+    test "initial iterator with non-empty map" do
+      result =
+        %{a: 1, b: 2, c: 3}
+        |> :maps.iterator()
+        |> :maps.next()
+
+      expected_1 = {:a, 1, {:b, 2, {:c, 3, :none}}}
+      expected_2 = {:a, 1, {:c, 3, {:b, 2, :none}}}
+      expected_3 = {:b, 2, {:a, 1, {:c, 3, :none}}}
+      expected_4 = {:b, 2, {:c, 3, {:a, 1, :none}}}
+      expected_5 = {:c, 3, {:a, 1, {:b, 2, :none}}}
+      expected_6 = {:c, 3, {:b, 2, {:a, 1, :none}}}
+
+      # Maps in Erlang/Elixir do not guarantee a specific order for key-value pairs.
+      # The :maps.next/1 function returns a tuple {Key, Value, Iterator}, where Iterator
+      # represents the remaining key-value pairs in an unspecified order.
+      # This test accounts for all possible orderings of the map's key-value pairs.
+      assert result in [expected_1, expected_2, expected_3, expected_4, expected_5, expected_6]
+    end
+
+    test "non-initial empty iterator" do
+      result =
+        %{}
+        |> :maps.iterator()
+        |> :maps.next()
+        |> :maps.next()
+
+      assert result == :none
+    end
+
+    test "non-initial non-empty iterator" do
+      iter =
+        %{a: 1, b: 2, c: 3}
+        |> :maps.iterator()
+        |> :maps.next()
+
+      assert :maps.next(iter) == iter
+    end
+
+    test "not an iterator" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a valid iterator"), fn ->
+        :maps.next(123)
+      end
+    end
+  end
+
   describe "put/3" do
     test "when the map doesn't have the given key" do
       assert :maps.put(:b, 2, %{a: 1}) == %{a: 1, b: 2}
