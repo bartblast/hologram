@@ -99,6 +99,19 @@ describe("Utils", () => {
     });
   });
 
+  it("cloneShallow()", () => {
+    const obj = {a: 1, b: {c: 3, d: 4}};
+    const clone = Utils.cloneShallow(obj);
+
+    assert.deepStrictEqual(clone, {a: 1, b: {c: 3, d: 4}});
+
+    clone.a = 10;
+    clone.b.c = 30;
+
+    assert.deepStrictEqual(obj, {a: 1, b: {c: 30, d: 4}});
+    assert.deepStrictEqual(clone, {a: 10, b: {c: 30, d: 4}});
+  });
+
   describe("concatUint8Arrays()", () => {
     it("concatenates multiple 8-bit unsigned integer arrays", () => {
       const arrays = [
