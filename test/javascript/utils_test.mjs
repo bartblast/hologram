@@ -161,6 +161,19 @@ describe("Utils", () => {
     });
   });
 
+  it("shallowCloneArray()", () => {
+    const arr = [1, [3, 4]];
+    const clone = Utils.shallowCloneArray(arr);
+
+    assert.deepStrictEqual(clone, [1, [3, 4]]);
+
+    clone[0] = 10;
+    clone[1][0] = 30;
+
+    assert.deepStrictEqual(arr, [1, [30, 4]]);
+    assert.deepStrictEqual(clone, [10, [30, 4]]);
+  });
+
   it("shallowCloneObject()", () => {
     const obj = {a: 1, b: {c: 3, d: 4}};
     const clone = Utils.shallowCloneObject(obj);
