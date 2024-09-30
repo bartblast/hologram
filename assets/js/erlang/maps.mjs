@@ -150,6 +150,32 @@ const Erlang_Maps = {
   // End merge/2
   // Deps: []
 
+  // Start next/1
+  "next/1": (iterator) => {
+    if (!Type.isIterator(iterator)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a valid iterator"),
+      );
+    }
+
+    if (Type.isTuple(iterator)) {
+      return iterator;
+    }
+
+    if (Type.isImproperList(iterator)) {
+      return Object.values(iterator.data[1].data)
+        .reverse()
+        .reduce(
+          (acc, [key, value]) => Type.tuple([key, value, acc]),
+          Type.atom("none"),
+        );
+    }
+
+    return Type.atom("none");
+  },
+  // End next/1
+  // Deps: []
+
   // Start put/3
   "put/3": (key, value, map) => {
     if (!Type.isMap(map)) {

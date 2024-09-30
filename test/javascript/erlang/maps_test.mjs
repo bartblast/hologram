@@ -477,6 +477,63 @@ describe("Erlang_Maps", () => {
     });
   });
 
+  describe("next/1", () => {
+    const iterator = Erlang_Maps["iterator/1"];
+    const next = Erlang_Maps["next/1"];
+
+    const map = Type.map([
+      [Type.atom("a"), Type.integer(1)],
+      [Type.atom("b"), Type.integer(2)],
+      [Type.atom("c"), Type.integer(3)],
+    ]);
+
+    it("initial iterator with empty map", () => {
+      const iter = iterator(Type.map());
+      const result = next(iter);
+
+      assert.deepStrictEqual(result, Type.atom("none"));
+    });
+
+    it("initial iterator with non-empty map", () => {
+      const iter = iterator(map);
+      const result = next(iter);
+
+      const expected = Type.tuple([
+        Type.atom("a"),
+        Type.integer(1),
+        Type.tuple([
+          Type.atom("b"),
+          Type.integer(2),
+          Type.tuple([Type.atom("c"), Type.integer(3), Type.atom("none")]),
+        ]),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("non-initial empty iterator", () => {
+      const iter = next(iterator(Type.map()));
+      const result = next(iter);
+
+      assert.deepStrictEqual(result, Type.atom("none"));
+    });
+
+    it("non-initial non-empty iterator", () => {
+      const iter = next(iterator(map));
+      const result = next(iter);
+
+      assert.deepStrictEqual(result, iter);
+    });
+
+    it("not an iterator", () => {
+      assertBoxedError(
+        () => next(Type.integer(123)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a valid iterator"),
+      );
+    });
+  });
+
   describe("put/3", () => {
     const put = Erlang_Maps["put/3"];
 
