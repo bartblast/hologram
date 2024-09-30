@@ -272,7 +272,7 @@ export default class Renderer {
       }
 
       return acc;
-    }, Utils.cloneDeep(props));
+    }, Utils.shallowCloneObject(props));
   }
 
   // Based on inject_props_from_context/3

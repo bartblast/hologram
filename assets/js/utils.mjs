@@ -1,8 +1,5 @@
 "use strict";
 
-// See: https://www.blazemeter.com/blog/the-correct-way-to-import-lodash-libraries-a-benchmark
-import cloneDeep from "lodash/cloneDeep.js";
-
 export default class Utils {
   static capitalize(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
@@ -30,10 +27,6 @@ export default class Utils {
     }
 
     return result;
-  }
-
-  static cloneDeep(context) {
-    return cloneDeep(context);
   }
 
   static concatUint8Arrays(arrays) {

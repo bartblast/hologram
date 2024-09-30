@@ -138,7 +138,7 @@ const Erlang = {
       Interpreter.raiseArgumentError("argument error");
     }
 
-    const result = Utils.cloneDeep(left.data);
+    const result = Utils.shallowCloneArray(left.data);
 
     for (const rightElem of right.data) {
       for (let i = 0; i < result.length; ++i) {

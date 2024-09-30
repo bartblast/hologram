@@ -4637,7 +4637,7 @@ describe("Interpreter", () => {
       // %{x: 1, y: 2} = %{x: 1, y: 2}
       it("left and right maps have the same items", () => {
         const left = map;
-        const right = Utils.cloneDeep(map);
+        const right = structuredClone(map);
         const result = Interpreter.matchOperator(right, left, context);
 
         assert.deepStrictEqual(result, right);

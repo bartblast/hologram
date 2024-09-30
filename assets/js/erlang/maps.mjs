@@ -182,7 +182,7 @@ const Erlang_Maps = {
       Interpreter.raiseBadMapError(map);
     }
 
-    const newMap = Utils.cloneDeep(map);
+    const newMap = Utils.shallowCloneObject(map);
     newMap.data[Type.encodeMapKey(key)] = [key, value];
 
     return newMap;
@@ -196,7 +196,7 @@ const Erlang_Maps = {
       Interpreter.raiseBadMapError(map);
     }
 
-    const newMap = Utils.cloneDeep(map);
+    const newMap = Utils.shallowCloneObject(map);
     delete newMap.data[Type.encodeMapKey(key)];
 
     return newMap;
