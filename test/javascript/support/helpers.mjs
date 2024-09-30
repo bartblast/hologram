@@ -150,7 +150,7 @@ function defineElixirEnumModule() {
         );
       }
 
-      return {...term, data: term.data.reverse()};
+      return {...term, data: term.data.toReversed()};
     },
   };
 }
