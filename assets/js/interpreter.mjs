@@ -198,6 +198,12 @@ export default class Interpreter {
     Interpreter.raiseCaseClauseError(condition);
   }
 
+  static cloneContext(context) {
+    // Use {...obj} instead of Object.assign({}, obj) for shallow copying,
+    // see benchmarks here: https://thecodebarbarian.com/object-assign-vs-object-spread.html
+    return {module: context.module, vars: {...context.vars}};
+  }
+
   // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
   static compareTerms(term1, term2) {
     Interpreter.assertStructuralComparisonSupportedType(term1);

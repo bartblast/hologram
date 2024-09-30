@@ -945,6 +945,36 @@ describe("Interpreter", () => {
     });
   });
 
+  it("cloneContext()", () => {
+    const context = {
+      module: Type.atom("MyModule1"),
+      vars: {
+        a: Type.integer(1),
+        b: Type.integer(2),
+      },
+    };
+
+    const clone = Interpreter.cloneContext(context);
+    clone.module = Type.atom("MyModule2");
+    clone.vars.b = Type.integer(20);
+
+    assert.deepStrictEqual(context, {
+      module: Type.atom("MyModule1"),
+      vars: {
+        a: Type.integer(1),
+        b: Type.integer(2),
+      },
+    });
+
+    assert.deepStrictEqual(clone, {
+      module: Type.atom("MyModule2"),
+      vars: {
+        a: Type.integer(1),
+        b: Type.integer(20),
+      },
+    });
+  });
+
   describe("compareTerms()", () => {
     describe("different types", () => {
       it("first term smaller than second term", () => {
