@@ -41,7 +41,7 @@ export default class Type {
       capturedFunction: null,
       capturedModule: null,
       clauses: clauses,
-      context: Utils.cloneDeep(context),
+      context: Interpreter.cloneContext(context),
       uniqueId: Sequence.next(),
     };
   }
@@ -194,7 +194,7 @@ export default class Type {
       capturedFunction: capturedFunction,
       capturedModule: capturedModule,
       clauses: clauses,
-      context: {...Utils.cloneDeep(context), vars: {}},
+      context: Interpreter.buildContext({module: context.module, vars: {}}),
       uniqueId: Sequence.next(),
     };
   }

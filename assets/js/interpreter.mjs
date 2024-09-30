@@ -121,7 +121,7 @@ export default class Interpreter {
     const args = Type.list(argsArray);
 
     for (const clause of fun.clauses) {
-      const contextClone = Utils.cloneDeep(fun.context);
+      const contextClone = Interpreter.cloneContext(fun.context);
       const pattern = Type.list(clause.params(contextClone));
 
       if (Interpreter.isMatched(pattern, args, contextClone)) {
@@ -177,14 +177,14 @@ export default class Interpreter {
     let conditionContext;
 
     if (typeof condition === "function") {
-      conditionContext = Utils.cloneDeep(context);
+      conditionContext = Interpreter.cloneContext(context);
       condition = condition(conditionContext);
     } else {
       conditionContext = context;
     }
 
     for (const clause of clauses) {
-      const contextClone = Utils.cloneDeep(conditionContext);
+      const contextClone = Interpreter.cloneContext(conditionContext);
 
       if (Interpreter.isMatched(clause.match, condition, contextClone)) {
         Interpreter.updateVarsToMatchedValues(contextClone);
@@ -250,7 +250,7 @@ export default class Interpreter {
     );
 
     let items = Utils.cartesianProduct(sets).reduce((acc, combination) => {
-      const contextClone = Utils.cloneDeep(context);
+      const contextClone = Interpreter.cloneContext(context);
 
       for (let i = 0; i < generatorsCount; ++i) {
         if (
@@ -289,7 +289,7 @@ export default class Interpreter {
 
   static cond(clauses, context) {
     for (const clause of clauses) {
-      const contextClone = Utils.cloneDeep(context);
+      const contextClone = Interpreter.cloneContext(context);
 
       if (Type.isTruthy(clause.condition(contextClone))) {
         return clause.body(contextClone);
@@ -731,7 +731,7 @@ export default class Interpreter {
     let result;
 
     try {
-      const contextClone = Utils.cloneDeep(context);
+      const contextClone = Interpreter.cloneContext(context);
       result = body(contextClone);
       // TODO: finish
       // eslint-disable-next-line no-useless-catch
@@ -810,7 +810,7 @@ export default class Interpreter {
 
   static #evaluateCatchClauses(clauses, error, context) {
     for (const clause of clauses) {
-      const contextClone = Utils.cloneDeep(context);
+      const contextClone = Interpreter.cloneContext(context);
 
       if (Interpreter.#matchCatchClause(clause, error, contextClone)) {
         return clause.body(contextClone);
@@ -836,7 +836,7 @@ export default class Interpreter {
 
   static #evaluateRescueClauses(clauses, error, context) {
     for (const clause of clauses) {
-      const contextClone = Utils.cloneDeep(context);
+      const contextClone = Interpreter.cloneContext(context);
 
       if (Interpreter.#matchRescueClause(clause, error, contextClone)) {
         return clause.body(contextClone);
