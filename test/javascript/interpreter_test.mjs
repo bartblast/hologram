@@ -955,6 +955,15 @@ describe("Interpreter", () => {
     };
 
     const clone = Interpreter.cloneContext(context);
+
+    assert.deepStrictEqual(clone, {
+      module: Type.atom("MyModule1"),
+      vars: {
+        a: Type.integer(1),
+        b: Type.integer(2),
+      },
+    });
+
     clone.module = Type.atom("MyModule2");
     clone.vars.b = Type.integer(20);
 
