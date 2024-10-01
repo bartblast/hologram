@@ -28,6 +28,9 @@ defmodule Hologram.Test.Fixtures.Compiler.CallGraph.Module17 do
     # credo:disable-for-next-line Credo.Check.Refactor.Apply
     apply(Hologram.Test.Fixtures.Compiler.CallGraph.Module18, :my_fun_18, [1, 2])
 
-    component
+    put_state(component,
+      struct_1: struct(Hex.Solver.Assignment, term: :abc),
+      struct_2: %Hex.Solver.Assignment{term: :abc}
+    )
   end
 end

@@ -992,6 +992,18 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute {String.Chars.Hex.Solver.PackageRange, :to_string, 1} in result
     end
 
+    test "excludes Hex.Solver.* MFAs" do
+      module_17_ir = IR.for_module(Module17)
+
+      result =
+        start()
+        |> build(module_17_ir)
+        |> list_page_mfas(Module17)
+
+      refute {Hex.Solver.Assignment, :__struct__, 0} in result
+      refute {Hex.Solver.Assignment, :__struct__, 1} in result
+    end
+
     test "includes reflection MFAs reachable from server inits of components used by the page", %{
       page_module_22_mfas: result
     } do
@@ -1120,6 +1132,11 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       refute {String.Chars.Hex.Solver.PackageRange, :__impl__, 1} in result
       refute {String.Chars.Hex.Solver.PackageRange, :to_string, 1} in result
+    end
+
+    test "excludes Hex.Solver.* MFAs", %{runtime_mfas: result} do
+      refute {Hex.Solver.Assignment, :__struct__, 0} in result
+      refute {Hex.Solver.Assignment, :__struct__, 1} in result
     end
 
     test "results are deduped", %{runtime_mfas: result} do
