@@ -494,7 +494,10 @@ export default class Hologram {
       }
     });
 
-    Client.connect();
+    const connectPromise = new Promise((resolve) => {
+      Client.connect();
+      resolve();
+    });
 
     Hologram.#defineManuallyPortedFunctions();
 
@@ -511,7 +514,9 @@ export default class Hologram {
 
     console.inspect = (term) => console.log(Interpreter.inspect(term));
 
-    Hologram.#isInitiated = true;
+    connectPromise.then(() => {
+      Hologram.#isInitiated = true;
+    });
   }
 
   static #isPrefetchPageTimedOut(mapKey) {
