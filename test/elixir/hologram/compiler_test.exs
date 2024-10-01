@@ -373,7 +373,11 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  test "create_page_entry_files/4", %{call_graph: call_graph, ir_plt: ir_plt} do
+  test "create_page_entry_files/4", %{
+    call_graph: call_graph,
+    ir_plt: ir_plt,
+    runtime_mfas: runtime_mfas
+  } do
     opts = [
       js_dir: @js_dir,
       tmp_dir: Path.join([@tmp_dir, "tests", "compiler", "create_page_entry_files_4"])
@@ -383,7 +387,12 @@ defmodule Hologram.CompilerTest do
 
     page_modules = Reflection.list_pages()
 
-    result = create_page_entry_files(page_modules, call_graph, ir_plt, opts)
+    call_graph_without_runtime_mfas =
+      call_graph
+      |> CallGraph.clone()
+      |> CallGraph.remove_runtime_mfas!(runtime_mfas)
+
+    result = create_page_entry_files(page_modules, call_graph_without_runtime_mfas, ir_plt, opts)
 
     assert Enum.count(result) == Enum.count(page_modules)
 
