@@ -393,7 +393,7 @@ defmodule Hologram.Compiler.CallGraph do
 
     graph
     |> sorted_reachable_mfas(entry_mfas)
-    |> reject_hex_solver_modules()
+    |> reject_hex_solver_mfas()
     |> add_reflection_mfas_reachable_from_server_inits(page_module, graph)
     |> Enum.uniq()
     |> Enum.sort()
@@ -527,7 +527,7 @@ defmodule Hologram.Compiler.CallGraph do
     reachable(graph, [vertex])
   end
 
-  defp reject_hex_solver_modules(mfas) do
+  defp reject_hex_solver_mfas(mfas) do
     Enum.reject(mfas, fn {module, _function, _arity} ->
       module_str = to_string(module)
 
