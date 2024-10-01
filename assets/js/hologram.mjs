@@ -496,12 +496,7 @@ export default class Hologram {
       }
     });
 
-    const connectPromise = new Promise((resolve) => {
-      setTimeout(() => {
-        Client.connect();
-        resolve();
-      }, 0);
-    });
+    const connectPromise = Utils.runAsyncTask(() => Client.connect());
 
     Hologram.#defineManuallyPortedFunctions();
 
@@ -509,7 +504,7 @@ export default class Hologram {
 
     window.addEventListener("pageshow", (event) => {
       if (event.persisted) {
-        Client.connect();
+        Utils.runAsyncTask(() => Client.connect());
       }
     });
 
