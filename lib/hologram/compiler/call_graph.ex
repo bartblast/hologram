@@ -427,7 +427,7 @@ defmodule Hologram.Compiler.CallGraph do
     |> get_graph()
     |> add_edges_for_erlang_functions()
     |> sorted_reachable_mfas(entry_mfas)
-    |> reject_hex_solver_modules()
+    |> reject_hex_solver_mfas()
   end
 
   @doc """
