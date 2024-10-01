@@ -63,6 +63,15 @@ export default class Utils {
     }
   }
 
+  static runAsyncTask(task) {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        task();
+        resolve();
+      }, 0);
+    });
+  }
+
   static shallowCloneArray(arr) {
     return [...arr];
   }

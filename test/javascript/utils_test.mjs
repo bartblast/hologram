@@ -149,6 +149,19 @@ describe("Utils", () => {
     });
   });
 
+  it("runAsyncTask()", async () => {
+    const obj = {a: 1, b: 2};
+    const task = () => (obj.b = 3);
+
+    const promise = Utils.runAsyncTask(task);
+
+    assert.equal(obj.b, 2);
+
+    await promise;
+
+    assert.equal(obj.b, 3);
+  });
+
   it("shallowCloneArray()", () => {
     const arr = [1, [3, 4]];
     const clone = Utils.shallowCloneArray(arr);
