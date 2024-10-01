@@ -56,7 +56,7 @@ export default class Client {
     );
   }
 
-  static async fetchPage(toParam, successCallback, failureCallback) {
+  static fetchPage(toParam, successCallback, failureCallback) {
     Client.#channel
       .push("page", toParam, Config.fetchPageTimeoutMs)
       .receive("ok", successCallback)

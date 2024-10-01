@@ -195,11 +195,13 @@ export default class Hologram {
         timestamp: Date.now(),
       });
 
-      Client.fetchPage(
-        toParam,
-        (resp) => Hologram.handlePrefetchPageSuccess(mapKey, resp),
-        (resp) => Hologram.handlePrefetchPageError(mapKey, resp),
-      );
+      Utils.runAsyncTask(() => {
+        Client.fetchPage(
+          toParam,
+          (resp) => Hologram.handlePrefetchPageSuccess(mapKey, resp),
+          (resp) => Hologram.handlePrefetchPageError(mapKey, resp),
+        );
+      });
     }
   }
 
