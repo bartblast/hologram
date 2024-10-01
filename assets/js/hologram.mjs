@@ -495,8 +495,10 @@ export default class Hologram {
     });
 
     const connectPromise = new Promise((resolve) => {
-      Client.connect();
-      resolve();
+      setTimeout(() => {
+        Client.connect();
+        resolve();
+      }, 0);
     });
 
     Hologram.#defineManuallyPortedFunctions();
