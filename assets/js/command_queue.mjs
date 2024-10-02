@@ -31,7 +31,7 @@ export default class CommandQueue {
     return null;
   }
 
-  static async process() {
+  static process() {
     if (!CommandQueue.isProcessing && Client.isConnected()) {
       CommandQueue.isProcessing = true;
 

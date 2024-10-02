@@ -68,7 +68,7 @@ export default class Client {
     return Client.socket === null ? false : Client.socket.isConnected();
   }
 
-  static async sendCommand(payload, successCallback, failureCallback) {
+  static sendCommand(payload, successCallback, failureCallback) {
     Client.#channel
       .push("command", payload)
       .receive("ok", successCallback)

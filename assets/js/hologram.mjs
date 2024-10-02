@@ -195,13 +195,11 @@ export default class Hologram {
         timestamp: Date.now(),
       });
 
-      Utils.runAsyncTask(() => {
-        Client.fetchPage(
-          toParam,
-          (resp) => Hologram.handlePrefetchPageSuccess(mapKey, resp),
-          (resp) => Hologram.handlePrefetchPageError(mapKey, resp),
-        );
-      });
+      Client.fetchPage(
+        toParam,
+        (resp) => Hologram.handlePrefetchPageSuccess(mapKey, resp),
+        (resp) => Hologram.handlePrefetchPageError(mapKey, resp),
+      );
     }
   }
 
@@ -277,7 +275,7 @@ export default class Hologram {
   }
 
   // Made public to make tests easier
-  static async navigateToPage(toParam) {
+  static navigateToPage(toParam) {
     const pagePath = Hologram.#buildPagePath(toParam);
 
     Client.fetchPage(
@@ -496,7 +494,7 @@ export default class Hologram {
       }
     });
 
-    const connectPromise = Utils.runAsyncTask(() => Client.connect());
+    Client.connect();
 
     Hologram.#defineManuallyPortedFunctions();
 
@@ -504,7 +502,7 @@ export default class Hologram {
 
     window.addEventListener("pageshow", (event) => {
       if (event.persisted) {
-        Utils.runAsyncTask(() => Client.connect());
+        Client.connect();
       }
     });
 
@@ -513,9 +511,7 @@ export default class Hologram {
 
     console.inspect = (term) => console.log(Interpreter.inspect(term));
 
-    connectPromise.then(() => {
-      Hologram.#isInitiated = true;
-    });
+    Hologram.#isInitiated = true;
   }
 
   static #isPrefetchPageTimedOut(mapKey) {
