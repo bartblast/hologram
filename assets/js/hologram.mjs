@@ -65,6 +65,7 @@ export default class Hologram {
   // Deps: [:maps.get/2, :maps.put/3]
   static executeAction(action) {
     const startTime = performance.now();
+    window.hologram.isProfilingEnabled = true;
 
     const name = Erlang_Maps["get/2"](Type.atom("name"), action);
     const params = Erlang_Maps["get/2"](Type.atom("params"), action);
@@ -127,6 +128,8 @@ export default class Hologram {
     );
 
     ComponentRegistry.putComponentStruct(target, savedComponentStruct);
+
+    window.hologram.isProfilingEnabled = false;
 
     console.log(
       "Hologram: action",

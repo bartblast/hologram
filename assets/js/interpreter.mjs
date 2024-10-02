@@ -319,6 +319,12 @@ export default class Interpreter {
     Interpreter.maybeInitModuleProxy(moduleExName, moduleJsName);
 
     globalThis[moduleJsName][`${functionName}/${arity}`] = function () {
+      let startTime;
+
+      if (window.hologram.isProfilingEnabled) {
+        startTime = performance.now();
+      }
+
       const mfa = `${moduleExName}.${functionName}/${arity}`;
 
       // TODO: remove on release
@@ -338,6 +344,14 @@ export default class Interpreter {
 
             // TODO: remove on release
             // Interpreter.#logFunctionResult(mfa, result);
+
+            if (window.hologram.isProfilingEnabled) {
+              console.log(
+                `Hologram: executed function ${mfa} in`,
+                Math.round(performance.now() - startTime),
+                "ms",
+              );
+            }
 
             return result;
           }
