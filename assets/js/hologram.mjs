@@ -64,6 +64,8 @@ export default class Hologram {
   // Made public to make tests easier
   // Deps: [:maps.get/2, :maps.put/3]
   static executeAction(action) {
+    const startTime = performance.now();
+
     const name = Erlang_Maps["get/2"](Type.atom("name"), action);
     const params = Erlang_Maps["get/2"](Type.atom("params"), action);
     const target = Erlang_Maps["get/2"](Type.atom("target"), action);
@@ -125,6 +127,14 @@ export default class Hologram {
     );
 
     ComponentRegistry.putComponentStruct(target, savedComponentStruct);
+
+    console.log(
+      "Hologram: action",
+      `:${name.value}`,
+      "executed in",
+      Math.round(performance.now() - startTime),
+      "ms",
+    );
 
     if (!Type.isNil(nextAction)) {
       if (Type.isNil(Erlang_Maps["get/2"](Type.atom("target"), nextAction))) {
@@ -291,6 +301,8 @@ export default class Hologram {
 
   // Made public to make tests easier
   static render() {
+    const startTime = performance.now();
+
     const newVirtualDocument = Renderer.renderPage(
       Hologram.#pageModule,
       Hologram.#pageParams,
@@ -299,6 +311,12 @@ export default class Hologram {
     Hologram.virtualDocument = patch(
       Hologram.virtualDocument,
       newVirtualDocument,
+    );
+
+    console.log(
+      "Hologram: page rendered in",
+      Math.round(performance.now() - startTime),
+      "ms",
     );
   }
 
