@@ -423,6 +423,11 @@ describe("Hologram", () => {
     });
   });
 
+  // Test skipped: executeCommand() is a simple pass-through function
+  // that directly calls CommandQueue functions without additional logic.
+  // Testing it would only verify that these function calls occur.
+  // it("executeCommand()")
+
   describe("executeLoadPrefetchedPageAction()", () => {
     let eventTargetNode, loadPageStub;
 

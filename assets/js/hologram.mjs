@@ -159,6 +159,11 @@ export default class Hologram {
     }
   }
 
+  static executeCommand(command) {
+    CommandQueue.push(command);
+    CommandQueue.process();
+  }
+
   // Made public to make tests easier
   static executeLoadPrefetchedPageAction(action, eventTargetNode) {
     Hologram.#ensureDomNodeHasHologramId(eventTargetNode);
