@@ -14,8 +14,8 @@ defmodule Mix.Tasks.Holo.Compiler.PageExFunSizesTest do
     assert output === """
            [
              {{Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageExFunSizes.Module1,
-               :template, 0}, 853},
-             {{Hologram.Test.Fixtures.LayoutFixture, :template, 0}, 634},
+               :template, 0}, 861},
+             {{Hologram.Test.Fixtures.LayoutFixture, :template, 0}, 642},
              {{Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageExFunSizes.Module1,
                :__route__, 0}, 295},
              {{Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageExFunSizes.Module1,
