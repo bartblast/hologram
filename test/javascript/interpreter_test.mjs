@@ -80,6 +80,13 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("module defined, null", () => {
+      const result = Interpreter.buildContext({module: null});
+      const expected = {module: null, vars: {}};
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("vars defined", () => {
       const result = Interpreter.buildContext({
         vars: {a: Type.integer(1), b: Type.integer(2)},

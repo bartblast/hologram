@@ -50,11 +50,11 @@ export default class Interpreter {
     const {module, vars} = data;
     const context = {module: null, vars: {}};
 
-    if (typeof module !== "undefined") {
+    if (module) {
       context.module = Type.isAlias(module) ? module : Type.alias(module);
     }
 
-    if (typeof vars !== "undefined") {
+    if (vars) {
       context.vars = vars;
     }
 
