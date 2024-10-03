@@ -65,7 +65,7 @@ export default class Hologram {
   // Deps: [:maps.get/2, :maps.put/3]
   static executeAction(action) {
     const startTime = performance.now();
-    window.hologram.isProfilingEnabled = true;
+    globalThis.hologram.isProfilingEnabled = true;
 
     const name = Erlang_Maps["get/2"](Type.atom("name"), action);
     const params = Erlang_Maps["get/2"](Type.atom("params"), action);
@@ -129,7 +129,7 @@ export default class Hologram {
 
     ComponentRegistry.putComponentStruct(target, savedComponentStruct);
 
-    window.hologram.isProfilingEnabled = false;
+    globalThis.hologram.isProfilingEnabled = false;
 
     console.log(
       "Hologram: action",
@@ -543,7 +543,7 @@ export default class Hologram {
   }
 
   static #loadMountData() {
-    const mountData = window.hologram.pageMountData(Hologram.#deps);
+    const mountData = globalThis.hologram.pageMountData(Hologram.#deps);
 
     Hologram.#mountData = mountData;
     Hologram.#pageModule = mountData.pageModule;
@@ -552,12 +552,12 @@ export default class Hologram {
 
   static #maybeInitAssetPathRegistry() {
     if (AssetPathRegistry.entries === null) {
-      AssetPathRegistry.hydrate(window.hologram.assetManifest);
+      AssetPathRegistry.hydrate(globalThis.hologram.assetManifest);
     }
   }
 
   static #mountPage() {
-    window.hologram.pageReachableFunctionDefs(Hologram.#deps);
+    globalThis.hologram.pageReachableFunctionDefs(Hologram.#deps);
 
     Hologram.#loadMountData();
 

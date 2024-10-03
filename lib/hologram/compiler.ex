@@ -145,7 +145,7 @@ defmodule Hologram.Compiler do
     """
     "use strict";
 
-    window.hologram.pageReachableFunctionDefs = (deps) => {
+    globalThis.hologram.pageReachableFunctionDefs = (deps) => {
       const {
         Bitstring,
         HologramBoxedError,

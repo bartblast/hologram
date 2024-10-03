@@ -27,7 +27,7 @@ defmodule Hologram.Assets.ManifestCacheTest do
     init(nil)
 
     assert get_manifest_js() == """
-           window.hologram.assetManifest = {
+           globalThis.hologram.assetManifest = {
            "hologram/runtime.js": "/hologram/runtime-00000000000000000000000000000000.js",
            "hologram/test_file_9.css": "/hologram/test_file_9-99999999999999999999999999999999.css",
            "test_dir_1/test_dir_2/page.js": "/test_dir_1/test_dir_2/page-33333333333333333333333333333333.js",
@@ -55,7 +55,7 @@ defmodule Hologram.Assets.ManifestCacheTest do
     reload()
 
     assert :persistent_term.get(key) == """
-           window.hologram.assetManifest = {
+           globalThis.hologram.assetManifest = {
            "hologram/runtime.js": "/hologram/runtime-00000000000000000000000000000000.js",
            "hologram/test_file_9.css": "/hologram/test_file_9-99999999999999999999999999999999.css",
            "test_dir_1/test_dir_2/page.js": "/test_dir_1/test_dir_2/page-33333333333333333333333333333333.js",

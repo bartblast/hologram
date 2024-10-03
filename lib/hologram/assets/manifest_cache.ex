@@ -54,7 +54,7 @@ defmodule Hologram.Assets.ManifestCache do
       end)
 
     """
-    window.hologram.assetManifest = {
+    globalThis.hologram.assetManifest = {
     #{entries_js}
     };\
     """

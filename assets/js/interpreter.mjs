@@ -321,7 +321,7 @@ export default class Interpreter {
     globalThis[moduleJsName][`${functionName}/${arity}`] = function () {
       let startTime;
 
-      if (window.hologram.isProfilingEnabled) {
+      if (globalThis.hologram.isProfilingEnabled) {
         startTime = performance.now();
       }
 
@@ -345,7 +345,7 @@ export default class Interpreter {
             // TODO: remove on release
             // Interpreter.#logFunctionResult(mfa, result);
 
-            if (window.hologram.isProfilingEnabled) {
+            if (globalThis.hologram.isProfilingEnabled) {
               console.log(
                 `Hologram: executed function ${mfa} in`,
                 Math.round(performance.now() - startTime),

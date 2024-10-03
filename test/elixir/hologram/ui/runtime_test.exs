@@ -40,8 +40,8 @@ defmodule Hologram.UI.RuntimeTest do
 
     markup = render_component(Runtime, %{}, context)
 
-    refute String.contains?(markup, "window.hologram.assetManifest")
-    refute String.contains?(markup, "window.hologram.pageMountData")
+    refute String.contains?(markup, "globalThis.hologram.assetManifest")
+    refute String.contains?(markup, "globalThis.hologram.pageMountData")
     refute String.contains?(markup, "hologram/runtime")
     refute String.contains?(markup, "hologram/page")
   end
@@ -50,8 +50,8 @@ defmodule Hologram.UI.RuntimeTest do
     context = Map.put(context, {Hologram.Runtime, :initial_page?}, true)
     markup = render_component(Runtime, %{}, context)
 
-    assert String.contains?(markup, "window.hologram.assetManifest")
-    assert String.contains?(markup, "window.hologram.pageMountData")
+    assert String.contains?(markup, "globalThis.hologram.assetManifest")
+    assert String.contains?(markup, "globalThis.hologram.pageMountData")
     assert String.contains?(markup, "hologram/runtime")
     assert String.contains?(markup, "hologram/page")
   end
@@ -60,8 +60,8 @@ defmodule Hologram.UI.RuntimeTest do
     context = Map.put(context, {Hologram.Runtime, :page_mounted?}, true)
     markup = render_component(Runtime, %{}, context)
 
-    refute String.contains?(markup, "window.hologram.assetManifest")
-    refute String.contains?(markup, "window.hologram.pageMountData")
+    refute String.contains?(markup, "globalThis.hologram.assetManifest")
+    refute String.contains?(markup, "globalThis.hologram.pageMountData")
     refute String.contains?(markup, "hologram/runtime")
     refute String.contains?(markup, "hologram/page")
   end
@@ -69,8 +69,8 @@ defmodule Hologram.UI.RuntimeTest do
   test "not initial page, page not mounted", %{context: context} do
     markup = render_component(Runtime, %{}, context)
 
-    refute String.contains?(markup, "window.hologram.assetManifest")
-    assert String.contains?(markup, "window.hologram.pageMountData")
+    refute String.contains?(markup, "globalThis.hologram.assetManifest")
+    assert String.contains?(markup, "globalThis.hologram.pageMountData")
     refute String.contains?(markup, "hologram/runtime")
     assert String.contains?(markup, "hologram/page")
   end

@@ -409,9 +409,9 @@ defmodule Hologram.Compiler.EncoderTest do
 
       assert encode_ir(ir) == """
              ((context) => {
-             window.hologram.return = Erlang["+/2"](context.vars.x, Interpreter.matchOperator(Type.integer(123n), Type.variablePattern("y"), context));
+             globalThis.hologram.return = Erlang["+/2"](context.vars.x, Interpreter.matchOperator(Type.integer(123n), Type.variablePattern("y"), context));
              Interpreter.updateVarsToMatchedValues(context);
-             return window.hologram.return;
+             return globalThis.hologram.return;
              })(context)\
              """
     end

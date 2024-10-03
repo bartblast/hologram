@@ -11,7 +11,7 @@ defmodule Hologram.UI.Runtime do
     ~H"""
     {%if @initial_page? && !@page_mounted?}
       <script>
-        window.hologram ??= \{\};
+        globalThis.hologram ??= \{\};
         {AssetManifestCache.get_manifest_js()}
       </script>
     {/if}
@@ -19,7 +19,7 @@ defmodule Hologram.UI.Runtime do
     {%if !@page_mounted?}
       <script>
         {%raw}
-          window.hologram.pageMountData = (deps) => {
+          globalThis.hologram.pageMountData = (deps) => {
             const Type = deps.Type;
             
             return {

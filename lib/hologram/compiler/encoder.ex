@@ -564,9 +564,9 @@ defmodule Hologram.Compiler.Encoder do
   defp encode_block_expr(expr_js, true, true) do
     """
 
-    window.hologram.return = #{expr_js};
+    globalThis.hologram.return = #{expr_js};
     Interpreter.updateVarsToMatchedValues(context);
-    return window.hologram.return;\
+    return globalThis.hologram.return;\
     """
   end
 
