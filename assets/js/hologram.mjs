@@ -111,8 +111,7 @@ export default class Hologram {
         );
       }
 
-      CommandQueue.push(nextCommand);
-      CommandQueue.process();
+      Hologram.executeAsyncCommand(nextCommand);
     }
 
     let savedComponentStruct = Erlang_Maps["put/3"](

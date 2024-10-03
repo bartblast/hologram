@@ -2,7 +2,6 @@
 
 import {
   assert,
-  commandQueueItemFixture,
   componentRegistryEntryFixture,
   defineGlobalErlangAndElixirModules,
   registerWebApis,
@@ -59,12 +58,11 @@ const module9 = Type.alias("Hologram.Test.Fixtures.Module9");
 
 describe("Hologram", () => {
   describe("executeAction()", () => {
-    let commandQueueProcessStub, navigateToPageStub, renderStub;
+    let executeAsyncCommandStub, navigateToPageStub, renderStub;
 
     beforeEach(() => {
-      CommandQueue.items = [];
-      commandQueueProcessStub = sinon
-        .stub(CommandQueue, "process")
+      executeAsyncCommandStub = sinon
+        .stub(Hologram, "executeAsyncCommand")
         .callsFake(() => null);
 
       navigateToPageStub = sinon
@@ -75,7 +73,7 @@ describe("Hologram", () => {
     });
 
     afterEach(() => {
-      CommandQueue.process.restore();
+      Hologram.executeAsyncCommand.restore();
       Hologram.navigateToPage.restore();
       Hologram.render.restore();
     });
@@ -125,10 +123,8 @@ describe("Hologram", () => {
         ]),
       );
 
-      sinon.assert.notCalled(commandQueueProcessStub);
+      sinon.assert.notCalled(executeAsyncCommandStub);
       sinon.assert.calledOnce(renderStub);
-
-      assert.equal(CommandQueue.size(), 0);
     });
 
     it("with next action having target specified", () => {
@@ -187,10 +183,8 @@ describe("Hologram", () => {
         ]),
       );
 
-      sinon.assert.notCalled(commandQueueProcessStub);
+      sinon.assert.notCalled(executeAsyncCommandStub);
       sinon.assert.calledOnce(renderStub);
-
-      assert.equal(CommandQueue.size(), 0);
     });
 
     it("with next action not having target specified", () => {
@@ -242,10 +236,8 @@ describe("Hologram", () => {
         ]),
       );
 
-      sinon.assert.notCalled(commandQueueProcessStub);
+      sinon.assert.notCalled(executeAsyncCommandStub);
       sinon.assert.calledOnce(renderStub);
-
-      assert.equal(CommandQueue.size(), 0);
     });
 
     it("with next command having target specified", () => {
@@ -295,27 +287,19 @@ describe("Hologram", () => {
         ]),
       );
 
-      sinon.assert.calledOnce(commandQueueProcessStub);
-      sinon.assert.calledOnce(renderStub);
-
-      assert.equal(CommandQueue.size(), 1);
-
-      const enqueuedItem = CommandQueue.getNextPending();
-
-      assert.deepStrictEqual(
-        enqueuedItem,
-        commandQueueItemFixture({
-          id: enqueuedItem.id,
-          module: module5,
+      sinon.assert.calledOnceWithExactly(
+        executeAsyncCommandStub,
+        Type.commandStruct({
           name: Type.atom("my_command_5"),
           params: Type.map([
             [Type.atom("c"), Type.integer(10)],
             [Type.atom("d"), Type.integer(20)],
           ]),
-          status: "pending",
           target: cid2,
         }),
       );
+
+      sinon.assert.calledOnce(renderStub);
     });
 
     it("with next command not having target specified", () => {
@@ -363,28 +347,19 @@ describe("Hologram", () => {
         ]),
       );
 
-      sinon.assert.calledOnce(commandQueueProcessStub);
-      sinon.assert.calledOnce(renderStub);
-
-      assert.equal(CommandQueue.size(), 1);
-
-      const enqueuedItem = CommandQueue.getNextPending();
-
-      assert.deepStrictEqual(
-        enqueuedItem,
-        commandQueueItemFixture({
-          id: enqueuedItem.id,
-          failCount: 0,
-          module: module5,
+      sinon.assert.calledOnceWithExactly(
+        executeAsyncCommandStub,
+        Type.commandStruct({
           name: Type.atom("my_command_6"),
           params: Type.map([
             [Type.atom("c"), Type.integer(10)],
             [Type.atom("d"), Type.integer(20)],
           ]),
-          status: "pending",
           target: cid1,
         }),
       );
+
+      sinon.assert.calledOnce(renderStub);
     });
 
     it("with next page", () => {
