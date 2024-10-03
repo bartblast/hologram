@@ -423,10 +423,23 @@ describe("Hologram", () => {
     });
   });
 
-  // Test skipped: executeCommand() is a simple pass-through function
-  // that directly calls CommandQueue functions without additional logic.
-  // Testing it would only verify that these function calls occur.
-  // it("executeCommand()")
+  it("executeAsyncCommand()", async () => {
+    const commandQueueProcessStub = sinon
+      .stub(CommandQueue, "process")
+      .callsFake(() => null);
+
+    const commandQueuePushStub = sinon
+      .stub(CommandQueue, "push")
+      .callsFake((_command) => null);
+
+    await Hologram.executeAsyncCommand("dummyCommand");
+
+    sinon.assert.calledOnceWithExactly(commandQueuePushStub, "dummyCommand");
+    sinon.assert.calledOnceWithExactly(commandQueueProcessStub);
+
+    CommandQueue.process.restore();
+    CommandQueue.push.restore();
+  });
 
   describe("executeLoadPrefetchedPageAction()", () => {
     let eventTargetNode, loadPageStub;

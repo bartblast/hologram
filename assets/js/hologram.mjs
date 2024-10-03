@@ -159,9 +159,11 @@ export default class Hologram {
     }
   }
 
-  static executeCommand(command) {
-    CommandQueue.push(command);
-    CommandQueue.process();
+  static executeAsyncCommand(command) {
+    return Utils.runAsyncTask(() => {
+      CommandQueue.push(command);
+      CommandQueue.process();
+    });
   }
 
   // Made public to make tests easier
