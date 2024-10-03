@@ -9,8 +9,7 @@ defmodule HologramFeatureTests.Helpers do
   @max_wait_time Application.compile_env(:wallaby, :max_wait_time, 3_000)
 
   def assert_js_error(session, expected_msg, fun) when is_binary(expected_msg) do
-    regex =
-      ~r/^There was an uncaught JavaScript error:.+: #{Regex.escape(expected_msg)}\n$/su
+    regex = ~r/^There was an uncaught JavaScript error:.+: #{Regex.escape(expected_msg)}\n$/su
 
     assert_js_error(session, regex, fun)
   end

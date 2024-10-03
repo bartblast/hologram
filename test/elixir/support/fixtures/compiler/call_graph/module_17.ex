@@ -32,9 +32,23 @@ defmodule Hologram.Test.Fixtures.Compiler.CallGraph.Module17 do
       component
     else
       put_state(component,
-        struct_1: struct(Hex.Solver.Assignment, term: :abc),
-        struct_2: %Hex.Solver.Assignment{term: :abc}
+        struct_1: struct_1(),
+        struct_2: struct_2()
       )
+    end
+  end
+
+  if Version.compare(System.version(), "1.15.0") in [:gt, :eq] do
+    def struct_1, do: nil
+
+    def struct_2, do: nil
+  else
+    def struct_1 do
+      struct(Hex.Solver.Assignment, term: :abc)
+    end
+
+    def struct_2 do
+      %Hex.Solver.Assignment{term: :abc}
     end
   end
 end
