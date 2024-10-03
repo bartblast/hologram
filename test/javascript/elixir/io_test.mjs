@@ -20,7 +20,7 @@ describe("Elixir_IO", () => {
   let consoleLogStub;
 
   beforeEach(() => {
-    consoleLogStub = sinon.stub(console, "log").callsFake((msg) => undefined);
+    consoleLogStub = sinon.stub(console, "log").callsFake((_msg) => undefined);
   });
 
   afterEach(() => {

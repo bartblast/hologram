@@ -16,7 +16,6 @@ import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
-import Utils from "../../assets/js/utils.mjs";
 
 defineGlobalErlangAndElixirModules();
 

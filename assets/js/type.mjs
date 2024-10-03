@@ -5,7 +5,6 @@ import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import JsonEncoder from "./json_encoder.mjs";
 import Sequence from "./sequence.mjs";
-import Utils from "./utils.mjs";
 
 export default class Type {
   static actionStruct(data = {}) {
