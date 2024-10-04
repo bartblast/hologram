@@ -13,8 +13,8 @@ defmodule HologramFeatureTests.Components.Component1 do
   def template do
     ~H"""
     <p>
-      <button id="layout_action_3" $click={%Action{name: :layout_action_3, params: %{a: 1, b: 2}, target: "layout"}}> layout_action_3 </button>
-      <button id="page_action_7" $click={%Action{name: :page_action_7, params: %{a: 1, b: 2}, target: "page"}}> page_action_7 </button>
+      <button id="layout_action_3" $click={action: :layout_action_3, target: "layout", params: %{a: 1, b: 2}}> layout_action_3 </button>
+      <button id="page_action_7" $click={action: :page_action_7, target: "page", params: %{a: 1, b: 2}}> page_action_7 </button>
       <button id="component_1_action_1" $click="component_1_action_1"> component_1_action_1 </button>
     </p>        
     <p>

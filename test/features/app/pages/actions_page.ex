@@ -18,16 +18,16 @@ defmodule HologramFeatureTests.ActionsPage do
   def template do
     ~H"""
     <p>
-      <button id="layout_action_2" $click={%Action{name: :layout_action_2, params: %{a: 1, b: 2}, target: "layout"}}> layout_action_2 </button>
+      <button id="layout_action_2" $click={action: :layout_action_2, target: "layout", params: %{a: 1, b: 2}}> layout_action_2 </button>
       <button id="page_action_1" $click="page_action_1"> page_action_1 </button>
       <button id="page_action_2" $click={:page_action_2}> page_action_2 </button>
       <button id="page_action_3" $click={:page_action_3, a: 1, b: 2}> page_action_3 </button>
-      <button id="page_action_4" $click={%Action{name: :page_action_4, params: %{a: 1, b: 2}}}> page_action_4 </button>
+      <button id="page_action_4" $click={action: :page_action_4, params: %{a: 1, b: 2}}> page_action_4 </button>
       <button id="page_action_5" $click="page_ac{"ti"}on_{5}"> page_action_5 </button>
       <button id="page_action_8" $click="page_action_8"> page_action_8 </button>
       <button id="page_action_9" $click={:page_action_9, a: 1, b: 2}> page_action_9 </button>
       <button id="page_action_11" $click={:page_action_11, a: 1, b: 2}> page_action_11 </button>
-      <button id="component_1_action_2" $click={%Action{name: :component_1_action_2, params: %{a: 1, b: 2}, target: "component_1"}}> component_1_action_2 </button>
+      <button id="component_1_action_2" $click={action: :component_1_action_2, target: "component_1", params: %{a: 1, b: 2}}> component_1_action_2 </button>
     </p>
     <p>
       Page result: <strong id="page_result"><code>{inspect(@result)}</code></strong>

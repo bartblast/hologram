@@ -17,15 +17,15 @@ defmodule HologramFeatureTests.TypesPage do
     ~H"""
     <p>
       <button id="anonymous function (client origin, non-capture)" $click="anonymous function (client origin, non-capture)"> anonymous function (client origin, non-capture) </button>
-      <button id="anonymous function (server origin, non-capture)" $click={%Command{name: :"anonymous function (server origin, non-capture)"}}> anonymous function (server origin, non-capture) </button>
+      <button id="anonymous function (server origin, non-capture)" $click={command: :"anonymous function (server origin, non-capture)"}> anonymous function (server origin, non-capture) </button>
       <button id="anonymous function (client origin, capture)" $click="anonymous function (client origin, capture)"> anonymous function (client origin, capture) </button>
-      <button id="anonymous function (server origin, capture)" $click={%Command{name: :"anonymous function (server origin, capture)"}}> anonymous function (server origin, capture) </button>
+      <button id="anonymous function (server origin, capture)" $click={command: :"anonymous function (server origin, capture)"}> anonymous function (server origin, capture) </button>
     </p>
     <p>
       <button id="local function capture (client origin)" $click="local function capture (client origin)"> local function capture (client origin) </button>
-      <button id="local function capture (server origin)" $click={%Command{name: :"local function capture (server origin)"}}> local function capture (server origin) </button>
+      <button id="local function capture (server origin)" $click={command: :"local function capture (server origin)"}> local function capture (server origin) </button>
       <button id="remote function capture (client origin)" $click="remote function capture (client origin)"> remote function capture (client origin) </button>
-      <button id="remote function capture (server origin)" $click={%Command{name: :"remote function capture (server origin)"}}> remote function capture (server origin) </button>
+      <button id="remote function capture (server origin)" $click={command: :"remote function capture (server origin)"}> remote function capture (server origin) </button>
     </p>
     <p>
       <button id="atom" $click="atom"> atom </button>
@@ -36,7 +36,7 @@ defmodule HologramFeatureTests.TypesPage do
       <button id="list" $click="list"> list </button>
       <button id="map" $click="map"> map </button>
       <button id="pid (client origin)" $click="pid (client origin)"> pid (client origin) </button>
-      <button id="pid (server origin)" $click={%Command{name: :"pid (server origin)"}}> pid (server origin) </button>
+      <button id="pid (server origin)" $click={command: :"pid (server origin)"}> pid (server origin) </button>
       <button id="tuple" $click="tuple"> tuple </button>
     </p>
     <p>

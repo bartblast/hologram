@@ -16,9 +16,9 @@ defmodule HologramFeatureTests.CommandsPage do
   def template do
     ~H"""
     <p>
-      <button id="layout_command_2" $click={%Command{name: :layout_command_2, params: %{a: 1, b: 2}, target: "layout"}}> layout_command_2 </button>
-      <button id="page_command_2" $click={%Command{name: :page_command_2, params: %{a: 1, b: 2}}}> page_command_2 </button>
-      <button id="component_2_command_2" $click={%Command{name: :component_2_command_2, params: %{a: 1, b: 2}, target: "component_2"}}> component_2_command_2 </button>
+      <button id="layout_command_2" $click={command: :layout_command_2, target: "layout", params: %{a: 1, b: 2}}> layout_command_2 </button>
+      <button id="page_command_2" $click={command: :page_command_2, params: %{a: 1, b: 2}}> page_command_2 </button>
+      <button id="component_2_command_2" $click={command: :component_2_command_2, target: "component_2", params: %{a: 1, b: 2}}> component_2_command_2 </button>
     </p>
     <p>
       Page result: <strong id="page_result"><code>{inspect(@result)}</code></strong>
