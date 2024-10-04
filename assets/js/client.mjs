@@ -4,6 +4,7 @@ import Config from "./config.mjs";
 import GlobalRegistry from "./global_registry.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import JsonEncoder from "./json_encoder.mjs";
+import Utils from "./utils.mjs";
 
 import {Socket} from "phoenix";
 
@@ -57,11 +58,13 @@ export default class Client {
   }
 
   static fetchPage(toParam, successCallback, failureCallback) {
-    Client.#channel
-      .push("page", toParam, Config.fetchPageTimeoutMs)
-      .receive("ok", successCallback)
-      .receive("error", failureCallback)
-      .receive("timeout", failureCallback);
+    Utils.runAsyncTask(() => {
+      Client.#channel
+        .push("page", toParam, Config.fetchPageTimeoutMs)
+        .receive("ok", successCallback)
+        .receive("error", failureCallback)
+        .receive("timeout", failureCallback);
+    });
   }
 
   static isConnected() {
