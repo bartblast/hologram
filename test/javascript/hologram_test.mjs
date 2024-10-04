@@ -833,14 +833,19 @@ describe("Hologram", () => {
     });
 
     it("navigate to prefetched page action", () => {
+      // Spec DOM: [expression: {[action: :__load_prefetched_page__, params: %{to: MyPage}]}],
+      // which is equivalent to [{:expression, {[{:action, :__load_prefetched_page__}, {:params, %{to: MyPage}}]}}]
       const actionSpecDom = Type.keywordList([
         [
           Type.atom("expression"),
           Type.tuple([
-            Type.actionStruct({
-              name: Type.atom("__load_prefetched_page__"),
-              params: Type.map([[Type.atom("to"), Type.alias("MyPage")]]),
-            }),
+            Type.keywordList([
+              [Type.atom("action"), Type.atom("__load_prefetched_page__")],
+              [
+                Type.atom("params"),
+                Type.map([[Type.atom("to"), Type.alias("MyPage")]]),
+              ],
+            ]),
           ]),
         ],
       ]);
@@ -879,14 +884,19 @@ describe("Hologram", () => {
     });
 
     it("prefetch page action", () => {
+      // Spec DOM: [expression: {[action: :__prefetch_page__, params: %{to: MyPage}]}],
+      // which is equivalent to [{:expression, {[{:action, :__prefetch_page__}, {:params, %{to: MyPage}}]}}]
       const actionSpecDom = Type.keywordList([
         [
           Type.atom("expression"),
           Type.tuple([
-            Type.actionStruct({
-              name: Type.atom("__prefetch_page__"),
-              params: Type.map([[Type.atom("to"), Type.alias("MyPage")]]),
-            }),
+            Type.keywordList([
+              [Type.atom("action"), Type.atom("__prefetch_page__")],
+              [
+                Type.atom("params"),
+                Type.map([[Type.atom("to"), Type.alias("MyPage")]]),
+              ],
+            ]),
           ]),
         ],
       ]);
@@ -925,10 +935,15 @@ describe("Hologram", () => {
     });
 
     it("command", () => {
+      // Example: $click={command: :my_command}
+      // Spec DOM: [expression: {[command: :my_command]}],
+      // which is equivalent to [{:expression, {[{:command, :my_command}]}}]
       const commandSpecDom = Type.keywordList([
         [
           Type.atom("expression"),
-          Type.tuple([Type.commandStruct({name: Type.atom("my_command")})]),
+          Type.tuple([
+            Type.keywordList([[Type.atom("command"), Type.atom("my_command")]]),
+          ]),
         ],
       ]);
 
