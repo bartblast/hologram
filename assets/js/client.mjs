@@ -16,33 +16,35 @@ export default class Client {
   static socket = null;
 
   static connect() {
-    Client.socket = new Socket("/hologram", {
-      encode: Client.encoder,
-      longPollFallbackMs: window.location.host.startsWith("localhost")
-        ? undefined
-        : 3000,
-    });
-
-    Client.socket.connect();
-
-    Client.#channel = Client.socket.channel("hologram");
-
-    Client.#channel
-      .join()
-      .receive("ok", (_resp) => {
-        console.debug("Hologram: connected to a server");
-        GlobalRegistry.set("connected?", true);
-      })
-      .receive("error", (_resp) => {
-        GlobalRegistry.set("connected?", false);
-        throw new HologramRuntimeError("unable to connect to a server");
-      })
-      .receive("timeout", (_resp) => {
-        GlobalRegistry.set("connected?", false);
-        throw new HologramRuntimeError("unable to connect to a server");
+    Utils.runAsyncTask(() => {
+      Client.socket = new Socket("/hologram", {
+        encode: Client.encoder,
+        longPollFallbackMs: window.location.host.startsWith("localhost")
+          ? undefined
+          : 3000,
       });
 
-    Client.#channel.on("reload", (_payload) => document.location.reload());
+      Client.socket.connect();
+
+      Client.#channel = Client.socket.channel("hologram");
+
+      Client.#channel
+        .join()
+        .receive("ok", (_resp) => {
+          console.debug("Hologram: connected to a server");
+          GlobalRegistry.set("connected?", true);
+        })
+        .receive("error", (_resp) => {
+          GlobalRegistry.set("connected?", false);
+          throw new HologramRuntimeError("unable to connect to a server");
+        })
+        .receive("timeout", (_resp) => {
+          GlobalRegistry.set("connected?", false);
+          throw new HologramRuntimeError("unable to connect to a server");
+        });
+
+      Client.#channel.on("reload", (_payload) => document.location.reload());
+    });
   }
 
   static encoder(msg, callback) {
@@ -57,7 +59,6 @@ export default class Client {
     );
   }
 
-  // TODO: test
   static fetchPage(toParam, successCallback, failureCallback) {
     Utils.runAsyncTask(() => {
       Client.#channel
