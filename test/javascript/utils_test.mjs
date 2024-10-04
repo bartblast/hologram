@@ -154,6 +154,7 @@ describe("Utils", () => {
     const task = () => (obj.b = 3);
 
     const promise = Utils.runAsyncTask(task);
+    assert.instanceOf(promise, Promise);
 
     assert.equal(obj.b, 2);
 

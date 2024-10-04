@@ -57,6 +57,7 @@ export default class Client {
     );
   }
 
+  // TODO: test
   static fetchPage(toParam, successCallback, failureCallback) {
     Utils.runAsyncTask(() => {
       Client.#channel

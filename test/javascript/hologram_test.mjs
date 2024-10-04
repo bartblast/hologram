@@ -407,7 +407,9 @@ describe("Hologram", () => {
       .stub(CommandQueue, "push")
       .callsFake((_command) => null);
 
-    await Hologram.executeAsyncCommand("dummyCommand");
+    const promise = Hologram.executeAsyncCommand("dummyCommand");
+    assert.instanceOf(promise, Promise);
+    await promise;
 
     sinon.assert.calledOnceWithExactly(commandQueuePushStub, "dummyCommand");
     sinon.assert.calledOnceWithExactly(commandQueueProcessStub);
