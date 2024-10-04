@@ -278,8 +278,7 @@ export default class Hologram {
             return Hologram.executeAction(operation);
         }
       } else {
-        CommandQueue.push(operation);
-        CommandQueue.process();
+        Hologram.executeAsyncCommand(operation);
       }
     }
   }

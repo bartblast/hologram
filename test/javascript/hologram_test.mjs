@@ -737,9 +737,8 @@ describe("Hologram", () => {
   });
 
   describe("handleUiEvent()", () => {
-    let commandQueueProcessStub,
-      commandQueuePushStub,
-      executeActionStub,
+    let executeActionStub,
+      executeAsyncCommandStub,
       executeLoadPrefetchedPageActionStub,
       executePrefetchPageActionStub;
 
@@ -757,12 +756,8 @@ describe("Hologram", () => {
     };
 
     beforeEach(() => {
-      commandQueueProcessStub = sinon
-        .stub(CommandQueue, "process")
-        .callsFake(() => null);
-
-      commandQueuePushStub = sinon
-        .stub(CommandQueue, "push")
+      executeAsyncCommandStub = sinon
+        .stub(Hologram, "executeAsyncCommand")
         .callsFake((_command) => null);
 
       executeActionStub = sinon
@@ -779,9 +774,8 @@ describe("Hologram", () => {
     });
 
     afterEach(() => {
-      CommandQueue.process.restore();
-      CommandQueue.push.restore();
       Hologram.executeAction.restore();
+      Hologram.executeAsyncCommand.restore();
       Hologram.executeLoadPrefetchedPageAction.restore();
       Hologram.executePrefetchPageAction.restore();
     });
@@ -801,9 +795,8 @@ describe("Hologram", () => {
         defaultTarget,
       );
 
-      sinon.assert.notCalled(commandQueuePushStub);
-      sinon.assert.notCalled(commandQueueProcessStub);
       sinon.assert.notCalled(executeActionStub);
+      sinon.assert.notCalled(executeAsyncCommandStub);
       sinon.assert.notCalled(executeLoadPrefetchedPageActionStub);
       sinon.assert.notCalled(executePrefetchPageActionStub);
     });
@@ -816,8 +809,7 @@ describe("Hologram", () => {
         defaultTarget,
       );
 
-      sinon.assert.notCalled(commandQueuePushStub);
-      sinon.assert.notCalled(commandQueueProcessStub);
+      sinon.assert.notCalled(executeAsyncCommandStub);
       sinon.assert.notCalled(executeLoadPrefetchedPageActionStub);
       sinon.assert.notCalled(executePrefetchPageActionStub);
 
@@ -858,9 +850,8 @@ describe("Hologram", () => {
         defaultTarget,
       );
 
-      sinon.assert.notCalled(commandQueuePushStub);
-      sinon.assert.notCalled(commandQueueProcessStub);
       sinon.assert.notCalled(executeActionStub);
+      sinon.assert.notCalled(executeAsyncCommandStub);
       sinon.assert.notCalled(executePrefetchPageActionStub);
 
       const expectedAction = Type.actionStruct({
@@ -905,9 +896,8 @@ describe("Hologram", () => {
         defaultTarget,
       );
 
-      sinon.assert.notCalled(commandQueuePushStub);
-      sinon.assert.notCalled(commandQueueProcessStub);
       sinon.assert.notCalled(executeActionStub);
+      sinon.assert.notCalled(executeAsyncCommandStub);
       sinon.assert.notCalled(executeLoadPrefetchedPageActionStub);
 
       const expectedAction = Type.actionStruct({
@@ -965,8 +955,10 @@ describe("Hologram", () => {
         target: defaultTarget,
       });
 
-      sinon.assert.calledOnceWithExactly(commandQueuePushStub, expectedCommand);
-      sinon.assert.calledOnceWithExactly(commandQueueProcessStub);
+      sinon.assert.calledOnceWithExactly(
+        executeAsyncCommandStub,
+        expectedCommand,
+      );
     });
   });
 
