@@ -90,8 +90,21 @@ defmodule Hologram.Template.DOM do
     "]}"
   end
 
-  defp render_code({:expression, expr_str}) do
-    "{:expression, #{expr_str}}"
+  # Wraps implicit keyword list.
+  # {a: 1, b: 2} is not valid Elixir code, although {123, a: 1, b: 2} is allowed.
+  defp render_code({:expression, templ_expr}) do
+    regex = ~r/^\{(([a-zA-Z][a-zA-Z0-9]*|"[^"]+"): .+)\}$/
+
+    elixir_expr =
+      case Regex.run(regex, templ_expr) do
+        [_full, content, _beginning] ->
+          "{[#{content}]}"
+
+        nil ->
+          templ_expr
+      end
+
+    "{:expression, #{elixir_expr}}"
   end
 
   defp render_code(:public_comment_end) do

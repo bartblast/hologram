@@ -683,6 +683,18 @@ defmodule Hologram.Template.DOMTest do
                ]
       end
     end)
+
+    test "with implicit keyword list, starting with a key without double quotes" do
+      tags = [{:expression, "{a: 1, b: 2}"}]
+
+      assert build_ast(tags) == [expression: {:{}, [line: 1], [[a: 1, b: 2]]}]
+    end
+
+    test "with implicit keyword list, starting with a key with double quotes" do
+      tags = [{:expression, ~s/{"aaa bbb": 1, c: 2}/}]
+
+      assert build_ast(tags) == [expression: {:{}, [line: 1], [["aaa bbb": 1, c: 2]]}]
+    end
   end
 
   describe "build_ast/1, for block" do
