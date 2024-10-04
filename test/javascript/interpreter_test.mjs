@@ -39,13 +39,23 @@ describe("Interpreter", () => {
       assert.deepStrictEqual(result, Type.integer(2));
     });
 
-    it("keyword list doesn't have the given key", () => {
+    it("keyword list doesn't have the given key, no default value provided", () => {
       const result = Interpreter.accessKeywordListElement(
         keywordList,
         Type.atom("d"),
       );
 
       assert.isNull(result);
+    });
+
+    it("keyword list doesn't have the given key, default value is provided", () => {
+      const result = Interpreter.accessKeywordListElement(
+        keywordList,
+        Type.atom("d"),
+        Type.atom("my_default_value"),
+      );
+
+      assert.deepStrictEqual(result, Type.atom("my_default_value"));
     });
   });
 

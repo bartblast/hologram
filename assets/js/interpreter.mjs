@@ -11,14 +11,14 @@ import Utils from "./utils.mjs";
 
 export default class Interpreter {
   // Deps: [:lists.keyfind/3]
-  static accessKeywordListElement(keywordList, key) {
+  static accessKeywordListElement(keywordList, key, defaultValue = null) {
     const keyfindRes = Erlang_Lists["keyfind/3"](
       key,
       Type.integer(1),
       keywordList,
     );
 
-    return Type.isTuple(keyfindRes) ? keyfindRes.data[1] : null;
+    return Type.isTuple(keyfindRes) ? keyfindRes.data[1] : defaultValue;
   }
 
   // TODO: Remove when structural comparison is fully implemented.
