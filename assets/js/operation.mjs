@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
+import Interpreter from "./interpreter.mjs";
 import Renderer from "./renderer.mjs";
 import Type from "./type.mjs";
 
@@ -50,35 +51,52 @@ export default class Operation {
     );
   }
 
-  // Deps: [:maps.get/2, :maps.put/3]
+  // Example: $click={action: :my_action, target: "my_target", params: %{a: 1, b: 2}}
+  // Spec DOM: [expression: {[action: :my_action, target: "my_target", params: %{a: 1, b: 2}]}],
+  // which is equivalent to [{:expression, {[{:action, :my_action}, {:target, "my_target"}, {:params, %{a: 1, b: 2}}]}}]
+  // Deps: [:maps.put/3]
   #constructFromExpressionLonghandSyntaxSpec(specDom) {
-    const specStruct = specDom.data[0].data[1].data[0];
+    const specKeywordList = specDom.data[0].data[1].data[0];
+
+    const actionName = Interpreter.accessKeywordListElement(
+      specKeywordList,
+      Type.atom("action"),
+    );
+
+    const name = actionName
+      ? actionName
+      : Interpreter.accessKeywordListElement(
+          specKeywordList,
+          Type.atom("command"),
+        );
 
     const params = Erlang_Maps["put/3"](
       Type.atom("event"),
       this.#eventParam,
-      Erlang_Maps["get/2"](Type.atom("params"), specStruct),
+      Interpreter.accessKeywordListElement(
+        specKeywordList,
+        Type.atom("params"),
+        Type.map(),
+      ),
     );
 
-    let result = Erlang_Maps["put/3"](Type.atom("params"), params, specStruct);
+    const target = Interpreter.accessKeywordListElement(
+      specKeywordList,
+      Type.atom("target"),
+      this.#defaultTarget,
+    );
 
-    const specTarget = Erlang_Maps["get/2"](Type.atom("target"), specStruct);
+    const opStructBuilder = actionName ? Type.actionStruct : Type.commandStruct;
 
-    if (Type.isNil(specTarget)) {
-      result = Erlang_Maps["put/3"](
-        Type.atom("target"),
-        this.#defaultTarget,
-        result,
-      );
-    }
-
-    return result;
+    return opStructBuilder({name: name, params: params, target: target});
   }
 
+  // Example: $click={:my_action, a: 1, b: 2}
+  // Spec DOM: [expression: {:my_action, a: 1, b: 2}],
+  // which is equivalent to [{:expression, {:my_action, [{:a, 1}, {:b, 2}]}}]
   #constructFromExpressionShorthandSyntaxSpec() {
     this.name = this.#specDom.data[0].data[1].data[0];
     this.target = this.#defaultTarget;
-    this.type = Type.atom("action");
 
     const paramsKeywordList =
       this.#specDom.data[0].data[1].data[1] || Type.keywordList();
@@ -87,6 +105,8 @@ export default class Operation {
   }
 
   // Example: $click="aaa{123}bbb"
+  // Spec DOM: [text: "aaa", expression: {123}, text: "bbb"],
+  // which is equivalent to [{:text, "aaa"}, {:expression, {123}}, {:text, "bbb"}]
   #constructFromMultiChunkSyntaxSpec() {
     const nameBitstring = Renderer.valueDomToBitstring(this.#specDom);
     const nameText = Bitstring.toText(nameBitstring);
@@ -94,9 +114,10 @@ export default class Operation {
     this.name = Type.atom(nameText);
     this.params = Type.map([[Type.atom("event"), this.#eventParam]]);
     this.target = this.#defaultTarget;
-    this.type = Type.atom("action");
   }
 
+  // Example: $click="my_action"
+  // Spec DOM: [text: "my_action"], which is equivalent to [{:text, "my_action"}]
   #constructFromTextSyntaxSpec() {
     const nameBitstring = this.#specDom.data[0].data[1];
     const nameText = Bitstring.toText(nameBitstring);
@@ -104,19 +125,22 @@ export default class Operation {
     this.name = Type.atom(nameText);
     this.params = Type.map([[Type.atom("event"), this.#eventParam]]);
     this.target = this.#defaultTarget;
-    this.type = Type.atom("action");
   }
 
-  // Example: $click={%Action{name: :my_action, params: %{a: 1, b: 2}}}
+  // Example: $click={action: :my_action, target: "my_target", params: %{a: 1, b: 2}}
+  // Spec DOM: [expression: {[action: :my_action, target: "my_target", params: %{a: 1, b: 2}]}],
+  // which is equivalent to [{:expression, {[{:action, :my_action}, {:target, "my_target"}, {:params, %{a: 1, b: 2}}]}}]
   static #isExpressionLonghandSyntax(specDom) {
     return (
       specDom.data.length === 1 &&
       specDom.data[0].data[0].value === "expression" &&
-      Type.isStruct(specDom.data[0].data[1].data[0])
+      Type.isList(specDom.data[0].data[1].data[0])
     );
   }
 
   // Example: $click={:my_action, a: 1, b: 2}
+  // Spec DOM: [expression: {:my_action, a: 1, b: 2}],
+  // which is equivalent to [{:expression, {:my_action, [{:a, 1}, {:b, 2}]}}]
   static #isExpressionShorthandSyntax(specDom) {
     return (
       specDom.data.length === 1 &&
@@ -126,6 +150,7 @@ export default class Operation {
   }
 
   // Example: $click="my_action"
+  // Spec DOM: [text: "my_action"], which is equivalent to [{:text, "my_action"}]
   static #isTextSyntax(specDom) {
     return (
       specDom.data.length === 1 && specDom.data[0].data[0].value === "text"
