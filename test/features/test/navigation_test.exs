@@ -39,4 +39,14 @@ defmodule HologramFeatureTests.NavigationTest do
     |> click(button("Put page 2 result"))
     |> assert_text("Page 2 result")
   end
+
+  test "put page in action", %{session: session} do
+    session
+    |> visit(Page1)
+    |> click(button("Change page"))
+    |> assert_page(Page2)
+    |> assert_text("Page 2 title")
+    |> click(button("Put page 2 result"))
+    |> assert_text("Page 2 result")
+  end
 end
