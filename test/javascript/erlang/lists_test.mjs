@@ -29,11 +29,139 @@ const properList = Type.list([
   Type.integer(3),
 ]);
 
+const funArity2 = Type.anonymousFunction(
+  2,
+  [
+    {
+      params: (_context) => [
+        Type.variablePattern("x"),
+        Type.variablePattern("y"),
+      ],
+      guards: [],
+      body: (context) => {
+        return Erlang["+/2"](context.vars.x, context.vars.y);
+      },
+    },
+  ],
+  contextFixture(),
+);
+
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/lists_test.exs
 // Always update both together.
 
 describe("Erlang_Lists", () => {
+  describe("filter/2", () => {
+    const filter = Erlang_Lists["filter/2"];
+
+    const fun = Type.anonymousFunction(
+      1,
+      [
+        {
+          params: (_context) => [Type.variablePattern("elem")],
+          guards: [],
+          body: (context) => {
+            return Erlang[">/2"](context.vars.elem, Type.integer(1));
+          },
+        },
+      ],
+      contextFixture(),
+    );
+
+    it("empty list", () => {
+      const result = filter(fun, Type.list());
+
+      assert.deepStrictEqual(result, emptyList);
+    });
+
+    it("non-empty list", () => {
+      const result = filter(fun, properList);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(2), Type.integer(3)]),
+      );
+    });
+
+    it("first arg is not an anonymous function", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.filter/2",
+        [Type.atom("abc"), properList],
+      );
+
+      assertBoxedError(
+        () => filter(Type.atom("abc"), properList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    // Client error message is intentionally different than server error message.
+    it("first arg is an anonymous function with arity different than 1", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.filter/2",
+        [funArity2, properList],
+      );
+
+      assertBoxedError(
+        () => filter(funArity2, properList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("second arg is not a list", () => {
+      const expectedMessage = Interpreter.buildErlangErrorMsg(
+        "{:bad_generator, :abc}",
+      );
+
+      assertBoxedError(
+        () => filter(fun, Type.atom("abc")),
+        "ErlangError",
+        expectedMessage,
+      );
+    });
+
+    it("second arg is not a proper list", () => {
+      const expectedMessage = Interpreter.buildErlangErrorMsg(
+        "{:bad_generator, 3}",
+      );
+
+      assertBoxedError(
+        () => filter(fun, improperList),
+        "ErlangError",
+        expectedMessage,
+      );
+    });
+
+    it("filter fun doesn't return a boolean", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return Erlang["*/2"](Type.integer(2), context.vars.elem);
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const list = Type.list([
+        Type.integer(2),
+        Type.integer(3),
+        Type.integer(4),
+      ]);
+
+      const expectedMessage =
+        Interpreter.buildErlangErrorMsg("{:bad_filter, 4}");
+
+      assertBoxedError(() => filter(fun, list), "ErlangError", expectedMessage);
+    });
+  });
+
   describe("flatten/1", () => {
     const flatten = Erlang_Lists["flatten/1"];
 
@@ -449,30 +577,13 @@ describe("Erlang_Lists", () => {
 
     // Client error message is intentionally different than server error message.
     it("raises FunctionClauseError if the first argument is an anonymous function with arity different than 1", () => {
-      const fun = Type.anonymousFunction(
-        2,
-        [
-          {
-            params: (_context) => [
-              Type.variablePattern("x"),
-              Type.variablePattern("y"),
-            ],
-            guards: [],
-            body: (context) => {
-              return Erlang["+/2"](context.vars.x, context.vars.y);
-            },
-          },
-        ],
-        contextFixture(),
-      );
-
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
         ":lists.map/2",
-        [fun, emptyList],
+        [funArity2, emptyList],
       );
 
       assertBoxedError(
-        () => map(fun, emptyList),
+        () => map(funArity2, emptyList),
         "FunctionClauseError",
         expectedMessage,
       );
