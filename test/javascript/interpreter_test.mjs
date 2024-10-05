@@ -6382,6 +6382,14 @@ describe("Interpreter", () => {
     );
   });
 
+  it("raiseErlangError()", () => {
+    assertBoxedError(
+      () => Interpreter.raiseErlangError("abc"),
+      "ErlangError",
+      "abc",
+    );
+  });
+
   it("raiseError()", () => {
     assertBoxedError(
       () => Interpreter.raiseError("Aaa.Bbb", "abc"),

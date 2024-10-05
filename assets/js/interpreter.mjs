@@ -712,6 +712,10 @@ export default class Interpreter {
     Interpreter.raiseError("CompileError", message);
   }
 
+  static raiseErlangError(message) {
+    Interpreter.raiseError("ErlangError", message);
+  }
+
   // Deps: [:erlang.error/1]
   static raiseError(aliasStr, message) {
     const errorStruct = Type.errorStruct(aliasStr, message);
