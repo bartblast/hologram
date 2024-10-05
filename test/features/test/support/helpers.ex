@@ -23,6 +23,8 @@ defmodule HologramFeatureTests.Helpers do
 
   def assert_page(session, page_module, params \\ []) do
     path = Router.Helpers.page_path(page_module, params)
+    wait_for_path(session, path)
+
     assert Browser.current_path(session) == path
 
     session
@@ -81,10 +83,20 @@ defmodule HologramFeatureTests.Helpers do
     |> wait_for_server_connection()
   end
 
+  defp timed_out?(start_time) do
+    DateTime.diff(DateTime.utc_now(), start_time, :millisecond) > @max_wait_time
+  end
+
+  defp wait_for_path(session, path, start_time \\ DateTime.utc_now()) do
+    if Browser.current_path(session) != path && !timed_out?(start_time) do
+      :timer.sleep(100)
+      wait_for_path(session, path, start_time)
+    end
+  end
+
   def wait_for_server_connection(session, start_time \\ DateTime.utc_now()) do
     callback = fn connected? ->
-      if !connected? &&
-           DateTime.diff(DateTime.utc_now(), start_time, :millisecond) < @max_wait_time - 100 do
+      if !connected? && !timed_out?(start_time) do
         :timer.sleep(100)
         wait_for_server_connection(session, start_time)
       end
@@ -98,7 +110,7 @@ defmodule HologramFeatureTests.Helpers do
   defp wait_for_js_error(session, start_time \\ DateTime.utc_now()) do
     Browser.execute_script(session, "1 + 1")
 
-    if DateTime.diff(DateTime.utc_now(), start_time, :millisecond) < @max_wait_time - 100 do
+    if !timed_out?(start_time) do
       :timer.sleep(100)
       wait_for_js_error(session, start_time)
     end
