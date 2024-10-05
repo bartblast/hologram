@@ -111,6 +111,11 @@ describe("Interpreter", () => {
     });
   });
 
+  it("buildErlangErrorMsg()", () => {
+    const result = Interpreter.buildErlangErrorMsg("my message");
+    assert.equal(result, "Erlang error: my message");
+  });
+
   describe("buildFunctionClauseErrorMsg()", () => {
     it("no args param given", () => {
       const result =

@@ -61,6 +61,10 @@ export default class Interpreter {
     return context;
   }
 
+  static buildErlangErrorMsg(message) {
+    return `Erlang error: ${message}`;
+  }
+
   // TODO: include attempted function clauses info
   static buildFunctionClauseErrorMsg(funName, args = []) {
     let argsInfo = "";
