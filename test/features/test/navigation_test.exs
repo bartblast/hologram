@@ -4,7 +4,7 @@ defmodule HologramFeatureTests.NavigationTest do
   alias HologramFeatureTests.Navigation1Page, as: Page1
   alias HologramFeatureTests.Navigation2Page, as: Page2
 
-  test "link", %{session: session} do
+  test "link component", %{session: session} do
     session
     |> visit(Page1)
     |> click(link("Page 2 link"))
@@ -12,5 +12,17 @@ defmodule HologramFeatureTests.NavigationTest do
     |> assert_text("Page 2 title")
     |> click(button("Put page 2 result"))
     |> assert_text("Page 2 result")
+  end
+
+  test "go back", %{session: session} do
+    session
+    |> visit(Page1)
+    |> click(link("Page 2 link"))
+    |> assert_page(Page2)
+    |> go_back()
+    |> assert_page(Page1)
+    |> assert_text("Page 1 title")
+    |> click(button("Put page 1 resultgs"))
+    |> assert_text("Page 1 result")
   end
 end
