@@ -26,12 +26,6 @@ without its shortcomings related to scalability, efficiency, etc.
 
 ### Runtime
 
-#### Core
-
-| Feature     | Status             | Comments                                                        |
-| :---------- | :----------------: | :-------------------------------------------------------------- |
-| Routing     | :construction:     | done: paths without params, todo: params                        |
-
 #### Template Engine
 
 | Feature         | Status             | Comments                                                        |
@@ -148,23 +142,6 @@ without its shortcomings related to scalability, efficiency, etc.
 | Require          | :white_check_mark: |
 | Use              | :white_check_mark: |
 
-#### Sigils
-
-| Sigil | Status             |
-| :---- | :----------------: |
-| ~c    | :x:                |
-| ~C    | :x:                |
-| ~D    | :x:                |
-| ~N    | :x:                |
-| ~r    | :x:                |
-| ~R    | :x:                |
-| ~s    | :x:                |
-| ~S    | :x:                |
-| ~T    | :x:                |
-| ~U    | :x:                |
-| ~w    | :x:                |
-| ~W    | :x:                |
-
 #### Other
 
 | Feature                        | Status             |
@@ -181,10 +158,5 @@ without its shortcomings related to scalability, efficiency, etc.
 | Protocols                      | :x:                |
 | Variable rebinding             | :x:                |
 
-#### Someday/Maybe
-* Two-Way Binding (template engine)
-
 #### Not on Roadmap
-* Types: PID, Port, Reference
 * Control Flow: Exit, Receive
-* Other: Erlang Libraries
