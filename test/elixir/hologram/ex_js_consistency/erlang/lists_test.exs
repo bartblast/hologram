@@ -9,6 +9,65 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
   @moduletag :consistency
 
+  describe "filter/2" do
+    setup do
+      [fun: fn elem -> elem > 1 end]
+    end
+
+    test "empty list", %{fun: fun} do
+      assert :lists.filter(fun, []) == []
+    end
+
+    test "non-empty list", %{fun: fun} do
+      assert :lists.filter(fun, [1, 2, 3]) == [2, 3]
+    end
+
+    test "first arg is not an anonymous function" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.filter/2", [:abc, [1, 2, 3]]),
+                   fn ->
+                     :lists.filter(:abc, [1, 2, 3])
+                   end
+    end
+
+    # Client error message is intentionally different than server error message.
+    test "first arg is an anonymous function with arity different than 1" do
+      expected_msg = ~r"""
+      no function clause matching in :lists\.filter/2
+
+      The following arguments were given to :lists\.filter/2:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\."test filter/2 first arg is an anonymous function with arity different than 1"/1>
+
+          # 2
+          \[1, 2, 3\]
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.filter(fn x, y -> x + y > 0 end, [1, 2, 3])
+      end
+    end
+
+    test "second arg is not a list", %{fun: fun} do
+      assert_error ErlangError, build_erlang_error_msg("{:bad_generator, :abc}"), fn ->
+        :lists.filter(fun, :abc)
+      end
+    end
+
+    test "second arg is not a proper list", %{fun: fun} do
+      assert_error ErlangError, build_erlang_error_msg("{:bad_generator, 3}"), fn ->
+        :lists.filter(fun, [1, 2 | 3])
+      end
+    end
+
+    test "filter fun doesn't return a boolean" do
+      assert_error ErlangError, build_erlang_error_msg("{:bad_filter, 4}"), fn ->
+        :lists.filter(fn elem -> 2 * elem end, [2, 3, 4])
+      end
+    end
+  end
+
   describe "flatten/1" do
     test "works with empty list" do
       assert :lists.flatten([]) == []
