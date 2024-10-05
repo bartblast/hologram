@@ -56,6 +56,10 @@ defmodule HologramFeatureTests.Helpers do
     Browser.execute_script(session, "history.back();")
   end
 
+  def go_forward(session) do
+    Browser.execute_script(session, "history.forward();")
+  end
+
   def has_text?(parent, text) when is_binary(text) do
     Browser.has_text?(parent, text)
   end
