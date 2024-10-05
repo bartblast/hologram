@@ -94,6 +94,14 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Builds an error message for ErlangError.
+  """
+  @spec build_erlang_error_msg(String.t()) :: String.t()
+  def build_erlang_error_msg(blame) do
+    "Erlang error: #{blame}"
+  end
+
+  @doc """
   Builds an error message for FunctionClauseError.
   """
   @spec build_function_clause_error_msg(String.t(), list, list) :: String.t()
