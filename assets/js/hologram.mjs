@@ -437,6 +437,13 @@ export default class Hologram {
 
     Interpreter.defineManuallyPortedFunction(
       "String",
+      "replace/3",
+      "public",
+      ManuallyPortedElixirString["replace/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "String",
       "upcase/1",
       "public",
       ManuallyPortedElixirString["upcase/1"],
