@@ -34,6 +34,33 @@ const Elixir_String = {
     return Type.bitstring(Bitstring.toText(string).toLowerCase());
   },
 
+  // Deps: [String.replace/3]
+  "replace/3": function (subject, pattern, replacement) {
+    if (!Type.isBinary(subject)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg("String.replace/4", arguments),
+      );
+    }
+
+    if (!Type.isBinary(pattern) || pattern.bits.length === 0) {
+      throw new HologramInterpreterError(
+        "using String.replace/3 pattern argument other than non-empty binary is not yet implemented in Hologram",
+      );
+    }
+
+    if (!Type.isBinary(replacement)) {
+      throw new HologramInterpreterError(
+        "using String.replace/3 replacement argument other than binary is not yet implemented in Hologram",
+      );
+    }
+
+    const subjectStr = Bitstring.toText(subject);
+    const patternStr = Bitstring.toText(pattern);
+    const replacementStr = Bitstring.toText(replacement);
+
+    return Type.bitstring(subjectStr.replaceAll(patternStr, replacementStr));
+  },
+
   // Deps: [String.upcase/2]
   "upcase/1": (string) => {
     return Elixir_String["upcase/2"](string, Type.atom("default"));
