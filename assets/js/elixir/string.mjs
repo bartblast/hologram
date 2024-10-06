@@ -34,7 +34,6 @@ const Elixir_String = {
     return Type.bitstring(Bitstring.toText(string).toLowerCase());
   },
 
-  // Deps: [String.replace/3]
   "replace/3": function (subject, pattern, replacement) {
     if (!Type.isBinary(subject)) {
       Interpreter.raiseFunctionClauseError(
