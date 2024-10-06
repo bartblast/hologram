@@ -167,6 +167,7 @@ describe("Elixir_String", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    // TODO: client error message for this case is inconsistent with server error message
     it("non-binary subject arg", () => {
       const subject = Type.atom("abc");
 

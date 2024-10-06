@@ -87,6 +87,35 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
     end
   end
 
+  describe "String.replace/3" do
+    test "ASCII text" do
+      assert String.replace("abcabc", "ab", "xy") == "xycxyc"
+    end
+
+    test "Unicode text" do
+      assert String.replace("全息图全息图", "全息", "xy") == "xy图xy图"
+    end
+
+    test "grapheme 'é' which is made of the characters 'e' and the acute accent (replacing across grapheme boundaries)" do
+      assert String.replace("é", "e", "o") == "ó"
+    end
+
+    test "grapheme 'é' which is represented by the single character 'e with acute' accent (no replacing at all)" do
+      assert String.replace("é", "e", "o") == "é"
+    end
+
+    # TODO: client error message for this case is inconsistent with server error message
+    test "non-binary subject arg" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg("String.replace/4", [:abc, "ab", "xy", []], [
+                     "def replace(subject, pattern, replacement, options) when -is_binary(subject)- and (is_binary(replacement) or -is_function(replacement, 1)-) and is_list(options)"
+                   ]),
+                   fn ->
+                     String.replace(:abc, "ab", "xy")
+                   end
+    end
+  end
+
   describe "upcase/1" do
     test "delegates to upcase/2" do
       assert String.upcase("HoLoGrAm") == "HOLOGRAM"
