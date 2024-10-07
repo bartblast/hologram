@@ -6,6 +6,7 @@ defmodule HologramFeatureTests.Navigation1Page do
 
   alias Hologram.UI.Link
   alias HologramFeatureTests.Navigation2Page, as: Page2
+  alias HologramFeatureTests.Navigation3Page, as: Page3
 
   route "/navigation-1"
 
@@ -21,9 +22,10 @@ defmodule HologramFeatureTests.Navigation1Page do
     <button $click="put_result">Put page 1 result</button>
     <button $click="change_page">Change page</button>
     <Link to={Page2}>Page 2 link</Link>
+    <Link to={Page3, s: "abc", i: 123}>Page 3 link</Link>
     <p>
       Page result: <strong id="page_result"><code>{inspect(@result)}</code></strong>
-    </p>    
+    </p>
     """
   end
 
