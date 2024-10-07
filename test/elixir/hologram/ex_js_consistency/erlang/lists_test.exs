@@ -170,7 +170,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       The following arguments were given to :lists\.foldl_1/3:
 
           # 1
-          #Function<[0-9]+.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\.__ex_unit_setup_1_0/1>
+          #Function<[0-9]+.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\.__ex_unit_setup_[0-9]+_0/1>
 
           # 2
           3
@@ -323,7 +323,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       The following arguments were given to :lists\.map_1/2:
 
           # 1
-          #Function<[0-9]+\.[0-9]+/1 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\.__ex_unit_setup_4_0/1>
+          #Function<[0-9]+\.[0-9]+/1 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\.__ex_unit_setup_[0-9]+_0/1>
 
           # 2
           3
