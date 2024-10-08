@@ -17,7 +17,13 @@ defmodule Mix.Tasks.Compile.Hologram do
   @impl Mix.Task.Compiler
   # If the options are strings, it means that the task was executed directly by the Elixir compiler.
   def run([hd | _tail]) when is_binary(hd) do
-    run(build_default_opts())
+    opts = build_default_opts()
+
+    if !elixir_ls_build?(opts) do
+      run(opts)
+    else
+      :ok
+    end
   end
 
   @impl Mix.Task.Compiler
@@ -126,5 +132,9 @@ defmodule Mix.Tasks.Compile.Hologram do
       static_dir: Path.join([root_dir, "priv", "static", "hologram"]),
       tmp_dir: Path.join(build_dir, "tmp")
     ]
+  end
+
+  defp elixir_ls_build?(opts) do
+    String.contains?(opts[:build_dir], "/.elixir_ls/")
   end
 end
