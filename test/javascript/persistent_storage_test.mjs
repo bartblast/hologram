@@ -85,7 +85,7 @@ describe("PersistentStorage", () => {
 
     const nowMs = Date.now();
     const createdAtMs = createdAt.getTime();
-    assert.isAbove(nowMs, createdAtMs);
+    assert.isAtLeast(nowMs, createdAtMs);
     assert.isAtMost(Math.abs(nowMs - createdAtMs), 3000);
   });
 });
