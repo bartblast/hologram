@@ -118,8 +118,12 @@ jobs:
       # Step: Download lib Elixir dependencies.
       # If unchanged, uses the cached version.
       - name: Download lib Elixir deps
-        run: mix deps.get
-        timeout-minutes: 3
+        uses: nick-fields/retry@v3
+        with:
+          command: mix deps.get
+          retry_on: error
+          timeout_minutes: 3
+          max_attempts: 3
 
       # Step: Download lib JavaScript dependencies.
       - name: Download lib JavaScript deps
@@ -331,8 +335,12 @@ jobs:
       # Step: Download feature tests app Elixir dependencies.
       # If unchanged, uses the cached version.
       - name: Download feature tests app Elixir deps
-        run: mix deps.get
-        timeout-minutes: 3
+        uses: nick-fields/retry@v3
+        with:
+          command: mix deps.get
+          retry_on: error
+          timeout_minutes: 3
+          max_attempts: 3
 
       # Step: Compile the feature tests app project treating any warnings as errors.
       - name: Check feature tests app project compiles without warnings
