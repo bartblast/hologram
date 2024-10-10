@@ -38,10 +38,10 @@ export default class PersistentStorage {
     });
   }
 
-  static async getPageSnapshot(id) {
-    return await new Promise((resolve) => {
+  static getPageSnapshot(id) {
+    return new Promise((resolve) => {
       const request = $.db
-        .transaction([$.PAGE_SNAPSHOTS_OBJ_STORE_NAME], "readonly")
+        .transaction($.PAGE_SNAPSHOTS_OBJ_STORE_NAME, "readonly")
         .objectStore($.PAGE_SNAPSHOTS_OBJ_STORE_NAME)
         .get(id);
 
@@ -55,12 +55,12 @@ export default class PersistentStorage {
     });
   }
 
-  static async putPageSnapshot(data) {
-    return await new Promise((resolve) => {
-      const obj = {data, createdAt: Date.now()};
+  static putPageSnapshot(data) {
+    return new Promise((resolve) => {
+      const obj = {data, createdAt: new Date()};
 
       const request = $.db
-        .transaction([$.PAGE_SNAPSHOTS_OBJ_STORE_NAME], "readwrite")
+        .transaction($.PAGE_SNAPSHOTS_OBJ_STORE_NAME, "readwrite")
         .objectStore($.PAGE_SNAPSHOTS_OBJ_STORE_NAME)
         .put(obj);
 
@@ -75,8 +75,8 @@ export default class PersistentStorage {
   }
 
   // TODO: test
-  static async reset() {
-    return await new Promise((resolve) => {
+  static reset() {
+    return new Promise((resolve) => {
       const request = indexedDB.deleteDatabase($.db);
 
       request.onerror = (_event) => {
