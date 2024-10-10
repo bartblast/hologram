@@ -73,21 +73,6 @@ export default class PersistentStorage {
       request.onsuccess = (event) => resolve(event.target.result);
     });
   }
-
-  // TODO: test
-  static reset() {
-    return new Promise((resolve) => {
-      const request = indexedDB.deleteDatabase($.db);
-
-      request.onerror = (_event) => {
-        throw new HologramRuntimeError(
-          "failed to reset client persistent storage",
-        );
-      };
-
-      request.onsuccess = (event) => resolve(event.target.result);
-    });
-  }
 }
 
 const $ = PersistentStorage;
