@@ -8,7 +8,6 @@ import {
 import PersistentStorage from "../../assets/js/persistent_storage.mjs";
 
 import FDBDatabase from "../../assets/node_modules/fake-indexeddb/build/esm/FDBDatabase.js";
-import FDBOpenDBRequest from "../../assets/node_modules/fake-indexeddb/build/esm/FDBOpenDBRequest.js";
 
 defineGlobalErlangAndElixirModules();
 
