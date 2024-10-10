@@ -26,6 +26,8 @@ export {JSDOM};
 export * as sinon from "../../../assets/node_modules/sinon/pkg/sinon-esm.js";
 export {h as vnode} from "../../../assets/node_modules/snabbdom/build/index.js";
 
+import fakeIndexedDB from "../../../assets/node_modules/fake-indexeddb/build/esm/fakeIndexedDB.js";
+
 export const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
@@ -356,5 +358,6 @@ export function registerWebApis() {
   globalThis.DOMParser = window.DOMParser;
   globalThis.FormData = window.FormData;
   globalThis.history = window.history;
+  globalThis.indexedDB = fakeIndexedDB;
   globalThis.sessionStorage = window.sessionStorage;
 }
