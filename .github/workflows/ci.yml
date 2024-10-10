@@ -37,7 +37,7 @@ jobs:
           - "24.3"
           - "25.3"
           - "26.2"
-          - "27.0"
+          - "27.1"
         node:
           # Version 18 doesn't support Web Crypto API.
           # - "18.20.4"
@@ -249,7 +249,7 @@ jobs:
           - "24.3"
           - "25.3"
           - "26.2"
-          - "27.0"
+          - "27.1"
         node:
           # Version 18 doesn't support Web Crypto API.
           # - "18.20.4"
