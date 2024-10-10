@@ -38,6 +38,20 @@ defmodule HologramFeatureTests.NavigationTest do
     |> assert_text("Page 1 result")
   end
 
+  test "go back after reload", %{session: session} do
+    session
+    |> visit(Page1)
+    |> click(link("Page 2 link"))
+    |> assert_page(Page2)
+    |> reload()
+    |> assert_page(Page2)
+    |> go_back()
+    |> assert_page(Page1)
+    |> assert_text("Page 1 title")
+    |> click(button("Put page 1 result"))
+    |> assert_text("Page 1 result")
+  end
+
   test "go forward", %{session: session} do
     session
     |> visit(Page1)
