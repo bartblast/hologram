@@ -1,6 +1,7 @@
 "use strict";
 
 export default class MemoryStorage {
+  // Made public to make tests easier
   static data = {};
 
   static get(key) {
