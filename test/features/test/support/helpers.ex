@@ -83,6 +83,10 @@ defmodule HologramFeatureTests.Helpers do
     end
   end
 
+  def reload(session) do
+    Browser.execute_script(session, "document.location.reload();")
+  end
+
   def visit(session, page_module, params \\ []) do
     path = Router.Helpers.page_path(page_module, params)
 
