@@ -119,6 +119,7 @@ jobs:
       # If unchanged, uses the cached version.
       - name: Download lib Elixir deps
         run: mix deps.get
+        timeout-minutes: 3
 
       # Step: Download lib JavaScript dependencies.
       - name: Download lib JavaScript deps
@@ -331,6 +332,7 @@ jobs:
       # If unchanged, uses the cached version.
       - name: Download feature tests app Elixir deps
         run: mix deps.get
+        timeout-minutes: 3
 
       # Step: Compile the feature tests app project treating any warnings as errors.
       - name: Check feature tests app project compiles without warnings
