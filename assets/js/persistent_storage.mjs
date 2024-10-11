@@ -4,13 +4,13 @@ import HologramRuntimeError from "./errors/runtime_error.mjs";
 
 export default class PersistentStorage {
   // Made public to make tests easier
-  static db = null;
+  static env = null;
 
   static PAGE_SNAPSHOTS_OBJ_STORE_NAME = "pageSnapshots";
 
-  static init(env) {
+  static async database() {
     return new Promise((resolve) => {
-      const request = indexedDB.open(`hologram_${env}`, 1);
+      const request = indexedDB.open(`hologram_${$.env}`, 1);
 
       request.onerror = (_event) => {
         throw new HologramRuntimeError(
@@ -19,28 +19,24 @@ export default class PersistentStorage {
       };
 
       request.onsuccess = (event) => {
-        $.db = event.target.result;
         resolve(event.target.result);
       };
 
       request.onupgradeneeded = (event) => {
-        $.db = event.target.result;
-
-        const objectStore = $.db.createObjectStore(
-          $.PAGE_SNAPSHOTS_OBJ_STORE_NAME,
-          {
+        event.target.result
+          .createObjectStore($.PAGE_SNAPSHOTS_OBJ_STORE_NAME, {
             autoIncrement: true,
-          },
-        );
-
-        objectStore.createIndex("createdAt", "createdAt", {unique: false});
+          })
+          .createIndex("createdAt", "createdAt", {unique: false});
       };
     });
   }
 
-  static getPageSnapshot(id) {
+  static async getPageSnapshot(id) {
+    const db = await $.database();
+
     return new Promise((resolve) => {
-      const request = $.db
+      const request = db
         .transaction($.PAGE_SNAPSHOTS_OBJ_STORE_NAME, "readonly")
         .objectStore($.PAGE_SNAPSHOTS_OBJ_STORE_NAME)
         .get(id);
@@ -55,11 +51,18 @@ export default class PersistentStorage {
     });
   }
 
-  static putPageSnapshot(data) {
+  static async init(env) {
+    $.env = env;
+    return $.database();
+  }
+
+  static async putPageSnapshot(data) {
+    const db = await $.database();
+
     return new Promise((resolve) => {
       const obj = {data, createdAt: new Date()};
 
-      const request = $.db
+      const request = db
         .transaction($.PAGE_SNAPSHOTS_OBJ_STORE_NAME, "readwrite")
         .objectStore($.PAGE_SNAPSHOTS_OBJ_STORE_NAME)
         .put(obj);

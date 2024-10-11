@@ -12,9 +12,11 @@ import FDBFactory from "../../assets/node_modules/fake-indexeddb/build/esm/FDBFa
 
 defineGlobalErlangAndElixirModules();
 
-function getAllObjects() {
+async function getAllObjects() {
+  const db = await PersistentStorage.database();
+
   return new Promise((resolve) => {
-    PersistentStorage.db
+    db
       .transaction(PersistentStorage.PAGE_SNAPSHOTS_OBJ_STORE_NAME, "readonly")
       .objectStore(PersistentStorage.PAGE_SNAPSHOTS_OBJ_STORE_NAME)
       .getAll().onsuccess = (event) => {
@@ -26,21 +28,19 @@ function getAllObjects() {
 describe("PersistentStorage", () => {
   beforeEach(async () => {
     globalThis.indexedDB = new FDBFactory();
+    PersistentStorage.env = "dev";
   });
 
-  it("init()", async () => {
-    const result = await PersistentStorage.init("dev");
+  it("database()", async () => {
+    const result = await PersistentStorage.database();
 
     assert.instanceOf(result, FDBDatabase);
-    assert.equal(PersistentStorage.db, result);
     assert.equal(result.name, "hologram_dev");
     assert.equal(result.version, 1);
 
-    assert.deepStrictEqual(PersistentStorage.db.objectStoreNames, [
-      "pageSnapshots",
-    ]);
+    assert.deepStrictEqual(result.objectStoreNames, ["pageSnapshots"]);
 
-    const objectStore = PersistentStorage.db
+    const objectStore = result
       .transaction("pageSnapshots", "readonly")
       .objectStore("pageSnapshots");
 
@@ -55,8 +55,6 @@ describe("PersistentStorage", () => {
   });
 
   it("getPageSnapshot()", async () => {
-    await PersistentStorage.init("dev");
-
     const data = {a: 1, b: 2};
 
     // putPageSnapshot() can be used in this test,
@@ -70,9 +68,16 @@ describe("PersistentStorage", () => {
     assert.deepStrictEqual(result, objects[0]);
   });
 
-  it("putPageSnapshot()", async () => {
-    await PersistentStorage.init("dev");
+  it("init()", async () => {
+    PersistentStorage.env = null;
 
+    const result = await PersistentStorage.init("my_env");
+    assert.instanceOf(result, FDBDatabase);
+
+    assert.equal(PersistentStorage.env, "my_env");
+  });
+
+  it("putPageSnapshot()", async () => {
     const data = {a: 1, b: 2};
     const id = await PersistentStorage.putPageSnapshot(data);
     assert.equal(id, 1);
