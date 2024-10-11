@@ -12,6 +12,7 @@ import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import MemoryStorage from "./memory_storage.mjs";
 import Operation from "./operation.mjs";
+import PersistentStorage from "./persistent_storage.mjs";
 import Renderer from "./renderer.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
@@ -55,7 +56,6 @@ export default class Hologram {
     Utils: Utils,
   };
 
-  static #historyStorage = {};
   static #isInitiated = false;
   static #mountData = null;
   static #pageModule = null;
@@ -507,9 +507,11 @@ export default class Hologram {
     );
   }
 
-  static #handlePopstateEvent(event) {
+  static async #handlePopstateEvent(event) {
+    const pageSnapshot = await PersistentStorage.getPageSnapshot(event.state);
+
     const {componentRegistryEntries, pageModule, pageParams} =
-      Hologram.#historyStorage[event.state];
+      pageSnapshot.data;
 
     ComponentRegistry.hydrate(componentRegistryEntries);
     Hologram.#pageModule = pageModule;
@@ -527,6 +529,8 @@ export default class Hologram {
       }
     });
 
+    PersistentStorage.init();
+
     Client.connect();
 
     Hologram.#defineManuallyPortedFunctions();
@@ -535,6 +539,7 @@ export default class Hologram {
 
     window.addEventListener("pageshow", (event) => {
       if (event.persisted) {
+        PersistentStorage.init();
         Client.connect();
       }
     });
@@ -639,15 +644,15 @@ export default class Hologram {
   }
 
   static #replaceHistoryState() {
-    const state = {
+    const data = {
       componentRegistryEntries: ComponentRegistry.entries,
       pageModule: Hologram.#pageModule,
       pageParams: Hologram.#pageParams,
     };
 
-    const historyStateId = crypto.randomUUID();
-    Hologram.#historyStorage[historyStateId] = state;
+    const id = crypto.randomUUID();
+    PersistentStorage.putPageSnapshot(id, data);
 
-    history.replaceState(historyStateId, null, window.location.pathname);
+    history.replaceState(id, null, window.location.pathname);
   }
 }
