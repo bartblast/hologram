@@ -529,7 +529,7 @@ export default class Hologram {
       }
     });
 
-    PersistentStorage.init();
+    PersistentStorage.init("dev");
 
     Client.connect();
 
@@ -539,7 +539,7 @@ export default class Hologram {
 
     window.addEventListener("pageshow", (event) => {
       if (event.persisted) {
-        PersistentStorage.init();
+        PersistentStorage.init("dev");
         Client.connect();
       }
     });
