@@ -25,7 +25,7 @@ export default class PersistentStorage {
       request.onupgradeneeded = (event) => {
         event.target.result
           .createObjectStore($.PAGE_SNAPSHOTS_OBJ_STORE_NAME, {
-            autoIncrement: true,
+            keyPath: "id",
           })
           .createIndex("createdAt", "createdAt", {unique: false});
       };
@@ -56,11 +56,11 @@ export default class PersistentStorage {
     return $.database();
   }
 
-  static async putPageSnapshot(data) {
+  static async putPageSnapshot(id, data) {
     const db = await $.database();
 
     return new Promise((resolve) => {
-      const obj = {data, createdAt: new Date()};
+      const obj = {id, data, createdAt: new Date()};
 
       const request = db
         .transaction($.PAGE_SNAPSHOTS_OBJ_STORE_NAME, "readwrite")
@@ -73,7 +73,7 @@ export default class PersistentStorage {
         );
       };
 
-      request.onsuccess = (event) => resolve(event.target.result);
+      request.onsuccess = (_event) => resolve(id);
     });
   }
 }

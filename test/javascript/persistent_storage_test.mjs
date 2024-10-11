@@ -44,8 +44,8 @@ describe("PersistentStorage", () => {
       .transaction("pageSnapshots", "readonly")
       .objectStore("pageSnapshots");
 
-    assert.isNull(objectStore.keyPath);
-    assert.isTrue(objectStore.autoIncrement);
+    assert.equal(objectStore.keyPath, "id");
+    assert.isFalse(objectStore.autoIncrement);
     assert.deepStrictEqual(objectStore.indexNames, ["createdAt"]);
 
     const index = objectStore.index("createdAt");
@@ -55,12 +55,13 @@ describe("PersistentStorage", () => {
   });
 
   it("getPageSnapshot()", async () => {
+    const id = crypto.randomUUID();
     const data = {a: 1, b: 2};
 
     // putPageSnapshot() can be used in this test,
     // because it was tested with low-level indexedDB functions only
     // (not using PersistentStorage class functions).
-    const id = await PersistentStorage.putPageSnapshot(data);
+    await PersistentStorage.putPageSnapshot(id, data);
 
     const objects = await getAllObjects();
 
@@ -78,15 +79,17 @@ describe("PersistentStorage", () => {
   });
 
   it("putPageSnapshot()", async () => {
+    const id = crypto.randomUUID();
     const data = {a: 1, b: 2};
-    const id = await PersistentStorage.putPageSnapshot(data);
-    assert.equal(id, 1);
+
+    const result = await PersistentStorage.putPageSnapshot(id, data);
+    assert.equal(result, id);
 
     const objects = await getAllObjects();
 
     const createdAt = objects[0].createdAt;
     assert.instanceOf(createdAt, Date);
-    assert.deepStrictEqual(objects, [{data: data, createdAt: createdAt}]);
+    assert.deepStrictEqual(objects, [{id, data, createdAt}]);
 
     const nowMs = Date.now();
     const createdAtMs = createdAt.getTime();
