@@ -36,5 +36,13 @@ describe("Deserializer", () => {
 
       assert.deepStrictEqual(result, term);
     });
+
+    it("boxed nil", () => {
+      const term = Type.nil();
+      const data = JsonEncoder.encode(term);
+      const result = Deserializer.deserialize(data);
+
+      assert.deepStrictEqual(result, term);
+    });
   });
 });
