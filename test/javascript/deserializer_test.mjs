@@ -29,6 +29,30 @@ describe("Deserializer", () => {
       assert.deepStrictEqual(result, term);
     });
 
+    it("boxed atom", () => {
+      const term = Type.atom("abc");
+      const data = JsonEncoder.encode(term);
+      const result = Deserializer.deserialize(data);
+
+      assert.deepStrictEqual(result, term);
+    });
+
+    it("boxed boolean", () => {
+      const term = Type.boolean(true);
+      const data = JsonEncoder.encode(term);
+      const result = Deserializer.deserialize(data);
+
+      assert.deepStrictEqual(result, term);
+    });
+
+    it("boxed float", () => {
+      const term = Type.float(1.23);
+      const data = JsonEncoder.encode(term);
+      const result = Deserializer.deserialize(data);
+
+      assert.deepStrictEqual(result, term);
+    });
+
     it("boxed integer", () => {
       const term = Type.integer(123);
       const data = JsonEncoder.encode(term);
