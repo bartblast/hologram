@@ -7,17 +7,26 @@ import {
 
 import Deserializer from "../../assets/js/deserializer.mjs";
 import JsonEncoder from "../../assets/js/json_encoder.mjs";
+import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
 describe("Deserializer", () => {
   describe("deserialize()", () => {
-    it("string", () => {
+    it("JS object", () => {
       const obj = {a: 1, b: 2};
       const data = JsonEncoder.encode(obj);
       const result = Deserializer.deserialize(data);
 
       assert.deepStrictEqual(result, obj);
+    });
+
+    it("boxed integer", () => {
+      const term = Type.integer(123);
+      const data = JsonEncoder.encode(term);
+      const result = Deserializer.deserialize(data);
+
+      assert.deepStrictEqual(result, term);
     });
   });
 });
