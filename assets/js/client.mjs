@@ -49,13 +49,10 @@ export default class Client {
 
   static encoder(msg, callback) {
     return callback(
-      JsonEncoder.encode([
-        msg.join_ref,
-        msg.ref,
-        msg.topic,
-        msg.event,
-        msg.payload,
-      ]),
+      JsonEncoder.encode(
+        [msg.join_ref, msg.ref, msg.topic, msg.event, msg.payload],
+        false,
+      ),
     );
   }
 
