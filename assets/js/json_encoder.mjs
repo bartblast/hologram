@@ -106,7 +106,7 @@ export default class JsonEncoder {
       return JSON.stringify(term);
     }
 
-    if (term.origin === "client" && !isFullScope) {
+    if (term.origin === "client") {
       throw new HologramRuntimeError(
         "can't encode client terms that are PIDs originating in client",
       );
