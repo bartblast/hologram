@@ -4,13 +4,7 @@ import Type from "./type.mjs";
 
 export default class Deserializer {
   static deserialize(data) {
-    const value = typeof data === "string" ? $.#parseJson(data) : data;
-
-    if (value === null) {
-      return Type.nil();
-    }
-
-    return value;
+    return typeof data === "string" ? $.#parseJson(data) : data;
   }
 
   static #parseJson(json) {
