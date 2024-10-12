@@ -119,7 +119,7 @@ describe("JsonEncoder", () => {
         );
       });
 
-      it("originating in server full scope", () => {
+      it("originating in server, full scope", () => {
         const term = Type.pid('my_node@my_"host', [0, 11, 222], "server");
 
         const expected =
@@ -137,21 +137,38 @@ describe("JsonEncoder", () => {
     });
 
     describe("boxed port", () => {
-      it("originating in client", () => {
+      it("originating in client, full scope", () => {
         const term = Type.port("0.11", "client");
 
         assert.throw(
-          () => JsonEncoder.encode(term),
+          () => JsonEncoder.encode(term, true),
           HologramRuntimeError,
           "can't encode client terms that are ports originating in client",
         );
       });
 
-      it("originating in server", () => {
+      it("originating in client, not full scope", () => {
+        const term = Type.port("0.11", "client");
+
+        assert.throw(
+          () => JsonEncoder.encode(term, false),
+          HologramRuntimeError,
+          "can't encode client terms that are ports originating in client",
+        );
+      });
+
+      it("originating in server, full scope", () => {
+        const term = Type.port("0.11", "server");
+        const expected = '{"type":"port","origin":"server","value":"0.11"}';
+
+        assert.equal(JsonEncoder.encode(term, true), expected);
+      });
+
+      it("originating in server, not full scope", () => {
         const term = Type.port("0.11", "server");
         const expected = '{"type":"port","value":"0.11"}';
 
-        assert.equal(JsonEncoder.encode(term), expected);
+        assert.equal(JsonEncoder.encode(term, false), expected);
       });
     });
 

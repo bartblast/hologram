@@ -32,7 +32,7 @@ export default class JsonEncoder {
         return JsonEncoder.#encodePid(term, isFullScope);
 
       case "port":
-        return JsonEncoder.#encodePort(term);
+        return JsonEncoder.#encodePort(term, isFullScope);
 
       case "reference":
         return JsonEncoder.#encodeReference(term);
@@ -115,7 +115,11 @@ export default class JsonEncoder {
     return `{"type":"pid","segments":${JsonEncoder.encode(term.segments)}}`;
   }
 
-  static #encodePort(term) {
+  static #encodePort(term, isFullScope) {
+    if (isFullScope) {
+      return JSON.stringify(term);
+    }
+
     if (term.origin === "client") {
       throw new HologramRuntimeError(
         "can't encode client terms that are ports originating in client",
