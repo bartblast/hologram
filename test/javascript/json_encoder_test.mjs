@@ -13,7 +13,7 @@ import Type from "../../assets/js/type.mjs";
 defineGlobalErlangAndElixirModules();
 
 describe("JsonEncoder", () => {
-  describe.only("encode()", () => {
+  describe("encode()", () => {
     describe("boxed anonymous function", () => {
       it("not having capture info", () => {
         const term = Type.anonymousFunction(2, [], contextFixture());
