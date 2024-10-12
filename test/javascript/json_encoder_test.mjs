@@ -173,21 +173,37 @@ describe("JsonEncoder", () => {
     });
 
     describe("boxed reference", () => {
-      it("originating in client", () => {
+      it("originating in client, full scope", () => {
+        const term = Type.reference("0.1.2.3", "client");
+        const expected =
+          '{"type":"reference","origin":"client","value":"0.1.2.3"}';
+
+        assert.equal(JsonEncoder.encode(term, true), expected);
+      });
+
+      it("originating in client, not full scope", () => {
         const term = Type.reference("0.1.2.3", "client");
 
         assert.throw(
-          () => JsonEncoder.encode(term),
+          () => JsonEncoder.encode(term, false),
           HologramRuntimeError,
           "can't encode client terms that are references originating in client",
         );
       });
 
-      it("originating in server", () => {
+      it("originating in server, full scope", () => {
+        const term = Type.reference("0.1.2.3", "server");
+        const expected =
+          '{"type":"reference","origin":"server","value":"0.1.2.3"}';
+
+        assert.equal(JsonEncoder.encode(term, true), expected);
+      });
+
+      it("originating in server, not full scope", () => {
         const term = Type.reference("0.1.2.3", "server");
         const expected = '{"type":"reference","value":"0.1.2.3"}';
 
-        assert.equal(JsonEncoder.encode(term), expected);
+        assert.equal(JsonEncoder.encode(term, false), expected);
       });
     });
 

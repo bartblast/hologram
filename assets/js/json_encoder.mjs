@@ -129,7 +129,11 @@ export default class JsonEncoder {
     return `{"type":"port","value":"${term.value}"}`;
   }
 
-  static #encodeReference(term) {
+  static #encodeReference(term, isFullScope) {
+    if (isFullScope) {
+      return JSON.stringify(term);
+    }
+
     if (term.origin === "client") {
       throw new HologramRuntimeError(
         "can't encode client terms that are references originating in client",
