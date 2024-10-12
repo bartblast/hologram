@@ -139,12 +139,9 @@ describe("JsonEncoder", () => {
     describe("boxed port", () => {
       it("originating in client, full scope", () => {
         const term = Type.port("0.11", "client");
+        const expected = '{"type":"port","origin":"client","value":"0.11"}';
 
-        assert.throw(
-          () => JsonEncoder.encode(term, true),
-          HologramRuntimeError,
-          "can't encode client terms that are ports originating in client",
-        );
+        assert.equal(JsonEncoder.encode(term, true), expected);
       });
 
       it("originating in client, not full scope", () => {
@@ -175,6 +172,7 @@ describe("JsonEncoder", () => {
     describe("boxed reference", () => {
       it("originating in client, full scope", () => {
         const term = Type.reference("0.1.2.3", "client");
+
         const expected =
           '{"type":"reference","origin":"client","value":"0.1.2.3"}';
 
@@ -193,6 +191,7 @@ describe("JsonEncoder", () => {
 
       it("originating in server, full scope", () => {
         const term = Type.reference("0.1.2.3", "server");
+
         const expected =
           '{"type":"reference","origin":"server","value":"0.1.2.3"}';
 

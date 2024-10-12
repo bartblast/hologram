@@ -35,7 +35,7 @@ export default class JsonEncoder {
         return JsonEncoder.#encodePort(term, isFullScope);
 
       case "reference":
-        return JsonEncoder.#encodeReference(term);
+        return JsonEncoder.#encodeReference(term, isFullScope);
 
       case "tuple":
         return JsonEncoder.#encodeTuple(term, isFullScope);
