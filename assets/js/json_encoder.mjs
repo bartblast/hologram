@@ -5,7 +5,9 @@ import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Type from "./type.mjs";
 
 export default class JsonEncoder {
-  static encode(term) {
+  // When isFullScope is set to true, then everything is serialized,
+  // including anonymous functions and all objects' fields (such as boxed PID node).
+  static encode(term, isFullScope = true) {
     if (term === null || typeof term === "undefined") {
       return "null";
     }
@@ -21,13 +23,13 @@ export default class JsonEncoder {
         return JsonEncoder.encode(term.value);
 
       case "list":
-        return JsonEncoder.#encodeList(term);
+        return JsonEncoder.#encodeList(term, isFullScope);
 
       case "map":
-        return JsonEncoder.#encodeMap(term);
+        return JsonEncoder.#encodeMap(term, isFullScope);
 
       case "pid":
-        return JsonEncoder.#encodePid(term);
+        return JsonEncoder.#encodePid(term, isFullScope);
 
       case "port":
         return JsonEncoder.#encodePort(term);
@@ -36,11 +38,11 @@ export default class JsonEncoder {
         return JsonEncoder.#encodeReference(term);
 
       case "tuple":
-        return JsonEncoder.#encodeTuple(term);
+        return JsonEncoder.#encodeTuple(term, isFullScope);
 
       default:
         if (Array.isArray(term)) {
-          return JsonEncoder.#encodeArray(term);
+          return JsonEncoder.#encodeArray(term, isFullScope);
         }
 
         return JSON.stringify(term, (_key, value) => {
@@ -68,8 +70,8 @@ export default class JsonEncoder {
     });
   }
 
-  static #encodeArray(term) {
-    return `[${JsonEncoder.#encodeEnumData(term)}]`;
+  static #encodeArray(term, isFullScope) {
+    return `[${JsonEncoder.#encodeEnumData(term, isFullScope)}]`;
   }
 
   static #encodeBitstring(term) {
@@ -80,27 +82,31 @@ export default class JsonEncoder {
     return JSON.stringify({type: "bitstring", bits: Array.from(term.bits)});
   }
 
-  static #encodeEnumData(data) {
-    return data.map((item) => JsonEncoder.encode(item)).join(",");
+  static #encodeEnumData(data, isFullScope) {
+    return data.map((item) => JsonEncoder.encode(item, isFullScope)).join(",");
   }
 
-  static #encodeList(term) {
-    return `{"type":"list","data":[${JsonEncoder.#encodeEnumData(term.data)}]}`;
+  static #encodeList(term, isFullScope) {
+    return `{"type":"list","data":[${JsonEncoder.#encodeEnumData(term.data, isFullScope)}]}`;
   }
 
-  static #encodeMap(term) {
+  static #encodeMap(term, isFullScope) {
     const dataOutput = Object.values(term.data)
       .map(
         ([key, value]) =>
-          `[${JsonEncoder.encode(key)},${JsonEncoder.encode(value)}]`,
+          `[${JsonEncoder.encode(key, isFullScope)},${JsonEncoder.encode(value, isFullScope)}]`,
       )
       .join(",");
 
     return `{"type":"map","data":[${dataOutput}]}`;
   }
 
-  static #encodePid(term) {
-    if (term.origin === "client") {
+  static #encodePid(term, isFullScope) {
+    if (isFullScope) {
+      return JSON.stringify(term);
+    }
+
+    if (term.origin === "client" && !isFullScope) {
       throw new HologramRuntimeError(
         "can't encode client terms that are PIDs originating in client",
       );
@@ -129,8 +135,8 @@ export default class JsonEncoder {
     return `{"type":"reference","value":"${term.value}"}`;
   }
 
-  static #encodeTuple(term) {
-    return `{"type":"tuple","data":[${JsonEncoder.#encodeEnumData(term.data)}]}`;
+  static #encodeTuple(term, isFullScope) {
+    return `{"type":"tuple","data":[${JsonEncoder.#encodeEnumData(term.data, isFullScope)}]}`;
   }
 
   static #escapeDoubleQuotes(str) {

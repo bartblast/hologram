@@ -13,7 +13,7 @@ import Type from "../../assets/js/type.mjs";
 defineGlobalErlangAndElixirModules();
 
 describe("JsonEncoder", () => {
-  describe("encode()", () => {
+  describe.only("encode()", () => {
     describe("boxed anonymous function", () => {
       it("not having capture info", () => {
         const term = Type.anonymousFunction(2, [], contextFixture());
@@ -100,21 +100,39 @@ describe("JsonEncoder", () => {
     });
 
     describe("boxed PID", () => {
-      it("originating in client", () => {
+      it("originating in client, full scope", () => {
+        const term = Type.pid('my_node@my_"host', [0, 11, 222], "client");
+
+        const expected =
+          '{"type":"pid","node":"my_node@my_\\"host","origin":"client","segments":[0,11,222]}';
+
+        assert.equal(JsonEncoder.encode(term, true), expected);
+      });
+
+      it("originating in client, not full scope", () => {
         const term = Type.pid("my_node@my_host", [0, 11, 222], "client");
 
         assert.throw(
-          () => JsonEncoder.encode(term),
+          () => JsonEncoder.encode(term, false),
           HologramRuntimeError,
           "can't encode client terms that are PIDs originating in client",
         );
       });
 
-      it("originating in server", () => {
+      it("originating in server full scope", () => {
         const term = Type.pid('my_node@my_"host', [0, 11, 222], "server");
+
+        const expected =
+          '{"type":"pid","node":"my_node@my_\\"host","origin":"server","segments":[0,11,222]}';
+
+        assert.equal(JsonEncoder.encode(term, true), expected);
+      });
+
+      it("originating in server, not full scope", () => {
+        const term = Type.pid("my_node@my_host", [0, 11, 222], "server");
         const expected = '{"type":"pid","segments":[0,11,222]}';
 
-        assert.equal(JsonEncoder.encode(term), expected);
+        assert.equal(JsonEncoder.encode(term, false), expected);
       });
     });
 
