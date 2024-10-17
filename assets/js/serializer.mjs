@@ -7,6 +7,10 @@ export default class Serializer {
         return `__atom__:${value.value}`;
       }
 
+      if (value?.type === "float") {
+        return `__float__:${value.value.toString()}`;
+      }
+
       if (value?.type === "integer") {
         return `__integer__:${value.value.toString()}`;
       }

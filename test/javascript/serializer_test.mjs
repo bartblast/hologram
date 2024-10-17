@@ -10,7 +10,7 @@ import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
-describe("Serializer", () => {
+describe.only("Serializer", () => {
   describe("serialize()", () => {
     const serialize = Serializer.serialize;
 
@@ -25,6 +25,20 @@ describe("Serializer", () => {
       it("nested atom", () => {
         const term = {a: Type.atom('a"bc'), b: 2};
         const expected = '{"a":"__atom__:a\\"bc","b":2}';
+
+        assert.equal(serialize(term), expected);
+      });
+
+      it("float", () => {
+        const term = Type.float(1.23);
+        const expected = '"__float__:1.23"';
+
+        assert.equal(serialize(term), expected);
+      });
+
+      it("nested float", () => {
+        const term = {a: Type.float(1.23), b: 2};
+        const expected = '{"a":"__float__:1.23","b":2}';
 
         assert.equal(serialize(term), expected);
       });
