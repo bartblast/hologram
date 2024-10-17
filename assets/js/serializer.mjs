@@ -28,10 +28,6 @@ export default class Serializer {
 
     return serialized;
   }
-
-  static #escapeDoubleQuotes(str) {
-    return str.replace(/"/g, '\\"');
-  }
 }
 
 const $ = Serializer;
