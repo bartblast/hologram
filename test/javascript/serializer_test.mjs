@@ -56,6 +56,24 @@ describe("Serializer", () => {
 
         assert.equal(serialize(term), expected);
       });
+
+      it("list", () => {
+        const term = Type.list([Type.integer(1), Type.float(1.23)]);
+
+        const expected =
+          '{"type":"list","data":["__integer__:1","__float__:1.23"],"isProper":true}';
+
+        assert.equal(serialize(term), expected);
+      });
+
+      it("nested list", () => {
+        const term = {a: Type.list([Type.integer(1), Type.float(1.23)]), b: 2};
+
+        const expected =
+          '{"a":{"type":"list","data":["__integer__:1","__float__:1.23"],"isProper":true},"b":2}';
+
+        assert.equal(serialize(term), expected);
+      });
     });
 
     describe("JS terms", () => {
