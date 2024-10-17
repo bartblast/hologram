@@ -27,10 +27,12 @@ export default class Serializer {
       !serialized.startsWith("{") &&
       !serialized.startsWith("[")
     ) {
-      return `"${serialized}"`;
+      // [version, data]
+      return `[1,"${serialized}"]`;
     }
 
-    return serialized;
+    // [version, data]
+    return `[1,${serialized}]`;
   }
 }
 
