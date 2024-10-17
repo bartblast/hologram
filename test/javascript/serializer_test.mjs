@@ -10,7 +10,7 @@ import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
-describe.only("Serializer", () => {
+describe("Serializer", () => {
   describe("serialize()", () => {
     const serialize = Serializer.serialize;
 
@@ -116,6 +116,35 @@ describe.only("Serializer", () => {
 
           const expected =
             '[1,{"a":{"type":"list","data":["__integer__:1","__float__:1.23"],"isProper":true},"b":2}]';
+
+          assert.equal(serialize(term), expected);
+        });
+      });
+
+      describe("map", () => {
+        it("top-level", () => {
+          const term = Type.map([
+            [Type.atom("x"), Type.integer(1)],
+            [Type.bitstring("y"), Type.float(1.23)],
+          ]);
+
+          const expected =
+            '[1,{"type":"map","data":[["__atom__:x","__integer__:1"],["__binary__:y","__float__:1.23"]]}]';
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("nested", () => {
+          const term = {
+            a: Type.map([
+              [Type.atom("x"), Type.integer(1)],
+              [Type.bitstring("y"), Type.float(1.23)],
+            ]),
+            b: 2,
+          };
+
+          const expected =
+            '[1,{"a":{"type":"map","data":[["__atom__:x","__integer__:1"],["__binary__:y","__float__:1.23"]]},"b":2}]';
 
           assert.equal(serialize(term), expected);
         });

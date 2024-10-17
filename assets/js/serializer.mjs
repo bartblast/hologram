@@ -26,6 +26,10 @@ export default class Serializer {
         return `__integer__:${value.value.toString()}`;
       }
 
+      if (value?.type === "map") {
+        return {...value, data: Object.values(value.data)};
+      }
+
       if (typeof value === "bigint") {
         return `__bigint__:${value.toString()}`;
       }
