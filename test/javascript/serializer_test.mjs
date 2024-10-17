@@ -149,6 +149,29 @@ describe("Serializer", () => {
           assert.equal(serialize(term), expected);
         });
       });
+
+      describe("tuple", () => {
+        it("top-level", () => {
+          const term = Type.tuple([Type.integer(1), Type.float(1.23)]);
+
+          const expected =
+            '[1,{"type":"tuple","data":["__integer__:1","__float__:1.23"]}]';
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("nested", () => {
+          const term = {
+            a: Type.tuple([Type.integer(1), Type.float(1.23)]),
+            b: 2,
+          };
+
+          const expected =
+            '[1,{"a":{"type":"tuple","data":["__integer__:1","__float__:1.23"]},"b":2}]';
+
+          assert.equal(serialize(term), expected);
+        });
+      });
     });
 
     describe("JS terms", () => {
