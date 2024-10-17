@@ -10,7 +10,7 @@ import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
-describe.only("Serializer", () => {
+describe("Serializer", () => {
   describe("serialize()", () => {
     const serialize = Serializer.serialize;
 
@@ -61,7 +61,7 @@ describe.only("Serializer", () => {
     describe("JS terms", () => {
       it("JS BigInt", () => {
         const term = 123n;
-        const expected = "__bigint__:123";
+        const expected = '"__bigint__:123"';
 
         assert.equal(serialize(term), expected);
       });
