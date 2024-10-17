@@ -278,6 +278,22 @@ describe("Serializer", () => {
         });
       });
 
+      describe("object", () => {
+        it("top-level", () => {
+          const term = {a: 1, b: 2.34};
+          const expected = '[1,{"a":1,"b":2.34}]';
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("nested", () => {
+          const term = {a: 1, b: {c: 3.45, d: "xyz"}};
+          const expected = '[1,{"a":1,"b":{"c":3.45,"d":"xyz"}}]';
+
+          assert.equal(serialize(term), expected);
+        });
+      });
+
       describe("string", () => {
         it("top-level", () => {
           const term = 'a"bc';
