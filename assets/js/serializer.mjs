@@ -40,7 +40,8 @@ export default class Serializer {
     if (
       !serialized.startsWith('"') &&
       !serialized.startsWith("{") &&
-      !serialized.startsWith("[")
+      !serialized.startsWith("[") &&
+      !["true", "false"].includes(serialized)
     ) {
       // [version, data]
       return `[1,"${serialized}"]`;

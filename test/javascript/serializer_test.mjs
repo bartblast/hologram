@@ -213,6 +213,22 @@ describe("Serializer", () => {
           assert.equal(serialize(term), expected);
         });
       });
+
+      describe("boolean", () => {
+        it("top-level", () => {
+          const term = true;
+          const expected = "[1,true]";
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("nested", () => {
+          const term = {a: true, b: 2};
+          const expected = '[1,{"a":true,"b":2}]';
+
+          assert.equal(serialize(term), expected);
+        });
+      });
     });
   });
 });
