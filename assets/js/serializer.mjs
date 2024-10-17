@@ -1,10 +1,21 @@
 "use strict";
 
+import Bitstring from "./bitstring.mjs";
+import Type from "./type.mjs";
+
 export default class Serializer {
   static serialize(term) {
     const serialized = JSON.stringify(term, (_key, value) => {
       if (value?.type === "atom") {
         return `__atom__:${value.value}`;
+      }
+
+      if (value?.type === "bitstring") {
+        if (Type.isBinary(value)) {
+          return `__binary__:${Bitstring.toText(value)}`;
+        }
+
+        return {...value, bits: Array.from(value.bits)};
       }
 
       if (value?.type === "float") {

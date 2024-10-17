@@ -29,6 +29,37 @@ describe("Serializer", () => {
         assert.equal(serialize(term), expected);
       });
 
+      describe("bitstring", () => {
+        it("binary", () => {
+          const term = Type.bitstring('a"bc');
+          const expected = '[1,"__binary__:a\\"bc"]';
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("nested binary", () => {
+          const term = {a: Type.bitstring('a"bc'), b: 2};
+          const expected = '[1,{"a":"__binary__:a\\"bc","b":2}]';
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("non-binary", () => {
+          const term = Type.bitstring([1, 0, 1, 0]);
+          const expected = '[1,{"type":"bitstring","bits":[1,0,1,0]}]';
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("nested non-binary", () => {
+          const term = {a: Type.bitstring([1, 0, 1, 0]), b: 2};
+          const expected =
+            '[1,{"a":{"type":"bitstring","bits":[1,0,1,0]},"b":2}]';
+
+          assert.equal(serialize(term), expected);
+        });
+      });
+
       it("float", () => {
         const term = Type.float(1.23);
         const expected = '[1,"__float__:1.23"]';
