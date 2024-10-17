@@ -229,6 +229,22 @@ describe("Serializer", () => {
           assert.equal(serialize(term), expected);
         });
       });
+
+      describe("float", () => {
+        it("top-level", () => {
+          const term = 2.34;
+          const expected = "[1,2.34]";
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("nested", () => {
+          const term = {a: 1.23, b: 2};
+          const expected = '[1,{"a":1.23,"b":2}]';
+
+          assert.equal(serialize(term), expected);
+        });
+      });
     });
   });
 });

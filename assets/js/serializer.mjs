@@ -41,7 +41,8 @@ export default class Serializer {
       !serialized.startsWith('"') &&
       !serialized.startsWith("{") &&
       !serialized.startsWith("[") &&
-      !["true", "false"].includes(serialized)
+      !["true", "false"].includes(serialized) &&
+      !/^\d/.test(serialized)
     ) {
       // [version, data]
       return `[1,"${serialized}"]`;
