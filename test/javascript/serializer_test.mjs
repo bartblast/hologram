@@ -246,6 +246,22 @@ describe("Serializer", () => {
         });
       });
 
+      describe("integer", () => {
+        it("top-level", () => {
+          const term = 234;
+          const expected = "[1,234]";
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("nested", () => {
+          const term = {a: 123, b: 2};
+          const expected = '[1,{"a":123,"b":2}]';
+
+          assert.equal(serialize(term), expected);
+        });
+      });
+
       describe("null", () => {
         it("top-level", () => {
           const term = null;
