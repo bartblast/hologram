@@ -246,6 +246,22 @@ describe("Serializer", () => {
         });
       });
 
+      describe("null", () => {
+        it("top-level", () => {
+          const term = null;
+          const expected = "[1,null]";
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("nested", () => {
+          const term = {a: null, b: 2};
+          const expected = '[1,{"a":null,"b":2}]';
+
+          assert.equal(serialize(term), expected);
+        });
+      });
+
       describe("string", () => {
         it("top-level", () => {
           const term = 'a"bc';
