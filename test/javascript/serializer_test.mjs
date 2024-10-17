@@ -175,6 +175,29 @@ describe("Serializer", () => {
     });
 
     describe("JS terms", () => {
+      describe("array", () => {
+        it("top-level", () => {
+          const term = [123, Type.float(2.34), Type.bitstring([1, 0, 1, 0])];
+
+          const expected =
+            '[1,[123,"__float__:2.34",{"type":"bitstring","bits":[1,0,1,0]}]]';
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("nested", () => {
+          const term = {
+            a: [123, Type.float(2.34), Type.bitstring([1, 0, 1, 0])],
+            b: 2,
+          };
+
+          const expected =
+            '[1,{"a":[123,"__float__:2.34",{"type":"bitstring","bits":[1,0,1,0]}],"b":2}]';
+
+          assert.equal(serialize(term), expected);
+        });
+      });
+
       describe("BigInt", () => {
         it("top-level", () => {
           const term = 123n;
