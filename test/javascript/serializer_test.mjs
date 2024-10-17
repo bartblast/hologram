@@ -245,6 +245,22 @@ describe("Serializer", () => {
           assert.equal(serialize(term), expected);
         });
       });
+
+      describe("string", () => {
+        it("top-level", () => {
+          const term = 'a"bc';
+          const expected = '[1,"a\\"bc"]';
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("nested", () => {
+          const term = {a: 'x"yz', b: 2};
+          const expected = '[1,{"a":"x\\"yz","b":2}]';
+
+          assert.equal(serialize(term), expected);
+        });
+      });
     });
   });
 });
