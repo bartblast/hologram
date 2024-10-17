@@ -17,7 +17,14 @@ describe("Serializer", () => {
     describe("boxed terms", () => {
       it("atom", () => {
         const term = Type.atom('a"bc');
-        const expected = '{"type":"atom","value":"a\\"bc"}';
+        const expected = '"__atom__:a\\"bc"';
+
+        assert.equal(serialize(term), expected);
+      });
+
+      it("nested atom", () => {
+        const term = {a: Type.atom('a"bc'), b: 2};
+        const expected = '{"a":"__atom__:a\\"bc","b":2}';
 
         assert.equal(serialize(term), expected);
       });

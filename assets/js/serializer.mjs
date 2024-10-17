@@ -3,6 +3,10 @@
 export default class Serializer {
   static serialize(term) {
     const serialized = JSON.stringify(term, (_key, value) => {
+      if (value?.type === "atom") {
+        return `__atom__:${value.value}`;
+      }
+
       if (value?.type === "integer") {
         return `__integer__:${value.value.toString()}`;
       }
@@ -24,4 +28,10 @@ export default class Serializer {
 
     return serialized;
   }
+
+  static #escapeDoubleQuotes(str) {
+    return str.replace(/"/g, '\\"');
+  }
 }
+
+const $ = Serializer;
