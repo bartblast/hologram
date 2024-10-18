@@ -7,7 +7,7 @@ import Type from "./type.mjs";
 export default class Serializer {
   // When isFullScope is set to true, then everything is serialized,
   // including anonymous functions and all objects' fields (such as boxed PID node).
-  static serialize(term, isFullScope = true) {
+  static serialize(term, isFullScope = true, isVersioned = true) {
     const serialized = JSON.stringify(term, (_key, value) => {
       if (value?.type === "anonymous_function") {
         return $.#serializeBoxedAnonymousFunction(value, isFullScope);
@@ -63,12 +63,20 @@ export default class Serializer {
       !["false", "null", "true"].includes(serialized) &&
       !/^\d/.test(serialized)
     ) {
-      // [version, data]
-      return `[1,"${serialized}"]`;
+      if (isVersioned) {
+        // [version, data]
+        return `[1,"${serialized}"]`;
+      }
+
+      return `"${serialized}"`;
     }
 
-    // [version, data]
-    return `[1,${serialized}]`;
+    if (isVersioned) {
+      // [version, data]
+      return `[1,${serialized}]`;
+    }
+
+    return serialized;
   }
 
   static #serializeBoxedAnonymousFunction(term, isFullScope) {

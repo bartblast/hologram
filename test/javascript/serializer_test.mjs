@@ -184,6 +184,21 @@ describe.only("Serializer", () => {
             });
           });
         });
+
+        it("not versioned", () => {
+          const term = Type.functionCapture(
+            "Calendar.ISO",
+            "parse_date",
+            2,
+            [(param) => Type.integer(param), (param) => Type.bitstring(param)],
+            contextFixture(),
+          );
+
+          const expected =
+            '{"type":"anonymous_function","arity":2,"capturedFunction":"parse_date","capturedModule":"Calendar.ISO","clauses":["__function__:(param) => Type.integer(param)","__function__:(param) => Type.bitstring(param)"],"context":{"module":"__atom__:Elixir.MyModule","vars":{}},"uniqueId":1}';
+
+          assert.equal(serialize(term, true, false), expected);
+        });
       });
 
       describe("atom", () => {
@@ -199,6 +214,13 @@ describe.only("Serializer", () => {
           const expected = '[1,{"a":"__atom__:a\\"bc","b":2}]';
 
           assert.equal(serialize(term), expected);
+        });
+
+        it("not versioned", () => {
+          const term = Type.atom('a"bc');
+          const expected = '"__atom__:a\\"bc"';
+
+          assert.equal(serialize(term, true, false), expected);
         });
       });
 
@@ -217,6 +239,13 @@ describe.only("Serializer", () => {
 
             assert.equal(serialize(term), expected);
           });
+
+          it("not versioned", () => {
+            const term = Type.bitstring('a"bc');
+            const expected = '"__binary__:a\\"bc"';
+
+            assert.equal(serialize(term, true, false), expected);
+          });
         });
 
         describe("non-binary", () => {
@@ -233,6 +262,13 @@ describe.only("Serializer", () => {
               '[1,{"a":{"type":"bitstring","bits":[1,0,1,0]},"b":2}]';
 
             assert.equal(serialize(term), expected);
+          });
+
+          it("not versioned", () => {
+            const term = Type.bitstring([1, 0, 1, 0]);
+            const expected = '{"type":"bitstring","bits":[1,0,1,0]}';
+
+            assert.equal(serialize(term, true, false), expected);
           });
         });
       });
@@ -251,6 +287,13 @@ describe.only("Serializer", () => {
 
           assert.equal(serialize(term), expected);
         });
+
+        it("not versioned", () => {
+          const term = Type.float(1.23);
+          const expected = '"__float__:1.23"';
+
+          assert.equal(serialize(term, true, false), expected);
+        });
       });
 
       describe("integer", () => {
@@ -266,6 +309,13 @@ describe.only("Serializer", () => {
           const expected = '[1,{"a":"__integer__:123","b":2}]';
 
           assert.equal(serialize(term), expected);
+        });
+
+        it("not versioned", () => {
+          const term = Type.integer(123);
+          const expected = '"__integer__:123"';
+
+          assert.equal(serialize(term, true, false), expected);
         });
       });
 
@@ -289,6 +339,15 @@ describe.only("Serializer", () => {
             '[1,{"a":{"type":"list","data":["__integer__:1","__float__:1.23"],"isProper":true},"b":2}]';
 
           assert.equal(serialize(term), expected);
+        });
+
+        it("not versioned", () => {
+          const term = Type.list([Type.integer(1), Type.float(1.23)]);
+
+          const expected =
+            '{"type":"list","data":["__integer__:1","__float__:1.23"],"isProper":true}';
+
+          assert.equal(serialize(term, true, false), expected);
         });
       });
 
@@ -318,6 +377,18 @@ describe.only("Serializer", () => {
             '[1,{"a":{"type":"map","data":[["__atom__:x","__integer__:1"],["__binary__:y","__float__:1.23"]]},"b":2}]';
 
           assert.equal(serialize(term), expected);
+        });
+
+        it("not versioned", () => {
+          const term = Type.map([
+            [Type.atom("x"), Type.integer(1)],
+            [Type.bitstring("y"), Type.float(1.23)],
+          ]);
+
+          const expected =
+            '{"type":"map","data":[["__atom__:x","__integer__:1"],["__binary__:y","__float__:1.23"]]}';
+
+          assert.equal(serialize(term, true, false), expected);
         });
       });
 
@@ -417,6 +488,15 @@ describe.only("Serializer", () => {
             });
           });
         });
+
+        it("full scope", () => {
+          const term = Type.pid('my_node@my_"host', [0, 11, 222], "client");
+
+          const expected =
+            '{"type":"pid","node":"my_node@my_\\"host","origin":"client","segments":[0,11,222]}';
+
+          assert.equal(serialize(term, true, false), expected);
+        });
       });
 
       describe("port", () => {
@@ -501,6 +581,14 @@ describe.only("Serializer", () => {
               assert.equal(serialize(term, false), expected);
             });
           });
+        });
+
+        it("not versioned", () => {
+          const term = Type.port("0.11", "client");
+
+          const expected = '{"type":"port","origin":"client","value":"0.11"}';
+
+          assert.equal(serialize(term, true, false), expected);
         });
       });
 
@@ -588,6 +676,15 @@ describe.only("Serializer", () => {
             });
           });
         });
+
+        it("not versioned", () => {
+          const term = Type.reference("0.1.2.3", "client");
+
+          const expected =
+            '{"type":"reference","origin":"client","value":"0.1.2.3"}';
+
+          assert.equal(serialize(term, true, false), expected);
+        });
       });
 
       describe("tuple", () => {
@@ -610,6 +707,15 @@ describe.only("Serializer", () => {
             '[1,{"a":{"type":"tuple","data":["__integer__:1","__float__:1.23"]},"b":2}]';
 
           assert.equal(serialize(term), expected);
+        });
+
+        it("not versioned", () => {
+          const term = Type.tuple([Type.integer(1), Type.float(1.23)]);
+
+          const expected =
+            '{"type":"tuple","data":["__integer__:1","__float__:1.23"]}';
+
+          assert.equal(serialize(term, true, false), expected);
         });
       });
     });
@@ -636,6 +742,15 @@ describe.only("Serializer", () => {
 
           assert.equal(serialize(term), expected);
         });
+
+        it("not versioned", () => {
+          const term = [123, Type.float(2.34), Type.bitstring([1, 0, 1, 0])];
+
+          const expected =
+            '[123,"__float__:2.34",{"type":"bitstring","bits":[1,0,1,0]}]';
+
+          assert.equal(serialize(term, true, false), expected);
+        });
       });
 
       describe("BigInt", () => {
@@ -651,6 +766,13 @@ describe.only("Serializer", () => {
           const expected = '[1,{"a":"__bigint__:123","b":2}]';
 
           assert.equal(serialize(term), expected);
+        });
+
+        it("not versioned", () => {
+          const term = 123n;
+          const expected = '"__bigint__:123"';
+
+          assert.equal(serialize(term, true, false), expected);
         });
       });
 
@@ -668,6 +790,13 @@ describe.only("Serializer", () => {
 
           assert.equal(serialize(term), expected);
         });
+
+        it("not versioned", () => {
+          const term = true;
+          const expected = "true";
+
+          assert.equal(serialize(term, true, false), expected);
+        });
       });
 
       describe("float", () => {
@@ -683,6 +812,13 @@ describe.only("Serializer", () => {
           const expected = '[1,{"a":1.23,"b":2}]';
 
           assert.equal(serialize(term), expected);
+        });
+
+        it("not versioned", () => {
+          const term = 2.34;
+          const expected = "2.34";
+
+          assert.equal(serialize(term, true, false), expected);
         });
       });
 
@@ -704,6 +840,15 @@ describe.only("Serializer", () => {
 
           assert.equal(serialize(term), expected);
         });
+
+        it("not versioned", () => {
+          // prettier-ignore
+          const term = (param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring('a"bc'); return Type.list([integer, binary, param2]); };
+
+          const expected = `"__function__:(param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring('a\\"bc'); return Type.list([integer, binary, param2]); }"`;
+
+          assert.equal(serialize(term, true, false), expected);
+        });
       });
 
       describe("integer", () => {
@@ -719,6 +864,13 @@ describe.only("Serializer", () => {
           const expected = '[1,{"a":123,"b":2}]';
 
           assert.equal(serialize(term), expected);
+        });
+
+        it("not versioned", () => {
+          const term = 234;
+          const expected = "234";
+
+          assert.equal(serialize(term, true, false), expected);
         });
       });
 
@@ -736,6 +888,13 @@ describe.only("Serializer", () => {
 
           assert.equal(serialize(term), expected);
         });
+
+        it("not versioned", () => {
+          const term = null;
+          const expected = "null";
+
+          assert.equal(serialize(term, true, false), expected);
+        });
       });
 
       describe("object", () => {
@@ -751,6 +910,13 @@ describe.only("Serializer", () => {
           const expected = '[1,{"a":1,"b":{"c":3.45,"d\\"ef":"xyz"}}]';
 
           assert.equal(serialize(term), expected);
+        });
+
+        it("not versioned", () => {
+          const term = {a: 1, b: {c: 3.45, 'd"ef': "xyz"}};
+          const expected = '{"a":1,"b":{"c":3.45,"d\\"ef":"xyz"}}';
+
+          assert.equal(serialize(term, true, false), expected);
         });
       });
 
@@ -768,6 +934,13 @@ describe.only("Serializer", () => {
 
           assert.equal(serialize(term), expected);
         });
+
+        it("not versioned", () => {
+          const term = 'a"bc';
+          const expected = '"a\\"bc"';
+
+          assert.equal(serialize(term, true, false), expected);
+        });
       });
 
       describe("undefined", () => {
@@ -783,6 +956,13 @@ describe.only("Serializer", () => {
           const expected = '[1,{"a":null,"b":2}]';
 
           assert.equal(serialize(term), expected);
+        });
+
+        it("not versioned", () => {
+          const term = undefined;
+          const expected = "null";
+
+          assert.equal(serialize(term, true, false), expected);
         });
       });
     });
