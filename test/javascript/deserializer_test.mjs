@@ -18,157 +18,145 @@ describe("Deserializer", () => {
 
     describe("boxed terms", () => {
       describe("atom", () => {
-        it("top-level", () => {
-          const term = Type.atom("abc");
-          const serialized = serialize(term);
+        const atom = Type.atom("abc");
 
-          assert.deepStrictEqual(deserialize(serialized), term);
+        it("top-level", () => {
+          const serialized = serialize(atom);
+
+          assert.deepStrictEqual(deserialize(serialized), atom);
         });
 
         it("nested", () => {
-          const term = {a: Type.atom("abc"), b: 2};
+          const term = {a: atom, b: 2};
           const serialized = serialize(term);
 
           assert.deepStrictEqual(deserialize(serialized), term);
         });
 
         it("not versioned", () => {
-          const term = Type.atom("abc");
-          const serialized = serialize(term, true, false);
+          const serialized = serialize(atom, true, false);
 
-          assert.deepStrictEqual(deserialize(serialized, false), term);
+          assert.deepStrictEqual(deserialize(serialized, false), atom);
         });
       });
 
       describe("bitstring", () => {
         describe("binary", () => {
-          it("top-level", () => {
-            const term = Type.bitstring('a"bc');
-            const serialized = serialize(term);
+          const bitstring = Type.bitstring('a"bc');
 
-            assert.deepStrictEqual(deserialize(serialized), term);
+          it("top-level", () => {
+            const serialized = serialize(bitstring);
+
+            assert.deepStrictEqual(deserialize(serialized), bitstring);
           });
 
           it("nested", () => {
-            const term = {a: Type.bitstring('a"bc'), b: 2};
+            const term = {a: bitstring, b: 2};
             const serialized = serialize(term);
 
             assert.deepStrictEqual(deserialize(serialized), term);
           });
 
           it("not versioned", () => {
-            const term = Type.bitstring('a"bc');
-            const serialized = serialize(term, true, false);
+            const serialized = serialize(bitstring, true, false);
 
-            assert.deepStrictEqual(deserialize(serialized, false), term);
+            assert.deepStrictEqual(deserialize(serialized, false), bitstring);
           });
         });
 
         describe("non-binary", () => {
-          it("top-level", () => {
-            const term = Type.bitstring([1, 0, 1, 0]);
-            const serialized = serialize(term);
+          const bitstring = Type.bitstring([1, 0, 1, 0]);
 
-            assert.deepStrictEqual(deserialize(serialized), term);
+          it("top-level", () => {
+            const serialized = serialize(bitstring);
+
+            assert.deepStrictEqual(deserialize(serialized), bitstring);
           });
 
           it("nested", () => {
-            const term = {a: Type.bitstring([1, 0, 1, 0]), b: 2};
+            const term = {a: bitstring, b: 2};
             const serialized = serialize(term);
 
             assert.deepStrictEqual(deserialize(serialized), term);
           });
 
           it("not versioned", () => {
-            const term = Type.bitstring([1, 0, 1, 0]);
-            const serialized = serialize(term, true, false);
+            const serialized = serialize(bitstring, true, false);
 
-            assert.deepStrictEqual(deserialize(serialized, false), term);
+            assert.deepStrictEqual(deserialize(serialized, false), bitstring);
           });
         });
       });
 
       describe("float", () => {
-        it("top-level", () => {
-          const term = Type.float(1.23);
-          const serialized = serialize(term);
+        const float = Type.float(1.23);
 
-          assert.deepStrictEqual(deserialize(serialized), term);
+        it("top-level", () => {
+          const serialized = serialize(float);
+
+          assert.deepStrictEqual(deserialize(serialized), float);
         });
 
         it("nested", () => {
-          const term = {a: Type.float(1.23), b: 2};
+          const term = {a: float, b: 2};
           const serialized = serialize(term);
 
           assert.deepStrictEqual(deserialize(serialized), term);
         });
 
         it("not versioned", () => {
-          const term = Type.float(1.23);
-          const serialized = serialize(term, true, false);
+          const serialized = serialize(float, true, false);
 
-          assert.deepStrictEqual(deserialize(serialized, false), term);
+          assert.deepStrictEqual(deserialize(serialized, false), float);
         });
       });
 
       describe("integer", () => {
-        it("top-level", () => {
-          const term = Type.integer(123);
-          const serialized = serialize(term);
+        const integer = Type.integer(123);
 
-          assert.deepStrictEqual(deserialize(serialized), term);
+        it("top-level", () => {
+          const serialized = serialize(integer);
+
+          assert.deepStrictEqual(deserialize(serialized), integer);
         });
 
         it("nested", () => {
-          const term = {a: Type.integer(123), b: 2};
+          const term = {a: integer, b: 2};
           const serialized = serialize(term);
 
           assert.deepStrictEqual(deserialize(serialized), term);
         });
 
         it("not versioned", () => {
-          const term = Type.integer(123);
-          const serialized = serialize(term, true, false);
+          const serialized = serialize(integer, true, false);
 
-          assert.deepStrictEqual(deserialize(serialized, false), term);
+          assert.deepStrictEqual(deserialize(serialized, false), integer);
         });
       });
 
       describe("map", () => {
+        const map = Type.map([
+          [Type.atom("x"), Type.integer(1)],
+          [Type.bitstring("y"), Type.float(1.23)],
+        ]);
+
         it("top-level", () => {
-          const term = Type.map([
-            [Type.atom("x"), Type.integer(1)],
-            [Type.bitstring("y"), Type.float(1.23)],
-          ]);
+          const serialized = serialize(map);
 
-          const serialized = serialize(term);
-
-          assert.deepStrictEqual(deserialize(serialized), term);
+          assert.deepStrictEqual(deserialize(serialized), map);
         });
 
         it("nested", () => {
-          const term = {
-            a: Type.map([
-              [Type.atom("x"), Type.integer(1)],
-              [Type.bitstring("y"), Type.float(1.23)],
-            ]),
-            b: 2,
-          };
-
+          const term = {a: map, b: 2};
           const serialized = serialize(term);
 
           assert.deepStrictEqual(deserialize(serialized), term);
         });
 
         it("not versioned", () => {
-          const term = Type.map([
-            [Type.atom("x"), Type.integer(1)],
-            [Type.bitstring("y"), Type.float(1.23)],
-          ]);
+          const serialized = serialize(map, true, false);
 
-          const serialized = serialize(term, true, false);
-
-          assert.deepStrictEqual(deserialize(serialized, false), term);
+          assert.deepStrictEqual(deserialize(serialized, false), map);
         });
       });
     });
