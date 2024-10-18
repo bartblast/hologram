@@ -9,8 +9,8 @@ defmodule Hologram.Socket.DecoderTest do
   test "anonymous function" do
     assert decode(%{
              "type" => "anonymous_function",
-             "module" => "Calendar.ISO",
-             "function" => "parse_date",
+             "capturedModule" => "Calendar.ISO",
+             "capturedFunction" => "parse_date",
              "arity" => 2
            }) == (&Calendar.ISO.parse_date/2)
   end

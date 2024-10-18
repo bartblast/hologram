@@ -27,8 +27,8 @@ defmodule Hologram.Socket.Decoder do
 
   def decode(%{
         "type" => "anonymous_function",
-        "module" => module_str,
-        "function" => function_str,
+        "capturedModule" => module_str,
+        "capturedFunction" => function_str,
         "arity" => arity
       }) do
     module = Module.safe_concat([module_str])
