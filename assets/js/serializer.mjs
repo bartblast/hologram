@@ -29,6 +29,10 @@ export default class Serializer {
         return {...value, data: Object.values(value.data)};
       }
 
+      if (value?.type === "pid") {
+        return $.#serializeBoxedPid(value, isFullScope);
+      }
+
       if (value?.type === "port") {
         return $.#serializeBoxedPort(value, isFullScope);
       }
@@ -65,6 +69,21 @@ export default class Serializer {
     }
 
     return {...term, bits: Array.from(term.bits)};
+  }
+
+  static #serializeBoxedPid(term, isFullScope) {
+    if (isFullScope) {
+      return term;
+    }
+
+    if (term.origin === "client") {
+      throw new HologramRuntimeError(
+        "can't encode client terms that are PIDs originating in client",
+      );
+    }
+
+    const {node, origin, ...rest} = term;
+    return rest;
   }
 
   static #serializeBoxedPort(term, isFullScope) {
