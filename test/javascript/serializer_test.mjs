@@ -2,10 +2,12 @@
 
 import {
   assert,
+  contextFixture,
   defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
+import Sequence from "../../assets/js/sequence.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -16,6 +18,174 @@ describe("Serializer", () => {
     const serialize = Serializer.serialize;
 
     describe("boxed terms", () => {
+      describe("anonymous function", () => {
+        beforeEach(() => {
+          Sequence.reset();
+        });
+
+        describe("top-level", () => {
+          describe("having capture info", () => {
+            it("full scope", () => {
+              const term = Type.functionCapture(
+                "Calendar.ISO",
+                "parse_date",
+                2,
+                [
+                  (param) => Type.integer(param),
+                  (param) => Type.bitstring(param),
+                ],
+                contextFixture(),
+              );
+
+              const expected =
+                '[1,{"type":"anonymous_function","arity":2,"capturedFunction":"parse_date","capturedModule":"Calendar.ISO","clauses":["__function__:(param) => Type.integer(param)","__function__:(param) => Type.bitstring(param)"],"context":{"module":"__atom__:Elixir.MyModule","vars":{}},"uniqueId":1}]';
+
+              assert.equal(serialize(term, true), expected);
+            });
+
+            it("not full scope", () => {
+              const term = Type.functionCapture(
+                "Calendar.ISO",
+                "parse_date",
+                2,
+                [],
+                contextFixture(),
+              );
+
+              const expected =
+                '[1,{"type":"anonymous_function","arity":2,"capturedFunction":"parse_date","capturedModule":"Calendar.ISO"}]';
+
+              assert.equal(serialize(term, false), expected);
+            });
+          });
+
+          describe("not having capture info", () => {
+            it("full scope", () => {
+              const term = Type.anonymousFunction(
+                1,
+                [
+                  {
+                    params: (_context) => [Type.variablePattern("x")],
+                    guards: [],
+                    // prettier-ignore
+                    body: (_context) => { return Type.atom("expr_a"); },
+                  },
+                  {
+                    params: (_context) => [Type.variablePattern("y")],
+                    guards: [],
+                    // prettier-ignore
+                    body: (_context) => { return Type.atom("expr_b"); },
+                  },
+                ],
+                contextFixture({vars: {a: 10, b: 20}}),
+              );
+
+              const expected =
+                '[1,{"type":"anonymous_function","arity":1,"capturedFunction":null,"capturedModule":null,"clauses":[{"params":"__function__:(_context) => [Type.variablePattern(\\"x\\")]","guards":[],"body":"__function__:(_context) => { return Type.atom(\\"expr_a\\"); }"},{"params":"__function__:(_context) => [Type.variablePattern(\\"y\\")]","guards":[],"body":"__function__:(_context) => { return Type.atom(\\"expr_b\\"); }"}],"context":{"module":"__atom__:Elixir.MyModule","vars":{"a":10,"b":20}},"uniqueId":1}]';
+
+              assert.equal(serialize(term, true), expected);
+            });
+
+            it("not full scope", () => {
+              const term = Type.anonymousFunction(2, [], contextFixture());
+
+              assert.throw(
+                () => serialize(term, false),
+                HologramRuntimeError,
+                "can't encode client terms that are anonymous functions that are not named function captures",
+              );
+            });
+          });
+        });
+
+        describe("nested", () => {
+          describe("having capture info", () => {
+            it("full scope", () => {
+              const term = {
+                a: Type.functionCapture(
+                  "Calendar.ISO",
+                  "parse_date",
+                  2,
+                  [
+                    (param) => Type.integer(param),
+                    (param) => Type.bitstring(param),
+                  ],
+                  contextFixture(),
+                ),
+                b: 2,
+              };
+
+              const expected =
+                '[1,{"a":{"type":"anonymous_function","arity":2,"capturedFunction":"parse_date","capturedModule":"Calendar.ISO","clauses":["__function__:(param) => Type.integer(param)","__function__:(param) => Type.bitstring(param)"],"context":{"module":"__atom__:Elixir.MyModule","vars":{}},"uniqueId":1},"b":2}]';
+
+              assert.equal(serialize(term, true), expected);
+            });
+
+            it("not full scope", () => {
+              const term = {
+                a: Type.functionCapture(
+                  "Calendar.ISO",
+                  "parse_date",
+                  2,
+                  [],
+                  contextFixture(),
+                ),
+                b: 2,
+              };
+
+              const expected =
+                '[1,{"a":{"type":"anonymous_function","arity":2,"capturedFunction":"parse_date","capturedModule":"Calendar.ISO"},"b":2}]';
+
+              assert.equal(serialize(term, false), expected);
+            });
+          });
+
+          describe("not having capture info", () => {
+            it("full scope", () => {
+              const term = {
+                a: Type.anonymousFunction(
+                  1,
+                  [
+                    {
+                      params: (_context) => [Type.variablePattern("x")],
+                      guards: [],
+                      // prettier-ignore
+                      body: (_context) => { return Type.atom("expr_a"); },
+                    },
+                    {
+                      params: (_context) => [Type.variablePattern("y")],
+                      guards: [],
+                      // prettier-ignore
+                      body: (_context) => { return Type.atom("expr_b"); },
+                    },
+                  ],
+                  contextFixture({vars: {a: 10, b: 20}}),
+                ),
+                b: 2,
+              };
+
+              const expected =
+                '[1,{"a":{"type":"anonymous_function","arity":1,"capturedFunction":null,"capturedModule":null,"clauses":[{"params":"__function__:(_context) => [Type.variablePattern(\\"x\\")]","guards":[],"body":"__function__:(_context) => { return Type.atom(\\"expr_a\\"); }"},{"params":"__function__:(_context) => [Type.variablePattern(\\"y\\")]","guards":[],"body":"__function__:(_context) => { return Type.atom(\\"expr_b\\"); }"}],"context":{"module":"__atom__:Elixir.MyModule","vars":{"a":10,"b":20}},"uniqueId":1},"b":2}]';
+
+              assert.equal(serialize(term, true), expected);
+            });
+
+            it("not full scope", () => {
+              const term = {
+                a: Type.anonymousFunction(2, [], contextFixture()),
+                b: 2,
+              };
+
+              assert.throw(
+                () => serialize(term, false),
+                HologramRuntimeError,
+                "can't encode client terms that are anonymous functions that are not named function captures",
+              );
+            });
+          });
+        });
+      });
+
       describe("atom", () => {
         it("top-level", () => {
           const term = Type.atom('a"bc');

@@ -9,6 +9,10 @@ export default class Serializer {
   // including anonymous functions and all objects' fields (such as boxed PID node).
   static serialize(term, isFullScope = true) {
     const serialized = JSON.stringify(term, (_key, value) => {
+      if (value?.type === "anonymous_function") {
+        return $.#serializeBoxedAnonymousFunction(value, isFullScope);
+      }
+
       if (value?.type === "atom") {
         return `__atom__:${value.value}`;
       }
@@ -65,6 +69,21 @@ export default class Serializer {
 
     // [version, data]
     return `[1,${serialized}]`;
+  }
+
+  static #serializeBoxedAnonymousFunction(term, isFullScope) {
+    if (isFullScope) {
+      return term;
+    }
+
+    if (term.capturedModule === null) {
+      throw new HologramRuntimeError(
+        "can't encode client terms that are anonymous functions that are not named function captures",
+      );
+    }
+
+    const {clauses, context, uniqueId, ...rest} = term;
+    return rest;
   }
 
   static #serializeBoxedBitstring(term) {
