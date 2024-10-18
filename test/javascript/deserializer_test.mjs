@@ -110,6 +110,29 @@ describe("Deserializer", () => {
           assert.deepStrictEqual(deserialize(serialized, false), term);
         });
       });
+
+      describe("integer", () => {
+        it("top-level", () => {
+          const term = Type.integer(123);
+          const serialized = serialize(term);
+
+          assert.deepStrictEqual(deserialize(serialized), term);
+        });
+
+        it("nested", () => {
+          const term = {a: Type.integer(123), b: 2};
+          const serialized = serialize(term);
+
+          assert.deepStrictEqual(deserialize(serialized), term);
+        });
+
+        it("not versioned", () => {
+          const term = Type.integer(123);
+          const serialized = serialize(term, true, false);
+
+          assert.deepStrictEqual(deserialize(serialized, false), term);
+        });
+      });
     });
   });
 });

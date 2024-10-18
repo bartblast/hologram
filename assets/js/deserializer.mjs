@@ -17,6 +17,10 @@ export default class Deserializer {
         if (value.startsWith("__float__:")) {
           return Type.float(Number(value.slice(10)));
         }
+
+        if (value.startsWith("__integer__:")) {
+          return Type.integer(BigInt(value.slice(12)));
+        }
       }
 
       if (value?.type === "bitstring") {
