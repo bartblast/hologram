@@ -489,7 +489,7 @@ describe.only("Serializer", () => {
           });
         });
 
-        it("full scope", () => {
+        it("not versioned", () => {
           const term = Type.pid('my_node@my_"host', [0, 11, 222], "client");
 
           const expected =
