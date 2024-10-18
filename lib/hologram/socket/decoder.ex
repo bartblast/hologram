@@ -21,6 +21,10 @@ defmodule Hologram.Socket.Decoder do
   @spec decode(map | String.t()) :: any
   def decode(term)
 
+  def decode([_version, data]) do
+    decode(data)
+  end
+
   def decode(%{
         "type" => "anonymous_function",
         "module" => module_str,
@@ -33,7 +37,7 @@ defmodule Hologram.Socket.Decoder do
     Function.capture(module, function, arity)
   end
 
-  def decode(%{"type" => "atom", "value" => value}) do
+  def decode("__atom__:" <> value) do
     String.to_existing_atom(value)
   end
 
@@ -45,12 +49,10 @@ defmodule Hologram.Socket.Decoder do
     BitstringUtils.from_bit_list(bits)
   end
 
-  def decode(%{"type" => "float", "value" => value}) when is_integer(value) do
-    value + 0.0
-  end
-
-  def decode(%{"type" => "float", "value" => value}) do
+  def decode("__float__:" <> value) do
     value
+    |> Float.parse()
+    |> elem(0)
   end
 
   def decode("__integer__:" <> value) do
