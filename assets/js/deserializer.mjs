@@ -13,6 +13,10 @@ export default class Deserializer {
         if (value.startsWith("__binary__:")) {
           return Type.bitstring(value.slice(11));
         }
+
+        if (value.startsWith("__float__:")) {
+          return Type.float(Number(value.slice(10)));
+        }
       }
 
       if (value?.type === "bitstring") {
