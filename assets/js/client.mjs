@@ -48,13 +48,22 @@ export default class Client {
   }
 
   static encoder(msg, callback) {
-    return callback(
-      Serializer.serialize(
-        [msg.join_ref, msg.ref, msg.topic, msg.event, msg.payload],
-        false,
-        false,
-      ),
-    );
+    let encoded;
+
+    if (msg.topic === "hologram") {
+      const serializedPayload = Serializer.serialize(msg.payload, false, true);
+      encoded = `["${msg.join_ref}","${msg.ref}","${msg.topic}","${msg.event}",${serializedPayload}]`;
+    } else {
+      encoded = JSON.stringify([
+        msg.join_ref,
+        msg.ref,
+        msg.topic,
+        msg.event,
+        msg.payload,
+      ]);
+    }
+
+    return callback(encoded);
   }
 
   static fetchPage(toParam, successCallback, failureCallback) {
