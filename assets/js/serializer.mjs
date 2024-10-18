@@ -29,6 +29,10 @@ export default class Serializer {
         return {...value, data: Object.values(value.data)};
       }
 
+      if (value?.type === "port") {
+        return $.#serializeBoxedPort(value, isFullScope);
+      }
+
       if (value?.type === "reference") {
         return $.#serializeBoxedReference(value, isFullScope);
       }
@@ -61,6 +65,21 @@ export default class Serializer {
     }
 
     return {...term, bits: Array.from(term.bits)};
+  }
+
+  static #serializeBoxedPort(term, isFullScope) {
+    if (isFullScope) {
+      return term;
+    }
+
+    if (term.origin === "client") {
+      throw new HologramRuntimeError(
+        "can't encode client terms that are ports originating in client",
+      );
+    }
+
+    const {origin, ...rest} = term;
+    return rest;
   }
 
   static #serializeBoxedReference(term, isFullScope) {

@@ -151,6 +151,91 @@ describe("Serializer", () => {
         });
       });
 
+      describe("port", () => {
+        describe("top-level", () => {
+          describe("originating in client", () => {
+            it("full scope", () => {
+              const term = Type.port("0.11", "client");
+
+              const expected =
+                '[1,{"type":"port","origin":"client","value":"0.11"}]';
+
+              assert.equal(serialize(term, true), expected);
+            });
+
+            it("not full scope", () => {
+              const term = Type.port("0.11", "client");
+
+              assert.throw(
+                () => serialize(term, false),
+                HologramRuntimeError,
+                "can't encode client terms that are ports originating in client",
+              );
+            });
+          });
+
+          describe("originating in server", () => {
+            it("full scope", () => {
+              const term = Type.port("0.11", "server");
+
+              const expected =
+                '[1,{"type":"port","origin":"server","value":"0.11"}]';
+
+              assert.equal(serialize(term, true), expected);
+            });
+
+            it("not full scope", () => {
+              const term = Type.port("0.11", "server");
+              const expected = '[1,{"type":"port","value":"0.11"}]';
+
+              assert.equal(serialize(term, false), expected);
+            });
+          });
+        });
+
+        describe.only("nested", () => {
+          describe("originating in client", () => {
+            it("full scope", () => {
+              const term = {a: Type.port("0.11", "client"), b: 2};
+
+              const expected =
+                '[1,{"a":{"type":"port","origin":"client","value":"0.11"},"b":2}]';
+
+              assert.equal(serialize(term, true), expected);
+            });
+
+            it("not full scope", () => {
+              const term = {a: Type.port("0.11", "client"), b: 2};
+
+              assert.throw(
+                () => serialize(term, false),
+                HologramRuntimeError,
+                "can't encode client terms that are ports originating in client",
+              );
+            });
+          });
+
+          describe("originating in server", () => {
+            it("full scope", () => {
+              const term = {a: Type.port("0.11", "server"), b: 2};
+
+              const expected =
+                '[1,{"a":{"type":"port","origin":"server","value":"0.11"},"b":2}]';
+
+              assert.equal(serialize(term, true), expected);
+            });
+
+            it("not full scope", () => {
+              const term = {a: Type.port("0.11", "server"), b: 2};
+
+              const expected = '[1,{"a":{"type":"port","value":"0.11"},"b":2}]';
+
+              assert.equal(serialize(term, false), expected);
+            });
+          });
+        });
+      });
+
       describe("reference", () => {
         describe("top-level", () => {
           describe("originating in client", () => {
