@@ -45,6 +45,10 @@ export default class Serializer {
         return `__bigint__:${value.toString()}`;
       }
 
+      if (typeof value === "function") {
+        return `__function__:${value.toString()}`;
+      }
+
       return value;
     });
 

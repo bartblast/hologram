@@ -516,6 +516,26 @@ describe("Serializer", () => {
         });
       });
 
+      describe("function", () => {
+        it("top-level", () => {
+          // prettier-ignore
+          const term = (param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring('a"bc'); return Type.list([integer, binary, param2]); };
+
+          const expected = `[1,"__function__:(param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring('a\\"bc'); return Type.list([integer, binary, param2]); }"]`;
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("nested", () => {
+          // prettier-ignore
+          const term = {a: (param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring('a"bc'); return Type.list([integer, binary, param2]); }, b: 2};
+
+          const expected = `[1,{"a":"__function__:(param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring('a\\"bc'); return Type.list([integer, binary, param2]); }","b":2}]`;
+
+          assert.equal(serialize(term), expected);
+        });
+      });
+
       describe("integer", () => {
         it("top-level", () => {
           const term = 234;
