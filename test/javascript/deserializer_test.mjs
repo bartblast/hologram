@@ -39,6 +39,54 @@ describe("Deserializer", () => {
           assert.deepStrictEqual(deserialize(serialized, false), term);
         });
       });
+
+      describe("bitstring", () => {
+        describe("binary", () => {
+          it("top-level", () => {
+            const term = Type.bitstring('a"bc');
+            const serialized = serialize(term);
+
+            assert.deepStrictEqual(deserialize(serialized), term);
+          });
+
+          it("nested", () => {
+            const term = {a: Type.bitstring('a"bc'), b: 2};
+            const serialized = serialize(term);
+
+            assert.deepStrictEqual(deserialize(serialized), term);
+          });
+
+          it("not versioned", () => {
+            const term = Type.bitstring('a"bc');
+            const serialized = serialize(term, true, false);
+
+            assert.deepStrictEqual(deserialize(serialized, false), term);
+          });
+        });
+
+        describe("non-binary", () => {
+          it("top-level", () => {
+            const term = Type.bitstring([1, 0, 1, 0]);
+            const serialized = serialize(term);
+
+            assert.deepStrictEqual(deserialize(serialized), term);
+          });
+
+          it("nested", () => {
+            const term = {a: Type.bitstring([1, 0, 1, 0]), b: 2};
+            const serialized = serialize(term);
+
+            assert.deepStrictEqual(deserialize(serialized), term);
+          });
+
+          it("not versioned", () => {
+            const term = Type.bitstring([1, 0, 1, 0]);
+            const serialized = serialize(term, true, false);
+
+            assert.deepStrictEqual(deserialize(serialized, false), term);
+          });
+        });
+      });
     });
   });
 });

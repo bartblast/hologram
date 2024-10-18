@@ -9,6 +9,14 @@ export default class Deserializer {
         if (value.startsWith("__atom__:")) {
           return Type.atom(value.slice(9));
         }
+
+        if (value.startsWith("__binary__:")) {
+          return Type.bitstring(value.slice(11));
+        }
+      }
+
+      if (value?.type === "bitstring") {
+        return Type.bitstring(value.bits);
       }
 
       return value;
