@@ -27,6 +27,10 @@ export default class Deserializer {
         return Type.bitstring(value.bits);
       }
 
+      if (value?.type === "map") {
+        return Type.map(value.data);
+      }
+
       return value;
     });
 

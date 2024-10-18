@@ -133,6 +133,44 @@ describe("Deserializer", () => {
           assert.deepStrictEqual(deserialize(serialized, false), term);
         });
       });
+
+      describe("map", () => {
+        it("top-level", () => {
+          const term = Type.map([
+            [Type.atom("x"), Type.integer(1)],
+            [Type.bitstring("y"), Type.float(1.23)],
+          ]);
+
+          const serialized = serialize(term);
+
+          assert.deepStrictEqual(deserialize(serialized), term);
+        });
+
+        it("nested", () => {
+          const term = {
+            a: Type.map([
+              [Type.atom("x"), Type.integer(1)],
+              [Type.bitstring("y"), Type.float(1.23)],
+            ]),
+            b: 2,
+          };
+
+          const serialized = serialize(term);
+
+          assert.deepStrictEqual(deserialize(serialized), term);
+        });
+
+        it("not versioned", () => {
+          const term = Type.map([
+            [Type.atom("x"), Type.integer(1)],
+            [Type.bitstring("y"), Type.float(1.23)],
+          ]);
+
+          const serialized = serialize(term, true, false);
+
+          assert.deepStrictEqual(deserialize(serialized, false), term);
+        });
+      });
     });
   });
 });
