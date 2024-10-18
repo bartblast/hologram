@@ -1,10 +1,13 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
+import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Type from "./type.mjs";
 
 export default class Serializer {
-  static serialize(term) {
+  // When isFullScope is set to true, then everything is serialized,
+  // including anonymous functions and all objects' fields (such as boxed PID node).
+  static serialize(term, isFullScope = true) {
     const serialized = JSON.stringify(term, (_key, value) => {
       if (value?.type === "atom") {
         return `__atom__:${value.value}`;
@@ -30,6 +33,10 @@ export default class Serializer {
         return {...value, data: Object.values(value.data)};
       }
 
+      if (value?.type === "reference") {
+        return $.#serializeBoxedReference(value, isFullScope);
+      }
+
       if (typeof value === "bigint") {
         return `__bigint__:${value.toString()}`;
       }
@@ -50,6 +57,21 @@ export default class Serializer {
 
     // [version, data]
     return `[1,${serialized}]`;
+  }
+
+  static #serializeBoxedReference(term, isFullScope) {
+    if (isFullScope) {
+      return term;
+    }
+
+    if (term.origin === "client") {
+      throw new HologramRuntimeError(
+        "can't encode client terms that are references originating in client",
+      );
+    }
+
+    const {origin, ...rest} = term;
+    return rest;
   }
 }
 

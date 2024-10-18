@@ -5,6 +5,7 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
+import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -147,6 +148,92 @@ describe("Serializer", () => {
             '[1,{"a":{"type":"map","data":[["__atom__:x","__integer__:1"],["__binary__:y","__float__:1.23"]]},"b":2}]';
 
           assert.equal(serialize(term), expected);
+        });
+      });
+
+      describe("reference", () => {
+        describe("top-level", () => {
+          describe("originating in client", () => {
+            it("full scope", () => {
+              const term = Type.reference("0.1.2.3", "client");
+
+              const expected =
+                '[1,{"type":"reference","origin":"client","value":"0.1.2.3"}]';
+
+              assert.equal(serialize(term, true), expected);
+            });
+
+            it("not full scope", () => {
+              const term = Type.reference("0.1.2.3", "client");
+
+              assert.throw(
+                () => serialize(term, false),
+                HologramRuntimeError,
+                "can't encode client terms that are references originating in client",
+              );
+            });
+          });
+
+          describe("originating in server", () => {
+            it("full scope", () => {
+              const term = Type.reference("0.1.2.3", "server");
+
+              const expected =
+                '[1,{"type":"reference","origin":"server","value":"0.1.2.3"}]';
+
+              assert.equal(serialize(term, true), expected);
+            });
+
+            it("not full scope", () => {
+              const term = Type.reference("0.1.2.3", "server");
+              const expected = '[1,{"type":"reference","value":"0.1.2.3"}]';
+
+              assert.equal(serialize(term, false), expected);
+            });
+          });
+        });
+
+        describe("nested", () => {
+          describe("originating in client", () => {
+            it("full scope", () => {
+              const term = {a: Type.reference("0.1.2.3", "client"), b: 2};
+
+              const expected =
+                '[1,{"a":{"type":"reference","origin":"client","value":"0.1.2.3"},"b":2}]';
+
+              assert.equal(serialize(term, true), expected);
+            });
+
+            it("not full scope", () => {
+              const term = {a: Type.reference("0.1.2.3", "client"), b: 2};
+
+              assert.throw(
+                () => serialize(term, false),
+                HologramRuntimeError,
+                "can't encode client terms that are references originating in client",
+              );
+            });
+          });
+
+          describe("originating in server", () => {
+            it("full scope", () => {
+              const term = {a: Type.reference("0.1.2.3", "server"), b: 2};
+
+              const expected =
+                '[1,{"a":{"type":"reference","origin":"server","value":"0.1.2.3"},"b":2}]';
+
+              assert.equal(serialize(term, true), expected);
+            });
+
+            it("not full scope", () => {
+              const term = {a: Type.reference("0.1.2.3", "server"), b: 2};
+
+              const expected =
+                '[1,{"a":{"type":"reference","value":"0.1.2.3"},"b":2}]';
+
+              assert.equal(serialize(term, false), expected);
+            });
+          });
         });
       });
 
