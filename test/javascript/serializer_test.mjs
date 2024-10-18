@@ -258,6 +258,7 @@ describe("Serializer", () => {
 
           it("nested", () => {
             const term = {a: Type.bitstring([1, 0, 1, 0]), b: 2};
+
             const expected =
               '[1,{"a":{"type":"bitstring","bits":[1,0,1,0]},"b":2}]';
 
