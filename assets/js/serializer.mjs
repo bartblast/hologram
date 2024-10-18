@@ -14,11 +14,7 @@ export default class Serializer {
       }
 
       if (value?.type === "bitstring") {
-        if (Type.isBinary(value)) {
-          return `__binary__:${Bitstring.toText(value)}`;
-        }
-
-        return {...value, bits: Array.from(value.bits)};
+        return $.#serializeBoxedBitstring(value);
       }
 
       if (value?.type === "float") {
@@ -57,6 +53,14 @@ export default class Serializer {
 
     // [version, data]
     return `[1,${serialized}]`;
+  }
+
+  static #serializeBoxedBitstring(term) {
+    if (Type.isBinary(term)) {
+      return `__binary__:${Bitstring.toText(term)}`;
+    }
+
+    return {...term, bits: Array.from(term.bits)};
   }
 
   static #serializeBoxedReference(term, isFullScope) {
