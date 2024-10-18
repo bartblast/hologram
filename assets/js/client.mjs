@@ -3,7 +3,7 @@
 import Config from "./config.mjs";
 import GlobalRegistry from "./global_registry.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
-import JsonEncoder from "./json_encoder.mjs";
+import Serializer from "./serializer.mjs";
 import Utils from "./utils.mjs";
 
 import {Socket} from "phoenix";
@@ -49,8 +49,9 @@ export default class Client {
 
   static encoder(msg, callback) {
     return callback(
-      JsonEncoder.encode(
+      Serializer.serialize(
         [msg.join_ref, msg.ref, msg.topic, msg.event, msg.payload],
+        false,
         false,
       ),
     );

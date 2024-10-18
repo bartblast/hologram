@@ -3,8 +3,8 @@
 import Bitstring from "./bitstring.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
-import JsonEncoder from "./json_encoder.mjs";
 import Sequence from "./sequence.mjs";
+import Serializer from "./serializer.mjs";
 
 export default class Type {
   static actionStruct(data = {}) {
@@ -202,7 +202,7 @@ export default class Type {
     if (data.length < 2) {
       throw new HologramInterpreterError(
         "improper list must have at least 2 items, received " +
-          JsonEncoder.encode(data),
+          Serializer.serialize(data, true, false),
       );
     }
 

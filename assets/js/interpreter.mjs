@@ -5,7 +5,7 @@ import uniqWith from "lodash/uniqWith.js";
 
 import Bitstring from "./bitstring.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
-import JsonEncoder from "./json_encoder.mjs";
+import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
@@ -519,7 +519,7 @@ export default class Interpreter {
 
       // TODO: remove when all types are supported
       default:
-        return JsonEncoder.encode(term);
+        return Serializer.serialize(term, true, false);
     }
   }
 
