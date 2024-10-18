@@ -58,6 +58,8 @@ describe("Type", () => {
   });
 
   it("anonymousFunction()", () => {
+    Sequence.reset();
+
     const arity = 3;
     const clauses = ["clause_dummy_1", "clause_dummy_2"];
 
@@ -74,7 +76,7 @@ describe("Type", () => {
       capturedModule: null,
       clauses: clauses,
       context: context,
-      uniqueId: Sequence.next() - 1,
+      uniqueId: 1,
     };
 
     assert.deepStrictEqual(result, expected);
@@ -346,6 +348,8 @@ describe("Type", () => {
 
   describe("encodeMapKey()", () => {
     it("encodes boxed anonymous function value as map key", () => {
+      Sequence.reset();
+
       const anonymousFunction = Type.anonymousFunction(
         "dummyArity",
         "dummyClauses",
@@ -354,7 +358,7 @@ describe("Type", () => {
 
       const result = Type.encodeMapKey(anonymousFunction);
 
-      assert.equal(result, "anonymous_function(" + (Sequence.next() - 1) + ")");
+      assert.equal(result, "anonymous_function(1)");
     });
 
     it("encodes boxed atom value as map key", () => {
@@ -468,6 +472,8 @@ describe("Type", () => {
   });
 
   it("functionCapture()", () => {
+    Sequence.reset();
+
     const capturedModule = "MyModule";
     const capturedFunction = "my_fun";
     const arity = 2;
@@ -493,7 +499,7 @@ describe("Type", () => {
       capturedModule: capturedModule,
       clauses: clauses,
       context: contextFixture({module: "Aaa.Bbb", vars: {}}),
-      uniqueId: Sequence.next() - 1,
+      uniqueId: 1,
     };
 
     assert.deepStrictEqual(result, expected);

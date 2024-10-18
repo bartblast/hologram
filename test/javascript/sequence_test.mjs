@@ -11,7 +11,7 @@ defineGlobalErlangAndElixirModules();
 
 describe("Sequence", () => {
   beforeEach(() => {
-    Sequence.value = 0;
+    Sequence.reset();
   });
 
   it("next()", () => {
