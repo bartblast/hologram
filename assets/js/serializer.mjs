@@ -53,7 +53,7 @@ export default class Serializer {
         return `__function__:${value.toString()}`;
       }
 
-      return value;
+      return typeof value === "undefined" ? null : value;
     });
 
     if (

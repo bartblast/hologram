@@ -13,7 +13,7 @@ import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
-describe("Serializer", () => {
+describe.only("Serializer", () => {
   describe("serialize()", () => {
     const serialize = Serializer.serialize;
 
@@ -765,6 +765,22 @@ describe("Serializer", () => {
         it("nested", () => {
           const term = {a: 'x"yz', b: 2};
           const expected = '[1,{"a":"x\\"yz","b":2}]';
+
+          assert.equal(serialize(term), expected);
+        });
+      });
+
+      describe("undefined", () => {
+        it("top-level", () => {
+          const term = undefined;
+          const expected = "[1,null]";
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("nested", () => {
+          const term = {a: undefined, b: 2};
+          const expected = '[1,{"a":null,"b":2}]';
 
           assert.equal(serialize(term), expected);
         });
