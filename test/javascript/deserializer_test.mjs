@@ -229,5 +229,30 @@ describe("Deserializer", () => {
         });
       });
     });
+
+    describe("JS terms", () => {
+      describe("BigInt", () => {
+        const bigint = 123n;
+
+        it("top-level", () => {
+          const serialized = serialize(bigint);
+
+          assert.equal(deserialize(serialized), bigint);
+        });
+
+        it("nested", () => {
+          const term = {a: bigint, b: 2};
+          const serialized = serialize(term);
+
+          assert.deepStrictEqual(deserialize(serialized), term);
+        });
+
+        it("not versioned", () => {
+          const serialized = serialize(bigint, true, false);
+
+          assert.equal(deserialize(serialized, false), bigint);
+        });
+      });
+    });
   });
 });

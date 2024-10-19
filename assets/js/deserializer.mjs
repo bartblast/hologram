@@ -10,6 +10,10 @@ export default class Deserializer {
           return Type.atom(value.slice(9));
         }
 
+        if (value.startsWith("__bigint__:")) {
+          return BigInt(value.slice(11));
+        }
+
         if (value.startsWith("__binary__:")) {
           return Type.bitstring(value.slice(11));
         }
