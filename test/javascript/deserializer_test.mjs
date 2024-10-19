@@ -182,6 +182,29 @@ describe("Deserializer", () => {
           assert.deepStrictEqual(deserialize(serialized, false), pid);
         });
       });
+
+      describe("port", () => {
+        const port = Type.port("0.11", "client");
+
+        it("top-level", () => {
+          const serialized = serialize(port);
+
+          assert.deepStrictEqual(deserialize(serialized), port);
+        });
+
+        it("nested", () => {
+          const term = {a: port, b: 2};
+          const serialized = serialize(term);
+
+          assert.deepStrictEqual(deserialize(serialized), term);
+        });
+
+        it("not versioned", () => {
+          const serialized = serialize(port, true, false);
+
+          assert.deepStrictEqual(deserialize(serialized, false), port);
+        });
+      });
     });
   });
 });
