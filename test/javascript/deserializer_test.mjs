@@ -205,6 +205,29 @@ describe("Deserializer", () => {
           assert.deepStrictEqual(deserialize(serialized, false), port);
         });
       });
+
+      describe("reference", () => {
+        const reference = Type.reference("0.1.2.3", "client");
+
+        it("top-level", () => {
+          const serialized = serialize(reference);
+
+          assert.deepStrictEqual(deserialize(serialized), reference);
+        });
+
+        it("nested", () => {
+          const term = {a: reference, b: 2};
+          const serialized = serialize(term);
+
+          assert.deepStrictEqual(deserialize(serialized), term);
+        });
+
+        it("not versioned", () => {
+          const serialized = serialize(reference, true, false);
+
+          assert.deepStrictEqual(deserialize(serialized, false), reference);
+        });
+      });
     });
   });
 });
