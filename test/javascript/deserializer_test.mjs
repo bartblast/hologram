@@ -159,6 +159,29 @@ describe("Deserializer", () => {
           assert.deepStrictEqual(deserialize(serialized, false), map);
         });
       });
+
+      describe("pid", () => {
+        const pid = Type.pid('my_node@my_"host', [0, 11, 222], "client");
+
+        it("top-level", () => {
+          const serialized = serialize(pid);
+
+          assert.deepStrictEqual(deserialize(serialized), pid);
+        });
+
+        it("nested", () => {
+          const term = {a: pid, b: 2};
+          const serialized = serialize(term);
+
+          assert.deepStrictEqual(deserialize(serialized), term);
+        });
+
+        it("not versioned", () => {
+          const serialized = serialize(pid, true, false);
+
+          assert.deepStrictEqual(deserialize(serialized, false), pid);
+        });
+      });
     });
   });
 });
