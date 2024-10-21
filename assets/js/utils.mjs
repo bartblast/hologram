@@ -63,7 +63,7 @@ export default class Utils {
     }
   }
 
-  static runAsyncTask(task) {
+  static async runAsyncTask(task) {
     return new Promise((resolve) => {
       setTimeout(() => {
         task();
