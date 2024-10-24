@@ -299,6 +299,29 @@ describe("Deserializer", () => {
           assert.equal(deserialize(serialized, false), boolean);
         });
       });
+
+      describe("float", () => {
+        const float = 1.23;
+
+        it("top-level", () => {
+          const serialized = serialize(float);
+
+          assert.equal(deserialize(serialized), float);
+        });
+
+        it("nested", () => {
+          const term = {a: float, b: 2};
+          const serialized = serialize(term);
+
+          assert.deepStrictEqual(deserialize(serialized), term);
+        });
+
+        it("not versioned", () => {
+          const serialized = serialize(float, true, false);
+
+          assert.equal(deserialize(serialized, false), float);
+        });
+      });
     });
   });
 });
