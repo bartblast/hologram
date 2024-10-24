@@ -366,6 +366,22 @@ describe("Deserializer", () => {
           testNotVersionedDeserialization(term);
         });
       });
+
+      describe("string", () => {
+        const term = 'a"bc';
+
+        it("top-level", () => {
+          testTopLevelDeserialization(term);
+        });
+
+        it("nested", () => {
+          testNestedDeserialization(term);
+        });
+
+        it("not versioned", () => {
+          testNotVersionedDeserialization(term);
+        });
+      });
     });
   });
 });
