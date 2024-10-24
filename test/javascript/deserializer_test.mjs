@@ -231,6 +231,29 @@ describe("Deserializer", () => {
     });
 
     describe("JS terms", () => {
+      describe("array", () => {
+        const array = [123, Type.float(2.34), Type.bitstring([1, 0, 1, 0])];
+
+        it("top-level", () => {
+          const serialized = serialize(array);
+
+          assert.deepStrictEqual(deserialize(serialized), array);
+        });
+
+        it("nested", () => {
+          const term = {a: array, b: 2};
+          const serialized = serialize(term);
+
+          assert.deepStrictEqual(deserialize(serialized), term);
+        });
+
+        it("not versioned", () => {
+          const serialized = serialize(array, true, false);
+
+          assert.deepStrictEqual(deserialize(serialized, false), array);
+        });
+      });
+
       describe("BigInt", () => {
         const bigint = 123n;
 
