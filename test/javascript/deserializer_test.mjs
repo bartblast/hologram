@@ -387,6 +387,29 @@ describe("Deserializer", () => {
           });
         });
       });
+
+      describe("integer", () => {
+        const integer = 123;
+
+        it("top-level", () => {
+          const serialized = serialize(integer);
+
+          assert.equal(deserialize(serialized), integer);
+        });
+
+        it("nested", () => {
+          const term = {a: integer, b: 2};
+          const serialized = serialize(term);
+
+          assert.deepStrictEqual(deserialize(serialized), term);
+        });
+
+        it("not versioned", () => {
+          const serialized = serialize(integer, true, false);
+
+          assert.equal(deserialize(serialized, false), integer);
+        });
+      });
     });
   });
 });
