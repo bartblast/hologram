@@ -11,337 +11,246 @@ import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
+const deserialize = Deserializer.deserialize;
+const serialize = Serializer.serialize;
+
 function testNestedDeserialization(nestedTerm) {
   const term = {a: nestedTerm, b: 2};
-  const serialized = Serializer.serialize(term);
-  const deserialized = Deserializer.deserialize(serialized);
+  const serialized = serialize(term);
+  const deserialized = deserialize(serialized);
 
   assert.deepStrictEqual(deserialized, term);
 }
 
 function testNotVersionedDeserialization(term) {
-  const serialized = Serializer.serialize(term, true, false);
-  const deserialized = Deserializer.deserialize(serialized, false);
+  const serialized = serialize(term, true, false);
+  const deserialized = deserialize(serialized, false);
 
   assert.deepStrictEqual(deserialized, term);
 }
 
 function testTopLevelDeserialization(term) {
-  const serialized = Serializer.serialize(term);
-  const deserialized = Deserializer.deserialize(serialized);
+  const serialized = serialize(term);
+  const deserialized = deserialize(serialized);
 
   assert.deepStrictEqual(deserialized, term);
 }
 
 describe("Deserializer", () => {
   describe("deserialize()", () => {
-    const deserialize = Deserializer.deserialize;
-    const serialize = Serializer.serialize;
-
     describe("boxed terms", () => {
       describe("atom", () => {
-        const atom = Type.atom("abc");
+        const term = Type.atom("abc");
 
         it("top-level", () => {
-          const serialized = serialize(atom);
-
-          assert.deepStrictEqual(deserialize(serialized), atom);
+          testTopLevelDeserialization(term);
         });
 
         it("nested", () => {
-          const term = {a: atom, b: 2};
-          const serialized = serialize(term);
-
-          assert.deepStrictEqual(deserialize(serialized), term);
+          testNestedDeserialization(term);
         });
 
         it("not versioned", () => {
-          const serialized = serialize(atom, true, false);
-
-          assert.deepStrictEqual(deserialize(serialized, false), atom);
+          testNotVersionedDeserialization(term);
         });
       });
 
       describe("bitstring", () => {
         describe("binary", () => {
-          const bitstring = Type.bitstring('a"bc');
+          const term = Type.bitstring('a"bc');
 
           it("top-level", () => {
-            const serialized = serialize(bitstring);
-
-            assert.deepStrictEqual(deserialize(serialized), bitstring);
+            testTopLevelDeserialization(term);
           });
 
           it("nested", () => {
-            const term = {a: bitstring, b: 2};
-            const serialized = serialize(term);
-
-            assert.deepStrictEqual(deserialize(serialized), term);
+            testNestedDeserialization(term);
           });
 
           it("not versioned", () => {
-            const serialized = serialize(bitstring, true, false);
-
-            assert.deepStrictEqual(deserialize(serialized, false), bitstring);
+            testNotVersionedDeserialization(term);
           });
         });
 
         describe("non-binary", () => {
-          const bitstring = Type.bitstring([1, 0, 1, 0]);
+          const term = Type.bitstring([1, 0, 1, 0]);
 
           it("top-level", () => {
-            const serialized = serialize(bitstring);
-
-            assert.deepStrictEqual(deserialize(serialized), bitstring);
+            testTopLevelDeserialization(term);
           });
 
           it("nested", () => {
-            const term = {a: bitstring, b: 2};
-            const serialized = serialize(term);
-
-            assert.deepStrictEqual(deserialize(serialized), term);
+            testNestedDeserialization(term);
           });
 
           it("not versioned", () => {
-            const serialized = serialize(bitstring, true, false);
-
-            assert.deepStrictEqual(deserialize(serialized, false), bitstring);
+            testNotVersionedDeserialization(term);
           });
         });
       });
 
       describe("float", () => {
-        const float = Type.float(1.23);
+        const term = Type.float(1.23);
 
         it("top-level", () => {
-          const serialized = serialize(float);
-
-          assert.deepStrictEqual(deserialize(serialized), float);
+          testTopLevelDeserialization(term);
         });
 
         it("nested", () => {
-          const term = {a: float, b: 2};
-          const serialized = serialize(term);
-
-          assert.deepStrictEqual(deserialize(serialized), term);
+          testNestedDeserialization(term);
         });
 
         it("not versioned", () => {
-          const serialized = serialize(float, true, false);
-
-          assert.deepStrictEqual(deserialize(serialized, false), float);
+          testNotVersionedDeserialization(term);
         });
       });
 
       describe("integer", () => {
-        const integer = Type.integer(123);
+        const term = Type.integer(123);
 
         it("top-level", () => {
-          const serialized = serialize(integer);
-
-          assert.deepStrictEqual(deserialize(serialized), integer);
+          testTopLevelDeserialization(term);
         });
 
         it("nested", () => {
-          const term = {a: integer, b: 2};
-          const serialized = serialize(term);
-
-          assert.deepStrictEqual(deserialize(serialized), term);
+          testNestedDeserialization(term);
         });
 
         it("not versioned", () => {
-          const serialized = serialize(integer, true, false);
-
-          assert.deepStrictEqual(deserialize(serialized, false), integer);
+          testNotVersionedDeserialization(term);
         });
       });
 
       describe("map", () => {
-        const map = Type.map([
+        const term = Type.map([
           [Type.atom("x"), Type.integer(1)],
           [Type.bitstring("y"), Type.float(1.23)],
         ]);
 
         it("top-level", () => {
-          const serialized = serialize(map);
-
-          assert.deepStrictEqual(deserialize(serialized), map);
+          testTopLevelDeserialization(term);
         });
 
         it("nested", () => {
-          const term = {a: map, b: 2};
-          const serialized = serialize(term);
-
-          assert.deepStrictEqual(deserialize(serialized), term);
+          testNestedDeserialization(term);
         });
 
         it("not versioned", () => {
-          const serialized = serialize(map, true, false);
-
-          assert.deepStrictEqual(deserialize(serialized, false), map);
+          testNotVersionedDeserialization(term);
         });
       });
 
       describe("pid", () => {
-        const pid = Type.pid('my_node@my_"host', [0, 11, 222], "client");
+        const term = Type.pid('my_node@my_"host', [0, 11, 222], "client");
 
         it("top-level", () => {
-          const serialized = serialize(pid);
-
-          assert.deepStrictEqual(deserialize(serialized), pid);
+          testTopLevelDeserialization(term);
         });
 
         it("nested", () => {
-          const term = {a: pid, b: 2};
-          const serialized = serialize(term);
-
-          assert.deepStrictEqual(deserialize(serialized), term);
+          testNestedDeserialization(term);
         });
 
         it("not versioned", () => {
-          const serialized = serialize(pid, true, false);
-
-          assert.deepStrictEqual(deserialize(serialized, false), pid);
+          testNotVersionedDeserialization(term);
         });
       });
 
       describe("port", () => {
-        const port = Type.port("0.11", "client");
+        const term = Type.port("0.11", "client");
 
         it("top-level", () => {
-          const serialized = serialize(port);
-
-          assert.deepStrictEqual(deserialize(serialized), port);
+          testTopLevelDeserialization(term);
         });
 
         it("nested", () => {
-          const term = {a: port, b: 2};
-          const serialized = serialize(term);
-
-          assert.deepStrictEqual(deserialize(serialized), term);
+          testNestedDeserialization(term);
         });
 
         it("not versioned", () => {
-          const serialized = serialize(port, true, false);
-
-          assert.deepStrictEqual(deserialize(serialized, false), port);
+          testNotVersionedDeserialization(term);
         });
       });
 
       describe("reference", () => {
-        const reference = Type.reference("0.1.2.3", "client");
+        const term = Type.reference("0.1.2.3", "client");
 
         it("top-level", () => {
-          const serialized = serialize(reference);
-
-          assert.deepStrictEqual(deserialize(serialized), reference);
+          testTopLevelDeserialization(term);
         });
 
         it("nested", () => {
-          const term = {a: reference, b: 2};
-          const serialized = serialize(term);
-
-          assert.deepStrictEqual(deserialize(serialized), term);
+          testNestedDeserialization(term);
         });
 
         it("not versioned", () => {
-          const serialized = serialize(reference, true, false);
-
-          assert.deepStrictEqual(deserialize(serialized, false), reference);
+          testNotVersionedDeserialization(term);
         });
       });
     });
 
     describe("JS terms", () => {
       describe("array", () => {
-        const array = [123, Type.float(2.34), Type.bitstring([1, 0, 1, 0])];
+        const term = [123, Type.float(2.34), Type.bitstring([1, 0, 1, 0])];
 
         it("top-level", () => {
-          const serialized = serialize(array);
-
-          assert.deepStrictEqual(deserialize(serialized), array);
+          testTopLevelDeserialization(term);
         });
 
         it("nested", () => {
-          const term = {a: array, b: 2};
-          const serialized = serialize(term);
-
-          assert.deepStrictEqual(deserialize(serialized), term);
+          testNestedDeserialization(term);
         });
 
         it("not versioned", () => {
-          const serialized = serialize(array, true, false);
-
-          assert.deepStrictEqual(deserialize(serialized, false), array);
+          testNotVersionedDeserialization(term);
         });
       });
 
       describe("BigInt", () => {
-        const bigint = 123n;
+        const term = 123n;
 
         it("top-level", () => {
-          const serialized = serialize(bigint);
-
-          assert.equal(deserialize(serialized), bigint);
+          testTopLevelDeserialization(term);
         });
 
         it("nested", () => {
-          const term = {a: bigint, b: 2};
-          const serialized = serialize(term);
-
-          assert.deepStrictEqual(deserialize(serialized), term);
+          testNestedDeserialization(term);
         });
 
         it("not versioned", () => {
-          const serialized = serialize(bigint, true, false);
-
-          assert.equal(deserialize(serialized, false), bigint);
+          testNotVersionedDeserialization(term);
         });
       });
 
       describe("boolean", () => {
-        const boolean = true;
+        const term = true;
 
         it("top-level", () => {
-          const serialized = serialize(boolean);
-
-          assert.equal(deserialize(serialized), boolean);
+          testTopLevelDeserialization(term);
         });
 
         it("nested", () => {
-          const term = {a: boolean, b: 2};
-          const serialized = serialize(term);
-
-          assert.deepStrictEqual(deserialize(serialized), term);
+          testNestedDeserialization(term);
         });
 
         it("not versioned", () => {
-          const serialized = serialize(boolean, true, false);
-
-          assert.equal(deserialize(serialized, false), boolean);
+          testNotVersionedDeserialization(term);
         });
       });
 
       describe("float", () => {
-        const float = 1.23;
+        const term = 1.23;
 
         it("top-level", () => {
-          const serialized = serialize(float);
-
-          assert.equal(deserialize(serialized), float);
+          testTopLevelDeserialization(term);
         });
 
         it("nested", () => {
-          const term = {a: float, b: 2};
-          const serialized = serialize(term);
-
-          assert.deepStrictEqual(deserialize(serialized), term);
+          testNestedDeserialization(term);
         });
 
         it("not versioned", () => {
-          const serialized = serialize(float, true, false);
-
-          assert.equal(deserialize(serialized, false), float);
+          testNotVersionedDeserialization(term);
         });
       });
 
@@ -411,39 +320,34 @@ describe("Deserializer", () => {
       });
 
       describe("integer", () => {
-        const integer = 123;
+        const term = 123;
 
         it("top-level", () => {
-          const serialized = serialize(integer);
-
-          assert.equal(deserialize(serialized), integer);
+          testTopLevelDeserialization(term);
         });
 
         it("nested", () => {
-          const term = {a: integer, b: 2};
-          const serialized = serialize(term);
-
-          assert.deepStrictEqual(deserialize(serialized), term);
+          testNestedDeserialization(term);
         });
 
         it("not versioned", () => {
-          const serialized = serialize(integer, true, false);
-
-          assert.equal(deserialize(serialized, false), integer);
+          testNotVersionedDeserialization(term);
         });
       });
 
       describe("null", () => {
+        const term = null;
+
         it("top-level", () => {
-          testTopLevelDeserialization(null);
+          testTopLevelDeserialization(term);
         });
 
         it("nested", () => {
-          testNestedDeserialization(null);
+          testNestedDeserialization(term);
         });
 
         it("not versioned", () => {
-          testNotVersionedDeserialization(null);
+          testNotVersionedDeserialization(term);
         });
       });
     });
