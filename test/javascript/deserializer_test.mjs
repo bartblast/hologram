@@ -11,6 +11,28 @@ import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
+function testNestedDeserialization(nestedTerm) {
+  const term = {a: nestedTerm, b: 2};
+  const serialized = Serializer.serialize(term);
+  const deserialized = Deserializer.deserialize(serialized);
+
+  assert.deepStrictEqual(deserialized, term);
+}
+
+function testNotVersionedDeserialization(term) {
+  const serialized = Serializer.serialize(term, true, false);
+  const deserialized = Deserializer.deserialize(serialized, false);
+
+  assert.deepStrictEqual(deserialized, term);
+}
+
+function testTopLevelDeserialization(term) {
+  const serialized = Serializer.serialize(term);
+  const deserialized = Deserializer.deserialize(serialized);
+
+  assert.deepStrictEqual(deserialized, term);
+}
+
 describe("Deserializer", () => {
   describe("deserialize()", () => {
     const deserialize = Deserializer.deserialize;
@@ -408,6 +430,20 @@ describe("Deserializer", () => {
           const serialized = serialize(integer, true, false);
 
           assert.equal(deserialize(serialized, false), integer);
+        });
+      });
+
+      describe("null", () => {
+        it("top-level", () => {
+          testTopLevelDeserialization(null);
+        });
+
+        it("nested", () => {
+          testNestedDeserialization(null);
+        });
+
+        it("not versioned", () => {
+          testNotVersionedDeserialization(null);
         });
       });
     });
