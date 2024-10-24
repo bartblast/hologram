@@ -350,6 +350,22 @@ describe("Deserializer", () => {
           testNotVersionedDeserialization(term);
         });
       });
+
+      describe("object", () => {
+        const term = {v: 6, 'x"yz': 9.87};
+
+        it("top-level", () => {
+          testTopLevelDeserialization(term);
+        });
+
+        it("nested", () => {
+          testNestedDeserialization(term);
+        });
+
+        it("not versioned", () => {
+          testNotVersionedDeserialization(term);
+        });
+      });
     });
   });
 });
