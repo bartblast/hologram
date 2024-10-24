@@ -2,10 +2,12 @@
 
 import {
   assert,
+  contextFixture,
   defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
 import Deserializer from "../../assets/js/deserializer.mjs";
+import Interpreter from "../../assets/js/interpreter.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -39,6 +41,131 @@ function testTopLevelDeserialization(term) {
 describe("Deserializer", () => {
   describe("deserialize()", () => {
     describe("boxed terms", () => {
+      describe("anonymous_function", () => {
+        const term = Type.anonymousFunction(
+          1,
+          [
+            {
+              params: (_context) => [Type.variablePattern("x")],
+              guards: [
+                (context) => Erlang["/=/2"](context.vars.x, Type.integer(1)),
+              ],
+              // prettier-ignore
+              body: (context) => { return Type.list([Type.atom("a"), context.vars.x, context.vars.i]) },
+            },
+            {
+              params: (_context) => [Type.variablePattern("x")],
+              guards: [
+                (context) => Erlang["/=/2"](context.vars.x, Type.integer(2)),
+              ],
+              // prettier-ignore
+              body: (context) => { return Type.list([Type.atom("b"), context.vars.x, context.vars.j]) },
+            },
+          ],
+          contextFixture({vars: {i: Type.integer(10), j: Type.integer(20)}}),
+        );
+
+        it("top-level", () => {
+          const serialized = serialize(term);
+          const deserialized = deserialize(serialized);
+
+          assert.deepStrictEqual(deserialized, {
+            ...term,
+            clauses: deserialized.clauses,
+          });
+
+          assert.equal(deserialized.clauses.length, 2);
+
+          assert.isFunction(deserialized.clauses[0].params);
+          assert.isFunction(deserialized.clauses[0].guards[0]);
+          assert.isFunction(deserialized.clauses[0].body);
+
+          assert.isFunction(deserialized.clauses[1].params);
+          assert.isFunction(deserialized.clauses[1].guards[0]);
+          assert.isFunction(deserialized.clauses[1].body);
+
+          const callResult = Interpreter.callAnonymousFunction(deserialized, [
+            Type.integer(1),
+          ]);
+
+          const expectedCallResult = Type.list([
+            Type.atom("b"),
+            Type.integer(1),
+            Type.integer(20),
+          ]);
+
+          assert.deepStrictEqual(callResult, expectedCallResult);
+        });
+
+        it("nested", () => {
+          const nestedTerm = {a: term, b: 2};
+          const serialized = serialize(nestedTerm);
+          const deserialized = deserialize(serialized);
+
+          assert.deepStrictEqual(deserialized, {
+            a: {
+              ...term,
+              clauses: deserialized.a.clauses,
+            },
+            b: 2,
+          });
+
+          assert.equal(deserialized.a.clauses.length, 2);
+
+          assert.isFunction(deserialized.a.clauses[0].params);
+          assert.isFunction(deserialized.a.clauses[0].guards[0]);
+          assert.isFunction(deserialized.a.clauses[0].body);
+
+          assert.isFunction(deserialized.a.clauses[1].params);
+          assert.isFunction(deserialized.a.clauses[1].guards[0]);
+          assert.isFunction(deserialized.a.clauses[1].body);
+
+          const callResult = Interpreter.callAnonymousFunction(deserialized.a, [
+            Type.integer(1),
+          ]);
+
+          const expectedCallResult = Type.list([
+            Type.atom("b"),
+            Type.integer(1),
+            Type.integer(20),
+          ]);
+
+          assert.deepStrictEqual(callResult, expectedCallResult);
+        });
+
+        it("not versioned", () => {
+          const serialized = serialize(term, true, false);
+          const deserialized = deserialize(serialized, false);
+
+          assert.deepStrictEqual(deserialized, {
+            ...term,
+            clauses: deserialized.clauses,
+          });
+
+          assert.equal(deserialized.clauses.length, 2);
+
+          assert.isFunction(deserialized.clauses[0].params);
+          assert.isFunction(deserialized.clauses[0].guards[0]);
+          assert.isFunction(deserialized.clauses[0].body);
+
+          assert.isFunction(deserialized.clauses[1].params);
+          assert.isFunction(deserialized.clauses[1].guards[0]);
+          assert.isFunction(deserialized.clauses[1].body);
+
+          const callResult = Interpreter.callAnonymousFunction(deserialized, [
+            Type.integer(1),
+          ]);
+
+          const expectedCallResult = Type.list([
+            Type.atom("b"),
+            Type.integer(1),
+            Type.integer(20),
+          ]);
+
+          assert.deepStrictEqual(callResult, expectedCallResult);
+        });
+      });
+
       describe("atom", () => {
         const term = Type.atom("abc");
 
