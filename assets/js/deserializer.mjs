@@ -1,5 +1,6 @@
 "use strict";
 
+import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 
 export default class Deserializer {
@@ -20,6 +21,10 @@ export default class Deserializer {
 
         if (value.startsWith("__float__:")) {
           return Type.float(Number(value.slice(10)));
+        }
+
+        if (value.startsWith("__function__:")) {
+          return Interpreter.evaluateJavaScriptCode(value.slice(13));
         }
 
         if (value.startsWith("__integer__:")) {

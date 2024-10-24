@@ -322,6 +322,71 @@ describe("Deserializer", () => {
           assert.equal(deserialize(serialized, false), float);
         });
       });
+
+      describe("function", () => {
+        describe("longhand syntax", () => {
+          const fun = function (a, b) {
+            const result = Type.integer(a + b);
+            return result;
+          };
+
+          it("top-level", () => {
+            const serialized = serialize(fun);
+            const result = deserialize(serialized);
+
+            assert.isFunction(result);
+            assert.deepStrictEqual(result(1, 2), Type.integer(3));
+          });
+
+          it("nested", () => {
+            const term = {a: fun, b: 2};
+            const serialized = serialize(term);
+            const result = deserialize(serialized);
+
+            assert.isFunction(result.a);
+            assert.deepStrictEqual(result.a(1, 2), Type.integer(3));
+            assert.deepStrictEqual(result, {a: result.a, b: 2});
+          });
+
+          it("not versioned", () => {
+            const serialized = serialize(fun, true, false);
+            const result = deserialize(serialized, false);
+
+            assert.isFunction(result);
+            assert.deepStrictEqual(result(1, 2), Type.integer(3));
+          });
+        });
+
+        describe("shorthand syntax", () => {
+          const fun = (a, b) => Type.integer(a + b);
+
+          it("top-level", () => {
+            const serialized = serialize(fun);
+            const result = deserialize(serialized);
+
+            assert.isFunction(result);
+            assert.deepStrictEqual(result(1, 2), Type.integer(3));
+          });
+
+          it("nested", () => {
+            const term = {a: fun, b: 2};
+            const serialized = serialize(term);
+            const result = deserialize(serialized);
+
+            assert.isFunction(result.a);
+            assert.deepStrictEqual(result.a(1, 2), Type.integer(3));
+            assert.deepStrictEqual(result, {a: result.a, b: 2});
+          });
+
+          it("not versioned", () => {
+            const serialized = serialize(fun, true, false);
+            const result = deserialize(serialized, false);
+
+            assert.isFunction(result);
+            assert.deepStrictEqual(result(1, 2), Type.integer(3));
+          });
+        });
+      });
     });
   });
 });
