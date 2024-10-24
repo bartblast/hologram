@@ -248,6 +248,22 @@ describe("Deserializer", () => {
         });
       });
 
+      describe("list", () => {
+        const term = Type.list([Type.integer(1), Type.float(1.23)]);
+
+        it("top-level", () => {
+          testTopLevelDeserialization(term);
+        });
+
+        it("nested", () => {
+          testNestedDeserialization(term);
+        });
+
+        it("not versioned", () => {
+          testNotVersionedDeserialization(term);
+        });
+      });
+
       describe("map", () => {
         const term = Type.map([
           [Type.atom("x"), Type.integer(1)],
