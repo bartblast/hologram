@@ -426,7 +426,7 @@ export default class Interpreter {
     return Erlang_Maps["get/2"](right, left);
   }
 
-  static evaluateTranspiledCode(code) {
+  static evaluateJavaScriptCode(code) {
     const context = Interpreter.buildContext();
 
     // See why not to use eval() with esbuild and in general: https://esbuild.github.io/content-types/#direct-eval

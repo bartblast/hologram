@@ -2526,12 +2526,12 @@ describe("Interpreter", () => {
     });
   });
 
-  it("evaluateTranspiledCode()", () => {
+  it("evaluateJavaScriptCode()", () => {
     //  %{a: 1, b: 2}.a
     const code =
       'Interpreter.dotOperator(Type.map([[Type.atom("a"), Type.integer(1n)], [Type.atom("b"), context.vars.x]]), Type.atom("a"))';
 
-    const result = Interpreter.evaluateTranspiledCode(code);
+    const result = Interpreter.evaluateJavaScriptCode(code);
 
     assert.deepStrictEqual(result, Type.integer(1));
   });
