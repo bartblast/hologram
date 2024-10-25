@@ -61,6 +61,7 @@ export default class Hologram {
   static #mountData = null;
   static #pageModule = null;
   static #pageParams = null;
+  static #registeredPageModules = new Set();
 
   // Made public to make tests easier
   // Deps: [:maps.get/2, :maps.put/3]
@@ -563,6 +564,8 @@ export default class Hologram {
     Hologram.#mountData = mountData;
     Hologram.#pageModule = mountData.pageModule;
     Hologram.#pageParams = mountData.pageParams;
+
+    $.#registerPageModule(mountData.pageModule);
   }
 
   static #maybeInitAssetPathRegistry() {
@@ -641,6 +644,10 @@ export default class Hologram {
     );
   }
 
+  static #registerPageModule(pageModule) {
+    $.#registeredPageModules.set(pageModule);
+  }
+
   static #replaceHistoryState() {
     const serializedPageSnapshot = Serializer.serialize({
       componentRegistryEntries: ComponentRegistry.entries,
@@ -654,3 +661,5 @@ export default class Hologram {
     history.replaceState(id, null, window.location.pathname);
   }
 }
+
+const $ = Hologram;
