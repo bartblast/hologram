@@ -46,5 +46,3 @@ export default class Deserializer {
     return isVersioned ? deserialized[1] : deserialized;
   }
 }
-
-const $ = Deserializer;
