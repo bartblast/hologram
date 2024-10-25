@@ -645,7 +645,7 @@ export default class Hologram {
   }
 
   static #registerPageModule(pageModule) {
-    $.#registeredPageModules.set(pageModule);
+    $.#registeredPageModules.add(pageModule.value);
   }
 
   static #replaceHistoryState() {
