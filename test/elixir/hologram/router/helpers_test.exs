@@ -50,8 +50,13 @@ defmodule Hologram.Router.HelpersTest do
   end
 
   describe "page_path/2" do
-    test "valid params" do
+    test "valid keyword params" do
       assert page_path(Module2, param_1: :abc, param_2: 123) ==
+               "/hologram-test-fixtures-router-helpers-module2/abc/123"
+    end
+
+    test "valid map params" do
+      assert page_path(Module2, %{param_1: :abc, param_2: 123}) ==
                "/hologram-test-fixtures-router-helpers-module2/abc/123"
     end
 

@@ -33,7 +33,12 @@ defmodule Hologram.Router.Helpers do
   @doc """
   Builds relative URL for the given page module and params.
   """
-  @spec page_path(module, keyword) :: String.t()
+  @spec page_path(module, keyword | map) :: String.t()
+
+  def page_path(page_module, params) when is_map(params) do
+    page_path(page_module, Map.to_list(params))
+  end
+
   def page_path(page_module, params) do
     required_params = page_module.__params__()
     initial_acc = {params, page_module.__route__()}
