@@ -12,7 +12,6 @@ import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import MemoryStorage from "./memory_storage.mjs";
 import Operation from "./operation.mjs";
-import PersistentStorage from "./persistent_storage.mjs";
 import Renderer from "./renderer.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
@@ -507,11 +506,9 @@ export default class Hologram {
     );
   }
 
-  static async #handlePopstateEvent(event) {
-    const pageSnapshot = await PersistentStorage.getPageSnapshot(event.state);
-
+  static #handlePopstateEvent(event) {
     const {componentRegistryEntries, pageModule, pageParams} =
-      pageSnapshot.data;
+      sessionStorage.getItem(event.state);
 
     ComponentRegistry.hydrate(componentRegistryEntries);
     Hologram.#pageModule = pageModule;
@@ -529,8 +526,6 @@ export default class Hologram {
       }
     });
 
-    PersistentStorage.init("dev");
-
     Client.connect();
 
     Hologram.#defineManuallyPortedFunctions();
@@ -539,7 +534,6 @@ export default class Hologram {
 
     window.addEventListener("pageshow", (event) => {
       if (event.persisted) {
-        PersistentStorage.init("dev");
         Client.connect();
       }
     });
@@ -651,7 +645,7 @@ export default class Hologram {
     };
 
     const id = crypto.randomUUID();
-    PersistentStorage.putPageSnapshot(id, data);
+    sessionStorage.setItem(id, data);
 
     history.replaceState(id, null, window.location.pathname);
   }
