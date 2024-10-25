@@ -6,6 +6,7 @@ import Client from "./client.mjs";
 import CommandQueue from "./command_queue.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Config from "./config.mjs";
+import Deserializer from "./deserializer.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
@@ -13,6 +14,7 @@ import Interpreter from "./interpreter.mjs";
 import MemoryStorage from "./memory_storage.mjs";
 import Operation from "./operation.mjs";
 import Renderer from "./renderer.mjs";
+import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 import Vdom from "./vdom.mjs";
@@ -507,8 +509,10 @@ export default class Hologram {
   }
 
   static #handlePopstateEvent(event) {
+    const serializedPageSnapshot = sessionStorage.getItem(event.state);
+
     const {componentRegistryEntries, pageModule, pageParams} =
-      sessionStorage.getItem(event.state);
+      Deserializer.deserialize(serializedPageSnapshot);
 
     ComponentRegistry.hydrate(componentRegistryEntries);
     Hologram.#pageModule = pageModule;
@@ -638,14 +642,14 @@ export default class Hologram {
   }
 
   static #replaceHistoryState() {
-    const data = {
+    const serializedPageSnapshot = Serializer.serialize({
       componentRegistryEntries: ComponentRegistry.entries,
       pageModule: Hologram.#pageModule,
       pageParams: Hologram.#pageParams,
-    };
+    });
 
     const id = crypto.randomUUID();
-    sessionStorage.setItem(id, data);
+    sessionStorage.setItem(id, serializedPageSnapshot);
 
     history.replaceState(id, null, window.location.pathname);
   }
