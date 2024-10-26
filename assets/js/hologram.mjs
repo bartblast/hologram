@@ -64,7 +64,7 @@ export default class Hologram {
   static #shouldLoadMountData = true;
   static #shouldReplaceHistoryState = true;
 
-  // Made public to make tests easier
+  // TODO: make private (tested implicitely in feature tests)
   // Deps: [:maps.get/2, :maps.put/3]
   static executeAction(action) {
     const startTime = performance.now();
