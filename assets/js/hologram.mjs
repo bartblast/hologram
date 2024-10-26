@@ -58,10 +58,11 @@ export default class Hologram {
   };
 
   static #isInitiated = false;
-  static #mountData = null;
   static #pageModule = null;
   static #pageParams = null;
   static #registeredPageModules = new Set();
+  static #shouldLoadMountData = true;
+  static #shouldReplaceHistoryState = true;
 
   // Made public to make tests easier
   // Deps: [:maps.get/2, :maps.put/3]
@@ -286,21 +287,26 @@ export default class Hologram {
   }
 
   // Made public to make tests easier
-  static loadPage(pagePath, html) {
+  static loadPage(pagePath, html, isNewPage = true) {
     window.requestAnimationFrame(() => {
       Hologram.#patchPage(html);
       window.scrollTo(0, 0);
-      history.pushState(null, null, pagePath);
+
+      if (isNewPage) {
+        history.pushState(null, null, pagePath);
+      }
     });
   }
 
   // Made public to make tests easier
-  static navigateToPage(toParam) {
-    const pagePath = Hologram.#buildPagePath(toParam);
+  static async navigateToPage(toParam, pagePath = null, isNewPage = true) {
+    if (pagePath === null) {
+      pagePath = $.#buildPagePath(toParam);
+    }
 
-    Client.fetchPage(
+    return Client.fetchPage(
       toParam,
-      (resp) => Hologram.loadPage(pagePath, resp),
+      (resp) => Hologram.loadPage(pagePath, resp, isNewPage),
       (_resp) => {
         throw new HologramRuntimeError(
           "Failed to navigate to page: " + pagePath,
@@ -509,7 +515,7 @@ export default class Hologram {
     );
   }
 
-  static #handlePopstateEvent(event) {
+  static async #handlePopstateEvent(event) {
     const serializedPageSnapshot = sessionStorage.getItem(event.state);
 
     const {componentRegistryEntries, pageModule, pageParams} =
@@ -519,7 +525,18 @@ export default class Hologram {
     Hologram.#pageModule = pageModule;
     Hologram.#pageParams = pageParams;
 
-    Hologram.render();
+    if ($.#isPageModuleRegistered(pageModule)) {
+      return $.render();
+    }
+
+    $.#shouldLoadMountData = false;
+    $.#shouldReplaceHistoryState = false;
+
+    const toParam = Type.tuple([pageModule, pageParams]);
+    await $.navigateToPage(toParam, window.location.pathname, false);
+
+    $.#shouldLoadMountData = true;
+    $.#shouldReplaceHistoryState = true;
   }
 
   // Executed only once, on the initial page load.
@@ -551,6 +568,10 @@ export default class Hologram {
     Hologram.#isInitiated = true;
   }
 
+  static #isPageModuleRegistered(pageModule) {
+    return $.#registeredPageModules.has(pageModule.value);
+  }
+
   static #isPrefetchPageTimedOut(mapKey) {
     return (
       Date.now() - Hologram.prefetchedPages.get(mapKey).timestamp >
@@ -561,11 +582,10 @@ export default class Hologram {
   static #loadMountData() {
     const mountData = globalThis.hologram.pageMountData(Hologram.#deps);
 
-    Hologram.#mountData = mountData;
     Hologram.#pageModule = mountData.pageModule;
     Hologram.#pageParams = mountData.pageParams;
 
-    $.#registerPageModule(mountData.pageModule);
+    ComponentRegistry.hydrate(mountData.componentRegistry);
   }
 
   static #maybeInitAssetPathRegistry() {
@@ -577,9 +597,11 @@ export default class Hologram {
   static #mountPage() {
     globalThis.hologram.pageReachableFunctionDefs(Hologram.#deps);
 
-    Hologram.#loadMountData();
+    if ($.#shouldLoadMountData) {
+      Hologram.#loadMountData();
+    }
 
-    ComponentRegistry.hydrate(Hologram.#mountData.componentRegistry);
+    $.#registerPageModule($.#pageModule);
 
     Hologram.#maybeInitAssetPathRegistry();
 
@@ -587,7 +609,9 @@ export default class Hologram {
 
     Hologram.render();
 
-    Hologram.#replaceHistoryState();
+    if ($.#shouldReplaceHistoryState) {
+      Hologram.#replaceHistoryState();
+    }
   }
 
   static #onReady(callback) {

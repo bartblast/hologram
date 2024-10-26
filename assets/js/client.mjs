@@ -67,7 +67,7 @@ export default class Client {
   }
 
   static fetchPage(toParam, successCallback, failureCallback) {
-    Utils.runAsyncTask(() => {
+    return Utils.runAsyncTask(() => {
       Client.#channel
         .push("page", toParam, Config.fetchPageTimeoutMs)
         .receive("ok", successCallback)
