@@ -1,6 +1,8 @@
 defmodule Hologram.UI.Runtime do
   use Hologram.Component
+
   alias Hologram.Assets.ManifestCache, as: AssetManifestCache
+  alias Hologram.Router.Helpers, as: RouterHelpers
 
   prop :initial_page?, :boolean, from_context: {Hologram.Runtime, :initial_page?}
   prop :page_digest, :string, from_context: {Hologram.Runtime, :page_digest}
@@ -37,7 +39,7 @@ defmodule Hologram.UI.Runtime do
     {/if}
 
     {%if !@page_mounted?}
-      <script async src="/hologram/page-{@page_digest}.js"></script>
+      <script async src={RouterHelpers.page_bundle_asset_path(@page_digest)}></script>
     {/if}
     """
   end
