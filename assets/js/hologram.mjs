@@ -157,7 +157,7 @@ export default class Hologram {
     }
 
     if (!Type.isNil(nextPage)) {
-      Hologram.navigateToPage(nextPage);
+      $.#navigateToPage(nextPage);
     }
   }
 
@@ -296,23 +296,6 @@ export default class Hologram {
         history.pushState(null, null, pagePath);
       }
     });
-  }
-
-  // Made public to make tests easier
-  static async navigateToPage(toParam, pagePath = null, isNewPage = true) {
-    if (pagePath === null) {
-      pagePath = $.#buildPagePath(toParam);
-    }
-
-    return Client.fetchPage(
-      toParam,
-      (resp) => Hologram.loadPage(pagePath, resp, isNewPage),
-      (_resp) => {
-        throw new HologramRuntimeError(
-          "Failed to navigate to page: " + pagePath,
-        );
-      },
-    );
   }
 
   // Made public to make tests easier
@@ -533,7 +516,7 @@ export default class Hologram {
     $.#shouldReplaceHistoryState = false;
 
     const toParam = Type.tuple([pageModule, pageParams]);
-    await $.navigateToPage(toParam, window.location.pathname, false);
+    await $.#navigateToPage(toParam, window.location.pathname, false);
 
     $.#shouldLoadMountData = true;
     $.#shouldReplaceHistoryState = true;
@@ -612,6 +595,23 @@ export default class Hologram {
     if ($.#shouldReplaceHistoryState) {
       Hologram.#replaceHistoryState();
     }
+  }
+
+  // Tested implicitely in feature tests
+  static async #navigateToPage(toParam, pagePath = null, isNewPage = true) {
+    if (pagePath === null) {
+      pagePath = $.#buildPagePath(toParam);
+    }
+
+    return Client.fetchPage(
+      toParam,
+      (resp) => Hologram.loadPage(pagePath, resp, isNewPage),
+      (_resp) => {
+        throw new HologramRuntimeError(
+          "Failed to navigate to page: " + pagePath,
+        );
+      },
+    );
   }
 
   static #onReady(callback) {

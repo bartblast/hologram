@@ -1044,50 +1044,6 @@ describe("Hologram", () => {
     });
   });
 
-  it("navigateToPage()", () => {
-    const successCallbacks = [];
-    const errorCallbacks = [];
-
-    const clientFetchPageSub = sinon
-      .stub(Client, "fetchPage")
-      .callsFake((_toParam, successCallback, errorCallback) => {
-        successCallbacks.push(successCallback);
-        errorCallbacks.push(errorCallback);
-      });
-
-    const loadPageStub = sinon.stub(Hologram, "loadPage").callsFake(() => null);
-
-    Hologram.navigateToPage(module7);
-
-    sinon.assert.calledOnceWithExactly(
-      clientFetchPageSub,
-      module7,
-      successCallbacks[0],
-      errorCallbacks[0],
-    );
-
-    assert.equal(successCallbacks.length, 1);
-
-    successCallbacks[0]("dummy_resp");
-
-    sinon.assert.calledOnceWithExactly(
-      loadPageStub,
-      "/hologram-test-fixtures-module7",
-      "dummy_resp",
-    );
-
-    assert.equal(errorCallbacks.length, 1);
-
-    assert.throw(
-      () => errorCallbacks[0]("dummy_resp"),
-      HologramRuntimeError,
-      "Failed to navigate to page: /hologram-test-fixtures-module7",
-    );
-
-    Client.fetchPage.restore();
-    Hologram.loadPage.restore();
-  });
-
   describe("handlePrefetchPageError()", () => {
     it("no prefetchedPages map entry", () => {
       Hologram.prefetchedPages = new Map();
