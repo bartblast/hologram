@@ -184,6 +184,17 @@ defmodule Hologram.Socket.ChannelTest do
     end
   end
 
+  test "handle_in/3, page_bundle_path" do
+    stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
+    setup_page_digest_registry(PageDigestRegistryStub)
+    ETS.put(PageDigestRegistryStub.ets_table_name(), Module2, "12345678901234567890123456789012")
+
+    payload = [1, "__atom__:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module2"]
+
+    assert handle_in("page_bundle_path", payload, :dummy_socket) ==
+             {:reply, {:ok, "/hologram/page-12345678901234567890123456789012.js"}, :dummy_socket}
+  end
+
   describe "join/3" do
     test "valid topic name" do
       assert join("hologram", :dummy_payload, :dummy_socket) == {:ok, :dummy_socket}
