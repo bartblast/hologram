@@ -39,7 +39,7 @@ defmodule Hologram.UI.Runtime do
     {/if}
 
     {%if !@page_mounted?}
-      <script async src={RouterHelpers.page_bundle_asset_path(@page_digest)}></script>
+      <script async src={RouterHelpers.page_bundle_path(@page_digest)}></script>
     {/if}
     """
   end

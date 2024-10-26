@@ -20,8 +20,8 @@ defmodule Hologram.Router.Helpers do
   @doc """
   Returns the relative URL of a page's JavaScript bundle using the page's digest.
   """
-  @spec page_bundle_asset_path(String.t()) :: String.t()
-  def page_bundle_asset_path(page_digest) do
+  @spec page_bundle_path(String.t()) :: String.t()
+  def page_bundle_path(page_digest) do
     "/hologram/page-#{page_digest}.js"
   end
 
