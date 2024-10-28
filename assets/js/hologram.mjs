@@ -61,6 +61,7 @@ export default class Hologram {
   static #pageModule = null;
   static #pageParams = null;
   static #registeredPageModules = new Set();
+  static #scrollPosition = null;
   static #shouldLoadMountData = true;
   static #shouldReplaceHistoryState = true;
 
@@ -515,11 +516,24 @@ export default class Hologram {
     $.#shouldLoadMountData = false;
     $.#shouldReplaceHistoryState = false;
 
-    const toParam = Type.tuple([pageModule, pageParams]);
-    await $.#navigateToPage(toParam, window.location.pathname, false);
+    await Client.fetchPageBundlePath(
+      pageModule,
+      (resp) => {
+        const script = document.createElement("script");
+        script.src = resp;
+        script.fetchpriority = "high";
+        document.head.appendChild(script);
 
-    $.#shouldLoadMountData = true;
-    $.#shouldReplaceHistoryState = true;
+        // TODO: use scroll position from page snapshot
+        $.#scrollPosition = [0, 0];
+      },
+      (_resp) => {
+        throw new HologramRuntimeError(
+          "Failed to fetch page bundle path for: " +
+            Interpreter.inspect(pageModule),
+        );
+      },
+    );
   }
 
   // Executed only once, on the initial page load.
@@ -582,6 +596,8 @@ export default class Hologram {
 
     if ($.#shouldLoadMountData) {
       Hologram.#loadMountData();
+    } else {
+      $.#shouldLoadMountData = true;
     }
 
     $.#registerPageModule($.#pageModule);
@@ -590,11 +606,20 @@ export default class Hologram {
 
     Hologram.prefetchedPages.clear();
 
-    Hologram.render();
+    window.requestAnimationFrame(() => {
+      $.render();
 
-    if ($.#shouldReplaceHistoryState) {
-      Hologram.#replaceHistoryState();
-    }
+      if ($.#scrollPosition) {
+        window.scrollTo($.#scrollPosition[0], $.#scrollPosition[1]);
+        $.#scrollPosition = null;
+      }
+
+      if ($.#shouldReplaceHistoryState) {
+        $.#replaceHistoryState();
+      } else {
+        $.#shouldReplaceHistoryState = true;
+      }
+    });
   }
 
   // Tested implicitely in feature tests
