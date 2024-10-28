@@ -76,6 +76,16 @@ export default class Client {
     });
   }
 
+  static fetchPageBundlePath(pageModule, successCallback, failureCallback) {
+    return Utils.runAsyncTask(() => {
+      Client.#channel
+        .push("page_bundle_path", pageModule, Config.clientFetchTimeoutMs)
+        .receive("ok", successCallback)
+        .receive("error", failureCallback)
+        .receive("timeout", failureCallback);
+    });
+  }
+
   static isConnected() {
     return Client.socket === null ? false : Client.socket.isConnected();
   }
