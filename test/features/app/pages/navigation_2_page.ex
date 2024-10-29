@@ -15,14 +15,19 @@ defmodule HologramFeatureTests.Navigation2Page do
   def template do
     ~H"""
     <h1>Page 2 title</h1>
-    <button $click="put_result">Put page 2 result</button>
+    <button $click="put_result_a">Put page 2 result A</button>
+    <button $click="put_result_b">Put page 2 result B</button>
     <p>
       Page result: <strong id="page_result"><code>{inspect(@result)}</code></strong>
     </p>
     """
   end
 
-  def action(:put_result, _params, component) do
-    put_state(component, :result, "Page 2 result")
+  def action(:put_result_a, _params, component) do
+    put_state(component, :result, "Page 2 result A")
+  end
+
+  def action(:put_result_b, _params, component) do
+    put_state(component, :result, "Page 2 result B")
   end
 end
