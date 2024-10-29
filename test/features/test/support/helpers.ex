@@ -84,7 +84,9 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   def reload(session) do
-    Browser.execute_script(session, "document.location.reload();")
+    session
+    |> Browser.execute_script("document.location.reload();")
+    |> wait_for_server_connection()
   end
 
   def visit(session, page_module, params \\ []) do
