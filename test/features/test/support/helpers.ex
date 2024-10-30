@@ -23,11 +23,11 @@ defmodule HologramFeatureTests.Helpers do
 
   def assert_page(session, page_module, params \\ []) do
     path = Router.Helpers.page_path(page_module, params)
-    wait_for_path(session, path)
-
-    assert Browser.current_path(session) == path
 
     session
+    |> wait_for_path(path)
+    |> wait_for_page_mounting(page_module)
+    |> wait_for_server_connection()
   end
 
   def assert_text(parent, text) when is_binary(text) do
@@ -84,9 +84,7 @@ defmodule HologramFeatureTests.Helpers do
   end
 
   def reload(session) do
-    session
-    |> Browser.execute_script("document.location.reload();")
-    |> wait_for_server_connection()
+    Browser.execute_script(session, "document.location.reload();")
   end
 
   def visit(session, page_module, params \\ []) do
@@ -94,6 +92,7 @@ defmodule HologramFeatureTests.Helpers do
 
     session
     |> Browser.visit(path)
+    |> wait_for_page_mounting(page_module)
     |> wait_for_server_connection()
   end
 
@@ -106,9 +105,24 @@ defmodule HologramFeatureTests.Helpers do
       :timer.sleep(100)
       wait_for_path(session, path, start_time)
     end
+
+    session
   end
 
-  def wait_for_server_connection(session, start_time \\ DateTime.utc_now()) do
+  defp wait_for_page_mounting(session, page_module, start_time \\ DateTime.utc_now()) do
+    callback = fn mounted_page ->
+      if mounted_page != inspect(page_module) && !timed_out?(start_time) do
+        :timer.sleep(100)
+        wait_for_page_mounting(session, page_module, start_time)
+      end
+    end
+
+    script = "return window?.hologram?.['mountedPage'];"
+
+    Browser.execute_script(session, script, [], callback)
+  end
+
+  defp wait_for_server_connection(session, start_time \\ DateTime.utc_now()) do
     callback = fn connected? ->
       if !connected? && !timed_out?(start_time) do
         :timer.sleep(100)
