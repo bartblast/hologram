@@ -7,6 +7,7 @@ import CommandQueue from "./command_queue.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Config from "./config.mjs";
 import Deserializer from "./deserializer.mjs";
+import GlobalRegistry from "./global_registry.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
@@ -619,6 +620,8 @@ export default class Hologram {
       } else {
         $.#shouldReplaceHistoryState = true;
       }
+
+      GlobalRegistry.set("mountedPage", Interpreter.inspect($.#pageModule));
     });
   }
 
