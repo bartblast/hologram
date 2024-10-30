@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.Helpers do
-  import ExUnit.Assertions, only: [assert: 1, assert_raise: 3]
+  import ExUnit.Assertions, only: [assert_raise: 3]
   import Hologram.Commons.Guards, only: [is_regex: 1]
 
   alias Hologram.Router
