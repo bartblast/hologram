@@ -824,31 +824,52 @@ describe("Serializer", () => {
       });
 
       describe("function", () => {
-        it("top-level", () => {
+        describe("longhand syntax", () => {
           // prettier-ignore
-          const term = (param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring('a"bc'); return Type.list([integer, binary, param2]); };
+          const fun = function (param1, param2) { const integer = Type.integer(param1); const binary = Type.bitstring('a"bc'); return Type.list([integer, binary, param2]); };
 
-          const expected = `[1,"__function__:(param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring('a\\"bc'); return Type.list([integer, binary, param2]); }"]`;
+          it("top-level", () => {
+            const expected = `[1,"__function__:function (param1, param2) { const integer = Type.integer(param1); const binary = Type.bitstring('a\\"bc'); return Type.list([integer, binary, param2]); }"]`;
 
-          assert.equal(serialize(term), expected);
+            assert.equal(serialize(fun), expected);
+          });
+
+          it("nested", () => {
+            const term = {a: fun, b: 2};
+            const expected = `[1,{"a":"__function__:function (param1, param2) { const integer = Type.integer(param1); const binary = Type.bitstring('a\\"bc'); return Type.list([integer, binary, param2]); }","b":2}]`;
+
+            assert.equal(serialize(term), expected);
+          });
+
+          it("not versioned", () => {
+            const expected = `"__function__:function (param1, param2) { const integer = Type.integer(param1); const binary = Type.bitstring('a\\"bc'); return Type.list([integer, binary, param2]); }"`;
+
+            assert.equal(serialize(fun, true, false), expected);
+          });
         });
 
-        it("nested", () => {
+        describe("shorthand syntax", () => {
           // prettier-ignore
-          const term = {a: (param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring('a"bc'); return Type.list([integer, binary, param2]); }, b: 2};
+          const fun = (param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring('a"bc'); return Type.list([integer, binary, param2]); };
 
-          const expected = `[1,{"a":"__function__:(param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring('a\\"bc'); return Type.list([integer, binary, param2]); }","b":2}]`;
+          it("top-level", () => {
+            const expected = `[1,"__function__:(param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring('a\\"bc'); return Type.list([integer, binary, param2]); }"]`;
 
-          assert.equal(serialize(term), expected);
-        });
+            assert.equal(serialize(fun), expected);
+          });
 
-        it("not versioned", () => {
-          // prettier-ignore
-          const term = (param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring('a"bc'); return Type.list([integer, binary, param2]); };
+          it("nested", () => {
+            const term = {a: fun, b: 2};
+            const expected = `[1,{"a":"__function__:(param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring('a\\"bc'); return Type.list([integer, binary, param2]); }","b":2}]`;
 
-          const expected = `"__function__:(param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring('a\\"bc'); return Type.list([integer, binary, param2]); }"`;
+            assert.equal(serialize(term), expected);
+          });
 
-          assert.equal(serialize(term, true, false), expected);
+          it("not versioned", () => {
+            const expected = `"__function__:(param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring('a\\"bc'); return Type.list([integer, binary, param2]); }"`;
+
+            assert.equal(serialize(fun, true, false), expected);
+          });
         });
       });
 
