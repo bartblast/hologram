@@ -49,7 +49,7 @@ describe("Hologram", () => {
   });
 
   describe("executeLoadPrefetchedPageAction()", () => {
-    let eventTargetNode, loadPageStub;
+    let eventTargetNode, loadNewPageStub;
 
     const html = "my_html";
 
@@ -62,14 +62,14 @@ describe("Hologram", () => {
     const pagePath = "/hologram-test-fixtures-module7";
 
     beforeEach(() => {
-      loadPageStub = sinon
-        .stub(Hologram, "loadPage")
+      loadNewPageStub = sinon
+        .stub(Hologram, "loadNewPage")
         .callsFake((_pagePath, _html) => null);
 
       eventTargetNode = {id: "dummy_event_target_node"};
     });
 
-    afterEach(() => Hologram.loadPage.restore());
+    afterEach(() => Hologram.loadNewPage.restore());
 
     it("adds a Hologram ID to an event target DOM node that doesn't have one", () => {
       Hologram.executeLoadPrefetchedPageAction(
@@ -126,7 +126,7 @@ describe("Hologram", () => {
         timestamp: mapValue.timestamp,
       });
 
-      sinon.assert.notCalled(loadPageStub);
+      sinon.assert.notCalled(loadNewPageStub);
     });
 
     it("loads page if page HTML has been already fetched", () => {
@@ -154,7 +154,7 @@ describe("Hologram", () => {
       assert.instanceOf(Hologram.prefetchedPages, Map);
       assert.equal(Hologram.prefetchedPages.size, 0);
 
-      sinon.assert.calledOnceWithExactly(loadPageStub, pagePath, html);
+      sinon.assert.calledOnceWithExactly(loadNewPageStub, pagePath, html);
     });
 
     it("is a no-op if there is no prefeteched pages map entry for the given map key", () => {
@@ -169,7 +169,7 @@ describe("Hologram", () => {
       assert.instanceOf(Hologram.prefetchedPages, Map);
       assert.equal(Hologram.prefetchedPages.size, 0);
 
-      sinon.assert.notCalled(loadPageStub);
+      sinon.assert.notCalled(loadNewPageStub);
     });
   });
 
@@ -609,7 +609,7 @@ describe("Hologram", () => {
     });
   });
 
-  describe("loadPage()", () => {
+  describe("loadNewPage()", () => {
     let historyPushStateStub, windowScrollToStub;
 
     const pagePath = "/my-page-path";
@@ -644,7 +644,7 @@ describe("Hologram", () => {
     });
 
     it("patches the page", () => {
-      Hologram.loadPage(pagePath, html);
+      Hologram.loadNewPage(pagePath, html);
 
       assert.deepStrictEqual(
         vnodeToHtml(Hologram.virtualDocument),
@@ -653,12 +653,12 @@ describe("Hologram", () => {
     });
 
     it("sets pageScriptLoaded flag to false", () => {
-      Hologram.loadPage(pagePath, html);
+      Hologram.loadNewPage(pagePath, html);
       assert.isFalse(globalThis.hologram.pageScriptLoaded);
     });
 
     it("adds an entry to the browser's session history stack", () => {
-      Hologram.loadPage(pagePath, html);
+      Hologram.loadNewPage(pagePath, html);
 
       sinon.assert.calledOnceWithExactly(
         historyPushStateStub,
@@ -669,7 +669,7 @@ describe("Hologram", () => {
     });
 
     it("scrolls to the beginning of the page", () => {
-      Hologram.loadPage(pagePath, html);
+      Hologram.loadNewPage(pagePath, html);
       sinon.assert.calledOnceWithExactly(windowScrollToStub, 0, 0);
     });
   });
@@ -705,15 +705,15 @@ describe("Hologram", () => {
   });
 
   describe("handlePrefetchPageSuccess()", () => {
-    let loadPageStub;
+    let loadNewPageStub;
 
     beforeEach(() => {
-      loadPageStub = sinon
-        .stub(Hologram, "loadPage")
+      loadNewPageStub = sinon
+        .stub(Hologram, "loadNewPage")
         .callsFake((_pagePath, _html) => null);
     });
 
-    afterEach(() => Hologram.loadPage.restore());
+    afterEach(() => Hologram.loadNewPage.restore());
 
     it("no prefetchedPages map entry", () => {
       Hologram.prefetchedPages = new Map();
@@ -724,7 +724,7 @@ describe("Hologram", () => {
       assert.instanceOf(Hologram.prefetchedPages, Map);
       assert.equal(Hologram.prefetchedPages.size, 0);
 
-      sinon.assert.notCalled(loadPageStub);
+      sinon.assert.notCalled(loadNewPageStub);
     });
 
     it("navigate has been confirmed", () => {
@@ -747,7 +747,7 @@ describe("Hologram", () => {
       assert.equal(Hologram.prefetchedPages.size, 0);
 
       sinon.assert.calledOnceWithExactly(
-        loadPageStub,
+        loadNewPageStub,
         "/my-page-path",
         "my_html",
       );
@@ -785,7 +785,7 @@ describe("Hologram", () => {
         timestamp: timestamp,
       });
 
-      sinon.assert.notCalled(loadPageStub);
+      sinon.assert.notCalled(loadNewPageStub);
     });
   });
 });

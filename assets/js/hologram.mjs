@@ -192,7 +192,7 @@ export default class Hologram {
       mapValue.isNavigateConfirmed = true;
     } else {
       Hologram.prefetchedPages.delete(mapKey);
-      Hologram.loadPage(pagePath, mapValue.html);
+      Hologram.loadNewPage(pagePath, mapValue.html);
     }
   }
 
@@ -248,7 +248,7 @@ export default class Hologram {
 
     if (mapValue.isNavigateConfirmed) {
       Hologram.prefetchedPages.delete(mapKey);
-      Hologram.loadPage(mapValue.pagePath, html);
+      Hologram.loadNewPage(mapValue.pagePath, html);
     } else {
       mapValue.html = html;
     }
@@ -289,14 +289,11 @@ export default class Hologram {
   }
 
   // Made public to make tests easier
-  static loadPage(pagePath, html, isNewPage = true) {
+  static loadNewPage(pagePath, html) {
     window.requestAnimationFrame(() => {
       Hologram.#patchPage(html);
       window.scrollTo(0, 0);
-
-      if (isNewPage) {
-        history.pushState(null, null, pagePath);
-      }
+      history.pushState(null, null, pagePath);
     });
   }
 
@@ -503,7 +500,7 @@ export default class Hologram {
   static async #handlePopstateEvent(event) {
     const serializedPageSnapshot = sessionStorage.getItem(event.state);
 
-    const {componentRegistryEntries, pageModule, pageParams} =
+    const {componentRegistryEntries, pageModule, pageParams, scrollPosition} =
       Deserializer.deserialize(serializedPageSnapshot);
 
     ComponentRegistry.hydrate(componentRegistryEntries);
@@ -511,7 +508,8 @@ export default class Hologram {
     Hologram.#pageParams = pageParams;
 
     if ($.#isPageModuleRegistered(pageModule)) {
-      return $.render();
+      $.#scrollPosition = scrollPosition;
+      return $.#mountPage(true);
     }
 
     $.#shouldLoadMountData = false;
@@ -525,8 +523,7 @@ export default class Hologram {
         script.fetchpriority = "high";
         document.head.appendChild(script);
 
-        // TODO: use scroll position from page snapshot
-        $.#scrollPosition = [0, 0];
+        $.#scrollPosition = scrollPosition;
       },
       (_resp) => {
         throw new HologramRuntimeError(
@@ -592,16 +589,17 @@ export default class Hologram {
     }
   }
 
-  static #mountPage() {
-    globalThis.hologram.pageReachableFunctionDefs(Hologram.#deps);
-
+  static #mountPage(isPageModuleRegistered = false) {
     if ($.#shouldLoadMountData) {
       Hologram.#loadMountData();
     } else {
       $.#shouldLoadMountData = true;
     }
 
-    $.#registerPageModule($.#pageModule);
+    if (!isPageModuleRegistered) {
+      globalThis.hologram.pageReachableFunctionDefs(Hologram.#deps);
+      $.#registerPageModule($.#pageModule);
+    }
 
     Hologram.#maybeInitAssetPathRegistry();
 
@@ -626,14 +624,14 @@ export default class Hologram {
   }
 
   // Tested implicitely in feature tests
-  static async #navigateToPage(toParam, pagePath = null, isNewPage = true) {
+  static async #navigateToPage(toParam, pagePath = null) {
     if (pagePath === null) {
       pagePath = $.#buildPagePath(toParam);
     }
 
     return Client.fetchPage(
       toParam,
-      (resp) => Hologram.loadPage(pagePath, resp, isNewPage),
+      (resp) => Hologram.loadNewPage(pagePath, resp),
       (_resp) => {
         throw new HologramRuntimeError(
           "Failed to navigate to page: " + pagePath,
@@ -705,6 +703,7 @@ export default class Hologram {
       componentRegistryEntries: ComponentRegistry.entries,
       pageModule: Hologram.#pageModule,
       pageParams: Hologram.#pageParams,
+      scrollPosition: [window.scrollX, window.scrollY],
     });
 
     const id = crypto.randomUUID();
