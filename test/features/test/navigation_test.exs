@@ -61,8 +61,8 @@ defmodule HologramFeatureTests.NavigationTest do
     |> visit(Page1)
     |> click(button("Put page 1 result A"))
     |> assert_text("Page 1 result A")
-    |> visit("https://www.google.com/")
-    |> assert_text("Google")
+    |> visit("https://www.wikipedia.org/")
+    |> assert_text("Wikipedia")
     |> go_back()
     |> assert_page(Page1)
     |> assert_text("Page 1 title")
@@ -107,13 +107,13 @@ defmodule HologramFeatureTests.NavigationTest do
 
   feature "go forward to Hologram page (from non-Hologram page)", %{session: session} do
     session
-    |> visit("https://www.google.com/")
-    |> assert_text("Google")
+    |> visit("https://www.wikipedia.org/")
+    |> assert_text("Wikipedia")
     |> visit(Page1)
     |> click(button("Put page 1 result A"))
     |> assert_text("Page 1 result A")
     |> go_back()
-    |> assert_text("Google")
+    |> assert_text("Wikipedia")
     |> go_forward()
     |> assert_page(Page1)
     |> assert_text("Page 1 title")
