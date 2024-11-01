@@ -507,13 +507,13 @@ export default class Hologram {
     Hologram.#pageModule = pageModule;
     Hologram.#pageParams = pageParams;
 
-    if ($.#isPageModuleRegistered(pageModule)) {
-      $.#scrollPosition = scrollPosition;
-      return $.#mountPage(true);
-    }
-
+    $.#scrollPosition = scrollPosition;
     $.#shouldLoadMountData = false;
     $.#shouldReplaceHistoryState = false;
+
+    if ($.#isPageModuleRegistered(pageModule)) {
+      return $.#mountPage(true);
+    }
 
     await Client.fetchPageBundlePath(
       pageModule,
@@ -522,8 +522,6 @@ export default class Hologram {
         script.src = resp;
         script.fetchpriority = "high";
         document.head.appendChild(script);
-
-        $.#scrollPosition = scrollPosition;
       },
       (_resp) => {
         throw new HologramRuntimeError(
