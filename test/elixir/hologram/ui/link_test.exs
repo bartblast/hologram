@@ -5,7 +5,7 @@ defmodule Hologram.UI.LinkTest do
   alias Hologram.Test.Fixtures.UI.Link.Module2
   alias Hologram.UI.Link
 
-  test "with text anchor" do
+  test "with text anchor, no props" do
     assert render_markup(~H"<Link to={Module1}>my anchor text</Link>") ==
              ~s'<a href="/hologram-test-fixtures-ui-link-module1">my anchor text</a>'
   end
@@ -20,15 +20,13 @@ defmodule Hologram.UI.LinkTest do
              ~s'<a href="/hologram-test-fixtures-ui-link-module2/123/987">my anchor text</a>'
   end
 
-  describe "class prop" do
-    test "without class prop" do
-      assert render_markup(~H"<Link to={Module1}>my anchor text</Link>") ==
-               ~s'<a href="/hologram-test-fixtures-ui-link-module1">my anchor text</a>'
-    end
+  test "with class prop" do
+    assert render_markup(~H'<Link to={Module1} class="my_class">my anchor text</Link>') ==
+             ~s'<a href="/hologram-test-fixtures-ui-link-module1" class="my_class">my anchor text</a>'
+  end
 
-    test "with class prop" do
-      assert render_markup(~H'<Link to={Module1} class="my_class">my anchor text</Link>') ==
-               ~s'<a href="/hologram-test-fixtures-ui-link-module1" class="my_class">my anchor text</a>'
-    end
+  test "with style prop" do
+    assert render_markup(~H'<Link to={Module1} style="my_style">my anchor text</Link>') ==
+             ~s'<a href="/hologram-test-fixtures-ui-link-module1" style="my_style">my anchor text</a>'
   end
 end
