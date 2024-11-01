@@ -624,10 +624,8 @@ export default class Hologram {
   }
 
   // Tested implicitely in feature tests
-  static async #navigateToPage(toParam, pagePath = null) {
-    if (pagePath === null) {
-      pagePath = $.#buildPagePath(toParam);
-    }
+  static async #navigateToPage(toParam) {
+    const pagePath = $.#buildPagePath(toParam);
 
     return Client.fetchPage(
       toParam,
