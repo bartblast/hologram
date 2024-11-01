@@ -56,6 +56,21 @@ defmodule HologramFeatureTests.NavigationTest do
     |> assert_text("Page 1 result B")
   end
 
+  feature "go back to Hologram page (from non-Hologram page)", %{session: session} do
+    session
+    |> visit(Page1)
+    |> click(button("Put page 1 result A"))
+    |> assert_text("Page 1 result A")
+    |> visit("https://www.google.com/")
+    |> assert_text("Google")
+    |> go_back()
+    |> assert_page(Page1)
+    |> assert_text("Page 1 title")
+    |> assert_text("Page 1 result A")
+    |> click(button("Put page 1 result B"))
+    |> assert_text("Page 1 result B")
+  end
+
   feature "go forward", %{session: session} do
     session
     |> visit(Page1)
@@ -88,6 +103,23 @@ defmodule HologramFeatureTests.NavigationTest do
     |> assert_text("Page 2 result A")
     |> click(button("Put page 2 result B"))
     |> assert_text("Page 2 result B")
+  end
+
+  feature "go forward to Hologram page (from non-Hologram page)", %{session: session} do
+    session
+    |> visit("https://www.google.com/")
+    |> assert_text("Google")
+    |> visit(Page1)
+    |> click(button("Put page 1 result A"))
+    |> assert_text("Page 1 result A")
+    |> go_back()
+    |> assert_text("Google")
+    |> go_forward()
+    |> assert_page(Page1)
+    |> assert_text("Page 1 title")
+    |> assert_text("Page 1 result A")
+    |> click(button("Put page 1 result B"))
+    |> assert_text("Page 1 result B")
   end
 
   feature "put page in action", %{session: session} do

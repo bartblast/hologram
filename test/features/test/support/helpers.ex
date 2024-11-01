@@ -87,6 +87,10 @@ defmodule HologramFeatureTests.Helpers do
     Browser.execute_script(session, "document.location.reload();")
   end
 
+  def visit(session, path_or_url) when is_binary(path_or_url) do
+    Browser.visit(session, path_or_url)
+  end
+
   def visit(session, page_module, params \\ []) do
     path = Router.Helpers.page_path(page_module, params)
 
