@@ -55,13 +55,13 @@ export default class ComponentRegistry {
     return Erlang_Maps["get/3"](cid, ComponentRegistry.entries, null);
   }
 
-  static hydrate(entries) {
-    ComponentRegistry.entries = entries;
-  }
-
   // Deps: [:maps.is_key/2]
   static isCidRegistered(cid) {
     return Type.isTrue(Erlang_Maps["is_key/2"](cid, ComponentRegistry.entries));
+  }
+
+  static populate(entries) {
+    ComponentRegistry.entries = entries;
   }
 
   // Optimized (mutates entries/struct field)

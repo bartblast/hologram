@@ -20,7 +20,7 @@ const assetManifest = {
 
 describe("Elixir_Hologram_Router_Helpers", () => {
   beforeEach(() => {
-    AssetPathRegistry.hydrate(assetManifest);
+    AssetPathRegistry.populate(assetManifest);
   });
 
   describe("asset_path/1", () => {

@@ -5,8 +5,17 @@ import Type from "./type.mjs";
 export default class AssetPathRegistry {
   static entries = null;
 
+  // Deps: [:maps.get/3]
+  static lookup(staticPath) {
+    return Erlang_Maps["get/3"](
+      staticPath,
+      AssetPathRegistry.entries,
+      Type.nil(),
+    );
+  }
+
   // Deps: [:maps.put/3]
-  static hydrate(assetManifest) {
+  static populate(assetManifest) {
     AssetPathRegistry.entries = Type.map();
 
     for (const [staticPath, assetPath] of Object.entries(assetManifest)) {
@@ -19,14 +28,5 @@ export default class AssetPathRegistry {
         AssetPathRegistry.entries,
       );
     }
-  }
-
-  // Deps: [:maps.get/3]
-  static lookup(staticPath) {
-    return Erlang_Maps["get/3"](
-      staticPath,
-      AssetPathRegistry.entries,
-      Type.nil(),
-    );
   }
 }

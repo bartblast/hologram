@@ -18,19 +18,7 @@ const assetManifest = {
 
 describe("AssetPathRegistry", () => {
   beforeEach(() => {
-    AssetPathRegistry.hydrate(assetManifest);
-  });
-
-  it("hydrate()", () => {
-    AssetPathRegistry.hydrate(assetManifest);
-
-    const expected = Type.map([
-      [Type.bitstring("static-path-1"), Type.bitstring("/asset-path-1")],
-      [Type.bitstring("static-path-2"), Type.bitstring("/asset-path-2")],
-      [Type.bitstring("static-path-3"), Type.bitstring("/asset-path-3")],
-    ]);
-
-    assert.deepStrictEqual(AssetPathRegistry.entries, expected);
+    AssetPathRegistry.populate(assetManifest);
   });
 
   describe("lookup", () => {
@@ -43,5 +31,17 @@ describe("AssetPathRegistry", () => {
       const result = AssetPathRegistry.lookup(Type.bitstring("static-path-4"));
       assert.deepStrictEqual(result, Type.nil());
     });
+  });
+
+  it("populate()", () => {
+    AssetPathRegistry.populate(assetManifest);
+
+    const expected = Type.map([
+      [Type.bitstring("static-path-1"), Type.bitstring("/asset-path-1")],
+      [Type.bitstring("static-path-2"), Type.bitstring("/asset-path-2")],
+      [Type.bitstring("static-path-3"), Type.bitstring("/asset-path-3")],
+    ]);
+
+    assert.deepStrictEqual(AssetPathRegistry.entries, expected);
   });
 });

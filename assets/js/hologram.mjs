@@ -503,7 +503,7 @@ export default class Hologram {
     const {componentRegistryEntries, pageModule, pageParams, scrollPosition} =
       Deserializer.deserialize(serializedPageSnapshot);
 
-    ComponentRegistry.hydrate(componentRegistryEntries);
+    ComponentRegistry.populate(componentRegistryEntries);
     Hologram.#pageModule = pageModule;
     Hologram.#pageParams = pageParams;
 
@@ -578,12 +578,12 @@ export default class Hologram {
     Hologram.#pageModule = mountData.pageModule;
     Hologram.#pageParams = mountData.pageParams;
 
-    ComponentRegistry.hydrate(mountData.componentRegistry);
+    ComponentRegistry.populate(mountData.componentRegistry);
   }
 
   static #maybeInitAssetPathRegistry() {
     if (AssetPathRegistry.entries === null) {
-      AssetPathRegistry.hydrate(globalThis.hologram.assetManifest);
+      AssetPathRegistry.populate(globalThis.hologram.assetManifest);
     }
   }
 

@@ -162,11 +162,6 @@ describe("ComponentRegistry", () => {
     });
   });
 
-  it("hydrate()", () => {
-    ComponentRegistry.hydrate("dummyentries");
-    assert.equal(ComponentRegistry.entries, "dummyentries");
-  });
-
   describe("isCidRegistered()", () => {
     it("is registered", () => {
       assert.isTrue(ComponentRegistry.isCidRegistered(cid2));
@@ -175,6 +170,11 @@ describe("ComponentRegistry", () => {
     it("is not registered", () => {
       assert.isFalse(ComponentRegistry.isCidRegistered(cid3));
     });
+  });
+
+  it("populate()", () => {
+    ComponentRegistry.populate("dummyentries");
+    assert.equal(ComponentRegistry.entries, "dummyentries");
   });
 
   it("putEntry()", () => {
