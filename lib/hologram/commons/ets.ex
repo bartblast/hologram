@@ -87,4 +87,17 @@ defmodule Hologram.Commons.ETS do
   def reset(table_name_or_ref) do
     :ets.delete_all_objects(table_name_or_ref)
   end
+
+  @doc """
+  Determines whether the given ETS table exists.
+  """
+  @spec table_exists?(tid()) :: boolean
+  def table_exists?(table_ref_or_name)
+      when is_atom(table_ref_or_name) or is_reference(table_ref_or_name) do
+    table_ref_or_name
+    |> :ets.info()
+    |> is_list()
+  rescue
+    ArgumentError -> false
+  end
 end

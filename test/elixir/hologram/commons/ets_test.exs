@@ -100,4 +100,29 @@ defmodule Hologram.Commons.ETSTest do
     assert reset(table_ref) == true
     assert get_all(table_ref) == %{}
   end
+
+  describe "table_exists?/1" do
+    test "exists, named" do
+      table_name = random_atom()
+      create_named_table(table_name)
+
+      assert table_exists?(table_name)
+    end
+
+    test "exists, unnamed" do
+      table_ref = create_unnamed_table()
+
+      assert table_exists?(table_ref)
+    end
+
+    test "doesn't exist, named" do
+      table_name = random_atom()
+
+      refute table_exists?(table_name)
+    end
+
+    test "doesn't exist, unnamed" do
+      refute table_exists?(make_ref())
+    end
+  end
 end
