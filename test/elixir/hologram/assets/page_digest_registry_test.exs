@@ -16,6 +16,12 @@ defmodule Hologram.Assets.PageDigestRegistryTest do
     stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
     setup_page_digest_registry_dump(PageDigestRegistryStub)
 
+    ets_table_name = PageDigestRegistryStub.ets_table_name()
+
+    if ets_table_exists?(ets_table_name) do
+      :ets.delete(ets_table_name)
+    end
+
     :ok
   end
 
@@ -23,6 +29,7 @@ defmodule Hologram.Assets.PageDigestRegistryTest do
     assert init(nil) == {:ok, nil}
 
     ets_table_name = PageDigestRegistryStub.ets_table_name()
+    IO.inspect(PageDigestRegistryStub.ets_table_name())
 
     assert ets_table_exists?(ets_table_name)
 
@@ -40,10 +47,13 @@ defmodule Hologram.Assets.PageDigestRegistryTest do
     end
 
     test "module entry exists" do
+      IO.inspect(PageDigestRegistryStub.ets_table_name())
       assert lookup(:module_b) == :module_b_digest
     end
 
     test "module entry doesn't exist" do
+      IO.inspect(PageDigestRegistryStub.ets_table_name())
+
       assert_raise KeyError, "key :module_d not found in the PLT", fn ->
         lookup(:module_d)
       end
@@ -52,6 +62,7 @@ defmodule Hologram.Assets.PageDigestRegistryTest do
 
   test "reload/0" do
     PageDigestRegistry.start_link([])
+    IO.inspect(PageDigestRegistryStub.ets_table_name())
 
     ets_table_name = PageDigestRegistryStub.ets_table_name()
     ETS.put(ets_table_name, :dummy_key, :dummy_value)
@@ -67,6 +78,7 @@ defmodule Hologram.Assets.PageDigestRegistryTest do
 
   test "start_link/1" do
     assert {:ok, pid} = PageDigestRegistry.start_link([])
+    IO.inspect(PageDigestRegistryStub.ets_table_name())
     assert is_pid(pid)
     assert ets_table_exists?(PageDigestRegistryStub.ets_table_name())
   end
