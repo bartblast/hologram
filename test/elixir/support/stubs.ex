@@ -5,8 +5,38 @@ defmodule Hologram.Test.Stubs do
   alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
+  alias Hologram.Commons.PLT
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
+
+  @doc """
+  Sets up page digest registry process.
+  """
+  @spec setup_page_digest_registry(module) :: :ok
+  def setup_page_digest_registry(stub) do
+    setup_page_digest_registry_dump(stub)
+    PageDigestRegistry.start_link([])
+
+    :ok
+  end
+
+  @doc """
+  Sets up page digest registry dump file.
+  """
+  @spec setup_page_digest_registry_dump(module) :: :ok
+  def setup_page_digest_registry_dump(stub) do
+    dump_path = stub.dump_path()
+
+    File.rm(dump_path)
+
+    PLT.start()
+    |> PLT.put(:module_a, :module_a_digest)
+    |> PLT.put(:module_b, :module_b_digest)
+    |> PLT.put(:module_c, :module_c_digest)
+    |> PLT.dump(dump_path)
+
+    :ok
+  end
 
   defmacro use_module_stub(:asset_manifest_cache) do
     random_module = random_module()

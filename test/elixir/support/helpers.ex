@@ -4,11 +4,9 @@ defmodule Hologram.Test.Helpers do
   import Hologram.Commons.TestUtils, only: [wrap_term: 1]
   import Hologram.Template, only: [sigil_H: 2]
 
-  alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Commons.ETS
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.KernelUtils
-  alias Hologram.Commons.PLT
   alias Hologram.Commons.ProcessUtils
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context
@@ -396,35 +394,6 @@ defmodule Hologram.Test.Helpers do
         "hologram/test_file_9.css" => "/hologram/test_file_9-99999999999999999999999999999999.css"
       }
     ]
-  end
-
-  @doc """
-  Sets up page digest registry process.
-  """
-  @spec setup_page_digest_registry(module) :: :ok
-  def setup_page_digest_registry(stub) do
-    setup_page_digest_registry_dump(stub)
-    PageDigestRegistry.start_link([])
-
-    :ok
-  end
-
-  @doc """
-  Sets up page digest registry dump file.
-  """
-  @spec setup_page_digest_registry_dump(module) :: :ok
-  def setup_page_digest_registry_dump(stub) do
-    dump_path = stub.dump_path()
-
-    File.rm(dump_path)
-
-    PLT.start()
-    |> PLT.put(:module_a, :module_a_digest)
-    |> PLT.put(:module_b, :module_b_digest)
-    |> PLT.put(:module_c, :module_c_digest)
-    |> PLT.dump(dump_path)
-
-    :ok
   end
 
   @doc """
