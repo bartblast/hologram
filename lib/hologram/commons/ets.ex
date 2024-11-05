@@ -20,6 +20,14 @@ defmodule Hologram.Commons.ETS do
   end
 
   @doc """
+  Deletes the ETS table.
+  """
+  @spec delete(tid) :: true
+  def delete(table_name_or_ref) do
+    :ets.delete(table_name_or_ref)
+  end
+
+  @doc """
   Deletes a key-value pair from the ETS table.
   """
   @spec delete(tid, any) :: true

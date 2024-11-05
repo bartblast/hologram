@@ -33,6 +33,25 @@ defmodule Hologram.Commons.ETSTest do
     assert ets_info[:protection] == :public
   end
 
+  describe "delete/1" do
+    test "table exists" do
+      table_ref = create_unnamed_table()
+
+      assert delete(table_ref) == true
+      refute table_exists?(table_ref)
+    end
+
+    test "table doesn't exist" do
+      expected_msg =
+        build_argument_error_msg(
+          1,
+          "the table identifier does not refer to an existing ETS table"
+        )
+
+      assert_error ArgumentError, expected_msg, fn -> delete(random_atom()) end
+    end
+  end
+
   describe "delete/2" do
     test "key exists", %{table_ref: table_ref} do
       assert delete(table_ref, :my_key_2) == true
