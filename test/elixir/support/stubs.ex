@@ -11,10 +11,18 @@ defmodule Hologram.Test.Stubs do
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
 
-  @doc """
-  Sets up page digest registry process.
-  """
-  @spec setup_page_digest_registry(module) :: :ok
+  def setup_asset_manifest_cache(stub, start_link \\ true) do
+    stub_with(AssetManifestCacheMock, stub)
+
+    :persistent_term.erase(stub.persistent_term_key())
+
+    if start_link do
+      AssetManifestCache.start_link([])
+    end
+
+    :ok
+  end
+
   def setup_page_digest_registry(stub, start_link \\ true) do
     stub_with(PageDigestRegistryMock, stub)
 

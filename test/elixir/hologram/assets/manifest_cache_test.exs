@@ -14,13 +14,12 @@ defmodule Hologram.Assets.ManifestCacheTest do
   setup :set_mox_global
 
   setup do
-    stub_with(AssetManifestCacheMock, AssetManifestCacheStub)
     stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
 
     setup_asset_fixtures(AssetPathRegistryStub.static_dir())
     AssetPathRegistry.start_link([])
 
-    :ok
+    setup_asset_manifest_cache(AssetManifestCacheStub, false)
   end
 
   test "get_manifest_js/0" do

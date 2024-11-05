@@ -5,7 +5,6 @@ defmodule Hologram.Template.RendererTest do
   import Hologram.Test.Stubs
   import Mox
 
-  alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
   alias Hologram.Component
@@ -739,15 +738,13 @@ defmodule Hologram.Template.RendererTest do
 
   describe "page" do
     setup do
-      stub_with(AssetManifestCacheMock, AssetManifestCacheStub)
       stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
 
       setup_asset_fixtures(AssetPathRegistryStub.static_dir())
       AssetPathRegistry.start_link([])
       AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
 
-      AssetManifestCache.start_link([])
-
+      setup_asset_manifest_cache(AssetManifestCacheStub)
       setup_page_digest_registry(PageDigestRegistryStub)
     end
 
