@@ -582,11 +582,7 @@ defmodule Hologram.Template.RendererTest do
 
   describe "context" do
     setup do
-      stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
-
-      setup_asset_fixtures(AssetPathRegistryStub.static_dir())
-      AssetPathRegistry.start_link([])
-
+      setup_asset_path_registry(AssetPathRegistryStub)
       setup_page_digest_registry(PageDigestRegistryStub)
     end
 
@@ -738,13 +734,11 @@ defmodule Hologram.Template.RendererTest do
 
   describe "page" do
     setup do
-      stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
-
-      setup_asset_fixtures(AssetPathRegistryStub.static_dir())
-      AssetPathRegistry.start_link([])
+      setup_asset_path_registry(AssetPathRegistryStub)
       AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
 
       setup_asset_manifest_cache(AssetManifestCacheStub)
+
       setup_page_digest_registry(PageDigestRegistryStub)
     end
 

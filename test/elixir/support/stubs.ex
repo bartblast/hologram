@@ -7,7 +7,9 @@ defmodule Hologram.Test.Stubs do
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
+  alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
+  alias Hologram.Commons.ProcessUtils
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
 
@@ -21,6 +23,32 @@ defmodule Hologram.Test.Stubs do
     end
 
     :ok
+  end
+
+  def setup_asset_path_registry(stub, start_link \\ true) do
+    stub_with(AssetPathRegistryMock, stub)
+
+    process_name = stub.process_name()
+
+    if ProcessUtils.running?(process_name) do
+      process_name
+      |> Process.whereis()
+      |> Process.exit(:kill)
+    end
+
+    ets_table_name = stub.ets_table_name()
+
+    if ETS.table_exists?(ets_table_name) do
+      ETS.delete(ets_table_name)
+    end
+
+    mapping = setup_asset_fixtures(stub.static_dir())
+
+    if start_link do
+      AssetPathRegistry.start_link([])
+    end
+
+    mapping
   end
 
   def setup_page_digest_registry(stub, start_link \\ true) do
@@ -119,6 +147,79 @@ defmodule Hologram.Test.Stubs do
 
       alias alias!(unquote(random_module).PageModuleResolverStub)
     end
+  end
+
+  # credo:disable-for-lines:71 Credo.Check.Refactor.ABCSize
+  defp setup_asset_fixtures(static_dir) do
+    FileUtils.recreate_dir(static_dir)
+
+    dir_2 = static_dir <> "/test_dir_1/test_dir_2"
+    file_2a_path = dir_2 <> "/test_file_1-11111111111111111111111111111111.css"
+    file_2b_path = dir_2 <> "/test_file_2-22222222222222222222222222222222.css"
+    file_2c_path = dir_2 <> "/page-33333333333333333333333333333333.js"
+    file_2d_path = dir_2 <> "/page-33333333333333333333333333333333.js.map"
+    file_2e_path = dir_2 <> "/test_file_1.css"
+
+    dir_3 = static_dir <> "/test_dir_3"
+    file_3a_path = dir_3 <> "/test_file_5.css"
+    file_3b_path = dir_3 <> "/test_file_4-44444444444444444444444444444444.css"
+    file_3c_path = dir_3 <> "/test_file_5-55555555555555555555555555555555.css"
+    file_3d_path = dir_3 <> "/page-66666666666666666666666666666666.js"
+    file_3e_path = dir_3 <> "/page-66666666666666666666666666666666.js.map"
+    file_3f_path = dir_3 <> "/test_file_10.css"
+
+    dir_4 = static_dir <> "/hologram"
+    file_4a_path = dir_4 <> "/page-77777777777777777777777777777777.js"
+    file_4b_path = dir_4 <> "/page-77777777777777777777777777777777.js.map"
+    file_4c_path = dir_4 <> "/page-88888888888888888888888888888888.js"
+    file_4d_path = dir_4 <> "/page-88888888888888888888888888888888.js.map"
+    file_4e_path = dir_4 <> "/runtime-00000000000000000000000000000000.js"
+    file_4f_path = dir_4 <> "/test_file_9-99999999999999999999999999999999.css"
+
+    File.mkdir_p!(dir_2)
+    File.mkdir_p!(dir_3)
+    File.mkdir_p!(dir_4)
+
+    file_paths = [
+      file_2a_path,
+      file_2b_path,
+      file_2c_path,
+      file_2d_path,
+      file_2e_path,
+      file_3a_path,
+      file_3b_path,
+      file_3c_path,
+      file_3d_path,
+      file_3e_path,
+      file_3f_path,
+      file_4a_path,
+      file_4b_path,
+      file_4c_path,
+      file_4d_path,
+      file_4e_path,
+      file_4f_path
+    ]
+
+    Enum.each(file_paths, &File.write!(&1, ""))
+
+    [
+      mapping: %{
+        "test_dir_1/test_dir_2/test_file_1.css" =>
+          "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css",
+        "test_dir_1/test_dir_2/test_file_2.css" =>
+          "/test_dir_1/test_dir_2/test_file_2-22222222222222222222222222222222.css",
+        "test_dir_1/test_dir_2/page.js" =>
+          "/test_dir_1/test_dir_2/page-33333333333333333333333333333333.js",
+        "test_dir_3/test_file_4.css" =>
+          "/test_dir_3/test_file_4-44444444444444444444444444444444.css",
+        "test_dir_3/test_file_5.css" =>
+          "/test_dir_3/test_file_5-55555555555555555555555555555555.css",
+        "test_dir_3/test_file_10.css" => "/test_dir_3/test_file_10.css",
+        "test_dir_3/page.js" => "/test_dir_3/page-66666666666666666666666666666666.js",
+        "hologram/runtime.js" => "/hologram/runtime-00000000000000000000000000000000.js",
+        "hologram/test_file_9.css" => "/hologram/test_file_9-99999999999999999999999999999999.css"
+      }
+    ]
   end
 
   defp setup_page_digest_registry_dump(stub) do

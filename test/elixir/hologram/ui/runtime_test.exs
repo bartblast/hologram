@@ -13,10 +13,7 @@ defmodule Hologram.UI.RuntimeTest do
   setup :set_mox_global
 
   setup do
-    stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
-
-    setup_asset_fixtures(AssetPathRegistryStub.static_dir())
-    AssetPathRegistry.start_link([])
+    setup_asset_path_registry(AssetPathRegistryStub)
     AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
 
     setup_asset_manifest_cache(AssetManifestCacheStub)

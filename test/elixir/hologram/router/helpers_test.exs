@@ -5,7 +5,6 @@ defmodule Hologram.Router.HelpersTest do
   import Hologram.Test.Stubs
   import Mox
 
-  alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Test.Fixtures.Router.Helpers.Module1
   alias Hologram.Test.Fixtures.Router.Helpers.Module2
 
@@ -13,15 +12,9 @@ defmodule Hologram.Router.HelpersTest do
 
   setup :set_mox_global
 
-  setup do
-    stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
-    setup_asset_fixtures(AssetPathRegistryStub.static_dir())
-  end
-
   describe "asset_path/1" do
     setup do
-      AssetPathRegistry.start_link([])
-      :ok
+      setup_asset_path_registry(AssetPathRegistryStub)
     end
 
     test "asset exists" do

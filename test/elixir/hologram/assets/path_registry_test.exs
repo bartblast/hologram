@@ -13,8 +13,7 @@ defmodule Hologram.Assets.PathRegistryTest do
   setup :set_mox_global
 
   setup do
-    stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
-    setup_asset_fixtures(AssetPathRegistryStub.static_dir())
+    setup_asset_path_registry(AssetPathRegistryStub, false)
   end
 
   test "get_mapping/0", %{mapping: mapping} do

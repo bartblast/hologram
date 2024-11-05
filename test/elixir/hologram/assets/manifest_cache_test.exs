@@ -6,7 +6,6 @@ defmodule Hologram.Assets.ManifestCacheTest do
   import Mox
 
   alias Hologram.Assets.ManifestCache, as: AssetManifestCache
-  alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -14,11 +13,7 @@ defmodule Hologram.Assets.ManifestCacheTest do
   setup :set_mox_global
 
   setup do
-    stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
-
-    setup_asset_fixtures(AssetPathRegistryStub.static_dir())
-    AssetPathRegistry.start_link([])
-
+    setup_asset_path_registry(AssetPathRegistryStub)
     setup_asset_manifest_cache(AssetManifestCacheStub, false)
   end
 
