@@ -15,13 +15,10 @@ defmodule Hologram.RouterTest do
   setup :set_mox_global
 
   setup do
-    stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
     stub_with(PageModuleResolverMock, PageModuleResolverStub)
-
-    setup_page_digest_registry(PageDigestRegistryStub)
     PageModuleResolver.start_link([])
 
-    :ok
+    setup_page_digest_registry(PageDigestRegistryStub)
   end
 
   describe "call/2" do

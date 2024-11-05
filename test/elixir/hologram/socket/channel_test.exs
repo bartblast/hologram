@@ -128,7 +128,6 @@ defmodule Hologram.Socket.ChannelTest do
 
   describe "handle_in/3, page" do
     setup do
-      stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
       stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
 
       setup_asset_fixtures(AssetPathRegistryStub.static_dir())
@@ -136,8 +135,6 @@ defmodule Hologram.Socket.ChannelTest do
       AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
 
       setup_page_digest_registry(PageDigestRegistryStub)
-
-      :ok
     end
 
     test "module payload" do
@@ -185,7 +182,6 @@ defmodule Hologram.Socket.ChannelTest do
   end
 
   test "handle_in/3, page_bundle_path" do
-    stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
     setup_page_digest_registry(PageDigestRegistryStub)
     ETS.put(PageDigestRegistryStub.ets_table_name(), Module2, "12345678901234567890123456789012")
 

@@ -1,10 +1,12 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Stubs do
   import Hologram.Test.Helpers, only: [random_atom: 0, random_module: 0, random_string: 0]
+  import Mox, only: [stub_with: 2]
 
   alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
+  alias Hologram.Commons.ETS
   alias Hologram.Commons.PLT
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
@@ -13,27 +15,20 @@ defmodule Hologram.Test.Stubs do
   Sets up page digest registry process.
   """
   @spec setup_page_digest_registry(module) :: :ok
-  def setup_page_digest_registry(stub) do
+  def setup_page_digest_registry(stub, start_link \\ true) do
+    stub_with(PageDigestRegistryMock, stub)
+
     setup_page_digest_registry_dump(stub)
-    PageDigestRegistry.start_link([])
 
-    :ok
-  end
+    ets_table_name = stub.ets_table_name()
 
-  @doc """
-  Sets up page digest registry dump file.
-  """
-  @spec setup_page_digest_registry_dump(module) :: :ok
-  def setup_page_digest_registry_dump(stub) do
-    dump_path = stub.dump_path()
+    if ETS.table_exists?(ets_table_name) do
+      ETS.delete(ets_table_name)
+    end
 
-    File.rm(dump_path)
-
-    PLT.start()
-    |> PLT.put(:module_a, :module_a_digest)
-    |> PLT.put(:module_b, :module_b_digest)
-    |> PLT.put(:module_c, :module_c_digest)
-    |> PLT.dump(dump_path)
+    if start_link do
+      PageDigestRegistry.start_link([])
+    end
 
     :ok
   end
@@ -116,5 +111,19 @@ defmodule Hologram.Test.Stubs do
 
       alias alias!(unquote(random_module).PageModuleResolverStub)
     end
+  end
+
+  defp setup_page_digest_registry_dump(stub) do
+    dump_path = stub.dump_path()
+
+    File.rm(dump_path)
+
+    PLT.start()
+    |> PLT.put(:module_a, :module_a_digest)
+    |> PLT.put(:module_b, :module_b_digest)
+    |> PLT.put(:module_c, :module_c_digest)
+    |> PLT.dump(dump_path)
+
+    :ok
   end
 end

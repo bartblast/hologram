@@ -13,16 +13,7 @@ defmodule Hologram.Assets.PageDigestRegistryTest do
   setup :set_mox_global
 
   setup do
-    stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
-    setup_page_digest_registry_dump(PageDigestRegistryStub)
-
-    ets_table_name = PageDigestRegistryStub.ets_table_name()
-
-    if ets_table_exists?(ets_table_name) do
-      :ets.delete(ets_table_name)
-    end
-
-    :ok
+    setup_page_digest_registry(PageDigestRegistryStub, false)
   end
 
   test "init/1" do

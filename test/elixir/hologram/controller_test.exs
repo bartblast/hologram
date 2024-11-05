@@ -20,10 +20,7 @@ defmodule Hologram.ControllerTest do
 
   describe "handle_request/2" do
     setup do
-      stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
       setup_page_digest_registry(PageDigestRegistryStub)
-
-      :ok
     end
 
     test "conn updates" do

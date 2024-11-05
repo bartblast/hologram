@@ -584,14 +584,11 @@ defmodule Hologram.Template.RendererTest do
   describe "context" do
     setup do
       stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
-      stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
 
       setup_asset_fixtures(AssetPathRegistryStub.static_dir())
       AssetPathRegistry.start_link([])
 
       setup_page_digest_registry(PageDigestRegistryStub)
-
-      :ok
     end
 
     test "emitted in page, accessed in component nested in page" do
@@ -744,7 +741,6 @@ defmodule Hologram.Template.RendererTest do
     setup do
       stub_with(AssetManifestCacheMock, AssetManifestCacheStub)
       stub_with(AssetPathRegistryMock, AssetPathRegistryStub)
-      stub_with(PageDigestRegistryMock, PageDigestRegistryStub)
 
       setup_asset_fixtures(AssetPathRegistryStub.static_dir())
       AssetPathRegistry.start_link([])
@@ -753,8 +749,6 @@ defmodule Hologram.Template.RendererTest do
       AssetManifestCache.start_link([])
 
       setup_page_digest_registry(PageDigestRegistryStub)
-
-      :ok
     end
 
     test "inside layout slot" do
