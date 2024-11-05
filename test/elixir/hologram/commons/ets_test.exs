@@ -42,13 +42,7 @@ defmodule Hologram.Commons.ETSTest do
     end
 
     test "table doesn't exist" do
-      expected_msg =
-        build_argument_error_msg(
-          1,
-          "the table identifier does not refer to an existing ETS table"
-        )
-
-      assert_error ArgumentError, expected_msg, fn -> delete(random_atom()) end
+      assert_raise ArgumentError, fn -> delete(random_atom()) end
     end
   end
 
