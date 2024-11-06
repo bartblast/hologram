@@ -58,13 +58,13 @@ export default class Hologram {
     Utils: Utils,
   };
 
+  static #historyId = null;
   static #isInitiated = false;
   static #pageModule = null;
   static #pageParams = null;
   static #registeredPageModules = new Set();
   static #scrollPosition = null;
   static #shouldLoadMountData = true;
-  static #shouldReplaceHistoryState = true;
 
   // TODO: make private (tested implicitely in feature tests)
   // Deps: [:maps.get/2, :maps.put/3]
@@ -155,7 +155,6 @@ export default class Hologram {
       Hologram.executeAction(nextAction);
     } else {
       Hologram.render();
-      Hologram.#replaceHistoryState();
     }
 
     if (!Type.isNil(nextPage)) {
@@ -290,10 +289,13 @@ export default class Hologram {
 
   // Made public to make tests easier
   static loadNewPage(pagePath, html) {
+    $.#savePageSnapshot();
+    $.#historyId = crypto.randomUUID();
+
     window.requestAnimationFrame(() => {
       Hologram.#patchPage(html);
       window.scrollTo(0, 0);
-      history.pushState(null, null, pagePath);
+      history.pushState($.#historyId, null, pagePath);
     });
   }
 
@@ -498,6 +500,9 @@ export default class Hologram {
   }
 
   static async #handlePopstateEvent(event) {
+    $.#savePageSnapshot();
+    $.#historyId = event.state;
+
     const serializedPageSnapshot = sessionStorage.getItem(event.state);
 
     const {componentRegistryEntries, pageModule, pageParams, scrollPosition} =
@@ -509,7 +514,6 @@ export default class Hologram {
 
     $.#scrollPosition = scrollPosition;
     $.#shouldLoadMountData = false;
-    $.#shouldReplaceHistoryState = false;
 
     if ($.#isPageModuleRegistered(pageModule)) {
       return $.#mountPage(true);
@@ -541,9 +545,7 @@ export default class Hologram {
       }
     });
 
-    Client.connect();
-
-    Hologram.#defineManuallyPortedFunctions();
+    window.addEventListener("beforeunload", Hologram.#savePageSnapshot);
 
     window.addEventListener("popstate", Hologram.#handlePopstateEvent);
 
@@ -552,6 +554,13 @@ export default class Hologram {
         Client.connect();
       }
     });
+
+    $.#historyId = crypto.randomUUID();
+    history.replaceState($.#historyId, null, window.location.pathname);
+
+    Client.connect();
+
+    Hologram.#defineManuallyPortedFunctions();
 
     Hologram.virtualDocument = toVNode(document.documentElement);
     Vdom.addKeysToLinkAndScriptVnodes(Hologram.virtualDocument);
@@ -609,12 +618,6 @@ export default class Hologram {
       if ($.#scrollPosition) {
         window.scrollTo($.#scrollPosition[0], $.#scrollPosition[1]);
         $.#scrollPosition = null;
-      }
-
-      if ($.#shouldReplaceHistoryState) {
-        $.#replaceHistoryState();
-      } else {
-        $.#shouldReplaceHistoryState = true;
       }
 
       GlobalRegistry.set("mountedPage", Interpreter.inspect($.#pageModule));
@@ -694,7 +697,7 @@ export default class Hologram {
     $.#registeredPageModules.add(pageModule.value);
   }
 
-  static #replaceHistoryState() {
+  static #savePageSnapshot() {
     const serializedPageSnapshot = Serializer.serialize({
       componentRegistryEntries: ComponentRegistry.entries,
       pageModule: Hologram.#pageModule,
@@ -702,10 +705,7 @@ export default class Hologram {
       scrollPosition: [window.scrollX, window.scrollY],
     });
 
-    const id = crypto.randomUUID();
-    sessionStorage.setItem(id, serializedPageSnapshot);
-
-    history.replaceState(id, null, window.location.pathname);
+    sessionStorage.setItem($.#historyId, serializedPageSnapshot);
   }
 }
 
