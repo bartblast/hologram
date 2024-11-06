@@ -4,6 +4,7 @@ defmodule HologramFeatureTests.NavigationTest do
   alias HologramFeatureTests.Navigation1Page, as: Page1
   alias HologramFeatureTests.Navigation2Page, as: Page2
   alias HologramFeatureTests.Navigation3Page, as: Page3
+  alias HologramFeatureTests.Navigation4Page, as: Page4
 
   describe "link component" do
     feature "without params", %{session: session} do
@@ -134,5 +135,53 @@ defmodule HologramFeatureTests.NavigationTest do
     |> assert_text("Page 2 title")
     |> click(button("Put page 2 result A"))
     |> assert_text("Page 2 result A")
+  end
+
+  describe "scroll position" do
+    feature "when navigating to a new page", %{session: session} do
+      session
+      |> visit(Page4)
+      |> scroll_to(10, 20)
+      |> click(link("Page 2 link"))
+      |> assert_page(Page2)
+      |> assert_scroll_position(0, 0)
+    end
+
+    feature "when using history navigation without reload, within Hologram app", %{
+      session: session
+    } do
+      session
+      |> visit(Page4)
+      |> scroll_to(10, 20)
+      |> click(link("Page 2 link"))
+      |> assert_page(Page2)
+      |> go_back()
+      |> assert_page(Page4)
+      |> assert_scroll_position(10, 20)
+    end
+
+    feature "when using history navigation with reload, within Hologram app", %{session: session} do
+      session
+      |> visit(Page4)
+      |> scroll_to(10, 20)
+      |> click(link("Page 2 link"))
+      |> assert_page(Page2)
+      |> reload()
+      |> assert_page(Page2)
+      |> go_back()
+      |> assert_page(Page4)
+      |> assert_scroll_position(10, 20)
+    end
+
+    feature "when using history navigation coming from non-Hologram page", %{session: session} do
+      session
+      |> visit(Page4)
+      |> scroll_to(10, 20)
+      |> visit("https://www.wikipedia.org/")
+      |> assert_text("Wikipedia")
+      |> go_back()
+      |> assert_page(Page4)
+      |> assert_scroll_position(10, 20)
+    end
   end
 end
