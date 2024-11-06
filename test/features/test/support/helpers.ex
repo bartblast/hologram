@@ -30,6 +30,20 @@ defmodule HologramFeatureTests.Helpers do
     |> wait_for_server_connection()
   end
 
+  def assert_scroll_position(session, x, y) do
+    callback = fn scroll_position ->
+      if scroll_position == [x, y] do
+        session
+      else
+        raise Wallaby.ExpectationNotMetError, "Scroll position is different than [#{x}, #{y}]"
+      end
+    end
+
+    script = "return [window.scrollX, window.scrollY]"
+
+    Browser.execute_script(session, script, [], callback)
+  end
+
   def assert_text(parent, text) when is_binary(text) do
     Browser.assert_text(parent, text)
   end
@@ -85,6 +99,10 @@ defmodule HologramFeatureTests.Helpers do
 
   def reload(session) do
     Browser.execute_script(session, "document.location.reload();")
+  end
+
+  def scroll_to(session, x, y) do
+    Browser.execute_script(session, "window.scrollTo(#{x}, #{y});")
   end
 
   def visit(session, path_or_url) when is_binary(path_or_url) do
