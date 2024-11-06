@@ -14,8 +14,7 @@ defmodule Hologram.Router.PageModuleResolverTest do
   setup :set_mox_global
 
   setup do
-    stub_with(PageModuleResolverMock, PageModuleResolverStub)
-    :ok
+    setup_page_module_resolver(PageModuleResolverStub, false)
   end
 
   test "init/1" do

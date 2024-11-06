@@ -6,7 +6,6 @@ defmodule Hologram.RouterTest do
   import Mox
 
   alias Hologram.Commons.ETS
-  alias Hologram.Router.PageModuleResolver
   alias Hologram.Test.Fixtures.Router.Module1
 
   use_module_stub :page_digest_registry
@@ -15,10 +14,8 @@ defmodule Hologram.RouterTest do
   setup :set_mox_global
 
   setup do
-    stub_with(PageModuleResolverMock, PageModuleResolverStub)
-    PageModuleResolver.start_link([])
-
     setup_page_digest_registry(PageDigestRegistryStub)
+    setup_page_module_resolver(PageModuleResolverStub)
   end
 
   describe "call/2" do

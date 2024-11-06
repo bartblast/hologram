@@ -69,6 +69,18 @@ defmodule Hologram.Test.Stubs do
     :ok
   end
 
+  def setup_page_module_resolver(stub, start_link \\ true) do
+    stub_with(PageModuleResolverMock, stub)
+
+    :persistent_term.erase(stub.persistent_term_key())
+
+    if start_link do
+      PageModuleResolver.start_link([])
+    end
+
+    :ok
+  end
+
   defmacro use_module_stub(:asset_manifest_cache) do
     random_module = random_module()
 
