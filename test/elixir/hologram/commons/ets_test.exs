@@ -42,7 +42,20 @@ defmodule Hologram.Commons.ETSTest do
     end
 
     test "table doesn't exist" do
-      assert_raise ArgumentError, fn -> delete(random_atom()) end
+      assert delete(make_ref()) == false
+    end
+  end
+
+  describe "delete!/1" do
+    test "table exists" do
+      table_ref = create_unnamed_table()
+
+      assert delete!(table_ref) == true
+      refute table_exists?(table_ref)
+    end
+
+    test "table doesn't exist" do
+      assert_raise ArgumentError, fn -> delete!(random_atom()) end
     end
   end
 

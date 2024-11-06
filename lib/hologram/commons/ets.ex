@@ -20,10 +20,20 @@ defmodule Hologram.Commons.ETS do
   end
 
   @doc """
-  Deletes the ETS table.
+  Deletes the ETS table if it exists.
   """
-  @spec delete(tid) :: true
+  @spec delete(tid) :: boolean
   def delete(table_name_or_ref) do
+    delete!(table_name_or_ref)
+  rescue
+    ArgumentError -> false
+  end
+
+  @doc """
+  Deletes the ETS table if it exists or raises ArgumentError otherwise.
+  """
+  @spec delete!(tid) :: true
+  def delete!(table_name_or_ref) do
     :ets.delete(table_name_or_ref)
   end
 
