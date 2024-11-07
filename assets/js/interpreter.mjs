@@ -180,17 +180,12 @@ export default class Interpreter {
   // Unit test maintenance in interpreter_test.mjs would be problematic because tests would need to be updated
   // each time Hologram.Compiler.Encoder's implementation changes.
   static case(condition, clauses, context) {
-    let conditionContext;
-
     if (typeof condition === "function") {
-      conditionContext = Interpreter.cloneContext(context);
-      condition = condition(conditionContext);
-    } else {
-      conditionContext = context;
+      condition = condition(context);
     }
 
     for (const clause of clauses) {
-      const contextClone = Interpreter.cloneContext(conditionContext);
+      const contextClone = Interpreter.cloneContext(context);
 
       if (Interpreter.isMatched(clause.match, condition, contextClone)) {
         Interpreter.updateVarsToMatchedValues(contextClone);
