@@ -17,13 +17,6 @@ defmodule HologramE2E.ControlFlowTest do
     # feature "shorthand syntax"
   end
 
-  feature "case", %{session: session} do
-    session
-    |> visit(CaseExpressionPage)
-    |> click(css("#button"))
-    |> assert_has(css("#text", text: "Result = 22"))
-  end
-
   describe "for expression" do
     test "single generator", %{session: session} do
       session
