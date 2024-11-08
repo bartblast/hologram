@@ -99,7 +99,7 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 | Anonymous Function Call | :x:                |
 | Case                    | :white_check_mark: |
 | Comprehension           | :x:                |
-| Cond                    | :x:                |
+| Cond                    | :white_check_mark: |
 | Guards                  | :x:                |
 | If                      | :x:                |
 | Local Function Call     | :x:                |
