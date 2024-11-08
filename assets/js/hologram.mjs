@@ -538,12 +538,13 @@ export default class Hologram {
 
   // Executed only once, on the initial page load.
   static #init() {
-    window.addEventListener("error", (event) => {
-      if (event.error instanceof HologramBoxedError) {
-        console.error(`${event.error.message}\n`, event.error);
-        event.preventDefault();
-      }
-    });
+    // TODO: consider when implementing boxed error handling
+    // window.addEventListener("error", (event) => {
+    //   if (event.error instanceof HologramBoxedError) {
+    //     console.error(`${event.error.message}\n`, event.error);
+    //     event.preventDefault();
+    //   }
+    // });
 
     window.addEventListener("beforeunload", Hologram.#savePageSnapshot);
 
