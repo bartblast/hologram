@@ -92,6 +92,21 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 | PID                  | :white_check_mark: |
 | Tuple                | :white_check_mark: |
 
+#### Control Flow
+
+| Expression              | Status             |
+| :---------------------- | :----------------: |
+| Anonymous Function Call | :x:                |
+| Case                    | :white_check_mark: |
+| Comprehension           | :x:                |
+| Cond                    | :x:                |
+| Guards                  | :x:                |
+| If                      | :x:                |
+| Local Function Call     | :x:                |
+| Remote Function Call    | :x:                |
+| Unless                  | :x:                |
+| With                    | :x:                |
+
 #### Operators
 
 ##### Overridable General Operators
@@ -160,6 +175,18 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 | :---------- | :----------------: |
 | custom      | :white_check_mark: |
 | overriden   | :white_check_mark: |
+
+#### Error Handling
+
+| Keyword                 | Status             |
+| :---------------------- | :----------------: |
+| After                   | :x:                |
+| Catch                   | :x:                |
+| Else                    | :x:                |
+| Raise                   | :x:                |
+| Rescue                  | :x:                |
+| Throw                   | :x:                |
+| Try                     | :x:                |
 
 #### Other
 

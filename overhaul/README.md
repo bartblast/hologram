@@ -98,27 +98,6 @@ without its shortcomings related to scalability, efficiency, etc.
 | Struct             | :x:                |          
 | Tuple              | :white_check_mark: |        
 
-#### Control Flow
-
-| Structure               | Status             | Comments                                                        |
-| :---------------------- | :----------------: | :-------------------------------------------------------------- |
-| After                   | :x:                |                                                                 |
-| Anonymous Function Call | :construction:     | done: regular syntax, todo: shorthand syntax (capture operator) |
-| Case                    | :white_check_mark: |                                                                 |
-| Catch                   | :x:                |                                                                 |
-| Comprehension           | :construction:     | done: generator, todo: filter, into                             |
-| Cond                    | :x:                |                                                                 |
-| Else (If)               | :white_check_mark: |                                                                 |
-| Else (Rescue)           | :x:                |                                                                 |
-| Guards                  | :x:                |                                                                 |
-| If                      | :white_check_mark: |                                                                 |
-| Module Function Call    | :x:                |                                                                 |
-| Raise                   | :x:                |                                                                 |
-| Rescue                  | :x:                |                                                                 |
-| Throw                   | :x:                |                                                                 |
-| Unless                  | :x:                |                                                                 |
-| With                    | :x:                |                                                                 |
-
 #### Definitions
 
 | Structure        | Status             |
