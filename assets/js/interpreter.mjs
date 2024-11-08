@@ -176,7 +176,8 @@ export default class Interpreter {
 
     return moduleRef[functionArityStr](...args.data);
   }
-  // case() has no unit tests in interpreter_test.mjs, only feature tests in test/features/test/special_forms/case_test.exs
+
+  // case() has no unit tests in interpreter_test.mjs, only feature tests in test/features/test/control_flow/case_test.exs
   // Unit test maintenance in interpreter_test.mjs would be problematic because tests would need to be updated
   // each time Hologram.Compiler.Encoder's implementation changes.
   static case(condition, clauses, context) {
@@ -288,6 +289,9 @@ export default class Interpreter {
     return Elixir_Enum["into/2"](Type.list(items), collectable);
   }
 
+  // cond() has no unit tests in interpreter_test.mjs, only feature tests in test/features/test/control_flow/cond_test.exs
+  // Unit test maintenance in interpreter_test.mjs would be problematic because tests would need to be updated
+  // each time Hologram.Compiler.Encoder's implementation changes.
   static cond(clauses, context) {
     for (const clause of clauses) {
       const contextClone = Interpreter.cloneContext(context);
