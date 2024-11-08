@@ -293,6 +293,7 @@ export default class Interpreter {
       const contextClone = Interpreter.cloneContext(context);
 
       if (Type.isTruthy(clause.condition(contextClone))) {
+        Interpreter.updateVarsToMatchedValues(contextClone);
         return clause.body(contextClone);
       }
     }
