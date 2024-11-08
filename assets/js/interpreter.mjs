@@ -348,7 +348,7 @@ export default class Interpreter {
 
             if (globalThis.hologram.isProfilingEnabled) {
               console.log(
-                `Hologram: executed function ${mfa} in`,
+                `Hologram: function ${mfa} executed in`,
                 Math.round(performance.now() - startTime),
                 "ms",
               );
