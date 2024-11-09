@@ -80,27 +80,27 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 
 #### Data Types
 
-| Type                 | Status             |
-| :------------------- | :----------------: |
-| Anonymous Function   | :white_check_mark: |
-| Atom                 | :white_check_mark: |
-| Bitstring            | :white_check_mark: |
-| Float                | :white_check_mark: |
-| Integer              | :white_check_mark: |
-| List                 | :white_check_mark: |
-| Map                  | :white_check_mark: |
-| PID                  | :white_check_mark: |
-| Tuple                | :white_check_mark: |
+| Type               | Status             |
+| :----------------- | :----------------: |
+| Anonymous Function | :white_check_mark: |
+| Atom               | :white_check_mark: |
+| Bitstring          | :white_check_mark: |
+| Float              | :white_check_mark: |
+| Integer            | :white_check_mark: |
+| List               | :white_check_mark: |
+| Map                | :white_check_mark: |
+| PID                | :white_check_mark: |
+| Tuple              | :white_check_mark: |
 
 #### Control Flow
 
-| Expression              | Status             |
-| :---------------------- | :----------------: |
-| Case                    | :white_check_mark: |
-| Cond                    | :white_check_mark: |
-| If                      | :x:                |
-| Unless                  | :x:                |
-| With                    | :x:                |
+| Expression | Status             |
+| :--------- | :----------------: |
+| Case       | :white_check_mark: |
+| Cond       | :white_check_mark: |
+| If         | :x:                |
+| Unless     | :x:                |
+| With       | :x:                |
 
 #### Function Calls
 
@@ -174,22 +174,22 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 
 ##### Custom and Overriden Operators
 
-| Operator    | Status             |
-| :---------- | :----------------: |
-| custom      | :white_check_mark: |
-| overriden   | :white_check_mark: |
+| Operator  | Status             |
+| :-------- | :----------------: |
+| custom    | :white_check_mark: |
+| overriden | :white_check_mark: |
 
 #### Error Handling
 
-| Keyword                 | Status             |
-| :---------------------- | :----------------: |
-| After                   | :x:                |
-| Catch                   | :x:                |
-| Else                    | :x:                |
-| Raise                   | :x:                |
-| Rescue                  | :x:                |
-| Throw                   | :x:                |
-| Try                     | :x:                |
+| Keyword | Status             |
+| :------ | :----------------: |
+| After   | :x:                |
+| Catch   | :x:                |
+| Else    | :x:                |
+| Raise   | :x:                |
+| Rescue  | :x:                |
+| Throw   | :x:                |
+| Try     | :x:                |
 
 #### Guards
 
@@ -203,23 +203,23 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 
 #### Other Syntax
 
-| Construct               | Status             |
-| :---------------------- | :----------------: |
-| Comprehensions          | :x:                |
+| Construct      | Status             |
+| :------------- | :----------------: |
+| Comprehensions | :x:                |
 
 ### Misc Features
 
-| Feature               | Status             |
-| :-------------------- | :----------------: |
-| Regular expressions   | :x:                |
+| Feature             | Status             |
+| :------------------ | :----------------: |
+| Regular expressions | :x:                |
 
 ### Framework Runtime
 
 #### Core
 
-| Feature    | Status             |
-| :--------- | :----------------: |
-| Actions    | :white_check_mark: |
-| Commands   | :white_check_mark: |
-| Cookies    | :x:                |
-| Session    | :x:                |
+| Feature  | Status             |
+| :------- | :----------------: |
+| Actions  | :white_check_mark: |
+| Commands | :white_check_mark: |
+| Cookies  | :x:                |
+| Session  | :x:                |
