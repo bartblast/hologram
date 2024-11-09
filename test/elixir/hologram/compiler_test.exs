@@ -522,6 +522,7 @@ defmodule Hologram.CompilerTest do
       setup_js_deps_test("install_js_deps_1")
     end
 
+    @tag timeout: 300_000
     test "installs deps in node_modules dir and creates package-lock.json file", %{
       assets_dir: assets_dir,
       build_dir: build_dir
@@ -535,6 +536,7 @@ defmodule Hologram.CompilerTest do
       assert File.exists?(package_lock_json_path)
     end
 
+    @tag timeout: 300_000
     test "creates a file containing the digest of package.json", %{
       assets_dir: assets_dir,
       build_dir: build_dir
@@ -572,6 +574,7 @@ defmodule Hologram.CompilerTest do
       setup_js_deps_test("maybe_install_js_deps_1")
     end
 
+    @tag timeout: 300_000
     test "package_json_digest.bin file doesn't exist", %{
       assets_dir: assets_dir,
       build_dir: build_dir
@@ -585,6 +588,7 @@ defmodule Hologram.CompilerTest do
       assert File.exists?(package_json_digest_path)
     end
 
+    @tag timeout: 300_000
     test "package-lock.json file doesn't exist", %{assets_dir: assets_dir, build_dir: build_dir} do
       install_js_deps(assets_dir, build_dir)
 
@@ -595,6 +599,7 @@ defmodule Hologram.CompilerTest do
       assert File.exists?(package_lock_json_path)
     end
 
+    @tag timeout: 300_000
     test "package.json file changed", %{assets_dir: assets_dir, build_dir: build_dir} do
       install_js_deps(assets_dir, build_dir)
 
@@ -608,6 +613,7 @@ defmodule Hologram.CompilerTest do
       assert File.read!(package_json_digest_path) != package_json_digest
     end
 
+    @tag timeout: 300_000
     test "install is not needed", %{assets_dir: assets_dir, build_dir: build_dir} do
       install_js_deps(assets_dir, build_dir)
 
