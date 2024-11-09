@@ -149,13 +149,10 @@ defmodule HologramFeatureTests.ControlFlow.CasePage do
   end
 
   def action(:no_matching_clause, _params, component) do
-    _result =
-      case wrap_term(3) do
-        1 -> :a
-        2 -> :b
-      end
-
-    put_state(component, :result, "abc")
+    case wrap_term(3) do
+      1 -> :a
+      2 -> :b
+    end
   end
 
   def action(:error_in_clause_body, _params, _component) do
