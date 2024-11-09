@@ -96,16 +96,19 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 
 | Expression              | Status             |
 | :---------------------- | :----------------: |
-| Anonymous Function Call | :x:                |
 | Case                    | :white_check_mark: |
-| Comprehension           | :x:                |
 | Cond                    | :white_check_mark: |
-| Guards                  | :x:                |
 | If                      | :x:                |
-| Local Function Call     | :x:                |
-| Remote Function Call    | :x:                |
 | Unless                  | :x:                |
 | With                    | :x:                |
+
+#### Function Calls
+
+| Expression              | Status             |
+| :---------------------- | :----------------: |
+| Anonymous Function Call | :x:                |
+| Local Function Call     | :x:                |
+| Remote Function Call    | :x:                |
 
 #### Operators
 
@@ -188,7 +191,23 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 | Throw                   | :x:                |
 | Try                     | :x:                |
 
-#### Other
+#### Guards
+
+| Construct               | Status             |
+| :---------------------- | :----------------: |
+| Anonymous Function      | :x:                |
+| Case Expression         | :x:                |
+| Comprehension Generator | :x:                |
+| Private Local Function  | :x:                |
+| Public Local Function   | :x:                |
+
+#### Other Syntax
+
+| Construct               | Status             |
+| :---------------------- | :----------------: |
+| Comprehensions          | :x:                |
+
+### Misc Features
 
 | Feature               | Status             |
 | :-------------------- | :----------------: |
