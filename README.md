@@ -196,7 +196,7 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 | Construct               | Status             |
 | :---------------------- | :----------------: |
 | Anonymous Function      | :x:                |
-| Case Expression         | :x:                |
+| Case Expression         | :white_check_mark: |
 | Comprehension Generator | :x:                |
 | Private Local Function  | :x:                |
 | Public Local Function   | :x:                |
