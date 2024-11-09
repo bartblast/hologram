@@ -98,7 +98,7 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 | :--------- | :----------------: |
 | Case       | :white_check_mark: |
 | Cond       | :white_check_mark: |
-| If         | :x:                |
+| If         | :white_check_mark: |
 | Unless     | :x:                |
 | With       | :x:                |
 
