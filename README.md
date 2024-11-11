@@ -99,7 +99,7 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 | Case       | :white_check_mark: |
 | Cond       | :white_check_mark: |
 | If         | :white_check_mark: |
-| Unless     | :x:                |
+| Unless     | :white_check_mark: |
 | With       | :x:                |
 
 #### Function Calls
