@@ -6,7 +6,6 @@ defmodule Hologram.Test.Helpers do
 
   alias Hologram.Commons.ETS
   alias Hologram.Commons.FileUtils
-  alias Hologram.Commons.KernelUtils
   alias Hologram.Commons.ProcessUtils
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context
@@ -81,52 +80,6 @@ defmodule Hologram.Test.Helpers do
   @spec build_erlang_error_msg(String.t()) :: String.t()
   def build_erlang_error_msg(blame) do
     "Erlang error: #{blame}"
-  end
-
-  @doc """
-  Builds an error message for FunctionClauseError.
-  """
-  @spec build_function_clause_error_msg(String.t(), list, list) :: String.t()
-  def build_function_clause_error_msg(fun_name, args \\ [], attempted_clauses \\ []) do
-    args_info =
-      if Enum.any?(args) do
-        initial_acc = "\n\nThe following arguments were given to #{fun_name}:\n"
-
-        args
-        |> Enum.with_index()
-        |> Enum.reduce(initial_acc, fn {arg, idx}, acc ->
-          """
-          #{acc}
-              # #{idx + 1}
-              #{KernelUtils.inspect(arg)}
-          """
-        end)
-      else
-        ""
-      end
-
-    attempted_clauses_count = Enum.count(attempted_clauses)
-
-    attempted_clauses_info =
-      if attempted_clauses_count > 0 do
-        attempted_clauses_list =
-          Enum.map_join(attempted_clauses, "\n", fn attempted_clause ->
-            "    #{attempted_clause}"
-          end)
-
-        """
-
-        Attempted function clauses (showing #{attempted_clauses_count} out of #{attempted_clauses_count}):
-
-        #{attempted_clauses_list}
-        """
-      else
-        ""
-      end
-
-    """
-    no function clause matching in #{fun_name}#{args_info}#{attempted_clauses_info}\
-    """
   end
 
   @doc """
