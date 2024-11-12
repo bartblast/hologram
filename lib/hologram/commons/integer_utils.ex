@@ -21,27 +21,27 @@ defmodule Hologram.Commons.IntegerUtils do
   end
 
   @doc """
-  Returns the ordinal suffix ("st", "nd", "rd", or "th") for a given number.
+  Returns the ordinal number (number with suffix "st", "nd", "rd", or "th") for a given integer.
 
   ## Examples
 
       iex> ordinal(1)
-      "st"
+      "1st"
       
       iex> ordinal(42)
-      "nd"
+      "42nd"
       
       iex> ordinal(11)
-      "th"
+      "11th"
   """
   @spec ordinal(integer) :: String.t()
-  def ordinal(number) do
+  def ordinal(int) do
     # Based on: https://stackoverflow.com/a/39466341/13040586
-    suffix_idx = rem(rem(number + 90, 100) - 10, 10)
+    suffix_idx = rem(rem(int + 90, 100) - 10, 10)
 
     suffix = Map.get(%{1 => "st", 2 => "nd", 3 => "rd"}, suffix_idx, "th")
 
-    "#{number}#{suffix}"
+    "#{int}#{suffix}"
   end
 
   @doc """
