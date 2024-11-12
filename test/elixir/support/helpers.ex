@@ -6,6 +6,7 @@ defmodule Hologram.Test.Helpers do
 
   alias Hologram.Commons.ETS
   alias Hologram.Commons.FileUtils
+  alias Hologram.Commons.IntegerUtils
   alias Hologram.Commons.KernelUtils
   alias Hologram.Commons.ProcessUtils
   alias Hologram.Compiler.AST
@@ -72,14 +73,10 @@ defmodule Hologram.Test.Helpers do
   """
   @spec build_argument_error_msg(integer(), String.t()) :: String.t()
   def build_argument_error_msg(arg_idx, blame) do
-    # Based on: https://stackoverflow.com/a/39466341/13040586
-    suffix_idx = rem(rem(arg_idx + 90, 100) - 10, 10) - 1
-    suffix = Enum.at(["st", "nd", "rd"], suffix_idx, "th")
-
     """
     errors were found at the given arguments:
 
-      * #{arg_idx}#{suffix} argument: #{blame}
+      * #{IntegerUtils.ordinal(arg_idx)} argument: #{blame}
     """
   end
 
