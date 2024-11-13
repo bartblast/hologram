@@ -546,6 +546,10 @@ export default class Hologram {
     //   }
     // });
 
+    window.addEventListener("error", (event) => {
+      GlobalRegistry.set("lastError", event.error);
+    });
+
     window.addEventListener("beforeunload", Hologram.#savePageSnapshot);
 
     window.addEventListener("popstate", Hologram.#handlePopstateEvent);
