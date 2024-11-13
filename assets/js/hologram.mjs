@@ -547,7 +547,10 @@ export default class Hologram {
     // });
 
     window.addEventListener("error", (event) => {
-      GlobalRegistry.set("lastError", event.error);
+      GlobalRegistry.set("lastBoxedError", {
+        struct: event.error.struct,
+        serializedStruct: Serializer.serialize(event.error.struct),
+      });
     });
 
     window.addEventListener("beforeunload", Hologram.#savePageSnapshot);
