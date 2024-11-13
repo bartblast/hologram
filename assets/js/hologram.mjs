@@ -548,14 +548,16 @@ export default class Hologram {
     // });
 
     window.addEventListener("error", (event) => {
-      GlobalRegistry.set("lastBoxedError", {
-        module: Interpreter.inspect(
-          Erlang_Maps["get/2"](Type.atom("module"), event.error.struct),
-        ),
-        message: Bitstring.toText(
-          Erlang_Maps["get/2"](Type.atom("message"), event.error.struct),
-        ),
-      });
+      if (event.error instanceof HologramBoxedError) {
+        GlobalRegistry.set("lastBoxedError", {
+          module: Interpreter.inspect(
+            Erlang_Maps["get/2"](Type.atom("module"), event.error.struct),
+          ),
+          message: Bitstring.toText(
+            Erlang_Maps["get/2"](Type.atom("message"), event.error.struct),
+          ),
+        });
+      }
     });
 
     window.addEventListener("beforeunload", Hologram.#savePageSnapshot);
