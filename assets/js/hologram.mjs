@@ -551,7 +551,7 @@ export default class Hologram {
       if (event.error instanceof HologramBoxedError) {
         GlobalRegistry.set("lastBoxedError", {
           module: Interpreter.inspect(
-            Erlang_Maps["get/2"](Type.atom("module"), event.error.struct),
+            Erlang_Maps["get/2"](Type.atom("__struct__"), event.error.struct),
           ),
           message: Bitstring.toText(
             Erlang_Maps["get/2"](Type.atom("message"), event.error.struct),
