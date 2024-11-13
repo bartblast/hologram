@@ -18,6 +18,7 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
     x + y * x
   end
 
+  # TODO: reimplement to be consistent with test/features/test/function_calls/anonymous_function_test.exs
   describe "call anonymous function" do
     # TODO: client error message for this case is inconsistent with server error message (see test/javascript/interpreter_test.mjs)
     test "arity is invalid, called with no args" do
