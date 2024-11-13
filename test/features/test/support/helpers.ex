@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.Helpers do
-  import ExUnit.Assertions, only: [assert_raise: 3]
+  import ExUnit.Assertions, only: [assert: 2, assert_raise: 3]
   import Hologram.Commons.Guards, only: [is_regex: 1]
 
   alias Hologram.Router
@@ -7,6 +7,37 @@ defmodule HologramFeatureTests.Helpers do
   alias Wallaby.Element
 
   @max_wait_time Application.compile_env(:wallaby, :max_wait_time, 3_000)
+
+  def assert_client_error(session, expected_module, expected_msg, fun) do
+    fun.()
+    wait_for_js_error(session)
+  rescue
+    Wallaby.JSError ->
+      script = "return window?.hologram?.['lastBoxedError'];"
+
+      Browser.execute_script(session, script, [], fn result ->
+        assert result["module"] == inspect(expected_module),
+               "Expected exception #{inspect(expected_module)} but got #{result["module"]} (#{result["message"]})"
+
+        message = fn expected_module, expected_msg, actual_msg ->
+          """
+          Wrong message for #{inspect(expected_module)}
+          expected:
+            "#{expected_msg}"
+          actual:
+            "#{actual_msg}"\
+          """
+        end
+
+        if is_binary(expected_msg) do
+          assert result["message"] == expected_msg,
+                 message.(expected_module, expected_msg, result["message"])
+        else
+          assert result["message"] =~ expected_msg,
+                 message.(expected_module, expected_msg, result["message"])
+        end
+      end)
+  end
 
   def assert_js_error(session, expected_msg, fun) when is_binary(expected_msg) do
     regex = ~r/^There was an uncaught JavaScript error:.+: #{Regex.escape(expected_msg)}\n$/su
