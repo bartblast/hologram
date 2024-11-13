@@ -537,6 +537,7 @@ export default class Hologram {
   }
 
   // Executed only once, on the initial page load.
+  // Deps: [:maps.get/2]
   static #init() {
     // TODO: consider when implementing boxed error handling
     // window.addEventListener("error", (event) => {
@@ -548,8 +549,12 @@ export default class Hologram {
 
     window.addEventListener("error", (event) => {
       GlobalRegistry.set("lastBoxedError", {
-        struct: event.error.struct,
-        serializedStruct: Serializer.serialize(event.error.struct),
+        module: Interpreter.inspect(
+          Erlang_Maps["get/2"](Type.atom("module"), event.error.struct),
+        ),
+        message: Bitstring.toText(
+          Erlang_Maps["get/2"](Type.atom("message"), event.error.struct),
+        ),
       });
     });
 
