@@ -80,17 +80,17 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 
 #### Data Types
 
-| Type               | Status             |
-| :----------------- | :----------------: |
-| Anonymous Function | :white_check_mark: |
-| Atom               | :white_check_mark: |
-| Bitstring          | :white_check_mark: |
-| Float              | :white_check_mark: |
-| Integer            | :white_check_mark: |
-| List               | :white_check_mark: |
-| Map                | :white_check_mark: |
-| PID                | :white_check_mark: |
-| Tuple              | :white_check_mark: |
+| Type      | Status             |
+| :-------- | :----------------: |
+| Atom      | :white_check_mark: |
+| Bitstring | :white_check_mark: |
+| Float     | :white_check_mark: |
+| Function  | :white_check_mark: |
+| Integer   | :white_check_mark: |
+| List      | :white_check_mark: |
+| Map       | :white_check_mark: |
+| PID       | :white_check_mark: |
+| Tuple     | :white_check_mark: |
 
 #### Control Flow
 
@@ -104,11 +104,12 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 
 #### Function Calls
 
-| Expression              | Status             |
-| :---------------------- | :----------------: |
-| Anonymous Function Call | :x:                |
-| Local Function Call     | :x:                |
-| Remote Function Call    | :x:                |
+| Function Type      | Status             |
+| :----------------- | :----------------: |
+| Anonymous Function | :x:                |
+| Function Capture   | :x:                |
+| Local Function     | :x:                |
+| Remote Function    | :x:                |
 
 #### Operators
 
