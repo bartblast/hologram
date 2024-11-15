@@ -1,6 +1,8 @@
 defmodule HologramFeatureTests.Components.DefaultLayout do
   use Hologram.Component
+
   alias Hologram.UI.Runtime
+  alias HologramFeatureTests.Components.CommonLayoutStyles
 
   def template do
     ~H"""
@@ -10,8 +12,9 @@ defmodule HologramFeatureTests.Components.DefaultLayout do
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Runtime />
+        <CommonLayoutStyles />
       </head>
-      <body style="padding: 25px">
+      <body>
         <slot />
       </body>
     </html>

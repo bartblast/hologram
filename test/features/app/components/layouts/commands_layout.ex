@@ -1,6 +1,8 @@
 defmodule HologramFeatureTests.Components.CommandsLayout do
   use Hologram.Component
+
   alias Hologram.UI.Runtime
+  alias HologramFeatureTests.Components.CommonLayoutStyles
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
@@ -17,8 +19,9 @@ defmodule HologramFeatureTests.Components.CommandsLayout do
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Runtime />
+        <CommonLayoutStyles />
       </head>
-      <body style="padding: 25px">
+      <body>
         <p>
           <button id="layout_command_1" $click={command: :layout_command_1, params: %{a: 1, b: 2}}> layout_command_1 </button>
           <button id="page_command_1" $click={command: :page_command_1, target: "page", params: %{a: 1, b: 2}}> page_command_1 </button>

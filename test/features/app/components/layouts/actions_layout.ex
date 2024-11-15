@@ -1,6 +1,8 @@
 defmodule HologramFeatureTests.Components.ActionsLayout do
   use Hologram.Component
+
   alias Hologram.UI.Runtime
+  alias HologramFeatureTests.Components.CommonLayoutStyles
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
@@ -17,8 +19,9 @@ defmodule HologramFeatureTests.Components.ActionsLayout do
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Runtime />
+        <CommonLayoutStyles />
       </head>
-      <body style="padding: 25px">
+      <body>
         <p>
           <button id="layout_action_1" $click="layout_action_1"> layout_action_1 </button>
           <button id="page_action_6" $click={action: :page_action_6, target: "page", params: %{a: 1, b: 2}}> page_action_6 </button>
