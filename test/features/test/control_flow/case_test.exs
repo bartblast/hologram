@@ -66,16 +66,6 @@ defmodule HologramFeatureTests.ControlFlow.CaseTest do
     |> assert_text(css("#result"), "{1, 2, {3, 2}}")
   end
 
-  feature "error in condition", %{session: session} do
-    assert_js_error session,
-                    "(RuntimeError) my message",
-                    fn ->
-                      session
-                      |> visit(CasePage)
-                      |> click(button("Error in condition"))
-                    end
-  end
-
   feature "no matching clause", %{session: session} do
     assert_js_error session,
                     "(CaseClauseError) no case clause matching: 3",
@@ -83,6 +73,16 @@ defmodule HologramFeatureTests.ControlFlow.CaseTest do
                       session
                       |> visit(CasePage)
                       |> click(button("No matching clause"))
+                    end
+  end
+
+  feature "error in condition", %{session: session} do
+    assert_js_error session,
+                    "(RuntimeError) my message",
+                    fn ->
+                      session
+                      |> visit(CasePage)
+                      |> click(button("Error in condition"))
                     end
   end
 
