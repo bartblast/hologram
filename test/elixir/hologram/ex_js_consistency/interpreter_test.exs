@@ -22,7 +22,7 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
   # Keep consistent with feature tests in test/features/test/function_calls/anonymous_function_test.exs
   # TODO: reimplement to be consistent with feature tests in test/features/test/function_calls/anonymous_function_test.exs
   describe "call anonymous function" do
-    # TODO: client error message for this case is inconsistent with server error message (see test/javascript/interpreter_test.mjs)
+    # TODO: client error message for this case is inconsistent with server error message
     test "arity is invalid, called with no args" do
       fun = fn
         1 -> :expr_1
@@ -35,7 +35,7 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
       assert_error BadArityError, expected_msg, fn -> fun.() end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message (see test/javascript/interpreter_test.mjs)
+    # TODO: client error message for this case is inconsistent with server error message
     test "arity is invalid, called with a single arg" do
       fun = fn
         1, 2 -> :expr_1
@@ -48,7 +48,7 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
       assert_error BadArityError, expected_msg, fn -> fun.(9) end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message (see test/javascript/interpreter_test.mjs)
+    # TODO: client error message for this case is inconsistent with server error message
     test "arity is invalid, called with multiple args" do
       fun = fn
         1 -> :expr_1
@@ -61,8 +61,8 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
       assert_error BadArityError, expected_msg, fn -> fun.(9, 8) end
     end
 
-    # TODO: client error message for this case is inconsistent with server error message (see test/javascript/interpreter_test.mjs)
-    test "arity is valid, but args don't match the pattern in any of the clauses" do
+    # TODO: client error message for this case is inconsistent with server error message
+    test "no matching clause" do
       fun = fn
         1 -> :expr_1
         2 -> :expr_2

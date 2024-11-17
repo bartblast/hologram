@@ -94,6 +94,7 @@ defmodule HologramFeatureTests.FunctionCalls.FunctionCaptureTest do
     |> assert_text(css("#result"), "{3, 4, {5, 1, 2}}")
   end
 
+  # TODO: client error message for this case is inconsistent with server error message
   feature "arity invalid, called with no args", %{session: session} do
     assert_client_error session,
                         BadArityError,
@@ -105,6 +106,7 @@ defmodule HologramFeatureTests.FunctionCalls.FunctionCaptureTest do
                         end
   end
 
+  # TODO: client error message for this case is inconsistent with server error message
   feature "arity invalid, called with single arg", %{session: session} do
     assert_client_error session,
                         BadArityError,
@@ -116,6 +118,7 @@ defmodule HologramFeatureTests.FunctionCalls.FunctionCaptureTest do
                         end
   end
 
+  # TODO: client error message for this case is inconsistent with server error message
   feature "arity invalid, called with multiple args", %{session: session} do
     assert_client_error session,
                         BadArityError,
