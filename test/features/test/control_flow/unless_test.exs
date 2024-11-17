@@ -61,7 +61,7 @@ defmodule HologramFeatureTests.ControlFlow.UnlessTest do
 
   feature "error in condition", %{session: session} do
     assert_js_error session,
-                    "(ArgumentError) my message",
+                    "(RuntimeError) my message",
                     fn ->
                       session
                       |> visit(UnlessPage)

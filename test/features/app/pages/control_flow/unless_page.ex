@@ -134,7 +134,10 @@ defmodule HologramFeatureTests.ControlFlow.UnlessPage do
   end
 
   def action(:error_in_condition, _params, _component) do
-    unless raise ArgumentError, "my message" do
+    unless (
+             message = "my message"
+             raise RuntimeError, message
+           ) do
       :a
     end
   end
