@@ -161,7 +161,7 @@ defmodule HologramFeatureTests.ControlFlow.CasePage do
            message = "my message"
            raise RuntimeError, message
          ) do
-      1 -> :a
+      x -> x
     end
   end
 
