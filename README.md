@@ -107,7 +107,7 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 | Function Type      | Status             |
 | :----------------- | :----------------: |
 | Anonymous Function | :white_check_mark: |
-| Function Capture   | :x:                |
+| Function Capture   | :white_check_mark: |
 | Local Function     | :x:                |
 | Remote Function    | :x:                |
 
