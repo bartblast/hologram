@@ -28,6 +28,7 @@ defmodule HologramFeatureTests.ControlFlow.CasePage do
       <button $click="vars_matching"> Vars matching </button>
       <button $click="vars_scoping"> Vars scoping </button>
       <button $click="var_match_in_condition"> Var match in condition </button>
+      <button $click="error_in_condition"> Error in condition </button>
       <button $click="no_matching_clause"> No matching clause </button>
       <button $click="error_in_clause_body"> Error in clause body </button>
     </p>
@@ -146,6 +147,15 @@ defmodule HologramFeatureTests.ControlFlow.CasePage do
       end
 
     put_state(component, :result, {x, y, result})
+  end
+
+  def action(:error_in_condition, _params, _component) do
+    case (
+           message = "my message"
+           raise RuntimeError, message
+         ) do
+      1 -> :a
+    end
   end
 
   def action(:no_matching_clause, _params, _component) do
