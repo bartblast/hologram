@@ -26,6 +26,7 @@ defmodule HologramFeatureTests.ControlFlow.CondPage do
       <button $click="evaluates_the_first_clause_with_truthy_condition"> Evaluates the first clause with truthy condition </button>
       <button $click="vars_scoping"> Vars scoping </button>
       <button $click="no_matching_clause"> No matching clause </button>
+      <button $click="error_in_clause_condition"> Error in clause condition </button>
       <button $click="error_in_clause_body"> Error in clause body </button>
     </p>
     <p>
@@ -123,6 +124,12 @@ defmodule HologramFeatureTests.ControlFlow.CondPage do
     cond do
       false -> :a
       false -> :b
+    end
+  end
+
+  def action(:error_in_clause_condition, _params, _component) do
+    cond do
+      raise(RuntimeError, "my message") -> :a
     end
   end
 

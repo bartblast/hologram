@@ -55,7 +55,17 @@ defmodule HologramFeatureTests.ControlFlow.CondTest do
                     end
   end
 
-  feature "error_in_clause_body", %{session: session} do
+  feature "error in clause condition", %{session: session} do
+    assert_js_error session,
+                    "(RuntimeError) my message",
+                    fn ->
+                      session
+                      |> visit(CondPage)
+                      |> click(button("Error in clause condition"))
+                    end
+  end
+
+  feature "error in clause body", %{session: session} do
     assert_js_error session,
                     "(ArgumentError) my message",
                     fn ->
