@@ -2,6 +2,10 @@ defmodule HologramFeatureTests.FunctionCalls.FunctionCaptureTest do
   use HologramFeatureTests.TestCase, async: true
   alias HologramFeatureTests.FunctionCalls.FunctionCapturePage
 
+  # IMPORTANT!
+  # Keep consistent with Elixir/JavaScript consistency tests
+  # in test/elixir/hologram/ex_js_consistency/interpreter_test.exs (call function capture section).
+
   feature "single arg", %{session: session} do
     session
     |> visit(FunctionCapturePage)

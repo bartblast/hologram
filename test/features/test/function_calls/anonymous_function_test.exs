@@ -2,6 +2,10 @@ defmodule HologramFeatureTests.FunctionCalls.AnonymousFunctionTest do
   use HologramFeatureTests.TestCase, async: true
   alias HologramFeatureTests.FunctionCalls.AnonymousFunctionPage
 
+  # IMPORTANT!
+  # Keep consistent with Elixir/JavaScript consistency tests
+  # in test/elixir/hologram/ex_js_consistency/interpreter_test.exs (call anonymous function section).
+
   # no args / single clause / single-expression body
   feature "basic case", %{session: session} do
     session

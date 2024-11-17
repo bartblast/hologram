@@ -119,7 +119,9 @@ export default class Interpreter {
 
   // callAnonymousFunction() has no unit tests in interpreter_test.mjs, only:
   // * feature tests in test/features/test/function_calls/anonymous_function_test.exs,
+  // * feature tests in test/features/test/function_calls/function_capture_test.exs,
   // * consistency tests in test/elixir/hologram/ex_js_consistency/interpreter_test.exs (call anonymous function section).
+  // * consistency tests in test/elixir/hologram/ex_js_consistency/interpreter_test.exs (call function capture section).
   // Unit test maintenance in interpreter_test.mjs would be problematic because tests would need to be updated
   // each time Hologram.Compiler.Encoder's implementation changes.
   static callAnonymousFunction(fun, argsArray) {

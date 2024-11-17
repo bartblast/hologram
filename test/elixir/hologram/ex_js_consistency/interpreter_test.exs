@@ -1,7 +1,7 @@
 defmodule Hologram.ExJsConsistency.InterpreterTest do
   @moduledoc """
   IMPORTANT!
-  Each Elixir consistency test has a related JavaScript test in test/javascript/interpreter.mjs.
+  Each Elixir consistency test has a related unit JavaScript or Elixir feature test.
   Always update both together.
   """
   use Hologram.Test.BasicCase, async: true
@@ -18,7 +18,9 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
     x + y * x
   end
 
-  # TODO: reimplement to be consistent with test/features/test/function_calls/anonymous_function_test.exs
+  # IMPORTANT!
+  # Keep consistent with feature tests in test/features/test/function_calls/anonymous_function_test.exs
+  # TODO: reimplement to be consistent with feature tests in test/features/test/function_calls/anonymous_function_test.exs
   describe "call anonymous function" do
     # TODO: client error message for this case is inconsistent with server error message (see test/javascript/interpreter_test.mjs)
     test "arity is invalid, called with no args" do
@@ -74,6 +76,11 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
                    fn -> fun.(9) end
     end
   end
+
+  # IMPORTANT!
+  # Keep consistent with feature tests in test/features/test/function_calls/function_capture_test.exs  
+  # TODO: implement
+  # describe "call function capture"
 
   describe "call named function" do
     test "remote private function call" do
