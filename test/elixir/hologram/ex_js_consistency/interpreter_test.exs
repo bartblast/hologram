@@ -82,6 +82,12 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
   # TODO: implement
   # describe "call function capture"
 
+  # IMPORTANT!
+  # Keep consistent with feature tests in:
+  # * test/features/test/function_calls/local_function_test.exs
+  # * test/features/test/function_calls/remote_function_test.exs
+  # TODO: split into "call local function" and "call remote function"
+  # TODO: reimplement to be consistent with aforementioned feature tests
   describe "call named function" do
     test "remote private function call" do
       expected_msg =
