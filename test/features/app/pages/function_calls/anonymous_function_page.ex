@@ -164,18 +164,15 @@ defmodule HologramFeatureTests.FunctionCalls.AnonymousFunctionPage do
     fun.(:a, :b)
   end
 
-  def action(:no_matching_clause, _params, component) do
+  def action(:no_matching_clause, _params, _component) do
     fun = fn
       1, 2 -> :a
       3, 4 -> :b
     end
 
-    result =
-      5
-      |> wrap_term()
-      |> fun.(6)
-
-    put_state(component, :result, result)
+    5
+    |> wrap_term()
+    |> fun.(6)
   end
 
   def action(:error_in_body, _params, _component) do
