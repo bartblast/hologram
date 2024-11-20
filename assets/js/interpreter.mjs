@@ -152,6 +152,13 @@ export default class Interpreter {
     );
   }
 
+  // callNamedFunction() has no unit tests in interpreter_test.mjs, only:
+  // * feature tests in test/features/test/function_calls/local_function_test.exs,
+  // * feature tests in test/features/test/function_calls/remote_function_test.exs,
+  // * consistency tests in test/elixir/hologram/ex_js_consistency/interpreter_test.exs (call local function section).
+  // * consistency tests in test/elixir/hologram/ex_js_consistency/interpreter_test.exs (call remote function section).
+  // Unit test maintenance in interpreter_test.mjs would be problematic because tests would need to be updated
+  // each time Hologram.Compiler.Encoder's implementation changes.
   static callNamedFunction(module, functionName, args, context) {
     const moduleRef = Interpreter.moduleRef(module);
     const arity = args.data.length;
