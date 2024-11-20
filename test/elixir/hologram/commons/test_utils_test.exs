@@ -87,6 +87,39 @@ defmodule Hologram.Commons.TestUtilsTest do
     end
   end
 
+  describe "build_undefined_function_error/3" do
+    # no similar functions / module is available
+    test "basic case" do
+      assert build_undefined_function_error({MyModule, :my_fun, 2}) ==
+               "function MyModule.my_fun/2 is undefined or private"
+    end
+
+    test "single similar function" do
+      assert build_undefined_function_error({MyModule, :my_fun, 2}, [{:my_other_fun, 3}]) == """
+             function MyModule.my_fun/2 is undefined or private. Did you mean:
+
+                   * my_other_fun/3
+             """
+    end
+
+    test "multiple similar functions" do
+      assert build_undefined_function_error({MyModule, :my_fun, 2}, [
+               {:my_other_fun_1, 3},
+               {:my_other_fun_2, 4}
+             ]) == """
+             function MyModule.my_fun/2 is undefined or private. Did you mean:
+
+                   * my_other_fun_1/3
+                   * my_other_fun_2/4
+             """
+    end
+
+    test "module is not available" do
+      assert build_undefined_function_error({MyModule, :my_fun, 2}, [], false) ==
+               "function MyModule.my_fun/2 is undefined (module MyModule is not available)"
+    end
+  end
+
   test "wrap_term/1" do
     assert wrap_term(:abc) == :abc
   end
