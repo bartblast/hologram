@@ -6,7 +6,7 @@ defmodule HologramFeatureTests.FunctionCalls.LocalFunctionTest do
   # Keep consistent with Elixir/JavaScript consistency tests
   # in test/elixir/hologram/ex_js_consistency/interpreter_test.exs (call local function section).
 
-  # no args / single clause / single-expression body
+  # public function / no args / single clause / single-expression body
   feature "basic case", %{session: session} do
     session
     |> visit(LocalFunctionPage)

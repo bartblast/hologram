@@ -36,7 +36,7 @@ defmodule HologramFeatureTests.FunctionCalls.LocalFunctionPage do
     """
   end
 
-  # public funciton / no args / single clause / single-expression body
+  # public function / no args / single clause / single-expression body
   def action(:basic_case, _params, component) do
     result = local_fun_1()
 
