@@ -108,7 +108,7 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 | :----------------- | :----------------: |
 | Anonymous Function | :white_check_mark: |
 | Function Capture   | :white_check_mark: |
-| Local Function     | :x:                |
+| Local Function     | :white_check_mark: |
 | Remote Function    | :x:                |
 
 #### Operators
