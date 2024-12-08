@@ -32,7 +32,6 @@ without its shortcomings related to scalability, efficiency, etc.
 | :-------------- | :----------------: | :-------------------------------------------------------------- |
 | Components      | :construction:     | done: stateless/stateful components, todo: props DSL            |
 | If Block        | :construction:     | done: element nodes, todo: component nodes                      |
-| Interpolation   | :white_check_mark: |                                                                 |
 | Layouts         | :white_check_mark: |                                                                 |
 | Navigation      | :white_check_mark: |                                                                 |
 | Pages           | :white_check_mark: |                                                                 |

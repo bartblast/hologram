@@ -78,7 +78,7 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 
 ### Template Engine
 
-#### Template Markup
+#### Markup
 
 | Markup        | Status             |
 | :------------ | :----------------: |
