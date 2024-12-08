@@ -76,6 +76,15 @@ end
 
 Please note that the "Readme" file is currently undergoing an overhaul, and the "Features" section may not be up to date.
 
+### Template Engine
+
+#### Template Markup
+
+| Markup  | Status             |
+| :------ | :----------------: |
+| Element | :white_check_mark: |
+| Text    | :white_check_mark: |
+
 ### Elixir Syntax
 
 #### Data Types
