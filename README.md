@@ -80,10 +80,11 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 
 #### Template Markup
 
-| Markup  | Status             |
-| :------ | :----------------: |
-| Element | :white_check_mark: |
-| Text    | :white_check_mark: |
+| Markup        | Status             |
+| :------------ | :----------------: |
+| Element       | :white_check_mark: |
+| Interpolation | :white_check_mark: |
+| Text          | :white_check_mark: |
 
 ### Elixir Syntax
 
