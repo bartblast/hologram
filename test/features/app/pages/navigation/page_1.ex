@@ -1,14 +1,14 @@
-defmodule HologramFeatureTests.Navigation1Page do
+defmodule HologramFeatureTests.Navigation.Page1 do
   use Hologram.Page
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
   alias Hologram.UI.Link
-  alias HologramFeatureTests.Navigation2Page, as: Page2
-  alias HologramFeatureTests.Navigation3Page, as: Page3
+  alias HologramFeatureTests.Navigation.Page2
+  alias HologramFeatureTests.Navigation.Page3
 
-  route "/navigation-1"
+  route "/navigation/1"
 
   layout HologramFeatureTests.Components.DefaultLayout
 

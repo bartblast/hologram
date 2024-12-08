@@ -1,4 +1,4 @@
-defmodule HologramFeatureTests.Module2Fixture do
+defmodule HologramFeatureTests.ModuleFixture2 do
   def fun_1 do
     :a
   end

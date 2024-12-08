@@ -1,4 +1,4 @@
-defmodule HologramFeatureTests.ModuleFixture do
+defmodule HologramFeatureTests.ModuleFixture1 do
   defp private_fun(x, y) do
     {x, y}
   end

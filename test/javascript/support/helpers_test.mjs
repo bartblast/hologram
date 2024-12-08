@@ -9,12 +9,12 @@ import {
 import Type from "../../../assets/js/type.mjs";
 
 import {defineModule1Fixture} from "./fixtures/router/helpers/module_1.mjs";
-import {defineModule2Fixture} from "./fixtures/router/helpers/module_2.mjs";
+import {defineModuleFixture2} from "./fixtures/router/helpers/module_2.mjs";
 
 defineGlobalErlangAndElixirModules();
 
 defineModule1Fixture();
-defineModule2Fixture();
+defineModuleFixture2();
 
 const module1 = Type.alias("Hologram.Test.Fixtures.Router.Helpers.Module1");
 const module2 = Type.alias("Hologram.Test.Fixtures.Router.Helpers.Module2");

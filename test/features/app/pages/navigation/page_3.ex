@@ -1,10 +1,10 @@
-defmodule HologramFeatureTests.Navigation3Page do
+defmodule HologramFeatureTests.Navigation.Page3 do
   use Hologram.Page
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
-  route "/navigation-3/:s/:i"
+  route "/navigation/3/:s/:i"
 
   param :s, :string
   param :i, :integer

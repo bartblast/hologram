@@ -5,7 +5,7 @@ defmodule HologramFeatureTests.FunctionCalls.FunctionCapturePage do
   import Hologram.Commons.TestUtils, only: [wrap_term: 1]
   import Kernel, except: [inspect: 1]
 
-  alias HologramFeatureTests.ModuleFixture
+  alias HologramFeatureTests.ModuleFixture1
 
   route "/function-calls/function-capture"
 
@@ -73,7 +73,7 @@ defmodule HologramFeatureTests.FunctionCalls.FunctionCapturePage do
   end
 
   def action(:remote_private_elixir_function_capture, _params, component) do
-    module = wrap_term(ModuleFixture)
+    module = wrap_term(ModuleFixture1)
     fun = &module.private_fun/2
     result = fun.(:a, :b)
 
@@ -81,7 +81,7 @@ defmodule HologramFeatureTests.FunctionCalls.FunctionCapturePage do
   end
 
   def action(:remote_public_elixir_function_capture, _params, component) do
-    fun = &ModuleFixture.public_fun/2
+    fun = &ModuleFixture1.public_fun/2
     result = fun.(:a, :b)
 
     put_state(component, :result, result)
@@ -102,7 +102,7 @@ defmodule HologramFeatureTests.FunctionCalls.FunctionCapturePage do
   end
 
   def action(:partially_applied_remote_elixir_function_capture, _params, component) do
-    fun = &ModuleFixture.public_fun(&1, :b)
+    fun = &ModuleFixture1.public_fun(&1, :b)
     result = fun.(:a)
 
     put_state(component, :result, result)

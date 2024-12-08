@@ -1,10 +1,10 @@
-defmodule HologramFeatureTests.Navigation4Page do
+defmodule HologramFeatureTests.Navigation.Page4 do
   use Hologram.Page
 
   alias Hologram.UI.Link
-  alias HologramFeatureTests.Navigation2Page, as: Page2
+  alias HologramFeatureTests.Navigation.Page2
 
-  route "/navigation-4"
+  route "/navigation/4"
 
   layout HologramFeatureTests.Components.DefaultLayout
 

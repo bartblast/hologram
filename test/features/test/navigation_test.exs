@@ -1,10 +1,10 @@
 defmodule HologramFeatureTests.NavigationTest do
   use HologramFeatureTests.TestCase, async: true
 
-  alias HologramFeatureTests.Navigation1Page, as: Page1
-  alias HologramFeatureTests.Navigation2Page, as: Page2
-  alias HologramFeatureTests.Navigation3Page, as: Page3
-  alias HologramFeatureTests.Navigation4Page, as: Page4
+  alias HologramFeatureTests.Navigation.Page1
+  alias HologramFeatureTests.Navigation.Page2
+  alias HologramFeatureTests.Navigation.Page3
+  alias HologramFeatureTests.Navigation.Page4
 
   describe "link component" do
     feature "without params", %{session: session} do

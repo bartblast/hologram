@@ -37,7 +37,7 @@ defmodule HologramFeatureTests.FunctionCalls.FunctionCaptureTest do
   feature "remote private Elixir function capture", %{session: session} do
     assert_client_error session,
                         UndefinedFunctionError,
-                        "function HologramFeatureTests.ModuleFixture.private_fun/2 is undefined or private",
+                        "function HologramFeatureTests.ModuleFixture1.private_fun/2 is undefined or private",
                         fn ->
                           session
                           |> visit(FunctionCapturePage)

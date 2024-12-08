@@ -5,7 +5,7 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionPage do
   import Hologram.Commons.TestUtils, only: [wrap_term: 1]
   import Kernel, except: [inspect: 1]
 
-  alias HologramFeatureTests.Module2Fixture
+  alias HologramFeatureTests.ModuleFixture2
 
   route "/function-calls/remote-function"
 
@@ -45,13 +45,13 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionPage do
 
   # public function / Elixir function / no args / single clause / single-expression body
   def action(:basic_case, _params, component) do
-    result = Module2Fixture.fun_1()
+    result = ModuleFixture2.fun_1()
 
     put_state(component, :result, result)
   end
 
   def action(:private_function, _params, _component) do
-    wrap_term(Module2Fixture).fun_2()
+    wrap_term(ModuleFixture2).fun_2()
   end
 
   def action(:erlang_function, _params, component) do
@@ -61,37 +61,37 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionPage do
   end
 
   def action(:single_arg, _params, component) do
-    result = Module2Fixture.fun_3(:a)
+    result = ModuleFixture2.fun_3(:a)
 
     put_state(component, :result, result)
   end
 
   def action(:multiple_args, _params, component) do
-    result = Module2Fixture.fun_4(:a, :b)
+    result = ModuleFixture2.fun_4(:a, :b)
 
     put_state(component, :result, result)
   end
 
   def action(:multiple_clauses, _params, component) do
-    result = Module2Fixture.fun_5(2, :a)
+    result = ModuleFixture2.fun_5(2, :a)
 
     put_state(component, :result, result)
   end
 
   def action(:multiple_expression_body, _params, component) do
-    result = Module2Fixture.fun_6()
+    result = ModuleFixture2.fun_6()
 
     put_state(component, :result, result)
   end
 
   def action(:single_guard, _params, component) do
-    result = Module2Fixture.fun_7(2)
+    result = ModuleFixture2.fun_7(2)
 
     put_state(component, :result, result)
   end
 
   def action(:multiple_guards, _params, component) do
-    result = Module2Fixture.fun_8(25)
+    result = ModuleFixture2.fun_8(25)
 
     put_state(component, :result, result)
   end
@@ -100,29 +100,29 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionPage do
     x = 1
     y = 2
 
-    result = Module2Fixture.fun_9(x, 5)
+    result = ModuleFixture2.fun_9(x, 5)
 
     put_state(component, :result, {x, y, result})
   end
 
   def action(:arity_invalid_called_with_no_args, _params, _component) do
-    wrap_term(Module2Fixture).fun_4()
+    wrap_term(ModuleFixture2).fun_4()
   end
 
   def action(:arity_invalid_called_with_single_arg, _params, _component) do
-    wrap_term(Module2Fixture).fun_4(:a)
+    wrap_term(ModuleFixture2).fun_4(:a)
   end
 
   def action(:arity_invalid_called_with_multple_args, _params, _component) do
-    wrap_term(Module2Fixture).fun_3(:a, :b)
+    wrap_term(ModuleFixture2).fun_3(:a, :b)
   end
 
   def action(:no_matching_clause, _params, _component) do
-    Module2Fixture.fun_5(4, 5)
+    ModuleFixture2.fun_5(4, 5)
   end
 
   def action(:error_in_body, _params, _component) do
-    Module2Fixture.fun_10()
+    ModuleFixture2.fun_10()
   end
 
   def action(:reset, _params, component) do

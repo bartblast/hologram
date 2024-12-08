@@ -3,7 +3,7 @@
 import Interpreter from "../../../../../../assets/js/interpreter.mjs";
 import Type from "../../../../../../assets/js/type.mjs";
 
-export function defineModule2Fixture() {
+export function defineModuleFixture2() {
   Interpreter.defineElixirFunction(
     "Hologram.Test.Fixtures.Router.Helpers.Module2",
     "__params__",

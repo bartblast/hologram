@@ -19,7 +19,7 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionTest do
     assert_client_error session,
                         UndefinedFunctionError,
                         build_undefined_function_error(
-                          {HologramFeatureTests.Module2Fixture, :fun_2, 0},
+                          {HologramFeatureTests.ModuleFixture2, :fun_2, 0},
                           []
                         ),
                         fn ->
@@ -90,7 +90,7 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionTest do
     assert_client_error session,
                         UndefinedFunctionError,
                         build_undefined_function_error(
-                          {HologramFeatureTests.Module2Fixture, :fun_4, 0},
+                          {HologramFeatureTests.ModuleFixture2, :fun_4, 0},
                           []
                         ),
                         fn ->
@@ -105,7 +105,7 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionTest do
     assert_client_error session,
                         UndefinedFunctionError,
                         build_undefined_function_error(
-                          {HologramFeatureTests.Module2Fixture, :fun_4, 1},
+                          {HologramFeatureTests.ModuleFixture2, :fun_4, 1},
                           []
                         ),
                         fn ->
@@ -120,7 +120,7 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionTest do
     assert_client_error session,
                         UndefinedFunctionError,
                         build_undefined_function_error(
-                          {HologramFeatureTests.Module2Fixture, :fun_3, 2},
+                          {HologramFeatureTests.ModuleFixture2, :fun_3, 2},
                           []
                         ),
                         fn ->
@@ -135,7 +135,7 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionTest do
     assert_client_error session,
                         FunctionClauseError,
                         build_function_clause_error_msg(
-                          "HologramFeatureTests.Module2Fixture.fun_5/2",
+                          "HologramFeatureTests.ModuleFixture2.fun_5/2",
                           [4, 5]
                         ),
                         fn ->
