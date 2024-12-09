@@ -5,6 +5,7 @@ defmodule HologramFeatureTests.Helpers do
   alias Hologram.Router
   alias Wallaby.Browser
   alias Wallaby.Element
+  alias Wallaby.Query
 
   @max_wait_time Application.compile_env(:wallaby, :max_wait_time, 3_000)
 
@@ -37,6 +38,11 @@ defmodule HologramFeatureTests.Helpers do
                  message.(expected_module, expected_msg, result["message"])
         end
       end)
+  end
+
+  def assert_count(session, css_selector, count) do
+    Browser.find(session, Query.css(css_selector, count: count))
+    session
   end
 
   def assert_js_error(session, expected_msg, fun) when is_binary(expected_msg) do
