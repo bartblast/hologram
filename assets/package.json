@@ -13,7 +13,7 @@
     "fake-indexeddb": "^6",
     "jsdom": "^25",
     "jsdom-global": "^3",
-    "mocha": "^10",
+    "mocha": "^11",
     "prettier": "^3",
     "sinon": "^19"
   },
