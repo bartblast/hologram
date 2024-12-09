@@ -82,11 +82,11 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 
 | Markup                | Status             |
 | :-------------------- | :----------------: |
-| Element Node          | :white_check_mark: |
+| Element (node)        | :white_check_mark: |
 | Interpolation         | :white_check_mark: |
-| Iteration (for block) | :white_check_mark: |
-| Public comment        | :white_check_mark: |
-| Text Node             | :white_check_mark: |
+| For Block (iteration) | :white_check_mark: |
+| Public Comment        | :white_check_mark: |
+| Text (node)           | :white_check_mark: |
 
 ### Elixir Syntax
 
