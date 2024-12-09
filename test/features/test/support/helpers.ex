@@ -67,6 +67,21 @@ defmodule HologramFeatureTests.Helpers do
     |> wait_for_server_connection()
   end
 
+  def assert_public_comment(session, comment) do
+    script = "return document.documentElement.outerHTML;"
+
+    callback = fn html ->
+      regex = ~r/<!\-\-\s*#{Regex.escape(comment)}\s*\-\->/
+
+      unless html =~ regex do
+        raise Wallaby.ExpectationNotMetError,
+              "Expected to find public comment \"#{comment}\" in page content, but it was not found"
+      end
+    end
+
+    Browser.execute_script(session, script, [], callback)
+  end
+
   def assert_scroll_position(session, x, y) do
     callback = fn scroll_position ->
       if scroll_position == [x, y] do
