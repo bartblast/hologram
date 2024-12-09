@@ -3,6 +3,7 @@ defmodule HologramFeatureTests.TemplateMarkupTest do
 
   alias HologramFeatureTests.TemplateMarkup.ForBlockPage
   alias HologramFeatureTests.TemplateMarkup.InterpolationPage
+  alias HologramFeatureTests.TemplateMarkup.PublicCommentPage
   alias HologramFeatureTests.TemplateMarkup.TextAndElementPage
 
   feature "text and element", %{session: session} do
@@ -32,5 +33,11 @@ defmodule HologramFeatureTests.TemplateMarkupTest do
     |> assert_has(css("#item_1.item", text: "text_1"))
     |> assert_has(css("#item_2.item", text: "text_2"))
     |> assert_has(css("#item_3.item", text: "text_3"))
+  end
+
+  feature "public comment", %{session: session} do
+    session
+    |> visit(PublicCommentPage)
+    |> assert_public_comment("my comment")
   end
 end
