@@ -35,7 +35,6 @@ without its shortcomings related to scalability, efficiency, etc.
 | Layouts         | :white_check_mark: |                                                                 |
 | Navigation      | :white_check_mark: |                                                                 |
 | Pages           | :white_check_mark: |                                                                 |
-| Raw Block       | :x:                |                                                                 |
 | Templates       | :construction:     | done: template in module, todo: template in separate file       |
 
 #### Events
