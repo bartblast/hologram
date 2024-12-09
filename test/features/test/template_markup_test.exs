@@ -1,6 +1,7 @@
 defmodule HologramFeatureTests.TemplateMarkupTest do
   use HologramFeatureTests.TestCase, async: true
 
+  alias HologramFeatureTests.TemplateMarkup.ForBlockPage
   alias HologramFeatureTests.TemplateMarkup.InterpolationPage
   alias HologramFeatureTests.TemplateMarkup.TextAndElementPage
 
@@ -22,5 +23,14 @@ defmodule HologramFeatureTests.TemplateMarkupTest do
       |> visit(InterpolationPage)
       |> assert_has(css("span.node_2", text: "xyz"))
     end
+  end
+
+  feature "for block", %{session: session} do
+    session
+    |> visit(ForBlockPage)
+    |> assert_count(".item", 3)
+    |> assert_has(css("#item_1.item", text: "text_1"))
+    |> assert_has(css("#item_2.item", text: "text_2"))
+    |> assert_has(css("#item_3.item", text: "text_3"))
   end
 end
