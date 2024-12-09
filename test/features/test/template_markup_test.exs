@@ -4,6 +4,7 @@ defmodule HologramFeatureTests.TemplateMarkupTest do
   alias HologramFeatureTests.TemplateMarkup.ForBlockPage
   alias HologramFeatureTests.TemplateMarkup.InterpolationPage
   alias HologramFeatureTests.TemplateMarkup.PublicCommentPage
+  alias HologramFeatureTests.TemplateMarkup.RawBlockPage
   alias HologramFeatureTests.TemplateMarkup.TextAndElementPage
 
   feature "text and element", %{session: session} do
@@ -39,5 +40,11 @@ defmodule HologramFeatureTests.TemplateMarkupTest do
     session
     |> visit(PublicCommentPage)
     |> assert_public_comment("my comment")
+  end
+
+  feature "raw block", %{session: session} do
+    session
+    |> visit(RawBlockPage)
+    |> assert_has(css("body", text: "{%if false}abc{@var}xyz{/if}"))
   end
 end
