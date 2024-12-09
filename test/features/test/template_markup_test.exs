@@ -27,13 +27,21 @@ defmodule HologramFeatureTests.TemplateMarkupTest do
     end
   end
 
-  feature "for block", %{session: session} do
-    session
-    |> visit(ForBlockPage)
-    |> assert_count(".item", 3)
-    |> assert_has(css("#item_1.item", text: "text_1"))
-    |> assert_has(css("#item_2.item", text: "text_2"))
-    |> assert_has(css("#item_3.item", text: "text_3"))
+  describe "for block" do
+    feature "having items", %{session: session} do
+      session
+      |> visit(ForBlockPage)
+      |> assert_count("#block_1 .item", 3)
+      |> assert_has(css("#block_1 #item_1.item", text: "text_1"))
+      |> assert_has(css("#block_1 #item_2.item", text: "text_2"))
+      |> assert_has(css("#block_1 #item_3.item", text: "text_3"))
+    end
+
+    feature "not having items", %{session: session} do
+      session
+      |> visit(ForBlockPage)
+      |> assert_has(css("#block_2", text: "abcxyz"))
+    end
   end
 
   feature "public comment", %{session: session} do
