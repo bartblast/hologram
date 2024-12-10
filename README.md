@@ -82,6 +82,7 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 
 | Markup                       | Status             |
 | :--------------------------- | :----------------: |
+| Component (node)             | :white_check_mark: |
 | Element (node)               | :white_check_mark: |
 | Interpolation                | :white_check_mark: |
 | For Block (iteration)        | :white_check_mark: |
