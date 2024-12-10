@@ -86,6 +86,7 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 | Element (node)               | :white_check_mark: |
 | Interpolation                | :white_check_mark: |
 | For Block (iteration)        | :white_check_mark: |
+| If Block (conditional)       | :white_check_mark: |
 | Public Comment               | :white_check_mark: |
 | Raw Block (markup disabling) | :white_check_mark: |
 | Text (node)                  | :white_check_mark: |
