@@ -12,6 +12,7 @@ defmodule HologramFeatureTests.TemplateMarkup.ForBlockPage do
         <div id="item_{n}" class="item">text_{n}</div>
       {/for}
     </div>
+
     <div id="block_2">
       abc{%for n <- []}{n}{/for}xyz
     </div>
