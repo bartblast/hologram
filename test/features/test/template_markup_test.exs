@@ -3,6 +3,7 @@ defmodule HologramFeatureTests.TemplateMarkupTest do
 
   alias HologramFeatureTests.TemplateMarkup.ComponentPage
   alias HologramFeatureTests.TemplateMarkup.ForBlockPage
+  alias HologramFeatureTests.TemplateMarkup.IfBlockPage
   alias HologramFeatureTests.TemplateMarkup.InterpolationPage
   alias HologramFeatureTests.TemplateMarkup.PublicCommentPage
   alias HologramFeatureTests.TemplateMarkup.RawBlockPage
@@ -36,6 +37,26 @@ defmodule HologramFeatureTests.TemplateMarkupTest do
       session
       |> visit(ForBlockPage)
       |> assert_has(css("#block_2", text: "abcxyz"))
+    end
+  end
+
+  describe "if block" do
+    feature "with truthy condition", %{session: session} do
+      session
+      |> visit(IfBlockPage)
+      |> assert_has(css("#block_1", text: "abc"))
+    end
+
+    feature "with falsy condition, having else subblock", %{session: session} do
+      session
+      |> visit(IfBlockPage)
+      |> assert_has(css("#block_2", text: "acd"))
+    end
+
+    feature "with falsy condition, not having else subblock", %{session: session} do
+      session
+      |> visit(IfBlockPage)
+      |> assert_has(css("#block_3", text: "ac"))
     end
   end
 
