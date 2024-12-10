@@ -8,23 +8,17 @@ defmodule HologramFeatureTests.TemplateMarkupTest do
   alias HologramFeatureTests.TemplateMarkup.RawBlockPage
   alias HologramFeatureTests.TemplateMarkup.TextAndElementPage
 
-  feature "text and element", %{session: session} do
-    session
-    |> visit(TextAndElementPage)
-    |> assert_has(css("div.parent_elem span.child_elem", text: "my text"))
-  end
-
-  describe "interpolation" do
-    feature "in text", %{session: session} do
+  describe "nodes" do
+    feature "text and element", %{session: session} do
       session
-      |> visit(InterpolationPage)
-      |> assert_has(css("span.node_1", text: "a2c"))
+      |> visit(TextAndElementPage)
+      |> assert_has(css("div.parent_elem span.child_elem", text: "my text"))
     end
 
-    feature "in attribute value", %{session: session} do
+    feature "component", %{session: session} do
       session
-      |> visit(InterpolationPage)
-      |> assert_has(css("span.node_2", text: "xyz"))
+      |> visit(ComponentPage)
+      |> assert_has(css("div#my_component", text: "abc"))
     end
   end
 
@@ -45,21 +39,29 @@ defmodule HologramFeatureTests.TemplateMarkupTest do
     end
   end
 
-  feature "public comment", %{session: session} do
-    session
-    |> visit(PublicCommentPage)
-    |> assert_public_comment("my comment")
-  end
-
   feature "raw block", %{session: session} do
     session
     |> visit(RawBlockPage)
     |> assert_has(css("body", text: "{%if false}abc{@var}xyz{/if}"))
   end
 
-  feature "component", %{session: session} do
+  describe "interpolation" do
+    feature "in text", %{session: session} do
+      session
+      |> visit(InterpolationPage)
+      |> assert_has(css("span.node_1", text: "a2c"))
+    end
+
+    feature "in attribute value", %{session: session} do
+      session
+      |> visit(InterpolationPage)
+      |> assert_has(css("span.node_2", text: "xyz"))
+    end
+  end
+
+  feature "public comment", %{session: session} do
     session
-    |> visit(ComponentPage)
-    |> assert_has(css("div#my_component", text: "abc"))
+    |> visit(PublicCommentPage)
+    |> assert_public_comment("my comment")
   end
 end
