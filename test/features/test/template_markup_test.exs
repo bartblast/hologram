@@ -1,6 +1,7 @@
 defmodule HologramFeatureTests.TemplateMarkupTest do
   use HologramFeatureTests.TestCase, async: true
 
+  alias HologramFeatureTests.TemplateMarkup.ComponentPage
   alias HologramFeatureTests.TemplateMarkup.ForBlockPage
   alias HologramFeatureTests.TemplateMarkup.InterpolationPage
   alias HologramFeatureTests.TemplateMarkup.PublicCommentPage
@@ -54,5 +55,11 @@ defmodule HologramFeatureTests.TemplateMarkupTest do
     session
     |> visit(RawBlockPage)
     |> assert_has(css("body", text: "{%if false}abc{@var}xyz{/if}"))
+  end
+
+  feature "component", %{session: session} do
+    session
+    |> visit(ComponentPage)
+    |> assert_has(css("div#my_component", text: "abc"))
   end
 end
