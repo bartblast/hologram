@@ -1,6 +1,7 @@
 defmodule HologramFeatureTests.PagesTest do
   use HologramFeatureTests.TestCase, async: true
 
+  alias HologramFeatureTests.Pages.LayoutWithoutPropsPage
   alias HologramFeatureTests.Pages.RouteWithParamsPage
   alias HologramFeatureTests.Pages.RouteWithoutParamsPage
 
@@ -15,6 +16,14 @@ defmodule HologramFeatureTests.PagesTest do
       session
       |> visit(RouteWithParamsPage, a: "abc", b: 123)
       |> assert_text(css("#page_result"), inspect(%{a: "abc", b: 123}))
+    end
+  end
+
+  describe "layout" do
+    feature "without props", %{session: session} do
+      session
+      |> visit(LayoutWithoutPropsPage)
+      |> assert_text(css("#layout_result"), inspect(%{cid: "layout"}))
     end
   end
 end
