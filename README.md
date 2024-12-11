@@ -78,6 +78,14 @@ Please note that the "Readme" file is currently undergoing an overhaul, and the 
 
 ### Template Engine
 
+#### UI
+
+| Feature    | Status             |
+| :--------- | :----------------: |
+| Layouts    | :white_check_mark: |
+| Navigation | :white_check_mark: |
+| Routing    | :white_check_mark: |
+
 #### Markup
 
 | Markup                       | Status             |
