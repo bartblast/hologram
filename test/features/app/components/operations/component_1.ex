@@ -1,4 +1,4 @@
-defmodule HologramFeatureTests.Components.Component1 do
+defmodule HologramFeatureTests.Components.Operations.Component1 do
   use Hologram.Component
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
