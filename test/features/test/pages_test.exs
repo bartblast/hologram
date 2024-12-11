@@ -1,6 +1,7 @@
 defmodule HologramFeatureTests.PagesTest do
   use HologramFeatureTests.TestCase, async: true
 
+  alias HologramFeatureTests.Pages.LayoutGettingPropsExplicitelyPage
   alias HologramFeatureTests.Pages.LayoutGettingPropsImplicitelyPage
   alias HologramFeatureTests.Pages.LayoutWithoutPropsPage
   alias HologramFeatureTests.Pages.RouteWithParamsPage
@@ -30,6 +31,12 @@ defmodule HologramFeatureTests.PagesTest do
     feature "getting props implicitely", %{session: session} do
       session
       |> visit(LayoutGettingPropsImplicitelyPage)
+      |> assert_text(css("#layout_result"), inspect(%{a: "abc", b: 123, cid: "layout"}))
+    end
+
+    feature "getting props explicitely", %{session: session} do
+      session
+      |> visit(LayoutGettingPropsExplicitelyPage)
       |> assert_text(css("#layout_result"), inspect(%{a: "abc", b: 123, cid: "layout"}))
     end
   end
