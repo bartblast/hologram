@@ -8,13 +8,13 @@ defmodule HologramFeatureTests.PagesTest do
     feature "without params", %{session: session} do
       session
       |> visit(RouteWithoutParamsPage)
-      |> assert_text(css("#result"), inspect(%{}))
+      |> assert_text(css("#page_result"), inspect(%{}))
     end
 
     feature "with params", %{session: session} do
       session
       |> visit(RouteWithParamsPage, a: "abc", b: 123)
-      |> assert_text(css("#result"), inspect(%{a: "abc", b: 123}))
+      |> assert_text(css("#page_result"), inspect(%{a: "abc", b: 123}))
     end
   end
 end

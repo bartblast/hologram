@@ -18,7 +18,7 @@ defmodule HologramFeatureTests.Pages.RouteWithParamsPage do
   def template do
     ~H"""
     <p>
-      Result: <strong id="result"><code>{inspect(@result)}</code></strong>
+      Page params: <strong id="page_result"><code>{inspect(@result)}</code></strong>
     </p>    
     """
   end
