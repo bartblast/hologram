@@ -8,7 +8,7 @@ Hologram was inspired by Elm, Phoenix LiveView, Surface, Svelte, Vue.js and Ruby
 
 ## How it works
 
-Hologram simplifies web app development by breaking it down into basic building blocks: Layouts, Pages, and Components.
+Hologram simplifies web app development by breaking it down into basic building blocks: Pages and Components.
 
 Hologram analyzes the content of your Pages, which need to follow certain conventions. Based on this analysis, it decides which code should run on the client (in the web browser) and which should run on the server. Then, it converts the client-side code into JavaScript.
 
