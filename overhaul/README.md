@@ -30,8 +30,6 @@ without its shortcomings related to scalability, efficiency, etc.
 
 | Feature         | Status             | Comments                                                        |
 | :-------------- | :----------------: | :-------------------------------------------------------------- |
-| Layouts         | :white_check_mark: |                                                                 |
-| Navigation      | :white_check_mark: |                                                                 |
 | Pages           | :white_check_mark: |                                                                 |
 | Templates       | :construction:     | done: template in module, todo: template in separate file       |
 
