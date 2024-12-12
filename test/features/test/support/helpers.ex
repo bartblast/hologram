@@ -110,6 +110,10 @@ defmodule HologramFeatureTests.Helpers do
 
   def assert_text(parent, query, text) when is_binary(text) do
     Browser.assert_text(parent, query, text)
+
+    # TODO: return Browser.assert_text/3 result
+    # once https://github.com/elixir-wallaby/wallaby/pull/792 is accepted.
+    parent
   end
 
   def assert_text(parent, query, regex) when is_regex(regex) do
