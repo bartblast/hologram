@@ -1,7 +1,7 @@
-defmodule HologramFeatureTests.Pages.LayoutWithoutPropsPage do
+defmodule HologramFeatureTests.Layouts.NoPropsPage do
   use Hologram.Page
 
-  route "/pages/layout-without-props"
+  route "/layouts/no-props"
 
   layout HologramFeatureTests.Components.LayoutWithoutProps
 

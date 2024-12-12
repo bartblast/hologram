@@ -1,7 +1,7 @@
-defmodule HologramFeatureTests.Pages.LayoutGettingPropsImplicitelyPage do
+defmodule HologramFeatureTests.Layouts.PropsPassedImplicitelyPage do
   use Hologram.Page
 
-  route "/pages/layout-getting-props-implicitely"
+  route "/layouts/props-passed-implicitely"
 
   layout HologramFeatureTests.Components.LayoutWithProps
 
