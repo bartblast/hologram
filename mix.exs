@@ -43,7 +43,6 @@ defmodule Hologram.MixProject do
       {:doctor, "~> 0.21", only: [:dev, :test], runtime: false},
       {:ecto, "~> 3.0", only: :test, runtime: false},
       {:ex_check, "~> 0.15", only: [:dev, :test], runtime: false},
-      # file_system test env is required by credo
       {:file_system, "~> 1.0", only: [:dev, :test]},
       {:html_entities, "~> 0.5"},
       {:interceptor, "~> 0.5"},
