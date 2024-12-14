@@ -43,7 +43,7 @@ defmodule Hologram.MixProject do
       {:doctor, "~> 0.21", only: [:dev, :test], runtime: false},
       {:ecto, "~> 3.0", only: :test, runtime: false},
       {:ex_check, "~> 0.15", only: [:dev, :test], runtime: false},
-      {:file_system, "~> 1.0", only: [:dev, :test]},
+      {:file_system, "~> 1.0"},
       {:html_entities, "~> 0.5"},
       {:interceptor, "~> 0.5"},
       # It seems that libgraph is not maintained - there are pending pull requests and not released commits.
