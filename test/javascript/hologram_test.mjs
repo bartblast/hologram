@@ -15,9 +15,6 @@ import Hologram from "../../assets/js/hologram.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import Type from "../../assets/js/type.mjs";
 
-import {toVNode} from "../../assets/node_modules/snabbdom/build/index.js";
-import vnodeToHtml from "../../assets/node_modules/snabbdom-to-html/index.js";
-
 import {defineModule7Fixture} from "./support/fixtures/hologram/module_7.mjs";
 
 defineGlobalErlangAndElixirModules();
