@@ -199,11 +199,11 @@ describe("Vdom", () => {
   describe("from()", () => {
     it("builds virtual DOM from HTML markup", () => {
       const html =
-        '<!DOCTYPE html><html lang="en"><head></head><body><div attr1="abc" attr2></div><!-- my comment --><span>abc</span></body></html>';
+        '<!DOCTYPE html><html lang="en" class="abc"><head></head><body><div attr1="abc" attr2></div><!-- my comment --><span>abc</span></body></html>';
 
       const result = Vdom.from(html);
 
-      const expected = vnode("html", {attrs: {lang: "en"}}, [
+      const expected = vnode("html", {attrs: {lang: "en", class: "abc"}}, [
         vnode("head", {attrs: {}}, []),
         vnode("body", {attrs: {}}, [
           vnode("div", {attrs: {attr1: "abc", attr2: true}}, []),
