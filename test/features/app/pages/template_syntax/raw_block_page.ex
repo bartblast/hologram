@@ -1,7 +1,7 @@
-defmodule HologramFeatureTests.TemplateMarkup.RawBlockPage do
+defmodule HologramFeatureTests.TemplateSyntax.RawBlockPage do
   use Hologram.Page
 
-  route "/template-markup/raw-block"
+  route "/template-syntax/raw-block"
 
   layout HologramFeatureTests.Components.DefaultLayout
 

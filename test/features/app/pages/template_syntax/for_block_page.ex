@@ -1,7 +1,7 @@
-defmodule HologramFeatureTests.TemplateMarkup.ForBlockPage do
+defmodule HologramFeatureTests.TemplateSyntax.ForBlockPage do
   use Hologram.Page
 
-  route "/template-markup/for-block"
+  route "/template-syntax/for-block"
 
   layout HologramFeatureTests.Components.DefaultLayout
 

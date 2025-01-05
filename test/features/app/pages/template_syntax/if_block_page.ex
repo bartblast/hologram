@@ -1,7 +1,7 @@
-defmodule HologramFeatureTests.TemplateMarkup.IfBlockPage do
+defmodule HologramFeatureTests.TemplateSyntax.IfBlockPage do
   use Hologram.Page
 
-  route "/template-markup/if-block"
+  route "/template-syntax/if-block"
 
   layout HologramFeatureTests.Components.DefaultLayout
 

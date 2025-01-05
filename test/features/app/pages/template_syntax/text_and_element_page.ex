@@ -1,7 +1,7 @@
-defmodule HologramFeatureTests.TemplateMarkup.TextAndElementPage do
+defmodule HologramFeatureTests.TemplateSyntax.TextAndElementPage do
   use Hologram.Page
 
-  route "/template-markup/text-and-element"
+  route "/template-syntax/text-and-element"
 
   layout HologramFeatureTests.Components.DefaultLayout
 

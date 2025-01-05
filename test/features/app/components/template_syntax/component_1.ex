@@ -1,4 +1,4 @@
-defmodule HologramFeatureTests.Components.TemplateMarkup.Component1 do
+defmodule HologramFeatureTests.Components.TemplateSyntax.Component1 do
   use Hologram.Component
 
   prop :my_prop, :string

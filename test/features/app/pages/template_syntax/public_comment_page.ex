@@ -1,7 +1,7 @@
-defmodule HologramFeatureTests.TemplateMarkup.PublicCommentPage do
+defmodule HologramFeatureTests.TemplateSyntax.PublicCommentPage do
   use Hologram.Page
 
-  route "/template-markup/public-comment"
+  route "/template-syntax/public-comment"
 
   layout HologramFeatureTests.Components.DefaultLayout
 

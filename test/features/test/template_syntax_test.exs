@@ -1,13 +1,13 @@
-defmodule HologramFeatureTests.TemplateMarkupTest do
+defmodule HologramFeatureTests.TemplateSyntaxTest do
   use HologramFeatureTests.TestCase, async: true
 
-  alias HologramFeatureTests.TemplateMarkup.ComponentPage
-  alias HologramFeatureTests.TemplateMarkup.ForBlockPage
-  alias HologramFeatureTests.TemplateMarkup.IfBlockPage
-  alias HologramFeatureTests.TemplateMarkup.InterpolationPage
-  alias HologramFeatureTests.TemplateMarkup.PublicCommentPage
-  alias HologramFeatureTests.TemplateMarkup.RawBlockPage
-  alias HologramFeatureTests.TemplateMarkup.TextAndElementPage
+  alias HologramFeatureTests.TemplateSyntax.ComponentPage
+  alias HologramFeatureTests.TemplateSyntax.ForBlockPage
+  alias HologramFeatureTests.TemplateSyntax.IfBlockPage
+  alias HologramFeatureTests.TemplateSyntax.InterpolationPage
+  alias HologramFeatureTests.TemplateSyntax.PublicCommentPage
+  alias HologramFeatureTests.TemplateSyntax.RawBlockPage
+  alias HologramFeatureTests.TemplateSyntax.TextAndElementPage
 
   describe "nodes" do
     feature "text and element", %{session: session} do

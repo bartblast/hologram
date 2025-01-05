@@ -1,7 +1,7 @@
-defmodule HologramFeatureTests.TemplateMarkup.InterpolationPage do
+defmodule HologramFeatureTests.TemplateSyntax.InterpolationPage do
   use Hologram.Page
 
-  route "/template-markup/interpolation"
+  route "/template-syntax/interpolation"
 
   layout HologramFeatureTests.Components.DefaultLayout
 
