@@ -383,7 +383,7 @@ defmodule Hologram.Compiler do
   @spec install_js_deps(T.file_path(), T.file_path()) :: :ok
   def install_js_deps(assets_dir, build_dir) do
     opts = [cd: assets_dir, into: IO.stream(:stdio, :line)]
-    {_result, exit_status} = System.cmd("npm", ["install", "--no-progress", "--silent"], opts)
+    {_result, exit_status} = System.cmd("npm", ["install"], opts)
 
     if exit_status != 0 do
       raise RuntimeError, message: "npm install command failed"
