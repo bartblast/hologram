@@ -2,10 +2,17 @@ defmodule Hologram.Reflection do
   alias Hologram.Commons.StringUtils
 
   @call_graph_dump_file_name "call_graph.bin"
+
   @ignored_modules [Kernel.SpecialForms]
+
   @ir_plt_dump_file_name "ir.plt"
+
   @module_beam_path_plt_dump_file_name "module_beam_path.plt"
+
   @module_digest_plt_dump_file_name "module_digest.plt"
+
+  @otp_app Mix.Project.config()[:app]
+
   @page_digest_plt_dump_file_name "page_digest.plt"
 
   @doc """
@@ -383,20 +390,7 @@ defmodule Hologram.Reflection do
   Returns the project OTP application name.
   """
   @spec otp_app() :: atom
-  def otp_app do
-    if Code.ensure_loaded?(Mix.Project) do
-      Mix.Project.config()[:app]
-    else
-      [project_app] =
-        for {app, _, _} <- Application.loaded_applications(),
-            deps = Application.spec(app)[:applications],
-            :hologram in deps do
-          app
-        end
-
-      project_app
-    end
-  end
+  def otp_app, do: @otp_app
 
   @doc """
   Returns true if the given term is a page module (a module that has a "use Hologram.Page" directive)
