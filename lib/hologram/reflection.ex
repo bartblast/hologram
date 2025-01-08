@@ -393,7 +393,7 @@ defmodule Hologram.Reflection do
       Mix.Project.config()[:app]
     else
       [project_app] =
-        for {app, _, _} <- Application.loaded_applications(),
+        for {app, _description, _vsn} <- Application.loaded_applications(),
             deps = Application.spec(app)[:applications],
             :hologram in deps do
           app

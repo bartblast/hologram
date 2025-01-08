@@ -19,10 +19,10 @@ defmodule Mix.Tasks.Compile.Hologram do
   def run([hd | _tail]) when is_binary(hd) do
     opts = build_default_opts()
 
-    unless elixir_ls_build?(opts) do
-      run(opts)
-    else
+    if elixir_ls_build?(opts) do
       :ok
+    else
+      run(opts)
     end
   end
 

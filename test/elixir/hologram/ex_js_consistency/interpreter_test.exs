@@ -78,7 +78,7 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
   end
 
   # IMPORTANT!
-  # Keep consistent with feature tests in test/features/test/function_calls/function_capture_test.exs  
+  # Keep consistent with feature tests in test/features/test/function_calls/function_capture_test.exs
   # TODO: implement
   # describe "call function capture"
 
