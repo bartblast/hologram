@@ -384,7 +384,18 @@ defmodule Hologram.Reflection do
   """
   @spec otp_app() :: atom
   def otp_app do
-    Mix.Project.config()[:app]
+    if Code.ensure_loaded?(Mix.Project) do
+      Mix.Project.config()[:app]
+    else
+      [project_app] =
+        for {app, _, _} <- Application.loaded_applications(),
+            deps = Application.spec(app)[:applications],
+            :hologram in deps do
+          app
+        end
+
+      project_app
+    end
   end
 
   @doc """
