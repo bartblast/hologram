@@ -1,8 +1,8 @@
 defmodule HologramFeatureTests.RoutingTest do
   use HologramFeatureTests.TestCase, async: true
 
-  alias HologramFeatureTests.Routing.RouteWithParamsPage
   alias HologramFeatureTests.Routing.RouteWithoutParamsPage
+  alias HologramFeatureTests.Routing.RouteWithParamsPage
 
   feature "route without params", %{session: session} do
     session
