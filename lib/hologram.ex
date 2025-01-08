@@ -6,7 +6,7 @@ defmodule Hologram do
   """
   @spec env() :: atom
   def env do
-    regex = ~r"^.+/([^/]+)/lib/hologram$"
+    regex = ~r"^.+/_build/([^/]+)/.+$"
     lib_dir = to_string(:code.lib_dir(:hologram))
     [_lib_dir, env] = Regex.run(regex, lib_dir)
 
