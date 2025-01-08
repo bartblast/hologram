@@ -90,7 +90,7 @@ export default class Serializer {
       );
     }
 
-    const {clauses, context, uniqueId, ...rest} = term;
+    const {_clauses, _context, _uniqueId, ...rest} = term;
     return rest;
   }
 
@@ -113,7 +113,7 @@ export default class Serializer {
       );
     }
 
-    const {node, origin, ...rest} = term;
+    const {_node, _origin, ...rest} = term;
     return rest;
   }
 
@@ -128,7 +128,7 @@ export default class Serializer {
       );
     }
 
-    const {origin, ...rest} = term;
+    const {_origin, ...rest} = term;
     return rest;
   }
 
@@ -143,7 +143,7 @@ export default class Serializer {
       );
     }
 
-    const {origin, ...rest} = term;
+    const {_origin, ...rest} = term;
     return rest;
   }
 }
