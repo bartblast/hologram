@@ -70,7 +70,7 @@ defmodule Hologram.MixProject do
         "mix.exs",
         "README.md"
       ],
-      licenses: ["Apache License 2.0"],
+      licenses: ["Apache-2.0"],
       links: %{"GitHub" => "https://github.com/bartblast/hologram"},
       maintainers: ["Bart Blast"]
     ]
