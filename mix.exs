@@ -69,7 +69,7 @@ defmodule Hologram.MixProject do
         "assets/package.json",
         "config",
         "lib",
-        "formatter.exs",
+        ".formatter.exs",
         "LICENSE",
         "mix.exs",
         "README.md"
