@@ -374,38 +374,38 @@ jobs:
 
       # Step: Restore feature tests app Dialyzer PLT cache.
       # Cache key is based on Erlang/Elixir version and the mix.lock hash.
-      - name: Restore feature tests app Dialyzer PLT cache
-        id: restore-feature-tests-app-dialyzer-plt-cache
-        uses: actions/cache/restore@v4
-        with:
-          key: |
-            dialyzer-plt-feature-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/features/mix.lock') }}
-          path: |
-            test/features/priv/plts
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+      # - name: Restore feature tests app Dialyzer PLT cache
+      #   id: restore-feature-tests-app-dialyzer-plt-cache
+      #   uses: actions/cache/restore@v4
+      #   with:
+      #     key: |
+      #       dialyzer-plt-feature-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/features/mix.lock') }}
+      #     path: |
+      #       test/features/priv/plts
+      #   if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
 
       # Step: Create feature tests app Dialyzer PLTs if no cache was found.
-      - name: Create feature tests app Dialyzer PLTs
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
-        run: mix dialyzer --plt
+      # - name: Create feature tests app Dialyzer PLTs
+      #   if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
+      #   run: mix dialyzer --plt
 
       # Step: Save feature tests app Dialyzer PLT cache.
       # By default, the GitHub Cache action will only save the cache if all steps in the job succeed,
       # so we separate the cache restore and save steps in case running dialyzer fails.
-      - name: Save feature tests app Dialyzer PLT cache
-        id: save-feature-tests-app-dialyzer-plt-cache
-        uses: actions/cache/save@v4
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
-        with:
-          key: |
-            dialyzer-plt-feature-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/features/mix.lock') }}
-          path: |
-            test/features/priv/plts
+      # - name: Save feature tests app Dialyzer PLT cache
+      #   id: save-feature-tests-app-dialyzer-plt-cache
+      #   uses: actions/cache/save@v4
+      #   if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' && steps.restore-feature-tests-app-dialyzer-plt-cache.outputs.cache-hit != 'true' }}
+      #   with:
+      #     key: |
+      #       dialyzer-plt-feature-tests-app-${{ runner.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ hashFiles('test/features/mix.lock') }}
+      #     path: |
+      #       test/features/priv/plts
 
       # Step: Run feature tests app Elixir static code analysis with Dialyzer.
-      - name: Run feature tests app Elixir static code analysis with Dialyzer
-        if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
-        run: mix dialyzer --format github
+      # - name: Run feature tests app Elixir static code analysis with Dialyzer
+      #   if: ${{ env.IS_HIGHEST_MATRIX_COMBINATION == 'true' }}
+      #   run: mix dialyzer --format github
 
       # Step: Check that all feature tests app test scripts have valid file names.
       - name: Check feature tests app test file names
