@@ -90,7 +90,8 @@ export default class Serializer {
       );
     }
 
-    const {_clauses, _context, _uniqueId, ...rest} = term;
+    // eslint-disable-next-line no-unused-vars
+    const {clauses, context, uniqueId, ...rest} = term;
     return rest;
   }
 
@@ -113,7 +114,8 @@ export default class Serializer {
       );
     }
 
-    const {_node, _origin, ...rest} = term;
+    // eslint-disable-next-line no-unused-vars
+    const {node, origin, ...rest} = term;
     return rest;
   }
 
@@ -128,7 +130,8 @@ export default class Serializer {
       );
     }
 
-    const {_origin, ...rest} = term;
+    // eslint-disable-next-line no-unused-vars
+    const {origin, ...rest} = term;
     return rest;
   }
 
@@ -143,7 +146,8 @@ export default class Serializer {
       );
     }
 
-    const {_origin, ...rest} = term;
+    // eslint-disable-next-line no-unused-vars
+    const {origin, ...rest} = term;
     return rest;
   }
 }
