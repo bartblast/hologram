@@ -64,8 +64,17 @@ defmodule Hologram.MixProject do
 
   def package do
     [
-      files: ["lib", "mix.exs", "README.md"],
-      licenses: ["MIT"],
+      files: [
+        "assets/js",
+        "assets/package.json",
+        "config",
+        "lib",
+        "formatter.exs",
+        "LICENSE",
+        "mix.exs",
+        "README.md"
+      ],
+      licenses: ["Apache License 2.0"],
       links: %{"GitHub" => "https://github.com/bartblast/hologram"},
       maintainers: ["Bart Blast"]
     ]
@@ -93,11 +102,13 @@ defmodule Hologram.MixProject do
       elixir: "~> 1.0",
       elixirc_options: [warnings_as_errors: true],
       elixirc_paths: elixirc_paths(Mix.env()),
+      homepage_url: "https://hologram.page/",
       package: package(),
       preferred_cli_env: preferred_cli_env(),
       start_permanent: Mix.env() == :prod,
+      source_url: "https://github.com/bartblast/hologram",
       test_paths: ["test/elixir"],
-      version: "0.1.0",
+      version: "0.2.0",
       xref: [
         # These modules are used only in tests to test whether Hex.Solver's implementations
         # for Inspect and String.Chars protocols are excluded when building runtime and pages JavaScript files.
