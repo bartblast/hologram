@@ -43,13 +43,10 @@ defmodule Hologram.MixProject do
       {:doctor, "~> 0.21", only: [:dev, :test], runtime: false},
       {:ecto, "~> 3.0", only: :test, runtime: false},
       {:ex_check, "~> 0.15", only: [:dev, :test], runtime: false},
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:file_system, "~> 1.0"},
       {:html_entities, "~> 0.5"},
       {:interceptor, "~> 0.5"},
-      # It seems that libgraph is not maintained - there are pending pull requests and not released commits.
-      {:libgraph,
-       git: "https://github.com/bitwalker/libgraph",
-       ref: "460cdfd9a163a533bdab0a160ba7ccf888047927"},
       {:mix_audit, "~> 2.0", only: [:dev, :test], runtime: false},
       {:mox, "~> 1.0", only: :test},
       {:phoenix, "~> 1.7"},
@@ -74,7 +71,7 @@ defmodule Hologram.MixProject do
         "mix.exs",
         "README.md"
       ],
-      licenses: ["Apache License 2.0"],
+      licenses: ["Apache-2.0"],
       links: %{"GitHub" => "https://github.com/bartblast/hologram"},
       maintainers: ["Bart Blast"]
     ]
