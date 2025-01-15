@@ -6,7 +6,7 @@
     Hologram.Layout,
     Hologram.Page
   ],
-  ignore_paths: [~r(^benchmarks/*), ~r(^test/*)],
+  ignore_paths: [~r(^benchmarks/*), ~r(^lib/libgraph/*), ~r(^test/*)],
   min_module_doc_coverage: 100,
   min_module_spec_coverage: 100,
   min_overall_doc_coverage: 100,
