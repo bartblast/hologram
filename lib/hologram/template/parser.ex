@@ -448,7 +448,7 @@ defmodule Hologram.Template.Parser do
     raise_error(details, context, :start_tag, nil, [])
   end
 
-  def parse_tokens(context, :start_tag, [{:whitespace, _} = token | rest]) do
+  def parse_tokens(context, :start_tag, [{:whitespace, _value} = token | rest]) do
     context
     |> add_processed_token(token)
     |> parse_tokens(:start_tag, rest)
