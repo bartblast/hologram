@@ -61,6 +61,8 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
       assert_error BadArityError, expected_msg, fn -> fun.(9, 8) end
     end
 
+    # credo:disable-for-lines:15 Credo.Check.Readability.MaxLineLength
+    # TODO: fix the failing test (except the error message inconsistency):
     # TODO: client error message for this case is inconsistent with server error message
     # test "no matching clause" do
     #   fun = fn

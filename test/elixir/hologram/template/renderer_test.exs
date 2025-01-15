@@ -342,7 +342,7 @@ defmodule Hologram.Template.RendererTest do
         {:component, Module52, [{"cid", [text: "component_52"]}], []}
       ]
 
-      assert render_dom(nodes, @env) ==
+      assert ź(nodes, @env) ==
                {"abc<div>state_a = 1</div><div>state_b = 2</div>xyz<div>state_c = 3</div><div>state_d = 4</div>",
                 %{
                   "component_51" => %{module: Module51, struct: %Component{state: %{a: 1, b: 2}}},
@@ -374,20 +374,21 @@ defmodule Hologram.Template.RendererTest do
          ], []}
 
       assert {~s'component vars = %{cid: &quot;my_component&quot;, prop_1: &quot;value_1&quot;, prop_2: 2, prop_3: &quot;aaa2bbb&quot;}',
-              _} = render_dom(node, @env)
+              _component_registry} = render_dom(node, @env)
     end
 
     test "default value specified" do
       node = {:component, Module65, [{"prop_2", [expression: {:xyz}]}], []}
 
-      assert {~s'component vars = %{prop_1: &quot;abc&quot;, prop_2: :xyz, prop_3: 123}', _} =
+      assert {~s'component vars = %{prop_1: &quot;abc&quot;, prop_2: :xyz, prop_3: 123}',
+              _component_registry} =
                render_dom(node, @env)
     end
 
     test "default value not specified" do
       node = {:component, Module66, [{"prop_2", [expression: {:xyz}]}], []}
 
-      assert {~s'component vars = %{prop_2: :xyz}', _} = render_dom(node, @env)
+      assert {~s'component vars = %{prop_2: :xyz}', _component_registry} = render_dom(node, @env)
     end
   end
 
@@ -745,7 +746,7 @@ defmodule Hologram.Template.RendererTest do
     test "inside layout slot" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module14, :dummy_module_14_digest)
 
-      assert {"layout template start, page template, layout template end", _} =
+      assert {"layout template start, page template, layout template end", _component_registry} =
                render_page(Module14, @params, @opts)
     end
 
@@ -766,7 +767,7 @@ defmodule Hologram.Template.RendererTest do
 
       params = %{param_1: "abc", param_3: "123"}
 
-      assert {~s'page vars = %{param_1: &quot;abc&quot;, param_3: 123}', _} =
+      assert {~s'page vars = %{param_1: &quot;abc&quot;, param_3: 123}', _component_registry} =
                render_page(Module19, params, @opts)
     end
 
@@ -774,14 +775,14 @@ defmodule Hologram.Template.RendererTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module25, :dummy_module_25_digest)
 
       assert {~s'layout vars = %{cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;}',
-              _} = render_page(Module25, @params, @opts)
+              _component_registry} = render_page(Module25, @params, @opts)
     end
 
     test "cast layout props passed implicitely from page state" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module27, :dummy_module_27_digest)
 
       assert {~s'layout vars = %{cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;}',
-              _} = render_page(Module27, @params, @opts)
+              _component_registry} = render_page(Module27, @params, @opts)
     end
 
     test "aggregate page vars, giving state vars priority over param vars when there are name conflicts" do
@@ -790,14 +791,14 @@ defmodule Hologram.Template.RendererTest do
       params = %{key_1: "param_value_1", key_2: "param_value_2"}
 
       assert {~s'page vars = %{key_1: &quot;param_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;}',
-              _} = render_page(Module21, params, @opts)
+              _component_registry} = render_page(Module21, params, @opts)
     end
 
     test "aggregate layout vars, giving state vars priority over prop vars when there are name conflicts" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module24, :dummy_module_24_digest)
 
       assert {~s'layout vars = %{cid: &quot;layout&quot;, key_1: &quot;prop_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;}',
-              _} = render_page(Module24, @params, @opts)
+              _component_registry} = render_page(Module24, @params, @opts)
     end
 
     test "merge the page component struct into the result" do
@@ -849,7 +850,7 @@ defmodule Hologram.Template.RendererTest do
     test "injects asset manifest when the initial_page? opt is set to true" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module53, :dummy_module_53_digest)
 
-      assert {html, _} = render_page(Module53, @params, initial_page?: true)
+      assert {html, _component_registry} = render_page(Module53, @params, initial_page?: true)
 
       assert String.contains?(html, "globalThis.hologram.assetManifest")
     end
@@ -857,7 +858,7 @@ defmodule Hologram.Template.RendererTest do
     test "doesn't inject asset manifest when the initial_page? opt is set to false" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module53, :dummy_module_53_digest)
 
-      assert {html, _} = render_page(Module53, @params, initial_page?: false)
+      assert {html, _component_registry} = render_page(Module53, @params, initial_page?: false)
 
       refute String.contains?(html, "globalThis.hologram.assetManifest")
     end
@@ -869,7 +870,7 @@ defmodule Hologram.Template.RendererTest do
         "102790adb6c3b1956db310be523a7693"
       )
 
-      assert {html, _} = render_page(Module48, @params, @opts)
+      assert {html, _component_registry} = render_page(Module48, @params, @opts)
 
       expected =
         ~s/componentRegistry: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module49")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])], [Type.bitstring("page"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("initial_page?")]), Type.atom("false")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_mounted?")]), Type.atom("true")]])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])]])/
@@ -884,7 +885,7 @@ defmodule Hologram.Template.RendererTest do
         "102790adb6c3b1956db310be523a7693"
       )
 
-      assert {html, _} = render_page(Module48, @params, @opts)
+      assert {html, _component_registry} = render_page(Module48, @params, @opts)
 
       expected =
         ~s/pageModule: Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")/
@@ -901,7 +902,7 @@ defmodule Hologram.Template.RendererTest do
 
       params = %{key_1: 123, key_2: "value_2"}
 
-      assert {html, _} = render_page(Module50, params, @opts)
+      assert {html, _component_registry} = render_page(Module50, params, @opts)
 
       expected =
         ~s/pageParams: Type.map([[Type.atom("key_1"), Type.integer(123n)], [Type.atom("key_2"), Type.bitstring("value_2")]])/
@@ -916,7 +917,7 @@ defmodule Hologram.Template.RendererTest do
         "102790adb6c3b1956db310be523a7693"
       )
 
-      assert {html, _} = render_page(Module62, @params, @opts)
+      assert {html, _component_registry} = render_page(Module62, @params, @opts)
 
       assert html == """
              <!DOCTYPE html>

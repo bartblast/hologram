@@ -4528,7 +4528,7 @@ defmodule Hologram.Compiler.TransformerTest do
                    {%IR.AtomType{value: :b}, %IR.IntegerType{value: 2}}
                  ]
                },
-               right: _
+               right: _right
              } = transform_module_and_fetch_expr(Module106)
     end
 
