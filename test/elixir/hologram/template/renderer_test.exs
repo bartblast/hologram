@@ -342,7 +342,7 @@ defmodule Hologram.Template.RendererTest do
         {:component, Module52, [{"cid", [text: "component_52"]}], []}
       ]
 
-      assert ź(nodes, @env) ==
+      assert render_dom(nodes, @env) ==
                {"abc<div>state_a = 1</div><div>state_b = 2</div>xyz<div>state_c = 3</div><div>state_d = 4</div>",
                 %{
                   "component_51" => %{module: Module51, struct: %Component{state: %{a: 1, b: 2}}},
