@@ -35,6 +35,9 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    labels:
+      - "dependencies"
+      - "github-actions"
     groups:
       github-actions:
         patterns:
