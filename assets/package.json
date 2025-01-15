@@ -11,7 +11,7 @@
     "chai": "^5",
     "eslint": "^9",
     "fake-indexeddb": "^6",
-    "jsdom": "^25",
+    "jsdom": "^26",
     "jsdom-global": "^3",
     "mocha": "^11",
     "prettier": "^3",
