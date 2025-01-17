@@ -1,4 +1,6 @@
 defmodule Hologram.Socket.Channel do
+  @moduledoc false
+
   use Phoenix.Channel
 
   alias Hologram.Assets.PageDigestRegistry

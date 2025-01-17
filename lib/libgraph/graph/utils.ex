@@ -1,5 +1,6 @@
 defmodule Graph.Utils do
   @moduledoc false
+
   @compile {:inline, [vertex_id: 1, edge_weight: 3]}
 
   @binary_heap_limit 64

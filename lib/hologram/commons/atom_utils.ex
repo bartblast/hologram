@@ -1,4 +1,6 @@
 defmodule Hologram.Commons.AtomUtils do
+  @moduledoc false
+
   @doc """
   Returns `true` if `atom` starts with the given prefix.
   """

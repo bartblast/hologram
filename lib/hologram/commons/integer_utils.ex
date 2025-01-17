@@ -1,4 +1,6 @@
 defmodule Hologram.Commons.IntegerUtils do
+  @moduledoc false
+
   @doc """
   Counts the number of digits in the given integer.
 

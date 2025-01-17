@@ -1,4 +1,6 @@
 defmodule Hologram.Compiler.Transformer do
+  @moduledoc false
+
   if Application.compile_env(:hologram, :debug_transformer) do
     use Interceptor.Annotated,
       config: %{

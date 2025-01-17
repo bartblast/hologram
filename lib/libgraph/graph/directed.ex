@@ -1,5 +1,6 @@
 defmodule Graph.Directed do
   @moduledoc false
+
   @compile {:inline, [in_neighbors: 2, in_neighbors: 3, out_neighbors: 2, out_neighbors: 3]}
 
   def batch_topsort(%Graph{} = g) do

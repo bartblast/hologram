@@ -1,7 +1,8 @@
 defmodule Graph.Pathfinding do
-  @moduledoc """
-  This module contains implementation code for path finding algorithms used by `libgraph`.
-  """
+  @moduledoc false
+
+  # This module contains implementation code for path finding algorithms used by `libgraph`.
+
   import Graph.Utils, only: [edge_weight: 3]
 
   @type heuristic_fun :: (Graph.vertex() -> integer)

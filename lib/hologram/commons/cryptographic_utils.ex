@@ -1,4 +1,6 @@
 defmodule Hologram.Commons.CryptographicUtils do
+  @moduledoc false
+
   @doc """
   Calculates the cryptographic digest of the input data using the given algorithm (such as :md5, :sha256, etc.).
   Output format can be either `:hex` (hexadecimal string) or `:binary` (binary data).

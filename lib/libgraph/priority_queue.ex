@@ -1,13 +1,14 @@
 defmodule PriorityQueue do
-  @moduledoc """
-  This module defines a priority queue datastructure, intended for use with graphs, as it prioritizes
-  lower priority values over higher priority values (ideal for priorities based on edge weights, etc.).
+  @moduledoc false
 
-  This implementation makes use of `:gb_trees` under the covers. It is also very fast, even for a very large
-  number of distinct priorities. Other priority queue implementations I've looked at are either slow when working
-  with large numbers of priorities, or restrict themselves to a specific number of allowed priorities, which is
-  why I've ended up writing my own.
-  """
+  # This module defines a priority queue datastructure, intended for use with graphs, as it prioritizes
+  # lower priority values over higher priority values (ideal for priorities based on edge weights, etc.).
+
+  # This implementation makes use of `:gb_trees` under the covers. It is also very fast, even for a very large
+  # number of distinct priorities. Other priority queue implementations I've looked at are either slow when working
+  # with large numbers of priorities, or restrict themselves to a specific number of allowed priorities, which is
+  # why I've ended up writing my own.
+
   defstruct priorities: nil
 
   @type t :: %__MODULE__{

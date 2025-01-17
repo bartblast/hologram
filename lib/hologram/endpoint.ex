@@ -1,4 +1,6 @@
 defmodule Hologram.Endpoint do
+  @moduledoc false
+
   defmacro __using__(_opts) do
     quote do
       import Hologram.Endpoint, only: [hologram_socket: 0]

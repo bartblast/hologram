@@ -1,4 +1,6 @@
 defmodule Hologram.Commons.ProcessUtils do
+  @moduledoc false
+
   @doc """
   Tells whether the process with the given name is running.
   """

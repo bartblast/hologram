@@ -1,7 +1,8 @@
 defmodule Graph.Reducers.Bfs do
-  @moduledoc """
-  This reducer traverses the graph using Breadth-First Search.
-  """
+  @moduledoc false
+
+  # This reducer traverses the graph using Breadth-First Search.
+
   use Graph.Reducer
 
   @doc """

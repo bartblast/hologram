@@ -1,4 +1,6 @@
 defmodule Hologram.Commons.SerializationUtils do
+  @moduledoc false
+
   @doc """
   Deserializes binary data to Elixir term.
 

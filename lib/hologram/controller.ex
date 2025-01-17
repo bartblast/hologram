@@ -1,4 +1,6 @@
 defmodule Hologram.Controller do
+  @moduledoc false
+
   alias Hologram.Template.Renderer
   alias Phoenix.Controller
 

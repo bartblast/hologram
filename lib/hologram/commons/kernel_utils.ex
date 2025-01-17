@@ -1,4 +1,6 @@
 defmodule Hologram.Commons.KernelUtils do
+  @moduledoc false
+
   @doc """
   Inspects the given argument according to the Inspect protocol.
   Maps inspection is deterministic by sorting their key-value pairs.

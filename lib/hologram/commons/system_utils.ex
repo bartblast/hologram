@@ -1,4 +1,6 @@
 defmodule Hologram.Commons.SystemUtils do
+  @moduledoc false
+
   alias Hologram.Commons.IntegerUtils
 
   @doc """

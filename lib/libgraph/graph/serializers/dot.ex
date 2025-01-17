@@ -1,8 +1,9 @@
 defmodule Graph.Serializers.DOT do
-  @moduledoc """
-  This serializer converts a Graph to a DOT file, which can then be converted
-  to a great many other formats using Graphviz, e.g. `dot -Tpng out.dot > out.png`.
-  """
+  @moduledoc false
+
+  # This serializer converts a Graph to a DOT file, which can then be converted
+  # to a great many other formats using Graphviz, e.g. `dot -Tpng out.dot > out.png`.
+
   use Graph.Serializer
   alias Graph.Serializer
 
