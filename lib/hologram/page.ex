@@ -113,9 +113,10 @@ defmodule Hologram.Page do
     String.to_existing_atom(value)
   rescue
     ArgumentError ->
-      reraise Hologram.ParamError,
-        message:
-          ~s/can't cast param "#{name}" with value #{KernelUtils.inspect(value)} to atom, because it's not an already existing atom/
+      message =
+        ~s/can't cast param "#{name}" with value #{KernelUtils.inspect(value)} to atom, because it's not an already existing atom/
+
+      reraise Hologram.ParamError, [message: message], __STACKTRACE__
   end
 
   defp cast_param(:atom, value, name) do
