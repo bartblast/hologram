@@ -1,10 +1,12 @@
-defmodule HologramFeatureTests.PatchingPage do
+defmodule HologramFeatureTests.Patching.Page1 do
   use Hologram.Page
 
+  alias Hologram.UI.Link
   alias Hologram.UI.Runtime
   alias HologramFeatureTests.Components.CommonLayoutStyles
+  alias HologramFeatureTests.Patching.Page2
 
-  route "/patching"
+  route "/patching/1"
 
   layout HologramFeatureTests.Components.EmptyLayout
 
@@ -23,6 +25,7 @@ defmodule HologramFeatureTests.PatchingPage do
         <CommonLayoutStyles />
       </head>
       <body>
+        <h1>Page 1</h1>
         <p>
           <button $click="add_root_elem_attr_1">Add root elem attr 1</button>
           <button $click="add_root_elem_attr_2">Add root elem attr 2</button>
@@ -30,6 +33,7 @@ defmodule HologramFeatureTests.PatchingPage do
           <button $click="change_root_elem_attr_2">Change root elem attr 2</button>          
           <button $click="remove_root_elem_attr_1">Remove root elem attr 1</button>
           <button $click="remove_root_elem_attr_2">Remove root elem attr 2</button>
+          <Link to={Page2}>Page 2 link</Link>
         </p>
       </body>
     </html>

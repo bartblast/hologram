@@ -36,7 +36,13 @@ import ManuallyPortedElixirIO from "./elixir/io.mjs";
 import ManuallyPortedElixirKernel from "./elixir/kernel.mjs";
 import ManuallyPortedElixirString from "./elixir/string.mjs";
 
-import {attributesModule, eventListenersModule, init, toVNode} from "snabbdom";
+import {
+  attributesModule,
+  eventListenersModule,
+  init,
+  toVNode,
+  vnode,
+} from "snabbdom";
 
 const patch = init([attributesModule, eventListenersModule]);
 
@@ -674,15 +680,17 @@ export default class Hologram {
 
     const newVirtualDocument = Vdom.from(html);
 
-    Hologram.virtualDocument.data = newVirtualDocument.data;
-
-    const oldBody = Hologram.virtualDocument.children.find(
-      (child) => child.sel === "body",
+    // First patch the root html element itself to handle its attributes
+    Hologram.virtualDocument = patch(
+      Hologram.virtualDocument,
+      vnode(
+        "html",
+        {attrs: newVirtualDocument.data.attrs || {}},
+        Hologram.virtualDocument.children,
+      ),
     );
 
-    const newBody = newVirtualDocument.children.find(
-      (child) => child.sel === "body",
-    );
+    // Then patch head and body separately to preserve JavaScript/CSS handling
 
     const oldHead = Hologram.virtualDocument.children.find(
       (child) => child.sel === "head",
@@ -690,6 +698,14 @@ export default class Hologram {
 
     const newHead = newVirtualDocument.children.find(
       (child) => child.sel === "head",
+    );
+
+    const oldBody = Hologram.virtualDocument.children.find(
+      (child) => child.sel === "body",
+    );
+
+    const newBody = newVirtualDocument.children.find(
+      (child) => child.sel === "body",
     );
 
     Hologram.virtualDocument.children = Hologram.virtualDocument.children.map(

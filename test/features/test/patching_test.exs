@@ -3,14 +3,21 @@ defmodule HologramFeatureTests.PatchingTest do
   # or implement custom versions of assert_has/2 and refute_has/2 functions.
   use HologramFeatureTests.TestCase, async: false
 
-  alias HologramFeatureTests.PatchingPage
+  alias HologramFeatureTests.Patching.Page1
+  alias HologramFeatureTests.Patching.Page2
 
-  feature "root element attributes patching", %{session: session} do
+  setup do
     current_max_wait_time = Application.fetch_env!(:wallaby, :max_wait_time)
     Application.put_env(:wallaby, :max_wait_time, 3_000)
 
+    on_exit(fn ->
+      Application.put_env(:wallaby, :max_wait_time, current_max_wait_time)
+    end)
+  end
+
+  feature "root element attributes patching after action", %{session: session} do
     session
-    |> visit(PatchingPage)
+    |> visit(Page1)
     |> refute_has(css("html[attr_1]"))
     |> refute_has(css("html[attr_2]"))
     |> click(button("Add root elem attr 2"))
@@ -31,7 +38,19 @@ defmodule HologramFeatureTests.PatchingTest do
     |> click(button("Remove root elem attr 1"))
     |> refute_has(css("html[attr_1]"))
     |> refute_has(css("html[attr_2]"))
+  end
 
-    Application.put_env(:wallaby, :max_wait_time, current_max_wait_time)
+  feature "root element attributes patching after navigation", %{session: session} do
+    session
+    |> visit(Page1)
+    |> click(button("Add root elem attr 1"))
+    |> click(button("Add root elem attr 2"))
+    |> assert_has(css("html[attr_1='value_1a']"))
+    |> assert_has(css("html[attr_2='value_2a']"))
+    |> click(link("Page 2 link"))
+    |> assert_page(Page2)
+    |> refute_has(css("html[attr_1]"))
+    |> refute_has(css("html[attr_2]"))
+    |> assert_has(css("html[attr_3='value_3']"))
   end
 end
