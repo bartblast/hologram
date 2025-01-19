@@ -161,7 +161,8 @@ export default class Hologram {
 
       Hologram.executeAction(nextAction);
     } else {
-      Hologram.render();
+      // TODO: remove when there is a proper client-side bitstring implementation in place
+      setTimeout(() => Hologram.render(), 0);
     }
 
     if (!Type.isNil(nextPage)) {
