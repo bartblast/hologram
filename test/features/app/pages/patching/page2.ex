@@ -24,28 +24,4 @@ defmodule HologramFeatureTests.Patching.Page2 do
     </html>
     """
   end
-
-  def action(:add_root_elem_attr_1, _params, component) do
-    put_state(component, :root_elem_attr_1, "value_1a")
-  end
-
-  def action(:add_root_elem_attr_2, _params, component) do
-    put_state(component, :root_elem_attr_2, "value_2a")
-  end
-
-  def action(:change_root_elem_attr_1, _params, component) do
-    put_state(component, :root_elem_attr_1, "value_1b")
-  end
-
-  def action(:change_root_elem_attr_2, _params, component) do
-    put_state(component, :root_elem_attr_2, "value_2b")
-  end
-
-  def action(:remove_root_elem_attr_1, _params, component) do
-    put_state(component, :root_elem_attr_1, nil)
-  end
-
-  def action(:remove_root_elem_attr_2, _params, component) do
-    put_state(component, :root_elem_attr_2, nil)
-  end
 end

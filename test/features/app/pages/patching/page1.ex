@@ -25,7 +25,7 @@ defmodule HologramFeatureTests.Patching.Page1 do
         <CommonLayoutStyles />
       </head>
       <body>
-        <h1>Page 1</h1>
+        <h1>Page 1 title</h1>
         <p>
           <button $click="add_root_elem_attr_1">Add root elem attr 1</button>
           <button $click="add_root_elem_attr_2">Add root elem attr 2</button>
