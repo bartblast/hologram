@@ -5,8 +5,8 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "../../support/helpers.mjs";
 
-import Type from "../../../../assets/js/type.mjs";
 import Elixir_Hologram_JS from "../../../../assets/js/elixir/hologram/js.mjs";
+import Type from "../../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
