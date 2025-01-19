@@ -8,8 +8,9 @@ defmodule Hologram.JSTest do
   end
 
   if Version.compare(System.version(), "1.15.0") in [:gt, :eq] do
-    test "sigil_JS/1" do
-      assert ~JS"console.log('Hello, world!');" == "console.log('Hello, world!');"
+    test "sigil_JS/2" do
+      assert Code.eval_string("~JS\"console.log('Hello, world!');\"") ==
+               "console.log('Hello, world!');"
     end
   end
 end
