@@ -5,6 +5,7 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "../../support/helpers.mjs";
 
+import Type from "../../../../assets/js/type.mjs";
 import Elixir_Hologram_JS from "../../../../assets/js/elixir/hologram/js.mjs";
 
 defineGlobalErlangAndElixirModules();
@@ -14,7 +15,8 @@ describe("Elixir_Hologram_JS", () => {
     const exec = Elixir_Hologram_JS["exec/1"];
 
     it("delegates to Interpreter.evaluateJavaScriptCode()", () => {
-      assert.deepStrictEqual(exec("1 + 2"), 3);
+      const code = Type.bitstring("1 + 2");
+      assert.deepStrictEqual(exec(code), 3);
     });
   });
 });
