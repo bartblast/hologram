@@ -35,10 +35,12 @@ defmodule Hologram.Compiler.CallGraph do
   # * the transpiled output is deeply nested
   # * the function doesn't make sense on the client side
   # * the function must access the Hologram client runtime
+  # * the function has only a client-side implementation
   @manually_ported_mfas [
     {Cldr.Locale, :language_data, 0},
     {Cldr.Validity.U, :encode_key, 2},
     {Code, :ensure_loaded, 1},
+    {Hologram.JS, :exec, 1},
     {Hologram.Router.Helpers, :asset_path, 1},
     {IO, :inspect, 1},
     {IO, :inspect, 2},
