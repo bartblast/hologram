@@ -1723,7 +1723,7 @@ describe("Interpreter", () => {
     });
 
     it("using context, Type and Interpreter", () => {
-      //  %{a: 1, b: 2}.a
+      // %{a: 1, b: 2}.a
       const code =
         'return Interpreter.dotOperator(Type.map([[Type.atom("a"), Type.integer(1n)], [Type.atom("b"), context.vars.x]]), Type.atom("a"))';
 
@@ -1734,7 +1734,7 @@ describe("Interpreter", () => {
   });
 
   it("evaluateJavaScriptExpression()", () => {
-    //  %{a: 1, b: 2}.a
+    // %{a: 1, b: 2}.a
     const code =
       'Interpreter.dotOperator(Type.map([[Type.atom("a"), Type.integer(1n)], [Type.atom("b"), context.vars.x]]), Type.atom("a"))';
 
