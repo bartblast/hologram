@@ -44,7 +44,7 @@ export default class CommandQueue {
           return (resp) => {
             CommandQueue.remove(currentItem.id);
 
-            const nextAction = Interpreter.evaluateJavaScriptCode(resp);
+            const nextAction = Interpreter.evaluateJavaScriptExpression(resp);
 
             if (!Type.isNil(nextAction)) {
               Hologram.executeAction(nextAction);

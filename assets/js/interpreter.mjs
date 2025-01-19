@@ -446,11 +446,15 @@ export default class Interpreter {
     const context = Interpreter.buildContext();
 
     // See why not to use eval() with esbuild and in general: https://esbuild.github.io/content-types/#direct-eval
-    return new Function("context", "Type", "Interpreter", `return (${code});`)(
+    return new Function("context", "Type", "Interpreter", code)(
       context,
       Type,
       Interpreter,
     );
+  }
+
+  static evaluateJavaScriptExpression(expr) {
+    return Interpreter.evaluateJavaScriptCode(`return (${expr});`);
   }
 
   static getErrorMessage(jsError) {

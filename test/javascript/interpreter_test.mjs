@@ -1683,12 +1683,62 @@ describe("Interpreter", () => {
     });
   });
 
-  it("evaluateJavaScriptCode()", () => {
+  describe("evaluateJavaScriptCode()", () => {
+    it("single statement with semicolon", () => {
+      const code = "return 123;";
+      const result = Interpreter.evaluateJavaScriptCode(code);
+
+      assert.equal(result, 123);
+    });
+
+    it("single statement without semicolon", () => {
+      const code = "return 123";
+      const result = Interpreter.evaluateJavaScriptCode(code);
+
+      assert.equal(result, 123);
+    });
+
+    it("multiple statements with semicolons", () => {
+      const code = `
+        const a = 1;
+        const b = 2;
+        return a + b;
+      `;
+
+      const result = Interpreter.evaluateJavaScriptCode(code);
+
+      assert.equal(result, 3);
+    });
+
+    it("multiple statements without semicolons", () => {
+      const code = `
+        const a = 1
+        const b = 2
+        return a + b
+      `;
+
+      const result = Interpreter.evaluateJavaScriptCode(code);
+
+      assert.equal(result, 3);
+    });
+
+    it("using context, Type and Interpreter", () => {
+      //  %{a: 1, b: 2}.a
+      const code =
+        'return Interpreter.dotOperator(Type.map([[Type.atom("a"), Type.integer(1n)], [Type.atom("b"), context.vars.x]]), Type.atom("a"))';
+
+      const result = Interpreter.evaluateJavaScriptCode(code);
+
+      assert.deepStrictEqual(result, Type.integer(1));
+    });
+  });
+
+  it("evaluateJavaScriptExpression()", () => {
     //  %{a: 1, b: 2}.a
     const code =
       'Interpreter.dotOperator(Type.map([[Type.atom("a"), Type.integer(1n)], [Type.atom("b"), context.vars.x]]), Type.atom("a"))';
 
-    const result = Interpreter.evaluateJavaScriptCode(code);
+    const result = Interpreter.evaluateJavaScriptExpression(code);
 
     assert.deepStrictEqual(result, Type.integer(1));
   });

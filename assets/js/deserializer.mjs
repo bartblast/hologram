@@ -24,7 +24,7 @@ export default class Deserializer {
         }
 
         if (value.startsWith("__function__:")) {
-          return Interpreter.evaluateJavaScriptCode(value.slice(13));
+          return Interpreter.evaluateJavaScriptExpression(value.slice(13));
         }
 
         if (value.startsWith("__integer__:")) {
