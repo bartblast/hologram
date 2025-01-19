@@ -381,8 +381,7 @@ defmodule Hologram.Template.RendererTest do
       node = {:component, Module65, [{"prop_2", [expression: {:xyz}]}], []}
 
       assert {~s'component vars = %{prop_1: &quot;abc&quot;, prop_2: :xyz, prop_3: 123}',
-              _component_registry} =
-               render_dom(node, @env)
+              _component_registry} = render_dom(node, @env)
     end
 
     test "default value not specified" do
