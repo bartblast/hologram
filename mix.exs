@@ -97,7 +97,6 @@ defmodule Hologram.MixProject do
         plt_local_path: Path.join(["priv", "plts", "project.plt"])
       ],
       docs: [
-        api_reference: false,
         authors: ["Bart Blast"],
         groups_for_modules: [
           Main: [
@@ -117,7 +116,6 @@ defmodule Hologram.MixProject do
             Hologram.TemplateSyntaxError
           ]
         ],
-        main: "Hologram",
         source_ref: "master"
       ],
       elixir: "~> 1.0",
