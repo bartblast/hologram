@@ -1,4 +1,6 @@
 defmodule Hologram.Compiler.IR do
+  @moduledoc false
+
   alias Hologram.Commons.AtomUtils
   alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler.AST
@@ -47,12 +49,16 @@ defmodule Hologram.Compiler.IR do
           | IR.With.t()
 
   defmodule AnonymousFunctionCall do
+    @moduledoc false
+
     defstruct [:function, :args]
 
     @type t :: %__MODULE__{function: IR.t(), args: list(IR.t())}
   end
 
   defmodule AnonymousFunctionType do
+    @moduledoc false
+
     defstruct [:arity, :captured_function, :captured_module, :clauses]
 
     @type t :: %__MODULE__{
@@ -64,12 +70,16 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule AtomType do
+    @moduledoc false
+
     defstruct [:value]
 
     @type t :: %__MODULE__{value: atom}
   end
 
   defmodule BitstringSegment do
+    @moduledoc false
+
     defstruct [:value, :modifiers]
 
     @type(
@@ -83,30 +93,40 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule BitstringType do
+    @moduledoc false
+
     defstruct [:segments]
 
     @type t :: %__MODULE__{segments: list(IR.BitstringSegment.t())}
   end
 
   defmodule Block do
+    @moduledoc false
+
     defstruct [:expressions]
 
     @type t :: %__MODULE__{expressions: list(IR.t())}
   end
 
   defmodule Case do
+    @moduledoc false
+
     defstruct [:condition, :clauses]
 
     @type t :: %__MODULE__{condition: IR.t(), clauses: list(IR.Clause.t())}
   end
 
   defmodule Clause do
+    @moduledoc false
+
     defstruct [:match, :guards, :body]
 
     @type t :: %__MODULE__{match: IR.t(), guards: list(IR.t()), body: IR.Block.t()}
   end
 
   defmodule Comprehension do
+    @moduledoc false
+
     defstruct [:generators, :filters, :collectable, :unique, :mapper, :reducer]
 
     @type t :: %__MODULE__{
@@ -125,48 +145,64 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule ComprehensionFilter do
+    @moduledoc false
+
     defstruct [:expression]
 
     @type t :: %__MODULE__{expression: IR.t()}
   end
 
   defmodule Cond do
+    @moduledoc false
+
     defstruct [:clauses]
 
     @type t :: %__MODULE__{clauses: list(IR.CondClause.t())}
   end
 
   defmodule CondClause do
+    @moduledoc false
+
     defstruct [:condition, :body]
 
     @type t :: %__MODULE__{condition: IR.t(), body: IR.Block.t()}
   end
 
   defmodule ConsOperator do
+    @moduledoc false
+
     defstruct [:head, :tail]
 
     @type t :: %__MODULE__{head: IR.t(), tail: IR.t()}
   end
 
   defmodule DotOperator do
+    @moduledoc false
+
     defstruct [:left, :right]
 
     @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
   end
 
   defmodule FloatType do
+    @moduledoc false
+
     defstruct [:value]
 
     @type t :: %__MODULE__{value: float}
   end
 
   defmodule FunctionClause do
+    @moduledoc false
+
     defstruct [:params, :guards, :body]
 
     @type t :: %__MODULE__{params: list(IR.t()), guards: list(IR.t()), body: IR.Block.t()}
   end
 
   defmodule FunctionDefinition do
+    @moduledoc false
+
     defstruct [:name, :arity, :visibility, :clause]
 
     @type t :: %__MODULE__{
@@ -178,96 +214,128 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule IgnoredExpression do
+    @moduledoc false
+
     defstruct [:type]
 
     @type t :: %__MODULE__{type: :public_macro_definition | :private_macro_definition}
   end
 
   defmodule IntegerType do
+    @moduledoc false
+
     defstruct [:value]
 
     @type t :: %__MODULE__{value: integer}
   end
 
   defmodule ListType do
+    @moduledoc false
+
     defstruct [:data]
 
     @type t :: %__MODULE__{data: list(IR.t())}
   end
 
   defmodule LocalFunctionCall do
+    @moduledoc false
+
     defstruct [:function, :args]
 
     @type t :: %__MODULE__{function: atom, args: list(IR.t())}
   end
 
   defmodule MapType do
+    @moduledoc false
+
     defstruct [:data]
 
     @type t :: %__MODULE__{data: list({IR.t(), IR.t()})}
   end
 
   defmodule MatchOperator do
+    @moduledoc false
+
     defstruct [:left, :right]
 
     @type t :: %__MODULE__{left: IR.t(), right: IR.t()}
   end
 
   defmodule MatchPlaceholder do
+    @moduledoc false
+
     defstruct []
 
     @type t :: %__MODULE__{}
   end
 
   defmodule ModuleAttributeOperator do
+    @moduledoc false
+
     defstruct [:name]
 
     @type t :: %__MODULE__{name: atom}
   end
 
   defmodule ModuleDefinition do
+    @moduledoc false
+
     defstruct [:module, :body]
 
     @type t :: %__MODULE__{module: IR.AtomType.t(), body: IR.Block.t()}
   end
 
   defmodule PIDType do
+    @moduledoc false
+
     defstruct [:value]
 
     @type t :: %__MODULE__{value: pid}
   end
 
   defmodule PinOperator do
+    @moduledoc false
+
     defstruct [:name]
 
     @type t :: %__MODULE__{name: atom}
   end
 
   defmodule PortType do
+    @moduledoc false
+
     defstruct [:value]
 
     @type t :: %__MODULE__{value: port}
   end
 
   defmodule ReferenceType do
+    @moduledoc false
+
     defstruct [:value]
 
     @type t :: %__MODULE__{value: reference}
   end
 
   defmodule RemoteFunctionCall do
+    @moduledoc false
+
     defstruct [:module, :function, :args]
 
     @type t :: %__MODULE__{module: IR.t(), function: IR.t(), args: list(IR.t())}
   end
 
   defmodule StringType do
+    @moduledoc false
+
     defstruct [:value]
 
     @type t :: %__MODULE__{value: String.t()}
   end
 
   defmodule Try do
+    @moduledoc false
+
     defstruct [:body, :rescue_clauses, :catch_clauses, :else_clauses, :after_block]
 
     @type t :: %__MODULE__{
@@ -280,6 +348,8 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule TryCatchClause do
+    @moduledoc false
+
     defstruct [:kind, :value, :guards, :body]
 
     @type t :: %__MODULE__{
@@ -291,18 +361,24 @@ defmodule Hologram.Compiler.IR do
   end
 
   defmodule TryRescueClause do
+    @moduledoc false
+
     defstruct [:variable, :modules, :body]
 
     @type t :: %__MODULE__{variable: atom, modules: list(module), body: IR.Block.t()}
   end
 
   defmodule TupleType do
+    @moduledoc false
+
     defstruct [:data]
 
     @type t :: %__MODULE__{data: list(IR.t())}
   end
 
   defmodule Variable do
+    @moduledoc false
+
     defstruct [:name]
 
     @type t :: %__MODULE__{name: atom}
@@ -310,6 +386,8 @@ defmodule Hologram.Compiler.IR do
 
   # TODO: finish implementing
   defmodule With do
+    @moduledoc false
+
     defstruct []
 
     @type t :: %__MODULE__{}

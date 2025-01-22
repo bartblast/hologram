@@ -1,8 +1,8 @@
 defmodule Graph.Serializers.Edgelist do
-  @moduledoc """
-  This serializer converts a `Graph` to an edgelist suitable for using with
-  graph libraries such as the polyglot igraph library.
-  """
+  @moduledoc false
+
+  # This serializer converts a `Graph` to an edgelist suitable for using with
+  # graph libraries such as the polyglot igraph library.
 
   use Graph.Serializer
   alias Graph.Serializer

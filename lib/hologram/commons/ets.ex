@@ -1,4 +1,6 @@
 defmodule Hologram.Commons.ETS do
+  @moduledoc false
+
   # This helps to avoid Dialyzer warnings related to :ets.tid() type opaqueness.
   @type tid :: :ets.tid() | atom
 

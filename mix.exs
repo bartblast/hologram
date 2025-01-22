@@ -96,6 +96,28 @@ defmodule Hologram.MixProject do
         plt_core_path: Path.join(["priv", "plts", "core.plt"]),
         plt_local_path: Path.join(["priv", "plts", "project.plt"])
       ],
+      docs: [
+        authors: ["Bart Blast"],
+        groups_for_modules: [
+          Main: [
+            Hologram,
+            Hologram.Component,
+            Hologram.Component.Action,
+            Hologram.Component.Command,
+            Hologram.Page,
+            Hologram.Server
+          ],
+          Plug: [Hologram.Router, Hologram.Router.Helpers, Hologram.Socket],
+          UI: [Hologram.UI.Link, Hologram.UI.Runtime],
+          Errors: [
+            Hologram.AssetNotFoundError,
+            Hologram.CompileError,
+            Hologram.ParamError,
+            Hologram.TemplateSyntaxError
+          ]
+        ],
+        source_ref: "master"
+      ],
       elixir: "~> 1.0",
       elixirc_options: [warnings_as_errors: true],
       elixirc_paths: elixirc_paths(Mix.env()),

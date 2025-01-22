@@ -1,30 +1,31 @@
 defmodule Graph do
-  @moduledoc """
-  This module defines a graph data structure, which supports directed and undirected graphs, in both acyclic and cyclic forms.
-  It also defines the API for creating, manipulating, and querying that structure.
+  @moduledoc false
 
-  As far as memory usage is concerned, `Graph` should be fairly compact in memory, but if you want to do a rough
-  comparison between the memory usage for a graph between `libgraph` and `digraph`, use `:digraph.info/1` and
-  `Graph.info/1` on the two graphs, and both results will contain memory usage information. Keep in mind we don't have a precise
-  way to measure the memory usage of a term in memory, whereas ETS is able to give a more precise answer, but we do have
-  a fairly good way to estimate the usage of a term, and we use that method within `libgraph`.
+  # This module defines a graph data structure, which supports directed and undirected graphs, in both acyclic and cyclic forms.
+  # It also defines the API for creating, manipulating, and querying that structure.
 
-  The Graph struct is structured like so:
+  # As far as memory usage is concerned, `Graph` should be fairly compact in memory, but if you want to do a rough
+  # comparison between the memory usage for a graph between `libgraph` and `digraph`, use `:digraph.info/1` and
+  # `Graph.info/1` on the two graphs, and both results will contain memory usage information. Keep in mind we don't have a precise
+  # way to measure the memory usage of a term in memory, whereas ETS is able to give a more precise answer, but we do have
+  # a fairly good way to estimate the usage of a term, and we use that method within `libgraph`.
 
-  - A map of vertex ids to vertices (`vertices`)
-  - A map of vertex ids to their out neighbors (`out_edges`),
-  - A map of vertex ids to their in neighbors (`in_edges`), effectively the transposition of `out_edges`
-  - A map of vertex ids to vertex labels (`vertex_labels`), (labels are only stored if a non-nil label was provided)
-  - A map of edge ids (where an edge id is simply a tuple of `{vertex_id, vertex_id}`) to a map of edge metadata (`edges`)
-  - Edge metadata is a map of `label => weight`, and each entry in that map represents a distinct edge. This allows
-    us to support multiple edges in the same direction between the same pair of vertices, but for many purposes simply
-    treat them as a single logical edge.
+  # The Graph struct is structured like so:
 
-  This structure is designed to be as efficient as possible once a graph is built, but it turned out that it is also
-  quite efficient for manipulating the graph as well. For example, splitting an edge and introducing a new vertex on that
-  edge can be done with very little effort. We use vertex ids everywhere because we can generate them without any lookups,
-  we don't incur any copies of the vertex structure, and they are very efficient as keys in a map.
-  """
+  # - A map of vertex ids to vertices (`vertices`)
+  # - A map of vertex ids to their out neighbors (`out_edges`),
+  # - A map of vertex ids to their in neighbors (`in_edges`), effectively the transposition of `out_edges`
+  # - A map of vertex ids to vertex labels (`vertex_labels`), (labels are only stored if a non-nil label was provided)
+  # - A map of edge ids (where an edge id is simply a tuple of `{vertex_id, vertex_id}`) to a map of edge metadata (`edges`)
+  # - Edge metadata is a map of `label => weight`, and each entry in that map represents a distinct edge. This allows
+  #   us to support multiple edges in the same direction between the same pair of vertices, but for many purposes simply
+  #   treat them as a single logical edge.
+
+  # This structure is designed to be as efficient as possible once a graph is built, but it turned out that it is also
+  # quite efficient for manipulating the graph as well. For example, splitting an edge and introducing a new vertex on that
+  # edge can be done with very little effort. We use vertex ids everywhere because we can generate them without any lookups,
+  # we don't incur any copies of the vertex structure, and they are very efficient as keys in a map.
+
   defstruct in_edges: %{},
             out_edges: %{},
             edges: %{},

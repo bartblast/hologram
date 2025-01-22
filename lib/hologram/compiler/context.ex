@@ -1,4 +1,6 @@
 defmodule Hologram.Compiler.Context do
+  @moduledoc false
+
   @type t :: %__MODULE__{
           match_operator?: bool,
           module: module,

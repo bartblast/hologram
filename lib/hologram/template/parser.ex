@@ -1,4 +1,6 @@
 defmodule Hologram.Template.Parser do
+  @moduledoc false
+
   if Application.compile_env(:hologram, :debug_parser) do
     use Interceptor.Annotated,
       config: %{
@@ -57,6 +59,8 @@ defmodule Hologram.Template.Parser do
           | :start_tag_name
 
   defmodule Context do
+    @moduledoc false
+
     defstruct attribute_name: nil,
               attribute_value: [],
               attributes: [],

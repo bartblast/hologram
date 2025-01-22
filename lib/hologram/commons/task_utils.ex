@@ -1,4 +1,6 @@
 defmodule Hologram.Commons.TaskUtils do
+  @moduledoc false
+
   @doc """
   Starts multiple tasks.
   """

@@ -1,10 +1,10 @@
 defmodule Graph.Pathfindings.BellmanFord do
-  @moduledoc """
-  The Bellman–Ford algorithm is an algorithm that computes shortest paths from a single
-  source vertex to all of the other vertices in a weighted digraph.
-  It is capable of handling graphs in which some of the edge weights are negative numbers
-  Time complexity: O(VLogV)
-  """
+  @moduledoc false
+
+  # The Bellman–Ford algorithm is an algorithm that computes shortest paths from a single
+  # source vertex to all of the other vertices in a weighted digraph.
+  # It is capable of handling graphs in which some of the edge weights are negative numbers
+  # Time complexity: O(VLogV)
 
   @typep distance() :: %{Graph.vertex_id() => integer()}
 

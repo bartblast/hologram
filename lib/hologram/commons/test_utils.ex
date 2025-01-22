@@ -1,4 +1,6 @@
 defmodule Hologram.Commons.TestUtils do
+  @moduledoc false
+
   alias Hologram.Commons.IntegerUtils
   alias Hologram.Commons.KernelUtils
   alias Hologram.Reflection

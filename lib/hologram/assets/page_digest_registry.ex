@@ -1,4 +1,6 @@
 defmodule Hologram.Assets.PageDigestRegistry do
+  @moduledoc false
+
   use GenServer
 
   alias Hologram.Commons.PLT

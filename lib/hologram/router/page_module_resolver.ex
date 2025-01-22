@@ -1,4 +1,6 @@
 defmodule Hologram.Router.PageModuleResolver do
+  @moduledoc false
+
   use GenServer
 
   alias Hologram.Reflection

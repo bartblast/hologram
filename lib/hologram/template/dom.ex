@@ -1,4 +1,6 @@
 defmodule Hologram.Template.DOM do
+  @moduledoc false
+
   alias Hologram.Compiler.AST
   alias Hologram.Template.Helpers
   alias Hologram.Template.Parser

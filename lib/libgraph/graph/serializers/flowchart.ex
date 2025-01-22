@@ -1,7 +1,7 @@
 defmodule Graph.Serializers.Flowchart do
-  @moduledoc """
-  This serializer converts a `Graph` to a [Mermaid Flowchart](https://mermaid.js.org/syntax/flowchart.html).
-  """
+  @moduledoc false
+
+  # This serializer converts a `Graph` to a [Mermaid Flowchart](https://mermaid.js.org/syntax/flowchart.html).
 
   use Graph.Serializer
   import Graph.Serializer

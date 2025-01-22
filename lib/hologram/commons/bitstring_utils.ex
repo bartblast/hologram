@@ -1,4 +1,6 @@
 defmodule Hologram.Commons.BitstringUtils do
+  @moduledoc false
+
   @doc """
   Converts a list of bits into a corresponding bitstring.
   """

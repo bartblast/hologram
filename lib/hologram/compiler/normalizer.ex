@@ -1,4 +1,6 @@
 defmodule Hologram.Compiler.Normalizer do
+  @moduledoc false
+
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Helpers
   alias Hologram.Reflection

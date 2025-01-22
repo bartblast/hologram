@@ -1,4 +1,6 @@
 defimpl Inspect, for: Graph do
+  @moduledoc false
+
   # For graphs with less than 100 vertices, we'll try to pretty print it,
   # however we should avoid doing so with larger graphs, as it will likely cause outrageous
   # memory consumption, not to mention be expensive to calculate, and the pretty form is not

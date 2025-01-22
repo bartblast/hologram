@@ -1,4 +1,6 @@
 defmodule Hologram.Template.Tokenizer do
+  @moduledoc false
+
   @type token :: {:string | :symbol | :whitespace, String.t()}
 
   @doc """

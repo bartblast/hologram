@@ -1,5 +1,7 @@
 # TODO: test
 defmodule Hologram.LiveReload do
+  @moduledoc false
+
   use GenServer
 
   alias Hologram.Assets.ManifestCache

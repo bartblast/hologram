@@ -1,4 +1,6 @@
 defmodule Hologram.Compiler do
+  @moduledoc false
+
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.TaskUtils

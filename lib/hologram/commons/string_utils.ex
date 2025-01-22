@@ -1,4 +1,6 @@
 defmodule Hologram.Commons.StringUtils do
+  @moduledoc false
+
   @doc """
   Prepends the prefix to the given string.
 

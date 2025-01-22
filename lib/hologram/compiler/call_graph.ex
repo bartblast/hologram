@@ -1,4 +1,6 @@
 defmodule Hologram.Compiler.CallGraph do
+  @moduledoc false
+
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Commons.TaskUtils

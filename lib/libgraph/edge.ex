@@ -1,10 +1,11 @@
 defmodule Graph.Edge do
-  @moduledoc """
-  This module defines the struct used to represent edges and associated metadata about them.
+  @moduledoc false
 
-  Used internally, `v1` and `v2` typically hold vertex ids, not the vertex itself, but all
-  public APIs which return `Graph.Edge` structs, return them with the actual vertices.
-  """
+  # This module defines the struct used to represent edges and associated metadata about them.
+
+  # Used internally, `v1` and `v2` typically hold vertex ids, not the vertex itself, but all
+  # public APIs which return `Graph.Edge` structs, return them with the actual vertices.
+
   defstruct v1: nil,
             v2: nil,
             weight: 1,

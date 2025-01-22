@@ -1,4 +1,6 @@
 defmodule Hologram.Template.Renderer do
+  @moduledoc false
+
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Commons.StringUtils
   alias Hologram.Commons.Types, as: T
@@ -13,6 +15,8 @@ defmodule Hologram.Template.Renderer do
   @void_elems ~w(area base br col embed hr img input link meta param source track wbr)
 
   defmodule Env do
+    @moduledoc false
+
     defstruct context: %{}, node_type: nil, slots: [], tag_name: nil
 
     @type t :: %__MODULE__{

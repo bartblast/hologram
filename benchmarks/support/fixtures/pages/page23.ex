@@ -1,5 +1,7 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Benchmarks.Fixtures.Page23 do
+  @moduledoc false
+
   use Hologram.Page
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]

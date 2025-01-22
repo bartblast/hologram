@@ -1,7 +1,8 @@
 defmodule Graph.Reducers.Dfs do
-  @moduledoc """
-  This reducer traverses the graph using Depth-First Search.
-  """
+  @moduledoc false
+
+  # This reducer traverses the graph using Depth-First Search.
+
   use Graph.Reducer
 
   @doc """

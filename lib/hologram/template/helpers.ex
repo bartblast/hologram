@@ -1,4 +1,6 @@
 defmodule Hologram.Template.Helpers do
+  @moduledoc false
+
   # See: https://html.spec.whatwg.org/multipage/syntax.html#void-elements
   @void_html_elements [
     "area",

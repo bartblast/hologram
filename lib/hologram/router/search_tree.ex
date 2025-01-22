@@ -1,7 +1,11 @@
 defmodule Hologram.Router.SearchTree do
+  @moduledoc false
+
   alias Hologram.Router.SearchTree
 
   defmodule Node do
+    @moduledoc false
+
     defstruct value: nil, children: %{}
 
     @type t :: %__MODULE__{value: module | nil, children: %{String.t() => __MODULE__.t()}}

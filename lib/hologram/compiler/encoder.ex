@@ -1,4 +1,6 @@
 defmodule Hologram.Compiler.Encoder do
+  @moduledoc false
+
   if Application.compile_env(:hologram, :debug_encoder) do
     use Interceptor.Annotated,
       config: %{

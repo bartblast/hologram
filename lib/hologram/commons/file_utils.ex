@@ -1,4 +1,6 @@
 defmodule Hologram.Commons.FileUtils do
+  @moduledoc false
+
   alias Hologram.Commons.Types, as: T
 
   @doc """

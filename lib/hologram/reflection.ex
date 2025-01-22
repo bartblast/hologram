@@ -1,4 +1,6 @@
 defmodule Hologram.Reflection do
+  @moduledoc false
+
   alias Hologram.Commons.StringUtils
 
   @call_graph_dump_file_name "call_graph.bin"
