@@ -2,6 +2,8 @@
 defmodule Hologram.MixProject do
   use Mix.Project
 
+  @version "0.3.0"
+
   defp aliases do
     [
       eslint:
@@ -116,7 +118,7 @@ defmodule Hologram.MixProject do
             Hologram.TemplateSyntaxError
           ]
         ],
-        source_ref: "master"
+        source_ref: "v#{@version}"
       ],
       elixir: "~> 1.0",
       elixirc_options: [warnings_as_errors: true],
@@ -127,7 +129,7 @@ defmodule Hologram.MixProject do
       start_permanent: Mix.env() == :prod,
       source_url: "https://github.com/bartblast/hologram",
       test_paths: ["test/elixir"],
-      version: "0.3.0",
+      version: @version,
       xref: [
         # These modules are used only in tests to test whether Hex.Solver's implementations
         # for Inspect and String.Chars protocols are excluded when building runtime and pages JavaScript files.
