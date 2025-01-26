@@ -25,6 +25,11 @@ defmodule Hologram.UI.LinkTest do
              ~s'<a href="/hologram-test-fixtures-ui-link-module1" class="my_class">my anchor text</a>'
   end
 
+  test "with rel prop" do
+    assert render_markup(~H'<Link to={Module1} rel="nofollow">my anchor text</Link>') ==
+             ~s'<a href="/hologram-test-fixtures-ui-link-module1" rel="nofollow">my anchor text</a>'
+  end
+
   test "with style prop" do
     assert render_markup(~H'<Link to={Module1} style="my_style">my anchor text</Link>') ==
              ~s'<a href="/hologram-test-fixtures-ui-link-module1" style="my_style">my anchor text</a>'
