@@ -43,8 +43,18 @@ defmodule Hologram.PageTest do
       assert cast_params(Module6, %{a: :test}) == %{a: :test}
     end
 
-    test "string -> atom" do
+    test "to existing atom" do
       assert cast_params(Module6, %{a: "test"}) == %{a: :test}
+    end
+
+    test "to non-existing atom" do
+      random_string = random_string()
+
+      assert_raise Hologram.ParamError,
+                   ~s/can't cast param "a" with value "#{random_string}" to atom, because it's not an already existing atom/,
+                   fn ->
+                     cast_params(Module6, %{a: random_string})
+                   end
     end
 
     test "map -> atom" do
