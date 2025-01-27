@@ -899,7 +899,7 @@ defmodule Hologram.Template.RendererTest do
         "102790adb6c3b1956db310be523a7693"
       )
 
-      params = %{key_1: 123, key_2: "value_2"}
+      params = %{key_1: "123", key_2: "value_2"}
 
       assert {html, _component_registry} = render_page(Module50, params, @opts)
 

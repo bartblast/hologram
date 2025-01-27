@@ -39,15 +39,11 @@ defmodule Hologram.PageTest do
   end
 
   describe "cast params" do
-    test "atom -> atom" do
-      assert cast_params(Module6, %{a: :test}) == %{a: :test}
-    end
-
-    test "to existing atom" do
+    test "existing atom" do
       assert cast_params(Module6, %{a: "test"}) == %{a: :test}
     end
 
-    test "to non-existing atom" do
+    test "non-existing atom" do
       random_string = random_string()
 
       assert_raise Hologram.ParamError,
@@ -57,45 +53,21 @@ defmodule Hologram.PageTest do
                    end
     end
 
-    test "map -> atom" do
-      assert_raise Hologram.ParamError,
-                   ~s/can't cast param "a" with value %{x: 1, y: 2} to atom, because it's of invalid type/,
-                   fn ->
-                     cast_params(Module6, %{a: %{x: 1, y: 2}})
-                   end
-    end
-
-    test "float -> float" do
-      assert cast_params(Module6, %{b: 1.23}) == %{b: 1.23}
-    end
-
-    test "(valid) string -> float" do
+    test "valid float" do
       assert cast_params(Module6, %{b: "1.23abc"}) == %{b: 1.23}
     end
 
-    test "(invalid) string -> float" do
+    test "invalid float" do
       assert_raise Hologram.ParamError, ~s/can't cast param "b" with value "abc" to float/, fn ->
         cast_params(Module6, %{b: "abc"})
       end
     end
 
-    test "map -> float" do
-      assert_raise Hologram.ParamError,
-                   ~s/can't cast param "b" with value %{x: 1, y: 2} to float, because it's of invalid type/,
-                   fn ->
-                     cast_params(Module6, %{b: %{x: 1, y: 2}})
-                   end
-    end
-
-    test "integer -> integer" do
-      assert cast_params(Module6, %{c: 123}) == %{c: 123}
-    end
-
-    test "(valid) string -> integer" do
+    test "valid integer" do
       assert cast_params(Module6, %{c: "123abc"}) == %{c: 123}
     end
 
-    test "(invalid) string -> integer" do
+    test "invalid integer" do
       assert_raise Hologram.ParamError,
                    ~s/can't cast param "c" with value "abc" to integer/,
                    fn ->
@@ -103,24 +75,8 @@ defmodule Hologram.PageTest do
                    end
     end
 
-    test "map -> integer" do
-      assert_raise Hologram.ParamError,
-                   ~s/can't cast param "c" with value %{x: 1, y: 2} to integer, because it's of invalid type/,
-                   fn ->
-                     cast_params(Module6, %{c: %{x: 1, y: 2}})
-                   end
-    end
-
-    test "string -> string" do
+    test "string" do
       assert cast_params(Module6, %{d: "abc"}) == %{d: "abc"}
-    end
-
-    test "map -> string" do
-      assert_raise Hologram.ParamError,
-                   ~s/can't cast param "d" with value %{x: 1, y: 2} to string, because it's of invalid type/,
-                   fn ->
-                     cast_params(Module6, %{d: %{x: 1, y: 2}})
-                   end
     end
 
     test "multiple params" do

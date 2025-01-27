@@ -139,7 +139,7 @@ defmodule Hologram.Template.Renderer do
         %{"page" => %{module: MyPage, struct: %Component{state: %{a: 1, b: 2}}}}
       }
   """
-  @spec render_page(module, %{(atom | String.t()) => any}, T.opts()) ::
+  @spec render_page(module, %{atom => String.t()}, T.opts()) ::
           {String.t(), %{String.t() => %{module: module, struct: Component.t()}}}
   def render_page(page_module, params, opts) do
     initial_page? = opts[:initial_page?] || false
