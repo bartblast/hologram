@@ -134,11 +134,7 @@ defmodule HologramFeatureTests.ControlFlow.IfPage do
   end
 
   def action(:error_in_condition, params, _component) do
-    if (if params.flag do
-          raise RuntimeError, "my message"
-        else
-          123
-        end) do
+    if maybe_raise_error(params.flag) do
       :a
     end
   end
@@ -159,5 +155,13 @@ defmodule HologramFeatureTests.ControlFlow.IfPage do
 
   def action(:reset, _params, component) do
     put_state(component, :result, nil)
+  end
+
+  defp maybe_raise_error(flag) do
+    if params.flag do
+      raise RuntimeError, "my message"
+    else
+      123
+    end
   end
 end
