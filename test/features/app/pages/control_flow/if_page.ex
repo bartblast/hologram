@@ -158,7 +158,7 @@ defmodule HologramFeatureTests.ControlFlow.IfPage do
   end
 
   defp maybe_raise_error(flag) do
-    if params.flag do
+    if flag do
       raise RuntimeError, "my message"
     else
       123
