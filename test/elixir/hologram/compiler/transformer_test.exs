@@ -1443,7 +1443,7 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
-  describe "capture operator on local function" do
+  describe "local function capture" do
     test "arity 0 (AST from source code)" do
       ast = ast("&my_fun/0")
 
@@ -1604,8 +1604,8 @@ defmodule Hologram.Compiler.TransformerTest do
     end
   end
 
-  describe "capture operator" do
-    test "remote Elixir function capture, single-segment module name (AST from source code)" do
+  describe "remote Elixir function capture" do
+    test "single-segment module name (AST from source code)" do
       ast = ast("&DateTime.now/2")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
@@ -1636,7 +1636,7 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "remote Elixir function capture, single-segment module name (AST from BEAM file)" do
+    test "single-segment module name (AST from BEAM file)" do
       assert transform_module_and_fetch_expr(Module27) == %IR.AnonymousFunctionType{
                arity: 2,
                captured_function: :now,
@@ -1665,7 +1665,7 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "remote Elixir function capture, multi-segment module name (AST from source code)" do
+    test "multi-segment module name (AST from source code)" do
       ast = ast("&Calendar.ISO.parse_date/2")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
@@ -1696,7 +1696,7 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "remote Elixir function capture, multi-segment module name (AST from BEAM file)" do
+    test "multi-segment module name (AST from BEAM file)" do
       assert transform_module_and_fetch_expr(Module28) == %IR.AnonymousFunctionType{
                arity: 2,
                captured_function: :parse_date,
@@ -1724,8 +1724,10 @@ defmodule Hologram.Compiler.TransformerTest do
                ]
              }
     end
+  end
 
-    test "remote Erlang function capture (AST from source code)" do
+  describe "remote Erlang function capture" do
+    test "AST from source code" do
       ast = ast("&:erlang.binary_to_term/2")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
@@ -1756,7 +1758,7 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "remote Erlang function capture (AST from BEAM file)" do
+    test "AST from BEAM file" do
       assert transform_module_and_fetch_expr(Module29) == %IR.AnonymousFunctionType{
                arity: 2,
                captured_function: :binary_to_term,
@@ -1784,8 +1786,10 @@ defmodule Hologram.Compiler.TransformerTest do
                ]
              }
     end
+  end
 
-    test "remote function capture, variable module (AST from source code)" do
+  describe "remote function capture with variable module" do
+    test "AST from source code" do
       ast = ast("&my_module.my_fun/2")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
@@ -1816,7 +1820,7 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "remote function capture, variable module (AST from BEAM file)" do
+    test "AST from BEAM file" do
       assert transform_module_and_fetch_expr(Module30) == %IR.AnonymousFunctionType{
                arity: 2,
                captured_function: nil,
@@ -1844,8 +1848,10 @@ defmodule Hologram.Compiler.TransformerTest do
                ]
              }
     end
+  end
 
-    test "partially applied local function (AST from source code)" do
+  describe "partially applied local function" do
+    test "AST from source code" do
       ast = ast("&my_fun(&1, 2, [3, &2])")
 
       assert transform(ast, %Context{module: MyModule}) == %IR.AnonymousFunctionType{
@@ -1881,7 +1887,7 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "partially applied local function (AST from BEAM file)" do
+    test "AST from BEAM file" do
       {param_1_name, param_2_name} =
         if Version.compare(System.version(), "1.17.0") in [:gt, :eq] do
           {:"$3", :"$4"}
@@ -1921,8 +1927,10 @@ defmodule Hologram.Compiler.TransformerTest do
                ]
              }
     end
+  end
 
-    test "partially applied remote function (AST from source code)" do
+  describe "partially applied remote function" do
+    test "AST from source code" do
       ast = ast("&Hologram.Test.Fixtures.Compiler.Tranformer.Module32.my_fun(&1, 2, [3, &2])")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
@@ -1959,7 +1967,7 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "partially applied remote function (AST from BEAM file)" do
+    test "AST from BEAM file" do
       {param_1_name, param_2_name} =
         if Version.compare(System.version(), "1.17.0") in [:gt, :eq] do
           {:"$2", :"$3"}
@@ -2000,8 +2008,10 @@ defmodule Hologram.Compiler.TransformerTest do
                ]
              }
     end
+  end
 
-    test "anonymous function capture (AST from source code)" do
+  describe "anonymous function capture" do
+    test "AST from source code" do
       ast = ast("&(&1 * &2 + &1)")
 
       assert transform(ast, %Context{}) == %IR.AnonymousFunctionType{
@@ -2037,7 +2047,7 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "anonymous function capture (AST from BEAM file)" do
+    test "AST from BEAM file" do
       {param_1_name, param_2_name} =
         if Version.compare(System.version(), "1.17.0") in [:gt, :eq] do
           {:"$2", :"$3"}
