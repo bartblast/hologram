@@ -37,7 +37,7 @@ jobs:
           - "24.3"
           - "25.3"
           - "26.2"
-          - "27.1"
+          - "27.2"
         node:
           # Version 18 doesn't support Web Crypto API.
           # - "18.20.4"
@@ -50,23 +50,23 @@ jobs:
           - elixir: "1.13.4"
             otp: "26.2"
           - elixir: "1.13.4"
-            otp: "27.1"
+            otp: "27.2"
           - elixir: "1.14.5"
             otp: "22.3"
           - elixir: "1.14.5"
-            otp: "27.1"
+            otp: "27.2"
           - elixir: "1.15.8"
             otp: "22.3"
           - elixir: "1.15.8"
             otp: "23.3"
           - elixir: "1.15.8"
-            otp: "27.1"
+            otp: "27.2"
           - elixir: "1.16.3"
             otp: "22.3"
           - elixir: "1.16.3"
             otp: "23.3"
           - elixir: "1.16.3"
-            otp: "27.1"
+            otp: "27.2"
           - elixir: "1.17.3"
             otp: "22.3"
           - elixir: "1.17.3"
@@ -74,7 +74,7 @@ jobs:
           - elixir: "1.17.3"
             otp: "24.3"
     env:
-      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.elixir, '1.17.3') && contains(matrix.otp, '27.1') && contains(matrix.node, '22.9.0') }}
+      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.elixir, '1.17.3') && contains(matrix.otp, '27.2') && contains(matrix.node, '22.9.0') }}
     steps:
       # Step: Setup Elixir + Erlang image as the base.
       - name: Set up Elixir
@@ -259,7 +259,7 @@ jobs:
           - "24.3"
           - "25.3"
           - "26.2"
-          - "27.1"
+          - "27.2"
         node:
           # Version 18 doesn't support Web Crypto API.
           # - "18.20.4"
@@ -272,23 +272,23 @@ jobs:
           - elixir: "1.13.4"
             otp: "26.2"
           - elixir: "1.13.4"
-            otp: "27.1"
+            otp: "27.2"
           - elixir: "1.14.5"
             otp: "22.3"
           - elixir: "1.14.5"
-            otp: "27.1"
+            otp: "27.2"
           - elixir: "1.15.8"
             otp: "22.3"
           - elixir: "1.15.8"
             otp: "23.3"
           - elixir: "1.15.8"
-            otp: "27.1"
+            otp: "27.2"
           - elixir: "1.16.3"
             otp: "22.3"
           - elixir: "1.16.3"
             otp: "23.3"
           - elixir: "1.16.3"
-            otp: "27.1"
+            otp: "27.2"
           - elixir: "1.17.3"
             otp: "22.3"
           - elixir: "1.17.3"
@@ -296,7 +296,7 @@ jobs:
           - elixir: "1.17.3"
             otp: "24.3"
     env:
-      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.elixir, '1.17.3') && contains(matrix.otp, '27.1') && contains(matrix.node, '22.9.0') }}
+      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.elixir, '1.17.3') && contains(matrix.otp, '27.2') && contains(matrix.node, '22.9.0') }}
     steps:
       # Step: Setup Elixir + Erlang image as the base.
       - name: Set up Elixir
