@@ -3,6 +3,7 @@ defmodule Hologram.Compiler.TransformerTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.Transformer
 
+  alias Hologram.Commons.TestUtils
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
@@ -3187,13 +3188,21 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform_module_and_fetch_expr(Module58) == %IR.Cond{
                clauses: [
                  %IR.CondClause{
-                   condition: %IR.IntegerType{value: 1},
+                   condition: %IR.RemoteFunctionCall{
+                     args: [%IR.IntegerType{value: 1}],
+                     function: :wrap_term,
+                     module: %IR.AtomType{value: TestUtils}
+                   },
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :expr_1}]
                    }
                  },
                  %IR.CondClause{
-                   condition: %IR.IntegerType{value: 2},
+                   condition: %IR.RemoteFunctionCall{
+                     args: [%IR.IntegerType{value: 2}],
+                     function: :wrap_term,
+                     module: %IR.AtomType{value: TestUtils}
+                   },
                    body: %IR.Block{
                      expressions: [%IR.AtomType{value: :expr_2}]
                    }
