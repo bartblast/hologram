@@ -76,10 +76,15 @@ defmodule Hologram.Commons.TestUtils do
     module_name = Reflection.module_name(module)
 
     undefined_mfa_info =
-      if module_available? do
-        "function #{module_name}.#{fun}/#{arity} is undefined or private"
-      else
-        "function #{module_name}.#{fun}/#{arity} is undefined (module #{module_name} is not available). Make sure the module name is correct and has been specified in full (or that an alias has been defined)"
+      cond do
+        module_available? ->
+          "function #{module_name}.#{fun}/#{arity} is undefined or private"
+
+        Version.match?(System.version(), ">= 1.18.0") ->
+          "#{build_module_not_available_error(module_name, fun, arity)}. Make sure the module name is correct and has been specified in full (or that an alias has been defined)"
+
+        true ->
+          build_module_not_available_error(module_name, fun, arity)
       end
 
     similar_funs_info =
@@ -101,5 +106,9 @@ defmodule Hologram.Commons.TestUtils do
   @spec wrap_term(any) :: any
   def wrap_term(value) do
     value
+  end
+
+  defp build_module_not_available_error(module_name, fun, arity) do
+    "function #{module_name}.#{fun}/#{arity} is undefined (module #{module_name} is not available)"
   end
 end

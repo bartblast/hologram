@@ -115,8 +115,14 @@ defmodule Hologram.Commons.TestUtilsTest do
     end
 
     test "module is not available" do
-      assert build_undefined_function_error({MyModule, :my_fun, 2}, [], false) ==
-               "function MyModule.my_fun/2 is undefined (module MyModule is not available)"
+      expected =
+        if Version.match?(System.version(), ">= 1.18.0") do
+          "function MyModule.my_fun/2 is undefined (module MyModule is not available). Make sure the module name is correct and has been specified in full (or that an alias has been defined)"
+        else
+          "function MyModule.my_fun/2 is undefined (module MyModule is not available)"
+        end
+
+      assert build_undefined_function_error({MyModule, :my_fun, 2}, [], false) == expected
     end
   end
 
