@@ -19,14 +19,14 @@ defmodule HologramFeatureTests.ControlFlow.UnlessPage do
     </p>
     <p>
       <button $click="basic_case"> Basic case </button>
-      <button $click="multiple_expression_condition"> Multiple-expression condition </button>
+      <button $click={:multiple_expression_condition, expr: false}> Multiple-expression condition </button>
       <button $click="multiple_expression_unless_body"> Multiple-expression unless body </button>
       <button $click="unmet_condition_no_else_body"> Unmet condition, no else body </button>
       <button $click="single_expression_else_body"> Single-expression else body </button>
       <button $click="multiple_expression_else_body"> Multiple-expression else body </button>
-      <button $click="vars_scoping_in_unless_body"> Vars scoping in unless body </button>
+      <button $click={:vars_scoping_in_unless_body, expr: false}> Vars scoping in unless body </button>
       <button $click="vars_scoping_in_else_body"> Vars scoping in else body </button>
-      <button $click="error_in_condition"> Error in condition </button>
+      <button $click={:error_in_condition, flag: true}> Error in condition </button>
       <button $click="error_in_unless_body"> Error in unless body </button>
       <button $click="error_in_else_body"> Error in else body </button>
     </p>
@@ -46,11 +46,11 @@ defmodule HologramFeatureTests.ControlFlow.UnlessPage do
     put_state(component, :result, result)
   end
 
-  def action(:multiple_expression_condition, _params, component) do
+  def action(:multiple_expression_condition, params, component) do
     result =
       unless (
                true
-               false
+               params.expr
              ) do
         :a
       end
@@ -100,14 +100,14 @@ defmodule HologramFeatureTests.ControlFlow.UnlessPage do
     put_state(component, :result, result)
   end
 
-  def action(:vars_scoping_in_unless_body, _params, component) do
+  def action(:vars_scoping_in_unless_body, params, component) do
     z = 3
 
     result =
       unless (
                x = 1
                y = 2
-               false
+               params.expr
              ) do
         x = x + 10
         {x, y, z}
@@ -133,11 +133,12 @@ defmodule HologramFeatureTests.ControlFlow.UnlessPage do
     put_state(component, :result, {x, y, z, result})
   end
 
-  def action(:error_in_condition, _params, _component) do
-    unless (
-             message = "my message"
-             raise RuntimeError, message
-           ) do
+  def action(:error_in_condition, params, _component) do
+    unless (if params.flag do
+              raise RuntimeError, "my message"
+            else
+              123
+            end) do
       :a
     end
   end

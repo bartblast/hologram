@@ -21,11 +21,11 @@ defmodule HologramFeatureTests.ControlFlow.CondPage do
     <p>
       <button $click="basic_case"> Basic case </button>
       <button $click="multiple_expression_clause_condition"> Multiple-expression clause condition </button>
-      <button $click="multiple_clauses"> Multiple clauses </button>
-      <button $click="multiple_expression_clause_body"> Multiple-expression clause body </button>
+      <button $click={:multiple_clauses, a: false, b: true, c: true}> Multiple clauses </button>
+      <button $click={:multiple_expression_clause_body, x: false, y: true, z: true}> Multiple-expression clause body </button>
       <button $click="evaluates_the_first_clause_with_truthy_condition"> Evaluates the first clause with truthy condition </button>
       <button $click="vars_scoping"> Vars scoping </button>
-      <button $click="no_matching_clause"> No matching clause </button>
+      <button $click={:no_matching_clause, a: false, b: false}> No matching clause </button>
       <button $click="error_in_clause_condition"> Error in clause condition </button>
       <button $click="error_in_clause_body"> Error in clause body </button>
     </p>
@@ -58,29 +58,29 @@ defmodule HologramFeatureTests.ControlFlow.CondPage do
     put_state(component, :result, result)
   end
 
-  def action(:multiple_clauses, _params, component) do
+  def action(:multiple_clauses, params, component) do
     result =
       cond do
-        false -> :a
-        true -> :b
-        true -> :c
+        params.a -> :a
+        params.b -> :b
+        params.c -> :c
       end
 
     put_state(component, :result, result)
   end
 
-  def action(:multiple_expression_clause_body, _params, component) do
+  def action(:multiple_expression_clause_body, params, component) do
     result =
       cond do
-        false ->
+        params.x ->
           :x
           :a
 
-        true ->
+        params.y ->
           :y
           :b
 
-        true ->
+        params.z ->
           :z
           :c
       end
@@ -120,10 +120,10 @@ defmodule HologramFeatureTests.ControlFlow.CondPage do
     put_state(component, :result, {x, y, z, result})
   end
 
-  def action(:no_matching_clause, _params, _component) do
+  def action(:no_matching_clause, params, _component) do
     cond do
-      false -> :a
-      false -> :b
+      params.a -> :a
+      params.b -> :b
     end
   end
 
