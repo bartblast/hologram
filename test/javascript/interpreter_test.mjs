@@ -219,7 +219,7 @@ describe("Interpreter", () => {
       );
 
       const expected =
-        "function Aaa.Bbb.my_fun/2 is undefined (module Aaa.Bbb is not available)";
+        "function Aaa.Bbb.my_fun/2 is undefined (module Aaa.Bbb is not available). Make sure the module name is correct and has been specified in full (or that an alias has been defined)";
 
       assert.equal(result, expected);
     });

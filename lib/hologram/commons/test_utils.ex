@@ -79,7 +79,7 @@ defmodule Hologram.Commons.TestUtils do
       if module_available? do
         "function #{module_name}.#{fun}/#{arity} is undefined or private"
       else
-        "function #{module_name}.#{fun}/#{arity} is undefined (module #{module_name} is not available)"
+        "function #{module_name}.#{fun}/#{arity} is undefined (module #{module_name} is not available). Make sure the module name is correct and has been specified in full (or that an alias has been defined)"
       end
 
     similar_funs_info =

@@ -114,7 +114,7 @@ export default class Interpreter {
       return `function ${moduleName}.${functionName}/${arity} is undefined or private`;
     }
 
-    return `function ${moduleName}.${functionName}/${arity} is undefined (module ${moduleName} is not available)`;
+    return `function ${moduleName}.${functionName}/${arity} is undefined (module ${moduleName} is not available). Make sure the module name is correct and has been specified in full (or that an alias has been defined)`;
   }
 
   // callAnonymousFunction() has no unit tests in interpreter_test.mjs, only:
