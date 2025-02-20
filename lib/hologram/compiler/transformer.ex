@@ -508,7 +508,7 @@ defmodule Hologram.Compiler.Transformer do
       if kind do
         transform(kind, context)
       else
-        nil
+        %IR.AtomType{value: :throw}
       end
 
     guards_ir =

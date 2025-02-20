@@ -4991,7 +4991,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Try{
                catch_clauses: [
                  %IR.TryCatchClause{
-                   kind: nil,
+                   kind: %IR.AtomType{value: :throw},
                    value: %IR.Variable{name: :e},
                    guards: [],
                    body: %IR.Block{
@@ -5008,7 +5008,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Try{
                catch_clauses: [
                  %IR.TryCatchClause{
-                   kind: nil,
+                   kind: %IR.AtomType{value: :throw},
                    value: %IR.Variable{name: :e},
                    guards: [],
                    body: %IR.Block{
@@ -5034,7 +5034,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Try{
                catch_clauses: [
                  %IR.TryCatchClause{
-                   kind: nil,
+                   kind: %IR.AtomType{value: :throw},
                    value: %IR.Variable{name: :x},
                    guards: [
                      %IR.LocalFunctionCall{
@@ -5054,7 +5054,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Try{
                catch_clauses: [
                  %IR.TryCatchClause{
-                   kind: nil,
+                   kind: %IR.AtomType{value: :throw},
                    value: %IR.Variable{name: :x},
                    guards: [
                      %IR.RemoteFunctionCall{
@@ -5084,7 +5084,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Try{
                catch_clauses: [
                  %IR.TryCatchClause{
-                   kind: nil,
+                   kind: %IR.AtomType{value: :throw},
                    value: %IR.Variable{name: :x},
                    guards: [
                      %IR.LocalFunctionCall{
@@ -5108,7 +5108,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Try{
                catch_clauses: [
                  %IR.TryCatchClause{
-                   kind: nil,
+                   kind: %IR.AtomType{value: :throw},
                    value: %IR.Variable{name: :x},
                    guards: [
                      %IR.RemoteFunctionCall{
@@ -5143,7 +5143,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Try{
                catch_clauses: [
                  %IR.TryCatchClause{
-                   kind: nil,
+                   kind: %IR.AtomType{value: :throw},
                    value: %IR.Variable{name: :x},
                    guards: [
                      %IR.LocalFunctionCall{
@@ -5171,7 +5171,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Try{
                catch_clauses: [
                  %IR.TryCatchClause{
-                   kind: nil,
+                   kind: %IR.AtomType{value: :throw},
                    value: %IR.Variable{name: :x},
                    guards: [
                      %IR.RemoteFunctionCall{
@@ -5428,7 +5428,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Try{
                catch_clauses: [
                  %IR.TryCatchClause{
-                   kind: nil,
+                   kind: %IR.AtomType{value: :throw},
                    value: %IR.AtomType{value: :error},
                    guards: [],
                    body: %IR.Block{
@@ -5436,7 +5436,7 @@ defmodule Hologram.Compiler.TransformerTest do
                    }
                  },
                  %IR.TryCatchClause{
-                   kind: nil,
+                   kind: %IR.AtomType{value: :throw},
                    value: %IR.AtomType{value: :warning},
                    guards: [],
                    body: %IR.Block{
@@ -5451,7 +5451,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Try{
                catch_clauses: [
                  %IR.TryCatchClause{
-                   kind: nil,
+                   kind: %IR.AtomType{value: :throw},
                    value: %IR.AtomType{value: :error},
                    guards: [],
                    body: %IR.Block{
@@ -5459,7 +5459,7 @@ defmodule Hologram.Compiler.TransformerTest do
                    }
                  },
                  %IR.TryCatchClause{
-                   kind: nil,
+                   kind: %IR.AtomType{value: :throw},
                    value: %IR.AtomType{value: :warning},
                    guards: [],
                    body: %IR.Block{
@@ -5908,7 +5908,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Try{
                catch_clauses: [
                  %IR.TryCatchClause{
-                   kind: nil,
+                   kind: %IR.AtomType{value: :throw},
                    value: %IR.Variable{name: :e},
                    guards: [],
                    body: %IR.Block{
@@ -5925,7 +5925,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Try{
                catch_clauses: [
                  %IR.TryCatchClause{
-                   kind: nil,
+                   kind: %IR.AtomType{value: :throw},
                    value: %IR.Variable{name: :x},
                    guards: [
                      %IR.RemoteFunctionCall{
@@ -5946,7 +5946,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Try{
                catch_clauses: [
                  %IR.TryCatchClause{
-                   kind: nil,
+                   kind: %IR.AtomType{value: :throw},
                    value: %IR.Variable{name: :x},
                    guards: [
                      %IR.RemoteFunctionCall{
@@ -5972,7 +5972,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Try{
                catch_clauses: [
                  %IR.TryCatchClause{
-                   kind: nil,
+                   kind: %IR.AtomType{value: :throw},
                    value: %IR.Variable{name: :x},
                    guards: [
                      %IR.RemoteFunctionCall{
@@ -6096,7 +6096,7 @@ defmodule Hologram.Compiler.TransformerTest do
       assert %IR.Try{
                catch_clauses: [
                  %IR.TryCatchClause{
-                   kind: nil,
+                   kind: %IR.AtomType{value: :throw},
                    value: %IR.AtomType{value: :error},
                    guards: [],
                    body: %IR.Block{
@@ -6104,7 +6104,7 @@ defmodule Hologram.Compiler.TransformerTest do
                    }
                  },
                  %IR.TryCatchClause{
-                   kind: nil,
+                   kind: %IR.AtomType{value: :throw},
                    value: %IR.AtomType{value: :warning},
                    guards: [],
                    body: %IR.Block{
