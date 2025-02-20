@@ -497,6 +497,8 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
+  defp build_function_capture_args(0, _meta), do: []
+
   # sobelow_skip ["DOS.BinToAtom"]
   defp build_function_capture_args(arity, meta) do
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom

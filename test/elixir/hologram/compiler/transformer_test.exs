@@ -68,6 +68,8 @@ defmodule Hologram.Compiler.TransformerTest do
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module151
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module152
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module153
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module154
+  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module155
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module16
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module17
   alias Hologram.Test.Fixtures.Compiler.Tranformer.Module18
@@ -1441,8 +1443,108 @@ defmodule Hologram.Compiler.TransformerTest do
            }
   end
 
-  describe "capture operator" do
-    test "local function capture (AST from source code)" do
+  describe "capture operator on local function" do
+    test "arity 0 (AST from source code)" do
+      ast = ast("&my_fun/0")
+
+      assert transform(ast, %Context{module: MyModule}) == %IR.AnonymousFunctionType{
+               arity: 0,
+               captured_function: :my_fun,
+               captured_module: MyModule,
+               clauses: [
+                 %IR.FunctionClause{
+                   params: [],
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.LocalFunctionCall{
+                         function: :my_fun,
+                         args: []
+                       }
+                     ]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "arity 0 (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module155, %Context{module: Module155}) ==
+               %IR.AnonymousFunctionType{
+                 arity: 0,
+                 captured_function: :my_fun,
+                 captured_module: Module155,
+                 clauses: [
+                   %IR.FunctionClause{
+                     params: [],
+                     guards: [],
+                     body: %IR.Block{
+                       expressions: [
+                         %IR.LocalFunctionCall{
+                           function: :my_fun,
+                           args: []
+                         }
+                       ]
+                     }
+                   }
+                 ]
+               }
+    end
+
+    test "arity 1 (AST from source code)" do
+      ast = ast("&my_fun/1")
+
+      assert transform(ast, %Context{module: MyModule}) == %IR.AnonymousFunctionType{
+               arity: 1,
+               captured_function: :my_fun,
+               captured_module: MyModule,
+               clauses: [
+                 %IR.FunctionClause{
+                   params: [%IR.Variable{name: :"$1"}],
+                   guards: [],
+                   body: %IR.Block{
+                     expressions: [
+                       %IR.LocalFunctionCall{
+                         function: :my_fun,
+                         args: [
+                           %IR.Variable{name: :"$1"}
+                         ]
+                       }
+                     ]
+                   }
+                 }
+               ]
+             }
+    end
+
+    test "arity 1 (AST from BEAM file)" do
+      assert transform_module_and_fetch_expr(Module154, %Context{module: Module154}) ==
+               %IR.AnonymousFunctionType{
+                 arity: 1,
+                 captured_function: :my_fun,
+                 captured_module: Module154,
+                 clauses: [
+                   %IR.FunctionClause{
+                     params: [
+                       %IR.Variable{name: :"$1"}
+                     ],
+                     guards: [],
+                     body: %IR.Block{
+                       expressions: [
+                         %IR.LocalFunctionCall{
+                           function: :my_fun,
+                           args: [
+                             %IR.Variable{name: :"$1"}
+                           ]
+                         }
+                       ]
+                     }
+                   }
+                 ]
+               }
+    end
+
+    test "arity 2 (AST from source code)" do
       ast = ast("&my_fun/2")
 
       assert transform(ast, %Context{module: MyModule}) == %IR.AnonymousFunctionType{
@@ -1472,7 +1574,7 @@ defmodule Hologram.Compiler.TransformerTest do
              }
     end
 
-    test "local function capture (AST from BEAM file)" do
+    test "arity 2 (AST from BEAM file)" do
       assert transform_module_and_fetch_expr(Module26, %Context{module: Module26}) ==
                %IR.AnonymousFunctionType{
                  arity: 2,
@@ -1500,7 +1602,9 @@ defmodule Hologram.Compiler.TransformerTest do
                  ]
                }
     end
+  end
 
+  describe "capture operator" do
     test "remote Elixir function capture, single-segment module name (AST from source code)" do
       ast = ast("&DateTime.now/2")
 
