@@ -31,6 +31,7 @@ jobs:
           - "1.15.8"
           - "1.16.3"
           - "1.17.3"
+          - "1.18.2"
         otp:
           - "22.3"
           - "23.3"
@@ -73,8 +74,14 @@ jobs:
             otp: "23.3"
           - elixir: "1.17.3"
             otp: "24.3"
+          - elixir: "1.18.2"
+            otp: "22.3"
+          - elixir: "1.18.2"
+            otp: "23.3"
+          - elixir: "1.18.2"
+            otp: "24.3"
     env:
-      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.elixir, '1.17.3') && contains(matrix.otp, '27.2') && contains(matrix.node, '22.9.0') }}
+      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.elixir, '1.18.2') && contains(matrix.otp, '27.2') && contains(matrix.node, '22.9.0') }}
     steps:
       # Step: Setup Elixir + Erlang image as the base.
       - name: Set up Elixir
@@ -253,6 +260,7 @@ jobs:
           - "1.15.8"
           - "1.16.3"
           - "1.17.3"
+          - "1.18.2"
         otp:
           - "22.3"
           - "23.3"
@@ -295,8 +303,14 @@ jobs:
             otp: "23.3"
           - elixir: "1.17.3"
             otp: "24.3"
+          - elixir: "1.18.2"
+            otp: "22.3"
+          - elixir: "1.18.2"
+            otp: "23.3"
+          - elixir: "1.18.2"
+            otp: "24.3"
     env:
-      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.elixir, '1.17.3') && contains(matrix.otp, '27.2') && contains(matrix.node, '22.9.0') }}
+      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.elixir, '1.18.2') && contains(matrix.otp, '27.2') && contains(matrix.node, '22.9.0') }}
     steps:
       # Step: Setup Elixir + Erlang image as the base.
       - name: Set up Elixir

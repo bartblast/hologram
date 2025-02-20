@@ -186,7 +186,7 @@ defmodule HologramFeatureTests.OperatorsPage do
     put_state(component, :result, @integer_a..@integer_b)
   end
 
-  def action(:"..//", _params, component) do
+  def action(:..//, _params, component) do
     put_state(component, :result, @integer_a..@integer_b//@integer_c)
   end
 

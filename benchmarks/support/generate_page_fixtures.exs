@@ -133,7 +133,14 @@ Enum.each(1..100, fn i ->
   """
 
   file_path =
-    Path.join([Reflection.root_dir(), "benchmarks", "support", "fixtures", "pages", "page#{i}.ex"])
+    Path.join([
+      Reflection.root_dir(),
+      "benchmarks",
+      "support",
+      "fixtures",
+      "pages",
+      "page#{i}.ex"
+    ])
 
   File.write!(file_path, content)
 end)
