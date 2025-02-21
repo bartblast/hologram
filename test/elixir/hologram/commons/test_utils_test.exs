@@ -126,6 +126,10 @@ defmodule Hologram.Commons.TestUtilsTest do
     end
   end
 
+  test "prevent_term_typing_violation/1" do
+    assert prevent_term_typing_violation(:abc) == :abc
+  end
+
   test "wrap_term/1" do
     assert wrap_term(:abc) == :abc
   end

@@ -100,6 +100,18 @@ defmodule Hologram.Commons.TestUtils do
   end
 
   @doc """
+  Prevents term typing violations by converting a term to a string and evaluating it back.
+  This is useful in tests when you need to bypass compile-time type checking.
+  """
+  @spec prevent_term_typing_violation(term()) :: term()
+  def prevent_term_typing_violation(term) do
+    term
+    |> inspect()
+    |> Code.eval_string()
+    |> elem(0)
+  end
+
+  @doc """
   Returns the given argument.
   It prevents compiler warnings in tests when the given value is not permitted is specific situation.
   """
