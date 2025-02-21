@@ -490,7 +490,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "tuple > tuple" do
-      assert :erlang.<({1, 2, 3}, {1, 2}) == false
+      arg_1 = prevent_term_typing_violation({1, 2, 3})
+      arg_2 = prevent_term_typing_violation({1, 2})
+
+      assert :erlang.<(arg_1, arg_2) == false
     end
 
     # // TODO: reference, function, port, map, list, bitstring
@@ -798,7 +801,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "tuple < tuple" do
-      assert :erlang."=<"({1, 2}, {1, 2, 3}) == true
+      arg_1 = prevent_term_typing_violation({1, 2})
+      arg_2 = prevent_term_typing_violation({1, 2, 3})
+
+      assert :erlang."=<"(arg_1, arg_2) == true
     end
 
     test "atom > atom" do
@@ -832,7 +838,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "tuple > tuple" do
-      assert :erlang."=<"({1, 2, 3}, {1, 2}) == false
+      arg_1 = prevent_term_typing_violation({1, 2, 3})
+      arg_2 = prevent_term_typing_violation({1, 2})
+
+      assert :erlang."=<"(arg_1, arg_2) == false
     end
 
     # // TODO: reference, function, port, map, list, bitstring
@@ -1030,7 +1039,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "tuple < tuple" do
-      assert :erlang.>({1, 2}, {1, 2, 3}) == false
+      arg_1 = prevent_term_typing_violation({1, 2})
+      arg_2 = prevent_term_typing_violation({1, 2, 3})
+
+      assert :erlang.>(arg_1, arg_2) == false
     end
 
     test "atom > atom" do
@@ -1064,7 +1076,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "tuple > tuple" do
-      assert :erlang.>({1, 2, 3}, {1, 2}) == true
+      arg_1 = prevent_term_typing_violation({1, 2, 3})
+      arg_2 = prevent_term_typing_violation({1, 2})
+
+      assert :erlang.>(arg_1, arg_2) == true
     end
 
     # // TODO: reference, function, port, map, list, bitstring
@@ -1152,7 +1167,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "tuple < tuple" do
-      assert :erlang.>=({1, 2}, {1, 2, 3}) == false
+      arg_1 = prevent_term_typing_violation({1, 2})
+      arg_2 = prevent_term_typing_violation({1, 2, 3})
+
+      assert :erlang.>=(arg_1, arg_2) == false
     end
 
     test "atom > atom" do
@@ -1186,7 +1204,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "tuple > tuple" do
-      assert :erlang.>=({1, 2, 3}, {1, 2}) == true
+      arg_1 = prevent_term_typing_violation({1, 2, 3})
+      arg_2 = prevent_term_typing_violation({1, 2})
+
+      assert :erlang.>=(arg_1, arg_2) == true
     end
 
     # // TODO: reference, function, port, map, list, bitstring
@@ -1202,13 +1223,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "doesn't evaluate the second argument if the first argument is false" do
-      assert :erlang.andalso(false, raise("impossible")) == false
+      assert :erlang.andalso(false, apply(:impossible, [])) == false
     end
 
     test "raises ArgumentError if the first argument is not a boolean" do
+      arg = prevent_term_typing_violation(nil)
+
       assert_error ArgumentError,
                    "argument error: nil",
-                   fn -> :erlang.andalso(nil, true) end
+                   fn -> :erlang.andalso(arg, true) end
     end
   end
 
@@ -1646,13 +1669,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "doesn't evaluate the second argument if the first argument is true" do
-      assert :erlang.orelse(true, raise("impossible")) == true
+      assert :erlang.orelse(true, apply(:impossible, [])) == true
     end
 
     test "raises ArgumentError if the first argument is not a boolean" do
+      arg = prevent_term_typing_violation(nil)
+
       assert_error ArgumentError,
                    "argument error: nil",
-                   fn -> :erlang.orelse(nil, true) end
+                   fn -> :erlang.orelse(arg, true) end
     end
   end
 
