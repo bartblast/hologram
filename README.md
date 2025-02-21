@@ -6,7 +6,6 @@ Website: https://hologram.page/
 
 ## Sponsors
 
-### Early Adopters (monthly tier)
 * Calancea Daniel, [@D4no0](https://github.com/D4no0)
 * Lucas Sifoni, [@Lucassifoni](https://github.com/Lucassifoni)
 
