@@ -379,9 +379,9 @@ defmodule Hologram.Compiler.IR do
   defmodule Variable do
     @moduledoc false
 
-    defstruct [:name]
+    defstruct [:name, :version]
 
-    @type t :: %__MODULE__{name: atom}
+    @type t :: %__MODULE__{name: atom, version: integer | nil}
   end
 
   # TODO: finish implementing

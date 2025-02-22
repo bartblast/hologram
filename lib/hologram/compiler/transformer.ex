@@ -105,23 +105,21 @@ defmodule Hologram.Compiler.Transformer do
 
   # Param capture
   # sobelow_skip ["DOS.BinToAtom"]
-  def transform({:&, meta, [index]}, context) when is_integer(index) do
+  def transform({:&, _meta, [index]}, _context) when is_integer(index) do
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-    ast = {:"$#{index}", meta, nil}
-    transform(ast, context)
+    transform_variable(:"$#{index}", nil)
   end
 
   # Param capture
   # sobelow_skip ["DOS.BinToAtom"]
-  def transform({:capture, meta, nil}, context) do
+  def transform({:capture, meta, nil}, _context) do
     case Keyword.get(meta, :counter) do
       {_module, index} ->
         # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-        ast = {:"$#{index}", meta, nil}
-        transform(ast, context)
+        transform_variable(:"$#{index}", nil)
 
       _fallback ->
-        transform_variable(:capture)
+        transform_variable(:capture, meta)
     end
   end
 
@@ -226,8 +224,8 @@ defmodule Hologram.Compiler.Transformer do
     }
   end
 
-  def transform({:for, _meta, module}, _context) when not is_list(module) do
-    transform_variable(:for)
+  def transform({:for, meta, module}, _context) when not is_list(module) do
+    transform_variable(:for, meta)
   end
 
   def transform({:cond, _meta, [[do: clauses]]}, context) do
@@ -455,8 +453,8 @@ defmodule Hologram.Compiler.Transformer do
     transform_remote_function_call(module, function, args, context)
   end
 
-  def transform({name, _meta, module}, _context) when is_atom(name) and not is_list(module) do
-    transform_variable(name)
+  def transform({name, meta, module}, _context) when is_atom(name) and not is_list(module) do
+    transform_variable(name, meta)
   end
 
   def transform({function, _meta, args}, context) when is_atom(function) and is_list(args) do
@@ -501,8 +499,10 @@ defmodule Hologram.Compiler.Transformer do
 
   # sobelow_skip ["DOS.BinToAtom"]
   defp build_function_capture_args(arity, meta) do
+    arg_meta = Keyword.put(meta, :version, nil)
+
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
-    Enum.map(1..arity, &{:"$#{&1}", meta, nil})
+    Enum.map(1..arity, &{:"$#{&1}", arg_meta, nil})
   end
 
   defp build_try_catch_clause(kind, value, guards, body, context) do
@@ -906,13 +906,18 @@ defmodule Hologram.Compiler.Transformer do
     build_try_rescue_clause(variable, [], body, context)
   end
 
-  defp transform_variable(name) do
+  defp transform_variable(name, meta) when is_list(meta) do
+    version = Keyword.get(meta, :version)
+    transform_variable(name, version)
+  end
+
+  defp transform_variable(name, version) do
     case to_string(name) do
       "_" <> _rest ->
         %IR.MatchPlaceholder{}
 
       _fallback ->
-        %IR.Variable{name: name}
+        %IR.Variable{name: name, version: version}
     end
   end
 end
