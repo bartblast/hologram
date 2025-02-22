@@ -208,7 +208,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "without args (AST from BEAM file)" do
       assert transform_module_and_fetch_expr(Module9) ==
                %IR.AnonymousFunctionCall{
-                 function: %IR.Variable{name: :my_fun},
+                 function: %IR.Variable{name: :my_fun, version: 0},
                  args: []
                }
     end
@@ -227,7 +227,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "with args (AST from BEAM file)" do
       assert transform_module_and_fetch_expr(Module10) == %IR.AnonymousFunctionCall{
-               function: %IR.Variable{name: :my_fun},
+               function: %IR.Variable{name: :my_fun, version: 0},
                args: [
                  %IR.IntegerType{value: 1},
                  %IR.IntegerType{value: 2}
@@ -292,10 +292,10 @@ defmodule Hologram.Compiler.TransformerTest do
                  arity: 1,
                  clauses: [
                    %IR.FunctionClause{
-                     params: [%IR.Variable{name: :x}],
+                     params: [%IR.Variable{name: :x, version: 0}],
                      guards: [],
                      body: %IR.Block{
-                       expressions: [%IR.Variable{name: :x}]
+                       expressions: [%IR.Variable{name: :x, version: 0}]
                      }
                    }
                  ]
@@ -330,13 +330,18 @@ defmodule Hologram.Compiler.TransformerTest do
                clauses: [
                  %IR.FunctionClause{
                    params: [
-                     %IR.Variable{name: :x},
-                     %IR.Variable{name: :y}
+                     %IR.Variable{name: :x, version: 0},
+                     %IR.Variable{name: :y, version: 1}
                    ],
                    guards: [],
                    body: %IR.Block{
                      expressions: [
-                       %IR.TupleType{data: [%IR.Variable{name: :x}, %IR.Variable{name: :y}]}
+                       %IR.TupleType{
+                         data: [
+                           %IR.Variable{name: :x, version: 0},
+                           %IR.Variable{name: :y, version: 1}
+                         ]
+                       }
                      ]
                    }
                  }
@@ -471,16 +476,16 @@ defmodule Hologram.Compiler.TransformerTest do
                captured_module: nil,
                clauses: [
                  %IR.FunctionClause{
-                   params: [%IR.Variable{name: :x}],
+                   params: [%IR.Variable{name: :x, version: 0}],
                    guards: [
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :is_integer,
-                       args: [%IR.Variable{name: :x}]
+                       args: [%IR.Variable{name: :x, version: 0}]
                      }
                    ],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :x}]
+                     expressions: [%IR.Variable{name: :x, version: 0}]
                    }
                  }
                ]
@@ -525,24 +530,24 @@ defmodule Hologram.Compiler.TransformerTest do
                captured_module: nil,
                clauses: [
                  %IR.FunctionClause{
-                   params: [%IR.Variable{name: :x}],
+                   params: [%IR.Variable{name: :x, version: 0}],
                    guards: [
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :is_integer,
-                       args: [%IR.Variable{name: :x}]
+                       args: [%IR.Variable{name: :x, version: 0}]
                      },
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :>,
                        args: [
-                         %IR.Variable{name: :x},
+                         %IR.Variable{name: :x, version: 0},
                          %IR.IntegerType{value: 1}
                        ]
                      }
                    ],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :x}]
+                     expressions: [%IR.Variable{name: :x, version: 0}]
                    }
                  }
                ]
@@ -594,18 +599,18 @@ defmodule Hologram.Compiler.TransformerTest do
                captured_module: nil,
                clauses: [
                  %IR.FunctionClause{
-                   params: [%IR.Variable{name: :x}],
+                   params: [%IR.Variable{name: :x, version: 0}],
                    guards: [
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :is_integer,
-                       args: [%IR.Variable{name: :x}]
+                       args: [%IR.Variable{name: :x, version: 0}]
                      },
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :>,
                        args: [
-                         %IR.Variable{name: :x},
+                         %IR.Variable{name: :x, version: 0},
                          %IR.IntegerType{value: 1}
                        ]
                      },
@@ -613,13 +618,13 @@ defmodule Hologram.Compiler.TransformerTest do
                        module: %IR.AtomType{value: :erlang},
                        function: :<,
                        args: [
-                         %IR.Variable{name: :x},
+                         %IR.Variable{name: :x, version: 0},
                          %IR.IntegerType{value: 9}
                        ]
                      }
                    ],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :x}]
+                     expressions: [%IR.Variable{name: :x, version: 0}]
                    }
                  }
                ]
@@ -661,13 +666,13 @@ defmodule Hologram.Compiler.TransformerTest do
                    params: [
                      %IR.MapType{
                        data: [
-                         {%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x}}
+                         {%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x, version: 0}}
                        ]
                      }
                    ],
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :x}]
+                     expressions: [%IR.Variable{name: :x, version: 0}]
                    }
                  }
                ]
@@ -718,7 +723,7 @@ defmodule Hologram.Compiler.TransformerTest do
                  params: [
                    %IR.MapType{
                      data: [
-                       {%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x}}
+                       {%IR.AtomType{value: :__struct__}, %IR.Variable{name: :x, version: 0}}
                      ]
                    }
                  ],
@@ -727,13 +732,13 @@ defmodule Hologram.Compiler.TransformerTest do
                      module: %IR.AtomType{value: :erlang},
                      function: :"/=",
                      args: [
-                       %IR.Variable{name: :x},
+                       %IR.Variable{name: :x, version: 0},
                        %IR.AtomType{value: MyModule}
                      ]
                    }
                  ],
                  body: %IR.Block{
-                   expressions: [%IR.Variable{name: :x}]
+                   expressions: [%IR.Variable{name: :x, version: 0}]
                  }
                }
              ]
@@ -1835,7 +1840,7 @@ defmodule Hologram.Compiler.TransformerTest do
                    body: %IR.Block{
                      expressions: [
                        %IR.RemoteFunctionCall{
-                         module: %IR.Variable{name: :my_module},
+                         module: %IR.Variable{name: :my_module, version: 0},
                          function: :my_fun,
                          args: [
                            %IR.Variable{name: :"$1"},
@@ -2116,13 +2121,13 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "single clause / clause with single expression body (AST from BEAM file)" do
       assert transform_module_and_fetch_expr(Module34) == %IR.Case{
-               condition: %IR.Variable{name: :x},
+               condition: %IR.Variable{name: :x, version: 0},
                clauses: [
                  %IR.Clause{
                    match: %IR.IntegerType{value: 1},
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :x}]
+                     expressions: [%IR.Variable{name: :x, version: 0}]
                    }
                  }
                ]
@@ -2161,13 +2166,13 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "multiple clauses (AST from BEAM file)" do
       assert transform_module_and_fetch_expr(Module35) == %IR.Case{
-               condition: %IR.Variable{name: :x},
+               condition: %IR.Variable{name: :x, version: 0},
                clauses: [
                  %IR.Clause{
                    match: %IR.IntegerType{value: 1},
                    guards: [],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :x}]
+                     expressions: [%IR.Variable{name: :x, version: 0}]
                    }
                  },
                  %IR.Clause{
@@ -2210,7 +2215,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "multiple expressions body (AST from BEAM file)" do
       assert transform_module_and_fetch_expr(Module36) == %IR.Case{
-               condition: %IR.Variable{name: :x},
+               condition: %IR.Variable{name: :x, version: 0},
                clauses: [
                  %IR.Clause{
                    match: %IR.IntegerType{value: 1},
@@ -2260,24 +2265,24 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "clause with single guard (AST from BEAM file)" do
       assert transform_module_and_fetch_expr(Module37) == %IR.Case{
-               condition: %IR.Variable{name: :x},
+               condition: %IR.Variable{name: :x, version: 0},
                clauses: [
                  %IR.Clause{
                    match: %IR.TupleType{
                      data: [
                        %IR.AtomType{value: :ok},
-                       %IR.Variable{name: :n}
+                       %IR.Variable{name: :n, version: 1}
                      ]
                    },
                    guards: [
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :is_integer,
-                       args: [%IR.Variable{name: :n}]
+                       args: [%IR.Variable{name: :n, version: 1}]
                      }
                    ],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :n}]
+                     expressions: [%IR.Variable{name: :n, version: 1}]
                    }
                  }
                ]
@@ -2322,29 +2327,29 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "clause with 2 guards (AST from BEAM file)" do
       assert transform_module_and_fetch_expr(Module38) == %IR.Case{
-               condition: %IR.Variable{name: :x},
+               condition: %IR.Variable{name: :x, version: 0},
                clauses: [
                  %IR.Clause{
                    match: %IR.TupleType{
                      data: [
                        %IR.AtomType{value: :ok},
-                       %IR.Variable{name: :n}
+                       %IR.Variable{name: :n, version: 1}
                      ]
                    },
                    guards: [
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :is_integer,
-                       args: [%IR.Variable{name: :n}]
+                       args: [%IR.Variable{name: :n, version: 1}]
                      },
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :>,
-                       args: [%IR.Variable{name: :n}, %IR.IntegerType{value: 1}]
+                       args: [%IR.Variable{name: :n, version: 1}, %IR.IntegerType{value: 1}]
                      }
                    ],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :n}]
+                     expressions: [%IR.Variable{name: :n, version: 1}]
                    }
                  }
                ]
@@ -2393,34 +2398,34 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "clause with 3 guards (AST from BEAM file)" do
       assert transform_module_and_fetch_expr(Module39) == %IR.Case{
-               condition: %IR.Variable{name: :x},
+               condition: %IR.Variable{name: :x, version: 0},
                clauses: [
                  %IR.Clause{
                    match: %IR.TupleType{
                      data: [
                        %IR.AtomType{value: :ok},
-                       %IR.Variable{name: :n}
+                       %IR.Variable{name: :n, version: 1}
                      ]
                    },
                    guards: [
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :is_integer,
-                       args: [%IR.Variable{name: :n}]
+                       args: [%IR.Variable{name: :n, version: 1}]
                      },
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :>,
-                       args: [%IR.Variable{name: :n}, %IR.IntegerType{value: 1}]
+                       args: [%IR.Variable{name: :n, version: 1}, %IR.IntegerType{value: 1}]
                      },
                      %IR.RemoteFunctionCall{
                        module: %IR.AtomType{value: :erlang},
                        function: :<,
-                       args: [%IR.Variable{name: :n}, %IR.IntegerType{value: 9}]
+                       args: [%IR.Variable{name: :n, version: 1}, %IR.IntegerType{value: 9}]
                      }
                    ],
                    body: %IR.Block{
-                     expressions: [%IR.Variable{name: :n}]
+                     expressions: [%IR.Variable{name: :n, version: 1}]
                    }
                  }
                ]
@@ -3501,7 +3506,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "AST from BEAM file" do
       assert transform_module_and_fetch_expr(Module66) == %IR.DotOperator{
-               left: %IR.Variable{name: :my_var},
+               left: %IR.Variable{name: :my_var, version: 0},
                right: %IR.AtomType{value: :my_key}
              }
     end
@@ -3735,18 +3740,18 @@ defmodule Hologram.Compiler.TransformerTest do
                visibility: :public,
                clause: %IR.FunctionClause{
                  params: [
-                   %IR.Variable{name: :x}
+                   %IR.Variable{name: :x, version: 0}
                  ],
                  guards: [
                    %IR.RemoteFunctionCall{
                      module: %IR.AtomType{value: :erlang},
                      function: :is_integer,
-                     args: [%IR.Variable{name: :x}]
+                     args: [%IR.Variable{name: :x, version: 0}]
                    }
                  ],
                  body: %IR.Block{
                    expressions: [
-                     %IR.Variable{name: :x}
+                     %IR.Variable{name: :x, version: 0}
                    ]
                  }
                }
@@ -3795,23 +3800,23 @@ defmodule Hologram.Compiler.TransformerTest do
                visibility: :public,
                clause: %IR.FunctionClause{
                  params: [
-                   %IR.Variable{name: :x}
+                   %IR.Variable{name: :x, version: 0}
                  ],
                  guards: [
                    %IR.RemoteFunctionCall{
                      module: %IR.AtomType{value: :erlang},
                      function: :is_integer,
-                     args: [%IR.Variable{name: :x}]
+                     args: [%IR.Variable{name: :x, version: 0}]
                    },
                    %IR.RemoteFunctionCall{
                      module: %IR.AtomType{value: :erlang},
                      function: :>,
-                     args: [%IR.Variable{name: :x}, %IR.IntegerType{value: 1}]
+                     args: [%IR.Variable{name: :x, version: 0}, %IR.IntegerType{value: 1}]
                    }
                  ],
                  body: %IR.Block{
                    expressions: [
-                     %IR.Variable{name: :x}
+                     %IR.Variable{name: :x, version: 0}
                    ]
                  }
                }
@@ -3864,28 +3869,28 @@ defmodule Hologram.Compiler.TransformerTest do
                visibility: :public,
                clause: %IR.FunctionClause{
                  params: [
-                   %IR.Variable{name: :x}
+                   %IR.Variable{name: :x, version: 0}
                  ],
                  guards: [
                    %IR.RemoteFunctionCall{
                      module: %IR.AtomType{value: :erlang},
                      function: :is_integer,
-                     args: [%IR.Variable{name: :x}]
+                     args: [%IR.Variable{name: :x, version: 0}]
                    },
                    %IR.RemoteFunctionCall{
                      module: %IR.AtomType{value: :erlang},
                      function: :>,
-                     args: [%IR.Variable{name: :x}, %IR.IntegerType{value: 1}]
+                     args: [%IR.Variable{name: :x, version: 0}, %IR.IntegerType{value: 1}]
                    },
                    %IR.RemoteFunctionCall{
                      module: %IR.AtomType{value: :erlang},
                      function: :<,
-                     args: [%IR.Variable{name: :x}, %IR.IntegerType{value: 9}]
+                     args: [%IR.Variable{name: :x, version: 0}, %IR.IntegerType{value: 9}]
                    }
                  ],
                  body: %IR.Block{
                    expressions: [
-                     %IR.Variable{name: :x}
+                     %IR.Variable{name: :x, version: 0}
                    ]
                  }
                }
@@ -4087,7 +4092,7 @@ defmodule Hologram.Compiler.TransformerTest do
                module: %IR.AtomType{value: Map},
                function: :merge,
                args: [
-                 %IR.Variable{name: :x},
+                 %IR.Variable{name: :x, version: 0},
                  %IR.MapType{
                    data: [
                      {%IR.AtomType{value: :a}, %IR.IntegerType{value: 1}},
@@ -4123,8 +4128,8 @@ defmodule Hologram.Compiler.TransformerTest do
       assert transform_module_and_fetch_expr(Module86) == %IR.MatchOperator{
                left: %IR.MapType{
                  data: [
-                   {%IR.AtomType{value: :a}, %IR.Variable{name: :x}},
-                   {%IR.AtomType{value: :b}, %IR.Variable{name: :y}}
+                   {%IR.AtomType{value: :a}, %IR.Variable{name: :x, version: 0}},
+                   {%IR.AtomType{value: :b}, %IR.Variable{name: :y, version: 1}}
                  ]
                },
                right: %IR.MapType{
@@ -4315,7 +4320,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "on variable, without args, with parenthesis (AST from BEAM file)" do
       assert transform_module_and_fetch_expr(Module94) == %IR.RemoteFunctionCall{
-               module: %IR.Variable{name: :x},
+               module: %IR.Variable{name: :x, version: 0},
                function: :my_fun,
                args: []
              }
@@ -4336,7 +4341,7 @@ defmodule Hologram.Compiler.TransformerTest do
 
     test "on variable, with args (AST from BEAM file)" do
       assert transform_module_and_fetch_expr(Module95) == %IR.RemoteFunctionCall{
-               module: %IR.Variable{name: :x},
+               module: %IR.Variable{name: :x, version: 0},
                function: :my_fun,
                args: [
                  %IR.IntegerType{value: 1},
@@ -4455,7 +4460,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "on expression, without args (AST from BEAM file)" do
       assert transform_module_and_fetch_expr(Module99) == %IR.RemoteFunctionCall{
                module: %IR.AnonymousFunctionCall{
-                 function: %IR.Variable{name: :anon_fun},
+                 function: %IR.Variable{name: :anon_fun, version: 0},
                  args: [
                    %IR.IntegerType{value: 1},
                    %IR.IntegerType{value: 2}
@@ -4488,7 +4493,7 @@ defmodule Hologram.Compiler.TransformerTest do
     test "on expression, with args (AST from BEAM file)" do
       assert transform_module_and_fetch_expr(Module100) == %IR.RemoteFunctionCall{
                module: %IR.AnonymousFunctionCall{
-                 function: %IR.Variable{name: :anon_fun},
+                 function: %IR.Variable{name: :anon_fun, version: 0},
                  args: [
                    %IR.IntegerType{value: 1},
                    %IR.IntegerType{value: 2}
@@ -4753,7 +4758,7 @@ defmodule Hologram.Compiler.TransformerTest do
                module: %IR.AtomType{value: Map},
                function: :merge,
                args: [
-                 %IR.Variable{name: :x},
+                 %IR.Variable{name: :x, version: 0},
                  %IR.RemoteFunctionCall{
                    module: %IR.AtomType{value: Module109},
                    function: :__struct__,

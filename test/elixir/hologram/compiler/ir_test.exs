@@ -94,8 +94,8 @@ defmodule Hologram.Compiler.IRTest do
             visibility: :public,
             clause: %IR.FunctionClause{
               params: [
-                %IR.Variable{name: :x},
-                %IR.Variable{name: :y}
+                %IR.Variable{name: :x, version: 0},
+                %IR.Variable{name: :y, version: 1}
               ],
               guards: [],
               body: %IR.Block{
@@ -104,8 +104,8 @@ defmodule Hologram.Compiler.IRTest do
                     module: %IR.AtomType{value: :erlang},
                     function: :+,
                     args: [
-                      %IR.Variable{name: :x},
-                      %IR.Variable{name: :y}
+                      %IR.Variable{name: :x, version: 0},
+                      %IR.Variable{name: :y, version: 1}
                     ]
                   }
                 ]

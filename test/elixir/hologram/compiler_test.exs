@@ -864,10 +864,10 @@ defmodule Hologram.CompilerTest do
                    arity: 1,
                    visibility: :public,
                    clause: %IR.FunctionClause{
-                     params: [%IR.Variable{name: :x}],
+                     params: [%IR.Variable{name: :x, version: 0}],
                      guards: [],
                      body: %IR.Block{
-                       expressions: [%IR.Variable{name: :x}]
+                       expressions: [%IR.Variable{name: :x, version: 0}]
                      }
                    }
                  }
