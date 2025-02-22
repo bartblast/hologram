@@ -104,6 +104,7 @@ defmodule Hologram.Commons.TestUtils do
   This is useful in tests when you need to bypass compile-time type checking.
   """
   @spec prevent_term_typing_violation(term()) :: term()
+  # sobelow_skip ["RCE.CodeModule"]
   def prevent_term_typing_violation(term) do
     term
     |> inspect()
