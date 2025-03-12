@@ -4,6 +4,36 @@ defmodule HologramFeatureTests.TypesTest do
   alias Hologram.Commons.SystemUtils
   alias HologramFeatureTests.TypesPage
 
+  feature "atom", %{session: session} do
+    session
+    |> visit(TypesPage)
+    |> click(css("button[id='atom']"))
+    |> assert_text(css("#result"), inspect(:abc))
+  end
+
+  describe "bitstring" do
+    feature "binary", %{session: session} do
+      session
+      |> visit(TypesPage)
+      |> click(css("button[id='bitstring (binary)']"))
+      |> assert_text(css("#result"), inspect("abc"))
+    end
+
+    feature "non-binary", %{session: session} do
+      session
+      |> visit(TypesPage)
+      |> click(css("button[id='bitstring (non-binary)']"))
+      |> assert_text(css("#result"), inspect(<<1::1, 0::1, 1::1, 0::1>>))
+    end
+  end
+
+  feature "float", %{session: session} do
+    session
+    |> visit(TypesPage)
+    |> click(css("button[id='float']"))
+    |> assert_text(css("#result"), inspect(1.23))
+  end
+
   describe "function" do
     feature "anonymous (client origin, non-capture)", %{session: session} do
       assert_js_error session,
@@ -98,36 +128,6 @@ defmodule HologramFeatureTests.TypesTest do
       |> click(css("button[id='remote function capture (server origin)']"))
       |> assert_text(css("#result"), inspect(8))
     end
-  end
-
-  feature "atom", %{session: session} do
-    session
-    |> visit(TypesPage)
-    |> click(css("button[id='atom']"))
-    |> assert_text(css("#result"), inspect(:abc))
-  end
-
-  describe "bitstring" do
-    feature "binary", %{session: session} do
-      session
-      |> visit(TypesPage)
-      |> click(css("button[id='bitstring (binary)']"))
-      |> assert_text(css("#result"), inspect("abc"))
-    end
-
-    feature "non-binary", %{session: session} do
-      session
-      |> visit(TypesPage)
-      |> click(css("button[id='bitstring (non-binary)']"))
-      |> assert_text(css("#result"), inspect(<<1::1, 0::1, 1::1, 0::1>>))
-    end
-  end
-
-  feature "float", %{session: session} do
-    session
-    |> visit(TypesPage)
-    |> click(css("button[id='float']"))
-    |> assert_text(css("#result"), inspect(1.23))
   end
 
   feature "integer", %{session: session} do
