@@ -11,7 +11,7 @@ defmodule HologramFeatureTests.RoutingTest do
     |> assert_text(css("#page_params"), inspect(%{}))
   end
 
-  feature "rout with params", %{session: session} do
+  feature "route with params", %{session: session} do
     session
     |> visit(RouteWithParamsPage, a: "abc", b: 123)
     |> assert_text(css("#page_module"), inspect(RouteWithParamsPage))
