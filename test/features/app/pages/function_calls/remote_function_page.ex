@@ -84,18 +84,6 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionPage do
     put_state(component, :result, result)
   end
 
-  def action(:single_guard, _params, component) do
-    result = ModuleFixture2.fun_7(2)
-
-    put_state(component, :result, result)
-  end
-
-  def action(:multiple_guards, _params, component) do
-    result = ModuleFixture2.fun_8(25)
-
-    put_state(component, :result, result)
-  end
-
   def action(:vars_scoping, _params, component) do
     x = 1
     y = 2

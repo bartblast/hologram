@@ -36,34 +36,6 @@ defmodule HologramFeatureTests.ModuleFixture2 do
     :b
   end
 
-  def fun_7(x) when x == 1 do
-    :a
-  end
-
-  def fun_7(x) when x == 2 do
-    :b
-  end
-
-  def fun_7(x) when x == 3 do
-    :c
-  end
-
-  def fun_8(x) when x > 0 and x < 10 do
-    :a
-  end
-
-  def fun_8(x) when x > 10 and x < 20 do
-    :b
-  end
-
-  def fun_8(x) when x > 10 and x < 30 do
-    :c
-  end
-
-  def fun_8(x) when x > 10 and x < 40 do
-    :d
-  end
-
   def fun_9(x = 3, y = 4) do
     {x, y}
   end

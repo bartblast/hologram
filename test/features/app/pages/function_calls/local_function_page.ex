@@ -21,8 +21,6 @@ defmodule HologramFeatureTests.FunctionCalls.LocalFunctionPage do
       <button $click="multiple_args"> Multiple args </button>
       <button $click="multiple_clauses"> Multiple clauses </button>
       <button $click="multiple_expression_body"> Multiple-expression body </button>
-      <button $click="single_guard"> Single guard </button>
-      <button $click="multiple_guards"> Multiple guards </button>
       <button $click="vars_scoping"> Vars scoping </button>
       <button $click="no_matching_clause"> No matching clause </button>
       <button $click="error_in_body"> Error in body </button>
@@ -69,18 +67,6 @@ defmodule HologramFeatureTests.FunctionCalls.LocalFunctionPage do
 
   def action(:multiple_expression_body, _params, component) do
     result = local_fun_5()
-
-    put_state(component, :result, result)
-  end
-
-  def action(:single_guard, _params, component) do
-    result = local_fun_6(2)
-
-    put_state(component, :result, result)
-  end
-
-  def action(:multiple_guards, _params, component) do
-    result = local_fun_7(25)
 
     put_state(component, :result, result)
   end
@@ -133,34 +119,6 @@ defmodule HologramFeatureTests.FunctionCalls.LocalFunctionPage do
   def local_fun_5 do
     :a
     :b
-  end
-
-  def local_fun_6(x) when x == 1 do
-    :a
-  end
-
-  def local_fun_6(x) when x == 2 do
-    :b
-  end
-
-  def local_fun_6(x) when x == 3 do
-    :c
-  end
-
-  def local_fun_7(x) when x > 0 and x < 10 do
-    :a
-  end
-
-  def local_fun_7(x) when x > 10 and x < 20 do
-    :b
-  end
-
-  def local_fun_7(x) when x > 10 and x < 30 do
-    :c
-  end
-
-  def local_fun_7(x) when x > 10 and x < 40 do
-    :d
   end
 
   def local_fun_8(x = 3, y = 4) do

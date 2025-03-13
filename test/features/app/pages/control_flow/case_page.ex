@@ -23,8 +23,6 @@ defmodule HologramFeatureTests.ControlFlow.CasePage do
       <button $click="multiple_expression_condition"> Multiple-expression condition </button>
       <button $click="multiple_clauses"> Multiple clauses </button>
       <button $click="multiple_expression_clause_body"> Multiple-expression clause body </button>
-      <button $click="single_guard"> Single guard </button>
-      <button $click="multiple_guards"> Multiple guards </button>
       <button $click="vars_matching"> Vars matching </button>
       <button $click="vars_scoping"> Vars scoping </button>
       <button $click="var_match_in_condition"> Var match in condition </button>
@@ -85,29 +83,6 @@ defmodule HologramFeatureTests.ControlFlow.CasePage do
         3 ->
           :z
           :c
-      end
-
-    put_state(component, :result, result)
-  end
-
-  def action(:single_guard, _params, component) do
-    result =
-      case wrap_term(2) do
-        x when x == 1 -> :a
-        x when x == 2 -> :b
-        x when x == 3 -> :c
-      end
-
-    put_state(component, :result, result)
-  end
-
-  def action(:multiple_guards, _params, component) do
-    result =
-      case wrap_term(25) do
-        x when x > 0 and x < 10 -> :a
-        x when x > 10 and x < 20 -> :b
-        x when x > 10 and x < 30 -> :c
-        x when x > 10 and x < 40 -> :d
       end
 
     put_state(component, :result, result)

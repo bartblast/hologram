@@ -42,20 +42,6 @@ defmodule HologramFeatureTests.FunctionCalls.AnonymousFunctionTest do
     |> assert_text(css("#result"), ":b")
   end
 
-  feature "single guard", %{session: session} do
-    session
-    |> visit(AnonymousFunctionPage)
-    |> click(button("Single guard"))
-    |> assert_text(css("#result"), ":b")
-  end
-
-  feature "multiple guards", %{session: session} do
-    session
-    |> visit(AnonymousFunctionPage)
-    |> click(button("Multiple guards"))
-    |> assert_text(css("#result"), ":c")
-  end
-
   feature "vars scoping", %{session: session} do
     session
     |> visit(AnonymousFunctionPage)

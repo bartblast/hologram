@@ -24,8 +24,6 @@ defmodule HologramFeatureTests.FunctionCalls.AnonymousFunctionPage do
       <button $click="multiple_args"> Multiple args </button>
       <button $click="multiple_clauses"> Multiple clauses </button>
       <button $click="multiple_expression_body"> Multiple-expression body </button>
-      <button $click="single_guard"> Single guard </button>
-      <button $click="multiple_guards"> Multiple guards </button>
       <button $click="vars_scoping"> Vars scoping </button>
       <button $click="closure"> Closure </button>
       <button $click="arity_invalid_called_with_no_args"> Arity invalid, called with no args </button>
@@ -84,37 +82,6 @@ defmodule HologramFeatureTests.FunctionCalls.AnonymousFunctionPage do
     end
 
     result = fun.()
-
-    put_state(component, :result, result)
-  end
-
-  def action(:single_guard, _params, component) do
-    fun = fn
-      x when x == 1 -> :a
-      x when x == 2 -> :b
-      x when x == 3 -> :c
-    end
-
-    result =
-      2
-      |> wrap_term()
-      |> fun.()
-
-    put_state(component, :result, result)
-  end
-
-  def action(:multiple_guards, _params, component) do
-    fun = fn
-      x when x > 0 and x < 10 -> :a
-      x when x > 10 and x < 20 -> :b
-      x when x > 10 and x < 30 -> :c
-      x when x > 10 and x < 40 -> :d
-    end
-
-    result =
-      25
-      |> wrap_term()
-      |> fun.()
 
     put_state(component, :result, result)
   end
