@@ -25,8 +25,6 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionPage do
       <button $click="multiple_args"> Multiple args </button>
       <button $click="multiple_clauses"> Multiple clauses </button>
       <button $click="multiple_expression_body"> Multiple-expression body </button>
-      <button $click="single_guard"> Single guard </button>
-      <button $click="multiple_guards"> Multiple guards </button>
       <button $click="vars_scoping"> Vars scoping </button>
       <button $click="arity_invalid_called_with_no_args"> Arity invalid, called with no args </button>
       <button $click="arity_invalid_called_with_single_arg"> Arity invalid, called with single arg </button>
