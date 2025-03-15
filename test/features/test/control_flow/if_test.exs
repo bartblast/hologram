@@ -45,6 +45,13 @@ defmodule HologramFeatureTests.ControlFlow.IfTest do
     |> assert_text(css("#result"), ":c")
   end
 
+  feature "versioned x var handling", %{session: session} do
+    session
+    |> visit(IfPage)
+    |> click(button("Versioned x var handling"))
+    |> assert_text(css("#result"), "11")
+  end
+
   feature "vars scoping in if body", %{session: session} do
     session
     |> visit(IfPage)

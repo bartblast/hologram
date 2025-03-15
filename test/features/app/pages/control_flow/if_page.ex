@@ -24,6 +24,7 @@ defmodule HologramFeatureTests.ControlFlow.IfPage do
       <button $click="unmet_condition_no_else_body"> Unmet condition, no else body </button>
       <button $click="single_expression_else_body"> Single-expression else body </button>
       <button $click="multiple_expression_else_body"> Multiple-expression else body </button>
+      <button $click={:versioned_x_var_handling, expr: false}> Versioned x var handling </button>
       <button $click="vars_scoping_in_if_body"> Vars scoping in if body </button>
       <button $click={:vars_scoping_in_else_body, expr: false}> Vars scoping in else body </button>
       <button $click={:error_in_condition, flag: true}> Error in condition </button>
@@ -95,6 +96,22 @@ defmodule HologramFeatureTests.ControlFlow.IfPage do
       else
         :b
         :c
+      end
+
+    put_state(component, :result, result)
+  end
+
+  # The "if" expression is a macro that uses "x" var internally
+  def action(:versioned_x_var_handling, params, component) do
+    result =
+      if (
+           x = 1
+           params.expr
+         ) do
+        :a
+      else
+        x = x + 10
+        x
       end
 
     put_state(component, :result, result)
