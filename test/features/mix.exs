@@ -50,7 +50,7 @@ defmodule HologramFeatureTests.MixProject do
       compilers: Mix.compilers() ++ [:hologram],
       deps: deps(),
       elixir: "~> 1.0",
-      # elixirc_options: [warnings_as_errors: true],
+      elixirc_options: [warnings_as_errors: true],
       elixirc_paths: elixirc_paths(Mix.env()),
       dialyzer: [
         plt_add_apps: [:ex_unit, :iex, :mix],
