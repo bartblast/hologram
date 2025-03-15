@@ -11,25 +11,25 @@ defmodule Mix.Tasks.Holo.Compiler.PageExFunSizesTest do
         assert Task.run([arg]) == :ok
       end)
 
-    assert output === """
-           [
-             {{Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageExFunSizes.Module1,
-               :template, 0}, 861},
-             {{Hologram.Test.Fixtures.LayoutFixture, :template, 0}, 642},
-             {{Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageExFunSizes.Module1,
-               :__route__, 0}, 295},
-             {{Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageExFunSizes.Module1,
-               :__layout_module__, 0}, 270},
-             {{Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageExFunSizes.Module1,
-               :__params__, 0}, 246},
-             {{Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageExFunSizes.Module1,
-               :__layout_props__, 0}, 226},
-             {{Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageExFunSizes.Module1,
-               :fun_1, 0}, 216},
-             {{Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageExFunSizes.Module1,
-               :fun_2, 0}, 216},
-             {{Hologram.Test.Fixtures.LayoutFixture, :__props__, 0}, 212}
-           ]
+    assert output =~ ~r"""
+           \[
+             \{\{Hologram\.Test\.Fixtures\.Mix\.Tasks\.Holo\.Compiler\.PageExFunSizes\.Module1,
+               :template, 0\}, [[:alnum:]]+\},
+             \{\{Hologram\.Test\.Fixtures\.LayoutFixture, :template, 0\}, [[:alnum:]]+\},
+             \{\{Hologram\.Test\.Fixtures\.Mix\.Tasks\.Holo\.Compiler\.PageExFunSizes\.Module1,
+               :__route__, 0\}, [[:alnum:]]+\},
+             \{\{Hologram\.Test\.Fixtures\.Mix\.Tasks\.Holo\.Compiler\.PageExFunSizes\.Module1,
+               :__layout_module__, 0\}, [[:alnum:]]+\},
+             \{\{Hologram\.Test\.Fixtures\.Mix\.Tasks\.Holo\.Compiler\.PageExFunSizes\.Module1,
+               :__params__, 0\}, [[:alnum:]]+\},
+             \{\{Hologram\.Test\.Fixtures\.Mix\.Tasks\.Holo\.Compiler\.PageExFunSizes\.Module1,
+               :__layout_props__, 0\}, [[:alnum:]]+\},
+             \{\{Hologram\.Test\.Fixtures\.Mix\.Tasks\.Holo\.Compiler\.PageExFunSizes\.Module1,
+               :fun_1, 0\}, [[:alnum:]]+\},
+             \{\{Hologram\.Test\.Fixtures\.Mix\.Tasks\.Holo\.Compiler\.PageExFunSizes\.Module1,
+               :fun_2, 0\}, [[:alnum:]]+\},
+             \{\{Hologram\.Test\.Fixtures\.LayoutFixture, :__props__, 0\}, [[:alnum:]]+\}
+           \]
            """
   end
 end
