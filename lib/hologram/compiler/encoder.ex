@@ -316,7 +316,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode_ir(%IR.ModuleAttributeOperator{name: name}, _context) do
-    encode_var_value("@#{name}")
+    encode_var("@#{name}", nil)
   end
 
   def encode_ir(%IR.ModuleDefinition{module: module} = module_def, context) do
@@ -412,13 +412,13 @@ defmodule Hologram.Compiler.Encoder do
     "Type.tuple(#{data_js})"
   end
 
-  def encode_ir(%IR.Variable{name: name}, %{pattern?: true}) do
-    name_js = encode_as_string(name, true)
-    "Type.variablePattern(#{name_js})"
+  def encode_ir(%IR.Variable{name: name, version: version}, %{pattern?: true}) do
+    var_name = encode_var_name(name, version)
+    ~s/Type.variablePattern("#{var_name}")/
   end
 
-  def encode_ir(%IR.Variable{name: name}, %{pattern?: false}) do
-    encode_var_value(name)
+  def encode_ir(%IR.Variable{name: name, version: version}, %{pattern?: false}) do
+    encode_var(name, version)
   end
 
   # TODO: finish implementing
@@ -668,14 +668,22 @@ defmodule Hologram.Compiler.Encoder do
     "Type.#{type}(#{value})"
   end
 
-  defp encode_var_value(var_name) do
-    var_name = to_string(var_name)
+  defp encode_var(name, version) do
+    var_name = encode_var_name(name, version)
 
     if String.match?(var_name, ~r/[^a-zA-Z0-9_]+/) do
       ~s'context.vars["#{var_name}"]'
     else
       "context.vars.#{var_name}"
     end
+  end
+
+  defp encode_var_name(name, nil) do
+    encode_as_string(name, false)
+  end
+
+  defp encode_var_name(name, version) do
+    encode_as_string(name, false) <> "_#{version}"
   end
 
   defp escape_non_printable_and_special_chars(str)

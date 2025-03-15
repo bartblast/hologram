@@ -2002,28 +2002,52 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   describe "variable" do
-    test "not inside pattern, without special characters" do
+    test "not inside pattern, without special characters, non-versioned" do
       # my_var
-      assert encode_ir(%IR.Variable{name: :my_var}, %Context{pattern?: false}) ==
+      assert encode_ir(%IR.Variable{name: :my_var, version: nil}, %Context{pattern?: false}) ==
                "context.vars.my_var"
     end
 
-    test "not inside pattern, with special characters" do
+    test "not inside pattern, with special characters, non-versioned" do
       # my_var?
-      assert encode_ir(%IR.Variable{name: :my_var?}, %Context{pattern?: false}) ==
+      assert encode_ir(%IR.Variable{name: :my_var?, version: nil}, %Context{pattern?: false}) ==
                ~s'context.vars["my_var?"]'
     end
 
-    test "inside pattern, without special characters" do
+    test "inside pattern, without special characters, non-versioned" do
       # my_var
-      assert encode_ir(%IR.Variable{name: :my_var}, %Context{pattern?: true}) ==
+      assert encode_ir(%IR.Variable{name: :my_var, version: nil}, %Context{pattern?: true}) ==
                ~s/Type.variablePattern("my_var")/
     end
 
-    test "inside pattern, with special characters" do
+    test "inside pattern, with special characters, non-versioned" do
       # my_var?
-      assert encode_ir(%IR.Variable{name: :my_var?}, %Context{pattern?: true}) ==
+      assert encode_ir(%IR.Variable{name: :my_var?, version: nil}, %Context{pattern?: true}) ==
                ~s/Type.variablePattern("my_var?")/
+    end
+
+    test "not inside pattern, without special characters, versioned" do
+      # my_var
+      assert encode_ir(%IR.Variable{name: :my_var, version: 3}, %Context{pattern?: false}) ==
+               "context.vars.my_var_3"
+    end
+
+    test "not inside pattern, with special characters, versioned" do
+      # my_var?
+      assert encode_ir(%IR.Variable{name: :my_var?, version: 3}, %Context{pattern?: false}) ==
+               ~s'context.vars["my_var?_3"]'
+    end
+
+    test "inside pattern, without special characters, versioned" do
+      # my_var
+      assert encode_ir(%IR.Variable{name: :my_var, version: 3}, %Context{pattern?: true}) ==
+               ~s/Type.variablePattern("my_var_3")/
+    end
+
+    test "inside pattern, with special characters, versioned" do
+      # my_var?
+      assert encode_ir(%IR.Variable{name: :my_var?, version: 3}, %Context{pattern?: true}) ==
+               ~s/Type.variablePattern("my_var?_3")/
     end
   end
 
