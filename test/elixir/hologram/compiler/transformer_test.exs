@@ -4277,12 +4277,14 @@ defmodule Hologram.Compiler.TransformerTest do
     test "AST from source code" do
       ast = ast("^my_var")
 
-      assert transform(ast, %Context{}) == %IR.PinOperator{name: :my_var}
+      assert transform(ast, %Context{}) == %IR.PinOperator{
+               variable: %IR.Variable{name: :my_var, version: nil}
+             }
     end
 
     test "AST from BEAM file" do
       %IR.MatchOperator{
-        left: %IR.PinOperator{name: :my_var},
+        left: %IR.PinOperator{variable: %IR.Variable{name: :my_var, version: 0}},
         right: _right
       } = transform_module_and_fetch_expr(Module93)
     end

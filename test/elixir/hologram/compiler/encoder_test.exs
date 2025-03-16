@@ -1523,7 +1523,8 @@ defmodule Hologram.Compiler.EncoderTest do
 
   test "pin operator" do
     # ^abc
-    assert encode_ir(%IR.PinOperator{name: :abc}) == "context.vars.abc"
+    assert encode_ir(%IR.PinOperator{variable: %IR.Variable{name: :abc, version: 2}}) ==
+             "context.vars.abc_2"
   end
 
   test "port" do

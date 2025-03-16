@@ -358,8 +358,8 @@ defmodule Hologram.Compiler.Encoder do
     "Type.pid(#{encoded_node}, #{encoded_segments})"
   end
 
-  def encode_ir(%IR.PinOperator{name: name}, _context) do
-    "context.vars.#{name}"
+  def encode_ir(%IR.PinOperator{variable: variable}, context) do
+    encode_ir(variable, %{context | pattern?: false})
   end
 
   def encode_ir(%IR.PortType{value: value}, _context) do

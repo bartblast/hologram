@@ -296,9 +296,9 @@ defmodule Hologram.Compiler.IR do
   defmodule PinOperator do
     @moduledoc false
 
-    defstruct [:name]
+    defstruct [:variable]
 
-    @type t :: %__MODULE__{name: atom}
+    @type t :: %__MODULE__{variable: IR.Variable.t()}
   end
 
   defmodule PortType do
