@@ -1893,11 +1893,11 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "AST from BEAM file" do
-      {param_1_name, param_2_name} =
-        if Version.compare(System.version(), "1.17.0") in [:gt, :eq] do
-          {:"$3", :"$4"}
+      {param_1_name, param_1_version, param_2_name, param_2_version} =
+        if Version.match?(System.version(), ">= 1.17.0") do
+          {:"$3", nil, :"$4", nil}
         else
-          {:x1, :x2}
+          {:x1, 0, :x2, 1}
         end
 
       assert transform_module_and_fetch_expr(Module31) == %IR.AnonymousFunctionType{
@@ -1907,8 +1907,8 @@ defmodule Hologram.Compiler.TransformerTest do
                clauses: [
                  %IR.FunctionClause{
                    params: [
-                     %IR.Variable{name: param_1_name},
-                     %IR.Variable{name: param_2_name}
+                     %IR.Variable{name: param_1_name, version: param_1_version},
+                     %IR.Variable{name: param_2_name, version: param_2_version}
                    ],
                    guards: [],
                    body: %IR.Block{
@@ -1916,12 +1916,12 @@ defmodule Hologram.Compiler.TransformerTest do
                        %IR.LocalFunctionCall{
                          function: :my_fun,
                          args: [
-                           %IR.Variable{name: param_1_name},
+                           %IR.Variable{name: param_1_name, version: param_1_version},
                            %IR.IntegerType{value: 2},
                            %IR.ListType{
                              data: [
                                %IR.IntegerType{value: 3},
-                               %IR.Variable{name: param_2_name}
+                               %IR.Variable{name: param_2_name, version: param_2_version}
                              ]
                            }
                          ]
@@ -1973,11 +1973,11 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "AST from BEAM file" do
-      {param_1_name, param_2_name} =
-        if Version.compare(System.version(), "1.17.0") in [:gt, :eq] do
-          {:"$2", :"$3"}
+      {param_1_name, param_1_version, param_2_name, param_2_version} =
+        if Version.match?(System.version(), ">= 1.17.0") do
+          {:"$2", nil, :"$3", nil}
         else
-          {:x1, :x2}
+          {:x1, 0, :x2, 1}
         end
 
       assert transform_module_and_fetch_expr(Module33) == %IR.AnonymousFunctionType{
@@ -1987,8 +1987,8 @@ defmodule Hologram.Compiler.TransformerTest do
                clauses: [
                  %IR.FunctionClause{
                    params: [
-                     %IR.Variable{name: param_1_name},
-                     %IR.Variable{name: param_2_name}
+                     %IR.Variable{name: param_1_name, version: param_1_version},
+                     %IR.Variable{name: param_2_name, version: param_2_version}
                    ],
                    guards: [],
                    body: %IR.Block{
@@ -1997,12 +1997,12 @@ defmodule Hologram.Compiler.TransformerTest do
                          module: %IR.AtomType{value: Module32},
                          function: :my_fun,
                          args: [
-                           %IR.Variable{name: param_1_name},
+                           %IR.Variable{name: param_1_name, version: param_1_version},
                            %IR.IntegerType{value: 2},
                            %IR.ListType{
                              data: [
                                %IR.IntegerType{value: 3},
-                               %IR.Variable{name: param_2_name}
+                               %IR.Variable{name: param_2_name, version: param_2_version}
                              ]
                            }
                          ]
@@ -2053,11 +2053,11 @@ defmodule Hologram.Compiler.TransformerTest do
     end
 
     test "AST from BEAM file" do
-      {param_1_name, param_2_name} =
-        if Version.compare(System.version(), "1.17.0") in [:gt, :eq] do
-          {:"$2", :"$3"}
+      {param_1_name, param_1_version, param_2_name, param_2_version} =
+        if Version.match?(System.version(), ">= 1.17.0") do
+          {:"$2", nil, :"$3", nil}
         else
-          {:x1, :x2}
+          {:x1, 0, :x2, 1}
         end
 
       assert transform_module_and_fetch_expr(Module15) == %IR.AnonymousFunctionType{
@@ -2067,8 +2067,8 @@ defmodule Hologram.Compiler.TransformerTest do
                clauses: [
                  %IR.FunctionClause{
                    params: [
-                     %IR.Variable{name: param_1_name},
-                     %IR.Variable{name: param_2_name}
+                     %IR.Variable{name: param_1_name, version: param_1_version},
+                     %IR.Variable{name: param_2_name, version: param_2_version}
                    ],
                    guards: [],
                    body: %IR.Block{
@@ -2081,11 +2081,11 @@ defmodule Hologram.Compiler.TransformerTest do
                              module: %IR.AtomType{value: :erlang},
                              function: :*,
                              args: [
-                               %IR.Variable{name: param_1_name},
-                               %IR.Variable{name: param_2_name}
+                               %IR.Variable{name: param_1_name, version: param_1_version},
+                               %IR.Variable{name: param_2_name, version: param_2_version}
                              ]
                            },
-                           %IR.Variable{name: param_1_name}
+                           %IR.Variable{name: param_1_name, version: param_1_version}
                          ]
                        }
                      ]
