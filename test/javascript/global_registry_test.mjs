@@ -12,6 +12,24 @@ defineGlobalErlangAndElixirModules();
 describe("GlobalRegistry", () => {
   beforeEach(() => delete globalThis.hologram);
 
+  describe("append()", () => {
+    it("key is not set", () => {
+      GlobalRegistry.append("my_key", "my_value");
+
+      assert.deepStrictEqual(GlobalRegistry.get("my_key"), ["my_value"]);
+    });
+
+    it("key is set", () => {
+      GlobalRegistry.append("my_key", "my_value_1");
+      GlobalRegistry.append("my_key", "my_value_2");
+
+      assert.deepStrictEqual(GlobalRegistry.get("my_key"), [
+        "my_value_1",
+        "my_value_2",
+      ]);
+    });
+  });
+
   describe("get()", () => {
     it("root key hasn't been set", () => {
       assert.isNull(GlobalRegistry.get("my_key"));
