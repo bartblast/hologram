@@ -161,8 +161,7 @@ export default class Hologram {
 
       Hologram.executeAction(nextAction);
     } else {
-      // TODO: consider: remove when there is a proper client-side bitstring implementation in place
-      window.requestAnimationFrame(() => Hologram.render());
+      Hologram.render();
     }
 
     if (!Type.isNil(nextPage)) {
@@ -300,11 +299,9 @@ export default class Hologram {
     $.#savePageSnapshot();
     $.#historyId = crypto.randomUUID();
 
-    window.requestAnimationFrame(() => {
-      Hologram.#patchPage(html);
-      window.scrollTo(0, 0);
-      history.pushState($.#historyId, null, pagePath);
-    });
+    Hologram.#patchPage(html);
+    window.scrollTo(0, 0);
+    history.pushState($.#historyId, null, pagePath);
   }
 
   // Made public to make tests easier
@@ -642,16 +639,14 @@ export default class Hologram {
 
     Hologram.prefetchedPages.clear();
 
-    window.requestAnimationFrame(() => {
-      $.render();
+    $.render();
 
-      if ($.#scrollPosition) {
-        window.scrollTo($.#scrollPosition[0], $.#scrollPosition[1]);
-        $.#scrollPosition = null;
-      }
+    if ($.#scrollPosition) {
+      window.scrollTo($.#scrollPosition[0], $.#scrollPosition[1]);
+      $.#scrollPosition = null;
+    }
 
-      GlobalRegistry.set("mountedPage", Interpreter.inspect($.#pageModule));
-    });
+    GlobalRegistry.set("mountedPage", Interpreter.inspect($.#pageModule));
   }
 
   // Tested implicitely in feature tests
