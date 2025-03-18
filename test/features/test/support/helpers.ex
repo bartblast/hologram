@@ -153,6 +153,13 @@ defmodule HologramFeatureTests.Helpers do
     end
   end
 
+  defp print_client_debug_info(session) do
+    script = "return window?.hologram?.['debug'];"
+
+    # credo:disable-for-next-line Credo.Check.Warning.IoInspect
+    Browser.execute_script(session, script, [], &IO.inspect/1)
+  end
+
   def reload(session) do
     Browser.execute_script(session, "document.location.reload();")
   end
@@ -174,8 +181,38 @@ defmodule HologramFeatureTests.Helpers do
     |> wait_for_server_connection()
   end
 
+  # credo:disable-for-lines:9 Credo.Check.Refactor.IoPuts
+  defp maybe_print_page_mounting_debug_info(session, opts, mounted_page, expected_page) do
+    if opts[:debug] do
+      IO.puts("----------")
+
+      IO.puts("mounted page: #{inspect(mounted_page)}, expected page: #{inspect(expected_page)}")
+
+      print_client_debug_info(session)
+    end
+  end
+
   defp timed_out?(start_time) do
     DateTime.diff(DateTime.utc_now(), start_time, :millisecond) > @max_wait_time
+  end
+
+  defp wait_for_page_mounting(
+         session,
+         expected_page,
+         opts \\ [],
+         start_time \\ DateTime.utc_now()
+       ) do
+    callback = fn mounted_page ->
+      if mounted_page != inspect(expected_page) && !timed_out?(start_time) do
+        maybe_print_page_mounting_debug_info(session, opts, mounted_page, expected_page)
+        :timer.sleep(100)
+        wait_for_page_mounting(session, expected_page, opts, start_time)
+      end
+    end
+
+    script = "return window?.hologram?.['mountedPage'];"
+
+    Browser.execute_script(session, script, [], callback)
   end
 
   defp wait_for_path(session, path, start_time \\ DateTime.utc_now()) do
@@ -185,27 +222,6 @@ defmodule HologramFeatureTests.Helpers do
     end
 
     session
-  end
-
-  defp wait_for_page_mounting(session, page_module, opts \\ [], start_time \\ DateTime.utc_now()) do
-    callback = fn mounted_page ->
-      if mounted_page != inspect(page_module) && !timed_out?(start_time) do
-        # credo:disable-for-next-line Credo.Check.Refactor.Nesting
-        if opts[:debug] do
-          # credo:disable-for-next-line Credo.Check.Refactor.IoPuts
-          IO.puts(
-            "mounted page: #{inspect(mounted_page)}, expected page: #{inspect(page_module)}"
-          )
-        end
-
-        :timer.sleep(100)
-        wait_for_page_mounting(session, page_module, opts, start_time)
-      end
-    end
-
-    script = "return window?.hologram?.['mountedPage'];"
-
-    Browser.execute_script(session, script, [], callback)
   end
 
   defp wait_for_server_connection(session, start_time \\ DateTime.utc_now()) do

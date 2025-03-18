@@ -512,6 +512,8 @@ export default class Hologram {
   }
 
   static async #handlePopstateEvent(event) {
+    GlobalRegistry.append("debug", "popstate");
+
     $.#savePageSnapshot();
     $.#historyId = event.state;
 
@@ -528,7 +530,10 @@ export default class Hologram {
     $.#shouldLoadMountData = false;
 
     if ($.#isPageModuleRegistered(pageModule)) {
+      GlobalRegistry.append("debug", "page module registered");
       return $.#mountPage(true);
+    } else {
+      GlobalRegistry.append("debug", "page module not registered");
     }
 
     await Client.fetchPageBundlePath(
@@ -579,6 +584,9 @@ export default class Hologram {
     window.addEventListener("pageshow", (event) => {
       if (event.persisted) {
         Client.connect();
+        GlobalRegistry.append("debug", "pageshow, persisted");
+      } else {
+        GlobalRegistry.append("debug", "pageshow, not persisted");
       }
     });
 
