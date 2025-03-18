@@ -65,7 +65,7 @@ defmodule HologramFeatureTests.NavigationTest do
       |> visit(Page1)
       |> click(button("Put page 1 result A"))
       |> assert_text("Page 1 result A")
-      |> visit("https://www.wikipedia.org/")
+      |> click(link("External link"))
       |> assert_text("Wikipedia")
       |> go_back()
       |> assert_page(Page1, [], debug: true)
@@ -177,7 +177,7 @@ defmodule HologramFeatureTests.NavigationTest do
       session
       |> visit(Page4)
       |> scroll_to(10, 20)
-      |> visit("https://www.wikipedia.org/")
+      |> click(link("External link"))
       |> assert_text("Wikipedia")
       |> go_back()
       |> assert_page(Page4, [], debug: true)

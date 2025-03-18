@@ -24,6 +24,7 @@ defmodule HologramFeatureTests.Navigation.Page1 do
     <button $click="change_page">Change page</button>
     <Link to={Page2}>Page 2 link</Link>
     <Link to={Page3, s: "abc", i: 123}>Page 3 link</Link>
+    <a href="https://www.wikipedia.org/">External link</a>    
     <p>
       Page result: <strong id="page_result"><code>{inspect(@result)}</code></strong>
     </p>

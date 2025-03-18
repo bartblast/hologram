@@ -87,7 +87,8 @@ defmodule HologramFeatureTests.Helpers do
       if scroll_position == [x, y] do
         session
       else
-        raise Wallaby.ExpectationNotMetError, "Scroll position is different than [#{x}, #{y}]"
+        raise Wallaby.ExpectationNotMetError,
+              "Expected scroll position: [#{x}, #{y}], but got #{inspect(scroll_position)}"
       end
     end
 
