@@ -58,12 +58,12 @@ defmodule HologramFeatureTests.Helpers do
     end
   end
 
-  def assert_page(session, page_module, params \\ []) do
+  def assert_page(session, page_module, params \\ [], opts \\ []) do
     path = Router.Helpers.page_path(page_module, params)
 
     session
     |> wait_for_path(path)
-    |> wait_for_page_mounting(page_module)
+    |> wait_for_page_mounting(page_module, opts)
     |> wait_for_server_connection()
   end
 
@@ -187,11 +187,19 @@ defmodule HologramFeatureTests.Helpers do
     session
   end
 
-  defp wait_for_page_mounting(session, page_module, start_time \\ DateTime.utc_now()) do
+  defp wait_for_page_mounting(session, page_module, opts \\ [], start_time \\ DateTime.utc_now()) do
     callback = fn mounted_page ->
       if mounted_page != inspect(page_module) && !timed_out?(start_time) do
+        # credo:disable-for-next-line Credo.Check.Refactor.Nesting
+        if opts[:debug] do
+          # credo:disable-for-next-line Credo.Check.Refactor.IoPuts
+          IO.puts(
+            "mounted page: #{inspect(mounted_page)}, expected page: #{inspect(page_module)}"
+          )
+        end
+
         :timer.sleep(100)
-        wait_for_page_mounting(session, page_module, start_time)
+        wait_for_page_mounting(session, page_module, opts, start_time)
       end
     end
 

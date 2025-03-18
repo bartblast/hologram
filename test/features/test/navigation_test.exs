@@ -68,7 +68,7 @@ defmodule HologramFeatureTests.NavigationTest do
       |> visit("https://www.wikipedia.org/")
       |> assert_text("Wikipedia")
       |> go_back()
-      |> assert_page(Page1)
+      |> assert_page(Page1, [], debug: true)
       |> assert_text("Page 1 title")
       |> assert_text("Page 1 result A")
       |> click(button("Put page 1 result B"))
@@ -180,7 +180,7 @@ defmodule HologramFeatureTests.NavigationTest do
       |> visit("https://www.wikipedia.org/")
       |> assert_text("Wikipedia")
       |> go_back()
-      |> assert_page(Page4)
+      |> assert_page(Page4, [], debug: true)
       |> assert_scroll_position(10, 20)
     end
   end
