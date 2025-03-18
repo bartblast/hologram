@@ -299,9 +299,12 @@ export default class Hologram {
     $.#savePageSnapshot();
     $.#historyId = crypto.randomUUID();
 
-    Hologram.#patchPage(html);
-    window.scrollTo(0, 0);
-    history.pushState($.#historyId, null, pagePath);
+    window.requestAnimationFrame(() => {
+      Hologram.#patchPage(html);
+      window.scrollTo(0, 0);
+
+      history.pushState($.#historyId, null, pagePath);
+    });
   }
 
   // Made public to make tests easier
@@ -647,14 +650,16 @@ export default class Hologram {
 
     Hologram.prefetchedPages.clear();
 
-    $.render();
+    window.requestAnimationFrame(() => {
+      $.render();
 
-    if ($.#scrollPosition) {
-      window.scrollTo($.#scrollPosition[0], $.#scrollPosition[1]);
-      $.#scrollPosition = null;
-    }
+      if ($.#scrollPosition) {
+        window.scrollTo($.#scrollPosition[0], $.#scrollPosition[1]);
+        $.#scrollPosition = null;
+      }
 
-    GlobalRegistry.set("mountedPage", Interpreter.inspect($.#pageModule));
+      GlobalRegistry.set("mountedPage", Interpreter.inspect($.#pageModule));
+    });
   }
 
   // Tested implicitely in feature tests
