@@ -12,6 +12,7 @@ import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
+import Logger from "./logger.mjs";
 import MemoryStorage from "./memory_storage.mjs";
 import Operation from "./operation.mjs";
 import Renderer from "./renderer.mjs";
@@ -515,7 +516,7 @@ export default class Hologram {
   }
 
   static async #handlePopstateEvent(event) {
-    GlobalRegistry.append("debug", "popstate");
+    Logger.debug(`popstate event, state = ${event.state}`);
 
     $.#savePageSnapshot();
     $.#historyId = event.state;
@@ -533,10 +534,10 @@ export default class Hologram {
     $.#shouldLoadMountData = false;
 
     if ($.#isPageModuleRegistered(pageModule)) {
-      GlobalRegistry.append("debug", "page module registered");
+      Logger.debug(`page module ${pageModule.value} is registered`);
       return $.#mountPage(true);
     } else {
-      GlobalRegistry.append("debug", "page module not registered");
+      Logger.debug(`page module ${pageModule.value} is not registered`);
     }
 
     await Client.fetchPageBundlePath(
@@ -586,10 +587,10 @@ export default class Hologram {
 
     window.addEventListener("pageshow", (event) => {
       if (event.persisted) {
+        Logger.debug("pageshow event, document loaded from bfcache");
         Client.connect();
-        GlobalRegistry.append("debug", "pageshow, persisted");
       } else {
-        GlobalRegistry.append("debug", "pageshow, not persisted");
+        Logger.debug(`pageshow event, document not loaded from bfcache`);
       }
     });
 
