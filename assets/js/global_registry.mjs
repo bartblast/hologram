@@ -1,6 +1,7 @@
 "use strict";
 
 export default class GlobalRegistry {
+  // Made public to make tests easier
   static rootKey = "hologram";
 
   static append(key, item) {
