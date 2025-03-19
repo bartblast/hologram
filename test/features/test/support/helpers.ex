@@ -154,8 +154,8 @@ defmodule HologramFeatureTests.Helpers do
     end
   end
 
-  defp print_client_debug_info(session) do
-    script = "return window?.hologram?.['debug'];"
+  defp print_client_logs(session) do
+    script = "return sessionStorage.getItem('hologram_logs');"
 
     # credo:disable-for-next-line Credo.Check.Warning.IoInspect
     Browser.execute_script(session, script, [], &IO.inspect/1)
@@ -189,7 +189,7 @@ defmodule HologramFeatureTests.Helpers do
 
       IO.puts("mounted page: #{inspect(mounted_page)}, expected page: #{inspect(expected_page)}")
 
-      print_client_debug_info(session)
+      print_client_logs(session)
     end
   end
 
