@@ -689,47 +689,9 @@ export default class Hologram {
 
     const newVirtualDocument = Vdom.from(html);
 
-    // First patch the root html element itself to handle its attributes
-    Hologram.virtualDocument = patch(
+    Hologram.virtualDocument = Vdom.patchVirtualDocument(
       Hologram.virtualDocument,
-      vnode(
-        "html",
-        {attrs: newVirtualDocument.data.attrs || {}},
-        Hologram.virtualDocument.children,
-      ),
-    );
-
-    // Then patch head and body separately to preserve JavaScript/CSS handling
-
-    const oldHead = Hologram.virtualDocument.children.find(
-      (child) => child.sel === "head",
-    );
-
-    const newHead = newVirtualDocument.children.find(
-      (child) => child.sel === "head",
-    );
-
-    const oldBody = Hologram.virtualDocument.children.find(
-      (child) => child.sel === "body",
-    );
-
-    const newBody = newVirtualDocument.children.find(
-      (child) => child.sel === "body",
-    );
-
-    Hologram.virtualDocument.children = Hologram.virtualDocument.children.map(
-      (child) => {
-        switch (child.sel) {
-          case "body":
-            return patch(oldBody, newBody);
-
-          case "head":
-            return patch(oldHead, newHead);
-
-          default:
-            return child;
-        }
-      },
+      newVirtualDocument,
     );
   }
 
