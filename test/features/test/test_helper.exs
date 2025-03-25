@@ -1,5 +1,5 @@
 if System.get_env("GITHUB_ACTIONS") == "true" do
-  ExUnit.configure(max_cases: 2)
+  ExUnit.configure(max_cases: 1)
 end
 
 ExUnit.start()
