@@ -37,15 +37,7 @@ import ManuallyPortedElixirIO from "./elixir/io.mjs";
 import ManuallyPortedElixirKernel from "./elixir/kernel.mjs";
 import ManuallyPortedElixirString from "./elixir/string.mjs";
 
-import {
-  attributesModule,
-  eventListenersModule,
-  init,
-  toVNode,
-  vnode,
-} from "snabbdom";
-
-const patch = init([attributesModule, eventListenersModule]);
+import {toVNode} from "snabbdom";
 
 // TODO: test
 export default class Hologram {

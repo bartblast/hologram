@@ -1,6 +1,13 @@
 "use strict";
 
-import {h as vnode} from "snabbdom";
+import {
+  attributesModule,
+  eventListenersModule,
+  h as vnode,
+  init,
+} from "snabbdom";
+
+const patch = init([attributesModule, eventListenersModule]);
 
 export default class Vdom {
   static addKeysToLinkAndScriptVnodes(node) {
