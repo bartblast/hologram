@@ -316,7 +316,7 @@ export default class Hologram {
       Hologram.#pageParams,
     );
 
-    Hologram.virtualDocument = patch(
+    Hologram.virtualDocument = Vdom.patchVirtualDocument(
       Hologram.virtualDocument,
       newVirtualDocument,
     );

@@ -45,6 +45,56 @@ export default class Vdom {
     return Vdom.#buildVnodeFromDomNode(doc.documentElement);
   }
 
+  // Covered in feature tests
+  static patchVirtualDocument(oldVirtualDocument, newVirtualDocument) {
+    const newRootVNode = {
+      // Keep the same selector (tag name, id, classes)
+      sel: oldVirtualDocument.sel,
+      // Update only the attributes
+      data: {attrs: newVirtualDocument.data.attrs || {}},
+      // Keep the same children
+      children: oldVirtualDocument.children,
+    };
+
+    // Patch only the root vnode attributes
+    const patchedVirtualDocument = patch(oldVirtualDocument, newRootVNode);
+
+    // Then patch head and body separately to preserve JavaScript/CSS handling
+
+    const oldHead = oldVirtualDocument.children.find(
+      (child) => child.sel === "head",
+    );
+
+    const newHead = newVirtualDocument.children.find(
+      (child) => child.sel === "head",
+    );
+
+    const oldBody = oldVirtualDocument.children.find(
+      (child) => child.sel === "body",
+    );
+
+    const newBody = newVirtualDocument.children.find(
+      (child) => child.sel === "body",
+    );
+
+    patchedVirtualDocument.children = oldVirtualDocument.children.map(
+      (child) => {
+        switch (child.sel) {
+          case "body":
+            return patch(oldBody, newBody);
+
+          case "head":
+            return patch(oldHead, newHead);
+
+          default:
+            return child;
+        }
+      },
+    );
+
+    return patchedVirtualDocument;
+  }
+
   static #buildVnodeFromDomNode(node) {
     if (node.nodeType === Node.TEXT_NODE) {
       return node.textContent;
