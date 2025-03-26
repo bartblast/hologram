@@ -25,6 +25,7 @@ import ChangeEvent from "./events/change_event.mjs";
 import FocusEvent from "./events/focus_event.mjs";
 import MouseEvent from "./events/mouse_event.mjs";
 import PointerEvent from "./events/pointer_event.mjs";
+import SelectEvent from "./events/select_event.mjs";
 import SubmitEvent from "./events/submit_event.mjs";
 import TransitionEvent from "./events/transition_event.mjs";
 
@@ -486,6 +487,9 @@ export default class Hologram {
       case "pointerdown":
       case "pointerup":
         return PointerEvent;
+
+      case "select":
+        return SelectEvent;
 
       case "submit":
         return SubmitEvent;
