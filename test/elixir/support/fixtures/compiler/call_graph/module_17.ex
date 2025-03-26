@@ -28,27 +28,10 @@ defmodule Hologram.Test.Fixtures.Compiler.CallGraph.Module17 do
     # credo:disable-for-next-line Credo.Check.Refactor.Apply
     apply(Hologram.Test.Fixtures.Compiler.CallGraph.Module18, :my_fun_18, [1, 2])
 
-    if Version.compare(System.version(), "1.15.0") in [:gt, :eq] do
-      component
-    else
-      put_state(component,
-        struct_1: struct_1(),
-        struct_2: struct_2()
-      )
-    end
+    component
   end
 
-  if Version.compare(System.version(), "1.15.0") in [:gt, :eq] do
-    def struct_1, do: nil
+  def struct_1, do: nil
 
-    def struct_2, do: nil
-  else
-    def struct_1 do
-      struct(Hex.Solver.Assignment, term: :abc)
-    end
-
-    def struct_2 do
-      %Hex.Solver.Assignment{term: :abc}
-    end
-  end
+  def struct_2, do: nil
 end

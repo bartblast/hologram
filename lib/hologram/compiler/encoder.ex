@@ -162,7 +162,7 @@ defmodule Hologram.Compiler.Encoder do
     encode_primitive_type(:atom, value, true)
   end
 
-  # See: https://hexdocs.pm/elixir/1.14.5/Kernel.SpecialForms.html#%3C%3C%3E%3E/1
+  # See: https://hexdocs.pm/elixir/Kernel.SpecialForms.html#%3C%3C%3E%3E/1
   def encode_ir(
         %IR.BitstringSegment{value: %IR.StringType{value: value}, modifiers: modifiers},
         context
@@ -171,7 +171,7 @@ defmodule Hologram.Compiler.Encoder do
     encode_bitstring_segment(value_str, modifiers, context)
   end
 
-  # See: https://hexdocs.pm/elixir/1.14.5/Kernel.SpecialForms.html#%3C%3C%3E%3E/1
+  # See: https://hexdocs.pm/elixir/Kernel.SpecialForms.html#%3C%3C%3E%3E/1
   def encode_ir(
         %IR.BitstringSegment{value: value, modifiers: modifiers},
         context

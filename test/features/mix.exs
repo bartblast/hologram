@@ -27,19 +27,11 @@ defmodule HologramFeatureTests.MixProject do
   end
 
   defp elixirc_paths(:test) do
-    if Version.match?(System.version(), ">= 1.15.0") do
-      ["app", "app_gteq_1_15", "lib", "test/support"]
-    else
-      ["app", "lib", "test/support"]
-    end
+    ["app", "lib", "test/support"]
   end
 
   defp elixirc_paths(_env) do
-    if Version.match?(System.version(), ">= 1.15.0") do
-      ["app", "app_gteq_1_15", "lib"]
-    else
-      ["app", "lib"]
-    end
+    ["app", "lib"]
   end
 
   def project do
