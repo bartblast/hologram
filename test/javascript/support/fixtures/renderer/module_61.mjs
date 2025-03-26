@@ -11,7 +11,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module61 do
 
   @impl Component
   def template do
-    ~H"""
+    ~HOLO"""
     <div>
       <slot />
     </div>

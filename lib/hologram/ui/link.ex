@@ -8,7 +8,7 @@ defmodule Hologram.UI.Link do
 
   @impl Component
   def template do
-    ~H"""
+    ~HOLO"""
     <a 
       href={page_path(@to)}
       class={@class}

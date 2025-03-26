@@ -12,7 +12,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module60 do
 
   @impl Component
   def template do
-    ~H"""
+    ~HOLO"""
     <Module61 cid="component_61">
       <div>
         <button $click="my_action">Click me</button>

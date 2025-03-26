@@ -15,7 +15,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module63 do
 
   @impl Page
   def template do
-    ~H"abc"
+    ~HOLO"abc"
   end
 end
 */

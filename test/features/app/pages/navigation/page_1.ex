@@ -17,7 +17,7 @@ defmodule HologramFeatureTests.Navigation.Page1 do
   end
 
   def template do
-    ~H"""
+    ~HOLO"""
     <h1>Page 1 title</h1>
     <button $click="put_result_a">Put page 1 result A</button>
     <button $click="put_result_b">Put page 1 result B</button>

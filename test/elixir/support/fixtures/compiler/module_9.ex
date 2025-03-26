@@ -7,7 +7,7 @@ defmodule Hologram.Test.Fixtures.Compiler.Module9 do
   layout Hologram.Test.Fixtures.Compiler.Module10
 
   def template do
-    ~H"""
+    ~HOLO"""
     Module9 template
     """
   end

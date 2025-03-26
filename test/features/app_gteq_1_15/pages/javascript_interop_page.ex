@@ -9,7 +9,7 @@ defmodule HologramFeatureTests.JavaScriptInteropPage do
   layout HologramFeatureTests.Components.DefaultLayout
 
   def template do
-    ~H"""
+    ~HOLO"""
     <p>
       <button $click="run_js_snippet"> Run JavaScript snippet </button>
     </p>

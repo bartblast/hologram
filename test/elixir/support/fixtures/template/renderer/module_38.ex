@@ -5,7 +5,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module38 do
 
   @impl Component
   def template do
-    ~H"""
+    ~HOLO"""
     prop_aaa = {@aaa}
     """
   end

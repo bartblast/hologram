@@ -7,7 +7,7 @@ defmodule Hologram.Test.Fixtures.Compiler.CallGraph.Module17 do
   layout Hologram.Test.Fixtures.DefaultLayout
 
   def template do
-    ~H""
+    ~HOLO""
   end
 
   def action(:action_17, _params, component) do

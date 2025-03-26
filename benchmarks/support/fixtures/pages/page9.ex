@@ -26,7 +26,7 @@ defmodule Hologram.Benchmarks.Fixtures.Page9 do
   end
 
   def template do
-    ~H"""
+    ~HOLO"""
     <p>
       <button id="unary+" $click={:"unary+", value: @integer_a}> unary + </button>
       <button id="unary-" $click={:"unary-", value: @integer_a}> unary - </button>

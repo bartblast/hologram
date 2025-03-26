@@ -16,7 +16,7 @@ defmodule HologramFeatureTests.ActionsPage do
   end
 
   def template do
-    ~H"""
+    ~HOLO"""
     <p>
       <button id="layout_action_2" $click={action: :layout_action_2, target: "layout", params: %{a: 1, b: 2}}> layout_action_2 </button>
       <button id="page_action_1" $click="page_action_1"> page_action_1 </button>

@@ -59,7 +59,7 @@ defmodule Hologram.Component do
 
         import Hologram.JS, only: [sigil_JS: 2]
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
-        import Hologram.Template, only: [sigil_H: 2]
+        import Hologram.Template, only: [sigil_HOLO: 2]
 
         alias Hologram.Component
         alias Hologram.Component.Action
@@ -122,7 +122,7 @@ defmodule Hologram.Component do
       quote do
         @impl unquote(behaviour)
         def template do
-          sigil_H(unquote(markup), [])
+          sigil_HOLO(unquote(markup), [])
         end
       end
     end

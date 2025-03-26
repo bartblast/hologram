@@ -6,7 +6,7 @@ defmodule HologramFeatureTests.TemplateSyntax.TextAndElementPage do
   layout HologramFeatureTests.Components.DefaultLayout
 
   def template do
-    ~H"""
+    ~HOLO"""
     <div class="parent_elem">
       <span class="child_elem">my text</span>
     </div>

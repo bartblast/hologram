@@ -9,7 +9,7 @@ defmodule HologramFeatureTests.Rendering.Page2 do
   layout HologramFeatureTests.Components.EmptyLayout
 
   def template do
-    ~H"""
+    ~HOLO"""
     <!DOCTYPE html>
     <html attr_1="value_1">
       <head>

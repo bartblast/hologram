@@ -9,7 +9,7 @@ defmodule Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageToMfaPaths.Module1 
 
   @impl Page
   def template do
-    ~H"""
+    ~HOLO"""
     Module1 template
     {fun_1a()}, {fun_1b()}
     """

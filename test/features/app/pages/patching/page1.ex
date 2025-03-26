@@ -15,7 +15,7 @@ defmodule HologramFeatureTests.Patching.Page1 do
   end
 
   def template do
-    ~H"""
+    ~HOLO"""
     <!DOCTYPE html>
     <html attr_1={@root_elem_attr_1} attr_2={@root_elem_attr_2}>
       <head>

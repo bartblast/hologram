@@ -14,7 +14,7 @@ defmodule HologramFeatureTests.CommandsPage do
   end
 
   def template do
-    ~H"""
+    ~HOLO"""
     <p>
       <button id="layout_command_2" $click={command: :layout_command_2, target: "layout", params: %{a: 1, b: 2}}> layout_command_2 </button>
       <button id="page_command_2" $click={command: :page_command_2, params: %{a: 1, b: 2}}> page_command_2 </button>

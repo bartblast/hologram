@@ -2,7 +2,7 @@ defmodule HologramFeatureTests.Components.CommonLayoutStyles do
   use Hologram.Component
 
   def template do
-    ~H"""
+    ~HOLO"""
     <style>
       {%raw}
         body {

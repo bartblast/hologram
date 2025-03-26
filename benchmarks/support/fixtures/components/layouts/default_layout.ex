@@ -6,7 +6,7 @@ defmodule Hologram.Benchmarks.Fixtures.Components.DefaultLayout do
   alias Hologram.UI.Runtime
 
   def template do
-    ~H"""
+    ~HOLO"""
     <html>
       <head>
         <Runtime />

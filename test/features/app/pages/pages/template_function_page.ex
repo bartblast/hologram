@@ -6,6 +6,6 @@ defmodule HologramFeatureTests.Pages.TemplateFunctionPage do
   layout HologramFeatureTests.Components.DefaultLayout
 
   def template do
-    ~H"Template defined in function"
+    ~HOLO"Template defined in function"
   end
 end

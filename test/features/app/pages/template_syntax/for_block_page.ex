@@ -6,7 +6,7 @@ defmodule HologramFeatureTests.TemplateSyntax.ForBlockPage do
   layout HologramFeatureTests.Components.DefaultLayout
 
   def template do
-    ~H"""
+    ~HOLO"""
     <div id="block_1">
       {%for n <- [1, 2, 3]}
         <div id="item_{n}" class="item">text_{n}</div>

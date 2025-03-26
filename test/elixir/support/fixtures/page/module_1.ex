@@ -7,7 +7,7 @@ defmodule Hologram.Test.Fixtures.Page.Module1 do
 
   @impl Page
   def template do
-    ~H"""
+    ~HOLO"""
     Module1 template
     """
   end

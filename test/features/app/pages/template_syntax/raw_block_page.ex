@@ -6,6 +6,6 @@ defmodule HologramFeatureTests.TemplateSyntax.RawBlockPage do
   layout HologramFeatureTests.Components.DefaultLayout
 
   def template do
-    ~H"{%raw}{%if false}abc{@var}xyz{/if}{/raw}"
+    ~HOLO"{%raw}{%if false}abc{@var}xyz{/if}{/raw}"
   end
 end

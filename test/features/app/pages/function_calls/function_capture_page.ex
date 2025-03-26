@@ -16,7 +16,7 @@ defmodule HologramFeatureTests.FunctionCalls.FunctionCapturePage do
   end
 
   def template do
-    ~H"""
+    ~HOLO"""
     <p>
       <button $click="single_arg"> Single arg </button>
       <button $click="multiple_args"> Multiple args </button>

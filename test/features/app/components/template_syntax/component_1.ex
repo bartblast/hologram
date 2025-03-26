@@ -4,7 +4,7 @@ defmodule HologramFeatureTests.Components.TemplateSyntax.Component1 do
   prop :my_prop, :string
 
   def template do
-    ~H"""
+    ~HOLO"""
     <div id="my_component">{@my_prop}</div>
     """
   end

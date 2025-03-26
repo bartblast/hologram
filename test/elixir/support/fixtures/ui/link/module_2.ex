@@ -10,6 +10,6 @@ defmodule Hologram.Test.Fixtures.UI.Link.Module2 do
 
   @impl Page
   def template do
-    ~H""
+    ~HOLO""
   end
 end

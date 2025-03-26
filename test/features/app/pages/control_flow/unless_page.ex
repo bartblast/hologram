@@ -13,7 +13,7 @@ defmodule HologramFeatureTests.ControlFlow.UnlessPage do
   end
 
   def template do
-    ~H"""
+    ~HOLO"""
     <p>
       <button $click="reset"> Reset </button>
     </p>

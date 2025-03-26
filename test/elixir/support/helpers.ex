@@ -2,7 +2,7 @@ defmodule Hologram.Test.Helpers do
   import ExUnit.Assertions
   import Hologram.Commons.Guards, only: [is_regex: 1]
   import Hologram.Commons.TestUtils, only: [wrap_term: 1]
-  import Hologram.Template, only: [sigil_H: 2]
+  import Hologram.Template, only: [sigil_HOLO: 2]
 
   alias Hologram.Commons.ETS
   alias Hologram.Commons.FileUtils
@@ -233,7 +233,7 @@ defmodule Hologram.Test.Helpers do
   """
   defmacro template(markup) do
     quote do
-      sigil_H(unquote(markup), [])
+      sigil_HOLO(unquote(markup), [])
     end
   end
 

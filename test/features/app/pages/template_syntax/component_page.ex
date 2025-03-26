@@ -7,7 +7,7 @@ defmodule HologramFeatureTests.TemplateSyntax.ComponentPage do
   layout HologramFeatureTests.Components.DefaultLayout
 
   def template do
-    ~H"""
+    ~HOLO"""
     <Component1 my_prop="abc" />
     """
   end

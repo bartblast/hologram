@@ -2,6 +2,6 @@ defmodule HologramFeatureTests.Components.EmptyLayout do
   use Hologram.Component
 
   def template do
-    ~H"<slot />"
+    ~HOLO"<slot />"
   end
 end

@@ -7,6 +7,6 @@ defmodule Hologram.Test.Fixtures.Socket.Channel.Module5 do
 
   @impl Page
   def template do
-    ~H"page Module5 template"
+    ~HOLO"page Module5 template"
   end
 end

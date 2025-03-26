@@ -11,7 +11,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module4 do
 
   @impl Component
   def template do
-    ~H"""
+    ~HOLO"""
     <div>var_a = {@a}, var_b = {@b}, var_c = {@c}</div>
     """
   end

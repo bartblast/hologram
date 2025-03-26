@@ -4,7 +4,7 @@ defmodule Hologram.Test.Fixtures.Socket.Channel.Module4 do
 
   @impl Component
   def template do
-    ~H"""
+    ~HOLO"""
     <html>
       <head>
         <Runtime />

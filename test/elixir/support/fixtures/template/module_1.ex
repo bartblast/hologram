@@ -4,7 +4,7 @@ defmodule Hologram.Test.Fixtures.Template.Module1 do
 
   @impl Component
   def template do
-    ~H"""
+    ~HOLO"""
     Remote function call result = {Module2.fun_a()}
     """
   end

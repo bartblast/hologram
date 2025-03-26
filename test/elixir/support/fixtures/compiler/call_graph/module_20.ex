@@ -3,7 +3,7 @@ defmodule Hologram.Test.Fixtures.Compiler.CallGraph.Module20 do
   use Hologram.Component
 
   def template do
-    ~H"Layout 20 template"
+    ~HOLO"Layout 20 template"
   end
 
   def fun_20_a, do: :a

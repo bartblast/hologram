@@ -34,7 +34,7 @@ defmodule HologramFeatureTests.OperatorsPage do
   end
 
   def template do
-    ~H"""
+    ~HOLO"""
     <p>
       <h2><code>Overridable General Operators</code></h2>
       <button id="unary+" $click="unary+"> unary + </button>

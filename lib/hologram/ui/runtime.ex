@@ -10,7 +10,7 @@ defmodule Hologram.UI.Runtime do
 
   @impl Component
   def template do
-    ~H"""
+    ~HOLO"""
     {%if @initial_page? && !@page_mounted?}
       <script>
         globalThis.hologram ??= \{\};

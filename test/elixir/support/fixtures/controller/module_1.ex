@@ -10,7 +10,7 @@ defmodule Hologram.Test.Fixtures.Controller.Module1 do
 
   @impl Page
   def template do
-    ~H"""
+    ~HOLO"""
     param_aaa = {@aaa}, param_bbb = {@bbb}
     """
   end

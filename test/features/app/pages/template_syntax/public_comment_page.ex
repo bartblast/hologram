@@ -6,7 +6,7 @@ defmodule HologramFeatureTests.TemplateSyntax.PublicCommentPage do
   layout HologramFeatureTests.Components.DefaultLayout
 
   def template do
-    ~H"""
+    ~HOLO"""
     <div>
       <span>abc<!-- my comment -->xyz</span>
     </div>

@@ -11,7 +11,7 @@ defmodule Hologram.Test.Fixtures.Component.Module2 do
   end
 
   def template do
-    ~H"""
+    ~HOLO"""
     Module2 template
     """
   end

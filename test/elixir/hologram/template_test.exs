@@ -15,9 +15,9 @@ defmodule Hologram.TemplateTest do
     end
   end
 
-  describe "H sigil" do
+  describe "HOLO sigil" do
     test "template which uses vars" do
-      template = ~H"""
+      template = ~HOLO"""
       <div>{@value}</div>
       """
 
@@ -25,7 +25,7 @@ defmodule Hologram.TemplateTest do
     end
 
     test "template which doesn't use vars" do
-      template = ~H"""
+      template = ~HOLO"""
       <div>abc</div>
       """
 
@@ -34,13 +34,13 @@ defmodule Hologram.TemplateTest do
 
     test "alias" do
       alias Aaa.Bbb.Ccc
-      template = ~H"<Ccc />"
+      template = ~HOLO"<Ccc />"
 
       assert template.(%{}) == [{:component, Aaa.Bbb.Ccc, [], []}]
     end
 
     test "whitespace trimming" do
-      template = ~H"""
+      template = ~HOLO"""
 
       <div>abc</div>
 
@@ -50,11 +50,11 @@ defmodule Hologram.TemplateTest do
     end
 
     test "bitstring argument" do
-      assert sigil_H(<<"test">>, []).(%{}) == [text: "test"]
+      assert sigil_HOLO(<<"test">>, []).(%{}) == [text: "test"]
     end
 
     test "string argument" do
-      assert sigil_H("test", []).(%{}) == [text: "test"]
+      assert sigil_HOLO("test", []).(%{}) == [text: "test"]
     end
 
     test "compiler correctly detects alias used in template" do

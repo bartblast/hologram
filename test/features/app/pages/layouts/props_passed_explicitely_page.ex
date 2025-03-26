@@ -6,6 +6,6 @@ defmodule HologramFeatureTests.Layouts.PropsPassedExplicitelyPage do
   layout HologramFeatureTests.Components.LayoutWithProps, a: "abc", b: 123, c: :xyz
 
   def template do
-    ~H""
+    ~HOLO""
   end
 end

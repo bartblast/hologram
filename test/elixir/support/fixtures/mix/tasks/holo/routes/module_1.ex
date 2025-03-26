@@ -7,6 +7,6 @@ defmodule Hologram.Test.Fixtures.Mix.Tasks.Holo.Routes.Module1 do
 
   @impl Page
   def template do
-    ~H""
+    ~HOLO""
   end
 end

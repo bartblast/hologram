@@ -8,7 +8,7 @@ defmodule Hologram.Test.Fixtures.Mix.Tasks.Holo.Compiler.PageExFunSizes.Module1 
 
   @impl Page
   def template do
-    ~H"""
+    ~HOLO"""
     Module1 template
     {fun_1()}, {fun_2()}
     """

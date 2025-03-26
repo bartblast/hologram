@@ -11,7 +11,7 @@ defmodule Hologram.Test.Fixtures.Compiler.CallGraph.Module19 do
   end
 
   def template do
-    ~H"Page 19 template"
+    ~HOLO"Page 19 template"
   end
 
   def fun_19_a, do: :a

@@ -3,6 +3,6 @@ defmodule Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2 do
 
   @impl Component
   def template do
-    ~H""
+    ~HOLO""
   end
 end

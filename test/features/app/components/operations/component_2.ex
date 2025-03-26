@@ -9,7 +9,7 @@ defmodule HologramFeatureTests.Components.Operations.Component2 do
   end
 
   def template do
-    ~H"""
+    ~HOLO"""
     <p>
       <button id="layout_command_3" $click={command: :layout_command_3, target: "layout", params: %{a: 1, b: 2}}> layout_command_3 </button>
       <button id="page_command_3" $click={command: :page_command_3, target: "page", params: %{a: 1, b: 2}}> page_command_3 </button>

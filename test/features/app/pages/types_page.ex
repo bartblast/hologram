@@ -14,7 +14,7 @@ defmodule HologramFeatureTests.TypesPage do
   end
 
   def template do
-    ~H"""
+    ~HOLO"""
     <p>
       <button id="anonymous function (client origin, non-capture)" $click="anonymous function (client origin, non-capture)"> anonymous function (client origin, non-capture) </button>
       <button id="anonymous function (server origin, non-capture)" $click={command: :"anonymous function (server origin, non-capture)"}> anonymous function (server origin, non-capture) </button>

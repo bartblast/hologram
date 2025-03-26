@@ -14,7 +14,7 @@ defmodule HologramFeatureTests.GuardsPage do
   end
 
   def template do
-    ~H"""
+    ~HOLO"""
     <p>
       <button $click="anonymous_function_single_guard"> Anonymous function - single guard </button>
       <button $click="anonymous_function_multiple_guards"> Anonymous function - multiple guards </button>

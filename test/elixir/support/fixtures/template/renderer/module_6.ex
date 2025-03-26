@@ -9,7 +9,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module6 do
 
   @impl Component
   def template do
-    ~H"""
+    ~HOLO"""
     <div>state_a = {@a}, state_b = {@b}</div>
     """
   end

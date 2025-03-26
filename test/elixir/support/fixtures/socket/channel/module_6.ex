@@ -3,7 +3,7 @@ defmodule Hologram.Test.Fixtures.Socket.Channel.Module6 do
   use Hologram.Component
 
   def template do
-    ~H""
+    ~HOLO""
   end
 
   def command(:my_command_6, _params, server) do

@@ -15,6 +15,6 @@ defmodule Hologram.Test.Fixtures.Compiler.CallGraph.Module29 do
   end
 
   def template do
-    ~H"Module 29 template"
+    ~HOLO"Module 29 template"
   end
 end

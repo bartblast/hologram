@@ -5,7 +5,7 @@ defmodule HologramFeatureTests.Components.DefaultLayout do
   alias HologramFeatureTests.Components.CommonLayoutStyles
 
   def template do
-    ~H"""
+    ~HOLO"""
     <!DOCTYPE html>
     <html lang="en">
       <head>

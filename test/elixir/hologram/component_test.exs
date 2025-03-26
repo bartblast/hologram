@@ -59,7 +59,7 @@ defmodule Hologram.ComponentTest do
                 {:def, [{:context, Component} | _imports_2],
                  [
                    {:template, [context: Component], Component},
-                   [do: {:sigil_H, [], ["My template 1", []]}]
+                   [do: {:sigil_HOLO, [], ["My template 1", []]}]
                  ]}
               ]} = maybe_define_template_fun(template_path, Component)
     end

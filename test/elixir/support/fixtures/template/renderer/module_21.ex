@@ -17,6 +17,6 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module21 do
   # because this module is used in client renderer tests.
   @impl Page
   def template do
-    ~H"page vars = {inspect(vars, custom_options: [sort_maps: true])}"
+    ~HOLO"page vars = {inspect(vars, custom_options: [sort_maps: true])}"
   end
 end

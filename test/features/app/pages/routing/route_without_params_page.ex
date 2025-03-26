@@ -13,7 +13,7 @@ defmodule HologramFeatureTests.Routing.RouteWithoutParamsPage do
   end
 
   def template do
-    ~H"""
+    ~HOLO"""
     <p>
       Page module: <strong id="page_module"><code>{inspect(@module)}</code></strong>
     </p>       

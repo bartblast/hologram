@@ -10,6 +10,6 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module16 do
   # because this module is used in client renderer tests.
   @impl Component
   def template do
-    ~H"component vars = {inspect(vars, custom_options: [sort_maps: true])}"
+    ~HOLO"component vars = {inspect(vars, custom_options: [sort_maps: true])}"
   end
 end

@@ -3,7 +3,7 @@ defmodule Hologram.Test.Fixtures.Compiler.CallGraph.Module3 do
 
   @impl Component
   def template do
-    ~H"""
+    ~HOLO"""
     Module3 template
     """
   end

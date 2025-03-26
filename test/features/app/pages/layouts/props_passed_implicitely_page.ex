@@ -10,6 +10,6 @@ defmodule HologramFeatureTests.Layouts.PropsPassedImplicitelyPage do
   end
 
   def template do
-    ~H""
+    ~HOLO""
   end
 end

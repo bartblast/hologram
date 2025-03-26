@@ -5,6 +5,6 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module64 do
 
   @impl Component
   def template do
-    ~H"my_prop = {inspect(@my_prop)}"
+    ~HOLO"my_prop = {inspect(@my_prop)}"
   end
 end

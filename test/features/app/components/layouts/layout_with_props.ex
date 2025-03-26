@@ -15,7 +15,7 @@ defmodule HologramFeatureTests.Components.LayoutWithProps do
   end
 
   def template do
-    ~H"""
+    ~HOLO"""
     <!DOCTYPE html>
     <html lang="en">
       <head>

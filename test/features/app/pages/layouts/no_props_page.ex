@@ -6,6 +6,6 @@ defmodule HologramFeatureTests.Layouts.NoPropsPage do
   layout HologramFeatureTests.Components.LayoutWithoutProps
 
   def template do
-    ~H""
+    ~HOLO""
   end
 end

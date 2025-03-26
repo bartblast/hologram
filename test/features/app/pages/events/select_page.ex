@@ -13,7 +13,7 @@ defmodule HologramFeatureTests.Events.SelectPage do
   end
 
   def template do
-    ~H"""
+    ~HOLO"""
     <p>
       <form>
         <input $select="selected_in_text_input" type="text" id="text_input_elem" value="Hologram 1 Hologram" />

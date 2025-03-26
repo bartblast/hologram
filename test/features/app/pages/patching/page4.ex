@@ -13,7 +13,7 @@ defmodule HologramFeatureTests.Patching.Page4 do
   end
 
   def template do
-    ~H"""
+    ~HOLO"""
     <!DOCTYPE html>
     <html class={@class}>
       <head>

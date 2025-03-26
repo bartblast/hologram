@@ -4,7 +4,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module49 do
 
   @impl Component
   def template do
-    ~H"""
+    ~HOLO"""
     layout template start
     <Runtime />
     <slot />

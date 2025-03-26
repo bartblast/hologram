@@ -23,15 +23,15 @@ defmodule Hologram.Template do
     |> DOM.build_ast()
   end
 
-  defmacro sigil_H({:<<>>, _meta, [markup]}, _modifiers) do
-    build_h_sigil_ast(markup)
+  defmacro sigil_HOLO({:<<>>, _meta, [markup]}, _modifiers) do
+    build_holo_sigil_ast(markup)
   end
 
-  defmacro sigil_H(markup, _modifiers) do
-    build_h_sigil_ast(markup)
+  defmacro sigil_HOLO(markup, _modifiers) do
+    build_holo_sigil_ast(markup)
   end
 
-  defp build_h_sigil_ast(markup) do
+  defp build_holo_sigil_ast(markup) do
     quote do
       fn var!(vars) ->
         # Fixes unused var warning

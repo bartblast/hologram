@@ -14,7 +14,7 @@ defmodule HologramFeatureTests.ControlFlow.CondPage do
   end
 
   def template do
-    ~H"""
+    ~HOLO"""
     <p>
       <button $click="reset"> Reset </button>
     </p>

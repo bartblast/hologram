@@ -890,7 +890,7 @@ defmodule Hologram.CompilerTest do
 
         @impl Page
         def template do
-          ~H""
+          ~HOLO""
         end
       end
 
@@ -911,7 +911,7 @@ defmodule Hologram.CompilerTest do
 
         @impl Page
         def template do
-          ~H""
+          ~HOLO""
         end
       end
 

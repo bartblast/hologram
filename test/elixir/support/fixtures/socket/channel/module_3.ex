@@ -10,6 +10,6 @@ defmodule Hologram.Test.Fixtures.Socket.Channel.Module3 do
 
   @impl Page
   def template do
-    ~H"page Module3 template, params: a = {@a}, b = {@b}"
+    ~HOLO"page Module3 template, params: a = {@a}, b = {@b}"
   end
 end

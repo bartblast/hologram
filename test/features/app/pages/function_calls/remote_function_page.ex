@@ -16,7 +16,7 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionPage do
   end
 
   def template do
-    ~H"""
+    ~HOLO"""
     <p>
       <button $click="basic_case"> Basic case </button>
       <button $click="private_function"> Private function </button>

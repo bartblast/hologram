@@ -6,7 +6,7 @@ defmodule HologramFeatureTests.TemplateSyntax.IfBlockPage do
   layout HologramFeatureTests.Components.DefaultLayout
 
   def template do
-    ~H"""
+    ~HOLO"""
     <div id="block_1">
       a{%if true}b{/if}c
     </div>
