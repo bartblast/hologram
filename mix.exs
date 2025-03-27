@@ -7,10 +7,10 @@ defmodule Hologram.MixProject do
   defp aliases do
     [
       eslint:
-        "cmd assets/node_modules/.bin/eslint --color --config assets/eslint.config.mjs assets/js/** test/javascript/**",
+        "cmd assets/node_modules/.bin/eslint --color --config assets/eslint.config.mjs assets/js/** benchmarks/javascript/** test/javascript/**",
       f: ["format", "prettier", "cmd cd test/features && mix format"],
       prettier:
-        "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'test/javascript/**' --config 'assets/.prettierrc.json' --write",
+        "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'test/javascript/**' --config 'assets/.prettierrc.json' --write",
       t: ["test", "test.js"],
       "test.js": [&test_js/1]
     ]
