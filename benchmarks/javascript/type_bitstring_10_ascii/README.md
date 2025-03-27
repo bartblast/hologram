@@ -41,14 +41,10 @@ Argument: a string consisting of 10 ASCII characters
 <table>
   <tr>
     <th>Average Cold Execution Time</th>
-    <td>344.35 μs</td>
+    <td>282.71 μs</td>
   </tr>
   <tr>
     <th>Average Warm Execution Time</th>
-    <td>11.77 μs</td>
+    <td>12.36 μs</td>
   </tr>
 </table>
-
-10 Cold execution times were measured separately:\
-505.88 μs, 535.33 μs, 298.88 μs, 289.71 μs, 282.88 μs,\
-395.33 μs, 274.58 μs, 303.58 μs, 294.83 μs, 262.46 μs
