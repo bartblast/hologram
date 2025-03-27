@@ -7,31 +7,31 @@ Argument: a string consisting of 10 ASCII characters
 
 <table>
   <tr>
-    <th style="text-align: left;">Operating System</th>
+    <th>Operating System</th>
     <td>macOS 15.3.2</td>
   </tr>
   <tr>
-    <th style="text-align: left;">CPU</th>
+    <th>CPU</th>
     <td>Apple M1 Pro</td>
   </tr>
   <tr>
-    <th style="text-align: left;">Number of CPU Cores</th>
+    <th>Number of CPU Cores</th>
     <td>10</td>
   </tr>
   <tr>
-    <th style="text-align: left;">RAM</th>
+    <th>RAM</th>
     <td>16 GB</td>
   </tr>
   <tr>
-    <th style="text-align: left;">Elixir Version</th>
+    <th>Elixir Version</th>
     <td>1.18.2</td>
   </tr>
   <tr>
-    <th style="text-align: left;">Erlang/OTP Version</th>
+    <th>Erlang/OTP Version</th>
     <td>27.2.4</td>
   </tr>
   <tr>
-    <th style="text-align: left;">Node.js Version</th>
+    <th>Node.js Version</th>
     <td>22.9.0</td>
   </tr>
 </table>
@@ -40,11 +40,11 @@ Argument: a string consisting of 10 ASCII characters
 
 <table>
   <tr>
-    <th style="text-align: left;">Average Cold Execution Time</th>
+    <th>Average Cold Execution Time</th>
     <td>344.35 μs</td>
   </tr>
   <tr>
-    <th style="text-align: left;">Average Warm Execution Time</th>
+    <th>Average Warm Execution Time</th>
     <td>11.77 μs</td>
   </tr>
 </table>
