@@ -92,8 +92,7 @@ describe("Bitstring2", () => {
     const expected = {
       type: "bitstring",
       text: "Hologram",
-      bits: null,
-      isByteAligned: true,
+      bytes: null,
       numLeftoverBits: 0,
     };
 

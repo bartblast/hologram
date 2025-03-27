@@ -44,8 +44,7 @@ export default class Bitstring2 {
     return {
       type: "bitstring",
       text: text,
-      bits: null,
-      isByteAligned: true,
+      bytes: null,
       numLeftoverBits: 0,
     };
   }
