@@ -22,6 +22,7 @@ export default [
       globals: {
         ...globals.browser,
         ...globals.mocha,
+        ...globals.node,
         Elixir_Code: "readonly",
         Elixir_Enum: "readonly",
         Elixir_Hologram_Router_Helpers: "readonly",
