@@ -1,5 +1,7 @@
 "use strict";
 
+import HologramInterpreterError from "./errors/interpreter_error.mjs";
+
 export default class Bitstring2 {
   static concatSegments(segments) {
     if (
@@ -16,6 +18,39 @@ export default class Bitstring2 {
 
       return {type: "bitstring", text, bytes: null, numLeftoverBits: 0};
     }
+  }
+
+  static floatSegmentToBytes(segment) {
+    let value;
+    if (segment.value.type === "float") {
+      value = segment.value.value;
+    } else {
+      // integer
+      value = Number(segment.value.value);
+    }
+
+    const isLittleEndian = segment.endianness === "little";
+
+    const sizeModifier = segment.size ? Number(segment.size.value) : 64;
+    const unitModifier = segment.unit ? Number(segment.unit.value) : 1;
+    const bitSize = sizeModifier * unitModifier;
+    const byteLength = bitSize / 8;
+    const buffer = new ArrayBuffer(byteLength);
+    const dataView = new DataView(buffer);
+
+    if (bitSize === 64) {
+      dataView.setFloat64(0, value, isLittleEndian);
+    } else if (bitSize === 32) {
+      dataView.setFloat32(0, value, isLittleEndian);
+    } else {
+      // TODO: implement when browsers widely support 16-bit floats
+      // dataView.setFloat16(0, value, isLittleEndian);
+      throw new HologramInterpreterError(
+        "16-bit float bitstring segments are not yet implemented in Hologram",
+      );
+    }
+
+    return new Uint8Array(buffer);
   }
 
   static fromBits(bits) {
