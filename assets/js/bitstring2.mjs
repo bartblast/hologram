@@ -29,18 +29,16 @@ export default class Bitstring2 {
       value = Number(segment.value.value);
     }
 
-    const isLittleEndian = segment.endianness === "little";
+    const isLittleEndian = $.#isLittleEndian(segment);
 
-    const sizeModifier = segment.size ? Number(segment.size.value) : 64;
-    const unitModifier = segment.unit ? Number(segment.unit.value) : 1;
-    const bitSize = sizeModifier * unitModifier;
-    const byteLength = bitSize / 8;
+    const bitCount = $.#calculateBitCount(segment);
+    const byteLength = bitCount / 8;
     const buffer = new ArrayBuffer(byteLength);
     const dataView = new DataView(buffer);
 
-    if (bitSize === 64) {
+    if (bitCount === 64) {
       dataView.setFloat64(0, value, isLittleEndian);
-    } else if (bitSize === 32) {
+    } else if (bitCount === 32) {
       dataView.setFloat32(0, value, isLittleEndian);
     } else {
       // TODO: implement when browsers widely support 16-bit floats
@@ -98,14 +96,11 @@ export default class Bitstring2 {
 
   static integerSegmentToBytes(segment) {
     const value = segment.value.value;
-    const isLittleEndian = segment.endianness === "little";
+    const isLittleEndian = $.#isLittleEndian(segment);
 
-    const sizeModifier = segment.size ? Number(segment.size.value) : 64;
-    const unitModifier = segment.unit ? Number(segment.unit.value) : 1;
-    const bitSize = sizeModifier * unitModifier;
-
-    const completeBytes = Math.floor(bitSize / 8);
-    const leftoverBits = bitSize % 8;
+    const bitCount = $.#calculateBitCount(segment);
+    const completeBytes = Math.floor(bitCount / 8);
+    const leftoverBits = bitCount % 8;
     const totalBytes = completeBytes + (leftoverBits > 0 ? 1 : 0);
 
     const buffer = new ArrayBuffer(totalBytes);
@@ -118,16 +113,29 @@ export default class Bitstring2 {
     ) {
       const numberValue = Number(value);
 
-      if (bitSize === 8) {
+      if (bitCount === 8) {
         dataView.setUint8(0, numberValue & 0xff);
         return result;
-      } else if (bitSize === 16 && completeBytes === 2) {
+      } else if (bitCount === 16 && completeBytes === 2) {
         dataView.setUint16(0, numberValue & 0xffff, isLittleEndian);
         return result;
-      } else if (bitSize === 32 && completeBytes === 4) {
+      } else if (bitCount === 32 && completeBytes === 4) {
         dataView.setUint32(0, numberValue & 0xffffffff, isLittleEndian);
         return result;
       }
     }
   }
+
+  static #calculateBitCount(segment) {
+    const size = segment.size ? Number(segment.size.value) : 64;
+    const unit = segment.unit ? Number(segment.unit.value) : 1;
+
+    return size * unit;
+  }
+
+  static #isLittleEndian(segment) {
+    return segment.endianness === "little";
+  }
 }
+
+const $ = Bitstring2;
