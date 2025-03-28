@@ -1,6 +1,23 @@
 "use strict";
 
 export default class Bitstring2 {
+  static concatSegments(segments) {
+    if (
+      segments.every(
+        (segment) => segment.type === "utf8" || segment.type === "binary",
+      )
+    ) {
+      const len = segments.length;
+      let text = "";
+
+      for (let i = 0; i < len; i++) {
+        text += segments[i].value.value;
+      }
+
+      return {type: "bitstring", text, bytes: null, numLeftoverBits: 0};
+    }
+  }
+
   static fromBits(bits) {
     const length = bits.length;
     const byteCount = Math.ceil(length / 8);
@@ -41,11 +58,6 @@ export default class Bitstring2 {
   }
 
   static fromText(text) {
-    return {
-      type: "bitstring",
-      text: text,
-      bytes: null,
-      numLeftoverBits: 0,
-    };
+    return {type: "bitstring", text, bytes: null, numLeftoverBits: 0};
   }
 }

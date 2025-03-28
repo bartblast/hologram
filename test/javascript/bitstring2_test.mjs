@@ -6,10 +6,91 @@ import {
 } from "./support/helpers.mjs";
 
 import Bitstring2 from "../../assets/js/bitstring2.mjs";
+import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
 describe("Bitstring2", () => {
+  describe("concatSegments()", () => {
+    it("single string binary segment", () => {
+      const result = Bitstring2.concatSegments([
+        Type.bitstringSegment(Type.string("Hologram"), {type: "binary"}),
+      ]);
+
+      const expected = {
+        type: "bitstring",
+        text: "Hologram",
+        bytes: null,
+        numLeftoverBits: 0,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multiple string binary segments", () => {
+      const result = Bitstring2.concatSegments([
+        Type.bitstringSegment(Type.string("Holo"), {type: "binary"}),
+        Type.bitstringSegment(Type.string("gram"), {type: "binary"}),
+      ]);
+
+      const expected = {
+        type: "bitstring",
+        text: "Hologram",
+        bytes: null,
+        numLeftoverBits: 0,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("single string utf8 segment", () => {
+      const result = Bitstring2.concatSegments([
+        Type.bitstringSegment(Type.string("Hologram"), {type: "utf8"}),
+      ]);
+
+      const expected = {
+        type: "bitstring",
+        text: "Hologram",
+        bytes: null,
+        numLeftoverBits: 0,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multiple string utf8 segments", () => {
+      const result = Bitstring2.concatSegments([
+        Type.bitstringSegment(Type.string("Holo"), {type: "utf8"}),
+        Type.bitstringSegment(Type.string("gram"), {type: "utf8"}),
+      ]);
+
+      const expected = {
+        type: "bitstring",
+        text: "Hologram",
+        bytes: null,
+        numLeftoverBits: 0,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("string binary and utf8 segments", () => {
+      const result = Bitstring2.concatSegments([
+        Type.bitstringSegment(Type.string("Holo"), {type: "binary"}),
+        Type.bitstringSegment(Type.string("gram"), {type: "utf8"}),
+      ]);
+
+      const expected = {
+        type: "bitstring",
+        text: "Hologram",
+        bytes: null,
+        numLeftoverBits: 0,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   describe("fromBits()", () => {
     it("empty", () => {
       const result = Bitstring2.fromBits([]);
