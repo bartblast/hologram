@@ -9,10 +9,10 @@ export default class Bitstring2 {
         (segment) => segment.type === "utf8" || segment.type === "binary",
       )
     ) {
-      const len = segments.length;
+      const segmentCount = segments.length;
       let text = "";
 
-      for (let i = 0; i < len; i++) {
+      for (let i = 0; i < segmentCount; i++) {
         text += segments[i].value.value;
       }
 
@@ -32,8 +32,8 @@ export default class Bitstring2 {
     const isLittleEndian = $.#isLittleEndian(segment);
 
     const bitCount = $.#calculateBitCount(segment);
-    const byteLength = bitCount / 8;
-    const buffer = new ArrayBuffer(byteLength);
+    const byteCount = bitCount / 8;
+    const buffer = new ArrayBuffer(byteCount);
     const dataView = new DataView(buffer);
 
     if (bitCount === 64) {
@@ -52,9 +52,9 @@ export default class Bitstring2 {
   }
 
   static fromBits(bits) {
-    const length = bits.length;
-    const byteCount = Math.ceil(length / 8);
-    const numLeftoverBits = length % 8;
+    const bitCount = bits.length;
+    const byteCount = Math.ceil(bitCount / 8);
+    const numLeftoverBits = bitCount % 8;
     const bytes = new Uint8Array(byteCount);
 
     // Process 8 bytes at a time when possible
@@ -62,7 +62,7 @@ export default class Bitstring2 {
     let bitIndex = 0;
 
     // Fast path for byte-aligned chunks
-    while (bitIndex + 8 <= length) {
+    while (bitIndex + 8 <= bitCount) {
       bytes[byteIndex++] =
         (bits[bitIndex] << 7) |
         (bits[bitIndex + 1] << 6) |
@@ -76,7 +76,7 @@ export default class Bitstring2 {
     }
 
     // Handle remaining bits if any
-    if (bitIndex < length) {
+    if (bitIndex < bitCount) {
       let lastByte = 0;
 
       for (let j = 0; j < numLeftoverBits; j++) {
