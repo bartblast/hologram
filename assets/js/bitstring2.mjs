@@ -95,4 +95,39 @@ export default class Bitstring2 {
   static fromText(text) {
     return {type: "bitstring", text, bytes: null, numLeftoverBits: 0};
   }
+
+  static integerSegmentToBytes(segment) {
+    const value = segment.value.value;
+    const isLittleEndian = segment.endianness === "little";
+
+    const sizeModifier = segment.size ? Number(segment.size.value) : 64;
+    const unitModifier = segment.unit ? Number(segment.unit.value) : 1;
+    const bitSize = sizeModifier * unitModifier;
+
+    const completeBytes = Math.floor(bitSize / 8);
+    const leftoverBits = bitSize % 8;
+    const totalBytes = completeBytes + (leftoverBits > 0 ? 1 : 0);
+
+    const buffer = new ArrayBuffer(totalBytes);
+    const result = new Uint8Array(buffer);
+    const dataView = new DataView(buffer);
+
+    if (
+      value >= BigInt(Number.MIN_SAFE_INTEGER) &&
+      value <= BigInt(Number.MAX_SAFE_INTEGER)
+    ) {
+      const numberValue = Number(value);
+
+      if (bitSize === 8) {
+        dataView.setUint8(0, numberValue & 0xff);
+        return result;
+      } else if (bitSize === 16 && completeBytes === 2) {
+        dataView.setUint16(0, numberValue & 0xffff, isLittleEndian);
+        return result;
+      } else if (bitSize === 32 && completeBytes === 4) {
+        dataView.setUint32(0, numberValue & 0xffffffff, isLittleEndian);
+        return result;
+      }
+    }
+  }
 }
