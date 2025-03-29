@@ -68,7 +68,7 @@ defmodule HologramFeatureTests.NavigationTest do
       |> click(link("External link"))
       |> assert_text("Example Domain")
       |> go_back()
-      |> assert_page(Page1, [], debug: true)
+      |> assert_page(Page1)
       |> assert_text("Page 1 title")
       |> assert_text("Page 1 result A")
       |> click(button("Put page 1 result B"))
@@ -180,7 +180,7 @@ defmodule HologramFeatureTests.NavigationTest do
       |> click(link("External link"))
       |> assert_text("Example Domain")
       |> go_back()
-      |> assert_page(Page4, [], debug: true)
+      |> assert_page(Page4)
       |> assert_scroll_position(10, 20)
     end
   end
