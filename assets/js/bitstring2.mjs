@@ -113,6 +113,7 @@ export default class Bitstring2 {
     ) {
       const numberValue = Number(value);
 
+      // Fast path for standard bit counts
       if (bitCount === 8) {
         dataView.setUint8(0, numberValue & 0xff);
         return result;
@@ -123,7 +124,82 @@ export default class Bitstring2 {
         dataView.setUint32(0, numberValue & 0xffffffff, isLittleEndian);
         return result;
       }
+
+      // Hybrid approach: Bitwise operations for small integers, division for larger ones
+      const usesBitwiseOps = Math.abs(numberValue) < 0x100000000; // 2^32
+
+      if (isLittleEndian) {
+        // Little endian: LSB first
+        let remainingValue = numberValue;
+
+        for (let i = 0; i < completeBytes; i++) {
+          if (usesBitwiseOps) {
+            result[i] = remainingValue & 0xff;
+            remainingValue = remainingValue >>> 8;
+          } else {
+            result[i] = remainingValue % 256;
+            remainingValue = Math.floor(remainingValue / 256);
+          }
+        }
+
+        // Handle leftover bits
+        if (leftoverBits > 0) {
+          const mask = (1 << leftoverBits) - 1;
+          result[completeBytes] = remainingValue & mask;
+        }
+      } else {
+        // Big endian: MSB first
+        if (usesBitwiseOps) {
+          // Fast bit shifting approach for small integers
+          const totalBitsInInteger = 32;
+
+          // Calculate shift to align with MSB
+          const initialShift = totalBitsInInteger - bitCount;
+          let shiftedValue =
+            initialShift > 0 ? numberValue << initialShift : numberValue;
+
+          // For complete bytes
+          for (let i = 0; i < completeBytes; i++) {
+            result[i] = (shiftedValue >>> (totalBitsInInteger - 8)) & 0xff;
+            shiftedValue = shiftedValue << 8;
+          }
+
+          // Handle leftover bits
+          if (leftoverBits > 0) {
+            result[completeBytes] =
+              (shiftedValue >>> (totalBitsInInteger - 8)) & 0xff;
+          }
+        } else {
+          // Division approach for larger integers
+          let remainingValue = numberValue;
+          const divisor = Math.pow(2, 8);
+
+          // Calculate power needed for most significant byte
+          const msbPower =
+            completeBytes * 8 + (leftoverBits > 0 ? leftoverBits - 8 : 0);
+          let factor = Math.pow(2, msbPower);
+
+          for (let i = 0; i < completeBytes; i++) {
+            const byteValue = Math.floor(remainingValue / factor) & 0xff;
+            result[i] = byteValue;
+            remainingValue = remainingValue % factor;
+            factor = factor / divisor;
+          }
+
+          // Handle leftover bits
+          if (leftoverBits > 0) {
+            // Align to the most significant bits of the last byte
+            result[completeBytes] =
+              (Math.floor(remainingValue / factor) & 0xff) <<
+              (8 - leftoverBits);
+          }
+        }
+      }
     }
+
+    // TODO: code for handling BigInt values will go here...
+
+    return result;
   }
 
   static #calculateBitCount(segment) {
