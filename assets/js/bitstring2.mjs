@@ -173,26 +173,28 @@ export default class Bitstring2 {
         } else {
           // Division approach for larger integers
           let remainingValue = numberValue;
-          const divisor = Math.pow(2, 8);
 
-          // Calculate power needed for most significant byte
-          const msbPower =
-            completeBytes * 8 + (leftoverBits > 0 ? leftoverBits - 8 : 0);
-          let factor = Math.pow(2, msbPower);
-
+          // For big-endian, we need to start with the most significant bits
+          // Calculate bytes from most significant to least significant
           for (let i = 0; i < completeBytes; i++) {
-            const byteValue = Math.floor(remainingValue / factor) & 0xff;
-            result[i] = byteValue;
-            remainingValue = remainingValue % factor;
-            factor = factor / divisor;
+            // Calculate how many bits we still need to shift
+            const bitsToShift = (completeBytes - i - 1) * 8 + leftoverBits;
+            // Create a divisor based on that shift
+            const divisor = Math.pow(2, bitsToShift);
+
+            // Extract the current byte
+            const byteValue = Math.floor(remainingValue / divisor);
+            result[i] = byteValue & 0xff;
+
+            // Remove the processed bits
+            remainingValue = remainingValue % divisor;
           }
 
           // Handle leftover bits
           if (leftoverBits > 0) {
-            // Align to the most significant bits of the last byte
+            // For leftover bits, we shift them to the most significant bits of the last byte
             result[completeBytes] =
-              (Math.floor(remainingValue / factor) & 0xff) <<
-              (8 - leftoverBits);
+              (remainingValue << (8 - leftoverBits)) & 0xff;
           }
         }
       }
