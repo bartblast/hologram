@@ -605,7 +605,7 @@ describe("Bitstring2", () => {
             });
           });
 
-          describe("outside of 8 bits range", () => {
+          describe("outside 8 bits range", () => {
             it("big-endian", () => {
               const segment = Type.bitstringSegment(Type.integer(1234), {
                 type: "integer",
@@ -667,7 +667,7 @@ describe("Bitstring2", () => {
             });
           });
 
-          describe("outside of 16 bits range", () => {
+          describe("outside 16 bits range", () => {
             it("big-endian", () => {
               const segment = Type.bitstringSegment(Type.integer(123456), {
                 type: "integer",
@@ -729,7 +729,7 @@ describe("Bitstring2", () => {
             });
           });
 
-          describe("outside of 32 bits range", () => {
+          describe("outside 32 bits range", () => {
             it("big-endian", () => {
               const segment = Type.bitstringSegment(Type.integer(12345678901), {
                 type: "integer",
@@ -791,7 +791,7 @@ describe("Bitstring2", () => {
             });
           });
 
-          describe("outside of 4 bits range", () => {
+          describe("outside 4 bits range", () => {
             it("big-endian", () => {
               const segment = Type.bitstringSegment(Type.integer(54), {
                 type: "integer",
@@ -853,7 +853,7 @@ describe("Bitstring2", () => {
             });
           });
 
-          describe("outside of 12 bits range", () => {
+          describe("outside 12 bits range", () => {
             it("big-endian", () => {
               const segment = Type.bitstringSegment(Type.integer(13741), {
                 type: "integer",
@@ -1053,7 +1053,7 @@ describe("Bitstring2", () => {
             });
           });
 
-          describe("outside of 8 bits range", () => {
+          describe("outside 8 bits range", () => {
             it("big-endian", () => {
               const segment = Type.bitstringSegment(Type.integer(-1234), {
                 type: "integer",
@@ -1115,7 +1115,7 @@ describe("Bitstring2", () => {
             });
           });
 
-          describe("outside of 16 bits range", () => {
+          describe("outside 16 bits range", () => {
             it("big-endian", () => {
               const segment = Type.bitstringSegment(Type.integer(-123456), {
                 type: "integer",
@@ -1177,7 +1177,7 @@ describe("Bitstring2", () => {
             });
           });
 
-          describe("outside of 32 bits range", () => {
+          describe("outside 32 bits range", () => {
             it("big-endian", () => {
               const segment = Type.bitstringSegment(
                 Type.integer(-12345678901),
@@ -1245,7 +1245,7 @@ describe("Bitstring2", () => {
             });
           });
 
-          describe("outside of 4 bits range", () => {
+          describe("outside 4 bits range", () => {
             it("big-endian", () => {
               const segment = Type.bitstringSegment(Type.integer(-202), {
                 type: "integer",
@@ -1307,7 +1307,7 @@ describe("Bitstring2", () => {
             });
           });
 
-          describe("outside of 12 bits range", () => {
+          describe("outside 12 bits range", () => {
             it("big-endian", () => {
               const segment = Type.bitstringSegment(Type.integer(-51795), {
                 type: "integer",
