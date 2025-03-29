@@ -759,6 +759,14 @@ describe("Bitstring2", () => {
             });
           });
         });
+
+        describe("stored in 4 bits", () => {});
+
+        describe("stored in 12 bits", () => {});
+
+        describe("stored in 24 bits", () => {});
+
+        describe("stored in more than 32 bits", () => {});
       });
 
       describe("negative", () => {
@@ -953,6 +961,14 @@ describe("Bitstring2", () => {
             });
           });
         });
+
+        describe("stored in 4 bits", () => {});
+
+        describe("stored in 12 bits", () => {});
+
+        describe("stored in 24 bits", () => {});
+
+        describe("stored in more than 32 bits", () => {});
       });
     });
 
