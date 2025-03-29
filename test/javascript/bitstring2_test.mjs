@@ -822,7 +822,67 @@ describe("Bitstring2", () => {
           });
         });
 
-        describe("stored in 12 bits", () => {});
+        describe("stored in 12 bits", () => {
+          describe("within 12 bits range", () => {
+            it("big-endian", () => {
+              const segment = Type.bitstringSegment(Type.integer(1453), {
+                type: "integer",
+                size: Type.integer(6),
+                unit: Type.integer(2),
+                endianness: "big",
+              });
+
+              const result = Bitstring2.integerSegmentToBytes(segment);
+              const expected = new Uint8Array([90, 208]);
+
+              assert.deepStrictEqual(result, expected);
+            });
+
+            it("little-endian", () => {
+              const segment = Type.bitstringSegment(Type.integer(1453), {
+                type: "integer",
+                size: Type.integer(6),
+                unit: Type.integer(2),
+                endianness: "little",
+              });
+
+              const result = Bitstring2.integerSegmentToBytes(segment);
+              const expected = new Uint8Array([173, 80]);
+
+              assert.deepStrictEqual(result, expected);
+            });
+          });
+
+          describe("outside of 12 bits range", () => {
+            it("big-endian", () => {
+              const segment = Type.bitstringSegment(Type.integer(13741), {
+                type: "integer",
+                size: Type.integer(6),
+                unit: Type.integer(2),
+                endianness: "big",
+              });
+
+              const result = Bitstring2.integerSegmentToBytes(segment);
+              const expected = new Uint8Array([90, 208]);
+
+              assert.deepStrictEqual(result, expected);
+            });
+
+            it("little-endian", () => {
+              const segment = Type.bitstringSegment(Type.integer(13741), {
+                type: "integer",
+                size: Type.integer(6),
+                unit: Type.integer(2),
+                endianness: "little",
+              });
+
+              const result = Bitstring2.integerSegmentToBytes(segment);
+              const expected = new Uint8Array([173, 80]);
+
+              assert.deepStrictEqual(result, expected);
+            });
+          });
+        });
 
         describe("stored in 24 bits", () => {});
 
