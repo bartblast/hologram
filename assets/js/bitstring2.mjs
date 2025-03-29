@@ -144,8 +144,9 @@ export default class Bitstring2 {
 
         // Handle leftover bits
         if (leftoverBits > 0) {
-          const mask = (1 << leftoverBits) - 1;
-          result[completeBytes] = remainingValue & mask;
+          const shiftAmount = 8 - leftoverBits;
+          result[completeBytes] =
+            (remainingValue & ((1 << leftoverBits) - 1)) << shiftAmount;
         }
       } else {
         // Big endian: MSB first
