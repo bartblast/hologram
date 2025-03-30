@@ -1452,6 +1452,7 @@ describe("Bitstring2", () => {
 
             describe("negative", () => {
               it("big-endian", () => {
+                // 42 bits
                 const segment = Type.bitstringSegment(
                   Type.integer(-278353782412454),
                   {
@@ -1469,6 +1470,7 @@ describe("Bitstring2", () => {
               });
 
               it("little-endian", () => {
+                // 42 bits
                 const segment = Type.bitstringSegment(
                   Type.integer(-278353782412454),
                   {
@@ -1490,6 +1492,7 @@ describe("Bitstring2", () => {
           describe("outside 44 bits range", () => {
             describe("positive", () => {
               it("big-endian", () => {
+                // 46 bits
                 const segment = Type.bitstringSegment(
                   Type.integer(49939108771245),
                   {
@@ -1507,6 +1510,7 @@ describe("Bitstring2", () => {
               });
 
               it("little-endian", () => {
+                // 46 bits
                 const segment = Type.bitstringSegment(
                   Type.integer(49939108771245),
                   {
@@ -1527,7 +1531,7 @@ describe("Bitstring2", () => {
             describe("negative", () => {
               it("big-endian", () => {
                 const segment = Type.bitstringSegment(
-                  // 42 bits
+                  // 46 bits
                   Type.integer(-231535867939411),
                   {
                     type: "integer",
@@ -1545,7 +1549,7 @@ describe("Bitstring2", () => {
 
               it("little-endian", () => {
                 const segment = Type.bitstringSegment(
-                  // 42 bits
+                  // 46 bits
                   Type.integer(-231535867939411),
                   {
                     type: "integer",
