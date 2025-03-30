@@ -198,9 +198,90 @@ export default class Bitstring2 {
           }
         }
       }
-    }
+    } else {
+      // Special fast path for 64-bit BigInts (common case)
+      if (bitCount === 64 && completeBytes === 8 && leftoverBits === 0) {
+        const byteMask = 0xffn;
 
-    // TODO: code for handling BigInt values will go here...
+        if (isLittleEndian) {
+          // Little endian: LSB first
+          for (let i = 0; i < 8; i++) {
+            result[i] = Number((value >> BigInt(i * 8)) & byteMask);
+          }
+        } else {
+          // Big endian: MSB first
+          for (let i = 0; i < 8; i++) {
+            result[i] = Number((value >> BigInt(56 - i * 8)) & byteMask);
+          }
+        }
+        return result;
+      }
+
+      // Fast path for byte-aligned BigInts (no leftover bits)
+      if (leftoverBits === 0) {
+        const byteMask = 0xffn;
+
+        if (isLittleEndian) {
+          // Little endian: LSB first
+          let remainingValue = value;
+          for (let i = 0; i < completeBytes; i++) {
+            result[i] = Number(remainingValue & byteMask);
+            remainingValue = remainingValue >> 8n;
+          }
+        } else {
+          // Big endian: MSB first
+          const totalBits = BigInt(completeBytes * 8);
+
+          for (let i = 0; i < completeBytes; i++) {
+            const shift = totalBits - BigInt((i + 1) * 8);
+            result[i] = Number((value >> shift) & byteMask);
+          }
+        }
+        return result;
+      }
+
+      // Handle cases with leftover bits (not byte-aligned)
+      const byteMask = 0xffn;
+
+      if (isLittleEndian) {
+        // Little endian: LSB first
+        let remainingValue = value;
+
+        // Process complete bytes
+        for (let i = 0; i < completeBytes; i++) {
+          result[i] = Number(remainingValue & byteMask);
+          remainingValue = remainingValue >> 8n;
+        }
+
+        // Handle leftover bits - shift to the most significant bits of the byte
+        if (leftoverBits > 0) {
+          const leftoverMask = (1n << BigInt(leftoverBits)) - 1n;
+          const shiftAmount = 8 - leftoverBits;
+          result[completeBytes] = Number(
+            (remainingValue & leftoverMask) << shiftAmount,
+          );
+        }
+      } else {
+        // Big endian: MSB first
+
+        // Calculate total bits needed and create masks
+        const totalBits = BigInt(completeBytes * 8 + leftoverBits);
+
+        // Process complete bytes
+        for (let i = 0; i < completeBytes; i++) {
+          const shift = totalBits - BigInt((i + 1) * 8 + leftoverBits);
+          result[i] = Number((value >> shift) & byteMask);
+        }
+
+        // Handle leftover bits
+        if (leftoverBits > 0) {
+          // Extract the remaining bits and align them to the MSB of the byte
+          const shift = BigInt(8 - leftoverBits);
+          const remainingValue = value & ((1n << BigInt(leftoverBits)) - 1n);
+          result[completeBytes] = Number(remainingValue << shift);
+        }
+      }
+    }
 
     return result;
   }
