@@ -993,6 +993,8 @@ describe("Bitstring2", () => {
             });
           });
         });
+
+        describe("stored in 40 bits (more than 32 bits)", () => {});
       });
 
       describe("non-byte-aligned", () => {
@@ -1570,6 +1572,196 @@ describe("Bitstring2", () => {
       });
     });
 
-    describe("integers outside Number range", () => {});
+    describe("integers outside Number range", () => {
+      describe("byte-aligned", () => {
+        describe("stored in 64 bits", () => {
+          describe("within 64 bits range", () => {
+            describe("positive", () => {
+              it("big-endian", () => {
+                // 60 bits
+                const segment = Type.bitstringSegment(
+                  Type.integer(966966423218645850n),
+                  {
+                    type: "integer",
+                    size: Type.integer(32),
+                    unit: Type.integer(2),
+                    endianness: "big",
+                  },
+                );
+
+                const result = Bitstring2.integerSegmentToBytes(segment);
+
+                const expected = new Uint8Array([
+                  13, 107, 90, 214, 181, 173, 107, 90,
+                ]);
+
+                assert.deepStrictEqual(result, expected);
+              });
+
+              it("little-endian", () => {
+                // 60 bits
+                const segment = Type.bitstringSegment(
+                  Type.integer(966966423218645850n),
+                  {
+                    type: "integer",
+                    size: Type.integer(32),
+                    unit: Type.integer(2),
+                    endianness: "little",
+                  },
+                );
+
+                const result = Bitstring2.integerSegmentToBytes(segment);
+
+                const expected = new Uint8Array([
+                  90, 107, 173, 181, 214, 90, 107, 13,
+                ]);
+
+                assert.deepStrictEqual(result, expected);
+              });
+            });
+
+            describe("negative", () => {
+              it("big-endian", () => {
+                // 60 bits
+                const segment = Type.bitstringSegment(
+                  Type.integer(-17479777650490905766n),
+                  {
+                    type: "integer",
+                    size: Type.integer(32),
+                    unit: Type.integer(2),
+                    endianness: "big",
+                  },
+                );
+
+                const result = Bitstring2.integerSegmentToBytes(segment);
+
+                const expected = new Uint8Array([
+                  13, 107, 90, 214, 181, 173, 107, 90,
+                ]);
+
+                assert.deepStrictEqual(result, expected);
+              });
+
+              it("little-endian", () => {
+                // 60 bits
+                const segment = Type.bitstringSegment(
+                  Type.integer(-17479777650490905766n),
+                  {
+                    type: "integer",
+                    size: Type.integer(32),
+                    unit: Type.integer(2),
+                    endianness: "little",
+                  },
+                );
+
+                const result = Bitstring2.integerSegmentToBytes(segment);
+
+                const expected = new Uint8Array([
+                  90, 107, 173, 181, 214, 90, 107, 13,
+                ]);
+
+                assert.deepStrictEqual(result, expected);
+              });
+            });
+          });
+
+          describe("outside 64 bits range", () => {
+            describe("positive", () => {
+              it("big-endian", () => {
+                // 68 bits
+                const segment = Type.bitstringSegment(
+                  Type.integer(247543404343973337814n),
+                  {
+                    type: "integer",
+                    size: Type.integer(32),
+                    unit: Type.integer(2),
+                    endianness: "big",
+                  },
+                );
+
+                const result = Bitstring2.integerSegmentToBytes(segment);
+
+                const expected = new Uint8Array([
+                  107, 90, 214, 181, 173, 107, 90, 214,
+                ]);
+
+                assert.deepStrictEqual(result, expected);
+              });
+
+              it("little-endian", () => {
+                // 68 bits
+                const segment = Type.bitstringSegment(
+                  Type.integer(247543404343973337814n),
+                  {
+                    type: "integer",
+                    size: Type.integer(32),
+                    unit: Type.integer(2),
+                    endianness: "little",
+                  },
+                );
+
+                const result = Bitstring2.integerSegmentToBytes(segment);
+
+                const expected = new Uint8Array([
+                  214, 90, 107, 173, 181, 214, 90, 107,
+                ]);
+
+                assert.deepStrictEqual(result, expected);
+              });
+            });
+
+            describe("negative", () => {
+              it("big-endian", () => {
+                // 68 bits
+                const segment = Type.bitstringSegment(
+                  Type.integer(-4474823078525671875882n),
+                  {
+                    type: "integer",
+                    size: Type.integer(32),
+                    unit: Type.integer(2),
+                    endianness: "big",
+                  },
+                );
+
+                const result = Bitstring2.integerSegmentToBytes(segment);
+
+                const expected = new Uint8Array([
+                  107, 90, 214, 181, 173, 107, 90, 214,
+                ]);
+
+                assert.deepStrictEqual(result, expected);
+              });
+
+              it("little-endian", () => {
+                // 68 bits
+                const segment = Type.bitstringSegment(
+                  Type.integer(-4474823078525671875882n),
+                  {
+                    type: "integer",
+                    size: Type.integer(32),
+                    unit: Type.integer(2),
+                    endianness: "little",
+                  },
+                );
+
+                const result = Bitstring2.integerSegmentToBytes(segment);
+
+                const expected = new Uint8Array([
+                  214, 90, 107, 173, 181, 214, 90, 107,
+                ]);
+
+                assert.deepStrictEqual(result, expected);
+              });
+            });
+          });
+        });
+
+        describe("stored in 72 bits", () => {});
+      });
+
+      describe("non-byte-aligned", () => {
+        describe("stored in 68 bits", () => {});
+      });
+    });
   });
 });
