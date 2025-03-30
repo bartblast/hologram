@@ -946,10 +946,11 @@ describe("Bitstring2", () => {
           });
         });
 
-        describe("stored in more than 32 bits (tested on 44 bits)", () => {
+        describe("stored in 44 bits (more than 32 bits, non-byte-aligned)", () => {
           describe("within 44 bits range", () => {
             it("big-endian", () => {
               const segment = Type.bitstringSegment(
+                // 42 bits
                 Type.integer(3121194298202),
                 {
                   type: "integer",
@@ -967,6 +968,7 @@ describe("Bitstring2", () => {
 
             it("little-endian", () => {
               const segment = Type.bitstringSegment(
+                // 42 bits
                 Type.integer(3121194298202),
                 {
                   type: "integer",
@@ -1400,7 +1402,7 @@ describe("Bitstring2", () => {
           });
         });
 
-        describe("stored in more than 32 bits (tested on 44 bits)", () => {
+        describe("stored in 44 bits (more than 32 bits, non-byte-aligned)", () => {
           describe("within 44 bits range", () => {
             it("big-endian", () => {
               const segment = Type.bitstringSegment(
@@ -1440,6 +1442,7 @@ describe("Bitstring2", () => {
           describe("outside 44 bits range", () => {
             it("big-endian", () => {
               const segment = Type.bitstringSegment(
+                // 42 bits
                 Type.integer(-231535867939411),
                 {
                   type: "integer",
@@ -1457,6 +1460,7 @@ describe("Bitstring2", () => {
 
             it("little-endian", () => {
               const segment = Type.bitstringSegment(
+                // 42 bits
                 Type.integer(-231535867939411),
                 {
                   type: "integer",
