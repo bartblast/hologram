@@ -256,7 +256,7 @@ export default class Bitstring2 {
         // Handle leftover bits - shift to the most significant bits of the byte
         if (leftoverBits > 0) {
           const leftoverMask = (1n << BigInt(leftoverBits)) - 1n;
-          const shiftAmount = 8 - leftoverBits;
+          const shiftAmount = BigInt(8 - leftoverBits);
           result[completeBytes] = Number(
             (remainingValue & leftoverMask) << shiftAmount,
           );
