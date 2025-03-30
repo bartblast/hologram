@@ -264,21 +264,27 @@ export default class Bitstring2 {
       } else {
         // Big endian: MSB first
 
-        // Calculate total bits needed and create masks
+        // Calculate total bits needed
         const totalBits = BigInt(completeBytes * 8 + leftoverBits);
+        let remainingValue = value;
 
         // Process complete bytes
         for (let i = 0; i < completeBytes; i++) {
-          const shift = totalBits - BigInt((i + 1) * 8 + leftoverBits);
-          result[i] = Number((value >> shift) & byteMask);
+          // Calculate how many bits we still need to shift right to get the current byte
+          const shift = totalBits - BigInt((i + 1) * 8);
+          result[i] = Number((remainingValue >> shift) & byteMask);
         }
 
         // Handle leftover bits
         if (leftoverBits > 0) {
-          // Extract the remaining bits and align them to the MSB of the byte
-          const shift = BigInt(8 - leftoverBits);
-          const remainingValue = value & ((1n << BigInt(leftoverBits)) - 1n);
-          result[completeBytes] = Number(remainingValue << shift);
+          // For leftover bits, we need to:
+          // 1. Get the remaining value (last bits)
+          // 2. Shift it left to align with MSB of the last byte
+          const remainingBits =
+            remainingValue & ((1n << BigInt(leftoverBits)) - 1n);
+          result[completeBytes] = Number(
+            remainingBits << BigInt(8 - leftoverBits),
+          );
         }
       }
     }
