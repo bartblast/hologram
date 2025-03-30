@@ -1000,7 +1000,8 @@ describe("Bitstring2", () => {
           describe("within 4 bits range", () => {
             describe("positive", () => {
               it("big-endian", () => {
-                const segment = Type.bitstringSegment(Type.integer(6), {
+                // 2 bits
+                const segment = Type.bitstringSegment(Type.integer(2), {
                   type: "integer",
                   size: Type.integer(2),
                   unit: Type.integer(2),
@@ -1008,13 +1009,14 @@ describe("Bitstring2", () => {
                 });
 
                 const result = Bitstring2.integerSegmentToBytes(segment);
-                const expected = new Uint8Array([96]);
+                const expected = new Uint8Array([32]);
 
                 assert.deepStrictEqual(result, expected);
               });
 
               it("little-endian", () => {
-                const segment = Type.bitstringSegment(Type.integer(6), {
+                // 2 bits
+                const segment = Type.bitstringSegment(Type.integer(2), {
                   type: "integer",
                   size: Type.integer(2),
                   unit: Type.integer(2),
@@ -1022,7 +1024,7 @@ describe("Bitstring2", () => {
                 });
 
                 const result = Bitstring2.integerSegmentToBytes(segment);
-                const expected = new Uint8Array([96]);
+                const expected = new Uint8Array([32]);
 
                 assert.deepStrictEqual(result, expected);
               });
@@ -1030,7 +1032,8 @@ describe("Bitstring2", () => {
 
             describe("negative", () => {
               it("big-endian", () => {
-                const segment = Type.bitstringSegment(Type.integer(-250), {
+                // 2 bits
+                const segment = Type.bitstringSegment(Type.integer(-254), {
                   type: "integer",
                   size: Type.integer(2),
                   unit: Type.integer(2),
@@ -1038,13 +1041,14 @@ describe("Bitstring2", () => {
                 });
 
                 const result = Bitstring2.integerSegmentToBytes(segment);
-                const expected = new Uint8Array([96]);
+                const expected = new Uint8Array([32]);
 
                 assert.deepStrictEqual(result, expected);
               });
 
               it("little-endian", () => {
-                const segment = Type.bitstringSegment(Type.integer(-250), {
+                // 2 bits
+                const segment = Type.bitstringSegment(Type.integer(-254), {
                   type: "integer",
                   size: Type.integer(2),
                   unit: Type.integer(2),
@@ -1052,7 +1056,7 @@ describe("Bitstring2", () => {
                 });
 
                 const result = Bitstring2.integerSegmentToBytes(segment);
-                const expected = new Uint8Array([96]);
+                const expected = new Uint8Array([32]);
 
                 assert.deepStrictEqual(result, expected);
               });
@@ -1062,7 +1066,8 @@ describe("Bitstring2", () => {
           describe("outside 4 bits range", () => {
             describe("positive", () => {
               it("big-endian", () => {
-                const segment = Type.bitstringSegment(Type.integer(54), {
+                // 6 bits
+                const segment = Type.bitstringSegment(Type.integer(58), {
                   type: "integer",
                   size: Type.integer(2),
                   unit: Type.integer(2),
@@ -1070,13 +1075,14 @@ describe("Bitstring2", () => {
                 });
 
                 const result = Bitstring2.integerSegmentToBytes(segment);
-                const expected = new Uint8Array([96]);
+                const expected = new Uint8Array([160]);
 
                 assert.deepStrictEqual(result, expected);
               });
 
               it("little-endian", () => {
-                const segment = Type.bitstringSegment(Type.integer(54), {
+                // 6 bits
+                const segment = Type.bitstringSegment(Type.integer(58), {
                   type: "integer",
                   size: Type.integer(2),
                   unit: Type.integer(2),
@@ -1084,7 +1090,7 @@ describe("Bitstring2", () => {
                 });
 
                 const result = Bitstring2.integerSegmentToBytes(segment);
-                const expected = new Uint8Array([96]);
+                const expected = new Uint8Array([160]);
 
                 assert.deepStrictEqual(result, expected);
               });
@@ -1092,7 +1098,8 @@ describe("Bitstring2", () => {
 
             describe("negative", () => {
               it("big-endian", () => {
-                const segment = Type.bitstringSegment(Type.integer(-202), {
+                // 6 bits
+                const segment = Type.bitstringSegment(Type.integer(-198), {
                   type: "integer",
                   size: Type.integer(2),
                   unit: Type.integer(2),
@@ -1100,13 +1107,14 @@ describe("Bitstring2", () => {
                 });
 
                 const result = Bitstring2.integerSegmentToBytes(segment);
-                const expected = new Uint8Array([96]);
+                const expected = new Uint8Array([160]);
 
                 assert.deepStrictEqual(result, expected);
               });
 
               it("little-endian", () => {
-                const segment = Type.bitstringSegment(Type.integer(-202), {
+                // 6 bits
+                const segment = Type.bitstringSegment(Type.integer(-198), {
                   type: "integer",
                   size: Type.integer(2),
                   unit: Type.integer(2),
@@ -1114,7 +1122,7 @@ describe("Bitstring2", () => {
                 });
 
                 const result = Bitstring2.integerSegmentToBytes(segment);
-                const expected = new Uint8Array([96]);
+                const expected = new Uint8Array([160]);
 
                 assert.deepStrictEqual(result, expected);
               });
