@@ -434,6 +434,39 @@ export default class Bitstring2 {
     return true;
   }
 
+  static #validateFloatSegment(segment, index) {
+    if (
+      !["float", "integer", "variable_pattern"].includes(segment.value.type)
+    ) {
+      $.#raiseTypeMismatchError(
+        index,
+        "float",
+        "a float or an integer",
+        segment.value,
+      );
+    }
+
+    if (segment?.size != null && segment?.unit != null) {
+      Interpreter.raiseCompileError(
+        "integer and float types require a size specifier if the unit specifier is given",
+      );
+    }
+
+    const bitCount = $.calculateSegmentBitCount(segment);
+
+    if (![64, 32, 16].includes(bitCount)) {
+      $.#raiseTypeMismatchError(index, "integer", "an integer", segment.value);
+    }
+
+    if (bitCount == 16) {
+      throw new HologramInterpreterError(
+        `16-bit float bitstring segments are not yet implemented in Hologram`,
+      );
+    }
+
+    return true;
+  }
+
   static #validateIntegerSegment(segment, index) {
     if (!["integer", "variable_pattern"].includes(segment.value.type)) {
       $.#raiseTypeMismatchError(index, "integer", "an integer", segment.value);
