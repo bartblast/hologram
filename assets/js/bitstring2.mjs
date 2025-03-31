@@ -4,6 +4,13 @@ import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 
 export default class Bitstring2 {
+  static calculateSegmentBitCount(segment) {
+    const size = segment.size ? Number(segment.size.value) : 64;
+    const unit = segment.unit ? Number(segment.unit.value) : 1;
+
+    return size * unit;
+  }
+
   static concatSegments(segments) {
     if (
       segments.every(
@@ -32,7 +39,7 @@ export default class Bitstring2 {
 
     const isLittleEndian = $.#isLittleEndian(segment);
 
-    const bitCount = $.#calculateBitCount(segment);
+    const bitCount = $.calculateSegmentBitCount(segment);
     const byteCount = bitCount / 8;
     const buffer = new ArrayBuffer(byteCount);
     const dataView = new DataView(buffer);
@@ -108,18 +115,11 @@ export default class Bitstring2 {
     return $.#integerSegmentOutsideNumberRangeToBytes(segment);
   }
 
-  static #calculateBitCount(segment) {
-    const size = segment.size ? Number(segment.size.value) : 64;
-    const unit = segment.unit ? Number(segment.unit.value) : 1;
-
-    return size * unit;
-  }
-
   static #integerSegmentOutsideNumberRangeToBytes(segment) {
     const value = segment.value.value;
     const isLittleEndian = $.#isLittleEndian(segment);
 
-    const bitCount = $.#calculateBitCount(segment);
+    const bitCount = $.calculateSegmentBitCount(segment);
     const completeBytes = Math.floor(bitCount / 8);
     const leftoverBits = bitCount % 8;
     const totalBytes = completeBytes + (leftoverBits > 0 ? 1 : 0);
@@ -234,7 +234,7 @@ export default class Bitstring2 {
     const numberValue = Number(segment.value.value);
     const isLittleEndian = $.#isLittleEndian(segment);
 
-    const bitCount = $.#calculateBitCount(segment);
+    const bitCount = $.calculateSegmentBitCount(segment);
     const completeBytes = Math.floor(bitCount / 8);
     const leftoverBits = bitCount % 8;
     const totalBytes = completeBytes + (leftoverBits > 0 ? 1 : 0);
