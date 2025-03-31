@@ -113,390 +113,472 @@ describe("Bitstring2", () => {
   });
 
   describe("floatSegmentToBytes()", () => {
-    describe("positive float value", () => {
-      describe("64-bit", () => {
-        it("big-endian", () => {
-          const segment = Type.bitstringSegment(Type.float(123.45), {
-            type: "float",
-            size: Type.integer(32),
-            unit: 2n,
-            endianness: "big",
+    describe("64-bit", () => {
+      describe("float value", () => {
+        describe("positive", () => {
+          it("big-endian", () => {
+            const segment = Type.bitstringSegment(Type.float(123.45), {
+              type: "float",
+              size: Type.integer(32),
+              unit: 2n,
+              endianness: "big",
+            });
+
+            const result = Bitstring2.floatSegmentToBytes(segment);
+
+            const expected = new Uint8Array([
+              64, 94, 220, 204, 204, 204, 204, 205,
+            ]);
+
+            assert.deepStrictEqual(result, expected);
           });
 
-          const result = Bitstring2.floatSegmentToBytes(segment);
+          it("little-endian", () => {
+            const segment = Type.bitstringSegment(Type.float(123.45), {
+              type: "float",
+              size: Type.integer(32),
+              unit: 2n,
+              endianness: "little",
+            });
 
-          const expected = new Uint8Array([
-            64, 94, 220, 204, 204, 204, 204, 205,
-          ]);
+            const result = Bitstring2.floatSegmentToBytes(segment);
 
-          assert.deepStrictEqual(result, expected);
+            const expected = new Uint8Array([
+              205, 204, 204, 204, 204, 220, 94, 64,
+            ]);
+
+            assert.deepStrictEqual(result, expected);
+          });
         });
 
-        it("little-endian", () => {
-          const segment = Type.bitstringSegment(Type.float(123.45), {
-            type: "float",
-            size: Type.integer(32),
-            unit: 2n,
-            endianness: "little",
+        describe("negative", () => {
+          it("big-endian", () => {
+            const segment = Type.bitstringSegment(Type.float(-123.45), {
+              type: "float",
+              size: Type.integer(32),
+              unit: 2n,
+              endianness: "big",
+            });
+
+            const result = Bitstring2.floatSegmentToBytes(segment);
+
+            const expected = new Uint8Array([
+              192, 94, 220, 204, 204, 204, 204, 205,
+            ]);
+
+            assert.deepStrictEqual(result, expected);
           });
 
-          const result = Bitstring2.floatSegmentToBytes(segment);
+          it("little-endian", () => {
+            const segment = Type.bitstringSegment(Type.float(-123.45), {
+              type: "float",
+              size: Type.integer(32),
+              unit: 2n,
+              endianness: "little",
+            });
 
-          const expected = new Uint8Array([
-            205, 204, 204, 204, 204, 220, 94, 64,
-          ]);
+            const result = Bitstring2.floatSegmentToBytes(segment);
 
-          assert.deepStrictEqual(result, expected);
-        });
-      });
+            const expected = new Uint8Array([
+              205, 204, 204, 204, 204, 220, 94, 192,
+            ]);
 
-      describe("32-bit", () => {
-        it("big-endian", () => {
-          const segment = Type.bitstringSegment(Type.float(123.45), {
-            type: "float",
-            size: Type.integer(16),
-            unit: 2n,
-            endianness: "big",
+            assert.deepStrictEqual(result, expected);
           });
-
-          const result = Bitstring2.floatSegmentToBytes(segment);
-          const expected = new Uint8Array([66, 246, 230, 102]);
-
-          assert.deepStrictEqual(result, expected);
-        });
-
-        it("little-endian", () => {
-          const segment = Type.bitstringSegment(Type.float(123.45), {
-            type: "float",
-            size: Type.integer(16),
-            unit: 2n,
-            endianness: "little",
-          });
-
-          const result = Bitstring2.floatSegmentToBytes(segment);
-          const expected = new Uint8Array([102, 230, 246, 66]);
-
-          assert.deepStrictEqual(result, expected);
-        });
-      });
-
-      describe("16-bit", () => {
-        it("big-endian", () => {
-          const segment = Type.bitstringSegment(Type.float(123.45), {
-            type: "float",
-            size: Type.integer(8),
-            unit: 2n,
-            endianness: "big",
-          });
-
-          assert.throw(
-            () => Bitstring2.floatSegmentToBytes(segment),
-            HologramInterpreterError,
-            "16-bit float bitstring segments are not yet implemented in Hologram",
-          );
         });
 
-        it("little-endian", () => {
-          const segment = Type.bitstringSegment(Type.float(123.45), {
-            type: "float",
-            size: Type.integer(8),
-            unit: 2n,
-            endianness: "little",
-          });
+        describe("+0", () => {
+          it("big-endian", () => {});
 
-          assert.throw(
-            () => Bitstring2.floatSegmentToBytes(segment),
-            HologramInterpreterError,
-            "16-bit float bitstring segments are not yet implemented in Hologram",
-          );
-        });
-      });
-    });
-
-    describe("negative float value", () => {
-      describe("64-bit", () => {
-        it("big-endian", () => {
-          const segment = Type.bitstringSegment(Type.float(-123.45), {
-            type: "float",
-            size: Type.integer(32),
-            unit: 2n,
-            endianness: "big",
-          });
-
-          const result = Bitstring2.floatSegmentToBytes(segment);
-
-          const expected = new Uint8Array([
-            192, 94, 220, 204, 204, 204, 204, 205,
-          ]);
-
-          assert.deepStrictEqual(result, expected);
+          it("little-endian", () => {});
         });
 
-        it("little-endian", () => {
-          const segment = Type.bitstringSegment(Type.float(-123.45), {
-            type: "float",
-            size: Type.integer(32),
-            unit: 2n,
-            endianness: "little",
-          });
+        describe("-0", () => {
+          it("big-endian", () => {});
 
-          const result = Bitstring2.floatSegmentToBytes(segment);
-
-          const expected = new Uint8Array([
-            205, 204, 204, 204, 204, 220, 94, 192,
-          ]);
-
-          assert.deepStrictEqual(result, expected);
+          it("little-endian", () => {});
         });
       });
 
-      describe("32-bit", () => {
-        it("big-endian", () => {
-          const segment = Type.bitstringSegment(Type.float(-123.45), {
-            type: "float",
-            size: Type.integer(16),
-            unit: 2n,
-            endianness: "big",
+      describe("integer value", () => {
+        describe("positive", () => {
+          it("big-endian", () => {
+            const segment = Type.bitstringSegment(Type.integer(123), {
+              type: "float",
+              size: Type.integer(32),
+              unit: 2n,
+              endianness: "big",
+            });
+
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([64, 94, 192, 0, 0, 0, 0, 0]);
+
+            assert.deepStrictEqual(result, expected);
           });
 
-          const result = Bitstring2.floatSegmentToBytes(segment);
-          const expected = new Uint8Array([194, 246, 230, 102]);
+          it("little-endian", () => {
+            const segment = Type.bitstringSegment(Type.integer(123), {
+              type: "float",
+              size: Type.integer(32),
+              unit: 2n,
+              endianness: "little",
+            });
 
-          assert.deepStrictEqual(result, expected);
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([0, 0, 0, 0, 0, 192, 94, 64]);
+
+            assert.deepStrictEqual(result, expected);
+          });
         });
 
-        it("little-endian", () => {
-          const segment = Type.bitstringSegment(Type.float(-123.45), {
-            type: "float",
-            size: Type.integer(16),
-            unit: 2n,
-            endianness: "little",
+        describe("negative", () => {
+          it("big-endian", () => {
+            const segment = Type.bitstringSegment(Type.integer(-123), {
+              type: "float",
+              size: Type.integer(32),
+              unit: 2n,
+              endianness: "big",
+            });
+
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([192, 94, 192, 0, 0, 0, 0, 0]);
+
+            assert.deepStrictEqual(result, expected);
           });
 
-          const result = Bitstring2.floatSegmentToBytes(segment);
-          const expected = new Uint8Array([102, 230, 246, 194]);
+          it("little-endian", () => {
+            const segment = Type.bitstringSegment(Type.integer(-123), {
+              type: "float",
+              size: Type.integer(32),
+              unit: 2n,
+              endianness: "little",
+            });
 
-          assert.deepStrictEqual(result, expected);
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([0, 0, 0, 0, 0, 192, 94, 192]);
+
+            assert.deepStrictEqual(result, expected);
+          });
         });
-      });
 
-      describe("16-bit", () => {
-        it("big-endian", () => {
-          const segment = Type.bitstringSegment(Type.float(-123.45), {
-            type: "float",
-            size: Type.integer(8),
-            unit: 2n,
-            endianness: "big",
-          });
+        describe("+0", () => {
+          it("big-endian", () => {});
 
-          assert.throw(
-            () => Bitstring2.floatSegmentToBytes(segment),
-            HologramInterpreterError,
-            "16-bit float bitstring segments are not yet implemented in Hologram",
-          );
+          it("little-endian", () => {});
         });
 
-        it("little-endian", () => {
-          const segment = Type.bitstringSegment(Type.float(-123.45), {
-            type: "float",
-            size: Type.integer(8),
-            unit: 2n,
-            endianness: "little",
-          });
+        describe("-0", () => {
+          it("big-endian", () => {});
 
-          assert.throw(
-            () => Bitstring2.floatSegmentToBytes(segment),
-            HologramInterpreterError,
-            "16-bit float bitstring segments are not yet implemented in Hologram",
-          );
+          it("little-endian", () => {});
         });
       });
     });
 
-    describe("positive integer value", () => {
-      describe("64-bit", () => {
-        it("big-endian", () => {
-          const segment = Type.bitstringSegment(Type.integer(123), {
-            type: "float",
-            size: Type.integer(32),
-            unit: 2n,
-            endianness: "big",
+    describe("32-bit", () => {
+      describe("float value", () => {
+        describe("positive", () => {
+          it("big-endian", () => {
+            const segment = Type.bitstringSegment(Type.float(123.45), {
+              type: "float",
+              size: Type.integer(16),
+              unit: 2n,
+              endianness: "big",
+            });
+
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([66, 246, 230, 102]);
+
+            assert.deepStrictEqual(result, expected);
           });
 
-          const result = Bitstring2.floatSegmentToBytes(segment);
-          const expected = new Uint8Array([64, 94, 192, 0, 0, 0, 0, 0]);
+          it("little-endian", () => {
+            const segment = Type.bitstringSegment(Type.float(123.45), {
+              type: "float",
+              size: Type.integer(16),
+              unit: 2n,
+              endianness: "little",
+            });
 
-          assert.deepStrictEqual(result, expected);
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([102, 230, 246, 66]);
+
+            assert.deepStrictEqual(result, expected);
+          });
         });
 
-        it("little-endian", () => {
-          const segment = Type.bitstringSegment(Type.integer(123), {
-            type: "float",
-            size: Type.integer(32),
-            unit: 2n,
-            endianness: "little",
+        describe("negative", () => {
+          it("big-endian", () => {
+            const segment = Type.bitstringSegment(Type.float(-123.45), {
+              type: "float",
+              size: Type.integer(16),
+              unit: 2n,
+              endianness: "big",
+            });
+
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([194, 246, 230, 102]);
+
+            assert.deepStrictEqual(result, expected);
           });
 
-          const result = Bitstring2.floatSegmentToBytes(segment);
-          const expected = new Uint8Array([0, 0, 0, 0, 0, 192, 94, 64]);
+          it("little-endian", () => {
+            const segment = Type.bitstringSegment(Type.float(-123.45), {
+              type: "float",
+              size: Type.integer(16),
+              unit: 2n,
+              endianness: "little",
+            });
 
-          assert.deepStrictEqual(result, expected);
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([102, 230, 246, 194]);
+
+            assert.deepStrictEqual(result, expected);
+          });
+        });
+
+        describe("+0", () => {
+          it("big-endian", () => {});
+
+          it("little-endian", () => {});
+        });
+
+        describe("-0", () => {
+          it("big-endian", () => {});
+
+          it("little-endian", () => {});
         });
       });
 
-      describe("32-bit", () => {
-        it("big-endian", () => {
-          const segment = Type.bitstringSegment(Type.integer(123), {
-            type: "float",
-            size: Type.integer(16),
-            unit: 2n,
-            endianness: "big",
+      describe("integer value", () => {
+        describe("positive", () => {
+          it("big-endian", () => {
+            const segment = Type.bitstringSegment(Type.integer(123), {
+              type: "float",
+              size: Type.integer(16),
+              unit: 2n,
+              endianness: "big",
+            });
+
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([66, 246, 0, 0]);
+
+            assert.deepStrictEqual(result, expected);
           });
 
-          const result = Bitstring2.floatSegmentToBytes(segment);
-          const expected = new Uint8Array([66, 246, 0, 0]);
+          it("little-endian", () => {
+            const segment = Type.bitstringSegment(Type.integer(123), {
+              type: "float",
+              size: Type.integer(16),
+              unit: 2n,
+              endianness: "little",
+            });
 
-          assert.deepStrictEqual(result, expected);
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([0, 0, 246, 66]);
+
+            assert.deepStrictEqual(result, expected);
+          });
         });
 
-        it("little-endian", () => {
-          const segment = Type.bitstringSegment(Type.integer(123), {
-            type: "float",
-            size: Type.integer(16),
-            unit: 2n,
-            endianness: "little",
+        describe("negative", () => {
+          it("big-endian", () => {
+            const segment = Type.bitstringSegment(Type.integer(-123), {
+              type: "float",
+              size: Type.integer(16),
+              unit: 2n,
+              endianness: "big",
+            });
+
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([194, 246, 0, 0]);
+
+            assert.deepStrictEqual(result, expected);
           });
 
-          const result = Bitstring2.floatSegmentToBytes(segment);
-          const expected = new Uint8Array([0, 0, 246, 66]);
+          it("little-endian", () => {
+            const segment = Type.bitstringSegment(Type.integer(-123), {
+              type: "float",
+              size: Type.integer(16),
+              unit: 2n,
+              endianness: "little",
+            });
 
-          assert.deepStrictEqual(result, expected);
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([0, 0, 246, 194]);
+
+            assert.deepStrictEqual(result, expected);
+          });
         });
-      });
 
-      describe("16-bit", () => {
-        it("big-endian", () => {
-          const segment = Type.bitstringSegment(Type.integer(123), {
-            type: "float",
-            size: Type.integer(8),
-            unit: 2n,
-            endianness: "big",
-          });
+        describe("+0", () => {
+          it("big-endian", () => {});
 
-          assert.throw(
-            () => Bitstring2.floatSegmentToBytes(segment),
-            HologramInterpreterError,
-            "16-bit float bitstring segments are not yet implemented in Hologram",
-          );
+          it("little-endian", () => {});
         });
 
-        it("little-endian", () => {
-          const segment = Type.bitstringSegment(Type.integer(123), {
-            type: "float",
-            size: Type.integer(8),
-            unit: 2n,
-            endianness: "little",
-          });
+        describe("-0", () => {
+          it("big-endian", () => {});
 
-          assert.throw(
-            () => Bitstring2.floatSegmentToBytes(segment),
-            HologramInterpreterError,
-            "16-bit float bitstring segments are not yet implemented in Hologram",
-          );
+          it("little-endian", () => {});
         });
       });
     });
 
-    describe("negative integer value", () => {
-      describe("64-bit", () => {
-        it("big-endian", () => {
-          const segment = Type.bitstringSegment(Type.integer(-123), {
-            type: "float",
-            size: Type.integer(32),
-            unit: 2n,
-            endianness: "big",
+    describe("16-bit", () => {
+      describe("float value", () => {
+        describe("positive", () => {
+          it("big-endian", () => {
+            const segment = Type.bitstringSegment(Type.float(123.45), {
+              type: "float",
+              size: Type.integer(8),
+              unit: 2n,
+              endianness: "big",
+            });
+
+            assert.throw(
+              () => Bitstring2.floatSegmentToBytes(segment),
+              HologramInterpreterError,
+              "16-bit float bitstring segments are not yet implemented in Hologram",
+            );
           });
 
-          const result = Bitstring2.floatSegmentToBytes(segment);
-          const expected = new Uint8Array([192, 94, 192, 0, 0, 0, 0, 0]);
+          it("little-endian", () => {
+            const segment = Type.bitstringSegment(Type.float(123.45), {
+              type: "float",
+              size: Type.integer(8),
+              unit: 2n,
+              endianness: "little",
+            });
 
-          assert.deepStrictEqual(result, expected);
+            assert.throw(
+              () => Bitstring2.floatSegmentToBytes(segment),
+              HologramInterpreterError,
+              "16-bit float bitstring segments are not yet implemented in Hologram",
+            );
+          });
         });
 
-        it("little-endian", () => {
-          const segment = Type.bitstringSegment(Type.integer(-123), {
-            type: "float",
-            size: Type.integer(32),
-            unit: 2n,
-            endianness: "little",
+        describe("negative", () => {
+          it("big-endian", () => {
+            const segment = Type.bitstringSegment(Type.float(-123.45), {
+              type: "float",
+              size: Type.integer(8),
+              unit: 2n,
+              endianness: "big",
+            });
+
+            assert.throw(
+              () => Bitstring2.floatSegmentToBytes(segment),
+              HologramInterpreterError,
+              "16-bit float bitstring segments are not yet implemented in Hologram",
+            );
           });
 
-          const result = Bitstring2.floatSegmentToBytes(segment);
-          const expected = new Uint8Array([0, 0, 0, 0, 0, 192, 94, 192]);
+          it("little-endian", () => {
+            const segment = Type.bitstringSegment(Type.float(-123.45), {
+              type: "float",
+              size: Type.integer(8),
+              unit: 2n,
+              endianness: "little",
+            });
 
-          assert.deepStrictEqual(result, expected);
+            assert.throw(
+              () => Bitstring2.floatSegmentToBytes(segment),
+              HologramInterpreterError,
+              "16-bit float bitstring segments are not yet implemented in Hologram",
+            );
+          });
+        });
+
+        describe("+0", () => {
+          it("big-endian", () => {});
+
+          it("little-endian", () => {});
+        });
+
+        describe("-0", () => {
+          it("big-endian", () => {});
+
+          it("little-endian", () => {});
         });
       });
 
-      describe("32-bit", () => {
-        it("big-endian", () => {
-          const segment = Type.bitstringSegment(Type.integer(-123), {
-            type: "float",
-            size: Type.integer(16),
-            unit: 2n,
-            endianness: "big",
+      describe("integer value", () => {
+        describe("positive", () => {
+          it("big-endian", () => {
+            const segment = Type.bitstringSegment(Type.integer(123), {
+              type: "float",
+              size: Type.integer(8),
+              unit: 2n,
+              endianness: "big",
+            });
+
+            assert.throw(
+              () => Bitstring2.floatSegmentToBytes(segment),
+              HologramInterpreterError,
+              "16-bit float bitstring segments are not yet implemented in Hologram",
+            );
           });
 
-          const result = Bitstring2.floatSegmentToBytes(segment);
-          const expected = new Uint8Array([194, 246, 0, 0]);
+          it("little-endian", () => {
+            const segment = Type.bitstringSegment(Type.integer(123), {
+              type: "float",
+              size: Type.integer(8),
+              unit: 2n,
+              endianness: "little",
+            });
 
-          assert.deepStrictEqual(result, expected);
+            assert.throw(
+              () => Bitstring2.floatSegmentToBytes(segment),
+              HologramInterpreterError,
+              "16-bit float bitstring segments are not yet implemented in Hologram",
+            );
+          });
         });
 
-        it("little-endian", () => {
-          const segment = Type.bitstringSegment(Type.integer(-123), {
-            type: "float",
-            size: Type.integer(16),
-            unit: 2n,
-            endianness: "little",
+        describe("negative", () => {
+          it("big-endian", () => {
+            const segment = Type.bitstringSegment(Type.integer(-123), {
+              type: "float",
+              size: Type.integer(8),
+              unit: 2n,
+              endianness: "big",
+            });
+
+            assert.throw(
+              () => Bitstring2.floatSegmentToBytes(segment),
+              HologramInterpreterError,
+              "16-bit float bitstring segments are not yet implemented in Hologram",
+            );
           });
 
-          const result = Bitstring2.floatSegmentToBytes(segment);
-          const expected = new Uint8Array([0, 0, 246, 194]);
+          it("little-endian", () => {
+            const segment = Type.bitstringSegment(Type.integer(-123), {
+              type: "float",
+              size: Type.integer(8),
+              unit: 2n,
+              endianness: "little",
+            });
 
-          assert.deepStrictEqual(result, expected);
+            assert.throw(
+              () => Bitstring2.floatSegmentToBytes(segment),
+              HologramInterpreterError,
+              "16-bit float bitstring segments are not yet implemented in Hologram",
+            );
+          });
         });
-      });
 
-      describe("16-bit", () => {
-        it("big-endian", () => {
-          const segment = Type.bitstringSegment(Type.integer(-123), {
-            type: "float",
-            size: Type.integer(8),
-            unit: 2n,
-            endianness: "big",
-          });
+        describe("+0", () => {
+          it("big-endian", () => {});
 
-          assert.throw(
-            () => Bitstring2.floatSegmentToBytes(segment),
-            HologramInterpreterError,
-            "16-bit float bitstring segments are not yet implemented in Hologram",
-          );
+          it("little-endian", () => {});
         });
 
-        it("little-endian", () => {
-          const segment = Type.bitstringSegment(Type.integer(-123), {
-            type: "float",
-            size: Type.integer(8),
-            unit: 2n,
-            endianness: "little",
-          });
+        describe("-0", () => {
+          it("big-endian", () => {});
 
-          assert.throw(
-            () => Bitstring2.floatSegmentToBytes(segment),
-            HologramInterpreterError,
-            "16-bit float bitstring segments are not yet implemented in Hologram",
-          );
+          it("little-endian", () => {});
         });
       });
     });
