@@ -401,30 +401,32 @@ export default class Bitstring2 {
   }
 
   static #setFloat16(dataView, value, isLittleEndian) {
-    // Fast path for zeros (most common special case)
+    // Handle zeros
     if (value === 0) {
       dataView.setUint8(0, 0);
       dataView.setUint8(1, Object.is(value, -0) ? 0x80 : 0);
       return;
     }
 
-    // Extract sign and absolute value in one step
+    // Extract sign and absolute value
     const absValue = Math.abs(value);
     const signByte = value < 0 ? 0x80 : 0;
 
-    // Calculate exponent and fraction in minimal steps
+    // Calculate exponent
     const exp = Math.floor(Math.log2(absValue));
-    const biasedExp = (exp + 15) << 2; // Shift by 2 for upper bits position
+    const biasedExp = exp + 15;
 
-    // Calculate normalized fraction (10 bits needed)
-    const frac = Math.round((absValue / Math.pow(2, exp) - 1) * 0x400);
+    // Calculate normalized fraction (remove hidden bit and scale to 10 bits)
+    // Use precise multiplication to avoid rounding errors
+    const significand = absValue * Math.pow(2, -exp);
+    const fraction = Math.round((significand - 1) * 0x400);
 
-    // Combine high byte: sign + top 5 bits of biased exponent + top 2 bits of fraction
+    // Combine high byte: sign + 5 bits of exponent + top 2 bits of fraction
     const highByte =
-      signByte | ((biasedExp & 0x7c) >>> 2) | ((frac & 0x300) >>> 8);
+      signByte | ((biasedExp & 0x1f) << 2) | ((fraction >> 8) & 0x03);
 
-    // Combine low byte: bottom 2 bits of biased exponent + bottom 8 bits of fraction
-    const lowByte = ((biasedExp & 0x03) << 6) | (frac & 0xff);
+    // Low byte: bottom 8 bits of fraction
+    const lowByte = fraction & 0xff;
 
     // Set bytes in proper order
     if (isLittleEndian) {
