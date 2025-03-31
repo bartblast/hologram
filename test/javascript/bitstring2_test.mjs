@@ -2333,7 +2333,7 @@ describe("Bitstring2", () => {
       assert.throw(
         () => Bitstring2.resolveSegmentSize(segment),
         HologramInterpreterError,
-        "This case shouldn't be possible",
+        `This case shouldn't be possible, segment = {"type":"invalid_type"}`,
       );
     });
   });
