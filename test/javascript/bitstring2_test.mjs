@@ -12,6 +12,26 @@ import Type from "../../assets/js/type.mjs";
 defineGlobalErlangAndElixirModules();
 
 describe("Bitstring2", () => {
+  describe("calculateSegmentBitCount()", () => {
+    it("calculates bit count when size and unit are explicitly specified", () => {
+      const segment = Type.bitstringSegment(Type.integer(123), {
+        type: "integer",
+        size: Type.integer(16),
+        unit: Type.integer(2),
+      });
+
+      assert.equal(Bitstring2.calculateSegmentBitCount(segment), 32);
+    });
+
+    it("calculates bit count when size and unit are not specified", () => {
+      const segment = Type.bitstringSegment(Type.integer(123), {
+        type: "integer",
+      });
+
+      assert.equal(Bitstring2.calculateSegmentBitCount(segment), 8);
+    });
+  });
+
   describe("concatSegments()", () => {
     it("single string binary segment", () => {
       const result = Bitstring2.concatSegments([

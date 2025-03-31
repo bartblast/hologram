@@ -4,10 +4,9 @@ import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 
 export default class Bitstring2 {
-  // TODO: test
   static calculateSegmentBitCount(segment) {
-    const size = segment.size ? Number(segment.size.value) : 64;
-    const unit = segment.unit ? Number(segment.unit.value) : 1;
+    const size = $.resolveSegmentSize(segment);
+    const unit = $.resolveSegmentUnit(segment);
 
     return size * unit;
   }
