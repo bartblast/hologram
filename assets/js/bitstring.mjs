@@ -727,6 +727,7 @@ export default class Bitstring {
     return true;
   }
 
+  // Migrated to Bitstring2
   static #validateUtfSegment(segment, index) {
     if (["bitstring", "float"].includes(segment.value.type)) {
       Bitstring.#raiseTypeMismatchError(

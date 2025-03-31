@@ -440,6 +440,27 @@ export default class Bitstring2 {
 
     return true;
   }
+
+  static #validateUtfSegment(segment, index) {
+    if (["bitstring", "float"].includes(segment.value.type)) {
+      $.#raiseTypeMismatchError(
+        index,
+        segment.type,
+        "a non-negative integer encodable as " + segment.type,
+        segment.value,
+      );
+    }
+
+    if (
+      segment.size !== null ||
+      segment.unit !== null ||
+      segment.signedness !== null
+    ) {
+      $.#raiseTypeMismatchError(index, "integer", "an integer", segment.value);
+    }
+
+    return true;
+  }
 }
 
 const $ = Bitstring2;
