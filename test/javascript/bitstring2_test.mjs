@@ -436,11 +436,10 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            assert.throw(
-              () => Bitstring2.floatSegmentToBytes(segment),
-              HologramInterpreterError,
-              "16-bit float bitstring segments are not yet implemented in Hologram",
-            );
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([87, 183]);
+
+            assert.deepStrictEqual(result, expected);
           });
 
           it("little-endian", () => {
@@ -451,11 +450,10 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            assert.throw(
-              () => Bitstring2.floatSegmentToBytes(segment),
-              HologramInterpreterError,
-              "16-bit float bitstring segments are not yet implemented in Hologram",
-            );
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([183, 87]);
+
+            assert.deepStrictEqual(result, expected);
           });
         });
 
@@ -468,11 +466,10 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            assert.throw(
-              () => Bitstring2.floatSegmentToBytes(segment),
-              HologramInterpreterError,
-              "16-bit float bitstring segments are not yet implemented in Hologram",
-            );
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([215, 183]);
+
+            assert.deepStrictEqual(result, expected);
           });
 
           it("little-endian", () => {
@@ -483,11 +480,10 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            assert.throw(
-              () => Bitstring2.floatSegmentToBytes(segment),
-              HologramInterpreterError,
-              "16-bit float bitstring segments are not yet implemented in Hologram",
-            );
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([183, 215]);
+
+            assert.deepStrictEqual(result, expected);
           });
         });
 
@@ -514,11 +510,10 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            assert.throw(
-              () => Bitstring2.floatSegmentToBytes(segment),
-              HologramInterpreterError,
-              "16-bit float bitstring segments are not yet implemented in Hologram",
-            );
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([87, 176]);
+
+            assert.deepStrictEqual(result, expected);
           });
 
           it("little-endian", () => {
@@ -529,11 +524,10 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            assert.throw(
-              () => Bitstring2.floatSegmentToBytes(segment),
-              HologramInterpreterError,
-              "16-bit float bitstring segments are not yet implemented in Hologram",
-            );
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([176, 87]);
+
+            assert.deepStrictEqual(result, expected);
           });
         });
 
@@ -546,11 +540,10 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            assert.throw(
-              () => Bitstring2.floatSegmentToBytes(segment),
-              HologramInterpreterError,
-              "16-bit float bitstring segments are not yet implemented in Hologram",
-            );
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([215, 176]);
+
+            assert.deepStrictEqual(result, expected);
           });
 
           it("little-endian", () => {
@@ -561,11 +554,10 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            assert.throw(
-              () => Bitstring2.floatSegmentToBytes(segment),
-              HologramInterpreterError,
-              "16-bit float bitstring segments are not yet implemented in Hologram",
-            );
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([176, 215]);
+
+            assert.deepStrictEqual(result, expected);
           });
         });
 
