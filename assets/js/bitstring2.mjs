@@ -30,6 +30,7 @@ export default class Bitstring2 {
 
   static floatSegmentToBytes(segment) {
     let value;
+
     if (segment.value.type === "float") {
       value = segment.value.value;
     } else {
@@ -116,13 +117,13 @@ export default class Bitstring2 {
   }
 
   static resolveSegmentSize(segment) {
-    if (segment.size) {
+    if (segment?.size != null) {
       return Number(segment.size.value);
     }
 
     switch (segment.type) {
       case "binary":
-        if (segment.text) {
+        if (segment?.text != null) {
           const blob = new Blob([segment.text]);
           return blob.size;
         }
@@ -144,7 +145,7 @@ export default class Bitstring2 {
   }
 
   static resolveSegmentUnit(segment) {
-    if (segment.unit) {
+    if (segment?.unit != null) {
       return Number(segment.unit);
     }
 
@@ -426,7 +427,7 @@ export default class Bitstring2 {
       $.#raiseTypeMismatchError(index, "binary", "a binary", segment.value);
     }
 
-    if (segment.signedness !== null || segment.size !== null) {
+    if (segment?.size != null || segment?.signedness != null) {
       $.#raiseTypeMismatchError(index, "integer", "an integer", segment.value);
     }
 
@@ -452,9 +453,9 @@ export default class Bitstring2 {
     }
 
     if (
-      segment.size !== null ||
-      segment.unit !== null ||
-      segment.signedness !== null
+      segment?.size != null ||
+      segment?.unit != null ||
+      segment?.signedness != null
     ) {
       $.#raiseTypeMismatchError(index, "integer", "an integer", segment.value);
     }
