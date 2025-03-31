@@ -22,7 +22,7 @@ describe("Bitstring2", () => {
         type: "bitstring",
         text: "Hologram",
         bytes: null,
-        numLeftoverBits: 0,
+        leftoverBitCount: 0,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -38,7 +38,7 @@ describe("Bitstring2", () => {
         type: "bitstring",
         text: "Hologram",
         bytes: null,
-        numLeftoverBits: 0,
+        leftoverBitCount: 0,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -53,7 +53,7 @@ describe("Bitstring2", () => {
         type: "bitstring",
         text: "Hologram",
         bytes: null,
-        numLeftoverBits: 0,
+        leftoverBitCount: 0,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -69,7 +69,7 @@ describe("Bitstring2", () => {
         type: "bitstring",
         text: "Hologram",
         bytes: null,
-        numLeftoverBits: 0,
+        leftoverBitCount: 0,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -85,7 +85,7 @@ describe("Bitstring2", () => {
         type: "bitstring",
         text: "Hologram",
         bytes: null,
-        numLeftoverBits: 0,
+        leftoverBitCount: 0,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -490,7 +490,7 @@ describe("Bitstring2", () => {
         type: "bitstring",
         text: null,
         bytes: new Uint8Array(0),
-        numLeftoverBits: 0,
+        leftoverBitCount: 0,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -503,7 +503,7 @@ describe("Bitstring2", () => {
         type: "bitstring",
         text: null,
         bytes: new Uint8Array([170]),
-        numLeftoverBits: 0,
+        leftoverBitCount: 0,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -516,7 +516,7 @@ describe("Bitstring2", () => {
         type: "bitstring",
         text: null,
         bytes: new Uint8Array([160]),
-        numLeftoverBits: 4,
+        leftoverBitCount: 4,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -533,7 +533,7 @@ describe("Bitstring2", () => {
         type: "bitstring",
         text: null,
         bytes: new Uint8Array([170, 85]),
-        numLeftoverBits: 0,
+        leftoverBitCount: 0,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -551,7 +551,7 @@ describe("Bitstring2", () => {
         type: "bitstring",
         text: null,
         bytes: new Uint8Array([170, 85, 160]),
-        numLeftoverBits: 4,
+        leftoverBitCount: 4,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -565,7 +565,7 @@ describe("Bitstring2", () => {
       type: "bitstring",
       text: "Hologram",
       bytes: null,
-      numLeftoverBits: 0,
+      leftoverBitCount: 0,
     };
 
     assert.deepStrictEqual(result, expected);

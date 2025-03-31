@@ -17,7 +17,7 @@ export default class Bitstring2 {
         text += segments[i].value.value;
       }
 
-      return {type: "bitstring", text, bytes: null, numLeftoverBits: 0};
+      return {type: "bitstring", text, bytes: null, leftoverBitCount: 0};
     }
   }
 
@@ -55,7 +55,7 @@ export default class Bitstring2 {
   static fromBits(bits) {
     const bitCount = bits.length;
     const byteCount = Math.ceil(bitCount / 8);
-    const numLeftoverBits = bitCount % 8;
+    const leftoverBitCount = bitCount % 8;
     const bytes = new Uint8Array(byteCount);
 
     // Process 8 bytes at a time when possible
@@ -80,7 +80,7 @@ export default class Bitstring2 {
     if (bitIndex < bitCount) {
       let lastByte = 0;
 
-      for (let j = 0; j < numLeftoverBits; j++) {
+      for (let j = 0; j < leftoverBitCount; j++) {
         if (bits[bitIndex + j]) {
           lastByte |= 1 << (7 - j);
         }
@@ -88,11 +88,11 @@ export default class Bitstring2 {
       bytes[byteIndex] = lastByte;
     }
 
-    return {type: "bitstring", text: null, bytes, numLeftoverBits};
+    return {type: "bitstring", text: null, bytes, leftoverBitCount};
   }
 
   static fromText(text) {
-    return {type: "bitstring", text, bytes: null, numLeftoverBits: 0};
+    return {type: "bitstring", text, bytes: null, leftoverBitCount: 0};
   }
 
   static integerSegmentToBytes(segment) {
