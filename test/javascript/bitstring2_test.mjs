@@ -197,7 +197,6 @@ describe("Bitstring2", () => {
             });
 
             const result = Bitstring2.floatSegmentToBytes(segment);
-
             const expected = new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]);
 
             assert.deepStrictEqual(result, expected);
@@ -212,7 +211,6 @@ describe("Bitstring2", () => {
             });
 
             const result = Bitstring2.floatSegmentToBytes(segment);
-
             const expected = new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]);
 
             assert.deepStrictEqual(result, expected);
@@ -229,7 +227,6 @@ describe("Bitstring2", () => {
             });
 
             const result = Bitstring2.floatSegmentToBytes(segment);
-
             const expected = new Uint8Array([128, 0, 0, 0, 0, 0, 0, 0]);
 
             assert.deepStrictEqual(result, expected);
@@ -244,7 +241,6 @@ describe("Bitstring2", () => {
             });
 
             const result = Bitstring2.floatSegmentToBytes(segment);
-
             const expected = new Uint8Array([0, 0, 0, 0, 0, 0, 0, 128]);
 
             assert.deepStrictEqual(result, expected);
@@ -313,16 +309,34 @@ describe("Bitstring2", () => {
           });
         });
 
-        describe("+0", () => {
-          it("big-endian", () => {});
+        describe("0", () => {
+          it("big-endian", () => {
+            const segment = Type.bitstringSegment(Type.integer(0), {
+              type: "float",
+              size: Type.integer(32),
+              unit: 2n,
+              endianness: "big",
+            });
 
-          it("little-endian", () => {});
-        });
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]);
 
-        describe("-0", () => {
-          it("big-endian", () => {});
+            assert.deepStrictEqual(result, expected);
+          });
 
-          it("little-endian", () => {});
+          it("little-endian", () => {
+            const segment = Type.bitstringSegment(Type.integer(0), {
+              type: "float",
+              size: Type.integer(32),
+              unit: 2n,
+              endianness: "little",
+            });
+
+            const result = Bitstring2.floatSegmentToBytes(segment);
+            const expected = new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]);
+
+            assert.deepStrictEqual(result, expected);
+          });
         });
       });
     });
