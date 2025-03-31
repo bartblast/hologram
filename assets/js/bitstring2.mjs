@@ -50,11 +50,8 @@ export default class Bitstring2 {
     } else if (bitCount === 32) {
       dataView.setFloat32(0, value, isLittleEndian);
     } else {
-      // TODO: implement when browsers widely support 16-bit floats
-      // dataView.setFloat16(0, value, isLittleEndian);
-      throw new HologramInterpreterError(
-        "16-bit float bitstring segments are not yet implemented in Hologram",
-      );
+      // DataView.setFloat16() has limited availability in browsers
+      $.#setFloat16(dataView, value, isLittleEndian);
     }
 
     return new Uint8Array(buffer);
@@ -401,6 +398,42 @@ export default class Bitstring2 {
     const message = `construction of binary failed: segment ${index} of type '${segmentType}': expected ${expectedValueTypesStr} but got: ${inspectedValue}`;
 
     Interpreter.raiseArgumentError(message);
+  }
+
+  static #setFloat16(dataView, value, isLittleEndian) {
+    // Fast path for zeros (most common special case)
+    if (value === 0) {
+      dataView.setUint8(0, 0);
+      dataView.setUint8(1, Object.is(value, -0) ? 0x80 : 0);
+      return;
+    }
+
+    // Extract sign and absolute value in one step
+    const absValue = Math.abs(value);
+    const signByte = value < 0 ? 0x80 : 0;
+
+    // Calculate exponent and fraction in minimal steps
+    const exp = Math.floor(Math.log2(absValue));
+    const biasedExp = (exp + 15) << 2; // Shift by 2 for upper bits position
+
+    // Calculate normalized fraction (10 bits needed)
+    const frac = Math.round((absValue / Math.pow(2, exp) - 1) * 0x400);
+
+    // Combine high byte: sign + top 5 bits of biased exponent + top 2 bits of fraction
+    const highByte =
+      signByte | ((biasedExp & 0x7c) >>> 2) | ((frac & 0x300) >>> 8);
+
+    // Combine low byte: bottom 2 bits of biased exponent + bottom 8 bits of fraction
+    const lowByte = ((biasedExp & 0x03) << 6) | (frac & 0xff);
+
+    // Set bytes in proper order
+    if (isLittleEndian) {
+      dataView.setUint8(0, lowByte);
+      dataView.setUint8(1, highByte);
+    } else {
+      dataView.setUint8(0, highByte);
+      dataView.setUint8(1, lowByte);
+    }
   }
 
   static #validateBinarySegment(segment, index) {
