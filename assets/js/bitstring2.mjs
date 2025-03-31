@@ -376,6 +376,28 @@ export default class Bitstring2 {
 
     return true;
   }
+
+  static #validateBitstringSegment(segment, index) {
+    if (["float", "integer"].includes(segment.value.type)) {
+      Bitstring2.#raiseTypeMismatchError(
+        index,
+        "binary",
+        "a binary",
+        segment.value,
+      );
+    }
+
+    if (segment.signedness !== null || segment.size !== null) {
+      Bitstring2.#raiseTypeMismatchError(
+        index,
+        "integer",
+        "an integer",
+        segment.value,
+      );
+    }
+
+    return true;
+  }
 }
 
 const $ = Bitstring2;
