@@ -144,6 +144,27 @@ export default class Bitstring2 {
     }
   }
 
+  static resolveSegmentUnit(segment) {
+    if (segment.unit) {
+      return Number(segment.unit);
+    }
+
+    switch (segment.type) {
+      case "binary":
+        return 8;
+
+      case "float":
+      case "integer":
+        return 1;
+
+      default:
+        // TODO: eventually remove this
+        throw new HologramInterpreterError(
+          `This case shouldn't be possible, segment = ${JSON.stringify(segment)}`,
+        );
+    }
+  }
+
   static #integerSegmentOutsideNumberRangeToBytes(segment) {
     const value = segment.value.value;
     const isLittleEndian = $.#isLittleEndian(segment);

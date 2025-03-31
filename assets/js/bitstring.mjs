@@ -282,7 +282,7 @@ export default class Bitstring {
     return Type.bitstring(bits);
   }
 
-  // Migrate to Bitstring2
+  // Migrated to Bitstring2
   static resolveSegmentSize(segment) {
     if (["float", "integer"].includes(segment.type) && segment.size !== null) {
       return segment.size.value;
@@ -302,6 +302,7 @@ export default class Bitstring {
     }
   }
 
+  // Migrated to Bitstring2
   static resolveSegmentUnit(segment) {
     if (
       ["binary", "float", "integer"].includes(segment.type) &&

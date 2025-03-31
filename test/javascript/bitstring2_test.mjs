@@ -2337,4 +2337,51 @@ describe("Bitstring2", () => {
       );
     });
   });
+
+  describe("resolveSegmentUnit()", () => {
+    it("returns explicit unit when specified", () => {
+      const segment = Type.bitstringSegment(Type.integer(123), {
+        type: "integer",
+        unit: 16n,
+      });
+
+      assert.equal(Bitstring2.resolveSegmentUnit(segment), 16);
+    });
+
+    it("returns 8 for binary segments without unit", () => {
+      const segment = Type.bitstringSegment(Type.bitstring("abc"), {
+        type: "binary",
+      });
+
+      assert.equal(Bitstring2.resolveSegmentUnit(segment), 8);
+    });
+
+    it("returns 1 for float segments without unit", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        type: "float",
+      });
+
+      assert.equal(Bitstring2.resolveSegmentUnit(segment), 1);
+    });
+
+    it("returns 1 for integer segments without unit", () => {
+      const segment = Type.bitstringSegment(Type.integer(123), {
+        type: "integer",
+      });
+
+      assert.equal(Bitstring2.resolveSegmentUnit(segment), 1);
+    });
+
+    it("throws error for invalid segment type", () => {
+      const segment = {
+        type: "invalid_type",
+      };
+
+      assert.throw(
+        () => Bitstring2.resolveSegmentUnit(segment),
+        HologramInterpreterError,
+        `This case shouldn't be possible, segment = {"type":"invalid_type"}`,
+      );
+    });
+  });
 });
