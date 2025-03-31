@@ -162,6 +162,27 @@ export default class Bitstring2 {
     }
   }
 
+  static validateSegment(segment, index) {
+    switch (segment.type) {
+      case "binary":
+        return $.#validateBinarySegment(segment, index);
+
+      case "bitstring":
+        return $.#validateBitstringSegment(segment, index);
+
+      case "float":
+        return $.#validateFloatSegment(segment, index);
+
+      case "integer":
+        return $.#validateIntegerSegment(segment, index);
+
+      case "utf8":
+      case "utf16":
+      case "utf32":
+        return $.#validateUtfSegment(segment, index);
+    }
+  }
+
   static #integerSegmentOutsideNumberRangeToBytes(segment) {
     const value = segment.value.value;
     const isLittleEndian = $.#isLittleEndian(segment);
@@ -500,12 +521,6 @@ export default class Bitstring2 {
 
     if (![64, 32, 16].includes(bitCount)) {
       $.#raiseTypeMismatchError(index, "integer", "an integer", segment.value);
-    }
-
-    if (bitCount == 16) {
-      throw new HologramInterpreterError(
-        `16-bit float bitstring segments are not yet implemented in Hologram`,
-      );
     }
 
     return true;
