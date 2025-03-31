@@ -403,8 +403,17 @@ export default class Bitstring2 {
   static #setFloat16(dataView, value, isLittleEndian) {
     // Handle zeros
     if (value === 0) {
-      dataView.setUint8(0, 0);
-      dataView.setUint8(1, Object.is(value, -0) ? 0x80 : 0);
+      const highByte = Object.is(value, -0) ? 0x80 : 0;
+      const lowByte = 0;
+
+      if (isLittleEndian) {
+        dataView.setUint8(0, lowByte);
+        dataView.setUint8(1, highByte);
+      } else {
+        dataView.setUint8(0, highByte);
+        dataView.setUint8(1, lowByte);
+      }
+
       return;
     }
 
