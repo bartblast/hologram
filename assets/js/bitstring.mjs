@@ -713,6 +713,7 @@ export default class Bitstring {
     return true;
   }
 
+  // Migrated to Bitstring2
   static #validateIntegerSegment(segment, index) {
     if (!["integer", "variable_pattern"].includes(segment.value.type)) {
       Bitstring.#raiseTypeMismatchError(

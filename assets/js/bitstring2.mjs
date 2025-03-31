@@ -432,6 +432,14 @@ export default class Bitstring2 {
 
     return true;
   }
+
+  static #validateIntegerSegment(segment, index) {
+    if (!["integer", "variable_pattern"].includes(segment.value.type)) {
+      $.#raiseTypeMismatchError(index, "integer", "an integer", segment.value);
+    }
+
+    return true;
+  }
 }
 
 const $ = Bitstring2;
