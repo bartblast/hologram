@@ -601,6 +601,7 @@ export default class Bitstring {
     );
   }
 
+  // Migrated to Bitstring2
   static #raiseTypeMismatchError(
     index,
     segmentType,
@@ -621,6 +622,7 @@ export default class Bitstring {
     return "unsigned";
   }
 
+  // Migrated to Bitstring2
   static #validateBinarySegment(segment, index) {
     if (
       segment.value.type === "bitstring" &&

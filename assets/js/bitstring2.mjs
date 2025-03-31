@@ -1,6 +1,7 @@
 "use strict";
 
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
+import Interpreter from "./interpreter.mjs";
 
 export default class Bitstring2 {
   static concatSegments(segments) {
@@ -338,6 +339,42 @@ export default class Bitstring2 {
 
   static #isLittleEndian(segment) {
     return segment.endianness === "little";
+  }
+
+  static #raiseTypeMismatchError(
+    index,
+    segmentType,
+    expectedValueTypesStr,
+    value,
+  ) {
+    const inspectedValue = Interpreter.inspect(value);
+    const message = `construction of binary failed: segment ${index} of type '${segmentType}': expected ${expectedValueTypesStr} but got: ${inspectedValue}`;
+
+    Interpreter.raiseArgumentError(message);
+  }
+
+  static #validateBinarySegment(segment, index) {
+    if (
+      segment.value.type === "bitstring" &&
+      segment.value.leftoverBitCount !== 0
+    ) {
+      const inspectedValue = Interpreter.inspect(segment.value);
+
+      Interpreter.raiseArgumentError(
+        `construction of binary failed: segment ${index} of type 'binary': the size of the value ${inspectedValue} is not a multiple of the unit for the segment`,
+      );
+    }
+
+    if (["float", "integer"].includes(segment.value.type)) {
+      Bitstring2.#raiseTypeMismatchError(
+        index,
+        "binary",
+        "a binary",
+        segment.value,
+      );
+    }
+
+    return true;
   }
 }
 
