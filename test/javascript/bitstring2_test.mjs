@@ -17,7 +17,7 @@ describe("Bitstring2", () => {
       const segment = Type.bitstringSegment(Type.integer(123), {
         type: "integer",
         size: Type.integer(16),
-        unit: Type.integer(2),
+        unit: 2n,
       });
 
       assert.equal(Bitstring2.calculateSegmentBitCount(segment), 32);
@@ -119,7 +119,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.float(123.45), {
             type: "float",
             size: Type.integer(32),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "big",
           });
 
@@ -136,7 +136,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.float(123.45), {
             type: "float",
             size: Type.integer(32),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "little",
           });
 
@@ -155,7 +155,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.float(123.45), {
             type: "float",
             size: Type.integer(16),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "big",
           });
 
@@ -169,7 +169,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.float(123.45), {
             type: "float",
             size: Type.integer(16),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "little",
           });
 
@@ -185,7 +185,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.float(123.45), {
             type: "float",
             size: Type.integer(8),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "big",
           });
 
@@ -200,7 +200,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.float(123.45), {
             type: "float",
             size: Type.integer(8),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "little",
           });
 
@@ -219,7 +219,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.float(-123.45), {
             type: "float",
             size: Type.integer(32),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "big",
           });
 
@@ -236,7 +236,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.float(-123.45), {
             type: "float",
             size: Type.integer(32),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "little",
           });
 
@@ -255,7 +255,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.float(-123.45), {
             type: "float",
             size: Type.integer(16),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "big",
           });
 
@@ -269,7 +269,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.float(-123.45), {
             type: "float",
             size: Type.integer(16),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "little",
           });
 
@@ -285,7 +285,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.float(-123.45), {
             type: "float",
             size: Type.integer(8),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "big",
           });
 
@@ -300,7 +300,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.float(-123.45), {
             type: "float",
             size: Type.integer(8),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "little",
           });
 
@@ -319,7 +319,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.integer(123), {
             type: "float",
             size: Type.integer(32),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "big",
           });
 
@@ -333,7 +333,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.integer(123), {
             type: "float",
             size: Type.integer(32),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "little",
           });
 
@@ -349,7 +349,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.integer(123), {
             type: "float",
             size: Type.integer(16),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "big",
           });
 
@@ -363,7 +363,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.integer(123), {
             type: "float",
             size: Type.integer(16),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "little",
           });
 
@@ -379,7 +379,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.integer(123), {
             type: "float",
             size: Type.integer(8),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "big",
           });
 
@@ -394,7 +394,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.integer(123), {
             type: "float",
             size: Type.integer(8),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "little",
           });
 
@@ -413,7 +413,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.integer(-123), {
             type: "float",
             size: Type.integer(32),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "big",
           });
 
@@ -427,7 +427,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.integer(-123), {
             type: "float",
             size: Type.integer(32),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "little",
           });
 
@@ -443,7 +443,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.integer(-123), {
             type: "float",
             size: Type.integer(16),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "big",
           });
 
@@ -457,7 +457,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.integer(-123), {
             type: "float",
             size: Type.integer(16),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "little",
           });
 
@@ -473,7 +473,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.integer(-123), {
             type: "float",
             size: Type.integer(8),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "big",
           });
 
@@ -488,7 +488,7 @@ describe("Bitstring2", () => {
           const segment = Type.bitstringSegment(Type.integer(-123), {
             type: "float",
             size: Type.integer(8),
-            unit: Type.integer(2),
+            unit: 2n,
             endianness: "little",
           });
 
@@ -602,7 +602,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(10), {
                   type: "integer",
                   size: Type.integer(4),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "big",
                 });
 
@@ -617,7 +617,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(10), {
                   type: "integer",
                   size: Type.integer(4),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "little",
                 });
 
@@ -634,7 +634,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(-246), {
                   type: "integer",
                   size: Type.integer(4),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "big",
                 });
 
@@ -649,7 +649,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(-246), {
                   type: "integer",
                   size: Type.integer(4),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "little",
                 });
 
@@ -668,7 +668,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(2730), {
                   type: "integer",
                   size: Type.integer(4),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "big",
                 });
 
@@ -683,7 +683,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(2730), {
                   type: "integer",
                   size: Type.integer(4),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "little",
                 });
 
@@ -700,7 +700,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(-62806), {
                   type: "integer",
                   size: Type.integer(4),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "big",
                 });
 
@@ -715,7 +715,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(-62806), {
                   type: "integer",
                   size: Type.integer(4),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "little",
                 });
 
@@ -736,7 +736,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(2730), {
                   type: "integer",
                   size: Type.integer(8),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "big",
                 });
 
@@ -751,7 +751,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(2730), {
                   type: "integer",
                   size: Type.integer(8),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "little",
                 });
 
@@ -768,7 +768,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(-62806), {
                   type: "integer",
                   size: Type.integer(8),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "big",
                 });
 
@@ -783,7 +783,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(-62806), {
                   type: "integer",
                   size: Type.integer(8),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "little",
                 });
 
@@ -802,7 +802,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(879450), {
                   type: "integer",
                   size: Type.integer(8),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "big",
                 });
 
@@ -817,7 +817,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(879450), {
                   type: "integer",
                   size: Type.integer(8),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "little",
                 });
 
@@ -834,7 +834,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(-15897766), {
                   type: "integer",
                   size: Type.integer(8),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "big",
                 });
 
@@ -849,7 +849,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(-15897766), {
                   type: "integer",
                   size: Type.integer(8),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "little",
                 });
 
@@ -870,7 +870,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(225139414), {
                   type: "integer",
                   size: Type.integer(16),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "big",
                 });
 
@@ -885,7 +885,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(225139414), {
                   type: "integer",
                   size: Type.integer(16),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "little",
                 });
 
@@ -904,7 +904,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(16),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -922,7 +922,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(16),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -944,7 +944,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(16),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -962,7 +962,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(16),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -982,7 +982,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(16),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -1000,7 +1000,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(16),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -1024,7 +1024,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(20),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -1042,7 +1042,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(20),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -1062,7 +1062,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(20),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -1080,7 +1080,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(20),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -1102,7 +1102,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(20),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -1120,7 +1120,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(20),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -1140,7 +1140,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(20),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -1158,7 +1158,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(20),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -1182,7 +1182,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(2), {
                   type: "integer",
                   size: Type.integer(2),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "big",
                 });
 
@@ -1197,7 +1197,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(2), {
                   type: "integer",
                   size: Type.integer(2),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "little",
                 });
 
@@ -1214,7 +1214,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(-254), {
                   type: "integer",
                   size: Type.integer(2),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "big",
                 });
 
@@ -1229,7 +1229,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(-254), {
                   type: "integer",
                   size: Type.integer(2),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "little",
                 });
 
@@ -1248,7 +1248,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(58), {
                   type: "integer",
                   size: Type.integer(2),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "big",
                 });
 
@@ -1263,7 +1263,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(58), {
                   type: "integer",
                   size: Type.integer(2),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "little",
                 });
 
@@ -1280,7 +1280,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(-198), {
                   type: "integer",
                   size: Type.integer(2),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "big",
                 });
 
@@ -1295,7 +1295,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(-198), {
                   type: "integer",
                   size: Type.integer(2),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "little",
                 });
 
@@ -1316,7 +1316,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(682), {
                   type: "integer",
                   size: Type.integer(6),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "big",
                 });
 
@@ -1331,7 +1331,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(682), {
                   type: "integer",
                   size: Type.integer(6),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "little",
                 });
 
@@ -1348,7 +1348,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(-64854), {
                   type: "integer",
                   size: Type.integer(6),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "big",
                 });
 
@@ -1363,7 +1363,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(-64854), {
                   type: "integer",
                   size: Type.integer(6),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "little",
                 });
 
@@ -1382,7 +1382,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(10922), {
                   type: "integer",
                   size: Type.integer(6),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "big",
                 });
 
@@ -1397,7 +1397,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(10922), {
                   type: "integer",
                   size: Type.integer(6),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "little",
                 });
 
@@ -1414,7 +1414,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(-54614), {
                   type: "integer",
                   size: Type.integer(6),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "big",
                 });
 
@@ -1429,7 +1429,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(-54614), {
                   type: "integer",
                   size: Type.integer(6),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "little",
                 });
 
@@ -1450,7 +1450,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(47625645), {
                   type: "integer",
                   size: Type.integer(14),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "big",
                 });
 
@@ -1465,7 +1465,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(47625645), {
                   type: "integer",
                   size: Type.integer(14),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "little",
                 });
 
@@ -1484,7 +1484,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(14),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -1502,7 +1502,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(14),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -1522,7 +1522,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(900557658), {
                   type: "integer",
                   size: Type.integer(14),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "big",
                 });
 
@@ -1537,7 +1537,7 @@ describe("Bitstring2", () => {
                 const segment = Type.bitstringSegment(Type.integer(900557658), {
                   type: "integer",
                   size: Type.integer(14),
-                  unit: Type.integer(2),
+                  unit: 2n,
                   endianness: "little",
                 });
 
@@ -1556,7 +1556,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(14),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -1574,7 +1574,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(14),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -1598,7 +1598,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(22),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -1616,7 +1616,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(22),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -1636,7 +1636,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(22),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -1654,7 +1654,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(22),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -1676,7 +1676,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(22),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -1694,7 +1694,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(22),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -1714,7 +1714,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(22),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -1732,7 +1732,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(22),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -1760,7 +1760,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(32),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -1781,7 +1781,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(32),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -1804,7 +1804,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(32),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -1825,7 +1825,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(32),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -1850,7 +1850,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(32),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -1871,7 +1871,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(32),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -1894,7 +1894,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(32),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -1915,7 +1915,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(32),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -1942,7 +1942,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(36),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -1963,7 +1963,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(36),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -1986,7 +1986,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(36),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -2007,7 +2007,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(36),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -2032,7 +2032,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(36),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -2053,7 +2053,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(36),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -2076,7 +2076,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(36),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -2097,7 +2097,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(36),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -2126,7 +2126,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(34),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -2147,7 +2147,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(34),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -2170,7 +2170,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(34),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -2191,7 +2191,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(34),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -2216,7 +2216,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(34),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -2237,7 +2237,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(34),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
@@ -2260,7 +2260,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(34),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "big",
                   },
                 );
@@ -2281,7 +2281,7 @@ describe("Bitstring2", () => {
                   {
                     type: "integer",
                     size: Type.integer(34),
-                    unit: Type.integer(2),
+                    unit: 2n,
                     endianness: "little",
                   },
                 );
