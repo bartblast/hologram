@@ -2280,4 +2280,61 @@ describe("Bitstring2", () => {
       });
     });
   });
+
+  describe("resolveSegmentSize()", () => {
+    it("returns explicit size when size is specified", () => {
+      const segment = Type.bitstringSegment(Type.integer(123), {
+        type: "integer",
+        size: Type.integer(16),
+      });
+
+      assert.equal(Bitstring2.resolveSegmentSize(segment), 16);
+    });
+
+    it("calculates size for binary segment with text", () => {
+      const segment = {
+        type: "binary",
+        text: "全息图", // 9 bytes
+      };
+
+      assert.equal(Bitstring2.resolveSegmentSize(segment), 9);
+    });
+
+    it("calculates size for binary segment with bytes", () => {
+      const segment = {
+        type: "binary",
+        bytes: new Uint8Array([1, 2, 3, 4]),
+      };
+
+      assert.equal(Bitstring2.resolveSegmentSize(segment), 4);
+    });
+
+    it("returns 64 for float segments", () => {
+      const segment = Type.bitstringSegment(Type.float(123.45), {
+        type: "float",
+      });
+
+      assert.equal(Bitstring2.resolveSegmentSize(segment), 64);
+    });
+
+    it("returns 8 for integer segments", () => {
+      const segment = Type.bitstringSegment(Type.integer(123), {
+        type: "integer",
+      });
+
+      assert.equal(Bitstring2.resolveSegmentSize(segment), 8);
+    });
+
+    it("throws error for invalid segment type", () => {
+      const segment = {
+        type: "invalid_type",
+      };
+
+      assert.throw(
+        () => Bitstring2.resolveSegmentSize(segment),
+        HologramInterpreterError,
+        "This case shouldn't be possible",
+      );
+    });
+  });
 });

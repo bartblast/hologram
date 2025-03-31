@@ -4,6 +4,7 @@ import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 
 export default class Bitstring2 {
+  // TODO: test
   static calculateSegmentBitCount(segment) {
     const size = segment.size ? Number(segment.size.value) : 64;
     const unit = segment.unit ? Number(segment.unit.value) : 1;
@@ -113,6 +114,34 @@ export default class Bitstring2 {
     }
 
     return $.#integerSegmentOutsideNumberRangeToBytes(segment);
+  }
+
+  static resolveSegmentSize(segment) {
+    if (segment.size) {
+      return Number(segment.size.value);
+    }
+
+    switch (segment.type) {
+      case "binary":
+        if (segment.text) {
+          const blob = new Blob([segment.text]);
+          return blob.size;
+        }
+
+        return segment.bytes.length;
+
+      case "float":
+        return 64;
+
+      case "integer":
+        return 8;
+
+      default:
+        // TODO: eventually remove this
+        throw new HologramInterpreterError(
+          `This case shouldn't be possible, segment = ${JSON.stringify(segment)}`,
+        );
+    }
   }
 
   static #integerSegmentOutsideNumberRangeToBytes(segment) {
