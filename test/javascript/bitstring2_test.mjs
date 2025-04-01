@@ -2718,4 +2718,30 @@ describe("Bitstring2", () => {
       );
     });
   });
+
+  describe("validateCodePoint()", () => {
+    it("integer that is a valid code point", () => {
+      // a = 97
+      assert.isTrue(Bitstring2.validateCodePoint(97));
+    });
+
+    it("integer that is not a valid code point", () => {
+      // Max Unicode code point value is 1,114,112
+      assert.isFalse(Bitstring2.validateCodePoint(1114113));
+    });
+
+    it("bigint that is a valid code point", () => {
+      // a = 97
+      assert.isTrue(Bitstring2.validateCodePoint(97n));
+    });
+
+    it("bigint that is not a valid code point", () => {
+      // Max Unicode code point value is 1,114,112
+      assert.isFalse(Bitstring2.validateCodePoint(1114113n));
+    });
+
+    it("not an integer or a bigint", () => {
+      assert.isFalse(Bitstring2.validateCodePoint("abc"));
+    });
+  });
 });

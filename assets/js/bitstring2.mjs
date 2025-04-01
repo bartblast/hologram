@@ -203,6 +203,23 @@ export default class Bitstring2 {
     }
   }
 
+  static validateCodePoint(codePoint) {
+    if (typeof codePoint === "bigint") {
+      codePoint = Number(codePoint);
+    }
+
+    try {
+      String.fromCodePoint(codePoint);
+      return true;
+    } catch (error) {
+      if (error instanceof RangeError) {
+        return false;
+      } else {
+        throw error;
+      }
+    }
+  }
+
   static validateSegment(segment, index) {
     switch (segment.type) {
       case "binary":

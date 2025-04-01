@@ -334,6 +334,7 @@ export default class Bitstring {
     return decoder.decode(byteArray);
   }
 
+  // Migrated to Bitstring2
   static validateCodePoint(codePoint) {
     if (typeof codePoint === "bigint") {
       codePoint = Number(codePoint);
