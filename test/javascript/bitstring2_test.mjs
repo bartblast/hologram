@@ -2692,6 +2692,38 @@ describe("Bitstring2", () => {
     });
   });
 
+  describe("maybeSetTextFromBytes()", () => {
+    it("does nothing when text is already set to a string", () => {
+      const bitstring = Type.bitstring2("existing text");
+      bitstring.bytes = new Uint8Array([97, 98, 99]); // "abc"
+
+      Bitstring2.maybeSetTextFromBytes(bitstring);
+      assert.equal(bitstring.text, "existing text");
+    });
+
+    it("does nothing when text is already set to false", () => {
+      const bitstring = Bitstring2.fromBytes([97, 98, 99]); // "abc"
+      bitstring.text = false;
+
+      Bitstring2.maybeSetTextFromBytes(bitstring);
+      assert.isFalse(bitstring.text);
+    });
+
+    it("sets text from valid UTF-8 bytes", () => {
+      const bitstring = Bitstring2.fromBytes([97, 98, 99]); // "abc"
+
+      Bitstring2.maybeSetTextFromBytes(bitstring);
+      assert.equal(bitstring.text, "abc");
+    });
+
+    it("sets text to false for invalid UTF-8 bytes", () => {
+      const bitstring = Bitstring2.fromBytes([255, 255]); // Invalid UTF-8 sequence
+
+      Bitstring2.maybeSetTextFromBytes(bitstring);
+      assert.isFalse(bitstring.text);
+    });
+  });
+
   describe("resolveSegmentSize()", () => {
     it("returns explicit size when size is specified", () => {
       const segment = Type.bitstringSegment(Type.integer(123), {

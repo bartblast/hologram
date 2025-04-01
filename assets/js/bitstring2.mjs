@@ -193,6 +193,16 @@ export default class Bitstring2 {
     return true;
   }
 
+  static maybeSetTextFromBytes(bitstring) {
+    if (bitstring.text === null) {
+      try {
+        bitstring.text = $.#utf8Decoder.decode(bitstring.bytes);
+      } catch {
+        bitstring.text = false;
+      }
+    }
+  }
+
   static resolveSegmentSize(segment) {
     if (segment?.size != null) {
       return Number(segment.size.value);
