@@ -101,7 +101,6 @@ export default class Bitstring2 {
     return {type: "bitstring2", text: null, bytes, leftoverBitCount};
   }
 
-  // TODO: test
   static fromBytes(bytes) {
     const uint8Bytes =
       bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);

@@ -850,6 +850,50 @@ describe("Bitstring2", () => {
     });
   });
 
+  describe("fromBytes()", () => {
+    it("creates bitstring from Uint8Array", () => {
+      const bytes = new Uint8Array([1, 2, 3]);
+      const result = Bitstring2.fromBytes(bytes);
+
+      const expected = {
+        type: "bitstring2",
+        text: null,
+        bytes: bytes,
+        leftoverBitCount: 0,
+      };
+
+      assert.deepStrictEqual(result, expected);
+      assert.strictEqual(result.bytes, bytes);
+    });
+
+    it("creates bitstring from regular array", () => {
+      const bytes = [1, 2, 3];
+      const result = Bitstring2.fromBytes(bytes);
+
+      const expected = {
+        type: "bitstring2",
+        text: null,
+        bytes: new Uint8Array([1, 2, 3]),
+        leftoverBitCount: 0,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles empty array", () => {
+      const result = Bitstring2.fromBytes([]);
+
+      const expected = {
+        type: "bitstring2",
+        text: null,
+        bytes: new Uint8Array([]),
+        leftoverBitCount: 0,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   it("fromText()", () => {
     const result = Bitstring2.fromText("Hologram");
 
