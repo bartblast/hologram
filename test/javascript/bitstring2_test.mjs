@@ -2616,79 +2616,49 @@ describe("Bitstring2", () => {
   });
 
   describe("isPrintableText()", () => {
-    describe("bitstring.text field is not null", () => {
-      it("empty text", () => {
-        assert.isTrue(Bitstring2.isPrintableText(Type.bitstring2("")));
-      });
-
-      it("ASCII text", () => {
-        assert.isTrue(Bitstring2.isPrintableText(Type.bitstring2("abc")));
-      });
-
-      it("Unicode text (Chinese)", () => {
-        assert.isTrue(Bitstring2.isPrintableText(Type.bitstring2("全息图")));
-      });
-
-      it("with non-printable character", () => {
-        // \x01 is not printable
-        assert.isFalse(Bitstring2.isPrintableText(Type.bitstring2("a\x01b")));
-      });
+    it("empty text", () => {
+      assert.isTrue(Bitstring2.isPrintableText(Type.bitstring2("")));
     });
 
-    describe("bitstring.text field is null", () => {
-      it("empty bytes", () => {
-        const bitstring = Type.bitstring2([]);
+    it("ASCII text", () => {
+      assert.isTrue(Bitstring2.isPrintableText(Type.bitstring2("abc")));
+    });
 
-        assert.isTrue(Bitstring2.isPrintableText(bitstring));
-        assert.equal(bitstring.text, "");
-      });
+    it("Unicode text (Chinese)", () => {
+      assert.isTrue(Bitstring2.isPrintableText(Type.bitstring2("全息图")));
+    });
 
-      it("ASCII bytes", () => {
-        // "abc"
-        const bitstring = Bitstring2.fromBytes([97, 98, 99]);
+    it("with non-printable character", () => {
+      // \x01 is not printable
+      assert.isFalse(Bitstring2.isPrintableText(Type.bitstring2("a\x01b")));
+    });
 
-        assert.isTrue(Bitstring2.isPrintableText(bitstring));
-        assert.equal(bitstring.text, "abc");
-      });
+    it("with invalid UTF-8 sequence", () => {
+      const bitstring = Bitstring2.fromBytes([255, 255]);
+      assert.isFalse(Bitstring2.isPrintableText(bitstring));
+    });
 
-      it("Unicode bytes (Chinese)", () => {
-        // "全息图"
-        const bitstring = Bitstring2.fromBytes([
-          229, 133, 168, 230, 129, 175, 229, 155, 190,
-        ]);
+    it("with leftover bits", () => {
+      // prettier-ignore
+      const bits = [
+        0, 1, 1, 0, 0, 0, 0, 1, // "a"
+        0, 1, 1, 0, 0, 0, 1, 0, // "b"
+        1, 0, 1
+      ]
 
-        assert.isTrue(Bitstring2.isPrintableText(bitstring));
-        assert.equal(bitstring.text, "全息图");
-      });
+      const bitstring = Bitstring2.fromBits(bits);
 
-      it("with non-printable byte", () => {
-        // "a\x01b"
-        const bitstring = Bitstring2.fromBytes([97, 1, 98]);
+      assert.isFalse(Bitstring2.isPrintableText(bitstring));
+    });
 
-        assert.isFalse(Bitstring2.isPrintableText(bitstring));
-        assert.equal(bitstring.text, "a\x01b");
-      });
+    it("sets the text field if the bytes sequence is representable as text", () => {
+      // "abc"
+      const bitstring = Bitstring2.fromBytes([97, 98, 99]);
 
-      it("with invalid UTF-8 sequence", () => {
-        const bitstring = Bitstring2.fromBytes([255, 255]);
+      assert.isNull(bitstring.text);
 
-        assert.isFalse(Bitstring2.isPrintableText(bitstring));
-        assert.isNull(bitstring.text);
-      });
-
-      it("with leftover bits", () => {
-        // prettier-ignore
-        const bits = [
-          0, 1, 1, 0, 0, 0, 0, 1, // "a"
-          0, 1, 1, 0, 0, 0, 1, 0, // "b"
-          1, 0, 1
-        ]
-
-        const bitstring = Bitstring2.fromBits(bits);
-
-        assert.isFalse(Bitstring2.isPrintableText(bitstring));
-        assert.isNull(bitstring.text);
-      });
+      Bitstring2.isPrintableText(bitstring);
+      assert.equal(bitstring.text, "abc");
     });
   });
 

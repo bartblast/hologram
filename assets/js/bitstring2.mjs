@@ -174,14 +174,10 @@ export default class Bitstring2 {
       return false;
     }
 
-    if (bitstring.text === null) {
-      try {
-        // Cache the text representation of bytes for potential future use.
-        // This mutation acts as a performance optimization.
-        bitstring.text = $.#utf8Decoder.decode(bitstring.bytes);
-      } catch {
-        return false;
-      }
+    $.maybeSetTextFromBytes(bitstring);
+
+    if (bitstring.text === false) {
+      return false;
     }
 
     for (const char of bitstring.text) {
