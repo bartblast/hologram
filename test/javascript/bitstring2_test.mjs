@@ -2637,36 +2637,43 @@ describe("Bitstring2", () => {
 
     describe("bitstring.text field is null", () => {
       it("empty bytes", () => {
-        assert.isTrue(Bitstring2.isPrintableText(Type.bitstring2([])));
+        const bitstring = Type.bitstring2([]);
+
+        assert.isTrue(Bitstring2.isPrintableText(bitstring));
+        assert.equal(bitstring.text, "");
       });
 
       it("ASCII bytes", () => {
         // "abc"
-        assert.isTrue(
-          Bitstring2.isPrintableText(Bitstring2.fromBytes([97, 98, 99])),
-        );
+        const bitstring = Bitstring2.fromBytes([97, 98, 99]);
+
+        assert.isTrue(Bitstring2.isPrintableText(bitstring));
+        assert.equal(bitstring.text, "abc");
       });
 
       it("Unicode bytes (Chinese)", () => {
         // "全息图"
-        assert.isTrue(
-          Bitstring2.isPrintableText(
-            Bitstring2.fromBytes([229, 133, 168, 230, 129, 175, 229, 155, 190]),
-          ),
-        );
+        const bitstring = Bitstring2.fromBytes([
+          229, 133, 168, 230, 129, 175, 229, 155, 190,
+        ]);
+
+        assert.isTrue(Bitstring2.isPrintableText(bitstring));
+        assert.equal(bitstring.text, "全息图");
       });
 
       it("with non-printable byte", () => {
         // "a\x01b"
-        assert.isFalse(
-          Bitstring2.isPrintableText(Bitstring2.fromBytes([97, 1, 98])),
-        );
+        const bitstring = Bitstring2.fromBytes([97, 1, 98]);
+
+        assert.isFalse(Bitstring2.isPrintableText(bitstring));
+        assert.equal(bitstring.text, "a\x01b");
       });
 
       it("with invalid UTF-8 sequence", () => {
-        assert.isFalse(
-          Bitstring2.isPrintableText(Bitstring2.fromBytes([255, 255])),
-        );
+        const bitstring = Bitstring2.fromBytes([255, 255]);
+
+        assert.isFalse(Bitstring2.isPrintableText(bitstring));
+        assert.isNull(bitstring.text);
       });
 
       it("with leftover bits", () => {
@@ -2677,7 +2684,10 @@ describe("Bitstring2", () => {
           1, 0, 1
         ]
 
-        assert.isFalse(Bitstring2.isPrintableText(Bitstring2.fromBits(bits)));
+        const bitstring = Bitstring2.fromBits(bits);
+
+        assert.isFalse(Bitstring2.isPrintableText(bitstring));
+        assert.isNull(bitstring.text);
       });
     });
   });
