@@ -1873,48 +1873,59 @@ describe("Interpreter", () => {
     });
 
     describe("bitstring2", () => {
-      it("empty text", () => {
-        const result = Interpreter.inspect(Type.bitstring2(""));
-        assert.equal(result, '""');
+      describe("text", () => {
+        it("empty", () => {
+          const result = Interpreter.inspect(Type.bitstring2(""));
+          assert.equal(result, '""');
+        });
+
+        it("non-empty, printable", () => {
+          const result = Interpreter.inspect(Type.bitstring2("abc"));
+          assert.equal(result, '"abc"');
+        });
+
+        it("non-empty, non-printable", () => {
+          const result = Interpreter.inspect(Type.bitstring2("a\x01b"));
+          assert.equal(result, "<<97, 1, 98>>");
+        });
       });
 
-      it("non-empty printable text", () => {
-        const result = Interpreter.inspect(Type.bitstring2("abc"));
-        assert.equal(result, '"abc"');
-      });
+      describe("bytes", () => {
+        it("that can be encoded as text", () => {
+          // "abc"
+          const result = Interpreter.inspect(
+            Bitstring2.fromBytes([97, 98, 99]),
+          );
+          assert.equal(result, '"abc"');
+        });
 
-      it("non-empty non-printable text", () => {
-        const result = Interpreter.inspect(Type.bitstring2("a\x01b"));
-        assert.equal(result, "<<97, 1, 98>>");
-      });
+        it("byte-aligned, single", () => {
+          const result = Interpreter.inspect(Bitstring2.fromBytes([255]));
+          assert.equal(result, "<<255>>");
+        });
 
-      it("bytes that can be encoded as text", () => {
-        // "abc"
-        const result = Interpreter.inspect(Bitstring2.fromBytes([97, 98, 99]));
-        assert.equal(result, '"abc"');
-      });
+        it("byte-aligned, multiple", () => {
+          const result = Interpreter.inspect(Bitstring2.fromBytes([255, 254]));
+          assert.equal(result, "<<255, 254>>");
+        });
 
-      it("not text, byte-aligned", () => {
-        const result = Interpreter.inspect(Bitstring2.fromBytes([255, 254]));
-        assert.equal(result, "<<255, 254>>");
-      });
+        it("not byte-aligned, single", () => {
+          const result = Interpreter.inspect(Type.bitstring2([1, 1]));
+          assert.equal(result, "<<3::size(2)>>");
+        });
 
-      it("not text, not byte-aligned, single byte", () => {
-        const result = Interpreter.inspect(Type.bitstring2([1, 1]));
-        assert.equal(result, "<<3::size(2)>>");
-      });
+        it("not byte-aligned, multiple", () => {
+          const result = Interpreter.inspect(
+            // prettier-ignore
+            Type.bitstring2([
+              1, 1, 0, 0, 1, 1, 0, 0,
+              1, 0, 1, 0, 1, 0, 1, 0,
+              1, 1,
+            ]),
+          );
 
-      it("not text, not byte-aligned, multiple bytes", () => {
-        const result = Interpreter.inspect(
-          // prettier-ignore
-          Type.bitstring2([
-            1, 1, 0, 0, 1, 1, 0, 0,
-            1, 0, 1, 0, 1, 0, 1, 0,
-            1, 1,
-          ]),
-        );
-
-        assert.equal(result, "<<204, 170, 3::size(2)>>");
+          assert.equal(result, "<<204, 170, 3::size(2)>>");
+        });
       });
     });
 
