@@ -5,7 +5,7 @@ import Interpreter from "./interpreter.mjs";
 
 export default class Bitstring2 {
   static #encoder = new TextEncoder("utf-8");
-  static #utf8Decoder = new TextDecoder("utf-8", {fatal: true});
+  static #decoder = new TextDecoder("utf-8", {fatal: true});
 
   static calculateSegmentBitCount(segment) {
     const size = $.resolveSegmentSize(segment);
@@ -199,7 +199,7 @@ export default class Bitstring2 {
   static maybeSetTextFromBytes(bitstring) {
     if (bitstring.text === null) {
       try {
-        bitstring.text = $.#utf8Decoder.decode(bitstring.bytes);
+        bitstring.text = $.#decoder.decode(bitstring.bytes);
       } catch {
         bitstring.text = false;
       }
