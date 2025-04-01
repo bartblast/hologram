@@ -350,6 +350,7 @@ export default class Bitstring {
     }
   }
 
+  // Migrated to Bitstring2
   static validateSegment(segment, index) {
     switch (segment.type) {
       case "binary":
