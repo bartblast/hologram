@@ -65,7 +65,7 @@ export default class Type {
   // TODO: test
   static bitstring2(arg) {
     if (typeof arg === "string") {
-      return Bitstring2.fromString(arg);
+      return Bitstring2.fromText(arg);
     }
 
     if (arg.length > 0 && typeof arg[0] === "object") {

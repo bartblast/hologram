@@ -4,6 +4,8 @@ import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 
 export default class Bitstring2 {
+  static #utf8Decoder = new TextDecoder("utf-8", {fatal: true});
+
   static calculateSegmentBitCount(segment) {
     const size = $.resolveSegmentSize(segment);
     const unit = $.resolveSegmentUnit(segment);
@@ -98,6 +100,19 @@ export default class Bitstring2 {
     return {type: "bitstring2", text: null, bytes, leftoverBitCount};
   }
 
+  // TODO: test
+  static fromBytes(bytes) {
+    const uint8Bytes =
+      bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+
+    return {
+      type: "bitstring2",
+      text: null,
+      bytes: uint8Bytes,
+      leftoverBitCount: 0,
+    };
+  }
+
   static fromText(text) {
     return {type: "bitstring2", text, bytes: null, leftoverBitCount: 0};
   }
@@ -152,6 +167,30 @@ export default class Bitstring2 {
     }
 
     return false;
+  }
+
+  static isPrintableText(bitstring) {
+    if (bitstring.leftoverBitCount !== 0) {
+      return false;
+    }
+
+    if (bitstring.text === null) {
+      try {
+        // Cache the text representation of bytes for potential future use.
+        // This mutation acts as a performance optimization.
+        bitstring.text = $.#utf8Decoder.decode(bitstring.bytes);
+      } catch {
+        return false;
+      }
+    }
+
+    for (const char of bitstring.text) {
+      if (!$.isPrintableCodePoint(char.codePointAt(0))) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   static resolveSegmentSize(segment) {

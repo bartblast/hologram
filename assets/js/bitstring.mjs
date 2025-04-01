@@ -206,6 +206,7 @@ export default class Bitstring {
     return false;
   }
 
+  // Migrated to Bitstring2
   static isPrintableText(bitstring) {
     if (!Type.isBinary(bitstring)) {
       return false;

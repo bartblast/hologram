@@ -2615,6 +2615,73 @@ describe("Bitstring2", () => {
     });
   });
 
+  describe("isPrintableText()", () => {
+    describe("bitstring.text field is not null", () => {
+      it("empty text", () => {
+        assert.isTrue(Bitstring2.isPrintableText(Type.bitstring2("")));
+      });
+
+      it("ASCII text", () => {
+        assert.isTrue(Bitstring2.isPrintableText(Type.bitstring2("abc")));
+      });
+
+      it("Unicode text (Chinese)", () => {
+        assert.isTrue(Bitstring2.isPrintableText(Type.bitstring2("全息图")));
+      });
+
+      it("with non-printable character", () => {
+        // \x01 is not printable
+        assert.isFalse(Bitstring2.isPrintableText(Type.bitstring2("a\x01b")));
+      });
+    });
+
+    describe("bitstring.text field is null", () => {
+      it("empty bytes", () => {
+        assert.isTrue(Bitstring2.isPrintableText(Type.bitstring2([])));
+      });
+
+      it("ASCII bytes", () => {
+        // "abc"
+        assert.isTrue(
+          Bitstring2.isPrintableText(Bitstring2.fromBytes([97, 98, 99])),
+        );
+      });
+
+      it("Unicode bytes (Chinese)", () => {
+        // "全息图"
+        assert.isTrue(
+          Bitstring2.isPrintableText(
+            Bitstring2.fromBytes([229, 133, 168, 230, 129, 175, 229, 155, 190]),
+          ),
+        );
+      });
+
+      it("with non-printable byte", () => {
+        // "a\x01b"
+        assert.isFalse(
+          Bitstring2.isPrintableText(Bitstring2.fromBytes([97, 1, 98])),
+        );
+      });
+
+      it("with invalid UTF-8 sequence", () => {
+        assert.isFalse(
+          Bitstring2.isPrintableText(Bitstring2.fromBytes([255, 255])),
+        );
+      });
+
+      it("with leftover bits", () => {
+        // prettier-ignore
+        const bits = [
+          0, 1, 1, 0, 0, 0, 0, 1, // "a"
+          0, 1, 1, 0, 0, 0, 1, 0, // "b"
+          1, 0, 1
+        ]
+
+        assert.isFalse(Bitstring2.isPrintableText(Bitstring2.fromBits(bits)));
+      });
+    });
+  });
+
   describe("resolveSegmentSize()", () => {
     it("returns explicit size when size is specified", () => {
       const segment = Type.bitstringSegment(Type.integer(123), {
@@ -2683,7 +2750,7 @@ describe("Bitstring2", () => {
     });
 
     it("returns 8 for binary segments without unit", () => {
-      const segment = Type.bitstringSegment(Type.bitstring("abc"), {
+      const segment = Type.bitstringSegment(Type.bitstring2("abc"), {
         type: "binary",
       });
 
