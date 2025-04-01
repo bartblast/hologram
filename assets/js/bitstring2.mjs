@@ -4,6 +4,7 @@ import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 
 export default class Bitstring2 {
+  static #encoder = new TextEncoder("utf-8");
   static #utf8Decoder = new TextDecoder("utf-8", {fatal: true});
 
   static calculateSegmentBitCount(segment) {
@@ -187,6 +188,12 @@ export default class Bitstring2 {
     }
 
     return true;
+  }
+
+  static maybeSetBytesFromText(bitstring) {
+    if (bitstring.bytes === null) {
+      bitstring.bytes = $.#encoder.encode(bitstring.text);
+    }
   }
 
   static maybeSetTextFromBytes(bitstring) {

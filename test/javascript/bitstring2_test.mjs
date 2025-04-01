@@ -2662,6 +2662,43 @@ describe("Bitstring2", () => {
     });
   });
 
+  describe("maybeSetBytesFromText()", () => {
+    it("sets bytes when bytes is null", () => {
+      const bitstring = Type.bitstring2("abc");
+
+      Bitstring2.maybeSetBytesFromText(bitstring);
+      assert.deepStrictEqual(bitstring.bytes, new Uint8Array([97, 98, 99]));
+    });
+
+    it("does nothing when bytes is already set", () => {
+      const bitstring = Type.bitstring2("abc");
+
+      const existingBytes = new Uint8Array([1, 2, 3]);
+      bitstring.bytes = existingBytes;
+
+      Bitstring2.maybeSetBytesFromText(bitstring);
+      assert.strictEqual(bitstring.bytes, existingBytes);
+    });
+
+    it("handles empty string", () => {
+      const bitstring = Type.bitstring2("");
+
+      Bitstring2.maybeSetBytesFromText(bitstring);
+      assert.deepStrictEqual(bitstring.bytes, new Uint8Array([]));
+    });
+
+    it("handles Unicode characters", () => {
+      const bitstring = Type.bitstring2("全息图");
+
+      Bitstring2.maybeSetBytesFromText(bitstring);
+
+      assert.deepStrictEqual(
+        bitstring.bytes,
+        new Uint8Array([229, 133, 168, 230, 129, 175, 229, 155, 190]),
+      );
+    });
+  });
+
   describe("maybeSetTextFromBytes()", () => {
     it("does nothing when text is already set to a string", () => {
       const bitstring = Type.bitstring2("existing text");
