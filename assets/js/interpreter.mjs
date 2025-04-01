@@ -4,6 +4,7 @@ import isEqual from "lodash/isEqual.js";
 import uniqWith from "lodash/uniqWith.js";
 
 import Bitstring from "./bitstring.mjs";
+import Bitstring2 from "./bitstring2.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
@@ -516,6 +517,9 @@ export default class Interpreter {
       case "bitstring":
         return Interpreter.#inspectBitstring(term, opts);
 
+      case "bitstring2":
+        return Interpreter.#inspectBitstring2(term, opts);
+
       case "float":
         return Interpreter.#inspectFloat(term, opts);
 
@@ -972,6 +976,24 @@ export default class Interpreter {
     });
 
     return `<<${segmentStrs.join(", ")}>>`;
+  }
+
+  static #inspectBitstring2(term, _opts) {
+    if (Bitstring2.isPrintableText(term)) {
+      return '"' + term.text.replace(/"/g, '\\"') + '"';
+    }
+
+    Bitstring2.maybeSetBytesFromText(term);
+
+    const {bytes, leftoverBitCount} = term;
+
+    if (leftoverBitCount === 0) {
+      return `<<${bytes.join(", ")}>>`;
+    }
+
+    const leftoverBitsValue = bytes.at(-1) >>> (8 - leftoverBitCount);
+
+    return `<<${bytes.slice(0, -1).join(", ")}, ${leftoverBitsValue}::size(${leftoverBitCount})>>`;
   }
 
   static #inspectFloat(term, _opts) {

@@ -11,6 +11,7 @@ import {
 import {defineModule1Fixture} from "./support/fixtures/ex_js_consistency/interpreter/module_1.mjs";
 import {defineModule1Fixture as defineMatchOperatorModule1Fixture} from "./support/fixtures/ex_js_consistency/match_operator/module_1.mjs";
 
+import Bitstring2 from "../../assets/js/bitstring2.mjs";
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
@@ -1861,6 +1862,47 @@ describe("Interpreter", () => {
         const result = Interpreter.inspect(
           // prettier-ignore
           Type.bitstring([
+            1, 1, 0, 0, 1, 1, 0, 0,
+            1, 0, 1, 0, 1, 0, 1, 0,
+            1, 1,
+          ]),
+        );
+
+        assert.equal(result, "<<204, 170, 3::size(2)>>");
+      });
+    });
+
+    describe("bitstring2", () => {
+      it("empty text", () => {
+        const result = Interpreter.inspect(Type.bitstring2(""));
+        assert.equal(result, '""');
+      });
+
+      it("non-empty printable text", () => {
+        const result = Interpreter.inspect(Type.bitstring2("abc"));
+        assert.equal(result, '"abc"');
+      });
+
+      it("non-empty non-printable text", () => {
+        const result = Interpreter.inspect(Type.bitstring2("a\x01b"));
+        assert.equal(result, "<<97, 1, 98>>");
+      });
+
+      it("bytes that can be encoded as text", () => {
+        // "abc"
+        const result = Interpreter.inspect(Bitstring2.fromBytes([97, 98, 99]));
+        assert.equal(result, '"abc"');
+      });
+
+      it("not text, byte-aligned", () => {
+        const result = Interpreter.inspect(Bitstring2.fromBytes([255, 254]));
+        assert.equal(result, "<<255, 254>>");
+      });
+
+      it("not text, not byte-aligned", () => {
+        const result = Interpreter.inspect(
+          // prettier-ignore
+          Type.bitstring2([
             1, 1, 0, 0, 1, 1, 0, 0,
             1, 0, 1, 0, 1, 0, 1, 0,
             1, 1,
