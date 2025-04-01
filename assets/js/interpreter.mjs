@@ -992,8 +992,13 @@ export default class Interpreter {
     }
 
     const leftoverBitsValue = bytes.at(-1) >>> (8 - leftoverBitCount);
+    const leftoverBitsStr = `${leftoverBitsValue}::size(${leftoverBitCount}`;
 
-    return `<<${bytes.slice(0, -1).join(", ")}, ${leftoverBitsValue}::size(${leftoverBitCount})>>`;
+    if (bytes.length > 1) {
+      return `<<${bytes.slice(0, -1).join(", ")}, ${leftoverBitsStr})>>`;
+    }
+
+    return `<<${leftoverBitsStr})>>`;
   }
 
   static #inspectFloat(term, _opts) {

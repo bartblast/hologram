@@ -1899,7 +1899,12 @@ describe("Interpreter", () => {
         assert.equal(result, "<<255, 254>>");
       });
 
-      it("not text, not byte-aligned", () => {
+      it("not text, not byte-aligned, single byte", () => {
+        const result = Interpreter.inspect(Type.bitstring2([1, 1]));
+        assert.equal(result, "<<3::size(2)>>");
+      });
+
+      it("not text, not byte-aligned, multiple bytes", () => {
         const result = Interpreter.inspect(
           // prettier-ignore
           Type.bitstring2([
