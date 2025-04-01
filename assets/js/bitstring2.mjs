@@ -24,8 +24,10 @@ export default class Bitstring2 {
         text += segments[i].value.value;
       }
 
-      return {type: "bitstring", text, bytes: null, leftoverBitCount: 0};
+      return {type: "bitstring2", text, bytes: null, leftoverBitCount: 0};
     }
+
+    // TODO: concat non-binary segments
   }
 
   static floatSegmentToBytes(segment) {
@@ -93,11 +95,11 @@ export default class Bitstring2 {
       bytes[byteIndex] = lastByte;
     }
 
-    return {type: "bitstring", text: null, bytes, leftoverBitCount};
+    return {type: "bitstring2", text: null, bytes, leftoverBitCount};
   }
 
   static fromText(text) {
-    return {type: "bitstring", text, bytes: null, leftoverBitCount: 0};
+    return {type: "bitstring2", text, bytes: null, leftoverBitCount: 0};
   }
 
   static integerSegmentToBytes(segment) {
@@ -167,7 +169,7 @@ export default class Bitstring2 {
       case "binary":
         return $.#validateBinarySegment(segment, index);
 
-      case "bitstring":
+      case "bitstring2":
         return $.#validateBitstringSegment(segment, index);
 
       case "float":
@@ -470,7 +472,7 @@ export default class Bitstring2 {
 
   static #validateBinarySegment(segment, index) {
     if (
-      segment.value.type === "bitstring" &&
+      segment.value.type === "bitstring2" &&
       segment.value.leftoverBitCount !== 0
     ) {
       const inspectedValue = Interpreter.inspect(segment.value);
@@ -535,7 +537,7 @@ export default class Bitstring2 {
   }
 
   static #validateUtfSegment(segment, index) {
-    if (["bitstring", "float"].includes(segment.value.type)) {
+    if (["bitstring2", "float"].includes(segment.value.type)) {
       $.#raiseTypeMismatchError(
         index,
         segment.type,

@@ -39,7 +39,7 @@ describe("Bitstring2", () => {
       ]);
 
       const expected = {
-        type: "bitstring",
+        type: "bitstring2",
         text: "Hologram",
         bytes: null,
         leftoverBitCount: 0,
@@ -55,7 +55,7 @@ describe("Bitstring2", () => {
       ]);
 
       const expected = {
-        type: "bitstring",
+        type: "bitstring2",
         text: "Hologram",
         bytes: null,
         leftoverBitCount: 0,
@@ -70,7 +70,7 @@ describe("Bitstring2", () => {
       ]);
 
       const expected = {
-        type: "bitstring",
+        type: "bitstring2",
         text: "Hologram",
         bytes: null,
         leftoverBitCount: 0,
@@ -86,7 +86,7 @@ describe("Bitstring2", () => {
       ]);
 
       const expected = {
-        type: "bitstring",
+        type: "bitstring2",
         text: "Hologram",
         bytes: null,
         leftoverBitCount: 0,
@@ -102,7 +102,7 @@ describe("Bitstring2", () => {
       ]);
 
       const expected = {
-        type: "bitstring",
+        type: "bitstring2",
         text: "Hologram",
         bytes: null,
         leftoverBitCount: 0,
@@ -779,7 +779,7 @@ describe("Bitstring2", () => {
       const result = Bitstring2.fromBits([]);
 
       const expected = {
-        type: "bitstring",
+        type: "bitstring2",
         text: null,
         bytes: new Uint8Array(0),
         leftoverBitCount: 0,
@@ -792,7 +792,7 @@ describe("Bitstring2", () => {
       const result = Bitstring2.fromBits([1, 0, 1, 0, 1, 0, 1, 0]);
 
       const expected = {
-        type: "bitstring",
+        type: "bitstring2",
         text: null,
         bytes: new Uint8Array([170]),
         leftoverBitCount: 0,
@@ -805,7 +805,7 @@ describe("Bitstring2", () => {
       const result = Bitstring2.fromBits([1, 0, 1, 0]);
 
       const expected = {
-        type: "bitstring",
+        type: "bitstring2",
         text: null,
         bytes: new Uint8Array([160]),
         leftoverBitCount: 4,
@@ -822,7 +822,7 @@ describe("Bitstring2", () => {
       ]);
 
       const expected = {
-        type: "bitstring",
+        type: "bitstring2",
         text: null,
         bytes: new Uint8Array([170, 85]),
         leftoverBitCount: 0,
@@ -840,7 +840,7 @@ describe("Bitstring2", () => {
       ]);
 
       const expected = {
-        type: "bitstring",
+        type: "bitstring2",
         text: null,
         bytes: new Uint8Array([170, 85, 160]),
         leftoverBitCount: 4,
@@ -854,7 +854,7 @@ describe("Bitstring2", () => {
     const result = Bitstring2.fromText("Hologram");
 
     const expected = {
-      type: "bitstring",
+      type: "bitstring2",
       text: "Hologram",
       bytes: null,
       leftoverBitCount: 0,
