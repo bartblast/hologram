@@ -166,6 +166,7 @@ export default class Bitstring {
     return {type: "bitstring", bits: Utils.concatUint8Arrays(bitArrays)};
   }
 
+  // Migrated to Bitstring2
   // See: String.printable?/2
   // https://github.com/elixir-lang/elixir/blob/6bfb95ab884f11475de6da3f99c6528938e025a8/lib/elixir/lib/string.ex#L322
   static isPrintableCodePoint(codePoint) {

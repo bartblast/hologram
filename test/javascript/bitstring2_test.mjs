@@ -2573,6 +2573,48 @@ describe("Bitstring2", () => {
     });
   });
 
+  describe("isPrintableCodePoint()", () => {
+    it("code point in range 0x20..0x7E", () => {
+      assert.isTrue(Bitstring2.isPrintableCodePoint(40));
+    });
+
+    it("code point not in range 0x20..0x7E", () => {
+      assert.isFalse(Bitstring2.isPrintableCodePoint(128));
+    });
+
+    it("code point in range 0xA0..0xD7FF", () => {
+      assert.isTrue(Bitstring2.isPrintableCodePoint(170));
+    });
+
+    it("code point not in range 0xA0..0xD7FF", () => {
+      assert.isFalse(Bitstring2.isPrintableCodePoint(55296));
+    });
+
+    it("code point in range 0xE000..0xFFFD", () => {
+      assert.isTrue(Bitstring2.isPrintableCodePoint(58000));
+    });
+
+    it("code point not in range 0xE000..0xFFFD", () => {
+      assert.isFalse(Bitstring2.isPrintableCodePoint(65534));
+    });
+
+    it("code point in range 0x10000..0x10FFFF", () => {
+      assert.isTrue(Bitstring2.isPrintableCodePoint(66000));
+    });
+
+    it("code point not in range 0x10000..0x10FFFF", () => {
+      assert.isFalse(Bitstring2.isPrintableCodePoint(1114112));
+    });
+
+    it("one of special printable chars", () => {
+      assert.isTrue(Bitstring2.isPrintableCodePoint(10));
+    });
+
+    it("not one of special printable chars", () => {
+      assert.isFalse(Bitstring2.isPrintableCodePoint(14));
+    });
+  });
+
   describe("resolveSegmentSize()", () => {
     it("returns explicit size when size is specified", () => {
       const segment = Type.bitstringSegment(Type.integer(123), {
