@@ -3584,7 +3584,7 @@ describe("Bitstring2", () => {
       assert.equal(Bitstring2.resolveSegmentUnit(segment), 16);
     });
 
-    it("returns 8 for binary segments without unit", () => {
+    it("returns 8 for binary segments by default", () => {
       const segment = Type.bitstringSegment(Type.bitstring2("abc"), {
         type: "binary",
       });
@@ -3592,7 +3592,7 @@ describe("Bitstring2", () => {
       assert.equal(Bitstring2.resolveSegmentUnit(segment), 8);
     });
 
-    it("returns 1 for float segments without unit", () => {
+    it("returns 1 for float segments by default", () => {
       const segment = Type.bitstringSegment(Type.float(123.45), {
         type: "float",
       });
@@ -3600,7 +3600,7 @@ describe("Bitstring2", () => {
       assert.equal(Bitstring2.resolveSegmentUnit(segment), 1);
     });
 
-    it("returns 1 for integer segments without unit", () => {
+    it("returns 1 for integer segments by default", () => {
       const segment = Type.bitstringSegment(Type.integer(123), {
         type: "integer",
       });
