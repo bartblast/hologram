@@ -113,6 +113,126 @@ describe("Bitstring2", () => {
     });
   });
 
+  describe("fromBits()", () => {
+    it("empty", () => {
+      const result = Bitstring2.fromBits([]);
+
+      const expected = {
+        type: "bitstring2",
+        text: null,
+        bytes: new Uint8Array(0),
+        leftoverBitCount: 0,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("single byte, byte-aligned", () => {
+      const result = Bitstring2.fromBits([1, 0, 1, 0, 1, 0, 1, 0]);
+
+      const expected = {
+        type: "bitstring2",
+        text: null,
+        bytes: new Uint8Array([170]),
+        leftoverBitCount: 0,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("single byte, not byte-aligned", () => {
+      const result = Bitstring2.fromBits([1, 0, 1, 0]);
+
+      const expected = {
+        type: "bitstring2",
+        text: null,
+        bytes: new Uint8Array([160]),
+        leftoverBitCount: 4,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multiple bytes, byte-aligned", () => {
+      // prettier-ignore
+      const result = Bitstring2.fromBits([
+        1, 0, 1, 0, 1, 0, 1, 0,
+        0, 1, 0, 1, 0, 1, 0, 1
+      ]);
+
+      const expected = {
+        type: "bitstring2",
+        text: null,
+        bytes: new Uint8Array([170, 85]),
+        leftoverBitCount: 0,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multiple bytes, not byte-aligned", () => {
+      // prettier-ignore
+      const result = Bitstring2.fromBits([
+        1, 0, 1, 0, 1, 0, 1, 0,
+        0, 1, 0, 1, 0, 1, 0, 1,
+        1, 0, 1, 0
+      ]);
+
+      const expected = {
+        type: "bitstring2",
+        text: null,
+        bytes: new Uint8Array([170, 85, 160]),
+        leftoverBitCount: 4,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("fromBytes()", () => {
+    it("creates bitstring from Uint8Array", () => {
+      const bytes = new Uint8Array([1, 2, 3]);
+      const result = Bitstring2.fromBytes(bytes);
+
+      const expected = {
+        type: "bitstring2",
+        text: null,
+        bytes: bytes,
+        leftoverBitCount: 0,
+      };
+
+      assert.deepStrictEqual(result, expected);
+      assert.strictEqual(result.bytes, bytes);
+    });
+
+    it("creates bitstring from regular array", () => {
+      const bytes = [1, 2, 3];
+      const result = Bitstring2.fromBytes(bytes);
+
+      const expected = {
+        type: "bitstring2",
+        text: null,
+        bytes: new Uint8Array([1, 2, 3]),
+        leftoverBitCount: 0,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles empty array", () => {
+      const result = Bitstring2.fromBytes([]);
+
+      const expected = {
+        type: "bitstring2",
+        text: null,
+        bytes: new Uint8Array([]),
+        leftoverBitCount: 0,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   describe("fromFloatSegment()", () => {
     describe("64-bit", () => {
       describe("float value", () => {
@@ -1012,126 +1132,6 @@ describe("Bitstring2", () => {
           });
         });
       });
-    });
-  });
-
-  describe("fromBits()", () => {
-    it("empty", () => {
-      const result = Bitstring2.fromBits([]);
-
-      const expected = {
-        type: "bitstring2",
-        text: null,
-        bytes: new Uint8Array(0),
-        leftoverBitCount: 0,
-      };
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("single byte, byte-aligned", () => {
-      const result = Bitstring2.fromBits([1, 0, 1, 0, 1, 0, 1, 0]);
-
-      const expected = {
-        type: "bitstring2",
-        text: null,
-        bytes: new Uint8Array([170]),
-        leftoverBitCount: 0,
-      };
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("single byte, not byte-aligned", () => {
-      const result = Bitstring2.fromBits([1, 0, 1, 0]);
-
-      const expected = {
-        type: "bitstring2",
-        text: null,
-        bytes: new Uint8Array([160]),
-        leftoverBitCount: 4,
-      };
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("multiple bytes, byte-aligned", () => {
-      // prettier-ignore
-      const result = Bitstring2.fromBits([
-        1, 0, 1, 0, 1, 0, 1, 0,
-        0, 1, 0, 1, 0, 1, 0, 1
-      ]);
-
-      const expected = {
-        type: "bitstring2",
-        text: null,
-        bytes: new Uint8Array([170, 85]),
-        leftoverBitCount: 0,
-      };
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("multiple bytes, not byte-aligned", () => {
-      // prettier-ignore
-      const result = Bitstring2.fromBits([
-        1, 0, 1, 0, 1, 0, 1, 0,
-        0, 1, 0, 1, 0, 1, 0, 1,
-        1, 0, 1, 0
-      ]);
-
-      const expected = {
-        type: "bitstring2",
-        text: null,
-        bytes: new Uint8Array([170, 85, 160]),
-        leftoverBitCount: 4,
-      };
-
-      assert.deepStrictEqual(result, expected);
-    });
-  });
-
-  describe("fromBytes()", () => {
-    it("creates bitstring from Uint8Array", () => {
-      const bytes = new Uint8Array([1, 2, 3]);
-      const result = Bitstring2.fromBytes(bytes);
-
-      const expected = {
-        type: "bitstring2",
-        text: null,
-        bytes: bytes,
-        leftoverBitCount: 0,
-      };
-
-      assert.deepStrictEqual(result, expected);
-      assert.strictEqual(result.bytes, bytes);
-    });
-
-    it("creates bitstring from regular array", () => {
-      const bytes = [1, 2, 3];
-      const result = Bitstring2.fromBytes(bytes);
-
-      const expected = {
-        type: "bitstring2",
-        text: null,
-        bytes: new Uint8Array([1, 2, 3]),
-        leftoverBitCount: 0,
-      };
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("handles empty array", () => {
-      const result = Bitstring2.fromBytes([]);
-
-      const expected = {
-        type: "bitstring2",
-        text: null,
-        bytes: new Uint8Array([]),
-        leftoverBitCount: 0,
-      };
-
-      assert.deepStrictEqual(result, expected);
     });
   });
 
