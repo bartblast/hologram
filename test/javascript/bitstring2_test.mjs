@@ -3638,7 +3638,7 @@ describe("Bitstring2", () => {
   describe("validateSegment()", () => {
     describe("binary segments", () => {
       it("validates binary segment with byte-aligned bitstring value", () => {
-        const segment = Type.bitstringSegment(Type.bitstring("abc"), {
+        const segment = Type.bitstringSegment(Type.bitstring2("abc"), {
           type: "binary",
         });
 
@@ -3660,6 +3660,14 @@ describe("Bitstring2", () => {
           "ArgumentError",
           "construction of binary failed: segment 1 of type 'binary': the size of the value <<15::size(4)>> is not a multiple of the unit for the segment",
         );
+      });
+
+      it("validates binary segment with string value", () => {
+        const segment = Type.bitstringSegment(Type.string("abc"), {
+          type: "binary",
+        });
+
+        assert.isTrue(Bitstring2.validateSegment(segment, 1));
       });
 
       it("rejects binary segment with float value", () => {

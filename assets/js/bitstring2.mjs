@@ -624,6 +624,10 @@ export default class Bitstring2 {
   }
 
   static #validateBinarySegment(segment, index) {
+    if (!["bitstring2", "string"].includes(segment.value.type)) {
+      $.#raiseTypeMismatchError(index, "binary", "a binary", segment.value);
+    }
+
     if (
       segment.value.type === "bitstring2" &&
       segment.value.leftoverBitCount !== 0
@@ -633,10 +637,6 @@ export default class Bitstring2 {
       Interpreter.raiseArgumentError(
         `construction of binary failed: segment ${index} of type 'binary': the size of the value ${inspectedValue} is not a multiple of the unit for the segment`,
       );
-    }
-
-    if (["float", "integer"].includes(segment.value.type)) {
-      $.#raiseTypeMismatchError(index, "binary", "a binary", segment.value);
     }
 
     return true;
