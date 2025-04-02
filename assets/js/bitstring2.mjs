@@ -222,12 +222,17 @@ export default class Bitstring2 {
 
     switch (segment.type) {
       case "binary":
-        if (segment?.text != null) {
-          const blob = new Blob([segment.text]);
-          return blob.size;
+        if (segment.value.type === "string") {
+          return $.calculateTextByteCount(segment.value.value);
         }
 
-        return segment.bytes.length;
+        // bitstring2
+        if (segment.value?.text != null) {
+          return $.calculateTextByteCount(segment.value.text);
+        }
+
+        // bitstring2
+        return segment.value.bytes.length;
 
       case "float":
         return 64;

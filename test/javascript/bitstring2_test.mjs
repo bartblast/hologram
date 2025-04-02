@@ -3518,25 +3518,34 @@ describe("Bitstring2", () => {
       assert.equal(Bitstring2.resolveSegmentSize(segment), 16);
     });
 
-    it("calculates size for binary segment with text", () => {
-      const segment = {
+    it("calculates size for binary segment with string value", () => {
+      const segment = Type.bitstringSegment(Type.string("全息图"), {
         type: "binary",
-        text: "全息图", // 9 bytes
-      };
+      });
 
       assert.equal(Bitstring2.resolveSegmentSize(segment), 9);
     });
 
-    it("calculates size for binary segment with bytes", () => {
-      const segment = {
+    it("calculates size for binary segment with bitstring value having not null text field", () => {
+      const segment = Type.bitstringSegment(Type.bitstring2("全息图"), {
         type: "binary",
-        bytes: new Uint8Array([1, 2, 3, 4]),
-      };
+      });
 
-      assert.equal(Bitstring2.resolveSegmentSize(segment), 4);
+      assert.equal(Bitstring2.resolveSegmentSize(segment), 9);
     });
 
-    it("returns 64 for float segments", () => {
+    it("calculates size for binary segment with bitstring value having null text field", () => {
+      const segment = Type.bitstringSegment(
+        Bitstring2.fromBytes([97, 98, 99]),
+        {
+          type: "binary",
+        },
+      );
+
+      assert.equal(Bitstring2.resolveSegmentSize(segment), 3);
+    });
+
+    it("returns 64 for float segments by default", () => {
       const segment = Type.bitstringSegment(Type.float(123.45), {
         type: "float",
       });
@@ -3544,7 +3553,7 @@ describe("Bitstring2", () => {
       assert.equal(Bitstring2.resolveSegmentSize(segment), 64);
     });
 
-    it("returns 8 for integer segments", () => {
+    it("returns 8 for integer segments by default", () => {
       const segment = Type.bitstringSegment(Type.integer(123), {
         type: "integer",
       });
