@@ -33,35 +33,6 @@ export default class Bitstring2 {
     // TODO: concat non-binary segments
   }
 
-  static floatSegmentToBytes(segment) {
-    let value;
-
-    if (segment.value.type === "float") {
-      value = segment.value.value;
-    } else {
-      // integer
-      value = Number(segment.value.value);
-    }
-
-    const isLittleEndian = $.#isLittleEndian(segment);
-
-    const bitCount = $.calculateSegmentBitCount(segment);
-    const byteCount = bitCount / 8;
-    const buffer = new ArrayBuffer(byteCount);
-    const dataView = new DataView(buffer);
-
-    if (bitCount === 64) {
-      dataView.setFloat64(0, value, isLittleEndian);
-    } else if (bitCount === 32) {
-      dataView.setFloat32(0, value, isLittleEndian);
-    } else {
-      // DataView.setFloat16() has limited availability in browsers
-      $.#setFloat16(dataView, value, isLittleEndian);
-    }
-
-    return new Uint8Array(buffer);
-  }
-
   static fromBits(bits) {
     const bitCount = bits.length;
     const byteCount = Math.ceil(bitCount / 8);
@@ -109,6 +80,40 @@ export default class Bitstring2 {
       type: "bitstring2",
       text: null,
       bytes: uint8Bytes,
+      leftoverBitCount: 0,
+    };
+  }
+
+  static fromFloatSegment(segment) {
+    let value;
+
+    if (segment.value.type === "float") {
+      value = segment.value.value;
+    } else {
+      // integer
+      value = Number(segment.value.value);
+    }
+
+    const isLittleEndian = $.#isLittleEndian(segment);
+
+    const bitCount = $.calculateSegmentBitCount(segment);
+    const byteCount = bitCount / 8;
+    const buffer = new ArrayBuffer(byteCount);
+    const dataView = new DataView(buffer);
+
+    if (bitCount === 64) {
+      dataView.setFloat64(0, value, isLittleEndian);
+    } else if (bitCount === 32) {
+      dataView.setFloat32(0, value, isLittleEndian);
+    } else {
+      // DataView.setFloat16() has limited availability in browsers
+      $.#setFloat16(dataView, value, isLittleEndian);
+    }
+
+    return {
+      type: "bitstring2",
+      text: null,
+      bytes: new Uint8Array(buffer),
       leftoverBitCount: 0,
     };
   }

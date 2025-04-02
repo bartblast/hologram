@@ -113,7 +113,7 @@ describe("Bitstring2", () => {
     });
   });
 
-  describe("floatSegmentToBytes()", () => {
+  describe("fromFloatSegment()", () => {
     describe("64-bit", () => {
       describe("float value", () => {
         describe("positive", () => {
@@ -125,11 +125,14 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
+            const result = Bitstring2.fromFloatSegment(segment);
 
-            const expected = new Uint8Array([
-              64, 94, 220, 204, 204, 204, 204, 205,
-            ]);
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([64, 94, 220, 204, 204, 204, 204, 205]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -142,11 +145,14 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
+            const result = Bitstring2.fromFloatSegment(segment);
 
-            const expected = new Uint8Array([
-              205, 204, 204, 204, 204, 220, 94, 64,
-            ]);
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([205, 204, 204, 204, 204, 220, 94, 64]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -161,11 +167,14 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
+            const result = Bitstring2.fromFloatSegment(segment);
 
-            const expected = new Uint8Array([
-              192, 94, 220, 204, 204, 204, 204, 205,
-            ]);
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([192, 94, 220, 204, 204, 204, 204, 205]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -178,11 +187,14 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
+            const result = Bitstring2.fromFloatSegment(segment);
 
-            const expected = new Uint8Array([
-              205, 204, 204, 204, 204, 220, 94, 192,
-            ]);
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([205, 204, 204, 204, 204, 220, 94, 192]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -197,8 +209,14 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -211,8 +229,14 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -227,8 +251,14 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([128, 0, 0, 0, 0, 0, 0, 0]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([128, 0, 0, 0, 0, 0, 0, 0]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -241,8 +271,14 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([0, 0, 0, 0, 0, 0, 0, 128]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0, 0, 0, 0, 0, 0, 0, 128]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -259,8 +295,14 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([64, 94, 192, 0, 0, 0, 0, 0]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([64, 94, 192, 0, 0, 0, 0, 0]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -273,8 +315,14 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([0, 0, 0, 0, 0, 192, 94, 64]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0, 0, 0, 0, 0, 192, 94, 64]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -289,8 +337,14 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([192, 94, 192, 0, 0, 0, 0, 0]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([192, 94, 192, 0, 0, 0, 0, 0]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -303,8 +357,14 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([0, 0, 0, 0, 0, 192, 94, 192]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0, 0, 0, 0, 0, 192, 94, 192]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -319,8 +379,14 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -333,8 +399,14 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -353,8 +425,14 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([66, 246, 230, 102]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([66, 246, 230, 102]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -367,8 +445,14 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([102, 230, 246, 66]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([102, 230, 246, 66]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -383,8 +467,14 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([194, 246, 230, 102]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([194, 246, 230, 102]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -397,8 +487,14 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([102, 230, 246, 194]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([102, 230, 246, 194]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -413,13 +509,19 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([0, 0, 0, 0]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0, 0, 0, 0]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
 
-          it("big-endian", () => {
+          it("little-endian", () => {
             const segment = Type.bitstringSegment(Type.float(0.0), {
               type: "float",
               size: Type.integer(16),
@@ -427,8 +529,14 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([0, 0, 0, 0]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0, 0, 0, 0]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -443,8 +551,14 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([128, 0, 0, 0]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([128, 0, 0, 0]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -457,8 +571,14 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([0, 0, 0, 128]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0, 0, 0, 128]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -475,8 +595,14 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([66, 246, 0, 0]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([66, 246, 0, 0]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -489,8 +615,14 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([0, 0, 246, 66]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0, 0, 246, 66]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -505,8 +637,14 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([194, 246, 0, 0]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([194, 246, 0, 0]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -519,8 +657,14 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([0, 0, 246, 194]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0, 0, 246, 194]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -535,8 +679,14 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([0, 0, 0, 0]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0, 0, 0, 0]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -549,8 +699,14 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([0, 0, 0, 0]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0, 0, 0, 0]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -569,8 +725,14 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([87, 183]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([87, 183]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -583,8 +745,14 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([183, 87]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([183, 87]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -599,8 +767,14 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([215, 183]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([215, 183]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -613,8 +787,14 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([183, 215]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([183, 215]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -629,8 +809,14 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([0, 0]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0, 0]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -643,8 +829,14 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([0, 0]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0, 0]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -659,8 +851,14 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([128, 0]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([128, 0]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -673,8 +871,14 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([0, 128]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0, 128]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -691,8 +895,14 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([87, 176]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([87, 176]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -705,8 +915,14 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([176, 87]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([176, 87]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -721,8 +937,14 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([215, 176]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([215, 176]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -735,8 +957,14 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([176, 215]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([176, 215]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -751,8 +979,14 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([0, 0]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0, 0]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
@@ -765,8 +999,14 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.floatSegmentToBytes(segment);
-            const expected = new Uint8Array([0, 0]);
+            const result = Bitstring2.fromFloatSegment(segment);
+
+            const expected = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0, 0]),
+              leftoverBitCount: 0,
+            };
 
             assert.deepStrictEqual(result, expected);
           });
