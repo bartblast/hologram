@@ -1135,19 +1135,6 @@ describe("Bitstring2", () => {
     });
   });
 
-  it("fromText()", () => {
-    const result = Bitstring2.fromText("Hologram");
-
-    const expected = {
-      type: "bitstring2",
-      text: "Hologram",
-      bytes: null,
-      leftoverBitCount: 0,
-    };
-
-    assert.deepStrictEqual(result, expected);
-  });
-
   describe("fromIntegerSegment()", () => {
     describe("integers within Number range", () => {
       describe("byte-aligned", () => {
@@ -3344,6 +3331,19 @@ describe("Bitstring2", () => {
         });
       });
     });
+  });
+
+  it("fromText()", () => {
+    const result = Bitstring2.fromText("Hologram");
+
+    const expected = {
+      type: "bitstring2",
+      text: "Hologram",
+      bytes: null,
+      leftoverBitCount: 0,
+    };
+
+    assert.deepStrictEqual(result, expected);
   });
 
   describe("isPrintableCodePoint()", () => {
