@@ -2,6 +2,7 @@
 
 import {
   assert,
+  assertBoxedError,
   defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
@@ -2902,6 +2903,408 @@ describe("Bitstring2", () => {
 
     it("not an integer or a bigint", () => {
       assert.isFalse(Bitstring2.validateCodePoint("abc"));
+    });
+  });
+
+  // TODO: implement consistency tests
+  describe("validateSegment()", () => {
+    describe("binary segments", () => {
+      it("validates binary segment with byte-aligned bitstring value", () => {
+        const segment = Type.bitstringSegment(Type.bitstring("abc"), {
+          type: "binary",
+        });
+
+        assert.isTrue(Bitstring2.validateSegment(segment, 1));
+      });
+
+      it("rejects binary segment with non-byte-aligned bitstring value", () => {
+        const segment = Type.bitstringSegment(
+          {
+            type: "bitstring2",
+            bytes: new Uint8Array([255]),
+            leftoverBitCount: 4,
+          },
+          {type: "binary"},
+        );
+
+        assertBoxedError(
+          () => Bitstring2.validateSegment(segment, 1),
+          "ArgumentError",
+          "construction of binary failed: segment 1 of type 'binary': the size of the value <<15::size(4)>> is not a multiple of the unit for the segment",
+        );
+      });
+
+      it("rejects binary segment with float value", () => {
+        const segment = Type.bitstringSegment(Type.float(123.45), {
+          type: "binary",
+        });
+
+        assertBoxedError(
+          () => Bitstring2.validateSegment(segment, 1),
+          "ArgumentError",
+          "construction of binary failed: segment 1 of type 'binary': expected a binary but got: 123.45",
+        );
+      });
+
+      it("rejects binary segment with integer value", () => {
+        const segment = Type.bitstringSegment(Type.integer(123), {
+          type: "binary",
+        });
+
+        assertBoxedError(
+          () => Bitstring2.validateSegment(segment, 1),
+          "ArgumentError",
+          "construction of binary failed: segment 1 of type 'binary': expected a binary but got: 123",
+        );
+      });
+    });
+
+    describe("bitstring segments", () => {
+      it("validates bitstring segment with bitstring value", () => {
+        const segment = Type.bitstringSegment(Type.bitstring("abc"), {
+          type: "bitstring2",
+        });
+
+        assert.isTrue(Bitstring2.validateSegment(segment, 1));
+      });
+
+      it("rejects bitstring segment with float value", () => {
+        const segment = Type.bitstringSegment(Type.float(123.45), {
+          type: "bitstring2",
+        });
+
+        assertBoxedError(
+          () => Bitstring2.validateSegment(segment, 1),
+          "ArgumentError",
+          "construction of binary failed: segment 1 of type 'binary': expected a binary but got: 123.45",
+        );
+      });
+
+      it("rejects bitstring segment with integer value", () => {
+        const segment = Type.bitstringSegment(Type.integer(123), {
+          type: "bitstring2",
+        });
+
+        assertBoxedError(
+          () => Bitstring2.validateSegment(segment, 1),
+          "ArgumentError",
+          "construction of binary failed: segment 1 of type 'binary': expected a binary but got: 123",
+        );
+      });
+
+      it("rejects bitstring segment with size specified", () => {
+        const segment = Type.bitstringSegment(Type.bitstring("abc"), {
+          type: "bitstring2",
+          size: Type.integer(16),
+        });
+
+        assertBoxedError(
+          () => Bitstring2.validateSegment(segment, 1),
+          "ArgumentError",
+          `construction of binary failed: segment 1 of type 'integer': expected an integer but got: "abc"`,
+        );
+      });
+
+      it("rejects bitstring segment with signedness specified", () => {
+        const segment = Type.bitstringSegment(Type.bitstring("abc"), {
+          type: "bitstring2",
+          signedness: "unsigned",
+        });
+
+        assertBoxedError(
+          () => Bitstring2.validateSegment(segment, 1),
+          "ArgumentError",
+          `construction of binary failed: segment 1 of type 'integer': expected an integer but got: "abc"`,
+        );
+      });
+    });
+
+    describe("float segments", () => {
+      it("validates float segment with float value", () => {
+        const segment = Type.bitstringSegment(Type.float(123.45), {
+          type: "float",
+        });
+
+        assert.isTrue(Bitstring2.validateSegment(segment, 1));
+      });
+
+      it("validates float segment with integer value", () => {
+        const segment = Type.bitstringSegment(Type.integer(123), {
+          type: "float",
+        });
+
+        assert.isTrue(Bitstring2.validateSegment(segment, 1));
+      });
+
+      it("validates float segment with variable pattern value", () => {
+        const segment = Type.bitstringSegment(Type.variablePattern("abc"), {
+          type: "float",
+        });
+
+        assert.isTrue(Bitstring2.validateSegment(segment, 1));
+      });
+
+      it("rejects float segment with bitstring value", () => {
+        const segment = Type.bitstringSegment(Type.bitstring("abc"), {
+          type: "float",
+        });
+
+        assertBoxedError(
+          () => Bitstring2.validateSegment(segment, 1),
+          "ArgumentError",
+          `construction of binary failed: segment 1 of type 'float': expected a float or an integer but got: "abc"`,
+        );
+      });
+
+      it("rejects float segment when unit is specified without size", () => {
+        const segment = Type.bitstringSegment(Type.float(123.45), {
+          type: "float",
+          unit: 2n,
+        });
+
+        assertBoxedError(
+          () => Bitstring2.validateSegment(segment, 1),
+          "CompileError",
+          "integer and float types require a size specifier if the unit specifier is given",
+        );
+      });
+
+      it("validates float segment with valid bit size", () => {
+        const segment = Type.bitstringSegment(Type.float(123.45), {
+          type: "float",
+          size: Type.integer(32),
+        });
+
+        assert.isTrue(Bitstring2.validateSegment(segment, 1));
+      });
+
+      it("rejects float segment with invalid bit size", () => {
+        const segment = Type.bitstringSegment(Type.float(123.45), {
+          type: "float",
+          size: Type.integer(24),
+        });
+
+        assertBoxedError(
+          () => Bitstring2.validateSegment(segment, 1),
+          "ArgumentError",
+          "construction of binary failed: segment 1 of type 'integer': expected an integer but got: 123.45",
+        );
+      });
+    });
+
+    describe("integer segments", () => {
+      it("validates integer segment with integer value", () => {
+        const segment = Type.bitstringSegment(Type.integer(123), {
+          type: "integer",
+        });
+
+        assert.isTrue(Bitstring2.validateSegment(segment, 1));
+      });
+
+      it("validates integer segment with variable pattern value", () => {
+        const segment = Type.bitstringSegment(Type.variablePattern("abc"), {
+          type: "integer",
+        });
+
+        assert.isTrue(Bitstring2.validateSegment(segment, 1));
+      });
+
+      it("rejects integer segment with float value", () => {
+        const segment = Type.bitstringSegment(Type.float(123.45), {
+          type: "integer",
+        });
+
+        assertBoxedError(
+          () => Bitstring2.validateSegment(segment, 1),
+          "ArgumentError",
+          "construction of binary failed: segment 1 of type 'integer': expected an integer but got: 123.45",
+        );
+      });
+    });
+
+    describe("UTF segments", () => {
+      describe("utf8", () => {
+        it("validates utf8 segment with integer value", () => {
+          const segment = Type.bitstringSegment(Type.integer(97), {
+            type: "utf8",
+          });
+
+          assert.isTrue(Bitstring2.validateSegment(segment, 1));
+        });
+
+        it("rejects utf8 segment with float value", () => {
+          const segment = Type.bitstringSegment(Type.float(123.45), {
+            type: "utf8",
+          });
+
+          assertBoxedError(
+            () => Bitstring2.validateSegment(segment, 1),
+            "ArgumentError",
+            "construction of binary failed: segment 1 of type 'utf8': expected a non-negative integer encodable as utf8 but got: 123.45",
+          );
+        });
+
+        it("rejects utf8 segment with size specified", () => {
+          const segment = Type.bitstringSegment(Type.integer(97), {
+            type: "utf8",
+            size: Type.integer(16),
+          });
+
+          assertBoxedError(
+            () => Bitstring2.validateSegment(segment, 1),
+            "ArgumentError",
+            "construction of binary failed: segment 1 of type 'integer': expected an integer but got: 97",
+          );
+        });
+
+        it("rejects utf8 segment with unit specified", () => {
+          const segment = Type.bitstringSegment(Type.integer(97), {
+            type: "utf8",
+            unit: 2n,
+          });
+
+          assertBoxedError(
+            () => Bitstring2.validateSegment(segment, 1),
+            "ArgumentError",
+            "construction of binary failed: segment 1 of type 'integer': expected an integer but got: 97",
+          );
+        });
+
+        it("rejects utf8 segment with signedness specified", () => {
+          const segment = Type.bitstringSegment(Type.integer(97), {
+            type: "utf8",
+            signedness: "unsigned",
+          });
+
+          assertBoxedError(
+            () => Bitstring2.validateSegment(segment, 1),
+            "ArgumentError",
+            "construction of binary failed: segment 1 of type 'integer': expected an integer but got: 97",
+          );
+        });
+      });
+
+      describe("utf16", () => {
+        it("validates utf16 segment with integer value", () => {
+          const segment = Type.bitstringSegment(Type.integer(97), {
+            type: "utf16",
+          });
+
+          assert.isTrue(Bitstring2.validateSegment(segment, 1));
+        });
+
+        it("rejects utf16 segment with float value", () => {
+          const segment = Type.bitstringSegment(Type.float(123.45), {
+            type: "utf16",
+          });
+
+          assertBoxedError(
+            () => Bitstring2.validateSegment(segment, 1),
+            "ArgumentError",
+            "construction of binary failed: segment 1 of type 'utf16': expected a non-negative integer encodable as utf16 but got: 123.45",
+          );
+        });
+
+        it("rejects utf16 segment with size specified", () => {
+          const segment = Type.bitstringSegment(Type.integer(97), {
+            type: "utf16",
+            size: Type.integer(16),
+          });
+
+          assertBoxedError(
+            () => Bitstring2.validateSegment(segment, 1),
+            "ArgumentError",
+            "construction of binary failed: segment 1 of type 'integer': expected an integer but got: 97",
+          );
+        });
+
+        it("rejects utf16 segment with unit specified", () => {
+          const segment = Type.bitstringSegment(Type.integer(97), {
+            type: "utf16",
+            unit: 2n,
+          });
+
+          assertBoxedError(
+            () => Bitstring2.validateSegment(segment, 1),
+            "ArgumentError",
+            "construction of binary failed: segment 1 of type 'integer': expected an integer but got: 97",
+          );
+        });
+
+        it("rejects utf16 segment with signedness specified", () => {
+          const segment = Type.bitstringSegment(Type.integer(97), {
+            type: "utf16",
+            signedness: "unsigned",
+          });
+
+          assertBoxedError(
+            () => Bitstring2.validateSegment(segment, 1),
+            "ArgumentError",
+            "construction of binary failed: segment 1 of type 'integer': expected an integer but got: 97",
+          );
+        });
+      });
+
+      describe("utf32", () => {
+        it("validates utf32 segment with integer value", () => {
+          const segment = Type.bitstringSegment(Type.integer(97), {
+            type: "utf32",
+          });
+
+          assert.isTrue(Bitstring2.validateSegment(segment, 1));
+        });
+
+        it("rejects utf32 segment with float value", () => {
+          const segment = Type.bitstringSegment(Type.float(123.45), {
+            type: "utf32",
+          });
+
+          assertBoxedError(
+            () => Bitstring2.validateSegment(segment, 1),
+            "ArgumentError",
+            "construction of binary failed: segment 1 of type 'utf32': expected a non-negative integer encodable as utf32 but got: 123.45",
+          );
+        });
+
+        it("rejects utf32 segment with size specified", () => {
+          const segment = Type.bitstringSegment(Type.integer(97), {
+            type: "utf32",
+            size: Type.integer(16),
+          });
+
+          assertBoxedError(
+            () => Bitstring2.validateSegment(segment, 1),
+            "ArgumentError",
+            "construction of binary failed: segment 1 of type 'integer': expected an integer but got: 97",
+          );
+        });
+
+        it("rejects utf32 segment with unit specified", () => {
+          const segment = Type.bitstringSegment(Type.integer(97), {
+            type: "utf32",
+            unit: 2n,
+          });
+
+          assertBoxedError(
+            () => Bitstring2.validateSegment(segment, 1),
+            "ArgumentError",
+            "construction of binary failed: segment 1 of type 'integer': expected an integer but got: 97",
+          );
+        });
+
+        it("rejects utf32 segment with signedness specified", () => {
+          const segment = Type.bitstringSegment(Type.integer(97), {
+            type: "utf32",
+            signedness: "unsigned",
+          });
+
+          assertBoxedError(
+            () => Bitstring2.validateSegment(segment, 1),
+            "ArgumentError",
+            "construction of binary failed: segment 1 of type 'integer': expected an integer but got: 97",
+          );
+        });
+      });
     });
   });
 });

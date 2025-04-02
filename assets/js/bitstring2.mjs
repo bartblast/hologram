@@ -620,7 +620,7 @@ export default class Bitstring2 {
       );
     }
 
-    if (segment?.size != null && segment?.unit != null) {
+    if (!(segment?.size != null) && segment?.unit != null) {
       Interpreter.raiseCompileError(
         "integer and float types require a size specifier if the unit specifier is given",
       );
