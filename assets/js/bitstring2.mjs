@@ -249,7 +249,7 @@ export default class Bitstring2 {
   }
 
   static resolveSegmentUnit(segment) {
-    if (segment?.unit != null) {
+    if (segment?.unit != null && segment?.size != null) {
       return Number(segment.unit);
     }
 

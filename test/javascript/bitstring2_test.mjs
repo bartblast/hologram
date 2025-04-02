@@ -3575,13 +3575,23 @@ describe("Bitstring2", () => {
   });
 
   describe("resolveSegmentUnit()", () => {
-    it("returns explicit unit when specified", () => {
+    it("returns explicit unit when both unit and size are specified", () => {
+      const segment = Type.bitstringSegment(Type.integer(123), {
+        type: "integer",
+        size: Type.integer(1),
+        unit: 16n,
+      });
+
+      assert.equal(Bitstring2.resolveSegmentUnit(segment), 16);
+    });
+
+    it("returns default unit when unit is specified but size is not", () => {
       const segment = Type.bitstringSegment(Type.integer(123), {
         type: "integer",
         unit: 16n,
       });
 
-      assert.equal(Bitstring2.resolveSegmentUnit(segment), 16);
+      assert.equal(Bitstring2.resolveSegmentUnit(segment), 1);
     });
 
     it("returns 8 for binary segments by default", () => {
