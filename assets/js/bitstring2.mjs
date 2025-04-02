@@ -118,21 +118,21 @@ export default class Bitstring2 {
     };
   }
 
-  static fromText(text) {
-    return {type: "bitstring2", text, bytes: null, leftoverBitCount: 0};
-  }
-
-  static integerSegmentToBytes(segment) {
+  static fromIntegerSegment(segment) {
     const value = segment.value.value;
 
     if (
       value >= BigInt(Number.MIN_SAFE_INTEGER) &&
       value <= BigInt(Number.MAX_SAFE_INTEGER)
     ) {
-      return $.#integerSegmentWithinNumberRangeToBytes(segment);
+      return $.#fromIntegerSegmentWithinNumberRange(segment);
     }
 
-    return $.#integerSegmentOutsideNumberRangeToBytes(segment);
+    return $.#fromIntegerSegmentOutsideNumberRange(segment);
+  }
+
+  static fromText(text) {
+    return {type: "bitstring2", text, bytes: null, leftoverBitCount: 0};
   }
 
   // See: String.printable?/2
@@ -297,122 +297,7 @@ export default class Bitstring2 {
     }
   }
 
-  static #integerSegmentOutsideNumberRangeToBytes(segment) {
-    const value = segment.value.value;
-    const isLittleEndian = $.#isLittleEndian(segment);
-
-    const bitCount = $.calculateSegmentBitCount(segment);
-    const completeBytes = Math.floor(bitCount / 8);
-    const leftoverBits = bitCount % 8;
-    const totalBytes = completeBytes + (leftoverBits > 0 ? 1 : 0);
-
-    const buffer = new ArrayBuffer(totalBytes);
-    const result = new Uint8Array(buffer);
-
-    // Special fast path for 64-bit BigInts (common case)
-    if (bitCount === 64 && completeBytes === 8 && leftoverBits === 0) {
-      const byteMask = 0xffn;
-
-      if (isLittleEndian) {
-        // Little endian: LSB first
-        for (let i = 0; i < 8; i++) {
-          result[i] = Number((value >> BigInt(i * 8)) & byteMask);
-        }
-      } else {
-        // Big endian: MSB first
-        for (let i = 0; i < 8; i++) {
-          result[i] = Number((value >> BigInt(56 - i * 8)) & byteMask);
-        }
-      }
-
-      return result;
-    }
-
-    // Fast path for byte-aligned BigInts (no leftover bits)
-    if (leftoverBits === 0) {
-      const byteMask = 0xffn;
-
-      if (isLittleEndian) {
-        // Little endian: LSB first
-
-        let remainingValue = value;
-
-        for (let i = 0; i < completeBytes; i++) {
-          result[i] = Number(remainingValue & byteMask);
-          remainingValue = remainingValue >> 8n;
-        }
-      } else {
-        // Big endian: MSB first
-
-        const totalBits = BigInt(completeBytes * 8);
-
-        for (let i = 0; i < completeBytes; i++) {
-          const shift = totalBits - BigInt((i + 1) * 8);
-          result[i] = Number((value >> shift) & byteMask);
-        }
-      }
-
-      return result;
-    }
-
-    // Handle cases with leftover bits (not byte-aligned)
-    const byteMask = 0xffn;
-
-    if (isLittleEndian) {
-      // Little endian: LSB first
-
-      let remainingValue = value;
-
-      // Process complete bytes
-      for (let i = 0; i < completeBytes; i++) {
-        result[i] = Number(remainingValue & byteMask);
-        remainingValue = remainingValue >> 8n;
-      }
-
-      // Handle leftover bits - shift to the most significant bits of the byte
-      if (leftoverBits > 0) {
-        const leftoverMask = (1n << BigInt(leftoverBits)) - 1n;
-        const shiftAmount = BigInt(8 - leftoverBits);
-
-        result[completeBytes] = Number(
-          (remainingValue & leftoverMask) << shiftAmount,
-        );
-      }
-    } else {
-      // Big endian: MSB first
-
-      // Calculate total bits needed
-      const totalBits = BigInt(completeBytes * 8 + leftoverBits);
-
-      let remainingValue = value;
-
-      // Process complete bytes
-      for (let i = 0; i < completeBytes; i++) {
-        // Calculate how many bits we still need to shift right to get the current byte
-        const shift = totalBits - BigInt((i + 1) * 8);
-
-        result[i] = Number((remainingValue >> shift) & byteMask);
-      }
-
-      // Handle leftover bits
-      if (leftoverBits > 0) {
-        // For leftover bits, we need to:
-        // 1. Get the remaining value (last bits)
-        // 2. Shift it left to align with MSB of the last byte
-
-        const remainingBits =
-          remainingValue & ((1n << BigInt(leftoverBits)) - 1n);
-
-        result[completeBytes] = Number(
-          remainingBits << BigInt(8 - leftoverBits),
-        );
-      }
-    }
-
-    return result;
-  }
-
-  static #integerSegmentWithinNumberRangeToBytes(segment) {
+  static #fromIntegerSegmentWithinNumberRange(segment) {
     const numberValue = Number(segment.value.value);
     const isLittleEndian = $.#isLittleEndian(segment);
 
@@ -422,19 +307,37 @@ export default class Bitstring2 {
     const totalBytes = completeBytes + (leftoverBits > 0 ? 1 : 0);
 
     const buffer = new ArrayBuffer(totalBytes);
-    const result = new Uint8Array(buffer);
+    const bytesArray = new Uint8Array(buffer);
     const dataView = new DataView(buffer);
 
     // Fast path for standard bit counts
     if (bitCount === 8) {
       dataView.setUint8(0, numberValue & 0xff);
-      return result;
+
+      return {
+        type: "bitstring2",
+        text: null,
+        bytes: bytesArray,
+        leftoverBitCount: leftoverBits,
+      };
     } else if (bitCount === 16 && completeBytes === 2) {
       dataView.setUint16(0, numberValue & 0xffff, isLittleEndian);
-      return result;
+
+      return {
+        type: "bitstring2",
+        text: null,
+        bytes: bytesArray,
+        leftoverBitCount: leftoverBits,
+      };
     } else if (bitCount === 32 && completeBytes === 4) {
       dataView.setUint32(0, numberValue & 0xffffffff, isLittleEndian);
-      return result;
+
+      return {
+        type: "bitstring2",
+        text: null,
+        bytes: bytesArray,
+        leftoverBitCount: leftoverBits,
+      };
     }
 
     // Hybrid approach: bitwise operations for small integers, division for larger ones
@@ -447,10 +350,10 @@ export default class Bitstring2 {
 
       for (let i = 0; i < completeBytes; i++) {
         if (usesBitwiseOps) {
-          result[i] = remainingValue & 0xff;
+          bytesArray[i] = remainingValue & 0xff;
           remainingValue = remainingValue >>> 8;
         } else {
-          result[i] = remainingValue % 256;
+          bytesArray[i] = remainingValue % 256;
           remainingValue = Math.floor(remainingValue / 256);
         }
       }
@@ -459,7 +362,7 @@ export default class Bitstring2 {
       if (leftoverBits > 0) {
         const shiftAmount = 8 - leftoverBits;
 
-        result[completeBytes] =
+        bytesArray[completeBytes] =
           (remainingValue & ((1 << leftoverBits) - 1)) << shiftAmount;
       }
     } else {
@@ -471,19 +374,21 @@ export default class Bitstring2 {
         const totalBitsInInteger = 32;
 
         // Calculate shift to align with MSB
+
         const initialShift = totalBitsInInteger - bitCount;
+
         let shiftedValue =
           initialShift > 0 ? numberValue << initialShift : numberValue;
 
         // For complete bytes
         for (let i = 0; i < completeBytes; i++) {
-          result[i] = (shiftedValue >>> (totalBitsInInteger - 8)) & 0xff;
+          bytesArray[i] = (shiftedValue >>> (totalBitsInInteger - 8)) & 0xff;
           shiftedValue = shiftedValue << 8;
         }
 
         // Handle leftover bits
         if (leftoverBits > 0) {
-          result[completeBytes] =
+          bytesArray[completeBytes] =
             (shiftedValue >>> (totalBitsInInteger - 8)) & 0xff;
         }
       } else {
@@ -502,7 +407,7 @@ export default class Bitstring2 {
 
           // Extract the current byte
           const byteValue = Math.floor(remainingValue / divisor);
-          result[i] = byteValue & 0xff;
+          bytesArray[i] = byteValue & 0xff;
 
           // Remove the processed bits
           remainingValue = remainingValue % divisor;
@@ -511,12 +416,148 @@ export default class Bitstring2 {
         // Handle leftover bits
         if (leftoverBits > 0) {
           // For leftover bits, we shift them to the most significant bits of the last byte
-          result[completeBytes] = (remainingValue << (8 - leftoverBits)) & 0xff;
+          bytesArray[completeBytes] =
+            (remainingValue << (8 - leftoverBits)) & 0xff;
         }
       }
     }
 
-    return result;
+    return {
+      type: "bitstring2",
+      text: null,
+      bytes: bytesArray,
+      leftoverBitCount: leftoverBits,
+    };
+  }
+
+  static #fromIntegerSegmentOutsideNumberRange(segment) {
+    const value = segment.value.value;
+    const isLittleEndian = $.#isLittleEndian(segment);
+
+    const bitCount = $.calculateSegmentBitCount(segment);
+    const completeBytes = Math.floor(bitCount / 8);
+    const leftoverBits = bitCount % 8;
+    const totalBytes = completeBytes + (leftoverBits > 0 ? 1 : 0);
+
+    const buffer = new ArrayBuffer(totalBytes);
+    const bytesArray = new Uint8Array(buffer);
+
+    // Special fast path for 64-bit BigInts (common case)
+    if (bitCount === 64 && completeBytes === 8 && leftoverBits === 0) {
+      const byteMask = 0xffn;
+
+      if (isLittleEndian) {
+        // Little endian: LSB first
+        for (let i = 0; i < 8; i++) {
+          bytesArray[i] = Number((value >> BigInt(i * 8)) & byteMask);
+        }
+      } else {
+        // Big endian: MSB first
+        for (let i = 0; i < 8; i++) {
+          bytesArray[i] = Number((value >> BigInt(56 - i * 8)) & byteMask);
+        }
+      }
+
+      return {
+        type: "bitstring2",
+        text: null,
+        bytes: bytesArray,
+        leftoverBitCount: leftoverBits,
+      };
+    }
+
+    // Fast path for byte-aligned BigInts (no leftover bits)
+    if (leftoverBits === 0) {
+      const byteMask = 0xffn;
+
+      if (isLittleEndian) {
+        // Little endian: LSB first
+
+        let remainingValue = value;
+
+        for (let i = 0; i < completeBytes; i++) {
+          bytesArray[i] = Number(remainingValue & byteMask);
+          remainingValue = remainingValue >> 8n;
+        }
+      } else {
+        // Big endian: MSB first
+
+        const totalBits = BigInt(completeBytes * 8);
+
+        for (let i = 0; i < completeBytes; i++) {
+          const shift = totalBits - BigInt((i + 1) * 8);
+          bytesArray[i] = Number((value >> shift) & byteMask);
+        }
+      }
+
+      return {
+        type: "bitstring2",
+        text: null,
+        bytes: bytesArray,
+        leftoverBitCount: leftoverBits,
+      };
+    }
+
+    // Handle cases with leftover bits (not byte-aligned)
+    const byteMask = 0xffn;
+
+    if (isLittleEndian) {
+      // Little endian: LSB first
+
+      let remainingValue = value;
+
+      // Process complete bytes
+      for (let i = 0; i < completeBytes; i++) {
+        bytesArray[i] = Number(remainingValue & byteMask);
+        remainingValue = remainingValue >> 8n;
+      }
+
+      // Handle leftover bits - shift to the most significant bits of the byte
+      if (leftoverBits > 0) {
+        const leftoverMask = (1n << BigInt(leftoverBits)) - 1n;
+        const shiftAmount = BigInt(8 - leftoverBits);
+
+        bytesArray[completeBytes] = Number(
+          (remainingValue & leftoverMask) << shiftAmount,
+        );
+      }
+    } else {
+      // Big endian: MSB first
+
+      // Calculate total bits needed
+      const totalBits = BigInt(completeBytes * 8 + leftoverBits);
+
+      let remainingValue = value;
+
+      // Process complete bytes
+      for (let i = 0; i < completeBytes; i++) {
+        // Calculate how many bits we still need to shift right to get the current byte
+        const shift = totalBits - BigInt((i + 1) * 8);
+
+        bytesArray[i] = Number((remainingValue >> shift) & byteMask);
+      }
+
+      // Handle leftover bits
+      if (leftoverBits > 0) {
+        // For leftover bits, we need to:
+        // 1. Get the remaining value (last bits)
+        // 2. Shift it left to align with MSB of the last byte
+
+        const remainingBits =
+          remainingValue & ((1n << BigInt(leftoverBits)) - 1n);
+
+        bytesArray[completeBytes] = Number(
+          remainingBits << BigInt(8 - leftoverBits),
+        );
+      }
+    }
+
+    return {
+      type: "bitstring2",
+      text: null,
+      bytes: bytesArray,
+      leftoverBitCount: leftoverBits,
+    };
   }
 
   static #isLittleEndian(segment) {
