@@ -2124,8 +2124,16 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_term!("abc") == ~s/Type.bitstring("abc")/
     end
 
-    test "float" do
+    test "float, non-zero" do
       assert encode_term!(1.23) == "Type.float(1.23)"
+    end
+
+    test "float, signed zero, positive" do
+      assert encode_term!(+0.0) == "Type.float(0.0)"
+    end
+
+    test "float, signed zero, negative" do
+      assert encode_term!(-0.0) == "Type.float(-0.0)"
     end
 
     test "integer" do
