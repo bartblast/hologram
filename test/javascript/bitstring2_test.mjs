@@ -33,6 +33,10 @@ describe("Bitstring2", () => {
     });
   });
 
+  it("calculateTextByteCount()", () => {
+    assert.equal(Bitstring2.calculateTextByteCount("全息图"), 9);
+  });
+
   describe("concatSegments()", () => {
     it("single string binary segment", () => {
       const result = Bitstring2.concatSegments([

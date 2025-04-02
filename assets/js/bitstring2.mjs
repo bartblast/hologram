@@ -14,6 +14,11 @@ export default class Bitstring2 {
     return size * unit;
   }
 
+  static calculateTextByteCount(text) {
+    const blob = new Blob([text]);
+    return blob.size;
+  }
+
   static concatSegments(segments) {
     if (
       segments.every(
