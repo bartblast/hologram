@@ -89,7 +89,7 @@ export default class Bitstring2 {
     };
   }
 
-  static fromFloatSegment(segment) {
+  static fromSegmentWithFloatValue(segment) {
     let value;
 
     if (segment.value.type === "float") {
@@ -123,17 +123,17 @@ export default class Bitstring2 {
     };
   }
 
-  static fromIntegerSegment(segment) {
+  static fromSegmentWithIntegerValue(segment) {
     const value = segment.value.value;
 
     if (
       value >= BigInt(Number.MIN_SAFE_INTEGER) &&
       value <= BigInt(Number.MAX_SAFE_INTEGER)
     ) {
-      return $.#fromIntegerSegmentWithinNumberRange(segment);
+      return $.#fromSegmentWithIntegerWithinNumberRangeValue(segment);
     }
 
-    return $.#fromIntegerSegmentOutsideNumberRange(segment);
+    return $.#fromSegmentWithIntegerOutsideNumberRangeValue(segment);
   }
 
   static fromText(text) {
@@ -289,25 +289,25 @@ export default class Bitstring2 {
   static validateSegment(segment, index) {
     switch (segment.type) {
       case "binary":
-        return $.#validateBinarySegment(segment, index);
+        return $.#validateSegmentWithBinaryType(segment, index);
 
       case "bitstring2":
-        return $.#validateBitstringSegment(segment, index);
+        return $.#validateSegmentWithBitstringType(segment, index);
 
       case "float":
-        return $.#validateFloatSegment(segment, index);
+        return $.#validateSegmentWithFloatType(segment, index);
 
       case "integer":
-        return $.#validateIntegerSegment(segment, index);
+        return $.#validateSegmentWithIntegerType(segment, index);
 
       case "utf8":
       case "utf16":
       case "utf32":
-        return $.#validateUtfSegment(segment, index);
+        return $.#validateSegmentWithUtfType(segment, index);
     }
   }
 
-  static #fromIntegerSegmentWithinNumberRange(segment) {
+  static #fromSegmentWithIntegerWithinNumberRangeValue(segment) {
     const numberValue = Number(segment.value.value);
     const isLittleEndian = $.#isLittleEndian(segment);
 
@@ -440,7 +440,7 @@ export default class Bitstring2 {
     };
   }
 
-  static #fromIntegerSegmentOutsideNumberRange(segment) {
+  static #fromSegmentWithIntegerOutsideNumberRangeValue(segment) {
     const value = segment.value.value;
     const isLittleEndian = $.#isLittleEndian(segment);
 
@@ -633,7 +633,7 @@ export default class Bitstring2 {
     }
   }
 
-  static #validateBinarySegment(segment, index) {
+  static #validateSegmentWithBinaryType(segment, index) {
     if (!["bitstring2", "string"].includes(segment.value.type)) {
       $.#raiseTypeMismatchError(index, "binary", "a binary", segment.value);
     }
@@ -652,7 +652,7 @@ export default class Bitstring2 {
     return true;
   }
 
-  static #validateBitstringSegment(segment, index) {
+  static #validateSegmentWithBitstringType(segment, index) {
     if (["float", "integer"].includes(segment.value.type)) {
       $.#raiseTypeMismatchError(index, "binary", "a binary", segment.value);
     }
@@ -664,7 +664,7 @@ export default class Bitstring2 {
     return true;
   }
 
-  static #validateFloatSegment(segment, index) {
+  static #validateSegmentWithFloatType(segment, index) {
     if (
       !["float", "integer", "variable_pattern"].includes(segment.value.type)
     ) {
@@ -691,7 +691,7 @@ export default class Bitstring2 {
     return true;
   }
 
-  static #validateIntegerSegment(segment, index) {
+  static #validateSegmentWithIntegerType(segment, index) {
     if (!["integer", "variable_pattern"].includes(segment.value.type)) {
       $.#raiseTypeMismatchError(index, "integer", "an integer", segment.value);
     }
@@ -699,7 +699,7 @@ export default class Bitstring2 {
     return true;
   }
 
-  static #validateUtfSegment(segment, index) {
+  static #validateSegmentWithUtfType(segment, index) {
     if (["bitstring2", "float"].includes(segment.value.type)) {
       $.#raiseTypeMismatchError(
         index,

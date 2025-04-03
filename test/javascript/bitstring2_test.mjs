@@ -237,7 +237,7 @@ describe("Bitstring2", () => {
     });
   });
 
-  describe("fromFloatSegment()", () => {
+  describe("fromSegmentWithFloatValue()", () => {
     describe("64-bit", () => {
       describe("float value", () => {
         describe("positive", () => {
@@ -249,7 +249,7 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -269,7 +269,7 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -291,7 +291,7 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -311,7 +311,7 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -333,7 +333,7 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -353,7 +353,7 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -375,7 +375,7 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -395,7 +395,7 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -419,7 +419,7 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -439,7 +439,7 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -461,7 +461,7 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -481,7 +481,7 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -503,7 +503,7 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -523,7 +523,7 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -549,7 +549,7 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -569,7 +569,7 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -591,7 +591,7 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -611,7 +611,7 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -633,7 +633,7 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -653,7 +653,7 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -675,7 +675,7 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -695,7 +695,7 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -719,7 +719,7 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -739,7 +739,7 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -761,7 +761,7 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -781,7 +781,7 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -803,7 +803,7 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -823,7 +823,7 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -849,7 +849,7 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -869,7 +869,7 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -891,7 +891,7 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -911,7 +911,7 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -933,7 +933,7 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -953,7 +953,7 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -975,7 +975,7 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -995,7 +995,7 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -1019,7 +1019,7 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -1039,7 +1039,7 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -1061,7 +1061,7 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -1081,7 +1081,7 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -1103,7 +1103,7 @@ describe("Bitstring2", () => {
               endianness: "big",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -1123,7 +1123,7 @@ describe("Bitstring2", () => {
               endianness: "little",
             });
 
-            const result = Bitstring2.fromFloatSegment(segment);
+            const result = Bitstring2.fromSegmentWithFloatValue(segment);
 
             const expected = {
               type: "bitstring2",
@@ -1139,7 +1139,7 @@ describe("Bitstring2", () => {
     });
   });
 
-  describe("fromIntegerSegment()", () => {
+  describe("fromSegmentWithIntegerValue()", () => {
     describe("integers within Number range", () => {
       describe("byte-aligned", () => {
         describe("stored in 8 bits", () => {
@@ -1154,7 +1154,7 @@ describe("Bitstring2", () => {
                   endianness: "big",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1175,7 +1175,7 @@ describe("Bitstring2", () => {
                   endianness: "little",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1198,7 +1198,7 @@ describe("Bitstring2", () => {
                   endianness: "big",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1219,7 +1219,7 @@ describe("Bitstring2", () => {
                   endianness: "little",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1244,7 +1244,7 @@ describe("Bitstring2", () => {
                   endianness: "big",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1265,7 +1265,7 @@ describe("Bitstring2", () => {
                   endianness: "little",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1288,7 +1288,7 @@ describe("Bitstring2", () => {
                   endianness: "big",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1309,7 +1309,7 @@ describe("Bitstring2", () => {
                   endianness: "little",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1336,7 +1336,7 @@ describe("Bitstring2", () => {
                   endianness: "big",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1357,7 +1357,7 @@ describe("Bitstring2", () => {
                   endianness: "little",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1380,7 +1380,7 @@ describe("Bitstring2", () => {
                   endianness: "big",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1401,7 +1401,7 @@ describe("Bitstring2", () => {
                   endianness: "little",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1426,7 +1426,7 @@ describe("Bitstring2", () => {
                   endianness: "big",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1447,7 +1447,7 @@ describe("Bitstring2", () => {
                   endianness: "little",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1470,7 +1470,7 @@ describe("Bitstring2", () => {
                   endianness: "big",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1491,7 +1491,7 @@ describe("Bitstring2", () => {
                   endianness: "little",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1518,7 +1518,7 @@ describe("Bitstring2", () => {
                   endianness: "big",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1539,7 +1539,7 @@ describe("Bitstring2", () => {
                   endianness: "little",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1565,7 +1565,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1589,7 +1589,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1617,7 +1617,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1641,7 +1641,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1667,7 +1667,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1691,7 +1691,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1721,7 +1721,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1745,7 +1745,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1771,7 +1771,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1795,7 +1795,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1823,7 +1823,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1847,7 +1847,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1873,7 +1873,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1897,7 +1897,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1926,7 +1926,7 @@ describe("Bitstring2", () => {
                   endianness: "big",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1947,7 +1947,7 @@ describe("Bitstring2", () => {
                   endianness: "little",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1970,7 +1970,7 @@ describe("Bitstring2", () => {
                   endianness: "big",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -1991,7 +1991,7 @@ describe("Bitstring2", () => {
                   endianness: "little",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2016,7 +2016,7 @@ describe("Bitstring2", () => {
                   endianness: "big",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2037,7 +2037,7 @@ describe("Bitstring2", () => {
                   endianness: "little",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2060,7 +2060,7 @@ describe("Bitstring2", () => {
                   endianness: "big",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2081,7 +2081,7 @@ describe("Bitstring2", () => {
                   endianness: "little",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2108,7 +2108,7 @@ describe("Bitstring2", () => {
                   endianness: "big",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2129,7 +2129,7 @@ describe("Bitstring2", () => {
                   endianness: "little",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2152,7 +2152,7 @@ describe("Bitstring2", () => {
                   endianness: "big",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2173,7 +2173,7 @@ describe("Bitstring2", () => {
                   endianness: "little",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2198,7 +2198,7 @@ describe("Bitstring2", () => {
                   endianness: "big",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2219,7 +2219,7 @@ describe("Bitstring2", () => {
                   endianness: "little",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2242,7 +2242,7 @@ describe("Bitstring2", () => {
                   endianness: "big",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2263,7 +2263,7 @@ describe("Bitstring2", () => {
                   endianness: "little",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2290,7 +2290,7 @@ describe("Bitstring2", () => {
                   endianness: "big",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2311,7 +2311,7 @@ describe("Bitstring2", () => {
                   endianness: "little",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2337,7 +2337,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2361,7 +2361,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2386,7 +2386,7 @@ describe("Bitstring2", () => {
                   endianness: "big",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2407,7 +2407,7 @@ describe("Bitstring2", () => {
                   endianness: "little",
                 });
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2433,7 +2433,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2457,7 +2457,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2487,7 +2487,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2511,7 +2511,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2537,7 +2537,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2561,7 +2561,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2589,7 +2589,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2613,7 +2613,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2639,7 +2639,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2663,7 +2663,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2697,7 +2697,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2721,7 +2721,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2747,7 +2747,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2771,7 +2771,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2799,7 +2799,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2823,7 +2823,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2849,7 +2849,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2873,7 +2873,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2903,7 +2903,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2929,7 +2929,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2957,7 +2957,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -2983,7 +2983,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -3013,7 +3013,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -3039,7 +3039,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -3067,7 +3067,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -3093,7 +3093,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -3127,7 +3127,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -3153,7 +3153,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -3181,7 +3181,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -3207,7 +3207,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -3237,7 +3237,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -3263,7 +3263,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -3291,7 +3291,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
@@ -3317,7 +3317,7 @@ describe("Bitstring2", () => {
                   },
                 );
 
-                const result = Bitstring2.fromIntegerSegment(segment);
+                const result = Bitstring2.fromSegmentWithIntegerValue(segment);
 
                 const expected = {
                   type: "bitstring2",
