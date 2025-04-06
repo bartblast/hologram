@@ -136,6 +136,78 @@ export default class Bitstring2 {
     return $.#fromSegmentWithIntegerOutsideNumberRangeValue(segment);
   }
 
+  // TODO: test
+  static fromSegmentWithStringValue(segment) {
+    const valueStr = segment.value.value;
+
+    // Fast path: if no size specified, use the entire string
+    if (segment.size === null) {
+      return {
+        type: "bitstring2",
+        text: valueStr,
+        bytes: null,
+        leftoverBitCount: 0,
+      };
+    }
+
+    // Calculate the bit count from size and unit (do this before encoding for potential early returns)
+    const bitCount = $.calculateSegmentBitCount(segment);
+    const completeBytes = Math.floor(bitCount / 8);
+    const leftoverBits = bitCount % 8;
+
+    const byteLength = $.calculateTextByteCount(valueStr);
+
+    // If we know we need the complete string and no leftover bits, avoid encoding
+    if (completeBytes === byteLength && leftoverBits === 0) {
+      return {
+        type: "bitstring2",
+        text: valueStr,
+        bytes: null,
+        leftoverBitCount: 0,
+      };
+    }
+
+    const sourceBytes = $.#encoder.encode(valueStr);
+
+    // Fast path: if we need all complete bytes but no leftover bits
+    if (leftoverBits === 0) {
+      // We can use a subarray view of the original bytes to avoid copying
+      return {
+        type: "bitstring2",
+        text: null,
+        bytes: sourceBytes.subarray(0, completeBytes),
+        leftoverBitCount: 0,
+      };
+    }
+
+    // Case with leftover bits - optimize allocation
+    const totalBytes = completeBytes + 1;
+    const bytes = new Uint8Array(totalBytes);
+
+    // Micro-optimization: If we only need a few bytes, avoid the set() operation overhead
+    if (completeBytes <= 4) {
+      // Manual copy for small arrays - can be faster than set() due to function call overhead
+      for (let i = 0; i < completeBytes; i++) {
+        bytes[i] = sourceBytes[i];
+      }
+    } else {
+      // Use set() for larger arrays - more efficient for bulk operations
+      bytes.set(sourceBytes.subarray(0, completeBytes));
+    }
+
+    // Process leftover bits with bitwise operations (most efficient)
+    const remainingByte = sourceBytes[completeBytes];
+    const shiftAmount = 8 - leftoverBits;
+    bytes[completeBytes] = (remainingByte >>> shiftAmount) << shiftAmount;
+
+    return {
+      type: "bitstring2",
+      text: null,
+      bytes,
+      leftoverBitCount: leftoverBits,
+    };
+  }
+
   static fromText(text) {
     return {type: "bitstring2", text, bytes: null, leftoverBitCount: 0};
   }
