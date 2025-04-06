@@ -410,20 +410,6 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
                      build_from_value_with_size_modifier("abc", 7)
                    end
     end
-
-    test "with utf8 type modifier" do
-      # assert_error ArgumentError, "abc", fn ->
-      #   var = "abc"
-      #   <<var::utf8-size(3)>>
-      # end
-
-      try do
-        var = "abc"
-        <<var::utf8-size(3)>>
-      rescue
-        CompileError -> :ok
-      end
-    end
   end
 
   describe "unit modifier (with size modifier)" do
