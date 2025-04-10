@@ -136,7 +136,7 @@ export default class Bitstring2 {
     return $.#fromSegmentWithIntegerOutsideNumberRangeValue(segment);
   }
 
-  // TODO: test
+  // TODO: test, support utf16 and utf32 modifiers
   static fromSegmentWithStringValue(segment) {
     const valueStr = segment.value.value;
 
@@ -198,7 +198,7 @@ export default class Bitstring2 {
     // Process leftover bits with bitwise operations (most efficient)
     const remainingByte = sourceBytes[completeBytes];
     const shiftAmount = 8 - leftoverBits;
-    bytes[completeBytes] = (remainingByte >>> shiftAmount) << shiftAmount;
+    bytes[completeBytes] = remainingByte >>> shiftAmount;
 
     return {
       type: "bitstring2",
