@@ -691,9 +691,9 @@ defmodule Hologram.ExJsConsistency.BitstringTest do
   #
   # iex> var = "abc"
   # iex> <<var::utf8-size(3)>>
-  # size and unit are not supported on utf types (CompileError)  
-  # 
+  # size and unit are not supported on utf types (CompileError)
+  #
   # iex> var = "abc"
-  # iex> <<var::utf8-unit(3)>>  
+  # iex> <<var::utf8-unit(3)>>
   # size and unit are not supported on utf types (CompileError)
 end
