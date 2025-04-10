@@ -3337,6 +3337,117 @@ describe("Bitstring2", () => {
     });
   });
 
+  describe("fromSegmentWithStringValue()", () => {
+    describe("binary", () => {
+      describe("ASCII", () => {
+        it("without size or unit specified", () => {
+          const segment = Type.bitstringSegment(Type.string("abc"), {
+            type: "binary",
+          });
+
+          const result = Bitstring2.fromSegmentWithStringValue(segment);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: "abc",
+            bytes: null,
+            leftoverBitCount: 0,
+          });
+        });
+
+        it("with size * unit matching the complete string", () => {
+          const segment = Type.bitstringSegment(Type.string("abc"), {
+            type: "binary",
+            size: Type.integer(3),
+            unit: 8,
+          });
+
+          const result = Bitstring2.fromSegmentWithStringValue(segment);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: "abc",
+            bytes: null,
+            leftoverBitCount: 0,
+          });
+        });
+
+        it("with size * unit matching part of the string but complete bytes", () => {
+          const segment = Type.bitstringSegment(Type.string("abc"), {
+            type: "binary",
+            size: Type.integer(2),
+            unit: 8,
+          });
+
+          const result = Bitstring2.fromSegmentWithStringValue(segment);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([97, 98]),
+            leftoverBitCount: 0,
+          });
+        });
+
+        it("with leftover bits, size * unit taking up 1 byte", () => {
+          const segment = Type.bitstringSegment(Type.string("abc"), {
+            type: "binary",
+            size: Type.integer(3),
+            unit: 2,
+          });
+
+          const result = Bitstring2.fromSegmentWithStringValue(segment);
+          const expectedBytes = new Uint8Array([24]);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: expectedBytes,
+            leftoverBitCount: 6,
+          });
+        });
+
+        it("with leftover bits, size * unit taking up 2 bytes", () => {
+          const segment = Type.bitstringSegment(Type.string("abc"), {
+            type: "binary",
+            size: Type.integer(7),
+            unit: 2,
+          });
+
+          const result = Bitstring2.fromSegmentWithStringValue(segment);
+          const expectedBytes = new Uint8Array([97, 24]);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: expectedBytes,
+            leftoverBitCount: 6,
+          });
+        });
+
+        it("with leftover bits, size * unit taking up 10 (many) bytes", () => {
+          const segment = Type.bitstringSegment(Type.string("abcdefghijklmn"), {
+            type: "binary",
+            size: Type.integer(39),
+            unit: 2,
+          });
+
+          const result = Bitstring2.fromSegmentWithStringValue(segment);
+          const expectedBytes = new Uint8Array([
+            97, 98, 99, 100, 101, 102, 103, 104, 105, 26,
+          ]);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: expectedBytes,
+            leftoverBitCount: 6,
+          });
+        });
+      });
+    });
+  });
+
   it("fromText()", () => {
     const result = Bitstring2.fromText("Hologram");
 
