@@ -180,7 +180,6 @@ export default class Bitstring2 {
       };
     }
 
-    // Case with leftover bits - optimize allocation
     const totalBytes = completeBytes + 1;
     const bytes = new Uint8Array(totalBytes);
 
