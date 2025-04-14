@@ -194,16 +194,9 @@ export default class Bitstring2 {
       bytes.set(sourceBytes.subarray(0, completeBytes));
     }
 
-    const remainingByte = sourceBytes[completeBytes];
-    const shiftAmount = 8 - leftoverBits;
-
-    // For ASCII characters (0-127), right-align the bits
-    if (remainingByte <= 127) {
-      bytes[completeBytes] = remainingByte >>> (8 - leftoverBits);
-    } else {
-      // For UTF-8 characters, preserve the most significant bits
-      bytes[completeBytes] = remainingByte & (0xff << shiftAmount);
-    }
+    // We take the leftmost (most significant bits) as the leftover bits
+    const mask = 0xff << (8 - leftoverBits);
+    bytes[completeBytes] = sourceBytes[completeBytes] & mask;
 
     return {
       type: "bitstring2",
