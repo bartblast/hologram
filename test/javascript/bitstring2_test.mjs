@@ -13,6 +13,52 @@ import Type from "../../assets/js/type.mjs";
 defineGlobalErlangAndElixirModules();
 
 describe("Bitstring2", () => {
+  describe("calculateBitCount()", () => {
+    it("calculates bit count for bitstring with bytes and no leftover bits", () => {
+      const bitstring = {
+        type: "bitstring2",
+        text: null,
+        bytes: new Uint8Array([1, 2, 3]),
+        leftoverBitCount: 0,
+      };
+
+      assert.equal(Bitstring2.calculateBitCount(bitstring), 24);
+    });
+
+    it("calculates bit count for bitstring with bytes and leftover bits", () => {
+      const bitstring = {
+        type: "bitstring2",
+        text: null,
+        bytes: new Uint8Array([1, 2, 224]),
+        leftoverBitCount: 3,
+      };
+
+      assert.equal(Bitstring2.calculateBitCount(bitstring), 19);
+    });
+
+    it("calculates bit count for bitstring with ASCII text", () => {
+      const bitstring = {
+        type: "bitstring2",
+        text: "abc",
+        bytes: null,
+        leftoverBitCount: 0,
+      };
+
+      assert.equal(Bitstring2.calculateBitCount(bitstring), 24);
+    });
+
+    it("calculates bit count for bitstring with Unicode text", () => {
+      const bitstring = {
+        type: "bitstring2",
+        text: "全息图",
+        bytes: null,
+        leftoverBitCount: 0,
+      };
+
+      assert.equal(Bitstring2.calculateBitCount(bitstring), 72);
+    });
+  });
+
   describe("calculateSegmentBitCount()", () => {
     it("calculates bit count when size and unit are explicitly specified", () => {
       const segment = Type.bitstringSegment(Type.integer(123), {

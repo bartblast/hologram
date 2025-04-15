@@ -7,6 +7,19 @@ export default class Bitstring2 {
   static #decoder = new TextDecoder("utf-8", {fatal: true});
   static #encoder = new TextEncoder("utf-8");
 
+  static calculateBitCount(bitstring) {
+    if (bitstring.bytes !== null) {
+      const completeByteCount =
+        bitstring.leftoverBitCount === 0
+          ? bitstring.bytes.length
+          : bitstring.bytes.length - 1;
+
+      return 8 * completeByteCount + bitstring.leftoverBitCount;
+    }
+
+    return 8 * $.calculateTextByteCount(bitstring.text);
+  }
+
   static calculateSegmentBitCount(segment) {
     const size = $.resolveSegmentSize(segment);
     const unit = $.resolveSegmentUnit(segment);
