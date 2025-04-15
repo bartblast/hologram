@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   lib_tests:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     name: Lib Tests on Elixir ${{ matrix.elixir }}, Erlang/OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     strategy:
       fail-fast: false
@@ -224,7 +224,7 @@ jobs:
         run: mix test.js
 
   feature_tests:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     name: Feature Tests on Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     defaults:
       run:
