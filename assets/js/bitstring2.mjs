@@ -123,8 +123,18 @@ export default class Bitstring2 {
     };
   }
 
+  // TODO: support utf16 and utf32 type modifiers
   static fromSegmentWithIntegerValue(segment) {
     const value = segment.value.value;
+
+    if (segment.type === "utf8") {
+      return {
+        type: "bitstring2",
+        text: String.fromCodePoint(Number(value)),
+        bytes: null,
+        leftoverBitCount: 0,
+      };
+    }
 
     if (
       value >= BigInt(Number.MIN_SAFE_INTEGER) &&
@@ -136,7 +146,6 @@ export default class Bitstring2 {
     return $.#fromSegmentWithIntegerOutsideNumberRangeValue(segment);
   }
 
-  // TODO: test, support utf16 and utf32 modifiers
   static fromSegmentWithStringValue(segment) {
     const valueStr = segment.value.value;
 
