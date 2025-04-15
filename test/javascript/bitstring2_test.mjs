@@ -4100,6 +4100,414 @@ describe("Bitstring2", () => {
     });
   });
 
+  describe("takeChunk()", () => {
+    describe("take entire bitstring", () => {
+      it("when text-based", () => {
+        const original = {
+          type: "bitstring2",
+          text: "abc",
+          bytes: null,
+          leftoverBitCount: 0,
+        };
+
+        const result = Bitstring2.takeChunk(original, 0, 24);
+        assert.strictEqual(result, original); // Should return exact same object
+      });
+
+      it("when byte-based", () => {
+        const original = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([97, 98, 99]),
+          leftoverBitCount: 0,
+        };
+
+        const result = Bitstring2.takeChunk(original, 0, 24);
+        assert.strictEqual(result, original); // Should return exact same object
+      });
+    });
+
+    describe("byte-aligned offset", () => {
+      it("zero-length chunk", () => {
+        const bitstring = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xaa, 0xbb]),
+          leftoverBitCount: 0,
+        };
+
+        const result = Bitstring2.takeChunk(bitstring, 8, 0);
+
+        assert.deepStrictEqual(result, {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([]),
+          leftoverBitCount: 0,
+        });
+      });
+
+      describe("single-bit chunk", () => {
+        it("taken from the first byte", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0x80]), // 10000000
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.takeChunk(bitstring, 0, 1);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0x80]), // 10000000
+            leftoverBitCount: 1,
+          });
+        });
+
+        it("taken from non-first byte", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0x00, 0x80]), // 00000000, 10000000
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.takeChunk(bitstring, 8, 1);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0x80]), // 10000000
+            leftoverBitCount: 1,
+          });
+        });
+      });
+
+      describe("single-byte chunk", () => {
+        it("without leftover bits", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([97, 98, 99]),
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.takeChunk(bitstring, 8, 8);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([98]),
+            leftoverBitCount: 0,
+          });
+        });
+
+        it("with leftover bits", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xaa, 0xbb, 0xcc]), // 10101010, 10111011, 11001100
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.takeChunk(bitstring, 8, 4);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xb0]), // 10110000
+            leftoverBitCount: 4,
+          });
+        });
+      });
+
+      describe("two-byte chunk", () => {
+        it("without leftover bits", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd]), // 10101010, 10111011, 11001100, 11011101
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.takeChunk(bitstring, 8, 16);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xbb, 0xcc]), // 10111011, 11001100
+            leftoverBitCount: 0,
+          });
+        });
+
+        it("with leftover bits", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xaa, 0xbb, 0xff]), // 10101010, 10111011, 11111111
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.takeChunk(bitstring, 8, 12);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xbb, 0xf0]), // 10111011, 11110000
+            leftoverBitCount: 4,
+          });
+        });
+      });
+
+      describe("rightmost bits chunk", () => {
+        it("when there are no leftover bits", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xaa, 0xbb]), // 10101010, 10111011
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.takeChunk(bitstring, 8, 8);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xbb]), // 10111011
+            leftoverBitCount: 0,
+          });
+        });
+
+        it("when there are leftover bits", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xaa, 0xb0]), // 10101010, 10110000
+            leftoverBitCount: 4,
+          };
+
+          const result = Bitstring2.takeChunk(bitstring, 8, 4);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xb0]), // 10110000
+            leftoverBitCount: 4,
+          });
+        });
+      });
+
+      it("converts text to bytes when needed", () => {
+        const bitstring = {
+          type: "bitstring2",
+          text: "abc",
+          bytes: null,
+          leftoverBitCount: 0,
+        };
+
+        const result = Bitstring2.takeChunk(bitstring, 8, 8);
+
+        assert.deepStrictEqual(result, {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([98]),
+          leftoverBitCount: 0,
+        });
+      });
+    });
+
+    describe("non-byte-aligned offset", () => {
+      it("zero-length chunk", () => {
+        const bitstring = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xaa, 0xbb]),
+          leftoverBitCount: 0,
+        };
+
+        const result = Bitstring2.takeChunk(bitstring, 4, 0);
+
+        assert.deepStrictEqual(result, {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([]),
+          leftoverBitCount: 0,
+        });
+      });
+
+      describe("single-bit chunk", () => {
+        it("taken from the first byte", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0x08]), // 00001000
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.takeChunk(bitstring, 4, 1);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0x80]), // 10000000
+            leftoverBitCount: 1,
+          });
+        });
+
+        it("taken from non-first byte", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0x00, 0x08]), // 00000000, 00001000
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.takeChunk(bitstring, 12, 1);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0x80]), // 10000000
+            leftoverBitCount: 1,
+          });
+        });
+      });
+
+      describe("single-byte chunk", () => {
+        it("without leftover bits", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xaa, 0xbb, 0xcc]), // 10101010, 10111011, 11001100
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.takeChunk(bitstring, 4, 8);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xab]), // 10101011
+            leftoverBitCount: 0,
+          });
+        });
+
+        it("with leftover bits", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xaa, 0xff]), // 10101010, 11111111
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.takeChunk(bitstring, 6, 4);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xb0]), // 10110000
+            leftoverBitCount: 4,
+          });
+        });
+      });
+
+      describe("two-byte chunk", () => {
+        it("with leftover bits", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xaa, 0xbb, 0xcc]), // 10101010, 10111011, 11001100
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.takeChunk(bitstring, 4, 12);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xab, 0xb0]), // 10101011, 10110000
+            leftoverBitCount: 4,
+          });
+        });
+
+        it("without leftover bits", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xaa, 0xbb, 0x5f]), // 10101010, 10111011, 01011111
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.takeChunk(bitstring, 4, 16);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xab, 0xb5]), // 10101011, 10110101
+            leftoverBitCount: 0,
+          });
+        });
+      });
+
+      describe("rightmost bits chunk", () => {
+        it("when there are no leftover bits", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xaa, 0xfb]), // 10101010, 11111011
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.takeChunk(bitstring, 12, 4);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xb0]), // 10110000
+            leftoverBitCount: 4,
+          });
+        });
+
+        it("when there are leftover bits", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xaa, 0xa8]), // 10101010, 10101000
+            leftoverBitCount: 5,
+          };
+
+          const result = Bitstring2.takeChunk(bitstring, 10, 3);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0xa0]), // 10100000
+            leftoverBitCount: 3,
+          });
+        });
+      });
+
+      it("converts text to bytes when needed", () => {
+        const bitstring = {
+          type: "bitstring2",
+          text: "abc", // 01100001, 01100010, 01100011
+          bytes: null,
+          leftoverBitCount: 0,
+        };
+
+        const result = Bitstring2.takeChunk(bitstring, 12, 8);
+
+        assert.deepStrictEqual(result, {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([38]), // 00100110
+          leftoverBitCount: 0,
+        });
+      });
+    });
+  });
+
   describe("validateCodePoint()", () => {
     it("integer that is a valid code point", () => {
       // a = 97

@@ -361,6 +361,76 @@ export default class Bitstring2 {
     }
   }
 
+  static takeChunk(bitstring, chunkOffset, chunkSize) {
+    const bitstringBitCount = $.calculateBitCount(bitstring);
+
+    // Early return for taking the entire bitstring
+    if (chunkOffset === 0 && chunkSize === bitstringBitCount) {
+      return bitstring;
+    }
+
+    $.maybeSetBytesFromText(bitstring);
+
+    const startByteIndex = Math.floor(chunkOffset / 8);
+    const startBitOffset = chunkOffset % 8;
+    const resultByteCount = Math.ceil(chunkSize / 8);
+    const resultLeftoverBits = chunkSize % 8;
+
+    // Fast path: if byte-aligned and no leftover bits
+    if (startBitOffset === 0 && resultLeftoverBits === 0) {
+      return {
+        type: "bitstring2",
+        text: null,
+        bytes: bitstring.bytes.subarray(
+          startByteIndex,
+          startByteIndex + resultByteCount,
+        ),
+        leftoverBitCount: 0,
+      };
+    }
+
+    const resultBytes = new Uint8Array(resultByteCount);
+
+    if (startBitOffset === 0) {
+      // Byte-aligned with leftover bits
+
+      resultBytes.set(
+        bitstring.bytes.subarray(
+          startByteIndex,
+          startByteIndex + resultByteCount,
+        ),
+      );
+
+      resultBytes[resultByteCount - 1] &= 0xff << (8 - resultLeftoverBits);
+    } else {
+      // Non-byte-aligned
+
+      const rightShift = 8 - startBitOffset;
+      const leftShift = startBitOffset;
+      const bytes = bitstring.bytes; // Local reference to array performance optimization
+
+      for (let i = 0; i < resultByteCount; i++) {
+        const firstByte = bytes[startByteIndex + i];
+        const secondByte = bytes[startByteIndex + i + 1];
+
+        resultBytes[i] =
+          ((firstByte << leftShift) | (secondByte >>> rightShift)) & 0xff;
+      }
+
+      // Mask out extra bits in the last byte if we have leftover bits
+      if (resultLeftoverBits > 0) {
+        resultBytes[resultByteCount - 1] &= 0xff << (8 - resultLeftoverBits);
+      }
+    }
+
+    return {
+      type: "bitstring2",
+      text: null,
+      bytes: resultBytes,
+      leftoverBitCount: resultLeftoverBits,
+    };
+  }
+
   static validateCodePoint(codePoint) {
     if (typeof codePoint === "bigint") {
       codePoint = Number(codePoint);
