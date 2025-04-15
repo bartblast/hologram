@@ -3397,7 +3397,7 @@ describe("Bitstring2", () => {
           });
 
           const result = Bitstring2.fromSegmentWithStringValue(segment);
-          const expectedBytes = new Uint8Array([24]);
+          const expectedBytes = new Uint8Array([96]);
 
           assert.deepStrictEqual(result, {
             type: "bitstring2",
@@ -3415,7 +3415,25 @@ describe("Bitstring2", () => {
           });
 
           const result = Bitstring2.fromSegmentWithStringValue(segment);
-          const expectedBytes = new Uint8Array([97, 24]);
+          const expectedBytes = new Uint8Array([97, 96]);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: expectedBytes,
+            leftoverBitCount: 6,
+          });
+        });
+
+        it("with leftover bits, size * unit taking up 3 bytes", () => {
+          const segment = Type.bitstringSegment(Type.string("abcdef"), {
+            type: "binary",
+            size: Type.integer(11),
+            unit: 2,
+          });
+
+          const result = Bitstring2.fromSegmentWithStringValue(segment);
+          const expectedBytes = new Uint8Array([97, 98, 96]);
 
           assert.deepStrictEqual(result, {
             type: "bitstring2",
@@ -3433,8 +3451,155 @@ describe("Bitstring2", () => {
           });
 
           const result = Bitstring2.fromSegmentWithStringValue(segment);
+
           const expectedBytes = new Uint8Array([
-            97, 98, 99, 100, 101, 102, 103, 104, 105, 26,
+            97, 98, 99, 100, 101, 102, 103, 104, 105, 104,
+          ]);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: expectedBytes,
+            leftoverBitCount: 6,
+          });
+        });
+      });
+
+      describe("Unicode", () => {
+        it("without size or unit specified", () => {
+          const segment = Type.bitstringSegment(Type.string("全息图"), {
+            type: "binary",
+          });
+
+          const result = Bitstring2.fromSegmentWithStringValue(segment);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: "全息图",
+            bytes: null,
+            leftoverBitCount: 0,
+          });
+        });
+
+        it("with size * unit matching the complete string", () => {
+          const segment = Type.bitstringSegment(Type.string("全息图"), {
+            type: "binary",
+            size: Type.integer(9),
+            unit: 8,
+          });
+
+          const result = Bitstring2.fromSegmentWithStringValue(segment);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: "全息图",
+            bytes: null,
+            leftoverBitCount: 0,
+          });
+        });
+
+        it("with size * unit matching part of the string but complete bytes, and on char boundaries", () => {
+          const segment = Type.bitstringSegment(Type.string("全息图"), {
+            type: "binary",
+            size: Type.integer(6),
+            unit: 8,
+          });
+
+          const result = Bitstring2.fromSegmentWithStringValue(segment);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([229, 133, 168, 230, 129, 175]),
+            leftoverBitCount: 0,
+          });
+        });
+
+        it("with size * unit matching part of the string but complete bytes, and on not on char boundaries", () => {
+          const segment = Type.bitstringSegment(Type.string("全息图"), {
+            type: "binary",
+            size: Type.integer(5),
+            unit: 8,
+          });
+
+          const result = Bitstring2.fromSegmentWithStringValue(segment);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([229, 133, 168, 230, 129]),
+            leftoverBitCount: 0,
+          });
+        });
+
+        it("with leftover bits, size * unit taking up 1 byte", () => {
+          const segment = Type.bitstringSegment(Type.string("全息图"), {
+            type: "binary",
+            size: Type.integer(3),
+            unit: 2,
+          });
+
+          const result = Bitstring2.fromSegmentWithStringValue(segment);
+          const expectedBytes = new Uint8Array([228]);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: expectedBytes,
+            leftoverBitCount: 6,
+          });
+        });
+
+        it("with leftover bits, size * unit taking up 2 bytes", () => {
+          const segment = Type.bitstringSegment(Type.string("全息图"), {
+            type: "binary",
+            size: Type.integer(7),
+            unit: 2,
+          });
+
+          const result = Bitstring2.fromSegmentWithStringValue(segment);
+          const expectedBytes = new Uint8Array([229, 132]);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: expectedBytes,
+            leftoverBitCount: 6,
+          });
+        });
+
+        it("with leftover bits, size * unit taking up 3 bytes", () => {
+          const segment = Type.bitstringSegment(Type.string("全息图"), {
+            type: "binary",
+            size: Type.integer(11),
+            unit: 2,
+          });
+
+          const result = Bitstring2.fromSegmentWithStringValue(segment);
+          const expectedBytes = new Uint8Array([229, 133, 168]);
+
+          assert.deepStrictEqual(result, {
+            type: "bitstring2",
+            text: null,
+            bytes: expectedBytes,
+            leftoverBitCount: 6,
+          });
+        });
+
+        it("with leftover bits, size * unit taking up 10 (many) bytes", () => {
+          const segment = Type.bitstringSegment(
+            Type.string("全息图全息图全息图"),
+            {
+              type: "binary",
+              size: Type.integer(39),
+              unit: 2,
+            },
+          );
+
+          const result = Bitstring2.fromSegmentWithStringValue(segment);
+
+          const expectedBytes = new Uint8Array([
+            229, 133, 168, 230, 129, 175, 229, 155, 190, 228,
           ]);
 
           assert.deepStrictEqual(result, {
