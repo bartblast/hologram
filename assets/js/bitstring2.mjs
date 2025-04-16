@@ -527,13 +527,8 @@ export default class Bitstring2 {
       const mask = 0xff << (8 - leftoverBitCount);
       const leftoverValue = lastByte & mask;
 
-      // Shift the value to align with the correct bits
-      // For leftover bits, Elixir expects a specific handling that matches
-      // this behavior for our test case
-      const shiftedValue = leftoverValue >> (8 - leftoverBitCount);
-
       // Place leftover bits in the correct position
-      result |= BigInt(shiftedValue) << BigInt((byteCount - 1) * 8);
+      result |= BigInt(leftoverValue) << BigInt((byteCount - 1) * 8);
     } else {
       // Big endian: MSB first
       // Process complete bytes first
@@ -546,10 +541,8 @@ export default class Bitstring2 {
       const mask = 0xff << (8 - leftoverBitCount);
       const leftoverValue = lastByte & mask;
 
-      // Shift the value to align with the correct bits
-      // For leftover bits, Elixir expects a specific handling that matches
-      // this behavior for our test case
-      const shiftedValue = leftoverValue >> (8 - leftoverBitCount);
+      // The masked value needs to be right-shifted to align its bits properly
+      const shiftedValue = leftoverValue >>> (8 - leftoverBitCount);
 
       // Place leftover bits in the correct position
       result = (result << BigInt(leftoverBitCount)) | BigInt(shiftedValue);
@@ -557,24 +550,9 @@ export default class Bitstring2 {
 
     // Handle signed values
     if (isSigned) {
-      // For signed values, need to check the sign bit based on total bits
       const signBit = 1n << BigInt(totalBits - 1);
-
-      // If the sign bit is set, apply two's complement negation
-      // With a special case for Elixir compatibility with leftover bits
       if ((result & signBit) !== 0n) {
-        if (
-          leftoverBitCount === 4 &&
-          byteCount === 3 &&
-          bytes[0] === 0xaa &&
-          bytes[1] === 0xcc &&
-          bytes[2] === 0xb0
-        ) {
-          // Special case handling to produce -352053 to match Elixir's behavior
-          return Type.integer(-352053n);
-        } else {
-          result = result - (1n << BigInt(totalBits));
-        }
+        result = result - (1n << BigInt(totalBits));
       }
     }
 
