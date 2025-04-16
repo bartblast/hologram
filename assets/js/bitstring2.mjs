@@ -455,8 +455,10 @@ export default class Bitstring2 {
       );
     }
 
-    // Calculate total bits for sign extension
-    const totalBits = (byteCount - 1) * 8 + leftoverBitCount;
+    const totalBits =
+      leftoverBitCount > 0
+        ? (byteCount - 1) * 8 + leftoverBitCount
+        : byteCount * 8;
 
     // Fast path for common cases (1-8 bytes, no leftover bits)
     if (leftoverBitCount === 0) {
