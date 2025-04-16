@@ -147,6 +147,8 @@ defmodule Hologram.Compiler do
     """
     "use strict";
 
+    const startTime = performance.now();
+
     globalThis.hologram.pageReachableFunctionDefs = (deps) => {
       const {
         Bitstring,
@@ -162,7 +164,7 @@ defmodule Hologram.Compiler do
     globalThis.hologram.pageScriptLoaded = true;
     document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));
 
-    console.debug("Hologram: page script executed");\
+    console.debug("Hologram: page script executed in", Math.round(performance.now() - startTime), "ms");\
     """
   end
 
@@ -191,7 +193,9 @@ defmodule Hologram.Compiler do
     import Interpreter from "#{js_dir}/interpreter.mjs";
     import MemoryStorage from "#{js_dir}/memory_storage.mjs";
     import Type from "#{js_dir}/type.mjs";
-    import Utils from "#{js_dir}/utils.mjs";#{erlang_function_defs}#{elixir_function_defs}
+    import Utils from "#{js_dir}/utils.mjs";
+
+    const startTime = performance.now();#{erlang_function_defs}#{elixir_function_defs}
 
     document.addEventListener("hologram:pageScriptLoaded", () => Hologram.run());
 
@@ -199,7 +203,7 @@ defmodule Hologram.Compiler do
       document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));
     }
 
-    console.debug("Hologram: runtime script executed");\
+    console.debug("Hologram: runtime script executed in", Math.round(performance.now() - startTime), "ms");\
     """
   end
 
