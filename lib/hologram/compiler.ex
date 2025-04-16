@@ -147,6 +147,8 @@ defmodule Hologram.Compiler do
     """
     "use strict";
 
+    import PerformanceTimer from "#{js_dir}/performance_timer.mjs";    
+
     const startTime = performance.now();
 
     globalThis.hologram.pageReachableFunctionDefs = (deps) => {
@@ -164,7 +166,7 @@ defmodule Hologram.Compiler do
     globalThis.hologram.pageScriptLoaded = true;
     document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));
 
-    console.debug("Hologram: page script executed in", Math.round(performance.now() - startTime), "ms");\
+    console.debug("Hologram: page script executed in", PerformanceTimer.diff(startTime));\
     """
   end
 
@@ -192,10 +194,11 @@ defmodule Hologram.Compiler do
     import HologramInterpreterError from "#{js_dir}/errors/interpreter_error.mjs";
     import Interpreter from "#{js_dir}/interpreter.mjs";
     import MemoryStorage from "#{js_dir}/memory_storage.mjs";
+    import PerformanceTimer from "#{js_dir}/performance_timer.mjs";
     import Type from "#{js_dir}/type.mjs";
     import Utils from "#{js_dir}/utils.mjs";
 
-    const startTime = performance.now();#{erlang_function_defs}#{elixir_function_defs}
+    const startTime = PerformanceTimer.start();#{erlang_function_defs}#{elixir_function_defs}
 
     document.addEventListener("hologram:pageScriptLoaded", () => Hologram.run());
 
@@ -203,7 +206,7 @@ defmodule Hologram.Compiler do
       document.dispatchEvent(new CustomEvent("hologram:pageScriptLoaded"));
     }
 
-    console.debug("Hologram: runtime script executed in", Math.round(performance.now() - startTime), "ms");\
+    console.debug("Hologram: runtime script executed in", PerformanceTimer.diff(startTime));\
     """
   end
 
