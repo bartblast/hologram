@@ -541,8 +541,11 @@ export default class Bitstring2 {
       const mask = 0xff << (8 - leftoverBitCount);
       const leftoverValue = lastByte & mask;
 
+      // The masked value needs to be right-shifted to align its bits properly
+      const shiftedValue = leftoverValue >>> (8 - leftoverBitCount);
+
       // Place leftover bits in the correct position
-      result = (result << BigInt(leftoverBitCount)) | BigInt(leftoverValue);
+      result = (result << BigInt(leftoverBitCount)) | BigInt(shiftedValue);
     }
 
     // Handle signed values
