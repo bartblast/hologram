@@ -431,6 +431,141 @@ export default class Bitstring2 {
     };
   }
 
+  // TODO: split into multiple functions for different cases
+  static toInteger(bitstring, signedness, endianness) {
+    $.maybeSetBytesFromText(bitstring);
+
+    if (bitstring.bytes.length === 0) {
+      return Type.integer(0n);
+    }
+
+    const bytes = bitstring.bytes;
+    const byteCount = bytes.length;
+    const leftoverBitCount = bitstring.leftoverBitCount;
+    const isLittleEndian = endianness === "little";
+    const isSigned = signedness === "signed";
+
+    // Fast path for single byte with no leftover bits
+    if (byteCount === 1 && leftoverBitCount === 0) {
+      const value = bytes[0];
+
+      return Type.integer(
+        isSigned && value & 0x80 ? BigInt(value - 256) : BigInt(value),
+      );
+    }
+
+    // Calculate total bits for sign extension
+    const totalBits = (byteCount - 1) * 8 + leftoverBitCount;
+
+    // Fast path for common cases (1-8 bytes, no leftover bits)
+    if (leftoverBitCount === 0) {
+      // Use DataView for efficient byte access with endianness support
+      const buffer = new ArrayBuffer(byteCount);
+      const dataView = new DataView(buffer);
+
+      // Copy bytes to the buffer
+      for (let i = 0; i < byteCount; i++) {
+        dataView.setUint8(i, bytes[i]);
+      }
+
+      let result;
+
+      // Use appropriate DataView method based on size
+      if (byteCount <= 1) {
+        result = BigInt(dataView.getUint8(0));
+      } else if (byteCount <= 2) {
+        result = BigInt(dataView.getUint16(0, isLittleEndian));
+      } else if (byteCount <= 4) {
+        result = BigInt(dataView.getUint32(0, isLittleEndian));
+      } else if (byteCount <= 8) {
+        // For 5-8 bytes, we need to handle manually
+        if (isLittleEndian) {
+          result = 0n;
+
+          for (let i = 0; i < byteCount; i++) {
+            result |= BigInt(bytes[i]) << BigInt(i * 8);
+          }
+        } else {
+          result = 0n;
+
+          for (let i = 0; i < byteCount; i++) {
+            result = (result << 8n) | BigInt(bytes[i]);
+          }
+        }
+      } else {
+        // For more than 8 bytes, use BigInt with manual byte handling
+        result = 0n;
+
+        if (isLittleEndian) {
+          for (let i = 0; i < byteCount; i++) {
+            result |= BigInt(bytes[i]) << BigInt(i * 8);
+          }
+        } else {
+          for (let i = 0; i < byteCount; i++) {
+            result = (result << 8n) | BigInt(bytes[i]);
+          }
+        }
+      }
+
+      // Handle signed values
+      if (isSigned) {
+        const signBit = 1n << BigInt(totalBits - 1);
+
+        if ((result & signBit) !== 0n) {
+          result = result - (1n << BigInt(totalBits));
+        }
+      }
+
+      return Type.integer(result);
+    }
+
+    // Handle cases with leftover bits
+    let result = 0n;
+
+    if (isLittleEndian) {
+      // Little endian: LSB first
+
+      // Process complete bytes first
+      for (let i = 0; i < byteCount - 1; i++) {
+        result |= BigInt(bytes[i]) << BigInt(i * 8);
+      }
+
+      // Handle the last byte with leftover bits
+      const lastByte = bytes[byteCount - 1];
+      const mask = 0xff << (8 - leftoverBitCount);
+      const leftoverValue = lastByte & mask;
+
+      // Place leftover bits in the correct position
+      result |= BigInt(leftoverValue) << BigInt((byteCount - 1) * 8);
+    } else {
+      // Big endian: MSB first
+
+      // Process complete bytes first
+      for (let i = 0; i < byteCount - 1; i++) {
+        result = (result << 8n) | BigInt(bytes[i]);
+      }
+
+      // Handle the last byte with leftover bits
+      const lastByte = bytes[byteCount - 1];
+      const mask = 0xff << (8 - leftoverBitCount);
+      const leftoverValue = lastByte & mask;
+
+      // Place leftover bits in the correct position
+      result = (result << BigInt(leftoverBitCount)) | BigInt(leftoverValue);
+    }
+
+    // Handle signed values
+    if (isSigned) {
+      const signBit = 1n << BigInt(totalBits - 1);
+
+      if ((result & signBit) !== 0n) {
+        result = result - (1n << BigInt(totalBits));
+      }
+    }
+
+    return Type.integer(result);
+  }
+
   static validateCodePoint(codePoint) {
     if (typeof codePoint === "bigint") {
       codePoint = Number(codePoint);
