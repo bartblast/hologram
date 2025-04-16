@@ -4728,6 +4728,103 @@ describe("Bitstring2", () => {
             assert.deepStrictEqual(result, expected);
           });
         });
+
+        describe("little-endian", () => {
+          it("1 byte", () => {
+            const bitstring = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0xaa]), // 10101010
+              leftoverBitCount: 0,
+            };
+
+            const result = Bitstring2.toInteger(
+              bitstring,
+              "unsigned",
+              "little",
+            );
+
+            const expected = Type.integer(170n);
+
+            assert.deepStrictEqual(result, expected);
+          });
+
+          it("2 bytes", () => {
+            const bitstring = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0xaa, 0xbb]), // 10101010, 10111011
+              leftoverBitCount: 0,
+            };
+
+            const result = Bitstring2.toInteger(
+              bitstring,
+              "unsigned",
+              "little",
+            );
+
+            const expected = Type.integer(48042n);
+
+            assert.deepStrictEqual(result, expected);
+          });
+
+          it("3 bytes", () => {
+            const bitstring = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0xaa, 0xbb, 0xcc]), // 10101010, 10111011, 11001100
+              leftoverBitCount: 0,
+            };
+
+            const result = Bitstring2.toInteger(
+              bitstring,
+              "unsigned",
+              "little",
+            );
+
+            const expected = Type.integer(13417386n);
+
+            assert.deepStrictEqual(result, expected);
+          });
+
+          it("4 bytes", () => {
+            const bitstring = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd]), // 10101010, 10111011, 11001100, 11011101
+              leftoverBitCount: 0,
+            };
+
+            const result = Bitstring2.toInteger(
+              bitstring,
+              "unsigned",
+              "little",
+            );
+
+            const expected = Type.integer(3721182122n);
+
+            assert.deepStrictEqual(result, expected);
+          });
+
+          it("5 bytes", () => {
+            const bitstring = {
+              type: "bitstring2",
+              text: null,
+              bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd, 0xee]), // 10101010, 10111011, 11001100, 11011101, 11101110
+              leftoverBitCount: 0,
+            };
+
+            const result = Bitstring2.toInteger(
+              bitstring,
+              "unsigned",
+              "little",
+            );
+
+            const expected = Type.integer(1025923398570n);
+
+            assert.deepStrictEqual(result, expected);
+          });
+        });
       });
     });
   });
