@@ -14,6 +14,7 @@ import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import MemoryStorage from "./memory_storage.mjs";
 import Operation from "./operation.mjs";
+import PerformanceTimer from "./performance_timer.mjs";
 import Renderer from "./renderer.mjs";
 import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
@@ -139,8 +140,7 @@ export default class Hologram {
       "Hologram: action",
       `:${name.value}`,
       "executed in",
-      Math.round(performance.now() - startTime),
-      "ms",
+      PerformanceTimer.diff(startTime),
     );
 
     if (!Type.isNil(nextAction)) {

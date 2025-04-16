@@ -6,6 +6,7 @@ import uniqWith from "lodash/uniqWith.js";
 import Bitstring from "./bitstring.mjs";
 import Bitstring2 from "./bitstring2.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
+import PerformanceTimer from "./performance_timer.mjs";
 import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
@@ -369,8 +370,7 @@ export default class Interpreter {
             if (globalThis.hologram.isProfilingEnabled) {
               console.log(
                 `Hologram: function ${mfa} executed in`,
-                Math.round(performance.now() - startTime),
-                "ms",
+                PerformanceTimer.diff(startTime),
               );
             }
 
