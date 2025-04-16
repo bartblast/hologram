@@ -2,6 +2,7 @@
 
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
+import Type from "./type.mjs";
 
 export default class Bitstring2 {
   static #decoder = new TextDecoder("utf-8", {fatal: true});
@@ -474,9 +475,13 @@ export default class Bitstring2 {
       if (byteCount <= 1) {
         result = BigInt(dataView.getUint8(0));
       } else if (byteCount <= 2) {
-        result = BigInt(dataView.getUint16(0, isLittleEndian));
+        result = isSigned
+          ? BigInt(dataView.getInt16(0, isLittleEndian))
+          : BigInt(dataView.getUint16(0, isLittleEndian));
       } else if (byteCount <= 4) {
-        result = BigInt(dataView.getUint32(0, isLittleEndian));
+        result = isSigned
+          ? BigInt(dataView.getInt32(0, isLittleEndian))
+          : BigInt(dataView.getUint32(0, isLittleEndian));
       } else if (byteCount <= 8) {
         // For 5-8 bytes, we need to handle manually
         if (isLittleEndian) {
@@ -492,8 +497,18 @@ export default class Bitstring2 {
             result = (result << 8n) | BigInt(bytes[i]);
           }
         }
+
+        // Handle signed values for 5-8 bytes
+        if (isSigned) {
+          const signBit = 1n << BigInt(totalBits - 1);
+
+          if ((result & signBit) !== 0n) {
+            result = result - (1n << BigInt(totalBits));
+          }
+        }
       } else {
         // For more than 8 bytes, use BigInt with manual byte handling
+
         result = 0n;
 
         if (isLittleEndian) {
@@ -505,14 +520,14 @@ export default class Bitstring2 {
             result = (result << 8n) | BigInt(bytes[i]);
           }
         }
-      }
 
-      // Handle signed values
-      if (isSigned) {
-        const signBit = 1n << BigInt(totalBits - 1);
+        // Handle signed values for more than 8 bytes
+        if (isSigned) {
+          const signBit = 1n << BigInt(totalBits - 1);
 
-        if ((result & signBit) !== 0n) {
-          result = result - (1n << BigInt(totalBits));
+          if ((result & signBit) !== 0n) {
+            result = result - (1n << BigInt(totalBits));
+          }
         }
       }
 
