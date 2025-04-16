@@ -455,10 +455,7 @@ export default class Bitstring2 {
       );
     }
 
-    const totalBits =
-      leftoverBitCount > 0
-        ? (byteCount - 1) * 8 + leftoverBitCount
-        : byteCount * 8;
+    const totalBits = $.calculateBitCount(bitstring);
 
     // Fast path for common cases (1-8 bytes, no leftover bits)
     if (leftoverBitCount === 0) {
