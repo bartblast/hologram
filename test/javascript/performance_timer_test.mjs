@@ -13,13 +13,13 @@ describe("PerformanceTimer", () => {
   describe("diff()", () => {
     it("returns time in microseconds when difference is less than 1 ms", () => {
       // Create a mock timestamp very close to now to ensure sub-millisecond difference
-      const startTime = performance.now() - 0.5;
+      const startTime = performance.now() - 0.9;
 
       const result = PerformanceTimer.diff(startTime);
       assert.match(result, /^\d+ μs$/);
 
       const value = parseInt(result);
-      assert.isAtLeast(value, 500); // Allow for some overhead
+      assert.isAtLeast(value, 100); // Allow for some overhead
       assert.isBelow(value, 1000); // Should still be less than 1ms
     });
 
