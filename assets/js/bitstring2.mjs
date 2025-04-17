@@ -356,10 +356,7 @@ export default class Bitstring2 {
         return 1;
 
       default:
-        // TODO: eventually remove this
-        throw new HologramInterpreterError(
-          `This case shouldn't be possible, segment = ${JSON.stringify(segment)}`,
-        );
+        return null;
     }
   }
 
