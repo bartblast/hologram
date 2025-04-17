@@ -4509,6 +4509,20 @@ describe("Bitstring2", () => {
   });
 
   describe("toInteger()", () => {
+    it("empty bitstring", () => {
+      const bitstring = {
+        type: "bitstring2",
+        text: null,
+        bytes: new Uint8Array([]),
+        leftoverBitCount: 0,
+      };
+
+      const result = Bitstring2.toInteger(bitstring, "signed", "big");
+      const expected = Type.integer(0n);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     describe("without leftover bits", () => {
       describe("signed", () => {
         describe("big-endian", () => {

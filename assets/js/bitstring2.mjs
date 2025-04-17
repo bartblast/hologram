@@ -443,6 +443,7 @@ export default class Bitstring2 {
     }
 
     const leftoverBitCount = bitstring.leftoverBitCount;
+    const isSigned = signedness === "signed";
 
     // Fast path for single byte with no leftover bits
     if (byteCount === 1 && leftoverBitCount === 0) {
@@ -454,7 +455,6 @@ export default class Bitstring2 {
     }
 
     const isLittleEndian = endianness === "little";
-    const isSigned = signedness === "signed";
 
     if (leftoverBitCount === 0) {
       return $.#toIntegerFromBitstringWithoutLeftoverBits(
