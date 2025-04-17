@@ -846,41 +846,32 @@ export default class Bitstring2 {
 
     let result = 0n;
 
-    if (isLittleEndian) {
-      // Little endian: LSB first
+    // Little endian: LSB first
+    // Big endian: MSB first
 
-      // Process complete bytes first
+    // Process complete bytes first
+    if (isLittleEndian) {
       for (let i = 0; i < byteCount - 1; i++) {
         result |= BigInt(bytes[i]) << BigInt(i * 8);
       }
-
-      // Handle the last byte with leftover bits
-      const lastByte = bytes[byteCount - 1];
-      const mask = 0xff << (8 - leftoverBitCount);
-      const leftoverValue = lastByte & mask;
-
-      // Right-shift the leftover bits to align them properly
-      const shiftedValue = leftoverValue >>> (8 - leftoverBitCount);
-
-      // Place leftover bits in the correct position
-      result |= BigInt(shiftedValue) << BigInt((byteCount - 1) * 8);
     } else {
-      // Big endian: MSB first
-
-      // Process complete bytes first
       for (let i = 0; i < byteCount - 1; i++) {
         result = (result << 8n) | BigInt(bytes[i]);
       }
+    }
 
-      // Handle the last byte with leftover bits
-      const lastByte = bytes[byteCount - 1];
-      const mask = 0xff << (8 - leftoverBitCount);
-      const leftoverValue = lastByte & mask;
+    // Handle the last byte with leftover bits
+    const lastByte = bytes[byteCount - 1];
+    const mask = 0xff << (8 - leftoverBitCount);
+    const leftoverValue = lastByte & mask;
 
-      // Right-shift the leftover bits to align them properly
-      const shiftedValue = leftoverValue >>> (8 - leftoverBitCount);
+    // Right-shift the leftover bits to align them properly
+    const shiftedValue = leftoverValue >>> (8 - leftoverBitCount);
 
-      // Place leftover bits in the correct position
+    // Place leftover bits in the correct position
+    if (isLittleEndian) {
+      result |= BigInt(shiftedValue) << BigInt((byteCount - 1) * 8);
+    } else {
       result = (result << BigInt(leftoverBitCount)) | BigInt(shiftedValue);
     }
 
