@@ -4508,6 +4508,54 @@ describe("Bitstring2", () => {
     });
   });
 
+  describe("toFloat()", () => {
+    describe("big-endian", () => {
+      it("64-bit", () => {
+        const bitstring = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([64, 94, 221, 47, 26, 159, 190, 119]),
+          leftoverBitCount: 0,
+        };
+
+        const result = Bitstring2.toFloat(bitstring, "big");
+        const expected = Type.float(123.456);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("32-bit", () => {
+        const bitstring = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([66, 246, 233, 121]),
+          leftoverBitCount: 0,
+        };
+
+        const result = Bitstring2.toFloat(bitstring, "big");
+        const expected = Type.float(123.45600128173828);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("16-bit", () => {
+        const bitstring = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([87, 183]),
+          leftoverBitCount: 0,
+        };
+
+        const result = Bitstring2.toFloat(bitstring, "big");
+        const expected = Type.float(123.4375);
+
+        assert.deepStrictEqual(result, expected);
+      });
+    });
+
+    describe("little-endian", () => {});
+  });
+
   describe("toInteger()", () => {
     it("empty bitstring", () => {
       const bitstring = {
