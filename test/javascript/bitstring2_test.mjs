@@ -84,7 +84,7 @@ describe("Bitstring2", () => {
   });
 
   describe("concatSegments()", () => {
-    it("single string binary segment", () => {
+    it("single string segment", () => {
       const result = Bitstring2.concatSegments([
         Type.bitstringSegment(Type.string("Hologram"), {type: "binary"}),
       ]);
@@ -99,7 +99,7 @@ describe("Bitstring2", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("multiple string binary segments", () => {
+    it("multiple string segments", () => {
       const result = Bitstring2.concatSegments([
         Type.bitstringSegment(Type.string("Holo"), {type: "binary"}),
         Type.bitstringSegment(Type.string("gram"), {type: "binary"}),
@@ -115,9 +115,9 @@ describe("Bitstring2", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("single string utf8 segment", () => {
+    it("single bitstring2 segment having not null text field", () => {
       const result = Bitstring2.concatSegments([
-        Type.bitstringSegment(Type.string("Hologram"), {type: "utf8"}),
+        Type.bitstringSegment(Type.bitstring2("Hologram"), {type: "bitstring"}),
       ]);
 
       const expected = {
@@ -130,10 +130,10 @@ describe("Bitstring2", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("multiple string utf8 segments", () => {
+    it("multiple bitstring2 segments having not null text field", () => {
       const result = Bitstring2.concatSegments([
-        Type.bitstringSegment(Type.string("Holo"), {type: "utf8"}),
-        Type.bitstringSegment(Type.string("gram"), {type: "utf8"}),
+        Type.bitstringSegment(Type.bitstring2("Holo"), {type: "bitstring"}),
+        Type.bitstringSegment(Type.bitstring2("gram"), {type: "bitstring"}),
       ]);
 
       const expected = {
@@ -146,10 +146,10 @@ describe("Bitstring2", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("string binary and utf8 segments", () => {
+    it("string segment and bitstring2 segment with not null text field", () => {
       const result = Bitstring2.concatSegments([
         Type.bitstringSegment(Type.string("Holo"), {type: "binary"}),
-        Type.bitstringSegment(Type.string("gram"), {type: "utf8"}),
+        Type.bitstringSegment(Type.bitstring2("gram"), {type: "bitstring"}),
       ]);
 
       const expected = {

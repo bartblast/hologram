@@ -36,15 +36,19 @@ export default class Bitstring2 {
   static concatSegments(segments) {
     if (
       segments.every(
-        (segment) => segment.type === "utf8" || segment.type === "binary",
+        (segment) =>
+          segment.value.type === "string" ||
+          (segment.value.type === "bitstring2" && segment.value.text != null),
       )
     ) {
-      const segmentCount = segments.length;
-      let text = "";
-
-      for (let i = 0; i < segmentCount; i++) {
-        text += segments[i].value.value;
-      }
+      const text = segments.reduce(
+        (acc, segment) =>
+          acc +
+          (segment.value.type === "string"
+            ? segment.value.value
+            : segment.value.text),
+        "",
+      );
 
       return {type: "bitstring2", text, bytes: null, leftoverBitCount: 0};
     }
