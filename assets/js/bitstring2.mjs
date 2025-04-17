@@ -432,19 +432,17 @@ export default class Bitstring2 {
     };
   }
 
-  // TODO: refactor and split into multiple functions for different cases
   static toInteger(bitstring, signedness, endianness) {
     $.maybeSetBytesFromText(bitstring);
 
-    if (bitstring.bytes.length === 0) {
+    const bytes = bitstring.bytes;
+    const byteCount = bytes.length;
+
+    if (byteCount === 0) {
       return Type.integer(0n);
     }
 
-    const bytes = bitstring.bytes;
-    const byteCount = bytes.length;
     const leftoverBitCount = bitstring.leftoverBitCount;
-    const isLittleEndian = endianness === "little";
-    const isSigned = signedness === "signed";
 
     // Fast path for single byte with no leftover bits
     if (byteCount === 1 && leftoverBitCount === 0) {
@@ -455,65 +453,22 @@ export default class Bitstring2 {
       );
     }
 
-    const totalBits = $.calculateBitCount(bitstring);
+    const isLittleEndian = endianness === "little";
+    const isSigned = signedness === "signed";
 
     if (leftoverBitCount === 0) {
       return $.#toIntegerFromBitstringWithoutLeftoverBits(
         bitstring,
-        totalBits,
         isSigned,
         isLittleEndian,
       );
     }
 
-    // Handle cases with leftover bits
-    let result = 0n;
-
-    if (isLittleEndian) {
-      // Little endian: LSB first
-      // Process complete bytes first
-      for (let i = 0; i < byteCount - 1; i++) {
-        result |= BigInt(bytes[i]) << BigInt(i * 8);
-      }
-
-      // Handle the last byte with leftover bits
-      const lastByte = bytes[byteCount - 1];
-      const mask = 0xff << (8 - leftoverBitCount);
-      const leftoverValue = lastByte & mask;
-
-      // Right-shift the leftover bits to align them properly (like in big-endian)
-      const shiftedValue = leftoverValue >>> (8 - leftoverBitCount);
-
-      // Place leftover bits in the correct position
-      result |= BigInt(shiftedValue) << BigInt((byteCount - 1) * 8);
-    } else {
-      // Big endian: MSB first
-      // Process complete bytes first
-      for (let i = 0; i < byteCount - 1; i++) {
-        result = (result << 8n) | BigInt(bytes[i]);
-      }
-
-      // Handle the last byte with leftover bits
-      const lastByte = bytes[byteCount - 1];
-      const mask = 0xff << (8 - leftoverBitCount);
-      const leftoverValue = lastByte & mask;
-
-      // The masked value needs to be right-shifted to align its bits properly
-      const shiftedValue = leftoverValue >>> (8 - leftoverBitCount);
-
-      // Place leftover bits in the correct position
-      result = (result << BigInt(leftoverBitCount)) | BigInt(shiftedValue);
-    }
-
-    // Handle signed values
-    if (isSigned) {
-      const signBit = 1n << BigInt(totalBits - 1);
-      if ((result & signBit) !== 0n) {
-        result = result - (1n << BigInt(totalBits));
-      }
-    }
-
-    return Type.integer(result);
+    return $.#toIntegerFromBitstringWithLeftoverBits(
+      bitstring,
+      isSigned,
+      isLittleEndian,
+    );
   }
 
   static validateCodePoint(codePoint) {
@@ -880,18 +835,77 @@ export default class Bitstring2 {
     }
   }
 
-  static #toIntegerFromBitstringWithoutLeftoverBits(
+  static #toIntegerFromBitstringWithLeftoverBits(
     bitstring,
-    bitCount,
     isSigned,
     isLittleEndian,
   ) {
     const bytes = bitstring.bytes;
     const byteCount = bytes.length;
-    let result;
+    const leftoverBitCount = bitstring.leftoverBitCount;
+
+    let result = 0n;
+
+    if (isLittleEndian) {
+      // Little endian: LSB first
+
+      // Process complete bytes first
+      for (let i = 0; i < byteCount - 1; i++) {
+        result |= BigInt(bytes[i]) << BigInt(i * 8);
+      }
+
+      // Handle the last byte with leftover bits
+      const lastByte = bytes[byteCount - 1];
+      const mask = 0xff << (8 - leftoverBitCount);
+      const leftoverValue = lastByte & mask;
+
+      // Right-shift the leftover bits to align them properly
+      const shiftedValue = leftoverValue >>> (8 - leftoverBitCount);
+
+      // Place leftover bits in the correct position
+      result |= BigInt(shiftedValue) << BigInt((byteCount - 1) * 8);
+    } else {
+      // Big endian: MSB first
+
+      // Process complete bytes first
+      for (let i = 0; i < byteCount - 1; i++) {
+        result = (result << 8n) | BigInt(bytes[i]);
+      }
+
+      // Handle the last byte with leftover bits
+      const lastByte = bytes[byteCount - 1];
+      const mask = 0xff << (8 - leftoverBitCount);
+      const leftoverValue = lastByte & mask;
+
+      // Right-shift the leftover bits to align them properly
+      const shiftedValue = leftoverValue >>> (8 - leftoverBitCount);
+
+      // Place leftover bits in the correct position
+      result = (result << BigInt(leftoverBitCount)) | BigInt(shiftedValue);
+    }
+
+    if (isSigned) {
+      const bitCount = $.calculateBitCount(bitstring);
+      const signBit = 1n << BigInt(bitCount - 1);
+
+      if ((result & signBit) !== 0n) {
+        result = result - (1n << BigInt(bitCount));
+      }
+    }
+
+    return Type.integer(result);
+  }
+
+  static #toIntegerFromBitstringWithoutLeftoverBits(
+    bitstring,
+    isSigned,
+    isLittleEndian,
+  ) {
+    const bytes = bitstring.bytes;
+    const byteCount = bytes.length;
 
     // Use DataView for standard sizes (1, 2, 4 bytes)
-    let buffer, dataView;
+    let buffer, dataView, result;
 
     switch (byteCount) {
       case 1:
@@ -927,21 +941,20 @@ export default class Bitstring2 {
         break;
 
       default:
-        if (isLittleEndian) {
-          result = 0n;
+        result = 0n;
 
+        if (isLittleEndian) {
           for (let i = 0; i < byteCount; i++) {
             result |= BigInt(bytes[i]) << BigInt(i * 8);
           }
         } else {
-          result = 0n;
-
           for (let i = 0; i < byteCount; i++) {
             result = (result << 8n) | BigInt(bytes[i]);
           }
         }
 
         if (isSigned) {
+          const bitCount = $.calculateBitCount(bitstring);
           const signBit = 1n << BigInt(bitCount - 1);
 
           if ((result & signBit) !== 0n) {
