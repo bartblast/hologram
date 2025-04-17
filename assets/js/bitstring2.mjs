@@ -107,6 +107,16 @@ export default class Bitstring2 {
     };
   }
 
+  static fromSegmentWithBitstringValue(segment) {
+    // Fast path: if no size specified, use the entire bitstring
+    if (segment.size === null) {
+      return segment.value;
+    }
+
+    // For bitstrings "unit" is always 1, so we can use just "size"
+    return $.takeChunk(segment.value, 0, Number(segment.size.value));
+  }
+
   static fromSegmentWithFloatValue(segment) {
     let value;
 

@@ -283,6 +283,32 @@ describe("Bitstring2", () => {
     });
   });
 
+  describe("fromSegmentWithBitstringValue()", () => {
+    it("when size is not specified", () => {
+      const value = Type.bitstring2("Hologram");
+      const segment = Type.bitstringSegment(value, {type: "bitstring"});
+      const result = Bitstring2.fromSegmentWithBitstringValue(segment);
+
+      assert.equal(result, value);
+    });
+
+    it("when size is specified", () => {
+      const value = Bitstring2.fromBytes([0xaa, 0xbb, 0xcc]); // 10101010, 10111011, 11001100
+
+      const segment = Type.bitstringSegment(value, {
+        type: "bitstring",
+        size: Type.integer(12),
+      });
+
+      const result = Bitstring2.fromSegmentWithBitstringValue(segment);
+
+      const expected = Bitstring2.fromBytes([0xaa, 0xb0]); // 10101010, 10110000
+      expected.leftoverBitCount = 4;
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   describe("fromSegmentWithFloatValue()", () => {
     describe("64-bit", () => {
       describe("float value", () => {
