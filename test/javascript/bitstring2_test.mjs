@@ -4644,46 +4644,136 @@ describe("Bitstring2", () => {
     });
 
     describe("little-endian", () => {
-      it("64-bit", () => {
-        const bitstring = {
-          type: "bitstring2",
-          text: null,
-          bytes: new Uint8Array([119, 190, 159, 26, 47, 221, 94, 64]),
-          leftoverBitCount: 0,
-        };
+      describe("64-bit", () => {
+        it("non-zero", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([119, 190, 159, 26, 47, 221, 94, 64]),
+            leftoverBitCount: 0,
+          };
 
-        const result = Bitstring2.toFloat(bitstring, "little");
-        const expected = Type.float(123.456);
+          const result = Bitstring2.toFloat(bitstring, "little");
+          const expected = Type.float(123.456);
 
-        assert.deepStrictEqual(result, expected);
+          assert.deepStrictEqual(result, expected);
+        });
+
+        it("signed zero, negative", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0, 0, 0, 0, 0, 0, 0, 128]),
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.toFloat(bitstring, "little");
+          const expected = Type.float(-0.0);
+
+          assert.deepStrictEqual(result, expected);
+        });
+
+        it("signed zero, positive", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]),
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.toFloat(bitstring, "little");
+          const expected = Type.float(+0.0);
+
+          assert.deepStrictEqual(result, expected);
+        });
       });
 
-      it("32-bit", () => {
-        const bitstring = {
-          type: "bitstring2",
-          text: null,
-          bytes: new Uint8Array([121, 233, 246, 66]),
-          leftoverBitCount: 0,
-        };
+      describe("32-bit", () => {
+        it("non-zero", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([121, 233, 246, 66]),
+            leftoverBitCount: 0,
+          };
 
-        const result = Bitstring2.toFloat(bitstring, "little");
-        const expected = Type.float(123.45600128173828);
+          const result = Bitstring2.toFloat(bitstring, "little");
+          const expected = Type.float(123.45600128173828);
 
-        assert.deepStrictEqual(result, expected);
+          assert.deepStrictEqual(result, expected);
+        });
+
+        it("signed zero, negative", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0, 0, 0, 128]),
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.toFloat(bitstring, "little");
+          const expected = Type.float(-0.0);
+
+          assert.deepStrictEqual(result, expected);
+        });
+
+        it("signed zero, positive", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0, 0, 0, 0]),
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.toFloat(bitstring, "little");
+          const expected = Type.float(+0.0);
+
+          assert.deepStrictEqual(result, expected);
+        });
       });
 
-      it("16-bit", () => {
-        const bitstring = {
-          type: "bitstring2",
-          text: null,
-          bytes: new Uint8Array([183, 87]),
-          leftoverBitCount: 0,
-        };
+      describe("16-bit", () => {
+        it("non-zero", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([183, 87]),
+            leftoverBitCount: 0,
+          };
 
-        const result = Bitstring2.toFloat(bitstring, "little");
-        const expected = Type.float(123.4375);
+          const result = Bitstring2.toFloat(bitstring, "little");
+          const expected = Type.float(123.4375);
 
-        assert.deepStrictEqual(result, expected);
+          assert.deepStrictEqual(result, expected);
+        });
+
+        it("signed zero, negative", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0, 128]),
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.toFloat(bitstring, "little");
+          const expected = Type.float(-0.0);
+
+          assert.deepStrictEqual(result, expected);
+        });
+
+        it("signed zero, positive", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0, 0]),
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.toFloat(bitstring, "little");
+          const expected = Type.float(+0.0);
+
+          assert.deepStrictEqual(result, expected);
+        });
       });
     });
   });
