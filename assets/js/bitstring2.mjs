@@ -53,7 +53,7 @@ export default class Bitstring2 {
       return {type: "bitstring2", text, bytes: null, leftoverBitCount: 0};
     }
 
-    // TODO: concat non-binary segments
+    // TODO: concat bitstrings that can't be simply concatenated by text field
   }
 
   static fromBits(bits) {
@@ -338,10 +338,7 @@ export default class Bitstring2 {
         return 8;
 
       default:
-        // TODO: eventually remove this
-        throw new HologramInterpreterError(
-          `This case shouldn't be possible, segment = ${JSON.stringify(segment)}`,
-        );
+        return null;
     }
   }
 

@@ -4030,16 +4030,12 @@ describe("Bitstring2", () => {
       assert.equal(Bitstring2.resolveSegmentSize(segment), 8);
     });
 
-    it("throws error for invalid segment type", () => {
-      const segment = {
-        type: "invalid_type",
-      };
+    it("returns null for segments of type that don't have default size", () => {
+      const segment = Type.bitstringSegment(Type.bitstring2("abc"), {
+        type: "bitstring",
+      });
 
-      assert.throw(
-        () => Bitstring2.resolveSegmentSize(segment),
-        HologramInterpreterError,
-        `This case shouldn't be possible, segment = {"type":"invalid_type"}`,
-      );
+      assert.isNull(Bitstring2.resolveSegmentSize(segment));
     });
   });
 
