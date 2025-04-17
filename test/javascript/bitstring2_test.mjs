@@ -84,7 +84,7 @@ describe("Bitstring2", () => {
   });
 
   describe("concatSegments()", () => {
-    it("single string segment", () => {
+    it("single string-valued segment", () => {
       const result = Bitstring2.concatSegments([
         Type.bitstringSegment(Type.string("Hologram"), {type: "binary"}),
       ]);
@@ -99,7 +99,7 @@ describe("Bitstring2", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("multiple string segments", () => {
+    it("multiple string-valued segments", () => {
       const result = Bitstring2.concatSegments([
         Type.bitstringSegment(Type.string("Holo"), {type: "binary"}),
         Type.bitstringSegment(Type.string("gram"), {type: "binary"}),
@@ -115,7 +115,7 @@ describe("Bitstring2", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("single bitstring2 segment having not null text field", () => {
+    it("single segment with bitstring2 value having not null text field", () => {
       const result = Bitstring2.concatSegments([
         Type.bitstringSegment(Type.bitstring2("Hologram"), {type: "bitstring"}),
       ]);
@@ -130,7 +130,7 @@ describe("Bitstring2", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("multiple bitstring2 segments having not null text field", () => {
+    it("multiple segments with bitstring2 values having not null text fields", () => {
       const result = Bitstring2.concatSegments([
         Type.bitstringSegment(Type.bitstring2("Holo"), {type: "bitstring"}),
         Type.bitstringSegment(Type.bitstring2("gram"), {type: "bitstring"}),
@@ -146,7 +146,7 @@ describe("Bitstring2", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("string segment and bitstring2 segment with not null text field", () => {
+    it("string segment and segment with bitstring2 value having not null text field", () => {
       const result = Bitstring2.concatSegments([
         Type.bitstringSegment(Type.string("Holo"), {type: "binary"}),
         Type.bitstringSegment(Type.bitstring2("gram"), {type: "bitstring"}),
