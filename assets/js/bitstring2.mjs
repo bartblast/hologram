@@ -1,6 +1,5 @@
 "use strict";
 
-import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 
