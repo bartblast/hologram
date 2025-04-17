@@ -457,59 +457,13 @@ export default class Bitstring2 {
 
     const totalBits = $.calculateBitCount(bitstring);
 
-    // Fast path for common cases (1-8 bytes, no leftover bits)
     if (leftoverBitCount === 0) {
-      let result;
-
-      // Use DataView for standard sizes (1, 2, 4 bytes)
-      if (byteCount === 1) {
-        result = BigInt(bytes[0]);
-      } else if (byteCount === 2) {
-        // Use DataView for 2 bytes
-        const buffer = new ArrayBuffer(2);
-        const dataView = new DataView(buffer);
-        dataView.setUint8(0, bytes[0]);
-        dataView.setUint8(1, bytes[1]);
-
-        result = isSigned
-          ? BigInt(dataView.getInt16(0, isLittleEndian))
-          : BigInt(dataView.getUint16(0, isLittleEndian));
-      } else if (byteCount === 4) {
-        // Use DataView for 4 bytes
-        const buffer = new ArrayBuffer(4);
-        const dataView = new DataView(buffer);
-        dataView.setUint8(0, bytes[0]);
-        dataView.setUint8(1, bytes[1]);
-        dataView.setUint8(2, bytes[2]);
-        dataView.setUint8(3, bytes[3]);
-
-        result = isSigned
-          ? BigInt(dataView.getInt32(0, isLittleEndian))
-          : BigInt(dataView.getUint32(0, isLittleEndian));
-      } else {
-        // For non-standard sizes use manual handling
-        if (isLittleEndian) {
-          result = 0n;
-          for (let i = 0; i < byteCount; i++) {
-            result |= BigInt(bytes[i]) << BigInt(i * 8);
-          }
-        } else {
-          result = 0n;
-          for (let i = 0; i < byteCount; i++) {
-            result = (result << 8n) | BigInt(bytes[i]);
-          }
-        }
-
-        // Handle signed values for non-standard sizes
-        if (isSigned) {
-          const signBit = 1n << BigInt(totalBits - 1);
-          if ((result & signBit) !== 0n) {
-            result = result - (1n << BigInt(totalBits));
-          }
-        }
-      }
-
-      return Type.integer(result);
+      return $.#toIntegerFromBitstringWithoutLeftoverBits(
+        bitstring,
+        totalBits,
+        isSigned,
+        isLittleEndian,
+      );
     }
 
     // Handle cases with leftover bits
@@ -924,6 +878,79 @@ export default class Bitstring2 {
       dataView.setUint8(0, highByte);
       dataView.setUint8(1, lowByte);
     }
+  }
+
+  static #toIntegerFromBitstringWithoutLeftoverBits(
+    bitstring,
+    bitCount,
+    isSigned,
+    isLittleEndian,
+  ) {
+    const bytes = bitstring.bytes;
+    const byteCount = bytes.length;
+    let result;
+
+    // Use DataView for standard sizes (1, 2, 4 bytes)
+    let buffer, dataView;
+
+    switch (byteCount) {
+      case 1:
+        result = BigInt(bytes[0]);
+        break;
+
+      case 2:
+        buffer = new ArrayBuffer(2);
+        dataView = new DataView(buffer);
+
+        dataView.setUint8(0, bytes[0]);
+        dataView.setUint8(1, bytes[1]);
+
+        result = isSigned
+          ? BigInt(dataView.getInt16(0, isLittleEndian))
+          : BigInt(dataView.getUint16(0, isLittleEndian));
+
+        break;
+
+      case 4:
+        buffer = new ArrayBuffer(4);
+        dataView = new DataView(buffer);
+
+        dataView.setUint8(0, bytes[0]);
+        dataView.setUint8(1, bytes[1]);
+        dataView.setUint8(2, bytes[2]);
+        dataView.setUint8(3, bytes[3]);
+
+        result = isSigned
+          ? BigInt(dataView.getInt32(0, isLittleEndian))
+          : BigInt(dataView.getUint32(0, isLittleEndian));
+
+        break;
+
+      default:
+        if (isLittleEndian) {
+          result = 0n;
+
+          for (let i = 0; i < byteCount; i++) {
+            result |= BigInt(bytes[i]) << BigInt(i * 8);
+          }
+        } else {
+          result = 0n;
+
+          for (let i = 0; i < byteCount; i++) {
+            result = (result << 8n) | BigInt(bytes[i]);
+          }
+        }
+
+        if (isSigned) {
+          const signBit = 1n << BigInt(bitCount - 1);
+
+          if ((result & signBit) !== 0n) {
+            result = result - (1n << BigInt(bitCount));
+          }
+        }
+    }
+
+    return Type.integer(result);
   }
 
   static #validateSegmentWithBinaryType(segment, index) {
