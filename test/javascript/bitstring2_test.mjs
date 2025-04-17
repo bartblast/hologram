@@ -4835,12 +4835,12 @@ describe("Bitstring2", () => {
             const bitstring = {
               type: "bitstring2",
               text: null,
-              bytes: new Uint8Array([0xb0]), // 10110000
-              leftoverBitCount: 4,
+              bytes: new Uint8Array([0xe0]), // 11100000
+              leftoverBitCount: 3,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "big");
-            const expected = Type.integer(-5n);
+            const expected = Type.integer(-1n);
 
             assert.deepStrictEqual(result, expected);
           });
@@ -4849,12 +4849,12 @@ describe("Bitstring2", () => {
             const bitstring = {
               type: "bitstring2",
               text: null,
-              bytes: new Uint8Array([0xaa, 0xb0]), // 10101010, 10110000
-              leftoverBitCount: 4,
+              bytes: new Uint8Array([0xaa, 0xe0]), // 10101010, 11100000
+              leftoverBitCount: 3,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "big");
-            const expected = Type.integer(-1365n);
+            const expected = Type.integer(-681n);
 
             assert.deepStrictEqual(result, expected);
           });
@@ -4863,12 +4863,12 @@ describe("Bitstring2", () => {
             const bitstring = {
               type: "bitstring2",
               text: null,
-              bytes: new Uint8Array([0xaa, 0xcc, 0xb0]), // 10101010, 11001100, 10110000
-              leftoverBitCount: 4,
+              bytes: new Uint8Array([0xaa, 0xbb, 0xe0]), // 10101010, 10111011, 11100000
+              leftoverBitCount: 3,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "big");
-            const expected = Type.integer(-348981n);
+            const expected = Type.integer(-174625n);
 
             assert.deepStrictEqual(result, expected);
           });
@@ -4877,12 +4877,12 @@ describe("Bitstring2", () => {
             const bitstring = {
               type: "bitstring2",
               text: null,
-              bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xb0]), // 10101010, 10111011, 11001100, 10110000
-              leftoverBitCount: 4,
+              bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xe0]), // 10101010, 10111011, 11001100, 11100000
+              leftoverBitCount: 3,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "big");
-            const expected = Type.integer(-89408309n);
+            const expected = Type.integer(-44704153n);
 
             assert.deepStrictEqual(result, expected);
           });
@@ -4891,12 +4891,12 @@ describe("Bitstring2", () => {
             const bitstring = {
               type: "bitstring2",
               text: null,
-              bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd, 0xb0]), // 10101010, 10111011, 11001100, 11011101, 10110000
-              leftoverBitCount: 4,
+              bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd, 0xe0]), // 10101010, 10111011, 11001100, 11011101, 11100000
+              leftoverBitCount: 3,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "big");
-            const expected = Type.integer(-22888526373n);
+            const expected = Type.integer(-11444263185n);
 
             assert.deepStrictEqual(result, expected);
           });
