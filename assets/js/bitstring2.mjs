@@ -527,8 +527,11 @@ export default class Bitstring2 {
       const mask = 0xff << (8 - leftoverBitCount);
       const leftoverValue = lastByte & mask;
 
+      // Right-shift the leftover bits to align them properly (like in big-endian)
+      const shiftedValue = leftoverValue >>> (8 - leftoverBitCount);
+
       // Place leftover bits in the correct position
-      result |= BigInt(leftoverValue) << BigInt((byteCount - 1) * 8);
+      result |= BigInt(shiftedValue) << BigInt((byteCount - 1) * 8);
     } else {
       // Big endian: MSB first
       // Process complete bytes first
