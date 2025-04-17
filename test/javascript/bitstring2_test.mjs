@@ -4599,7 +4599,7 @@ describe("Bitstring2", () => {
       });
 
       describe("16-bit", () => {
-        it("non-zero", () => {
+        it("non-zero, normalized number", () => {
           const bitstring = {
             type: "bitstring2",
             text: null,
@@ -4609,6 +4609,20 @@ describe("Bitstring2", () => {
 
           const result = Bitstring2.toFloat(bitstring, "big");
           const expected = Type.float(123.4375);
+
+          assert.deepStrictEqual(result, expected);
+        });
+
+        it("non-zero, denormalized number", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([0, 1]),
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.toFloat(bitstring, "big");
+          const expected = Type.float(5.960464477539063e-8);
 
           assert.deepStrictEqual(result, expected);
         });
@@ -4733,7 +4747,7 @@ describe("Bitstring2", () => {
       });
 
       describe("16-bit", () => {
-        it("non-zero", () => {
+        it("non-zero, normalized number", () => {
           const bitstring = {
             type: "bitstring2",
             text: null,
@@ -4743,6 +4757,20 @@ describe("Bitstring2", () => {
 
           const result = Bitstring2.toFloat(bitstring, "little");
           const expected = Type.float(123.4375);
+
+          assert.deepStrictEqual(result, expected);
+        });
+
+        it("non-zero, denormalized number", () => {
+          const bitstring = {
+            type: "bitstring2",
+            text: null,
+            bytes: new Uint8Array([1, 0]),
+            leftoverBitCount: 0,
+          };
+
+          const result = Bitstring2.toFloat(bitstring, "little");
+          const expected = Type.float(5.960464477539063e-8);
 
           assert.deepStrictEqual(result, expected);
         });
