@@ -432,6 +432,35 @@ export default class Bitstring2 {
     };
   }
 
+  static toFloat(bitstring, endianness) {
+    $.maybeSetBytesFromText(bitstring);
+
+    const bytes = bitstring.bytes;
+    const byteCount = bytes.length;
+    const isLittleEndian = endianness === "little";
+
+    let result;
+
+    if (byteCount === 8) {
+      // 64-bit float
+      const buffer = new ArrayBuffer(8);
+      const view = new Uint8Array(buffer);
+      view.set(bytes);
+      result = new DataView(buffer).getFloat64(0, isLittleEndian);
+    } else if (byteCount === 4) {
+      // 32-bit float
+      const buffer = new ArrayBuffer(4);
+      const view = new Uint8Array(buffer);
+      view.set(bytes);
+      result = new DataView(buffer).getFloat32(0, isLittleEndian);
+    } else {
+      // 16-bit float - needs manual conversion as JavaScript doesn't natively support Float16
+      result = $.#decodeFloat16(bytes, isLittleEndian);
+    }
+
+    return Type.float(result);
+  }
+
   static toInteger(bitstring, signedness, endianness) {
     $.maybeSetBytesFromText(bitstring);
 
@@ -507,6 +536,28 @@ export default class Bitstring2 {
       case "utf32":
         return $.#validateSegmentWithUtfType(segment, index);
     }
+  }
+
+  static #decodeFloat16(bytes, isLittleEndian) {
+    const byte1 = isLittleEndian ? bytes[1] : bytes[0];
+    const byte2 = isLittleEndian ? bytes[0] : bytes[1];
+
+    const sign = byte1 & 0x80 ? -1 : 1;
+    const exponent = (byte1 & 0x7c) >> 2;
+    const fraction = ((byte1 & 0x03) << 8) | byte2;
+
+    // Handle special cases
+    if (exponent === 0) {
+      if (fraction === 0) {
+        return sign * 0; // Signed zero
+      }
+
+      // Denormalized number
+      return sign * Math.pow(2, -14) * (fraction / 1024);
+    }
+
+    // Normalized number
+    return sign * Math.pow(2, exponent - 15) * (1 + fraction / 1024);
   }
 
   static #fromSegmentWithIntegerWithinNumberRangeValue(segment) {
