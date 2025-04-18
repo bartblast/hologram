@@ -206,13 +206,13 @@ defmodule Hologram.Compiler.EncoderTest do
         segments: [
           %IR.BitstringSegment{
             value: %IR.IntegerType{value: 1},
-            modifiers: []
+            modifiers: [type: :integer]
           }
         ]
       }
 
       assert encode_ir(ir, @context) ==
-               "Type.bitstringPattern([Type.bitstringSegment(Type.integer(1n), {})])"
+               ~s/Type.bitstringPattern([Type.bitstringSegment(Type.integer(1n), {type: "integer"})])/
     end
 
     test "multiple segments" do
@@ -221,17 +221,17 @@ defmodule Hologram.Compiler.EncoderTest do
         segments: [
           %IR.BitstringSegment{
             value: %IR.IntegerType{value: 1},
-            modifiers: []
+            modifiers: [type: :integer]
           },
           %IR.BitstringSegment{
             value: %IR.IntegerType{value: 2},
-            modifiers: []
+            modifiers: [type: :integer]
           }
         ]
       }
 
       assert encode_ir(ir, @context) ==
-               "Type.bitstringPattern([Type.bitstringSegment(Type.integer(1n), {}), Type.bitstringSegment(Type.integer(2n), {})])"
+               ~s/Type.bitstringPattern([Type.bitstringSegment(Type.integer(1n), {type: "integer"}), Type.bitstringSegment(Type.integer(2n), {type: "integer"})])/
     end
   end
 
@@ -251,13 +251,13 @@ defmodule Hologram.Compiler.EncoderTest do
         segments: [
           %IR.BitstringSegment{
             value: %IR.IntegerType{value: 1},
-            modifiers: []
+            modifiers: [type: :integer]
           }
         ]
       }
 
       assert encode_ir(ir, @context) ==
-               "Type.bitstring([Type.bitstringSegment(Type.integer(1n), {})])"
+               ~s/Type.bitstring([Type.bitstringSegment(Type.integer(1n), {type: "integer"})])/
     end
 
     test "multiple segments" do
@@ -266,29 +266,30 @@ defmodule Hologram.Compiler.EncoderTest do
         segments: [
           %IR.BitstringSegment{
             value: %IR.IntegerType{value: 1},
-            modifiers: []
+            modifiers: [type: :integer]
           },
           %IR.BitstringSegment{
             value: %IR.IntegerType{value: 2},
-            modifiers: []
+            modifiers: [type: :integer]
           }
         ]
       }
 
       assert encode_ir(ir, @context) ==
-               "Type.bitstring([Type.bitstringSegment(Type.integer(1n), {}), Type.bitstringSegment(Type.integer(2n), {})])"
+               ~s/Type.bitstring([Type.bitstringSegment(Type.integer(1n), {type: "integer"}), Type.bitstringSegment(Type.integer(2n), {type: "integer"})])/
     end
   end
 
   describe "bitstring segment" do
-    test "no modifiers specified" do
+    # If no type modifier is specified explicitely, a default one is given based on the value type
+    test "only type modifier specified" do
       # <<123>>
       ir = %IR.BitstringSegment{
         value: %IR.IntegerType{value: 123},
-        modifiers: []
+        modifiers: [type: :integer]
       }
 
-      assert encode_ir(ir) == "Type.bitstringSegment(Type.integer(123n), {})"
+      assert encode_ir(ir) == ~s/Type.bitstringSegment(Type.integer(123n), {type: "integer"})/
     end
 
     test "all modifiers specified" do
@@ -312,11 +313,11 @@ defmodule Hologram.Compiler.EncoderTest do
       # <<123::big>>
       ir = %IR.BitstringSegment{
         value: %IR.IntegerType{value: 123},
-        modifiers: [endianness: :big]
+        modifiers: [type: :integer, endianness: :big]
       }
 
       assert encode_ir(ir) ==
-               ~s/Type.bitstringSegment(Type.integer(123n), {endianness: "big"})/
+               ~s/Type.bitstringSegment(Type.integer(123n), {type: "integer", endianness: "big"})/
     end
 
     test "from string type" do
@@ -331,11 +332,11 @@ defmodule Hologram.Compiler.EncoderTest do
       # <<123::big>>
       ir = %IR.BitstringSegment{
         value: %IR.IntegerType{value: 123},
-        modifiers: [endianness: :big]
+        modifiers: [type: :integer, endianness: :big]
       }
 
       assert encode_ir(ir) ==
-               ~s/Type.bitstringSegment(Type.integer(123n), {endianness: "big"})/
+               ~s/Type.bitstringSegment(Type.integer(123n), {type: "integer", endianness: "big"})/
     end
   end
 
