@@ -38,140 +38,6 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
-  describe "bitstring modifier, signed" do
-    test "no type modifier" do
-      # 170 == 0b10101010
-      result = <<value::signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
-
-      assert result == <<170>>
-      assert value == -86
-    end
-
-    # <<value::binary-signed>> won't compile
-    # test "binary type modifier"
-
-    # <<value::bitstring-signed>> won't compile
-    # test "bitstring type modifier"
-
-    test "float type modifier, 64-bit size modifier" do
-      result = <<value::float-size(64)-signed>> = <<123.45::size(64)>>
-
-      assert result == <<123.45::size(64)>>
-      assert value == 123.45
-    end
-
-    test "float type modifier, 32-bit size modifier" do
-      result = <<value::float-size(32)-signed>> = <<123.45::size(32)>>
-
-      assert result == <<123.45::size(32)>>
-      assert value == 123.44999694824219
-    end
-
-    test "float type modifier, 16-bit size modifier" do
-      # Use `size` variable to prevent compilation error in Elixir/OTP versions that don't support size 16.
-      size = wrap_term(16)
-
-      result = <<value::float-size(size)-signed>> = <<123.45::size(size)>>
-
-      assert result == <<123.45::size(size)>>
-      assert value == 123.4375
-    end
-
-    test "float type modifier, unsupported size modifier" do
-      # Use `size` variable to prevent compilation error.
-      size = wrap_term(8)
-
-      # 170 == 0b10101010
-      assert_error MatchError, "no match of right hand side value: <<170>>", fn ->
-        <<_value::float-size(size)-signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
-      end
-    end
-
-    test "integer type modifier" do
-      # 170 == 0b10101010
-      result = <<value::integer-signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
-
-      assert result == <<170>>
-      assert value == -86
-    end
-
-    # <value::utf8-signed>> won't compile
-    # test "utf8 type modifier"
-
-    # <value::utf16-signed>> won't compile
-    # test "utf16 type modifier"
-
-    # <value::utf32-signed>> won't compile
-    # test "utf32 type modifier"
-  end
-
-  describe "bitstring modifier, unsigned" do
-    test "no type modifier" do
-      # 170 == 0b10101010
-      result = <<value::unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
-
-      assert result == <<170>>
-      assert value == 170
-    end
-
-    # <<value::binary-unsigned>> won't compile
-    # test "binary type modifier"
-
-    # <<value::bitstring-unsigned>> won't compile
-    # test "bitstring type modifier"
-
-    test "float type modifier, 64-bit size modifier" do
-      result = <<value::float-size(64)-unsigned>> = <<123.45::size(64)>>
-
-      assert result == <<123.45::size(64)>>
-      assert value == 123.45
-    end
-
-    test "float type modifier, 32-bit size modifier" do
-      result = <<value::float-size(32)-unsigned>> = <<123.45::size(32)>>
-
-      assert result == <<123.45::size(32)>>
-      assert value == 123.44999694824219
-    end
-
-    test "float type modifier, 16-bit size modifier" do
-      # Use `size` variable to prevent compilation error in Elixir/OTP versions that don't support size 16.
-      size = wrap_term(16)
-
-      result = <<value::float-size(size)-unsigned>> = <<123.45::size(size)>>
-
-      assert result == <<123.45::size(size)>>
-      assert value == 123.4375
-    end
-
-    test "float type modifier, unsupported size modifier" do
-      # Use `size` variable to prevent compilation error.
-      size = wrap_term(8)
-
-      # 170 == 0b10101010
-      assert_error MatchError, "no match of right hand side value: <<170>>", fn ->
-        <<_value::float-size(size)-unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
-      end
-    end
-
-    test "integer type modifier" do
-      # 170 == 0b10101010
-      result = <<value::integer-unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
-
-      assert result == <<170>>
-      assert value == 170
-    end
-
-    # <value::utf8-unsigned>> won't compile
-    # test "utf8 type modifier"
-
-    # <value::utf16-unsigned>> won't compile
-    # test "utf16 type modifier"
-
-    # <value::utf32-unsigned>> won't compile
-    # test "utf32 type modifier"
-  end
-
   describe "bistring type" do
     # <<>> = <<>>
     test "left empty bitstring == right empty bitstring" do
@@ -271,6 +137,140 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
         <<1, 2::size(9)>> = <<1, 2>>
       end
     end
+  end
+
+  describe "bitstring segment decoding, signed modifier" do
+    test "no type modifier" do
+      # 170 == 0b10101010
+      result = <<value::signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+
+      assert result == <<170>>
+      assert value == -86
+    end
+
+    # <<value::binary-signed>> won't compile
+    # test "binary type modifier"
+
+    # <<value::bitstring-signed>> won't compile
+    # test "bitstring type modifier"
+
+    test "float type modifier, 64-bit size modifier" do
+      result = <<value::float-size(64)-signed>> = <<123.45::size(64)>>
+
+      assert result == <<123.45::size(64)>>
+      assert value == 123.45
+    end
+
+    test "float type modifier, 32-bit size modifier" do
+      result = <<value::float-size(32)-signed>> = <<123.45::size(32)>>
+
+      assert result == <<123.45::size(32)>>
+      assert value == 123.44999694824219
+    end
+
+    test "float type modifier, 16-bit size modifier" do
+      # Use `size` variable to prevent compilation error in Elixir/OTP versions that don't support size 16.
+      size = wrap_term(16)
+
+      result = <<value::float-size(size)-signed>> = <<123.45::size(size)>>
+
+      assert result == <<123.45::size(size)>>
+      assert value == 123.4375
+    end
+
+    test "float type modifier, unsupported size modifier" do
+      # Use `size` variable to prevent compilation error.
+      size = wrap_term(8)
+
+      # 170 == 0b10101010
+      assert_error MatchError, "no match of right hand side value: <<170>>", fn ->
+        <<_value::float-size(size)-signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+      end
+    end
+
+    test "integer type modifier" do
+      # 170 == 0b10101010
+      result = <<value::integer-signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+
+      assert result == <<170>>
+      assert value == -86
+    end
+
+    # <value::utf8-signed>> won't compile
+    # test "utf8 type modifier"
+
+    # <value::utf16-signed>> won't compile
+    # test "utf16 type modifier"
+
+    # <value::utf32-signed>> won't compile
+    # test "utf32 type modifier"
+  end
+
+  describe "bitstring segment decoding, unsigned modifier" do
+    test "no type modifier" do
+      # 170 == 0b10101010
+      result = <<value::unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+
+      assert result == <<170>>
+      assert value == 170
+    end
+
+    # <<value::binary-unsigned>> won't compile
+    # test "binary type modifier"
+
+    # <<value::bitstring-unsigned>> won't compile
+    # test "bitstring type modifier"
+
+    test "float type modifier, 64-bit size modifier" do
+      result = <<value::float-size(64)-unsigned>> = <<123.45::size(64)>>
+
+      assert result == <<123.45::size(64)>>
+      assert value == 123.45
+    end
+
+    test "float type modifier, 32-bit size modifier" do
+      result = <<value::float-size(32)-unsigned>> = <<123.45::size(32)>>
+
+      assert result == <<123.45::size(32)>>
+      assert value == 123.44999694824219
+    end
+
+    test "float type modifier, 16-bit size modifier" do
+      # Use `size` variable to prevent compilation error in Elixir/OTP versions that don't support size 16.
+      size = wrap_term(16)
+
+      result = <<value::float-size(size)-unsigned>> = <<123.45::size(size)>>
+
+      assert result == <<123.45::size(size)>>
+      assert value == 123.4375
+    end
+
+    test "float type modifier, unsupported size modifier" do
+      # Use `size` variable to prevent compilation error.
+      size = wrap_term(8)
+
+      # 170 == 0b10101010
+      assert_error MatchError, "no match of right hand side value: <<170>>", fn ->
+        <<_value::float-size(size)-unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+      end
+    end
+
+    test "integer type modifier" do
+      # 170 == 0b10101010
+      result = <<value::integer-unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+
+      assert result == <<170>>
+      assert value == 170
+    end
+
+    # <value::utf8-unsigned>> won't compile
+    # test "utf8 type modifier"
+
+    # <value::utf16-unsigned>> won't compile
+    # test "utf16 type modifier"
+
+    # <value::utf32-unsigned>> won't compile
+    # test "utf32 type modifier"
   end
 
   # TODO: finish overhaul, remember about JavaScript interpreter tests
