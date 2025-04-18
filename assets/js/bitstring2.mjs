@@ -33,30 +33,6 @@ export default class Bitstring2 {
     return blob.size;
   }
 
-  // TODO: remove
-  static concatSegments(segments) {
-    if (
-      segments.every(
-        (segment) =>
-          segment.value.type === "string" ||
-          (segment.value.type === "bitstring2" && segment.value.text != null),
-      )
-    ) {
-      const text = segments.reduce(
-        (acc, segment) =>
-          acc +
-          (segment.value.type === "string"
-            ? segment.value.value
-            : segment.value.text),
-        "",
-      );
-
-      return {type: "bitstring2", text, bytes: null, leftoverBitCount: 0};
-    }
-
-    // TODO: concat bitstrings that can't be simply concatenated by text field
-  }
-
   // TODO: support utf8, utf16, utf32 modifiers
   static decodeSegmentChunk(segment, chunk) {
     let endianness;
