@@ -86,14 +86,6 @@ export default class Type {
 
   static bitstringSegment(value, modifiers = {}) {
     const type = Type.#getOption(modifiers, "type");
-
-    // TODO: is this needed?
-    if (type === null) {
-      throw new HologramInterpreterError(
-        "bitstring segment type modifier is not specified",
-      );
-    }
-
     const size = Type.#getOption(modifiers, "size");
     const unit = Type.#getOption(modifiers, "unit");
     const signedness = Type.#getOption(modifiers, "signedness");

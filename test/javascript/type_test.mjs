@@ -211,17 +211,6 @@ describe("Type", () => {
 
       assert.deepStrictEqual(result, expected);
     });
-
-    it("raises error if type modifier is not given", () => {
-      const expectedMessage =
-        "bitstring segment type modifier is not specified";
-
-      assert.throw(
-        () => Type.bitstringSegment(Type.integer(123), {}),
-        HologramInterpreterError,
-        expectedMessage,
-      );
-    });
   });
 
   describe("boolean()", () => {
