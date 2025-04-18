@@ -472,6 +472,11 @@ export default class Type {
     return {type: "variable_pattern", name: name};
   }
 
+  // TODO: test
+  static variablePattern2(name) {
+    return {type: "variable_pattern2", name: name};
+  }
+
   static #encodeAnonymousFunctionTypeMapKey(anonymousFunction) {
     return "anonymous_function(" + anonymousFunction.uniqueId + ")";
   }
