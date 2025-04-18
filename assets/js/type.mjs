@@ -79,6 +79,11 @@ export default class Type {
     return {type: "bitstring_pattern", segments: segments};
   }
 
+  // TODO: test
+  static bitstringPattern2(segments) {
+    return {type: "bitstring_pattern2", segments: segments};
+  }
+
   static bitstringSegment(value, modifiers = {}) {
     const type = Type.#getOption(modifiers, "type");
 
