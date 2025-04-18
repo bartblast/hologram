@@ -1,5 +1,6 @@
 "use strict";
 
+import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 
@@ -32,6 +33,7 @@ export default class Bitstring2 {
     return blob.size;
   }
 
+  // TODO: remove
   static concatSegments(segments) {
     if (
       segments.every(
@@ -53,6 +55,31 @@ export default class Bitstring2 {
     }
 
     // TODO: concat bitstrings that can't be simply concatenated by text field
+  }
+
+  // TODO: support utf8, utf16, utf32 modifiers
+  static decodeSegmentChunk(segment, chunk) {
+    let endianness;
+
+    switch (segment.type) {
+      case "binary":
+      case "bitstring":
+        return chunk;
+
+      case "float":
+        endianness = segment.endianness || "big";
+        return $.toFloat(chunk, endianness);
+
+      case "integer":
+        const signedness = segment.signedness || "unsigned";
+        endianness = segment.endianness || "big";
+        return $.toInteger(chunk, signedness, endianness);
+
+      default:
+        throw new HologramInterpreterError(
+          `${segment.type} segment type modifier is not yet implemented in Hologram`,
+        );
+    }
   }
 
   static fromBits(bits) {

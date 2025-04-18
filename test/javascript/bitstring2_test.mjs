@@ -7,6 +7,7 @@ import {
 } from "./support/helpers.mjs";
 
 import Bitstring2 from "../../assets/js/bitstring2.mjs";
+import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
@@ -159,6 +160,174 @@ describe("Bitstring2", () => {
       };
 
       assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("decodeSegmentChunk()", () => {
+    describe("binary segment type", () => {
+      it("returns the chunk unchanged", () => {
+        const chunk = Type.bitstring2("abc");
+
+        const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+          type: "binary",
+        });
+
+        const result = Bitstring2.decodeSegmentChunk(segment, chunk);
+
+        assert.strictEqual(result, chunk);
+      });
+    });
+
+    describe("bitstring segment type", () => {
+      it("returns the chunk unchanged", () => {
+        const chunk = Type.bitstring2("abc");
+
+        const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+          type: "bitstring",
+        });
+
+        const result = Bitstring2.decodeSegmentChunk(segment, chunk);
+
+        assert.strictEqual(result, chunk);
+      });
+    });
+
+    describe("float segment type", () => {
+      it("decodes a float with default big-endian modifier", () => {
+        const chunk = Bitstring2.fromBytes([
+          64, 94, 221, 47, 26, 159, 190, 119,
+        ]);
+
+        const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+          type: "float",
+        });
+
+        const result = Bitstring2.decodeSegmentChunk(segment, chunk);
+
+        assert.deepStrictEqual(result, Type.float(123.456));
+      });
+
+      it("decodes a float with explicit big-endian modifier", () => {
+        const chunk = Bitstring2.fromBytes([
+          64, 94, 221, 47, 26, 159, 190, 119,
+        ]);
+
+        const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+          type: "float",
+          endianness: "big",
+        });
+
+        const result = Bitstring2.decodeSegmentChunk(segment, chunk);
+
+        assert.deepStrictEqual(result, Type.float(123.456));
+      });
+
+      it("decodes a float with little-endian modifier", () => {
+        const chunk = Bitstring2.fromBytes([
+          119, 190, 159, 26, 47, 221, 94, 64,
+        ]);
+
+        const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+          type: "float",
+          endianness: "little",
+        });
+
+        const result = Bitstring2.decodeSegmentChunk(segment, chunk);
+
+        assert.deepStrictEqual(result, Type.float(123.456));
+      });
+    });
+
+    describe("integer segment type", () => {
+      it("decodes an integer with default (signedness and endianness) modifiers", () => {
+        const chunk = Bitstring2.fromBytes([0xaa, 0xbb]);
+
+        const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+          type: "integer",
+          size: Type.integer(16n),
+        });
+
+        const result = Bitstring2.decodeSegmentChunk(segment, chunk);
+
+        assert.deepStrictEqual(result, Type.integer(43707n));
+      });
+
+      it("decodes an integer with unsigned and big-endian modifiers", () => {
+        const chunk = Bitstring2.fromBytes([0xaa, 0xbb]);
+
+        const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+          type: "integer",
+          size: Type.integer(16n),
+          signedness: "unsigned",
+          endianness: "big",
+        });
+
+        const result = Bitstring2.decodeSegmentChunk(segment, chunk);
+
+        assert.deepStrictEqual(result, Type.integer(43707n));
+      });
+
+      it("decodes an integer with unsigned and little-endian modifiers", () => {
+        const chunk = Bitstring2.fromBytes([0xaa, 0xbb]);
+
+        const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+          type: "integer",
+          size: Type.integer(16n),
+          signedness: "unsigned",
+          endianness: "little",
+        });
+
+        const result = Bitstring2.decodeSegmentChunk(segment, chunk);
+
+        assert.deepStrictEqual(result, Type.integer(48042n));
+      });
+
+      it("decodes an integer with signed and big-endian modifiers", () => {
+        const chunk = Bitstring2.fromBytes([0xaa, 0xbb]);
+
+        const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+          type: "integer",
+          size: Type.integer(16n),
+          signedness: "signed",
+          endianness: "big",
+        });
+
+        const result = Bitstring2.decodeSegmentChunk(segment, chunk);
+
+        assert.deepStrictEqual(result, Type.integer(-21829n));
+      });
+
+      it("decodes an integer with signed and little-endian modifiers", () => {
+        const chunk = Bitstring2.fromBytes([0xaa, 0xbb]);
+
+        const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+          type: "integer",
+          size: Type.integer(16n),
+          signedness: "signed",
+          endianness: "little",
+        });
+
+        const result = Bitstring2.decodeSegmentChunk(segment, chunk);
+
+        assert.deepStrictEqual(result, Type.integer(-17494n));
+      });
+    });
+
+    it("raises error if the used type modifier is not yet implemented in Hologram", () => {
+      const chunk = Bitstring2.fromBytes([0, 97]);
+
+      const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+        type: "utf16",
+      });
+
+      const expectedMessage =
+        "utf16 segment type modifier is not yet implemented in Hologram";
+
+      assert.throw(
+        () => Bitstring2.decodeSegmentChunk(segment, chunk),
+        HologramInterpreterError,
+        expectedMessage,
+      );
     });
   });
 
