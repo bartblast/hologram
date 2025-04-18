@@ -33,6 +33,195 @@ export default class Bitstring2 {
     return blob.size;
   }
 
+  // TODO: refactor
+  static concat(bitstrings) {
+    if (!bitstrings || bitstrings.length === 0) {
+      return {
+        type: "bitstring2",
+        text: null,
+        bytes: new Uint8Array(0),
+        leftoverBitCount: 0,
+      };
+    }
+
+    if (bitstrings.length === 1) {
+      return bitstrings[0];
+    }
+
+    // First pass: check if all are text-only and if any have leftover bits
+    let allTextOnly = true;
+    let hasBytesWithLeftoverBits = false;
+    let hasNonTextBitstring = false;
+
+    for (let i = 0; i < bitstrings.length; i++) {
+      const bs = bitstrings[i];
+
+      if (bs.bytes !== null) {
+        allTextOnly = false;
+        hasNonTextBitstring = true;
+        hasBytesWithLeftoverBits =
+          hasBytesWithLeftoverBits || bs.leftoverBitCount > 0;
+      } else if (bs.text === null) {
+        allTextOnly = false;
+      }
+    }
+
+    // Fast path: all are text-only bitstrings
+    if (allTextOnly) {
+      return {
+        type: "bitstring2",
+        text: bitstrings.map((bs) => bs.text).join(""),
+        bytes: null,
+        leftoverBitCount: 0,
+      };
+    }
+
+    // Now convert text-only bitstrings to bytes only if needed
+    let totalByteCount = 0;
+
+    for (let i = 0; i < bitstrings.length; i++) {
+      const bs = bitstrings[i];
+
+      // Only convert text to bytes if we have at least one non-text bitstring
+      if (hasNonTextBitstring && bs.text !== null && bs.bytes === null) {
+        $.maybeSetBytesFromText(bs);
+      }
+
+      if (bs.bytes !== null) {
+        totalByteCount += bs.bytes.length;
+      }
+    }
+
+    // Fast path: no bitstrings with leftover bits
+    if (!hasBytesWithLeftoverBits) {
+      // Just concatenate the byte arrays
+      const resultBytes = new Uint8Array(totalByteCount);
+      let offset = 0;
+
+      for (let i = 0; i < bitstrings.length; i++) {
+        const bs = bitstrings[i];
+        // Ensure bytes are set if needed
+        if (hasNonTextBitstring && bs.bytes === null && bs.text !== null) {
+          $.maybeSetBytesFromText(bs);
+        }
+        resultBytes.set(bs.bytes, offset);
+        offset += bs.bytes.length;
+      }
+
+      return {
+        type: "bitstring2",
+        text: null,
+        bytes: resultBytes,
+        leftoverBitCount: 0,
+      };
+    }
+
+    // Complex case: handle leftover bits
+    // Calculate total bits to determine exact output size
+    let totalBitCount = 0;
+    for (let i = 0; i < bitstrings.length; i++) {
+      const bs = bitstrings[i];
+      // Ensure bytes are set if needed
+      if (hasNonTextBitstring && bs.bytes === null && bs.text !== null) {
+        $.maybeSetBytesFromText(bs);
+      }
+      totalBitCount += $.calculateBitCount(bs);
+    }
+
+    const resultByteCount = Math.ceil(totalBitCount / 8);
+    const resultLeftoverBitCount = totalBitCount % 8;
+    const resultBytes = new Uint8Array(resultByteCount);
+
+    let bitOffset = 0;
+
+    for (let i = 0; i < bitstrings.length; i++) {
+      const bs = bitstrings[i];
+      // Ensure bytes are set if needed
+      if (hasNonTextBitstring && bs.bytes === null && bs.text !== null) {
+        $.maybeSetBytesFromText(bs);
+      }
+
+      const bsBitCount = $.calculateBitCount(bs);
+
+      if (bsBitCount === 0) continue;
+
+      // If we're at a byte boundary, we can use a fast path
+      if (bitOffset % 8 === 0) {
+        const byteOffset = bitOffset >>> 3; // Divide by 8
+
+        // If no leftover bits in this bitstring, copy directly
+        if (bs.leftoverBitCount === 0) {
+          resultBytes.set(bs.bytes, byteOffset);
+        } else {
+          // Copy complete bytes
+          const completeByteCount = bs.bytes.length - 1;
+          if (completeByteCount > 0) {
+            resultBytes.set(
+              bs.bytes.subarray(0, completeByteCount),
+              byteOffset,
+            );
+          }
+
+          // Handle last byte with leftover bits
+          const lastByte = bs.bytes[bs.bytes.length - 1];
+          const lastByteOffset = byteOffset + completeByteCount;
+
+          // Place leftover bits in the correct position
+          resultBytes[lastByteOffset] = lastByte;
+        }
+      } else {
+        // We're not at a byte boundary - need to shift bits
+        const byteOffset = bitOffset >>> 3; // Integer division by 8
+        const bitPositionInByte = bitOffset & 7; // Modulo 8
+        const shiftLeft = bitPositionInByte;
+        const shiftRight = 8 - shiftLeft;
+
+        // Process all complete bytes
+        let j = 0;
+        const bsCompleteByteCount =
+          bs.leftoverBitCount === 0 ? bs.bytes.length : bs.bytes.length - 1;
+
+        for (; j < bsCompleteByteCount; j++) {
+          const currentByte = bs.bytes[j];
+
+          // Add to current byte (may already have bits)
+          resultBytes[byteOffset + j] |= currentByte >>> shiftLeft;
+
+          // Add to next byte (if not last)
+          if (shiftLeft > 0) {
+            resultBytes[byteOffset + j + 1] =
+              (currentByte << shiftRight) & 0xff;
+          }
+        }
+
+        // Handle last byte with leftover bits if any
+        if (bs.leftoverBitCount > 0) {
+          const lastByte = bs.bytes[j];
+          const validBitMask = 0xff << (8 - bs.leftoverBitCount);
+          const maskedLastByte = lastByte & validBitMask;
+
+          // Add to current byte
+          resultBytes[byteOffset + j] |= maskedLastByte >>> shiftLeft;
+
+          // Add to next byte if needed
+          if (shiftLeft > 0 && bs.leftoverBitCount > shiftLeft) {
+            resultBytes[byteOffset + j + 1] =
+              (maskedLastByte << shiftRight) & 0xff;
+          }
+        }
+      }
+
+      bitOffset += bsBitCount;
+    }
+
+    return {
+      type: "bitstring2",
+      text: null,
+      bytes: resultBytes,
+      leftoverBitCount: resultLeftoverBitCount,
+    };
+  }
+
   // TODO: support utf8, utf16, utf32 modifiers
   static decodeSegmentChunk(segment, chunk) {
     let endianness;
