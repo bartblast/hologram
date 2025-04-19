@@ -96,105 +96,6 @@ export default class Bitstring2 {
     };
   }
 
-  static #appendBitstringAtByteBoundary(resultBytes, byteOffset, bitstring) {
-    const bytes = bitstring.bytes;
-    const leftoverBitCount = bitstring.leftoverBitCount;
-
-    if (leftoverBitCount === 0) {
-      // If no leftover bits in this bitstring, copy directly
-      resultBytes.set(bytes, byteOffset);
-    } else {
-      const totalByteCount = bytes.length;
-      const completeByteCount = totalByteCount - 1;
-
-      if (completeByteCount > 0) {
-        resultBytes.set(bytes.subarray(0, completeByteCount), byteOffset);
-      }
-
-      // Apply a mask to only include the leftover bits in the last byte
-      const lastByte = bytes[totalByteCount - 1];
-      const lastByteOffset = byteOffset + completeByteCount;
-      const leftoverBitsMask = 0xff << (8 - leftoverBitCount);
-      const maskedLastByte = lastByte & leftoverBitsMask;
-
-      // Place leftover bits in the correct position
-      resultBytes[lastByteOffset] = maskedLastByte;
-    }
-  }
-
-  static #appendBitstringNotAtByteBoundary(
-    resultBytes,
-    byteOffset,
-    bitOffset,
-    bitstring,
-  ) {
-    const bytes = bitstring.bytes;
-    const leftoverBitCount = bitstring.leftoverBitCount;
-    const bitPositionInByte = bitOffset & 7; // Modulo 8 (position within byte)
-    const bitsToShiftRight = bitPositionInByte; // How many bits to shift right when adding to current byte
-    const bitsToShiftLeft = 8 - bitsToShiftRight; // How many bits to shift left when adding to next byte
-
-    // Calculate how many complete bytes we have in the source bitstring
-    const completeByteCount =
-      leftoverBitCount === 0 ? bytes.length : bytes.length - 1;
-
-    // Process all complete bytes in the source bitstring
-    for (let i = 0; i < completeByteCount; i++) {
-      const currentByte = bytes[i];
-
-      // Add high bits to current byte (may already have bits)
-      resultBytes[byteOffset + i] |= currentByte >>> bitsToShiftRight;
-
-      // Add low bits to next byte (if we're not byte-aligned)
-      if (bitsToShiftRight > 0) {
-        resultBytes[byteOffset + i + 1] =
-          (currentByte << bitsToShiftLeft) & 0xff;
-      }
-    }
-
-    // Handle last byte with leftover bits if any
-    if (leftoverBitCount > 0) {
-      const lastByte = bytes[completeByteCount];
-
-      // Create a mask to extract only the valid leftover bits from the most significant bits
-      const leftoverBitsMask = 0xff << (8 - leftoverBitCount);
-      const maskedLastByte = lastByte & leftoverBitsMask;
-
-      // Add high bits of the last byte to current position
-      resultBytes[byteOffset + completeByteCount] |=
-        maskedLastByte >>> bitsToShiftRight;
-
-      // Add low bits of the last byte to next position if we're not byte-aligned
-      if (bitsToShiftRight > 0) {
-        resultBytes[byteOffset + completeByteCount + 1] |=
-          (maskedLastByte << bitsToShiftLeft) & 0xff;
-      }
-    }
-  }
-
-  static #concatBitstringsWithoutLeftoverBits(bitstrings) {
-    const totalByteCount = bitstrings.reduce((acc, bs) => {
-      $.maybeSetBytesFromText(bs);
-      return acc + bs.bytes.length;
-    }, 0);
-
-    const resultBytes = new Uint8Array(totalByteCount);
-    let offset = 0;
-
-    for (let i = 0; i < bitstrings.length; i++) {
-      const bs = bitstrings[i];
-      resultBytes.set(bs.bytes, offset);
-      offset += bs.bytes.length;
-    }
-
-    return {
-      type: "bitstring2",
-      text: null,
-      bytes: resultBytes,
-      leftoverBitCount: 0,
-    };
-  }
-
   // TODO: support utf8, utf16, utf32 modifiers
   static decodeSegmentChunk(segment, chunk) {
     let endianness;
@@ -708,6 +609,105 @@ export default class Bitstring2 {
       case "utf32":
         return $.#validateSegmentWithUtfType(segment, index);
     }
+  }
+
+  static #appendBitstringAtByteBoundary(resultBytes, byteOffset, bitstring) {
+    const bytes = bitstring.bytes;
+    const leftoverBitCount = bitstring.leftoverBitCount;
+
+    if (leftoverBitCount === 0) {
+      // If no leftover bits in this bitstring, copy directly
+      resultBytes.set(bytes, byteOffset);
+    } else {
+      const totalByteCount = bytes.length;
+      const completeByteCount = totalByteCount - 1;
+
+      if (completeByteCount > 0) {
+        resultBytes.set(bytes.subarray(0, completeByteCount), byteOffset);
+      }
+
+      // Apply a mask to only include the leftover bits in the last byte
+      const lastByte = bytes[totalByteCount - 1];
+      const lastByteOffset = byteOffset + completeByteCount;
+      const leftoverBitsMask = 0xff << (8 - leftoverBitCount);
+      const maskedLastByte = lastByte & leftoverBitsMask;
+
+      // Place leftover bits in the correct position
+      resultBytes[lastByteOffset] = maskedLastByte;
+    }
+  }
+
+  static #appendBitstringNotAtByteBoundary(
+    resultBytes,
+    byteOffset,
+    bitOffset,
+    bitstring,
+  ) {
+    const bytes = bitstring.bytes;
+    const leftoverBitCount = bitstring.leftoverBitCount;
+    const bitPositionInByte = bitOffset & 7; // Modulo 8 (position within byte)
+    const bitsToShiftRight = bitPositionInByte; // How many bits to shift right when adding to current byte
+    const bitsToShiftLeft = 8 - bitsToShiftRight; // How many bits to shift left when adding to next byte
+
+    // Calculate how many complete bytes we have in the source bitstring
+    const completeByteCount =
+      leftoverBitCount === 0 ? bytes.length : bytes.length - 1;
+
+    // Process all complete bytes in the source bitstring
+    for (let i = 0; i < completeByteCount; i++) {
+      const currentByte = bytes[i];
+
+      // Add high bits to current byte (may already have bits)
+      resultBytes[byteOffset + i] |= currentByte >>> bitsToShiftRight;
+
+      // Add low bits to next byte (if we're not byte-aligned)
+      if (bitsToShiftRight > 0) {
+        resultBytes[byteOffset + i + 1] =
+          (currentByte << bitsToShiftLeft) & 0xff;
+      }
+    }
+
+    // Handle last byte with leftover bits if any
+    if (leftoverBitCount > 0) {
+      const lastByte = bytes[completeByteCount];
+
+      // Create a mask to extract only the valid leftover bits from the most significant bits
+      const leftoverBitsMask = 0xff << (8 - leftoverBitCount);
+      const maskedLastByte = lastByte & leftoverBitsMask;
+
+      // Add high bits of the last byte to current position
+      resultBytes[byteOffset + completeByteCount] |=
+        maskedLastByte >>> bitsToShiftRight;
+
+      // Add low bits of the last byte to next position if we're not byte-aligned
+      if (bitsToShiftRight > 0) {
+        resultBytes[byteOffset + completeByteCount + 1] |=
+          (maskedLastByte << bitsToShiftLeft) & 0xff;
+      }
+    }
+  }
+
+  static #concatBitstringsWithoutLeftoverBits(bitstrings) {
+    const totalByteCount = bitstrings.reduce((acc, bs) => {
+      $.maybeSetBytesFromText(bs);
+      return acc + bs.bytes.length;
+    }, 0);
+
+    const resultBytes = new Uint8Array(totalByteCount);
+    let offset = 0;
+
+    for (let i = 0; i < bitstrings.length; i++) {
+      const bs = bitstrings[i];
+      resultBytes.set(bs.bytes, offset);
+      offset += bs.bytes.length;
+    }
+
+    return {
+      type: "bitstring2",
+      text: null,
+      bytes: resultBytes,
+      leftoverBitCount: 0,
+    };
   }
 
   static #decodeFloat16(bytes, isLittleEndian) {
