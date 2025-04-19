@@ -33,7 +33,6 @@ export default class Bitstring2 {
     return blob.size;
   }
 
-  // TODO: refactor
   static concat(bitstrings) {
     if (!bitstrings || bitstrings.length === 0) {
       return {
@@ -48,32 +47,10 @@ export default class Bitstring2 {
       return bitstrings[0];
     }
 
-    // First pass: check if all are text-only and if any have leftover bits
-    let allTextOnly = true;
-    let hasBytesWithLeftoverBits = false;
-    let hasNonTextBitstring = false;
-
-    for (let i = 0; i < bitstrings.length; i++) {
-      const bs = bitstrings[i];
-
-      if (bs.bytes !== null) {
-        allTextOnly = false;
-        hasNonTextBitstring = true;
-        hasBytesWithLeftoverBits =
-          hasBytesWithLeftoverBits || bs.leftoverBitCount > 0;
-      } else if (bs.text === null) {
-        allTextOnly = false;
-      }
-    }
-
-    // Fast path: all are text-only bitstrings
-    if (allTextOnly) {
-      return {
-        type: "bitstring2",
-        text: bitstrings.map((bs) => bs.text).join(""),
-        bytes: null,
-        leftoverBitCount: 0,
-      };
+    // Fast path: all bitstrings are text-based and can be joined
+    if (bitstrings.every((bs) => bs.text !== null)) {
+      const text = bitstrings.map((bs) => bs.text).join("");
+      return $.fromText(text);
     }
 
     // Now convert text-only bitstrings to bytes only if needed
@@ -82,15 +59,16 @@ export default class Bitstring2 {
     for (let i = 0; i < bitstrings.length; i++) {
       const bs = bitstrings[i];
 
-      // Only convert text to bytes if we have at least one non-text bitstring
-      if (hasNonTextBitstring && bs.text !== null && bs.bytes === null) {
-        $.maybeSetBytesFromText(bs);
-      }
+      $.maybeSetBytesFromText(bs);
 
       if (bs.bytes !== null) {
         totalByteCount += bs.bytes.length;
       }
     }
+
+    const hasBytesWithLeftoverBits = bitstrings.some(
+      (bs) => bs.leftoverBitCount > 0,
+    );
 
     // Fast path: no bitstrings with leftover bits
     if (!hasBytesWithLeftoverBits) {
@@ -100,10 +78,7 @@ export default class Bitstring2 {
 
       for (let i = 0; i < bitstrings.length; i++) {
         const bs = bitstrings[i];
-        // Ensure bytes are set if needed
-        if (hasNonTextBitstring && bs.bytes === null && bs.text !== null) {
-          $.maybeSetBytesFromText(bs);
-        }
+        $.maybeSetBytesFromText(bs);
         resultBytes.set(bs.bytes, offset);
         offset += bs.bytes.length;
       }
@@ -121,10 +96,7 @@ export default class Bitstring2 {
     let totalBitCount = 0;
     for (let i = 0; i < bitstrings.length; i++) {
       const bs = bitstrings[i];
-      // Ensure bytes are set if needed
-      if (hasNonTextBitstring && bs.bytes === null && bs.text !== null) {
-        $.maybeSetBytesFromText(bs);
-      }
+      $.maybeSetBytesFromText(bs);
       totalBitCount += $.calculateBitCount(bs);
     }
 
@@ -136,10 +108,7 @@ export default class Bitstring2 {
 
     for (let i = 0; i < bitstrings.length; i++) {
       const bs = bitstrings[i];
-      // Ensure bytes are set if needed
-      if (hasNonTextBitstring && bs.bytes === null && bs.text !== null) {
-        $.maybeSetBytesFromText(bs);
-      }
+      $.maybeSetBytesFromText(bs);
 
       const bsBitCount = $.calculateBitCount(bs);
 
