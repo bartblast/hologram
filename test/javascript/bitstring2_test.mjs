@@ -6016,7 +6016,7 @@ describe("Bitstring2", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns the single bitstring when array length is 1", () => {
+    it("returns the single bitstring when the bitstrings array length is 1", () => {
       const bitstring = Bitstring2.fromText("abc");
       const result = Bitstring2.concat([bitstring]);
 
@@ -6034,6 +6034,23 @@ describe("Bitstring2", () => {
         type: "bitstring2",
         text: "Hello World",
         bytes: null,
+        leftoverBitCount: 0,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("skips empty bitstrings with no bits", () => {
+      const bs1 = Bitstring2.fromBytes([1, 2]);
+      const bs2 = Bitstring2.fromBytes([]);
+      const bs3 = Bitstring2.fromBytes([3, 4]);
+
+      const result = Bitstring2.concat([bs1, bs2, bs3]);
+
+      const expected = {
+        type: "bitstring2",
+        text: null,
+        bytes: new Uint8Array([1, 2, 3, 4]),
         leftoverBitCount: 0,
       };
 
@@ -6354,23 +6371,6 @@ describe("Bitstring2", () => {
       it("when leftover bits are in the second and last multi-byte bitstring", () => {});
 
       it("when leftover bits are in the first and the one before last multi-byte bitstring", () => {});
-    });
-
-    it("skips empty bitstrings with no bits", () => {
-      const bs1 = Bitstring2.fromBytes([1, 2]);
-      const bs2 = Bitstring2.fromBytes([]);
-      const bs3 = Bitstring2.fromBytes([3, 4]);
-
-      const result = Bitstring2.concat([bs1, bs2, bs3]);
-
-      const expected = {
-        type: "bitstring2",
-        text: null,
-        bytes: new Uint8Array([1, 2, 3, 4]),
-        leftoverBitCount: 0,
-      };
-
-      assert.deepStrictEqual(result, expected);
     });
   });
 });
