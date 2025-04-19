@@ -6594,6 +6594,45 @@ describe("Bitstring2", () => {
 
         assert.deepStrictEqual(result, expected);
       });
+
+      it("when the number of result bytes is smaller than the number of bitstrings", () => {
+        // 1 (1 bit)
+        const bs1 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0x80]), // 10000000
+          leftoverBitCount: 1,
+        };
+
+        // 101 (3 bits)
+        const bs2 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xa0]), // 10100000
+          leftoverBitCount: 3,
+        };
+
+        // 10101 (5 bits)
+        const bs3 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xa8]), // 10101000
+          leftoverBitCount: 5,
+        };
+
+        const result = Bitstring2.concat([bs1, bs2, bs3]);
+
+        // Expected: 11011010, 10000000
+        // Which is: [0xDA, 0x80] with 1 bit in the last byte
+        const expected = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xda, 0x80]),
+          leftoverBitCount: 1,
+        };
+
+        assert.deepStrictEqual(result, expected);
+      });
     });
   });
 });
