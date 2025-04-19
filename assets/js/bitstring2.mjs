@@ -52,12 +52,11 @@ export default class Bitstring2 {
     }
 
     // Complex case: handle leftover bits
-    // Calculate total bits to determine exact output size
-    let totalBitCount = 0;
-    for (let i = 0; i < bitstrings.length; i++) {
-      const bs = bitstrings[i];
-      totalBitCount += $.calculateBitCount(bs);
-    }
+
+    const totalBitCount = bitstrings.reduce(
+      (acc, bs) => acc + $.calculateBitCount(bs),
+      0,
+    );
 
     const resultByteCount = Math.ceil(totalBitCount / 8);
     const resultLeftoverBitCount = totalBitCount % 8;
@@ -71,37 +70,14 @@ export default class Bitstring2 {
 
       if (bsBitCount === 0) continue;
 
-      // If we're at a byte boundary, we can use a fast path
+      const byteOffset = bitOffset >>> 3; // Integer division by 8
+
       if (bitOffset % 8 === 0) {
-        const byteOffset = bitOffset >>> 3; // Divide by 8
-
-        // If no leftover bits in this bitstring, copy directly
-        if (bs.leftoverBitCount === 0) {
-          resultBytes.set(bs.bytes, byteOffset);
-        } else {
-          // Copy complete bytes
-          const completeByteCount = bs.bytes.length - 1;
-          if (completeByteCount > 0) {
-            resultBytes.set(
-              bs.bytes.subarray(0, completeByteCount),
-              byteOffset,
-            );
-          }
-
-          // Handle last byte with leftover bits
-          const lastByte = bs.bytes[bs.bytes.length - 1];
-          const lastByteOffset = byteOffset + completeByteCount;
-
-          // Apply a mask to only include the valid bits in the last byte
-          const validBitMask = 0xff << (8 - bs.leftoverBitCount);
-          const maskedLastByte = lastByte & validBitMask;
-
-          // Place leftover bits in the correct position
-          resultBytes[lastByteOffset] = maskedLastByte;
-        }
+        // If we're at a byte boundary, we can use a fast path
+        $.#appendBitstringAtByteBoundary(resultBytes, byteOffset, bs);
       } else {
         // We're not at a byte boundary - need to shift bits
-        const byteOffset = bitOffset >>> 3; // Integer division by 8
+
         const bitPositionInByte = bitOffset & 7; // Modulo 8
         const shiftLeft = bitPositionInByte;
         const shiftRight = 8 - shiftLeft;
@@ -150,6 +126,32 @@ export default class Bitstring2 {
       bytes: resultBytes,
       leftoverBitCount: resultLeftoverBitCount,
     };
+  }
+
+  static #appendBitstringAtByteBoundary(resultBytes, byteOffset, bitstring) {
+    const bytes = bitstring.bytes;
+    const leftoverBitCount = bitstring.leftoverBitCount;
+
+    if (leftoverBitCount === 0) {
+      // If no leftover bits in this bitstring, copy directly
+      resultBytes.set(bytes, byteOffset);
+    } else {
+      const totalByteCount = bytes.length;
+      const completeByteCount = totalByteCount - 1;
+
+      if (completeByteCount > 0) {
+        resultBytes.set(bytes.subarray(0, completeByteCount), byteOffset);
+      }
+
+      // Apply a mask to only include the leftover bits in the last byte
+      const lastByte = bytes[totalByteCount - 1];
+      const lastByteOffset = byteOffset + completeByteCount;
+      const leftoverBitMask = 0xff << (8 - leftoverBitCount);
+      const maskedLastByte = lastByte & leftoverBitMask;
+
+      // Place leftover bits in the correct position
+      resultBytes[lastByteOffset] = maskedLastByte;
+    }
   }
 
   static #concatBitstringsWithoutLeftoverBits(bitstrings) {
