@@ -77,44 +77,12 @@ export default class Bitstring2 {
         $.#appendBitstringAtByteBoundary(resultBytes, byteOffset, bs);
       } else {
         // We're not at a byte boundary - need to shift bits
-
-        const bitPositionInByte = bitOffset & 7; // Modulo 8
-        const shiftLeft = bitPositionInByte;
-        const shiftRight = 8 - shiftLeft;
-
-        // Process all complete bytes
-        let j = 0;
-        const bsCompleteByteCount =
-          bs.leftoverBitCount === 0 ? bs.bytes.length : bs.bytes.length - 1;
-
-        for (; j < bsCompleteByteCount; j++) {
-          const currentByte = bs.bytes[j];
-
-          // Add to current byte (may already have bits)
-          resultBytes[byteOffset + j] |= currentByte >>> shiftLeft;
-
-          // Add to next byte (if not last)
-          if (shiftLeft > 0) {
-            resultBytes[byteOffset + j + 1] =
-              (currentByte << shiftRight) & 0xff;
-          }
-        }
-
-        // Handle last byte with leftover bits if any
-        if (bs.leftoverBitCount > 0) {
-          const lastByte = bs.bytes[j];
-          const validBitMask = 0xff << (8 - bs.leftoverBitCount);
-          const maskedLastByte = lastByte & validBitMask;
-
-          // Add to current byte
-          resultBytes[byteOffset + j] |= maskedLastByte >>> shiftLeft;
-
-          // Add to next byte if needed
-          if (shiftLeft > 0) {
-            resultBytes[byteOffset + j + 1] |=
-              (maskedLastByte << shiftRight) & 0xff;
-          }
-        }
+        $.#appendBitstringNotAtByteBoundary(
+          resultBytes,
+          byteOffset,
+          bitOffset,
+          bs,
+        );
       }
 
       bitOffset += bsBitCount;
@@ -146,11 +114,57 @@ export default class Bitstring2 {
       // Apply a mask to only include the leftover bits in the last byte
       const lastByte = bytes[totalByteCount - 1];
       const lastByteOffset = byteOffset + completeByteCount;
-      const leftoverBitMask = 0xff << (8 - leftoverBitCount);
-      const maskedLastByte = lastByte & leftoverBitMask;
+      const leftoverBitsMask = 0xff << (8 - leftoverBitCount);
+      const maskedLastByte = lastByte & leftoverBitsMask;
 
       // Place leftover bits in the correct position
       resultBytes[lastByteOffset] = maskedLastByte;
+    }
+  }
+
+  static #appendBitstringNotAtByteBoundary(
+    resultBytes,
+    byteOffset,
+    bitOffset,
+    bitstring,
+  ) {
+    const bytes = bitstring.bytes;
+    const leftoverBitCount = bitstring.leftoverBitCount;
+    const bitPositionInByte = bitOffset & 7; // Modulo 8
+    const shiftLeft = bitPositionInByte;
+    const shiftRight = 8 - shiftLeft;
+
+    const completeByteCount =
+      leftoverBitCount === 0 ? bytes.length : bytes.length - 1;
+
+    let i = 0;
+
+    for (; i < completeByteCount; i++) {
+      const currentByte = bytes[i];
+
+      // Add to current byte (may already have bits)
+      resultBytes[byteOffset + i] |= currentByte >>> shiftLeft;
+
+      // Add to next byte (if not last)
+      if (shiftLeft > 0) {
+        resultBytes[byteOffset + i + 1] = (currentByte << shiftRight) & 0xff;
+      }
+    }
+
+    // Handle last byte with leftover bits if any
+    if (leftoverBitCount > 0) {
+      const lastByte = bytes[i];
+      const leftoverBitsMask = 0xff << (8 - leftoverBitCount);
+      const maskedLastByte = lastByte & leftoverBitsMask;
+
+      // Add to current byte
+      resultBytes[byteOffset + i] |= maskedLastByte >>> shiftLeft;
+
+      // Add to next byte if needed
+      if (shiftLeft > 0) {
+        resultBytes[byteOffset + i + 1] |=
+          (maskedLastByte << shiftRight) & 0xff;
+      }
     }
   }
 
