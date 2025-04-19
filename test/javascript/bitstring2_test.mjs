@@ -6002,7 +6002,7 @@ describe("Bitstring2", () => {
     });
   });
 
-  describe.only("concat()", () => {
+  describe("concat()", () => {
     it("handles empty array of bitstrings", () => {
       const result = Bitstring2.concat([]);
 
@@ -6286,7 +6286,7 @@ describe("Bitstring2", () => {
         assert.deepStrictEqual(result, expected);
       });
 
-      it("when leftover bits are in the last multi-byte bitstring", () => {
+      it.only("when leftover bits are in the last multi-byte bitstring", () => {
         // 10101010, 10111011 (full bytes)
         const bs1 = {
           type: "bitstring2",
@@ -6313,12 +6313,12 @@ describe("Bitstring2", () => {
 
         const result = Bitstring2.concat([bs1, bs2, bs3]);
 
-        // Expected: 10101010, 10111011, 11001000
-        // Which is: [0xAA, 0xBB, 0xC8] with 5 bits in the last byte
+        // Expected: 10101010, 10111011, 11001100, 11011101, 11101110, 11111000
+        // Which is: [0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xF8] with 5 bits in the last byte
         const expected = {
           type: "bitstring2",
           text: null,
-          bytes: new Uint8Array([0xaa, 0xbb, 0xc8]),
+          bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xf8]),
           leftoverBitCount: 5,
         };
 
