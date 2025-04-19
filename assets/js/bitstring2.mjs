@@ -166,8 +166,12 @@ export default class Bitstring2 {
           const lastByte = bs.bytes[bs.bytes.length - 1];
           const lastByteOffset = byteOffset + completeByteCount;
 
+          // Apply a mask to only include the valid bits in the last byte
+          const validBitMask = 0xff << (8 - bs.leftoverBitCount);
+          const maskedLastByte = lastByte & validBitMask;
+
           // Place leftover bits in the correct position
-          resultBytes[lastByteOffset] = lastByte;
+          resultBytes[lastByteOffset] = maskedLastByte;
         }
       } else {
         // We're not at a byte boundary - need to shift bits
@@ -204,8 +208,8 @@ export default class Bitstring2 {
           resultBytes[byteOffset + j] |= maskedLastByte >>> shiftLeft;
 
           // Add to next byte if needed
-          if (shiftLeft > 0 && bs.leftoverBitCount > shiftLeft) {
-            resultBytes[byteOffset + j + 1] =
+          if (shiftLeft > 0) {
+            resultBytes[byteOffset + j + 1] |=
               (maskedLastByte << shiftRight) & 0xff;
           }
         }
