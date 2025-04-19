@@ -46,33 +46,9 @@ export default class Bitstring2 {
       return $.fromText(text);
     }
 
-    const totalByteCount = bitstrings.reduce((acc, bs) => {
-      $.maybeSetBytesFromText(bs);
-      return acc + bs.bytes.length;
-    }, 0);
-
-    const hasBytesWithLeftoverBits = bitstrings.some(
-      (bs) => bs.leftoverBitCount > 0,
-    );
-
     // Fast path: no bitstrings with leftover bits
-    if (!hasBytesWithLeftoverBits) {
-      // Just concatenate the byte arrays
-      const resultBytes = new Uint8Array(totalByteCount);
-      let offset = 0;
-
-      for (let i = 0; i < bitstrings.length; i++) {
-        const bs = bitstrings[i];
-        resultBytes.set(bs.bytes, offset);
-        offset += bs.bytes.length;
-      }
-
-      return {
-        type: "bitstring2",
-        text: null,
-        bytes: resultBytes,
-        leftoverBitCount: 0,
-      };
+    if (bitstrings.every((bs) => bs.leftoverBitCount === 0)) {
+      return $.#concatBitstringsWithoutLeftoverBits(bitstrings);
     }
 
     // Complex case: handle leftover bits
@@ -173,6 +149,29 @@ export default class Bitstring2 {
       text: null,
       bytes: resultBytes,
       leftoverBitCount: resultLeftoverBitCount,
+    };
+  }
+
+  static #concatBitstringsWithoutLeftoverBits(bitstrings) {
+    const totalByteCount = bitstrings.reduce((acc, bs) => {
+      $.maybeSetBytesFromText(bs);
+      return acc + bs.bytes.length;
+    }, 0);
+
+    const resultBytes = new Uint8Array(totalByteCount);
+    let offset = 0;
+
+    for (let i = 0; i < bitstrings.length; i++) {
+      const bs = bitstrings[i];
+      resultBytes.set(bs.bytes, offset);
+      offset += bs.bytes.length;
+    }
+
+    return {
+      type: "bitstring2",
+      text: null,
+      bytes: resultBytes,
+      leftoverBitCount: 0,
     };
   }
 
