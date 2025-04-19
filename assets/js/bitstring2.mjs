@@ -53,18 +53,10 @@ export default class Bitstring2 {
       return $.fromText(text);
     }
 
-    // Now convert text-only bitstrings to bytes only if needed
-    let totalByteCount = 0;
-
-    for (let i = 0; i < bitstrings.length; i++) {
-      const bs = bitstrings[i];
-
+    const totalByteCount = bitstrings.reduce((acc, bs) => {
       $.maybeSetBytesFromText(bs);
-
-      if (bs.bytes !== null) {
-        totalByteCount += bs.bytes.length;
-      }
-    }
+      return acc + bs.bytes.length;
+    }, 0);
 
     const hasBytesWithLeftoverBits = bitstrings.some(
       (bs) => bs.leftoverBitCount > 0,
@@ -78,7 +70,6 @@ export default class Bitstring2 {
 
       for (let i = 0; i < bitstrings.length; i++) {
         const bs = bitstrings[i];
-        $.maybeSetBytesFromText(bs);
         resultBytes.set(bs.bytes, offset);
         offset += bs.bytes.length;
       }
@@ -96,7 +87,6 @@ export default class Bitstring2 {
     let totalBitCount = 0;
     for (let i = 0; i < bitstrings.length; i++) {
       const bs = bitstrings[i];
-      $.maybeSetBytesFromText(bs);
       totalBitCount += $.calculateBitCount(bs);
     }
 
@@ -108,8 +98,6 @@ export default class Bitstring2 {
 
     for (let i = 0; i < bitstrings.length; i++) {
       const bs = bitstrings[i];
-      $.maybeSetBytesFromText(bs);
-
       const bsBitCount = $.calculateBitCount(bs);
 
       if (bsBitCount === 0) continue;
