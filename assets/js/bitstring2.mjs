@@ -122,15 +122,6 @@ export default class Bitstring2 {
     }
   }
 
-  /**
-   * Appends a bitstring to the result array when the bit offset is not aligned to a byte boundary.
-   * This requires careful bit shifting to correctly position bits in the target bytes.
-   *
-   * @param {Uint8Array} resultBytes - The array to append bits to
-   * @param {number} byteOffset - Byte index where to start appending
-   * @param {number} bitOffset - Total bit position (used to determine bit position within byte)
-   * @param {Object} bitstring - Bitstring to append
-   */
   static #appendBitstringNotAtByteBoundary(
     resultBytes,
     byteOffset,
