@@ -6002,7 +6002,7 @@ describe("Bitstring2", () => {
     });
   });
 
-  describe("concat()", () => {
+  describe.only("concat()", () => {
     it("handles empty array of bitstrings", () => {
       const result = Bitstring2.concat([]);
 
@@ -6286,7 +6286,7 @@ describe("Bitstring2", () => {
         assert.deepStrictEqual(result, expected);
       });
 
-      it.only("when leftover bits are in the last multi-byte bitstring", () => {
+      it("when leftover bits are in the last multi-byte bitstring", () => {
         // 10101010, 10111011 (full bytes)
         const bs1 = {
           type: "bitstring2",
@@ -6364,13 +6364,236 @@ describe("Bitstring2", () => {
         assert.deepStrictEqual(result, expected);
       });
 
-      it("when all multi-byte bitstrings have leftover bits", () => {});
+      it("when all multi-byte bitstrings have leftover bits", () => {
+        // 10101010, 10101 (5 bits in the second byte)
+        const bs1 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xaa, 0xa8]), // 10101010, 10101000
+          leftoverBitCount: 5,
+        };
 
-      it("when leftover bits are in the second and last single-byte bitstring", () => {});
+        // 10111011, 1101 (4 bits in the second byte)
+        const bs2 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xbb, 0xd0]), // 10111011, 11010000
+          leftoverBitCount: 4,
+        };
 
-      it("when leftover bits are in the second and last multi-byte bitstring", () => {});
+        // 11001100, 111 (3 bits in the second byte)
+        const bs3 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xcc, 0xe0]), // 11001100, 11100000
+          leftoverBitCount: 3,
+        };
 
-      it("when leftover bits are in the first and the one before last multi-byte bitstring", () => {});
+        const result = Bitstring2.concat([bs1, bs2, bs3]);
+
+        // Expected: 10101010, 10101101, 11011110, 11100110 01110000
+        // Which is: [0xAA, 0xAD, 0xDE, 0xE6, 0x70] with 4 bits in the last byte
+        const expected = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xaa, 0xad, 0xde, 0xe6, 0x70]),
+          leftoverBitCount: 4,
+        };
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("when leftover bits are in the first and the one before last single-byte bitstring", () => {
+        // 10101 (5 bits)
+        const bs1 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xa8]), // 10101000
+          leftoverBitCount: 5,
+        };
+
+        // 10111011 (full byte)
+        const bs2 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xbb]), // 10111011
+          leftoverBitCount: 0,
+        };
+
+        // 11001 (5 bits)
+        const bs3 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xc8]), // 11001000
+          leftoverBitCount: 5,
+        };
+
+        // 11011101 (full byte)
+        const bs4 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xdd]), // 11011101
+          leftoverBitCount: 0,
+        };
+
+        const result = Bitstring2.concat([bs1, bs2, bs3, bs4]);
+
+        // Expected: 10101101, 11011110, 01110111, 01000000
+        // Which is: [0xAD, 0xDE, 0x77, 0x40] with 2 bits in the last byte
+        const expected = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xad, 0xde, 0x77, 0x40]),
+          leftoverBitCount: 2,
+        };
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("when leftover bits are in the first and the one before last multi-byte bitstring", () => {
+        // 10101010, 10111 (5 bits in the second byte)
+        const bs1 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xaa, 0xb8]), // 10101010, 10111000
+          leftoverBitCount: 5,
+        };
+
+        // 11001100, 11011101 (full bytes)
+        const bs2 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xcc, 0xdd]), // 11001100, 11011101
+          leftoverBitCount: 0,
+        };
+
+        // 11101110, 11111 (5 bits in the second byte)
+        const bs3 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xee, 0xf8]), // 11101110, 11111000
+          leftoverBitCount: 5,
+        };
+
+        // 10001000, 10011001 (full bytes)
+        const bs4 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0x88, 0x99]), // 10001000, 10011001
+          leftoverBitCount: 0,
+        };
+
+        const result = Bitstring2.concat([bs1, bs2, bs3, bs4]);
+
+        // Expected: 10101010, 10111110, 01100110, 11101111, 01110111, 11100010, 00100110, 01000000
+        // Which is: [0xAA, 0xBE, 0x66, 0xEF, 0x77, 0xE2, 0x26, 0x40] with 2 bits in the last byte
+        const expected = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([
+            0xaa, 0xbe, 0x66, 0xef, 0x77, 0xe2, 0x26, 0x40,
+          ]),
+          leftoverBitCount: 2,
+        };
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("when leftover bits are in the second and last single-byte bitstring", () => {
+        // 10101010 (full byte)
+        const bs1 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xaa]), // 10101010
+          leftoverBitCount: 0,
+        };
+
+        // 10111 (5 bits)
+        const bs2 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xb8]), // 10111000
+          leftoverBitCount: 5,
+        };
+
+        // 11001100 (full byte)
+        const bs3 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xcc]), // 11001100
+          leftoverBitCount: 0,
+        };
+
+        // 11011 (5 bits)
+        const bs4 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xd8]), // 11011000
+          leftoverBitCount: 5,
+        };
+
+        const result = Bitstring2.concat([bs1, bs2, bs3, bs4]);
+
+        // Expected: 10101010, 10111110, 01100110, 11000000
+        // Which is: [0xAA, 0xBE, 0x66, 0xC0] with 2 bits in the last byte
+        const expected = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xaa, 0xbe, 0x66, 0xc0]),
+          leftoverBitCount: 2,
+        };
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("when leftover bits are in the second and last multi-byte bitstring", () => {
+        // 10101010, 10111011 (full bytes)
+        const bs1 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xaa, 0xbb]), // 10101010, 10111011
+          leftoverBitCount: 0,
+        };
+
+        // 11001100, 11011 (5 bits in the second byte)
+        const bs2 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xcc, 0xd8]), // 11001100, 11011000
+          leftoverBitCount: 5,
+        };
+
+        // 11101110, 11111111 (full bytes)
+        const bs3 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0xee, 0xff]), // 11101110, 11111111
+          leftoverBitCount: 0,
+        };
+
+        // 10001000, 10011 (5 bits in the second byte)
+        const bs4 = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([0x88, 0x98]), // 10001000, 10011000
+          leftoverBitCount: 5,
+        };
+
+        const result = Bitstring2.concat([bs1, bs2, bs3, bs4]);
+
+        // Expected: 10101010, 10111011 11001100, 11011111, 01110111, 11111100, 01000100, 11000000
+        // Which is: [0xAA, 0xBB, 0xCC, 0xDF, 0x77, 0xFC, 0x44, 0xC0] with 2 bits in the last byte
+        const expected = {
+          type: "bitstring2",
+          text: null,
+          bytes: new Uint8Array([
+            0xaa, 0xbb, 0xcc, 0xdf, 0x77, 0xfc, 0x44, 0xc0,
+          ]),
+          leftoverBitCount: 2,
+        };
+
+        assert.deepStrictEqual(result, expected);
+      });
     });
   });
 });
