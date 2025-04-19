@@ -122,6 +122,15 @@ export default class Bitstring2 {
     }
   }
 
+  /**
+   * Appends a bitstring to the result array when the bit offset is not aligned to a byte boundary.
+   * This requires careful bit shifting to correctly position bits in the target bytes.
+   *
+   * @param {Uint8Array} resultBytes - The array to append bits to
+   * @param {number} byteOffset - Byte index where to start appending
+   * @param {number} bitOffset - Total bit position (used to determine bit position within byte)
+   * @param {Object} bitstring - Bitstring to append
+   */
   static #appendBitstringNotAtByteBoundary(
     resultBytes,
     byteOffset,
@@ -130,40 +139,44 @@ export default class Bitstring2 {
   ) {
     const bytes = bitstring.bytes;
     const leftoverBitCount = bitstring.leftoverBitCount;
-    const bitPositionInByte = bitOffset & 7; // Modulo 8
-    const shiftLeft = bitPositionInByte;
-    const shiftRight = 8 - shiftLeft;
+    const bitPositionInByte = bitOffset & 7; // Modulo 8 (position within byte)
+    const bitsToShiftRight = bitPositionInByte; // How many bits to shift right when adding to current byte
+    const bitsToShiftLeft = 8 - bitsToShiftRight; // How many bits to shift left when adding to next byte
 
+    // Calculate how many complete bytes we have in the source bitstring
     const completeByteCount =
       leftoverBitCount === 0 ? bytes.length : bytes.length - 1;
 
-    let i = 0;
-
-    for (; i < completeByteCount; i++) {
+    // Process all complete bytes in the source bitstring
+    for (let i = 0; i < completeByteCount; i++) {
       const currentByte = bytes[i];
 
-      // Add to current byte (may already have bits)
-      resultBytes[byteOffset + i] |= currentByte >>> shiftLeft;
+      // Add high bits to current byte (may already have bits)
+      resultBytes[byteOffset + i] |= currentByte >>> bitsToShiftRight;
 
-      // Add to next byte (if not last)
-      if (shiftLeft > 0) {
-        resultBytes[byteOffset + i + 1] = (currentByte << shiftRight) & 0xff;
+      // Add low bits to next byte (if we're not byte-aligned)
+      if (bitsToShiftRight > 0) {
+        resultBytes[byteOffset + i + 1] =
+          (currentByte << bitsToShiftLeft) & 0xff;
       }
     }
 
     // Handle last byte with leftover bits if any
     if (leftoverBitCount > 0) {
-      const lastByte = bytes[i];
+      const lastByte = bytes[completeByteCount];
+
+      // Create a mask to extract only the valid leftover bits from the most significant bits
       const leftoverBitsMask = 0xff << (8 - leftoverBitCount);
       const maskedLastByte = lastByte & leftoverBitsMask;
 
-      // Add to current byte
-      resultBytes[byteOffset + i] |= maskedLastByte >>> shiftLeft;
+      // Add high bits of the last byte to current position
+      resultBytes[byteOffset + completeByteCount] |=
+        maskedLastByte >>> bitsToShiftRight;
 
-      // Add to next byte if needed
-      if (shiftLeft > 0) {
-        resultBytes[byteOffset + i + 1] |=
-          (maskedLastByte << shiftRight) & 0xff;
+      // Add low bits of the last byte to next position if we're not byte-aligned
+      if (bitsToShiftRight > 0) {
+        resultBytes[byteOffset + completeByteCount + 1] |=
+          (maskedLastByte << bitsToShiftLeft) & 0xff;
       }
     }
   }
