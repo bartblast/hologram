@@ -34,20 +34,13 @@ export default class Bitstring2 {
   }
 
   static concat(bitstrings) {
-    if (!bitstrings || bitstrings.length === 0) {
-      return {
-        type: "bitstring2",
-        text: null,
-        bytes: new Uint8Array(0),
-        leftoverBitCount: 0,
-      };
-    }
-
+    // Fast path: if a single bitstring is given return it as is
     if (bitstrings.length === 1) {
       return bitstrings[0];
     }
 
-    // Fast path: all bitstrings are text-based and can be joined
+    // Fast path: if all bitstrings are text-based join them
+    // Notice: this also covers the case when an empty array is given (an empty bitstring is returned)
     if (bitstrings.every((bs) => bs.text !== null)) {
       const text = bitstrings.map((bs) => bs.text).join("");
       return $.fromText(text);

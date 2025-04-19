@@ -6008,8 +6008,8 @@ describe("Bitstring2", () => {
 
       const expected = {
         type: "bitstring2",
-        text: null,
-        bytes: new Uint8Array([]),
+        text: "",
+        bytes: null,
         leftoverBitCount: 0,
       };
 
