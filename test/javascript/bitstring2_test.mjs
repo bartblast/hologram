@@ -6002,7 +6002,7 @@ describe("Bitstring2", () => {
     });
   });
 
-  describe.only("concat()", () => {
+  describe("concat()", () => {
     it("handles empty array of bitstrings", () => {
       const result = Bitstring2.concat([]);
 
