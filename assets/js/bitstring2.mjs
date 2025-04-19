@@ -98,7 +98,7 @@ export default class Bitstring2 {
 
   // TODO: support utf8, utf16, utf32 modifiers
   static decodeSegmentChunk(segment, chunk) {
-    let endianness;
+    let endianness, signedness;
 
     switch (segment.type) {
       case "binary":
@@ -110,7 +110,7 @@ export default class Bitstring2 {
         return $.toFloat(chunk, endianness);
 
       case "integer":
-        const signedness = segment.signedness || "unsigned";
+        signedness = segment.signedness || "unsigned";
         endianness = segment.endianness || "big";
         return $.toInteger(chunk, signedness, endianness);
 
