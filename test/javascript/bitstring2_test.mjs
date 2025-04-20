@@ -88,7 +88,7 @@ describe("Bitstring2", () => {
       it("returns the chunk unchanged", () => {
         const chunk = Type.bitstring2("abc");
 
-        const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+        const segment = Type.bitstringSegment(Type.variablePattern("value"), {
           type: "binary",
         });
 
@@ -102,7 +102,7 @@ describe("Bitstring2", () => {
       it("returns the chunk unchanged", () => {
         const chunk = Type.bitstring2("abc");
 
-        const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+        const segment = Type.bitstringSegment(Type.variablePattern("value"), {
           type: "bitstring",
         });
 
@@ -118,7 +118,7 @@ describe("Bitstring2", () => {
           64, 94, 221, 47, 26, 159, 190, 119,
         ]);
 
-        const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+        const segment = Type.bitstringSegment(Type.variablePattern("value"), {
           type: "float",
         });
 
@@ -132,7 +132,7 @@ describe("Bitstring2", () => {
           64, 94, 221, 47, 26, 159, 190, 119,
         ]);
 
-        const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+        const segment = Type.bitstringSegment(Type.variablePattern("value"), {
           type: "float",
           endianness: "big",
         });
@@ -147,7 +147,7 @@ describe("Bitstring2", () => {
           119, 190, 159, 26, 47, 221, 94, 64,
         ]);
 
-        const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+        const segment = Type.bitstringSegment(Type.variablePattern("value"), {
           type: "float",
           endianness: "little",
         });
@@ -162,7 +162,7 @@ describe("Bitstring2", () => {
       it("decodes an integer with default (signedness and endianness) modifiers", () => {
         const chunk = Bitstring2.fromBytes([0xaa, 0xbb]);
 
-        const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+        const segment = Type.bitstringSegment(Type.variablePattern("value"), {
           type: "integer",
           size: Type.integer(16n),
         });
@@ -175,7 +175,7 @@ describe("Bitstring2", () => {
       it("decodes an integer with unsigned and big-endian modifiers", () => {
         const chunk = Bitstring2.fromBytes([0xaa, 0xbb]);
 
-        const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+        const segment = Type.bitstringSegment(Type.variablePattern("value"), {
           type: "integer",
           size: Type.integer(16n),
           signedness: "unsigned",
@@ -190,7 +190,7 @@ describe("Bitstring2", () => {
       it("decodes an integer with unsigned and little-endian modifiers", () => {
         const chunk = Bitstring2.fromBytes([0xaa, 0xbb]);
 
-        const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+        const segment = Type.bitstringSegment(Type.variablePattern("value"), {
           type: "integer",
           size: Type.integer(16n),
           signedness: "unsigned",
@@ -205,7 +205,7 @@ describe("Bitstring2", () => {
       it("decodes an integer with signed and big-endian modifiers", () => {
         const chunk = Bitstring2.fromBytes([0xaa, 0xbb]);
 
-        const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+        const segment = Type.bitstringSegment(Type.variablePattern("value"), {
           type: "integer",
           size: Type.integer(16n),
           signedness: "signed",
@@ -220,7 +220,7 @@ describe("Bitstring2", () => {
       it("decodes an integer with signed and little-endian modifiers", () => {
         const chunk = Bitstring2.fromBytes([0xaa, 0xbb]);
 
-        const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+        const segment = Type.bitstringSegment(Type.variablePattern("value"), {
           type: "integer",
           size: Type.integer(16n),
           signedness: "signed",
@@ -236,7 +236,7 @@ describe("Bitstring2", () => {
     it("raises error if the used type modifier is not yet implemented in Hologram", () => {
       const chunk = Bitstring2.fromBytes([0, 97]);
 
-      const segment = Type.bitstringSegment(Type.variablePattern2("value"), {
+      const segment = Type.bitstringSegment(Type.variablePattern("value"), {
         type: "utf16",
       });
 
