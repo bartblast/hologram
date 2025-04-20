@@ -371,6 +371,76 @@ describe("Bitstring2", () => {
     });
   });
 
+  describe("fromSegments()", () => {
+    it("returns an empty bitstring for an empty array of segments", () => {
+      assert.deepStrictEqual(Bitstring2.fromSegments([]), Type.bitstring2(""));
+    });
+
+    it("creates a bitstring from a single bitstring-valued segment", () => {
+      const value = Type.bitstring2("Hologram");
+
+      const segments = [Type.bitstringSegment(value, {type: "bitstring"})];
+      const result = Bitstring2.fromSegments(segments);
+
+      assert.equal(result, value);
+    });
+
+    it("creates a bitstring from a single float-valued segment", () => {
+      const segments = [
+        Type.bitstringSegment(Type.float(1.23), {type: "float"}),
+      ];
+
+      const result = Bitstring2.fromSegments(segments);
+
+      const expected = Bitstring2.fromBytes([
+        63, 243, 174, 20, 122, 225, 71, 174,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("creates a bitstring from a single integer-valued segment", () => {
+      const segments = [
+        Type.bitstringSegment(Type.integer(3425778934n), {
+          type: "integer",
+          size: Type.integer(32),
+        }),
+      ];
+
+      const result = Bitstring2.fromSegments(segments);
+      const expected = Bitstring2.fromBytes([204, 49, 60, 246]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("creates a bitstring from a single string-valued segment", () => {
+      const segments = [
+        Type.bitstringSegment(Type.string("Hologram"), {type: "binary"}),
+      ];
+
+      const result = Bitstring2.fromSegments(segments);
+
+      assert.deepStrictEqual(result, Type.bitstring2("Hologram"));
+    });
+
+    it("creates a bitstring from multiple segments that have different value types", () => {
+      const segments = [
+        Type.bitstringSegment(Type.integer(123), {type: "integer"}),
+        Type.bitstringSegment(Type.string("Hologram"), {type: "binary"}),
+        Type.bitstringSegment(Type.float(1.23), {type: "float"}),
+      ];
+
+      const result = Bitstring2.fromSegments(segments);
+
+      const expected = Bitstring2.fromBytes([
+        123, 72, 111, 108, 111, 103, 114, 97, 109, 63, 243, 174, 20, 122, 225,
+        71, 174,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   describe("fromSegmentWithBitstringValue()", () => {
     it("when size is not specified", () => {
       const value = Type.bitstring2("Hologram");

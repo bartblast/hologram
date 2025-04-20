@@ -172,6 +172,26 @@ export default class Bitstring2 {
     };
   }
 
+  static fromSegments(segments) {
+    const bitstrings = segments.map((segment) => {
+      switch (segment.value.type) {
+        case "bitstring2":
+          return $.fromSegmentWithBitstringValue(segment);
+
+        case "float":
+          return $.fromSegmentWithFloatValue(segment);
+
+        case "integer":
+          return $.fromSegmentWithIntegerValue(segment);
+
+        case "string":
+          return $.fromSegmentWithStringValue(segment);
+      }
+    });
+
+    return $.concat(bitstrings);
+  }
+
   static fromSegmentWithBitstringValue(segment) {
     // Fast path: if no size specified, use the entire bitstring
     if (segment.size === null) {
