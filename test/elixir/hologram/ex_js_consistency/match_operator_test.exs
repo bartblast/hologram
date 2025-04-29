@@ -95,9 +95,9 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
 
     test "multiple literal string segments" do
-      result = <<"aaa"::utf8, "bbb"::utf8>> = <<"aaa"::utf8, "bbb"::utf8>>
+      result = <<"aaa"::binary, "bbb"::binary>> = <<"aaa"::binary, "bbb"::binary>>
 
-      assert result == <<"aaa"::utf8, "bbb"::utf8>>
+      assert result == <<"aaa"::binary, "bbb"::binary>>
     end
 
     # <<x::integer>> = <<1>>

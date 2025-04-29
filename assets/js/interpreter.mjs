@@ -625,6 +625,10 @@ export default class Interpreter {
       return Interpreter.#matchBitstringPattern(right, left, context);
     }
 
+    if (Type.isBitstringPattern2(left)) {
+      return Interpreter.#matchBitstringPattern2(right, left, context);
+    }
+
     if (left.type !== right.type) {
       Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
     }
@@ -1140,6 +1144,66 @@ export default class Interpreter {
   //   Console.printData(result);
   //   Console.endGroup(mfa);
   // }
+
+  static #matchBitstringPattern2(right, left, context) {
+    if (right.type !== "bitstring2" && right.type !== "bitstring_pattern2") {
+      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
+    }
+
+    let chunkOffset = 0;
+    const rightBitCount = Bitstring2.calculateBitCount(right);
+
+    for (const segment of left.segments) {
+      const segmentType = segment.type;
+
+      if (
+        segmentType === "utf8" ||
+        segmentType === "utf16" ||
+        segmentType === "utf32"
+      ) {
+        const message =
+          "Pattern matching on bitstring segments with utf* type modifiers is not yet implemented in Hologram";
+
+        throw new HologramInterpreterError(message);
+      }
+
+      const chunkBitCount = Bitstring2.calculateSegmentBitCount(segment);
+
+      if (
+        segment.type === "float" &&
+        chunkBitCount !== 16 &&
+        chunkBitCount !== 32 &&
+        chunkBitCount !== 64
+      ) {
+        Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
+      }
+
+      if (chunkOffset + chunkBitCount > rightBitCount) {
+        Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
+      }
+
+      const chunk = Bitstring2.takeChunk(right, chunkOffset, chunkBitCount);
+
+      if (segment.value.type === "variable_pattern") {
+        const decodedChunk = Bitstring2.decodeSegmentChunk(segment, chunk);
+        Interpreter.matchOperator(decodedChunk, segment.value, context);
+      } else {
+        const segmentBitstring = Bitstring2.fromSegments([segment]);
+
+        if (!Interpreter.isStrictlyEqual(segmentBitstring, chunk)) {
+          Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
+        }
+      }
+
+      chunkOffset += chunkBitCount;
+    }
+
+    if (chunkOffset !== rightBitCount) {
+      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
+    }
+
+    return right;
+  }
 
   static #matchBitstringPattern(right, left, context) {
     if (right.type !== "bitstring" && right.type !== "bitstring_pattern") {
