@@ -1212,14 +1212,13 @@ export default class Bitstring2 {
   }
 
   static #validateSegmentWithBinaryType(segment, index) {
-    if (!["bitstring2", "string"].includes(segment.value.type)) {
+    const valueType = segment.value.type;
+
+    if (valueType !== "bitstring2" && valueType !== "string") {
       $.#raiseTypeMismatchError(index, "binary", "a binary", segment.value);
     }
 
-    if (
-      segment.value.type === "bitstring2" &&
-      segment.value.leftoverBitCount !== 0
-    ) {
+    if (valueType === "bitstring2" && segment.value.leftoverBitCount !== 0) {
       const inspectedValue = Interpreter.inspect(segment.value);
 
       Interpreter.raiseArgumentError(
@@ -1231,7 +1230,9 @@ export default class Bitstring2 {
   }
 
   static #validateSegmentWithBitstringType(segment, index) {
-    if (["float", "integer"].includes(segment.value.type)) {
+    const valueType = segment.value.type;
+
+    if (valueType === "float" || valueType === "integer") {
       $.#raiseTypeMismatchError(index, "binary", "a binary", segment.value);
     }
 
@@ -1243,8 +1244,12 @@ export default class Bitstring2 {
   }
 
   static #validateSegmentWithFloatType(segment, index) {
+    const valueType = segment.value.type;
+
     if (
-      !["float", "integer", "variable_pattern"].includes(segment.value.type)
+      valueType !== "float" &&
+      valueType !== "integer" &&
+      valueType !== "variable_pattern"
     ) {
       $.#raiseTypeMismatchError(
         index,
@@ -1262,7 +1267,7 @@ export default class Bitstring2 {
 
     const bitCount = $.calculateSegmentBitCount(segment);
 
-    if (![64, 32, 16].includes(bitCount)) {
+    if (bitCount !== 16 && bitCount !== 32 && bitCount !== 64) {
       $.#raiseTypeMismatchError(index, "integer", "an integer", segment.value);
     }
 
@@ -1270,7 +1275,9 @@ export default class Bitstring2 {
   }
 
   static #validateSegmentWithIntegerType(segment, index) {
-    if (!["integer", "variable_pattern"].includes(segment.value.type)) {
+    const valueType = segment.value.type;
+
+    if (valueType !== "integer" && valueType !== "variable_pattern") {
       $.#raiseTypeMismatchError(index, "integer", "an integer", segment.value);
     }
 
@@ -1278,7 +1285,9 @@ export default class Bitstring2 {
   }
 
   static #validateSegmentWithUtfType(segment, index) {
-    if (["bitstring2", "float"].includes(segment.value.type)) {
+    const valueType = segment.value.type;
+
+    if (valueType === "bitstring2" || valueType === "float") {
       $.#raiseTypeMismatchError(
         index,
         segment.type,
