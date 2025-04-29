@@ -141,6 +141,55 @@ describe("Type", () => {
     });
   });
 
+  describe("bitstring2()", () => {
+    it("builds bitstring from string value", () => {
+      const result = Type.bitstring2("abc");
+
+      const expected = {
+        type: "bitstring2",
+        text: "abc",
+        bytes: null,
+        leftoverBitCount: 0,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("builds bitstring from segments array", () => {
+      const segment1 = Type.bitstringSegment(Type.integer(97), {
+        type: "integer",
+      });
+
+      const segment2 = Type.bitstringSegment(Type.integer(98), {
+        type: "integer",
+      });
+
+      const result = Type.bitstring2([segment1, segment2]);
+
+      const expected = {
+        type: "bitstring2",
+        text: null,
+        bytes: new Uint8Array([97, 98]),
+        leftoverBitCount: 0,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("builds bitstring from bits array", () => {
+      const result = Type.bitstring2([1, 0, 1, 0, 1]);
+
+      const expected = {
+        type: "bitstring2",
+        text: null,
+        bytes: new Uint8Array([168]),
+        leftoverBitCount: 5,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   it("bitstringPattern()", () => {
     const segment1 = Type.bitstringSegment(Type.integer(1), {type: "integer"});
     const segment2 = Type.bitstringSegment(Type.integer(2), {type: "integer"});

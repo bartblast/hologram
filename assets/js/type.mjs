@@ -62,7 +62,6 @@ export default class Type {
     }
   }
 
-  // TODO: test
   static bitstring2(arg) {
     if (typeof arg === "string") {
       return Bitstring2.fromText(arg);
