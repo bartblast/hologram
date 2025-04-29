@@ -29,8 +29,7 @@ export default class Bitstring2 {
   }
 
   static calculateTextByteCount(text) {
-    const blob = new Blob([text]);
-    return blob.size;
+    return $.#encoder.encode(text).length;
   }
 
   static concat(bitstrings) {

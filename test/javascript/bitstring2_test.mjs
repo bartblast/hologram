@@ -12,7 +12,7 @@ import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
-describe("Bitstring2", () => {
+describe.only("Bitstring2", () => {
   describe("calculateBitCount()", () => {
     it("calculates bit count for bitstring with bytes and no leftover bits", () => {
       const bitstring = {
