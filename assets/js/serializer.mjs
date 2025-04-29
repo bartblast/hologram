@@ -9,39 +9,41 @@ export default class Serializer {
   // including anonymous functions and all objects' fields (such as boxed PID node).
   static serialize(term, isFullScope = true, isVersioned = true) {
     const serialized = JSON.stringify(term, (_key, value) => {
-      if (value?.type === "anonymous_function") {
+      const boxedValueType = value?.type;
+
+      if (boxedValueType === "anonymous_function") {
         return $.#serializeBoxedAnonymousFunction(value, isFullScope);
       }
 
-      if (value?.type === "atom") {
+      if (boxedValueType === "atom") {
         return `__atom__:${value.value}`;
       }
 
-      if (value?.type === "bitstring") {
+      if (boxedValueType === "bitstring") {
         return $.#serializeBoxedBitstring(value);
       }
 
-      if (value?.type === "float") {
+      if (boxedValueType === "float") {
         return `__float__:${value.value.toString()}`;
       }
 
-      if (value?.type === "integer") {
+      if (boxedValueType === "integer") {
         return `__integer__:${value.value.toString()}`;
       }
 
-      if (value?.type === "map") {
+      if (boxedValueType === "map") {
         return {...value, data: Object.values(value.data)};
       }
 
-      if (value?.type === "pid") {
+      if (boxedValueType === "pid") {
         return $.#serializeBoxedPid(value, isFullScope);
       }
 
-      if (value?.type === "port") {
+      if (boxedValueType === "port") {
         return $.#serializeBoxedPort(value, isFullScope);
       }
 
-      if (value?.type === "reference") {
+      if (boxedValueType === "reference") {
         return $.#serializeBoxedReference(value, isFullScope);
       }
 
