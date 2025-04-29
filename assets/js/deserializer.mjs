@@ -32,11 +32,13 @@ export default class Deserializer {
         }
       }
 
-      if (value?.type === "bitstring") {
+      const boxedValueType = value?.type;
+
+      if (boxedValueType === "bitstring") {
         return Type.bitstring(value.bits);
       }
 
-      if (value?.type === "map") {
+      if (boxedValueType === "map") {
         return Type.map(value.data);
       }
 
