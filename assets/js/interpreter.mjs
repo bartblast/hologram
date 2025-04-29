@@ -586,6 +586,30 @@ export default class Interpreter {
       return false;
     }
 
+    if (left.type === "bitstring2") {
+      if (left.text !== null && left.text === right.text) {
+        return true;
+      }
+
+      Bitstring2.maybeSetBytesFromText(left);
+      const leftBytes = left.bytes;
+
+      Bitstring2.maybeSetBytesFromText(right);
+      const rightBytes = right.bytes;
+
+      if (leftBytes.length !== rightBytes.length) {
+        return false;
+      }
+
+      for (let i = 0; i < leftBytes.length; i++) {
+        if (leftBytes[i] !== rightBytes[i]) {
+          return false;
+        }
+      }
+
+      return true;
+    }
+
     return isEqual(left, right);
   }
 

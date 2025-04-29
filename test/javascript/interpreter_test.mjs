@@ -2278,6 +2278,68 @@ describe("Interpreter", () => {
   });
 
   describe("isStrictlyEqual()", () => {
+    describe("bitstring2 type", () => {
+      describe("equal", () => {
+        it("both have text field", () => {
+          const left = Type.bitstring2("abc");
+          const right = Type.bitstring2("abc");
+
+          assert.isTrue(Interpreter.isStrictlyEqual(left, right));
+        });
+
+        it("both have bytes field", () => {
+          const left = Bitstring2.fromBytes([97, 98, 99]);
+          const right = Bitstring2.fromBytes([97, 98, 99]);
+
+          assert.isTrue(Interpreter.isStrictlyEqual(left, right));
+        });
+
+        it("left has text field, right has bytes field", () => {
+          const left = Type.bitstring2("abc");
+          const right = Bitstring2.fromBytes([97, 98, 99]);
+
+          assert.isTrue(Interpreter.isStrictlyEqual(left, right));
+        });
+
+        it("left has bytes field, right has text field", () => {
+          const left = Bitstring2.fromBytes([97, 98, 99]);
+          const right = Type.bitstring2("abc");
+
+          assert.isTrue(Interpreter.isStrictlyEqual(left, right));
+        });
+      });
+
+      describe("not equal", () => {
+        it("both have text field", () => {
+          const left = Type.bitstring2("abc");
+          const right = Type.bitstring2("xyz");
+
+          assert.isFalse(Interpreter.isStrictlyEqual(left, right));
+        });
+
+        it("both have bytes field", () => {
+          const left = Bitstring2.fromBytes([97, 98, 99]);
+          const right = Bitstring2.fromBytes([97, 98, 100]);
+
+          assert.isFalse(Interpreter.isStrictlyEqual(left, right));
+        });
+
+        it("left has text field, right has bytes field", () => {
+          const left = Type.bitstring2("abc");
+          const right = Bitstring2.fromBytes([97, 98, 100]);
+
+          assert.isFalse(Interpreter.isStrictlyEqual(left, right));
+        });
+
+        it("left has bytes field, right has text field", () => {
+          const left = Bitstring2.fromBytes([97, 98, 100]);
+          const right = Type.bitstring2("abc");
+
+          assert.isFalse(Interpreter.isStrictlyEqual(left, right));
+        });
+      });
+    });
+
     it("returns true if the args are of the same boxed primitive type and have equal values", () => {
       const result = Interpreter.isStrictlyEqual(
         Type.integer(1),

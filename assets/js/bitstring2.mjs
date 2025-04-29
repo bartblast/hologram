@@ -406,6 +406,7 @@ export default class Bitstring2 {
     }
   }
 
+  // TODO: support utf8, utf16 and utf32 type modifiers
   static resolveSegmentSize(segment) {
     if (segment?.size != null) {
       return Number(segment.size.value);
