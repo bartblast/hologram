@@ -252,6 +252,10 @@ export default class Type {
     return term.type === "bitstring_pattern";
   }
 
+  static isBitstringPattern2(term) {
+    return term.type === "bitstring_pattern2";
+  }
+
   static isBoolean(term) {
     return (
       term.type === "atom" && (term.value === "false" || term.value === "true")
@@ -470,11 +474,6 @@ export default class Type {
 
   static variablePattern(name) {
     return {type: "variable_pattern", name: name};
-  }
-
-  // TODO: test
-  static variablePattern2(name) {
-    return {type: "variable_pattern2", name: name};
   }
 
   static #encodeAnonymousFunctionTypeMapKey(anonymousFunction) {

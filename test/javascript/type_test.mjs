@@ -627,6 +627,18 @@ describe("Type", () => {
     });
   });
 
+  describe("isBitstringPattern2()", () => {
+    it("returns true if the given object is a boxed bitstring pattern", () => {
+      const result = Type.isBitstringPattern2(Type.bitstringPattern2([]));
+      assert.isTrue(result);
+    });
+
+    it("returns false if the given object is not a boxed bitstring pattern", () => {
+      const result = Type.isBitstringPattern2(Type.atom("abc"));
+      assert.isFalse(result);
+    });
+  });
+
   describe("isBoolean()", () => {
     it("returns true for boxed true value", () => {
       const arg = Type.boolean(true);
