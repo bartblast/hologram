@@ -15,7 +15,6 @@ import {defineModule1Fixture as defineMatchOperatorModule1Fixture} from "./suppo
 import Bitstring2 from "../../assets/js/bitstring2.mjs";
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
-import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Type from "../../assets/js/type.mjs";
 
