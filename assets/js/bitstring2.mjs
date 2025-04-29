@@ -5,6 +5,17 @@ import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 
 export default class Bitstring2 {
+  // ?\n = 10
+  // ?\r = 13
+  // ?\t = 9
+  // ?\v = 11
+  // ?\b = 8
+  // ?\f = 12
+  // ?\e = 27
+  // ?\d = 127
+  // ?\a = 7
+  static #controlChars = new Set([10, 13, 9, 11, 8, 12, 27, 127, 7]);
+
   static #decoder = new TextDecoder("utf-8", {fatal: true});
   static #encoder = new TextEncoder("utf-8");
 
@@ -348,7 +359,7 @@ export default class Bitstring2 {
     // ?\e = 27
     // ?\d = 127
     // ?\a = 7
-    if ([10, 13, 9, 11, 8, 12, 27, 127, 7].includes(codePoint)) {
+    if ($.#controlChars.has(codePoint)) {
       return true;
     }
 
