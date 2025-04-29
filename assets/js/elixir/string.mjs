@@ -13,19 +13,22 @@ const Elixir_String = {
 
   // TODO: support mode param (see: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/toLocaleLowerCase)
   "downcase/2": function (string, mode) {
-    const allowedModes = ["default", "ascii", "greek", "turkic"];
+    const modeValue = mode.value;
 
     if (
       !Type.isBinary(string) ||
       !Type.isAtom(mode) ||
-      !allowedModes.includes(mode.value)
+      (modeValue !== "default" &&
+        modeValue !== "ascii" &&
+        modeValue !== "greek" &&
+        modeValue !== "turkic")
     ) {
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg("String.downcase/2", arguments),
       );
     }
 
-    if (mode.value !== "default") {
+    if (modeValue !== "default") {
       throw new HologramInterpreterError(
         "String.downcase/2 modes other than :default are not yet implemented in Hologram",
       );
@@ -67,19 +70,22 @@ const Elixir_String = {
 
   // TODO: support mode param (see: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/String/toLocaleUpperCase)
   "upcase/2": function (string, mode) {
-    const allowedModes = ["default", "ascii", "greek", "turkic"];
+    const modeValue = mode.value;
 
     if (
       !Type.isBinary(string) ||
       !Type.isAtom(mode) ||
-      !allowedModes.includes(mode.value)
+      (modeValue !== "default" &&
+        modeValue !== "ascii" &&
+        modeValue !== "greek" &&
+        modeValue !== "turkic")
     ) {
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg("String.upcase/2", arguments),
       );
     }
 
-    if (mode.value !== "default") {
+    if (modeValue !== "default") {
       throw new HologramInterpreterError(
         "String.upcase/2 modes other than :default are not yet implemented in Hologram",
       );
