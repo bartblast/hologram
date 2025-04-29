@@ -418,7 +418,7 @@ export default class Bitstring2 {
 
   // TODO: support utf8, utf16 and utf32 type modifiers
   static resolveSegmentSize(segment) {
-    if (segment?.size != null) {
+    if (segment.size !== null) {
       return Number(segment.size.value);
     }
 
@@ -429,7 +429,7 @@ export default class Bitstring2 {
         }
 
         // bitstring2
-        if (segment.value?.text != null) {
+        if (segment.value.text !== null) {
           return $.calculateTextByteCount(segment.value.text);
         }
 
@@ -448,7 +448,7 @@ export default class Bitstring2 {
   }
 
   static resolveSegmentUnit(segment) {
-    if (segment?.unit != null && segment?.size != null) {
+    if (segment.unit !== null && segment.size !== null) {
       return Number(segment.unit);
     }
 
@@ -1235,7 +1235,7 @@ export default class Bitstring2 {
       $.#raiseTypeMismatchError(index, "binary", "a binary", segment.value);
     }
 
-    if (segment?.size != null || segment?.signedness != null) {
+    if (segment.size !== null || segment.signedness !== null) {
       $.#raiseTypeMismatchError(index, "integer", "an integer", segment.value);
     }
 
@@ -1258,7 +1258,7 @@ export default class Bitstring2 {
       );
     }
 
-    if (!(segment?.size != null) && segment?.unit != null) {
+    if (!(segment.size !== null) && segment.unit !== null) {
       Interpreter.raiseCompileError(
         "integer and float types require a size specifier if the unit specifier is given",
       );
@@ -1296,9 +1296,9 @@ export default class Bitstring2 {
     }
 
     if (
-      segment?.size != null ||
-      segment?.unit != null ||
-      segment?.signedness != null
+      segment.size !== null ||
+      segment.unit !== null ||
+      segment.signedness !== null
     ) {
       $.#raiseTypeMismatchError(index, "integer", "an integer", segment.value);
     }
