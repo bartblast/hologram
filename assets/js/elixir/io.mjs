@@ -22,7 +22,10 @@ const Elixir_IO = {
       );
     }
 
-    if (Type.isPid(device) || !["stdio", "stderr"].includes(device.value)) {
+    if (
+      Type.isPid(device) ||
+      (device.value !== "stdio" && device.value !== "stderr")
+    ) {
       const inspectedDevice = Interpreter.inspect(device);
 
       throw new HologramInterpreterError(
