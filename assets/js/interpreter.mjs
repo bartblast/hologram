@@ -921,37 +921,37 @@ export default class Interpreter {
   }
 
   static #hasUnresolvedVariablePattern(term) {
+    const termType = term.type;
+
     if (
-      [
-        "anonymous_function",
-        "atom",
-        "bitstring",
-        "float",
-        "integer",
-        "match_placeholder",
-      ].includes(term.type)
+      termType === "anonymous_function" ||
+      termType === "atom" ||
+      termType === "bitstring" ||
+      termType === "float" ||
+      termType === "integer" ||
+      termType === "match_placeholder"
     ) {
       return false;
     }
 
-    if (term.type === "variable_pattern") {
+    if (termType === "variable_pattern") {
       return true;
     }
 
-    if (term.type === "cons_pattern") {
+    if (termType === "cons_pattern") {
       return (
         Interpreter.#hasUnresolvedVariablePattern(term.head) ||
         Interpreter.#hasUnresolvedVariablePattern(term.tail)
       );
     }
 
-    if (term.type === "list" || term.type === "tuple") {
+    if (termType === "list" || termType === "tuple") {
       return term.data.some((item) =>
         Interpreter.#hasUnresolvedVariablePattern(item),
       );
     }
 
-    if (term.type === "map") {
+    if (termType === "map") {
       for (const [key, value] of Object.values(term.data)) {
         if (
           Interpreter.#hasUnresolvedVariablePattern(key) ||
@@ -962,7 +962,7 @@ export default class Interpreter {
       }
     }
 
-    if (term.type === "match_pattern") {
+    if (termType === "match_pattern") {
       return (
         Interpreter.#hasUnresolvedVariablePattern(term.left) ||
         Interpreter.#hasUnresolvedVariablePattern(term.right)
