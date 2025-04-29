@@ -75,6 +75,16 @@ export function assertBoxedFalse(boxed) {
   assert.isTrue(Type.isFalse(boxed));
 }
 
+export function assertBoxedStrictEqual(left, right) {
+  if (!Interpreter.isStrictlyEqual(left, right)) {
+    const inspectLeft = Interpreter.inspect(left);
+    const inspectRight = Interpreter.inspect(right);
+    const failMessage = `expected (boxed) ${inspectLeft} to strictly equal (boxed) ${inspectRight}`;
+
+    assert.fail(failMessage);
+  }
+}
+
 export function assertBoxedTrue(boxed) {
   assert.isTrue(Type.isTrue(boxed));
 }
