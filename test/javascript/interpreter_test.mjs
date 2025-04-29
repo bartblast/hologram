@@ -2309,7 +2309,37 @@ describe("Interpreter", () => {
         });
       });
 
-      describe("not equal", () => {
+      describe("not equal - different length", () => {
+        it("both have text field", () => {
+          const left = Type.bitstring2("abc");
+          const right = Type.bitstring2("ab");
+
+          assert.isFalse(Interpreter.isStrictlyEqual(left, right));
+        });
+
+        it("both have bytes field", () => {
+          const left = Bitstring2.fromBytes([97, 98, 99]);
+          const right = Bitstring2.fromBytes([97, 98]);
+
+          assert.isFalse(Interpreter.isStrictlyEqual(left, right));
+        });
+
+        it("left has text field, right has bytes field", () => {
+          const left = Type.bitstring2("abc");
+          const right = Bitstring2.fromBytes([97, 98]);
+
+          assert.isFalse(Interpreter.isStrictlyEqual(left, right));
+        });
+
+        it("left has bytes field, right has text field", () => {
+          const left = Bitstring2.fromBytes([97, 98]);
+          const right = Type.bitstring2("abc");
+
+          assert.isFalse(Interpreter.isStrictlyEqual(left, right));
+        });
+      });
+
+      describe("not equal - different content", () => {
         it("both have text field", () => {
           const left = Type.bitstring2("abc");
           const right = Type.bitstring2("xyz");
