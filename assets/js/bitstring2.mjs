@@ -261,6 +261,7 @@ export default class Bitstring2 {
   static fromSegmentWithStringValue(segment) {
     const valueStr = segment.value.value;
 
+    // TODO: this won't work correctly for utf16 and utf32
     // Fast path: if no size specified, use the entire string
     if (segment.size === null) {
       return {
