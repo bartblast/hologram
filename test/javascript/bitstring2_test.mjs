@@ -4288,6 +4288,34 @@ describe("Bitstring2", () => {
     });
   });
 
+  describe("maybeSetMapKey()", () => {
+    it("mapKey is already set", () => {
+      const bitstring = Type.bitstring2("Hologram");
+      bitstring.mapKey = "already_set";
+
+      Bitstring2.maybeSetMapKey(bitstring);
+
+      assert.equal(bitstring.mapKey, "already_set");
+    });
+
+    it("for bitstring without leftover bits", () => {
+      const bitstring = Type.bitstring2("Hologram");
+
+      Bitstring2.maybeSetMapKey(bitstring);
+
+      assert.equal(bitstring.mapKey, "b:486f6c6f6772616d");
+    });
+
+    it("for bitstring with leftover bits", () => {
+      const bitstring = Bitstring2.fromBytes([1, 52, 103]);
+      bitstring.leftoverBitCount = 5;
+
+      Bitstring2.maybeSetMapKey(bitstring);
+
+      assert.equal(bitstring.mapKey, "b:013467:5");
+    });
+  });
+
   describe("maybeSetTextFromBytes()", () => {
     it("does nothing when text is already set to a string", () => {
       const bitstring = Type.bitstring2("existing text");
