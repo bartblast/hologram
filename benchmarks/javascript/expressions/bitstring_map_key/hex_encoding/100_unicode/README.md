@@ -40,10 +40,10 @@ Expression: Generating bitstring map key using hex encoding on 100 Unicode chars
 <table>
   <tr>
     <th>Average Cold Execution Time</th>
-    <td>38.79 μs</td>
+    <td>188.63 μs</td>
   </tr>
   <tr>
     <th>Average Warm Execution Time</th>
-    <td>4.90 μs</td>
+    <td>5.63 μs</td>
   </tr>
 </table>
