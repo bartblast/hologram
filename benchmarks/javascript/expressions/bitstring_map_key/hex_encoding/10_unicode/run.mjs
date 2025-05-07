@@ -13,6 +13,6 @@ benchmark(() => {
   let hexString = "";
 
   for (let i = 0; i < bitstring.bytes.length; i++) {
-    hexString += bitstring.bytes[i].toString(16);
+    hexString += bitstring.bytes[i].toString(16).padStart(2, "0");
   }
 });

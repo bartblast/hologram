@@ -168,6 +168,9 @@ export default class Type {
       case "bitstring":
         return Type.#encodeBitstringTypeMapKey(term);
 
+      case "bitstring2":
+        return Type.#encodeBitstring2TypeMapKey(term);
+
       case "list":
       case "tuple":
         return Type.#encodeEnumTypeMapKey(term);
@@ -481,6 +484,16 @@ export default class Type {
 
   static #encodeBitstringTypeMapKey(bitstring) {
     return "bitstring(" + bitstring.bits.join("") + ")";
+  }
+
+  static #encodeBitstring2TypeMapKey(bitstring) {
+    Bitstring2.maybeSetBytesFromText(bitstring);
+
+    let key = "b:";
+
+    for (let i = 0; i < bitstring.bytes.length; i++) {
+      key += bitstring.bytes[i].toString(16);
+    }
   }
 
   static #encodeEnumTypeMapKey(term) {
