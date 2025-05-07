@@ -20,6 +20,7 @@ describe("Bitstring2", () => {
         text: null,
         bytes: new Uint8Array([1, 2, 3]),
         leftoverBitCount: 0,
+        mapKey: null,
       };
 
       assert.equal(Bitstring2.calculateBitCount(bitstring), 24);
@@ -31,6 +32,7 @@ describe("Bitstring2", () => {
         text: null,
         bytes: new Uint8Array([1, 2, 224]),
         leftoverBitCount: 3,
+        mapKey: null,
       };
 
       assert.equal(Bitstring2.calculateBitCount(bitstring), 19);
@@ -42,6 +44,7 @@ describe("Bitstring2", () => {
         text: "abc",
         bytes: null,
         leftoverBitCount: 0,
+        mapKey: null,
       };
 
       assert.equal(Bitstring2.calculateBitCount(bitstring), 24);
@@ -53,6 +56,7 @@ describe("Bitstring2", () => {
         text: "全息图",
         bytes: null,
         leftoverBitCount: 0,
+        mapKey: null,
       };
 
       assert.equal(Bitstring2.calculateBitCount(bitstring), 72);
@@ -260,6 +264,7 @@ describe("Bitstring2", () => {
         text: null,
         bytes: new Uint8Array(0),
         leftoverBitCount: 0,
+        mapKey: null,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -273,6 +278,7 @@ describe("Bitstring2", () => {
         text: null,
         bytes: new Uint8Array([170]),
         leftoverBitCount: 0,
+        mapKey: null,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -286,6 +292,7 @@ describe("Bitstring2", () => {
         text: null,
         bytes: new Uint8Array([160]),
         leftoverBitCount: 4,
+        mapKey: null,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -303,6 +310,7 @@ describe("Bitstring2", () => {
         text: null,
         bytes: new Uint8Array([170, 85]),
         leftoverBitCount: 0,
+        mapKey: null,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -321,6 +329,7 @@ describe("Bitstring2", () => {
         text: null,
         bytes: new Uint8Array([170, 85, 160]),
         leftoverBitCount: 4,
+        mapKey: null,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -337,6 +346,7 @@ describe("Bitstring2", () => {
         text: null,
         bytes: bytes,
         leftoverBitCount: 0,
+        mapKey: null,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -352,6 +362,7 @@ describe("Bitstring2", () => {
         text: null,
         bytes: new Uint8Array([1, 2, 3]),
         leftoverBitCount: 0,
+        mapKey: null,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -365,6 +376,7 @@ describe("Bitstring2", () => {
         text: null,
         bytes: new Uint8Array([]),
         leftoverBitCount: 0,
+        mapKey: null,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -486,6 +498,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([64, 94, 220, 204, 204, 204, 204, 205]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -506,6 +519,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([205, 204, 204, 204, 204, 220, 94, 64]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -528,6 +542,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([192, 94, 220, 204, 204, 204, 204, 205]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -548,6 +563,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([205, 204, 204, 204, 204, 220, 94, 192]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -570,6 +586,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -590,6 +607,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -612,6 +630,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([128, 0, 0, 0, 0, 0, 0, 0]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -632,6 +651,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0, 0, 0, 0, 0, 0, 0, 128]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -656,6 +676,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([64, 94, 192, 0, 0, 0, 0, 0]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -676,6 +697,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0, 0, 0, 0, 0, 192, 94, 64]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -698,6 +720,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([192, 94, 192, 0, 0, 0, 0, 0]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -718,6 +741,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0, 0, 0, 0, 0, 192, 94, 192]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -740,6 +764,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -760,6 +785,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -786,6 +812,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([66, 246, 230, 102]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -806,6 +833,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([102, 230, 246, 66]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -828,6 +856,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([194, 246, 230, 102]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -848,6 +877,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([102, 230, 246, 194]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -870,6 +900,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0, 0, 0, 0]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -890,6 +921,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0, 0, 0, 0]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -912,6 +944,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([128, 0, 0, 0]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -932,6 +965,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0, 0, 0, 128]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -956,6 +990,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([66, 246, 0, 0]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -976,6 +1011,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0, 0, 246, 66]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -998,6 +1034,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([194, 246, 0, 0]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -1018,6 +1055,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0, 0, 246, 194]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -1040,6 +1078,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0, 0, 0, 0]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -1060,6 +1099,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0, 0, 0, 0]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -1086,6 +1126,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([87, 183]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -1106,6 +1147,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([183, 87]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -1128,6 +1170,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([215, 183]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -1148,6 +1191,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([183, 215]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -1170,6 +1214,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0, 0]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -1190,6 +1235,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0, 0]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -1212,6 +1258,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([128, 0]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -1232,6 +1279,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0, 128]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -1256,6 +1304,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([87, 176]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -1276,6 +1325,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([176, 87]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -1298,6 +1348,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([215, 176]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -1318,6 +1369,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([176, 215]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -1340,6 +1392,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0, 0]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -1360,6 +1413,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0, 0]),
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             assert.deepStrictEqual(result, expected);
@@ -1393,6 +1447,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([10]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1415,6 +1470,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([10]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1439,6 +1495,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([10]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1461,6 +1518,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([10]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1487,6 +1545,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([170]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1509,6 +1568,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([170]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1533,6 +1593,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([170]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1555,6 +1616,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([170]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1583,6 +1645,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([10, 170]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1605,6 +1668,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([170, 10]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1629,6 +1693,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([10, 170]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1651,6 +1716,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([170, 10]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1677,6 +1743,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([107, 90]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1699,6 +1766,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([90, 107]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1726,6 +1794,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([107, 90]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1751,6 +1820,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([90, 107]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1782,6 +1852,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([13, 107, 90, 214]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1807,6 +1878,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([214, 90, 107, 13]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1834,6 +1906,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([13, 107, 90, 214]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1859,6 +1932,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([214, 90, 107, 13]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1888,6 +1962,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([107, 90, 214, 181]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1913,6 +1988,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([181, 214, 90, 107]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1940,6 +2016,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([107, 90, 214, 181]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1965,6 +2042,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([181, 214, 90, 107]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -1996,6 +2074,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([13, 107, 90, 214, 181]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2021,6 +2100,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([181, 214, 90, 107, 13]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2048,6 +2128,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([13, 107, 90, 214, 181]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2073,6 +2154,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([181, 214, 90, 107, 13]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2102,6 +2184,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([107, 90, 214, 181, 173]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2127,6 +2210,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([173, 181, 214, 90, 107]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2154,6 +2238,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([107, 90, 214, 181, 173]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2179,6 +2264,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([173, 181, 214, 90, 107]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2209,6 +2295,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([32]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2231,6 +2318,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([32]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2255,6 +2343,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([32]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2277,6 +2366,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([32]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2303,6 +2393,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([160]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2325,6 +2416,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([160]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2349,6 +2441,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([160]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2371,6 +2464,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([160]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2399,6 +2493,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([42, 160]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2421,6 +2516,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([170, 32]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2445,6 +2541,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([42, 160]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2467,6 +2564,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([170, 32]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2493,6 +2591,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([170, 160]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2515,6 +2614,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([170, 160]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2539,6 +2639,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([170, 160]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2561,6 +2662,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([170, 160]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2592,6 +2694,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([45, 107, 90, 208]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2617,6 +2720,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([173, 181, 214, 32]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2644,6 +2748,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([45, 107, 90, 208]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2669,6 +2774,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([173, 181, 214, 32]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2698,6 +2804,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([90, 214, 181, 160]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2723,6 +2830,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([90, 107, 173, 80]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2750,6 +2858,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([90, 214, 181, 160]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2775,6 +2884,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([90, 107, 173, 80]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2806,6 +2916,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([45, 107, 90, 214, 181, 160]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2831,6 +2942,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([90, 107, 173, 181, 214, 32]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2858,6 +2970,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([45, 107, 90, 214, 181, 160]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2883,6 +2996,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([90, 107, 173, 181, 214, 32]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2912,6 +3026,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([214, 181, 173, 107, 90, 208]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2937,6 +3052,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([173, 181, 214, 90, 107, 208]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2964,6 +3080,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([214, 181, 173, 107, 90, 208]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -2989,6 +3106,7 @@ describe("Bitstring2", () => {
                     text: null,
                     bytes: new Uint8Array([173, 181, 214, 90, 107, 208]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3026,6 +3144,7 @@ describe("Bitstring2", () => {
                       13, 107, 90, 214, 181, 173, 107, 90,
                     ]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3053,6 +3172,7 @@ describe("Bitstring2", () => {
                       90, 107, 173, 181, 214, 90, 107, 13,
                     ]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3082,6 +3202,7 @@ describe("Bitstring2", () => {
                       13, 107, 90, 214, 181, 173, 107, 90,
                     ]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3109,6 +3230,7 @@ describe("Bitstring2", () => {
                       90, 107, 173, 181, 214, 90, 107, 13,
                     ]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3140,6 +3262,7 @@ describe("Bitstring2", () => {
                       107, 90, 214, 181, 173, 107, 90, 214,
                     ]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3167,6 +3290,7 @@ describe("Bitstring2", () => {
                       214, 90, 107, 173, 181, 214, 90, 107,
                     ]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3196,6 +3320,7 @@ describe("Bitstring2", () => {
                       107, 90, 214, 181, 173, 107, 90, 214,
                     ]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3223,6 +3348,7 @@ describe("Bitstring2", () => {
                       214, 90, 107, 173, 181, 214, 90, 107,
                     ]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3256,6 +3382,7 @@ describe("Bitstring2", () => {
                       13, 107, 90, 214, 181, 173, 107, 90, 214,
                     ]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3283,6 +3410,7 @@ describe("Bitstring2", () => {
                       214, 90, 107, 173, 181, 214, 90, 107, 13,
                     ]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3312,6 +3440,7 @@ describe("Bitstring2", () => {
                       13, 107, 90, 214, 181, 173, 107, 90, 214,
                     ]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3339,6 +3468,7 @@ describe("Bitstring2", () => {
                       214, 90, 107, 173, 181, 214, 90, 107, 13,
                     ]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3370,6 +3500,7 @@ describe("Bitstring2", () => {
                       107, 90, 214, 181, 173, 107, 90, 214, 181,
                     ]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3397,6 +3528,7 @@ describe("Bitstring2", () => {
                       181, 214, 90, 107, 173, 181, 214, 90, 107,
                     ]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3426,6 +3558,7 @@ describe("Bitstring2", () => {
                       107, 90, 214, 181, 173, 107, 90, 214, 181,
                     ]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3453,6 +3586,7 @@ describe("Bitstring2", () => {
                       181, 214, 90, 107, 173, 181, 214, 90, 107,
                     ]),
                     leftoverBitCount: 0,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3488,6 +3622,7 @@ describe("Bitstring2", () => {
                       53, 173, 107, 90, 214, 181, 173, 107, 80,
                     ]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3515,6 +3650,7 @@ describe("Bitstring2", () => {
                       181, 214, 90, 107, 173, 181, 214, 90, 48,
                     ]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3544,6 +3680,7 @@ describe("Bitstring2", () => {
                       53, 173, 107, 90, 214, 181, 173, 107, 80,
                     ]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3571,6 +3708,7 @@ describe("Bitstring2", () => {
                       181, 214, 90, 107, 173, 181, 214, 90, 48,
                     ]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3602,6 +3740,7 @@ describe("Bitstring2", () => {
                       90, 214, 181, 173, 107, 90, 214, 181, 160,
                     ]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3629,6 +3768,7 @@ describe("Bitstring2", () => {
                       90, 107, 173, 181, 214, 90, 107, 173, 80,
                     ]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3658,6 +3798,7 @@ describe("Bitstring2", () => {
                       90, 214, 181, 173, 107, 90, 214, 181, 160,
                     ]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3685,6 +3826,7 @@ describe("Bitstring2", () => {
                       90, 107, 173, 181, 214, 90, 107, 173, 80,
                     ]),
                     leftoverBitCount: 4,
+                    mapKey: null,
                   };
 
                   assert.deepStrictEqual(result, expected);
@@ -3708,6 +3850,7 @@ describe("Bitstring2", () => {
         text: "a",
         bytes: null,
         leftoverBitCount: 0,
+        mapKey: null,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -3729,6 +3872,7 @@ describe("Bitstring2", () => {
             text: "abc",
             bytes: null,
             leftoverBitCount: 0,
+            mapKey: null,
           });
         });
 
@@ -3746,6 +3890,7 @@ describe("Bitstring2", () => {
             text: "abc",
             bytes: null,
             leftoverBitCount: 0,
+            mapKey: null,
           });
         });
 
@@ -3763,6 +3908,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([97, 98]),
             leftoverBitCount: 0,
+            mapKey: null,
           });
         });
 
@@ -3781,6 +3927,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: expectedBytes,
             leftoverBitCount: 6,
+            mapKey: null,
           });
         });
 
@@ -3799,6 +3946,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: expectedBytes,
             leftoverBitCount: 6,
+            mapKey: null,
           });
         });
 
@@ -3817,6 +3965,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: expectedBytes,
             leftoverBitCount: 6,
+            mapKey: null,
           });
         });
 
@@ -3838,6 +3987,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: expectedBytes,
             leftoverBitCount: 6,
+            mapKey: null,
           });
         });
       });
@@ -3855,6 +4005,7 @@ describe("Bitstring2", () => {
             text: "全息图",
             bytes: null,
             leftoverBitCount: 0,
+            mapKey: null,
           });
         });
 
@@ -3872,6 +4023,7 @@ describe("Bitstring2", () => {
             text: "全息图",
             bytes: null,
             leftoverBitCount: 0,
+            mapKey: null,
           });
         });
 
@@ -3889,6 +4041,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([229, 133, 168, 230, 129, 175]),
             leftoverBitCount: 0,
+            mapKey: null,
           });
         });
 
@@ -3906,6 +4059,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([229, 133, 168, 230, 129]),
             leftoverBitCount: 0,
+            mapKey: null,
           });
         });
 
@@ -3924,6 +4078,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: expectedBytes,
             leftoverBitCount: 6,
+            mapKey: null,
           });
         });
 
@@ -3942,6 +4097,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: expectedBytes,
             leftoverBitCount: 6,
+            mapKey: null,
           });
         });
 
@@ -3960,6 +4116,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: expectedBytes,
             leftoverBitCount: 6,
+            mapKey: null,
           });
         });
 
@@ -3984,6 +4141,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: expectedBytes,
             leftoverBitCount: 6,
+            mapKey: null,
           });
         });
       });
@@ -3998,6 +4156,7 @@ describe("Bitstring2", () => {
       text: "Hologram",
       bytes: null,
       leftoverBitCount: 0,
+      mapKey: null,
     };
 
     assert.deepStrictEqual(result, expected);
@@ -4284,6 +4443,7 @@ describe("Bitstring2", () => {
           text: "abc",
           bytes: null,
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         const result = Bitstring2.takeChunk(original, 0, 24);
@@ -4296,6 +4456,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([97, 98, 99]),
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         const result = Bitstring2.takeChunk(original, 0, 24);
@@ -4310,6 +4471,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xaa, 0xbb]),
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         const result = Bitstring2.takeChunk(bitstring, 8, 0);
@@ -4319,6 +4481,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([]),
           leftoverBitCount: 0,
+          mapKey: null,
         });
       });
 
@@ -4329,6 +4492,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0x80]), // 10000000
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.takeChunk(bitstring, 0, 1);
@@ -4338,6 +4502,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0x80]), // 10000000
             leftoverBitCount: 1,
+            mapKey: null,
           });
         });
 
@@ -4347,6 +4512,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0x00, 0x80]), // 00000000, 10000000
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.takeChunk(bitstring, 8, 1);
@@ -4356,6 +4522,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0x80]), // 10000000
             leftoverBitCount: 1,
+            mapKey: null,
           });
         });
       });
@@ -4367,6 +4534,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([97, 98, 99]),
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.takeChunk(bitstring, 8, 8);
@@ -4376,6 +4544,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([98]),
             leftoverBitCount: 0,
+            mapKey: null,
           });
         });
 
@@ -4385,6 +4554,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xaa, 0xbb, 0xcc]), // 10101010, 10111011, 11001100
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.takeChunk(bitstring, 8, 4);
@@ -4394,6 +4564,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xb0]), // 10110000
             leftoverBitCount: 4,
+            mapKey: null,
           });
         });
       });
@@ -4405,6 +4576,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd]), // 10101010, 10111011, 11001100, 11011101
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.takeChunk(bitstring, 8, 16);
@@ -4414,6 +4586,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xbb, 0xcc]), // 10111011, 11001100
             leftoverBitCount: 0,
+            mapKey: null,
           });
         });
 
@@ -4423,6 +4596,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xaa, 0xbb, 0xff]), // 10101010, 10111011, 11111111
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.takeChunk(bitstring, 8, 12);
@@ -4432,6 +4606,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xbb, 0xf0]), // 10111011, 11110000
             leftoverBitCount: 4,
+            mapKey: null,
           });
         });
       });
@@ -4443,6 +4618,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xaa, 0xbb]), // 10101010, 10111011
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.takeChunk(bitstring, 8, 8);
@@ -4452,6 +4628,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xbb]), // 10111011
             leftoverBitCount: 0,
+            mapKey: null,
           });
         });
 
@@ -4461,6 +4638,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xaa, 0xb0]), // 10101010, 10110000
             leftoverBitCount: 4,
+            mapKey: null,
           };
 
           const result = Bitstring2.takeChunk(bitstring, 8, 4);
@@ -4470,6 +4648,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xb0]), // 10110000
             leftoverBitCount: 4,
+            mapKey: null,
           });
         });
       });
@@ -4480,6 +4659,7 @@ describe("Bitstring2", () => {
           text: "abc",
           bytes: null,
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         const result = Bitstring2.takeChunk(bitstring, 8, 8);
@@ -4489,6 +4669,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([98]),
           leftoverBitCount: 0,
+          mapKey: null,
         });
       });
     });
@@ -4500,6 +4681,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xaa, 0xbb]),
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         const result = Bitstring2.takeChunk(bitstring, 4, 0);
@@ -4509,6 +4691,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([]),
           leftoverBitCount: 0,
+          mapKey: null,
         });
       });
 
@@ -4519,6 +4702,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0x08]), // 00001000
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.takeChunk(bitstring, 4, 1);
@@ -4528,6 +4712,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0x80]), // 10000000
             leftoverBitCount: 1,
+            mapKey: null,
           });
         });
 
@@ -4537,6 +4722,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0x00, 0x08]), // 00000000, 00001000
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.takeChunk(bitstring, 12, 1);
@@ -4546,6 +4732,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0x80]), // 10000000
             leftoverBitCount: 1,
+            mapKey: null,
           });
         });
       });
@@ -4557,6 +4744,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xaa, 0xbb, 0xcc]), // 10101010, 10111011, 11001100
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.takeChunk(bitstring, 4, 8);
@@ -4566,6 +4754,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xab]), // 10101011
             leftoverBitCount: 0,
+            mapKey: null,
           });
         });
 
@@ -4575,6 +4764,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xaa, 0xff]), // 10101010, 11111111
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.takeChunk(bitstring, 6, 4);
@@ -4584,6 +4774,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xb0]), // 10110000
             leftoverBitCount: 4,
+            mapKey: null,
           });
         });
       });
@@ -4595,6 +4786,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xaa, 0xbb, 0xcc]), // 10101010, 10111011, 11001100
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.takeChunk(bitstring, 4, 12);
@@ -4604,6 +4796,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xab, 0xb0]), // 10101011, 10110000
             leftoverBitCount: 4,
+            mapKey: null,
           });
         });
 
@@ -4613,6 +4806,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xaa, 0xbb, 0x5f]), // 10101010, 10111011, 01011111
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.takeChunk(bitstring, 4, 16);
@@ -4622,6 +4816,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xab, 0xb5]), // 10101011, 10110101
             leftoverBitCount: 0,
+            mapKey: null,
           });
         });
       });
@@ -4633,6 +4828,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xaa, 0xfb]), // 10101010, 11111011
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.takeChunk(bitstring, 12, 4);
@@ -4642,6 +4838,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xb0]), // 10110000
             leftoverBitCount: 4,
+            mapKey: null,
           });
         });
 
@@ -4651,6 +4848,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xaa, 0xa8]), // 10101010, 10101000
             leftoverBitCount: 5,
+            mapKey: null,
           };
 
           const result = Bitstring2.takeChunk(bitstring, 10, 3);
@@ -4660,6 +4858,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0xa0]), // 10100000
             leftoverBitCount: 3,
+            mapKey: null,
           });
         });
       });
@@ -4670,6 +4869,7 @@ describe("Bitstring2", () => {
           text: "abc", // 01100001, 01100010, 01100011
           bytes: null,
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         const result = Bitstring2.takeChunk(bitstring, 12, 8);
@@ -4679,6 +4879,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([38]), // 00100110
           leftoverBitCount: 0,
+          mapKey: null,
         });
       });
     });
@@ -4693,6 +4894,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([64, 94, 221, 47, 26, 159, 190, 119]),
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.toFloat(bitstring, "big");
@@ -4707,6 +4909,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([128, 0, 0, 0, 0, 0, 0, 0]),
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.toFloat(bitstring, "big");
@@ -4721,6 +4924,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]),
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.toFloat(bitstring, "big");
@@ -4737,6 +4941,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([66, 246, 233, 121]),
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.toFloat(bitstring, "big");
@@ -4751,6 +4956,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([128, 0, 0, 0]),
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.toFloat(bitstring, "big");
@@ -4765,6 +4971,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0, 0, 0, 0]),
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.toFloat(bitstring, "big");
@@ -4781,6 +4988,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([87, 183]),
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.toFloat(bitstring, "big");
@@ -4795,6 +5003,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0, 1]),
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.toFloat(bitstring, "big");
@@ -4809,6 +5018,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([128, 0]),
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.toFloat(bitstring, "big");
@@ -4823,6 +5033,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0, 0]),
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.toFloat(bitstring, "big");
@@ -4841,6 +5052,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([119, 190, 159, 26, 47, 221, 94, 64]),
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.toFloat(bitstring, "little");
@@ -4855,6 +5067,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0, 0, 0, 0, 0, 0, 0, 128]),
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.toFloat(bitstring, "little");
@@ -4869,6 +5082,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0]),
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.toFloat(bitstring, "little");
@@ -4885,6 +5099,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([121, 233, 246, 66]),
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.toFloat(bitstring, "little");
@@ -4899,6 +5114,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0, 0, 0, 128]),
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.toFloat(bitstring, "little");
@@ -4913,6 +5129,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0, 0, 0, 0]),
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.toFloat(bitstring, "little");
@@ -4929,6 +5146,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([183, 87]),
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.toFloat(bitstring, "little");
@@ -4943,6 +5161,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([1, 0]),
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.toFloat(bitstring, "little");
@@ -4957,6 +5176,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0, 128]),
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.toFloat(bitstring, "little");
@@ -4971,6 +5191,7 @@ describe("Bitstring2", () => {
             text: null,
             bytes: new Uint8Array([0, 0]),
             leftoverBitCount: 0,
+            mapKey: null,
           };
 
           const result = Bitstring2.toFloat(bitstring, "little");
@@ -4989,6 +5210,7 @@ describe("Bitstring2", () => {
         text: null,
         bytes: new Uint8Array([]),
         leftoverBitCount: 0,
+        mapKey: null,
       };
 
       const result = Bitstring2.toInteger(bitstring, "signed", "big");
@@ -5006,6 +5228,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa]), // 10101010
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "big");
@@ -5020,6 +5243,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb]), // 10101010, 10111011
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "big");
@@ -5034,6 +5258,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xcc]), // 10101010, 10111011, 11001100
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "big");
@@ -5048,6 +5273,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd]), // 10101010, 10111011, 11001100, 11011101
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "big");
@@ -5062,6 +5288,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd, 0xee]), // 10101010, 10111011, 11001100, 11011101, 11101110
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "big");
@@ -5078,6 +5305,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa]), // 10101010
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "little");
@@ -5092,6 +5320,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb]), // 10101010, 10111011
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "little");
@@ -5106,6 +5335,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xcc]), // 10101010, 10111011, 11001100
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "little");
@@ -5120,6 +5350,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd]), // 10101010, 10111011, 11001100, 11011101
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "little");
@@ -5134,6 +5365,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd, 0xee]), // 10101010, 10111011, 11001100, 11011101, 11101110
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "little");
@@ -5152,6 +5384,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa]), // 10101010
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "unsigned", "big");
@@ -5166,6 +5399,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb]), // 10101010, 10111011
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "unsigned", "big");
@@ -5180,6 +5414,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xcc]), // 10101010, 10111011, 11001100
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "unsigned", "big");
@@ -5194,6 +5429,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd]), // 10101010, 10111011, 11001100, 11011101
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "unsigned", "big");
@@ -5208,6 +5444,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd, 0xee]), // 10101010, 10111011, 11001100, 11011101, 11101110
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "unsigned", "big");
@@ -5224,6 +5461,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa]), // 10101010
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(
@@ -5243,6 +5481,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb]), // 10101010, 10111011
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(
@@ -5262,6 +5501,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xcc]), // 10101010, 10111011, 11001100
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(
@@ -5281,6 +5521,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd]), // 10101010, 10111011, 11001100, 11011101
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(
@@ -5300,6 +5541,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd, 0xee]), // 10101010, 10111011, 11001100, 11011101, 11101110
               leftoverBitCount: 0,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(
@@ -5325,6 +5567,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xe0]), // 11100000
               leftoverBitCount: 3,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "big");
@@ -5339,6 +5582,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xe0]), // 10101010, 11100000
               leftoverBitCount: 3,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "big");
@@ -5353,6 +5597,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xe0]), // 10101010, 10111011, 11100000
               leftoverBitCount: 3,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "big");
@@ -5367,6 +5612,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xe0]), // 10101010, 10111011, 11001100, 11100000
               leftoverBitCount: 3,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "big");
@@ -5381,6 +5627,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd, 0xe0]), // 10101010, 10111011, 11001100, 11011101, 11100000
               leftoverBitCount: 3,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "big");
@@ -5397,6 +5644,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xe0]), // 11100000
               leftoverBitCount: 3,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "little");
@@ -5411,6 +5659,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xe0]), // 10101010, 11100000
               leftoverBitCount: 3,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "little");
@@ -5425,6 +5674,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xe0]), // 10101010, 10111011, 11100000
               leftoverBitCount: 3,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "little");
@@ -5439,6 +5689,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xe0]), // 10101010, 10111011, 11001100, 11100000
               leftoverBitCount: 3,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "little");
@@ -5453,6 +5704,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd, 0xe0]), // 10101010, 10111011, 11001100, 11011101, 11100000
               leftoverBitCount: 3,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "signed", "little");
@@ -5471,6 +5723,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xe0]), // 11100000
               leftoverBitCount: 3,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "unsigned", "big");
@@ -5485,6 +5738,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xe0]), // 10101010, 11100000
               leftoverBitCount: 3,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "unsigned", "big");
@@ -5499,6 +5753,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xe0]), // 10101010, 10111011, 11100000
               leftoverBitCount: 3,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "unsigned", "big");
@@ -5513,6 +5768,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xe0]), // 10101010, 10111011, 11001100, 11100000
               leftoverBitCount: 3,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "unsigned", "big");
@@ -5527,6 +5783,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd, 0xe0]), // 10101010, 10111011, 11001100, 11011101, 11100000
               leftoverBitCount: 3,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(bitstring, "unsigned", "big");
@@ -5543,6 +5800,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xe0]), // 11100000
               leftoverBitCount: 3,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(
@@ -5562,6 +5820,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xe0]), // 10101010, 11100000
               leftoverBitCount: 3,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(
@@ -5581,6 +5840,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xe0]), // 10101010, 10111011, 11100000
               leftoverBitCount: 3,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(
@@ -5600,6 +5860,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xe0]), // 10101010, 10111011, 11001100, 11100000
               leftoverBitCount: 3,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(
@@ -5619,6 +5880,7 @@ describe("Bitstring2", () => {
               text: null,
               bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd, 0xe0]), // 10101010, 10111011, 11001100, 11011101, 11100000
               leftoverBitCount: 3,
+              mapKey: null,
             };
 
             const result = Bitstring2.toInteger(
@@ -5679,6 +5941,7 @@ describe("Bitstring2", () => {
             type: "bitstring2",
             bytes: new Uint8Array([255]),
             leftoverBitCount: 4,
+            mapKey: null,
           },
           {type: "binary"},
         );
@@ -6081,6 +6344,7 @@ describe("Bitstring2", () => {
         text: "",
         bytes: null,
         leftoverBitCount: 0,
+        mapKey: null,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -6105,6 +6369,7 @@ describe("Bitstring2", () => {
         text: "Hello World",
         bytes: null,
         leftoverBitCount: 0,
+        mapKey: null,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -6122,6 +6387,7 @@ describe("Bitstring2", () => {
         text: null,
         bytes: new Uint8Array([1, 2, 3, 4]),
         leftoverBitCount: 0,
+        mapKey: null,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -6139,6 +6405,7 @@ describe("Bitstring2", () => {
         text: null,
         bytes: new Uint8Array([1, 2, 3, 4, 5, 6]),
         leftoverBitCount: 0,
+        mapKey: null,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -6155,6 +6422,7 @@ describe("Bitstring2", () => {
         text: null,
         bytes: new Uint8Array([97, 98, 99, 100]), // "abcd" in ASCII
         leftoverBitCount: 0,
+        mapKey: null,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -6168,6 +6436,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xa8]), // 10101000
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         // 10111011 (full byte)
@@ -6176,6 +6445,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xbb]), // 10111011
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         // 11001100 (full byte)
@@ -6184,6 +6454,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xcc]), // 11001100
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         const result = Bitstring2.concat([bs1, bs2, bs3]);
@@ -6195,6 +6466,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xad, 0xde, 0x60]),
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         assert.deepStrictEqual(result, expected);
@@ -6207,6 +6479,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xaa, 0xb8]), // 10101010, 10111000
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         // 11001100, 11011101 (full bytes)
@@ -6215,6 +6488,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xcc, 0xdd]), // 11001100, 11011101
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         // 11101110, 11111111 (full bytes)
@@ -6223,6 +6497,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xee, 0xff]), // 11101110, 11111111
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         const result = Bitstring2.concat([bs1, bs2, bs3]);
@@ -6234,6 +6509,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xaa, 0xbe, 0x66, 0xef, 0x77, 0xf8]),
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         assert.deepStrictEqual(result, expected);
@@ -6246,6 +6522,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xaa]), // 10101010
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         // 10111 (5 bits)
@@ -6254,6 +6531,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xb8]), // 10111000
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         // 11001100 (full byte)
@@ -6262,6 +6540,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xcc]), // 11001100
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         const result = Bitstring2.concat([bs1, bs2, bs3]);
@@ -6273,6 +6552,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xaa, 0xbe, 0x60]),
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         assert.deepStrictEqual(result, expected);
@@ -6285,6 +6565,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xaa, 0xbb]), // 10101010, 10111011
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         // 11001100, 11011 (5 bits in the second byte)
@@ -6293,6 +6574,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xcc, 0xd8]), // 11001100, 11011000
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         // 11101110, 11111111 (full bytes)
@@ -6301,6 +6583,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xee, 0xff]), // 11101110, 11111111
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         const result = Bitstring2.concat([bs1, bs2, bs3]);
@@ -6312,6 +6595,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xdf, 0x77, 0xf8]),
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         assert.deepStrictEqual(result, expected);
@@ -6324,6 +6608,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xaa]), // 10101010
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         // 10111011 (full byte)
@@ -6332,6 +6617,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xbb]), // 10111011
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         // 11001 (5 bits)
@@ -6340,6 +6626,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xc8]), // 11001000
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         const result = Bitstring2.concat([bs1, bs2, bs3]);
@@ -6351,6 +6638,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xaa, 0xbb, 0xc8]),
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         assert.deepStrictEqual(result, expected);
@@ -6363,6 +6651,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xaa, 0xbb]), // 10101010, 10111011
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         // 11001100, 11011101 (full bytes)
@@ -6371,6 +6660,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xcc, 0xdd]), // 11001100, 11011101
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         // 11101110, 11111 (5 bits in the second byte)
@@ -6379,6 +6669,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xee, 0xf8]), // 11101110, 11111000
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         const result = Bitstring2.concat([bs1, bs2, bs3]);
@@ -6390,6 +6681,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xf8]),
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         assert.deepStrictEqual(result, expected);
@@ -6402,6 +6694,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xa8]), // 10101000
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         // 1101 (4 bits)
@@ -6410,6 +6703,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xd0]), // 11010000
           leftoverBitCount: 4,
+          mapKey: null,
         };
 
         // 111 (3 bits)
@@ -6418,6 +6712,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xe0]), // 11100000
           leftoverBitCount: 3,
+          mapKey: null,
         };
 
         const result = Bitstring2.concat([bs1, bs2, bs3]);
@@ -6429,6 +6724,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xae, 0xf0]),
           leftoverBitCount: 4,
+          mapKey: null,
         };
 
         assert.deepStrictEqual(result, expected);
@@ -6441,6 +6737,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xaa, 0xa8]), // 10101010, 10101000
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         // 10111011, 1101 (4 bits in the second byte)
@@ -6449,6 +6746,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xbb, 0xd0]), // 10111011, 11010000
           leftoverBitCount: 4,
+          mapKey: null,
         };
 
         // 11001100, 111 (3 bits in the second byte)
@@ -6457,6 +6755,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xcc, 0xe0]), // 11001100, 11100000
           leftoverBitCount: 3,
+          mapKey: null,
         };
 
         const result = Bitstring2.concat([bs1, bs2, bs3]);
@@ -6468,6 +6767,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xaa, 0xad, 0xde, 0xe6, 0x70]),
           leftoverBitCount: 4,
+          mapKey: null,
         };
 
         assert.deepStrictEqual(result, expected);
@@ -6480,6 +6780,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xa8]), // 10101000
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         // 10111011 (full byte)
@@ -6488,6 +6789,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xbb]), // 10111011
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         // 11001 (5 bits)
@@ -6496,6 +6798,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xc8]), // 11001000
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         // 11011101 (full byte)
@@ -6504,6 +6807,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xdd]), // 11011101
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         const result = Bitstring2.concat([bs1, bs2, bs3, bs4]);
@@ -6515,6 +6819,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xad, 0xde, 0x77, 0x40]),
           leftoverBitCount: 2,
+          mapKey: null,
         };
 
         assert.deepStrictEqual(result, expected);
@@ -6527,6 +6832,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xaa, 0xb8]), // 10101010, 10111000
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         // 11001100, 11011101 (full bytes)
@@ -6535,6 +6841,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xcc, 0xdd]), // 11001100, 11011101
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         // 11101110, 11111 (5 bits in the second byte)
@@ -6543,6 +6850,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xee, 0xf8]), // 11101110, 11111000
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         // 10001000, 10011001 (full bytes)
@@ -6551,6 +6859,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0x88, 0x99]), // 10001000, 10011001
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         const result = Bitstring2.concat([bs1, bs2, bs3, bs4]);
@@ -6564,6 +6873,7 @@ describe("Bitstring2", () => {
             0xaa, 0xbe, 0x66, 0xef, 0x77, 0xe2, 0x26, 0x40,
           ]),
           leftoverBitCount: 2,
+          mapKey: null,
         };
 
         assert.deepStrictEqual(result, expected);
@@ -6576,6 +6886,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xaa]), // 10101010
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         // 10111 (5 bits)
@@ -6584,6 +6895,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xb8]), // 10111000
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         // 11001100 (full byte)
@@ -6592,6 +6904,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xcc]), // 11001100
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         // 11011 (5 bits)
@@ -6600,6 +6913,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xd8]), // 11011000
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         const result = Bitstring2.concat([bs1, bs2, bs3, bs4]);
@@ -6611,6 +6925,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xaa, 0xbe, 0x66, 0xc0]),
           leftoverBitCount: 2,
+          mapKey: null,
         };
 
         assert.deepStrictEqual(result, expected);
@@ -6623,6 +6938,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xaa, 0xbb]), // 10101010, 10111011
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         // 11001100, 11011 (5 bits in the second byte)
@@ -6631,6 +6947,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xcc, 0xd8]), // 11001100, 11011000
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         // 11101110, 11111111 (full bytes)
@@ -6639,6 +6956,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xee, 0xff]), // 11101110, 11111111
           leftoverBitCount: 0,
+          mapKey: null,
         };
 
         // 10001000, 10011 (5 bits in the second byte)
@@ -6647,6 +6965,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0x88, 0x98]), // 10001000, 10011000
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         const result = Bitstring2.concat([bs1, bs2, bs3, bs4]);
@@ -6660,6 +6979,7 @@ describe("Bitstring2", () => {
             0xaa, 0xbb, 0xcc, 0xdf, 0x77, 0xfc, 0x44, 0xc0,
           ]),
           leftoverBitCount: 2,
+          mapKey: null,
         };
 
         assert.deepStrictEqual(result, expected);
@@ -6672,6 +6992,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0x80]), // 10000000
           leftoverBitCount: 1,
+          mapKey: null,
         };
 
         // 101 (3 bits)
@@ -6680,6 +7001,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xa0]), // 10100000
           leftoverBitCount: 3,
+          mapKey: null,
         };
 
         // 10101 (5 bits)
@@ -6688,6 +7010,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xa8]), // 10101000
           leftoverBitCount: 5,
+          mapKey: null,
         };
 
         const result = Bitstring2.concat([bs1, bs2, bs3]);
@@ -6699,6 +7022,7 @@ describe("Bitstring2", () => {
           text: null,
           bytes: new Uint8Array([0xda, 0x80]),
           leftoverBitCount: 1,
+          mapKey: null,
         };
 
         assert.deepStrictEqual(result, expected);
