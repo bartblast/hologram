@@ -6,7 +6,6 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
-import Bitstring2 from "../../assets/js/bitstring2.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Sequence from "../../assets/js/sequence.mjs";
 import Type from "../../assets/js/type.mjs";
