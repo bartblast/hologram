@@ -10,9 +10,9 @@ const bitstring = Type.bitstring2("全息图全息图全息图全");
 Bitstring2.maybeSetBytesFromText(bitstring);
 
 benchmark(() => {
-  let hexString = "";
+  let _hexString = "";
 
   for (let i = 0; i < bitstring.bytes.length; i++) {
-    hexString += bitstring.bytes[i].toString(16).padStart(2, "0");
+    _hexString += bitstring.bytes[i].toString(16).padStart(2, "0");
   }
 });
