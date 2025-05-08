@@ -250,6 +250,10 @@ export default class Type {
     return term.type === "bitstring";
   }
 
+  static isBitstring2(term) {
+    return term.type === "bitstring2";
+  }
+
   static isBitstringPattern(term) {
     return term.type === "bitstring_pattern";
   }
