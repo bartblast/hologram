@@ -649,6 +649,12 @@ export default class Bitstring2 {
     );
   }
 
+  static toText(bitstring) {
+    $.maybeSetTextFromBytes(bitstring);
+
+    return bitstring.text;
+  }
+
   static validateCodePoint(codePoint) {
     if (typeof codePoint === "bigint") {
       codePoint = Number(codePoint);

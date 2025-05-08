@@ -5934,6 +5934,14 @@ describe("Bitstring2", () => {
     });
   });
 
+  it("toText()", () => {
+    const bitstring = Bitstring2.fromBytes([97, 98, 99]);
+    const result = Bitstring2.toText(bitstring);
+
+    assert.equal(bitstring.text, "abc");
+    assert.equal(result, "abc");
+  });
+
   describe("validateCodePoint()", () => {
     it("integer that is a valid code point", () => {
       // a = 97
