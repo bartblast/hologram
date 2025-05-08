@@ -4289,13 +4289,21 @@ describe("Bitstring2", () => {
   });
 
   describe("maybeSetMapKey()", () => {
-    it("mapKey is already set", () => {
+    it("when mapKey is already set", () => {
       const bitstring = Type.bitstring2("Hologram");
       bitstring.mapKey = "already_set";
 
       Bitstring2.maybeSetMapKey(bitstring);
 
       assert.equal(bitstring.mapKey, "already_set");
+    });
+
+    it("for empty bitstring", () => {
+      const bitstring = Type.bitstring2("");
+
+      Bitstring2.maybeSetMapKey(bitstring);
+
+      assert.equal(bitstring.mapKey, "b");
     });
 
     it("for bitstring without leftover bits", () => {

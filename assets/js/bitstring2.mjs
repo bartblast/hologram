@@ -431,8 +431,12 @@ export default class Bitstring2 {
     if (bitstring.mapKey === null) {
       $.maybeSetBytesFromText(bitstring);
 
-      let key = "b:";
+      let key = "b";
       const bytes = bitstring.bytes;
+
+      if (bytes.length > 0) {
+        key += ":";
+      }
 
       for (let i = 0; i < bytes.length; i++) {
         key += bytes[i].toString(16).padStart(2, "0");
