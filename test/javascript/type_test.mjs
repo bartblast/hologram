@@ -409,27 +409,11 @@ describe("Type", () => {
       assert.equal(result, "atom(abc)");
     });
 
-    it("encodes empty boxed bitstring value as map key", () => {
-      const segment = Type.bitstringSegment(Type.integer(0), {
-        size: Type.integer(0),
-        type: "integer",
-      });
-      const bitstring = Type.bitstring([segment]);
+    it("encodes boxed bitstring value as map key", () => {
+      const bitstring = Type.bitstring2("Hologram");
       const result = Type.encodeMapKey(bitstring);
 
-      assert.equal(result, "bitstring()");
-    });
-
-    it("encodes non-empty boxed bitstring value as map key", () => {
-      // 170 == 0b10101010
-
-      const segment = Type.bitstringSegment(Type.integer(170), {
-        type: "integer",
-      });
-      const bitstring = Type.bitstring([segment]);
-      const result = Type.encodeMapKey(bitstring);
-
-      assert.equal(result, "bitstring(10101010)");
+      assert.equal(result, "b:486f6c6f6772616d");
     });
 
     it("encodes boxed float value as map key", () => {

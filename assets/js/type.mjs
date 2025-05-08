@@ -487,13 +487,9 @@ export default class Type {
   }
 
   static #encodeBitstring2TypeMapKey(bitstring) {
-    Bitstring2.maybeSetBytesFromText(bitstring);
+    Bitstring2.maybeSetMapKey(bitstring);
 
-    let key = "b:";
-
-    for (let i = 0; i < bitstring.bytes.length; i++) {
-      key += bitstring.bytes[i].toString(16);
-    }
+    return bitstring.mapKey;
   }
 
   static #encodeEnumTypeMapKey(term) {
