@@ -647,7 +647,7 @@ describe("Type", () => {
     });
 
     it("returns false if the term is a non-binary bitstring2", () => {
-      const term = Bitstring2.fromBits([0, 1, 0]);
+      const term = Type.bitstring2([0, 1, 0]);
       assert.isFalse(Type.isBinary2(term));
     });
 
