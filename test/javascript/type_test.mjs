@@ -6,6 +6,7 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
+import Bitstring2 from "../../assets/js/bitstring2.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Sequence from "../../assets/js/sequence.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -636,6 +637,23 @@ describe("Type", () => {
     it("returns false if the term is not a bitstring", () => {
       const term = Type.atom("abc");
       assert.isFalse(Type.isBinary(term));
+    });
+  });
+
+  describe("isBinary2()", () => {
+    it("returns true if the term is a binary bitsting2", () => {
+      const term = Type.bitstring2("abc");
+      assert.isTrue(Type.isBinary2(term));
+    });
+
+    it("returns false if the term is a non-binary bitstring2", () => {
+      const term = Bitstring2.fromBits([0, 1, 0]);
+      assert.isFalse(Type.isBinary2(term));
+    });
+
+    it("returns false if the term is not a bitstring2", () => {
+      const term = Type.atom("abc");
+      assert.isFalse(Type.isBinary2(term));
     });
   });
 

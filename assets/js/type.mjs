@@ -246,6 +246,10 @@ export default class Type {
     return Type.isBitstring(term) && term.bits.length % 8 === 0;
   }
 
+  static isBinary2(term) {
+    return Type.isBitstring2(term) && term.leftoverBitCount === 0;
+  }
+
   static isBitstring(term) {
     return term.type === "bitstring";
   }
