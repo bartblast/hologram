@@ -10,7 +10,7 @@ const Elixir_Kernel = {
   },
 
   "inspect/2": (term, opts) => {
-    return Type.bitstring(Interpreter.inspect(term, opts));
+    return Type.bitstring2(Interpreter.inspect(term, opts));
   },
 };
 

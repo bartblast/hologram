@@ -1,6 +1,6 @@
 "use strict";
 
-import Bitstring from "../bitstring.mjs";
+import Bitstring2 from "../bitstring2.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
@@ -16,7 +16,7 @@ const Elixir_String = {
     const modeValue = mode.value;
 
     if (
-      !Type.isBinary(string) ||
+      !Type.isBinary2(string) ||
       !Type.isAtom(mode) ||
       (modeValue !== "default" &&
         modeValue !== "ascii" &&
@@ -34,33 +34,33 @@ const Elixir_String = {
       );
     }
 
-    return Type.bitstring(Bitstring.toText(string).toLowerCase());
+    return Type.bitstring2(Bitstring2.toText(string).toLowerCase());
   },
 
   "replace/3": function (subject, pattern, replacement) {
-    if (!Type.isBinary(subject)) {
+    if (!Type.isBinary2(subject)) {
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg("String.replace/4", arguments),
       );
     }
 
-    if (!Type.isBinary(pattern) || pattern.bits.length === 0) {
+    if (!Type.isBinary2(pattern) || pattern.bits.length === 0) {
       throw new HologramInterpreterError(
         "using String.replace/3 pattern argument other than non-empty binary is not yet implemented in Hologram",
       );
     }
 
-    if (!Type.isBinary(replacement)) {
+    if (!Type.isBinary2(replacement)) {
       throw new HologramInterpreterError(
         "using String.replace/3 replacement argument other than binary is not yet implemented in Hologram",
       );
     }
 
-    const subjectStr = Bitstring.toText(subject);
-    const patternStr = Bitstring.toText(pattern);
-    const replacementStr = Bitstring.toText(replacement);
+    const subjectStr = Bitstring2.toText(subject);
+    const patternStr = Bitstring2.toText(pattern);
+    const replacementStr = Bitstring2.toText(replacement);
 
-    return Type.bitstring(subjectStr.replaceAll(patternStr, replacementStr));
+    return Type.bitstring2(subjectStr.replaceAll(patternStr, replacementStr));
   },
 
   // Deps: [String.upcase/2]
@@ -73,7 +73,7 @@ const Elixir_String = {
     const modeValue = mode.value;
 
     if (
-      !Type.isBinary(string) ||
+      !Type.isBinary2(string) ||
       !Type.isAtom(mode) ||
       (modeValue !== "default" &&
         modeValue !== "ascii" &&
@@ -91,7 +91,7 @@ const Elixir_String = {
       );
     }
 
-    return Type.bitstring(Bitstring.toText(string).toUpperCase());
+    return Type.bitstring2(Bitstring2.toText(string).toUpperCase());
   },
 };
 

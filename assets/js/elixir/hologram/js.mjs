@@ -1,11 +1,11 @@
 "use strict";
 
-import Bitstring from "../../bitstring.mjs";
+import Bitstring2 from "../../bitstring2.mjs";
 import Interpreter from "../../interpreter.mjs";
 
 const Elixir_Hologram_JS = {
   "exec/1": (code) => {
-    return Interpreter.evaluateJavaScriptCode(Bitstring.toText(code));
+    return Interpreter.evaluateJavaScriptCode(Bitstring2.toText(code));
   },
 };
 
