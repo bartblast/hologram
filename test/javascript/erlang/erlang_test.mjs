@@ -641,7 +641,7 @@ describe("Erlang", () => {
         'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
 
       assert.throw(
-        () => testedFun(Type.bitstring("abc"), integer1),
+        () => testedFun(Type.bitstring2("abc"), integer1),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -652,7 +652,7 @@ describe("Erlang", () => {
         'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
 
       assert.throw(
-        () => testedFun(integer1, Type.bitstring("abc")),
+        () => testedFun(integer1, Type.bitstring2("abc")),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -969,7 +969,7 @@ describe("Erlang", () => {
         'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
 
       assert.throw(
-        () => testedFun(Type.bitstring("abc"), integer1),
+        () => testedFun(Type.bitstring2("abc"), integer1),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -980,7 +980,7 @@ describe("Erlang", () => {
         'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
 
       assert.throw(
-        () => testedFun(integer1, Type.bitstring("abc")),
+        () => testedFun(integer1, Type.bitstring2("abc")),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -1195,7 +1195,7 @@ describe("Erlang", () => {
         'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
 
       assert.throw(
-        () => testedFun(Type.bitstring("abc"), integer1),
+        () => testedFun(Type.bitstring2("abc"), integer1),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -1206,7 +1206,7 @@ describe("Erlang", () => {
         'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
 
       assert.throw(
-        () => testedFun(integer1, Type.bitstring("abc")),
+        () => testedFun(integer1, Type.bitstring2("abc")),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -1319,7 +1319,7 @@ describe("Erlang", () => {
         'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
 
       assert.throw(
-        () => testedFun(Type.bitstring("abc"), integer1),
+        () => testedFun(Type.bitstring2("abc"), integer1),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -1330,7 +1330,7 @@ describe("Erlang", () => {
         'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
 
       assert.throw(
-        () => testedFun(integer1, Type.bitstring("abc")),
+        () => testedFun(integer1, Type.bitstring2("abc")),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -1418,7 +1418,7 @@ describe("Erlang", () => {
     it("utf8 encoding", () => {
       const result = testedFun(atom, encoding);
 
-      assert.deepStrictEqual(result, Type.bitstring("全息图"));
+      assert.deepStrictEqual(result, Type.bitstring2("全息图"));
     });
 
     it("raises ArgumentError if the first arg is not an atom", () => {
@@ -1480,7 +1480,7 @@ describe("Erlang", () => {
 
   describe("binary_to_atom/1", () => {
     it("delegates to binary_to_atom/2", () => {
-      const binary = Type.bitstring("全息图");
+      const binary = Type.bitstring2("全息图");
       const result = Erlang["binary_to_atom/1"](binary);
       const expected = Erlang["binary_to_atom/2"](binary, Type.atom("utf8"));
 
@@ -1493,7 +1493,7 @@ describe("Erlang", () => {
     const encoding = Type.atom("utf8");
 
     it("converts a binary bitstring to an already existing atom", () => {
-      const binary = Type.bitstring("Elixir.Kernel");
+      const binary = Type.bitstring2("Elixir.Kernel");
       const result = binary_to_atom(binary, encoding);
 
       assert.deepStrictEqual(result, Type.alias("Kernel"));
@@ -1501,7 +1501,7 @@ describe("Erlang", () => {
 
     it("converts a binary bitstring to a not existing yet atom", () => {
       const randomStr = `${Math.random()}`;
-      const binary = Type.bitstring(randomStr);
+      const binary = Type.bitstring2(randomStr);
       const result = binary_to_atom(binary, encoding);
 
       assert.deepStrictEqual(result, Type.atom(randomStr));
@@ -1509,7 +1509,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the first argument is a non-binary bitstring", () => {
       assertBoxedError(
-        () => binary_to_atom(Type.bitstring([1, 0, 1]), encoding),
+        () => binary_to_atom(Type.bitstring2([1, 0, 1]), encoding),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
@@ -1527,7 +1527,7 @@ describe("Erlang", () => {
   describe("binary_to_existing_atom/1", () => {
     it("delegates to binary_to_atom/1", () => {
       const randomStr = `${Math.random()}`;
-      const binary = Type.bitstring(randomStr);
+      const binary = Type.bitstring2(randomStr);
 
       const result = Erlang["binary_to_existing_atom/1"](binary);
       const expected = Erlang["binary_to_atom/1"](binary);
@@ -1539,7 +1539,7 @@ describe("Erlang", () => {
   describe("binary_to_existing_atom/2", () => {
     it("delegates to binary_to_atom/2", () => {
       const randomStr = `${Math.random()}`;
-      const binary = Type.bitstring(randomStr);
+      const binary = Type.bitstring2(randomStr);
       const encoding = Type.atom("utf8");
 
       const result = Erlang["binary_to_existing_atom/2"](binary, encoding);
@@ -1553,7 +1553,7 @@ describe("Erlang", () => {
     const bit_size = Erlang["bit_size/1"];
 
     it("bitstring", () => {
-      const myBitstring = Type.bitstring([
+      const myBitstring = Type.bitstring2([
         Type.bitstringSegment(Type.integer(2), {
           type: "integer",
           size: Type.integer(7),
@@ -1697,7 +1697,7 @@ describe("Erlang", () => {
       it("base = 2", () => {
         const result = integer_to_binary(Type.integer(123123), Type.integer(2));
 
-        const expected = Type.bitstring("11110000011110011");
+        const expected = Type.bitstring2("11110000011110011");
 
         assert.deepStrictEqual(result, expected);
       });
@@ -1708,7 +1708,7 @@ describe("Erlang", () => {
           Type.integer(16),
         );
 
-        const expected = Type.bitstring("1E0F3");
+        const expected = Type.bitstring2("1E0F3");
 
         assert.deepStrictEqual(result, expected);
       });
@@ -1719,7 +1719,7 @@ describe("Erlang", () => {
           Type.integer(36),
         );
 
-        const expected = Type.bitstring("2N03");
+        const expected = Type.bitstring2("2N03");
 
         assert.deepStrictEqual(result, expected);
       });
@@ -1739,7 +1739,7 @@ describe("Erlang", () => {
     it("negative integer", () => {
       const result = integer_to_binary(Type.integer(-123123), Type.integer(16));
 
-      const expected = Type.bitstring("-1E0F3");
+      const expected = Type.bitstring2("-1E0F3");
 
       assert.deepStrictEqual(result, expected);
     });
@@ -1780,11 +1780,11 @@ describe("Erlang", () => {
     const is_binary = Erlang["is_binary/1"];
 
     it("binary bitsting", () => {
-      assertBoxedTrue(is_binary(Type.bitstring("abc")));
+      assertBoxedTrue(is_binary(Type.bitstring2("abc")));
     });
 
     it("non-binary bitstring", () => {
-      assertBoxedFalse(is_binary(Type.bitstring([0, 1, 0])));
+      assertBoxedFalse(is_binary(Type.bitstring2([0, 1, 0])));
     });
 
     it("non-bitstring", () => {
@@ -1796,7 +1796,7 @@ describe("Erlang", () => {
     const is_bitstring = Erlang["is_bitstring/1"];
 
     it("bitstring", () => {
-      assertBoxedTrue(is_bitstring(Type.bitstring([0, 1, 0])));
+      assertBoxedTrue(is_bitstring(Type.bitstring2([0, 1, 0])));
     });
 
     it("non-bitstring", () => {
