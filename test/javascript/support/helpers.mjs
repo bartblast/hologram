@@ -2,7 +2,7 @@
 
 import {assert} from "../../../assets/node_modules/chai/index.js";
 
-import Bitstring from "../../../assets/js/bitstring.mjs";
+import Bitstring2 from "../../../assets/js/bitstring2.mjs";
 import ComponentRegistry from "../../../assets/js/component_registry.mjs";
 import Elixir_Code from "../../../assets/js/elixir/code.mjs";
 import Elixir_Kernel from "../../../assets/js/elixir/kernel.mjs";
@@ -222,12 +222,12 @@ function defineElixirHologramRouterHelpersModule() {
             paramsAcc,
           ).data[1];
 
-          const paramValueText = Bitstring.toText(
+          const paramValueText = Bitstring2.toText(
             Elixir_String_Chars["to_string/1"](paramValue),
           );
 
-          const newPathAcc = Type.bitstring(
-            Bitstring.toText(pathAcc).replaceAll(
+          const newPathAcc = Type.bitstring2(
+            Bitstring2.toText(pathAcc).replaceAll(
               `:${key.value}`,
               paramValueText,
             ),
@@ -255,13 +255,13 @@ function defineElixirStringCharsModule() {
     "to_string/1": (term) => {
       switch (term.type) {
         case "atom":
-          return Type.bitstring(term.value);
+          return Type.bitstring2(term.value);
 
-        case "bitstring":
+        case "bitstring2":
           return term;
 
         case "integer":
-          return Type.bitstring(term.value.toString());
+          return Type.bitstring2(term.value.toString());
 
         default: {
           const inspectedTerm = Interpreter.inspect(term);
