@@ -482,7 +482,7 @@ describe("Type", () => {
       data: {
         "atom(__exception__)": [Type.atom("__exception__"), Type.boolean(true)],
         "atom(__struct__)": [Type.atom("__struct__"), Type.alias("Aaa.Bbb")],
-        "atom(message)": [Type.atom("message"), Type.bitstring("abc")],
+        "atom(message)": [Type.atom("message"), Type.bitstring2("abc")],
       },
     };
 

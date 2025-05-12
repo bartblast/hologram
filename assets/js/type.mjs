@@ -183,7 +183,7 @@ export default class Type {
   static errorStruct(aliasStr, message) {
     const data = [
       [Type.atom("__exception__"), Type.boolean(true)],
-      [Type.atom("message"), Type.bitstring(message)],
+      [Type.atom("message"), Type.bitstring2(message)],
     ];
 
     return Type.struct(aliasStr, data);
