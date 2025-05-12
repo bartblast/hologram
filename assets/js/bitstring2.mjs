@@ -352,6 +352,10 @@ export default class Bitstring2 {
     };
   }
 
+  static isEmpty(bitstring) {
+    return bitstring.text === "" || bitstring.bytes?.length === 0;
+  }
+
   // See: String.printable?/2
   // https://github.com/elixir-lang/elixir/blob/6bfb95ab884f11475de6da3f99c6528938e025a8/lib/elixir/lib/string.ex#L322
   static isPrintableCodePoint(codePoint) {

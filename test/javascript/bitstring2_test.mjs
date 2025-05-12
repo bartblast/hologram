@@ -4162,6 +4162,40 @@ describe("Bitstring2", () => {
     assert.deepStrictEqual(result, expected);
   });
 
+  describe("isEmpty()", () => {
+    describe("empty", () => {
+      it("with text field", () => {
+        const bitstring = Type.bitstring2("");
+        bitstring.bytes = null;
+
+        assert.isTrue(Bitstring2.isEmpty(bitstring));
+      });
+
+      it("with bytes field", () => {
+        const bitstring = Type.bitstring2([]);
+        bitstring.text = null;
+
+        assert.isTrue(Bitstring2.isEmpty(bitstring));
+      });
+    });
+
+    describe("non-empty", () => {
+      it("with text field", () => {
+        const bitstring = Type.bitstring2("abc");
+        bitstring.bytes = null;
+
+        assert.isFalse(Bitstring2.isEmpty(bitstring));
+      });
+
+      it("with bytes field", () => {
+        const bitstring = Type.bitstring2([1, 0, 1]);
+        bitstring.text = null;
+
+        assert.isFalse(Bitstring2.isEmpty(bitstring));
+      });
+    });
+  });
+
   describe("isPrintableCodePoint()", () => {
     it("code point in range 0x20..0x7E", () => {
       assert.isTrue(Bitstring2.isPrintableCodePoint(40));
