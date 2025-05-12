@@ -44,7 +44,7 @@ const Elixir_String = {
       );
     }
 
-    if (!Type.isBinary2(pattern) || pattern.bits.length === 0) {
+    if (!Type.isBinary2(pattern) || Bitstring2.isEmpty(pattern)) {
       throw new HologramInterpreterError(
         "using String.replace/3 pattern argument other than non-empty binary is not yet implemented in Hologram",
       );
