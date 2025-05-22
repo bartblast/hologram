@@ -4322,7 +4322,12 @@ describe("Bitstring2", () => {
         assert.isTrue(Bitstring2.isText(bitstring));
       });
 
-      it("non-binary", () => {
+      it("not bitstring", () => {
+        const term = Type.integer(123);
+        assert.isFalse(Bitstring2.isText(term));
+      });
+
+      it("non-binary bitstring", () => {
         const bitstring = Type.bitstring2([1, 0, 1]);
         assert.isFalse(Bitstring2.isText(bitstring));
       });

@@ -426,6 +426,10 @@ export default class Bitstring2 {
   }
 
   static isText(bitstring) {
+    if (!Type.isBinary2(bitstring)) {
+      return false;
+    }
+
     $.maybeSetTextFromBytes(bitstring);
     return bitstring.text !== false;
   }
