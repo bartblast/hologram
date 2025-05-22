@@ -5004,6 +5004,52 @@ describe("Bitstring2", () => {
     });
   });
 
+  describe("toCodepoints()", () => {
+    describe("single codepoint", () => {
+      it("$ (1 byte)", () => {
+        const bitstring = Type.bitstring2("$");
+        const result = Bitstring2.toCodepoints(bitstring);
+
+        assert.deepStrictEqual(result, [36]);
+      });
+
+      it("£ (2 bytes)", () => {
+        const bitstring = Type.bitstring2("£");
+        const result = Bitstring2.toCodepoints(bitstring);
+
+        assert.deepStrictEqual(result, [163]);
+      });
+
+      it("€ (3 bytes)", () => {
+        const bitstring = Type.bitstring2("€");
+        const result = Bitstring2.toCodepoints(bitstring);
+
+        assert.deepStrictEqual(result, [8364]);
+      });
+
+      it("𐍈 (4 bytes)", () => {
+        const bitstring = Type.bitstring2("𐍈");
+        const result = Bitstring2.toCodepoints(bitstring);
+
+        assert.deepStrictEqual(result, [66376]);
+      });
+    });
+
+    it("multiple codepoints", () => {
+      const bitstring = Type.bitstring2("$£€𐍈");
+      const result = Bitstring2.toCodepoints(bitstring);
+
+      assert.deepStrictEqual(result, [36, 163, 8364, 66376]);
+    });
+
+    it("converts bytes to text when needed", () => {
+      const bitstring = Bitstring2.fromBytes([97, 98, 99]);
+      const result = Bitstring2.toCodepoints(bitstring);
+
+      assert.deepStrictEqual(result, [97, 98, 99]);
+    });
+  });
+
   describe("toFloat()", () => {
     describe("big-endian", () => {
       describe("64-bit", () => {
