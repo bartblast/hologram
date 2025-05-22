@@ -1,7 +1,7 @@
 "use strict";
 
 import AssetPathRegistry from "./asset_path_registry.mjs";
-import Bitstring from "./bitstring.mjs";
+import Bitstring2 from "./bitstring2.mjs";
 import Client from "./client.mjs";
 import CommandQueue from "./command_queue.mjs";
 import ComponentRegistry from "./component_registry.mjs";
@@ -50,7 +50,7 @@ export default class Hologram {
   static virtualDocument = null;
 
   static #deps = {
-    Bitstring: Bitstring,
+    Bitstring2: Bitstring2,
     HologramBoxedError: HologramBoxedError,
     HologramInterpreterError: HologramInterpreterError,
     Interpreter: Interpreter,
@@ -341,7 +341,7 @@ export default class Hologram {
   }
 
   static #buildPagePath(toParam) {
-    return Bitstring.toText(
+    return Bitstring2.toText(
       Elixir_Hologram_Router_Helpers["page_path/1"](toParam),
     );
   }
@@ -564,7 +564,7 @@ export default class Hologram {
           module: Interpreter.inspect(
             Erlang_Maps["get/2"](Type.atom("__struct__"), event.error.struct),
           ),
-          message: Bitstring.toText(
+          message: Bitstring2.toText(
             Erlang_Maps["get/2"](Type.atom("message"), event.error.struct),
           ),
         });
