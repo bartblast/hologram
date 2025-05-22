@@ -151,7 +151,6 @@ describe("Type", () => {
         text: "abc",
         bytes: null,
         leftoverBitCount: 0,
-        mapKey: null,
         hex: null,
       };
 
@@ -174,7 +173,6 @@ describe("Type", () => {
         text: null,
         bytes: new Uint8Array([97, 98]),
         leftoverBitCount: 0,
-        mapKey: null,
         hex: null,
       };
 
@@ -189,7 +187,6 @@ describe("Type", () => {
         text: null,
         bytes: new Uint8Array([168]),
         leftoverBitCount: 5,
-        mapKey: null,
         hex: null,
       };
 
