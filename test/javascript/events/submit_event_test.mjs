@@ -31,8 +31,8 @@ describe("SubmitEvent", () => {
     assert.deepStrictEqual(
       result,
       Type.map([
-        [Type.bitstring("name"), Type.bitstring("John Doe")],
-        [Type.bitstring("email"), Type.bitstring("john.doe@example.com")],
+        [Type.bitstring2("name"), Type.bitstring2("John Doe")],
+        [Type.bitstring2("email"), Type.bitstring2("john.doe@example.com")],
       ]),
     );
   });
