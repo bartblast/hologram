@@ -1,8 +1,15 @@
 "use strict";
 
-import Bitstring from "./bitstring.mjs";
+import Bitstring2 from "./bitstring2.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
-import Type from "./type.mjs";
+
+/*
+Format Changelog
+
+v2:
+2025-05-22 22:02 (CEST)
+__binary__:* and __bitstring__:* replaced with b:*
+*/
 
 export default class Serializer {
   // When isFullScope is set to true, then everything is serialized,
@@ -19,8 +26,8 @@ export default class Serializer {
         return `__atom__:${value.value}`;
       }
 
-      if (boxedValueType === "bitstring") {
-        return $.#serializeBoxedBitstring(value);
+      if (boxedValueType === "bitstring2") {
+        return Bitstring2.serialize(value);
       }
 
       if (boxedValueType === "float") {
@@ -69,7 +76,7 @@ export default class Serializer {
     ) {
       if (isVersioned) {
         // [version, data]
-        return `[1,"${serialized}"]`;
+        return `[2,"${serialized}"]`;
       }
 
       return `"${serialized}"`;
@@ -77,7 +84,7 @@ export default class Serializer {
 
     if (isVersioned) {
       // [version, data]
-      return `[1,${serialized}]`;
+      return `[2,${serialized}]`;
     }
 
     return serialized;
@@ -97,14 +104,6 @@ export default class Serializer {
     // eslint-disable-next-line no-unused-vars
     const {clauses, context, uniqueId, ...rest} = term;
     return rest;
-  }
-
-  static #serializeBoxedBitstring(term) {
-    if (Type.isBinary(term)) {
-      return `__binary__:${Bitstring.toText(term)}`;
-    }
-
-    return {...term, bits: Array.from(term.bits)};
   }
 
   static #serializeBoxedPid(term, isFullScope) {
