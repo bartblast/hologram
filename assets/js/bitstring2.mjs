@@ -425,6 +425,11 @@ export default class Bitstring2 {
     return true;
   }
 
+  static isText(bitstring) {
+    $.maybeSetTextFromBytes(bitstring);
+    return bitstring.text !== false;
+  }
+
   static maybeSetBytesFromText(bitstring) {
     if (bitstring.bytes === null) {
       bitstring.bytes = $.#encoder.encode(bitstring.text);

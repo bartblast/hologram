@@ -4285,6 +4285,55 @@ describe("Bitstring2", () => {
     });
   });
 
+  describe("isText()", () => {
+    describe("based on text field", () => {
+      it("empty text", () => {
+        const bitstring = Type.bitstring2("");
+        assert.isTrue(Bitstring2.isText(bitstring));
+      });
+
+      it("ASCII text", () => {
+        const bitstring = Type.bitstring2("abc");
+        assert.isTrue(Bitstring2.isText(bitstring));
+      });
+
+      it("Unicode text", () => {
+        const bitstring = Type.bitstring2("全息图");
+        assert.isTrue(Bitstring2.isText(bitstring));
+      });
+    });
+
+    describe("based on bytes field", () => {
+      it("empty text", () => {
+        const bitstring = Type.bitstring2([]);
+        assert.isTrue(Bitstring2.isText(bitstring));
+      });
+
+      it("ASCII text", () => {
+        const bitstring = Bitstring2.fromBytes([97, 98, 99]);
+        assert.isTrue(Bitstring2.isText(bitstring));
+      });
+
+      it("Unicode text", () => {
+        const bitstring = Bitstring2.fromBytes([
+          229, 133, 168, 230, 129, 175, 229, 155, 190,
+        ]);
+
+        assert.isTrue(Bitstring2.isText(bitstring));
+      });
+
+      it("non-binary", () => {
+        const bitstring = Type.bitstring2([1, 0, 1]);
+        assert.isFalse(Bitstring2.isText(bitstring));
+      });
+
+      it("with invalid code point", () => {
+        const bitstring = Bitstring2.fromBytes([255]);
+        assert.isFalse(Bitstring2.isText(bitstring));
+      });
+    });
+  });
+
   describe("maybeSetBytesFromText()", () => {
     it("sets bytes when bytes is null", () => {
       const bitstring = Type.bitstring2("abc");
