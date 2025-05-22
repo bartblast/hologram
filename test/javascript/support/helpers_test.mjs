@@ -19,14 +19,14 @@ defineModule2Fixture();
 const module1 = Type.alias("Hologram.Test.Fixtures.Router.Helpers.Module1");
 const module2 = Type.alias("Hologram.Test.Fixtures.Router.Helpers.Module2");
 
-describe("Elixir_Hologram_Router_Helpers", () => {
+describe("defineElixirHologramRouterHelpersModule", () => {
   describe("page_path/1", () => {
     const page_path = Elixir_Hologram_Router_Helpers["page_path/1"];
 
     it("module arg", () => {
       const result = page_path(module1);
 
-      const expected = Type.bitstring(
+      const expected = Type.bitstring2(
         "/hologram-test-fixtures-router-helpers-module1",
       );
 
@@ -41,7 +41,7 @@ describe("Elixir_Hologram_Router_Helpers", () => {
 
       const result = page_path(Type.tuple([module2, params]));
 
-      const expected = Type.bitstring(
+      const expected = Type.bitstring2(
         "/hologram-test-fixtures-router-helpers-module2/abc/123",
       );
 
@@ -60,7 +60,7 @@ describe("Elixir_Hologram_Router_Helpers", () => {
 
       const result = page_path(module2, params);
 
-      const expected = Type.bitstring(
+      const expected = Type.bitstring2(
         "/hologram-test-fixtures-router-helpers-module2/abc/123",
       );
 
@@ -91,7 +91,7 @@ describe("Elixir_Hologram_Router_Helpers", () => {
       const params = Type.keywordList([
         [Type.atom("param_1"), Type.atom("abc")],
         [Type.atom("param_2"), Type.integer(123)],
-        [Type.atom("param_3"), Type.bitstring("xyz")],
+        [Type.atom("param_3"), Type.bitstring2("xyz")],
       ]);
 
       assertBoxedError(
@@ -105,7 +105,7 @@ describe("Elixir_Hologram_Router_Helpers", () => {
       const params = Type.keywordList([
         [Type.atom("param_1"), Type.atom("abc")],
         [Type.atom("param_2"), Type.integer(123)],
-        [Type.atom("param_3"), Type.bitstring("xyz")],
+        [Type.atom("param_3"), Type.bitstring2("xyz")],
         [Type.atom("param_4"), Type.integer(987)],
       ]);
 
