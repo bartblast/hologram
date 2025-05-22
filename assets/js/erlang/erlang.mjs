@@ -291,11 +291,7 @@ const Erlang = {
       );
     }
 
-    const codePoints = [...atom.value].map((cp) =>
-      Type.integer(cp.codePointAt(0)),
-    );
-
-    return Type.list(codePoints);
+    return Bitstring2.toCodepoints(Type.bitstring2(atom.value));
   },
   // End atom_to_list/1
   // Deps: []
