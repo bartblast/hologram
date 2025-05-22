@@ -24,6 +24,16 @@ function testNestedDeserialization(nestedTerm) {
   assert.deepStrictEqual(deserialized, term);
 }
 
+function testNestedBitstringDeserialization(nestedTerm) {
+  const term = {x: nestedTerm, y: 2};
+  const serialized = serialize(term);
+  const deserialized = deserialize(serialized);
+
+  assert.equal(typeof deserialized, "object");
+  assert.deepStrictEqual(Object.keys(deserialized), ["x", "y"]);
+  assert.isTrue(Interpreter.isStrictlyEqual(deserialized.x, term.x));
+}
+
 function testNotVersionedDeserialization(term) {
   const serialized = serialize(term, true, false);
   const deserialized = deserialize(serialized, false);
@@ -31,11 +41,25 @@ function testNotVersionedDeserialization(term) {
   assert.deepStrictEqual(deserialized, term);
 }
 
+function testNotVersionedBitstringDeserialization(term) {
+  const serialized = serialize(term, true, false);
+  const deserialized = deserialize(serialized, false);
+
+  assert.isTrue(Interpreter.isStrictlyEqual(deserialized, term));
+}
+
 function testTopLevelDeserialization(term) {
   const serialized = serialize(term);
   const deserialized = deserialize(serialized);
 
   assert.deepStrictEqual(deserialized, term);
+}
+
+function testTopLevelBitstringDeserialization(term) {
+  const serialized = serialize(term);
+  const deserialized = deserialize(serialized);
+
+  assert.isTrue(Interpreter.isStrictlyEqual(deserialized, term));
 }
 
 describe("Deserializer", () => {
@@ -182,40 +206,6 @@ describe("Deserializer", () => {
         });
       });
 
-      describe("bitstring", () => {
-        describe("binary", () => {
-          const term = Type.bitstring('a"bc');
-
-          it("top-level", () => {
-            testTopLevelDeserialization(term);
-          });
-
-          it("nested", () => {
-            testNestedDeserialization(term);
-          });
-
-          it("not versioned", () => {
-            testNotVersionedDeserialization(term);
-          });
-        });
-
-        describe("non-binary", () => {
-          const term = Type.bitstring([1, 0, 1, 0]);
-
-          it("top-level", () => {
-            testTopLevelDeserialization(term);
-          });
-
-          it("nested", () => {
-            testNestedDeserialization(term);
-          });
-
-          it("not versioned", () => {
-            testNotVersionedDeserialization(term);
-          });
-        });
-      });
-
       describe("float", () => {
         const term = Type.float(1.23);
 
@@ -267,7 +257,7 @@ describe("Deserializer", () => {
       describe("map", () => {
         const term = Type.map([
           [Type.atom("x"), Type.integer(1)],
-          [Type.bitstring("y"), Type.float(1.23)],
+          [Type.atom("y"), Type.float(1.23)],
         ]);
 
         it("top-level", () => {
@@ -350,7 +340,7 @@ describe("Deserializer", () => {
 
     describe("JS terms", () => {
       describe("array", () => {
-        const term = [123, Type.float(2.34), Type.bitstring([1, 0, 1, 0])];
+        const term = [123, Type.float(2.34), Type.atom("abc")];
 
         it("top-level", () => {
           testTopLevelDeserialization(term);
@@ -539,6 +529,60 @@ describe("Deserializer", () => {
 
         it("not versioned", () => {
           testNotVersionedDeserialization(term);
+        });
+      });
+    });
+
+    describe("v1", () => {});
+
+    describe("v2", () => {
+      describe("bitstring", () => {
+        describe("empty", () => {
+          const term = Type.bitstring2("");
+
+          it("top-level", () => {
+            testTopLevelBitstringDeserialization(term);
+          });
+
+          it("nested", () => {
+            testNestedBitstringDeserialization(term);
+          });
+
+          it("not versioned", () => {
+            testNotVersionedBitstringDeserialization(term);
+          });
+        });
+
+        it("non-empty without leftover bits", () => {
+          const term = Type.bitstring2("Hologram");
+
+          it("top-level", () => {
+            testTopLevelBitstringDeserialization(term);
+          });
+
+          it("nested", () => {
+            testNestedBitstringDeserialization(term);
+          });
+
+          it("not versioned", () => {
+            testNotVersionedBitstringDeserialization(term);
+          });
+        });
+
+        it("non-empty with leftover bits", () => {
+          const term = Type.bitstring2([1, 0, 1, 0]);
+
+          it("top-level", () => {
+            testTopLevelBitstringDeserialization(term);
+          });
+
+          it("nested", () => {
+            testNestedBitstringDeserialization(term);
+          });
+
+          it("not versioned", () => {
+            testNotVersionedBitstringDeserialization(term);
+          });
         });
       });
     });
