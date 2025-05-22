@@ -5014,29 +5014,33 @@ describe("Bitstring2", () => {
       it("$ (1 byte)", () => {
         const bitstring = Type.bitstring2("$");
         const result = Bitstring2.toCodepoints(bitstring);
+        const expected = Type.list([Type.integer(36)]);
 
-        assert.deepStrictEqual(result, [36]);
+        assert.deepStrictEqual(result, expected);
       });
 
       it("£ (2 bytes)", () => {
         const bitstring = Type.bitstring2("£");
         const result = Bitstring2.toCodepoints(bitstring);
+        const expected = Type.list([Type.integer(163)]);
 
-        assert.deepStrictEqual(result, [163]);
+        assert.deepStrictEqual(result, expected);
       });
 
       it("€ (3 bytes)", () => {
         const bitstring = Type.bitstring2("€");
         const result = Bitstring2.toCodepoints(bitstring);
+        const expected = Type.list([Type.integer(8364)]);
 
-        assert.deepStrictEqual(result, [8364]);
+        assert.deepStrictEqual(result, expected);
       });
 
       it("𐍈 (4 bytes)", () => {
         const bitstring = Type.bitstring2("𐍈");
         const result = Bitstring2.toCodepoints(bitstring);
+        const expected = Type.list([Type.integer(66376)]);
 
-        assert.deepStrictEqual(result, [66376]);
+        assert.deepStrictEqual(result, expected);
       });
     });
 
@@ -5044,14 +5048,27 @@ describe("Bitstring2", () => {
       const bitstring = Type.bitstring2("$£€𐍈");
       const result = Bitstring2.toCodepoints(bitstring);
 
-      assert.deepStrictEqual(result, [36, 163, 8364, 66376]);
+      const expected = Type.list([
+        Type.integer(36),
+        Type.integer(163),
+        Type.integer(8364),
+        Type.integer(66376),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
     });
 
     it("converts bytes to text when needed", () => {
       const bitstring = Bitstring2.fromBytes([97, 98, 99]);
       const result = Bitstring2.toCodepoints(bitstring);
 
-      assert.deepStrictEqual(result, [97, 98, 99]);
+      const expected = Type.list([
+        Type.integer(97),
+        Type.integer(98),
+        Type.integer(99),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
     });
   });
 

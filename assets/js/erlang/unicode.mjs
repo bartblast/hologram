@@ -112,11 +112,7 @@ const Erlang_Unicode = {
       bitstring = data;
     }
 
-    return Type.list(
-      Bitstring2.toCodepoints(bitstring).map((codepoint) =>
-        Type.integer(codepoint),
-      ),
-    );
+    return Bitstring2.toCodepoints(bitstring);
   },
   // End characters_to_list/1
   // Deps: []
