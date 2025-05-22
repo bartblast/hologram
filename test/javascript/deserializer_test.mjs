@@ -533,8 +533,6 @@ describe("Deserializer", () => {
       });
     });
 
-    describe("v1", () => {});
-
     describe("v2", () => {
       describe("bitstring", () => {
         describe("empty", () => {
