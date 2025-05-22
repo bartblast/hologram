@@ -4498,7 +4498,7 @@ describe("Bitstring2", () => {
     });
   });
 
-  describe.only("maybeResolveHex()", () => {
+  describe("maybeResolveHex()", () => {
     it("when hex field is already set", () => {
       const bitstring = Type.bitstring2("Hologram");
       bitstring.hex = "already_set";
