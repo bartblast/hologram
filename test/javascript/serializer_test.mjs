@@ -13,7 +13,7 @@ import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
-describe.only("Serializer", () => {
+describe("Serializer", () => {
   describe("serialize()", () => {
     const serialize = Serializer.serialize;
 
