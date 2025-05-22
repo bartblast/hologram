@@ -93,6 +93,7 @@ export default class Bitstring2 {
       bytes: resultBytes,
       leftoverBitCount: resultLeftoverBitCount,
       mapKey: null,
+      hex: null,
     };
   }
 
@@ -163,6 +164,7 @@ export default class Bitstring2 {
       bytes,
       leftoverBitCount,
       mapKey: null,
+      hex: null,
     };
   }
 
@@ -176,6 +178,7 @@ export default class Bitstring2 {
       bytes: uint8Bytes,
       leftoverBitCount: 0,
       mapKey: null,
+      hex: null,
     };
   }
 
@@ -241,6 +244,7 @@ export default class Bitstring2 {
       bytes: new Uint8Array(buffer),
       leftoverBitCount: 0,
       mapKey: null,
+      hex: null,
     };
   }
 
@@ -255,6 +259,7 @@ export default class Bitstring2 {
         bytes: null,
         leftoverBitCount: 0,
         mapKey: null,
+        hex: null,
       };
     }
 
@@ -280,6 +285,7 @@ export default class Bitstring2 {
         bytes: null,
         leftoverBitCount: 0,
         mapKey: null,
+        hex: null,
       };
     }
 
@@ -298,6 +304,7 @@ export default class Bitstring2 {
         bytes: null,
         leftoverBitCount: 0,
         mapKey: null,
+        hex: null,
       };
     }
 
@@ -312,6 +319,7 @@ export default class Bitstring2 {
         bytes: sourceBytes.subarray(0, completeBytes),
         leftoverBitCount: 0,
         mapKey: null,
+        hex: null,
       };
     }
 
@@ -339,6 +347,7 @@ export default class Bitstring2 {
       bytes,
       leftoverBitCount: leftoverBits,
       mapKey: null,
+      hex: null,
     };
   }
 
@@ -349,6 +358,7 @@ export default class Bitstring2 {
       bytes: null,
       leftoverBitCount: 0,
       mapKey: null,
+      hex: null,
     };
   }
 
@@ -548,6 +558,7 @@ export default class Bitstring2 {
         ),
         leftoverBitCount: 0,
         mapKey: null,
+        hex: null,
       };
     }
 
@@ -591,6 +602,7 @@ export default class Bitstring2 {
       bytes: resultBytes,
       leftoverBitCount: resultLeftoverBits,
       mapKey: null,
+      hex: null,
     };
   }
 
@@ -811,6 +823,7 @@ export default class Bitstring2 {
       bytes: resultBytes,
       leftoverBitCount: 0,
       mapKey: null,
+      hex: null,
     };
   }
 
@@ -859,6 +872,7 @@ export default class Bitstring2 {
         bytes: bytesArray,
         leftoverBitCount: leftoverBits,
         mapKey: null,
+        hex: null,
       };
     } else if (bitCount === 16 && completeBytes === 2) {
       dataView.setUint16(0, numberValue & 0xffff, isLittleEndian);
@@ -869,6 +883,7 @@ export default class Bitstring2 {
         bytes: bytesArray,
         leftoverBitCount: leftoverBits,
         mapKey: null,
+        hex: null,
       };
     } else if (bitCount === 32 && completeBytes === 4) {
       dataView.setUint32(0, numberValue & 0xffffffff, isLittleEndian);
@@ -879,6 +894,7 @@ export default class Bitstring2 {
         bytes: bytesArray,
         leftoverBitCount: leftoverBits,
         mapKey: null,
+        hex: null,
       };
     }
 
@@ -970,6 +986,7 @@ export default class Bitstring2 {
       bytes: bytesArray,
       leftoverBitCount: leftoverBits,
       mapKey: null,
+      hex: null,
     };
   }
 
@@ -1007,6 +1024,7 @@ export default class Bitstring2 {
         bytes: bytesArray,
         leftoverBitCount: leftoverBits,
         mapKey: null,
+        hex: null,
       };
     }
 
@@ -1040,6 +1058,7 @@ export default class Bitstring2 {
         bytes: bytesArray,
         leftoverBitCount: leftoverBits,
         mapKey: null,
+        hex: null,
       };
     }
 
@@ -1103,6 +1122,7 @@ export default class Bitstring2 {
       bytes: bytesArray,
       leftoverBitCount: leftoverBits,
       mapKey: null,
+      hex: null,
     };
   }
 

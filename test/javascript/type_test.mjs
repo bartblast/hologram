@@ -151,6 +151,7 @@ describe("Type", () => {
         bytes: null,
         leftoverBitCount: 0,
         mapKey: null,
+        hex: null,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -173,6 +174,7 @@ describe("Type", () => {
         bytes: new Uint8Array([97, 98]),
         leftoverBitCount: 0,
         mapKey: null,
+        hex: null,
       };
 
       assert.deepStrictEqual(result, expected);
@@ -187,6 +189,7 @@ describe("Type", () => {
         bytes: new Uint8Array([168]),
         leftoverBitCount: 5,
         mapKey: null,
+        hex: null,
       };
 
       assert.deepStrictEqual(result, expected);
