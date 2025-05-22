@@ -4498,6 +4498,33 @@ describe("Bitstring2", () => {
     });
   });
 
+  describe.only("maybeResolveHex()", () => {
+    it("when hex field is already set", () => {
+      const bitstring = Type.bitstring2("Hologram");
+      bitstring.hex = "already_set";
+
+      Bitstring2.maybeResolveHex(bitstring);
+
+      assert.equal(bitstring.hex, "already_set");
+    });
+
+    it("for empty bitstring", () => {
+      const bitstring = Type.bitstring2("");
+
+      Bitstring2.maybeResolveHex(bitstring);
+
+      assert.equal(bitstring.hex, "");
+    });
+
+    it("for non-empty bitstring", () => {
+      const bitstring = Type.bitstring2("Hologram");
+
+      Bitstring2.maybeResolveHex(bitstring);
+
+      assert.equal(bitstring.hex, "486f6c6f6772616d");
+    });
+  });
+
   describe("maybeSetBytesFromText()", () => {
     it("sets bytes when bytes is null", () => {
       const bitstring = Type.bitstring2("abc");

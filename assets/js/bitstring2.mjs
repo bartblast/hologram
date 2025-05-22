@@ -444,6 +444,21 @@ export default class Bitstring2 {
     return bitstring.text !== false;
   }
 
+  static maybeResolveHex(bitstring) {
+    if (bitstring.hex === null) {
+      $.maybeSetBytesFromText(bitstring);
+
+      let hex = "";
+      const bytes = bitstring.bytes;
+
+      for (let i = 0; i < bytes.length; i++) {
+        hex += bytes[i].toString(16).padStart(2, "0");
+      }
+
+      bitstring.hex = hex;
+    }
+  }
+
   static maybeSetBytesFromText(bitstring) {
     if (bitstring.bytes === null) {
       bitstring.bytes = $.#encoder.encode(bitstring.text);
