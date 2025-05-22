@@ -495,9 +495,21 @@ export default class Type {
   }
 
   static #encodeBitstring2TypeMapKey(bitstring) {
-    Bitstring2.maybeSetMapKey(bitstring);
+    Bitstring2.maybeResolveHex(bitstring);
 
-    return bitstring.mapKey;
+    let key = "b";
+    const hex = bitstring.hex;
+    const leftoverBitCount = bitstring.leftoverBitCount;
+
+    if (hex !== "") {
+      key += `:${hex}`;
+    }
+
+    if (leftoverBitCount > 0) {
+      key += `:${leftoverBitCount}`;
+    }
+
+    return key;
   }
 
   static #encodeEnumTypeMapKey(term) {

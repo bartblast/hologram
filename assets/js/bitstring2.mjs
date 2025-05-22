@@ -465,29 +465,6 @@ export default class Bitstring2 {
     }
   }
 
-  static maybeSetMapKey(bitstring) {
-    if (bitstring.mapKey === null) {
-      $.maybeSetBytesFromText(bitstring);
-
-      let key = "b";
-      const bytes = bitstring.bytes;
-
-      if (bytes.length > 0) {
-        key += ":";
-      }
-
-      for (let i = 0; i < bytes.length; i++) {
-        key += bytes[i].toString(16).padStart(2, "0");
-      }
-
-      if (bitstring.leftoverBitCount > 0) {
-        key += `:${bitstring.leftoverBitCount}`;
-      }
-
-      bitstring.mapKey = key;
-    }
-  }
-
   static maybeSetTextFromBytes(bitstring) {
     if (bitstring.text === null) {
       try {

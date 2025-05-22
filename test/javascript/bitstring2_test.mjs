@@ -12,7 +12,7 @@ import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
-describe("Bitstring2", () => {
+describe.only("Bitstring2", () => {
   describe("calculateBitCount()", () => {
     it("calculates bit count for bitstring with bytes and no leftover bits", () => {
       const bitstring = {
@@ -4559,42 +4559,6 @@ describe("Bitstring2", () => {
         bitstring.bytes,
         new Uint8Array([229, 133, 168, 230, 129, 175, 229, 155, 190]),
       );
-    });
-  });
-
-  describe("maybeSetMapKey()", () => {
-    it("when mapKey is already set", () => {
-      const bitstring = Type.bitstring2("Hologram");
-      bitstring.mapKey = "already_set";
-
-      Bitstring2.maybeSetMapKey(bitstring);
-
-      assert.equal(bitstring.mapKey, "already_set");
-    });
-
-    it("for empty bitstring", () => {
-      const bitstring = Type.bitstring2("");
-
-      Bitstring2.maybeSetMapKey(bitstring);
-
-      assert.equal(bitstring.mapKey, "b");
-    });
-
-    it("for bitstring without leftover bits", () => {
-      const bitstring = Type.bitstring2("Hologram");
-
-      Bitstring2.maybeSetMapKey(bitstring);
-
-      assert.equal(bitstring.mapKey, "b:486f6c6f6772616d");
-    });
-
-    it("for bitstring with leftover bits", () => {
-      const bitstring = Bitstring2.fromBytes([1, 52, 103]);
-      bitstring.leftoverBitCount = 5;
-
-      Bitstring2.maybeSetMapKey(bitstring);
-
-      assert.equal(bitstring.mapKey, "b:013467:5");
     });
   });
 

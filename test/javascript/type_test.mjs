@@ -6,6 +6,7 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
+import Bitstring2 from "../../assets/js/bitstring2.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Sequence from "../../assets/js/sequence.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -412,11 +413,29 @@ describe("Type", () => {
       assert.equal(result, "atom(abc)");
     });
 
-    it("encodes boxed bitstring value as map key", () => {
-      const bitstring = Type.bitstring2("Hologram");
-      const result = Type.encodeMapKey(bitstring);
+    describe("encodes boxed bitstring value as map key", () => {
+      it("for empty bitstring", () => {
+        const bitstring = Type.bitstring2("");
+        const result = Type.encodeMapKey(bitstring);
 
-      assert.equal(result, "b:486f6c6f6772616d");
+        assert.equal(result, "b");
+      });
+
+      it("for bitstring without leftover bits", () => {
+        const bitstring = Type.bitstring2("Hologram");
+        const result = Type.encodeMapKey(bitstring);
+
+        assert.equal(result, "b:486f6c6f6772616d");
+      });
+
+      it("for bitstring with leftover bits", () => {
+        const bitstring = Bitstring2.fromBytes([1, 52, 103]);
+        bitstring.leftoverBitCount = 5;
+
+        const result = Type.encodeMapKey(bitstring);
+
+        assert.equal(result, "b:013467:5");
+      });
     });
 
     it("encodes boxed float value as map key", () => {
