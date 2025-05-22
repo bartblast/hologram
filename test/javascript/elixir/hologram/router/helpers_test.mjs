@@ -27,13 +27,13 @@ describe("Elixir_Hologram_Router_Helpers", () => {
     const asset_path = Elixir_Hologram_Router_Helpers["asset_path/1"];
 
     it("entry for static path exists", () => {
-      const result = asset_path(Type.bitstring("static-path-2"));
-      assert.deepStrictEqual(result, Type.bitstring("/asset-path-2"));
+      const result = asset_path(Type.bitstring2("static-path-2"));
+      assert.deepStrictEqual(result, Type.bitstring2("/asset-path-2"));
     });
 
     it("entry for static path doesn't exists", () => {
       assertBoxedError(
-        () => asset_path(Type.bitstring("static-path-4")),
+        () => asset_path(Type.bitstring2("static-path-4")),
         "Hologram.AssetNotFoundError",
         'there is no such asset: "static-path-4"',
       );
