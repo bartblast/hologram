@@ -8,7 +8,7 @@ import {
 import Operation from "../../assets/js/operation.mjs";
 import Type from "../../assets/js/type.mjs";
 
-const defaultTarget = Type.bitstring("my_default_target");
+const defaultTarget = Type.bitstring2("my_default_target");
 const eventParam = "my_event_param";
 
 defineGlobalErlangAndElixirModules();
@@ -19,7 +19,7 @@ describe("Operation", () => {
       // Example: $click="my_action"
       // Spec DOM: [text: "my_action"], which is equivalent to [{:text, "my_action"}]
       const specDom = Type.keywordList([
-        [Type.atom("text"), Type.bitstring("my_action")],
+        [Type.atom("text"), Type.bitstring2("my_action")],
       ]);
 
       const operation = Operation.fromSpecDom(
@@ -167,7 +167,7 @@ describe("Operation", () => {
           Type.tuple([
             Type.keywordList([
               [Type.atom("action"), Type.atom("my_action")],
-              [Type.atom("target"), Type.bitstring("my_target")],
+              [Type.atom("target"), Type.bitstring2("my_target")],
             ]),
           ]),
         ],
@@ -184,7 +184,7 @@ describe("Operation", () => {
         Type.actionStruct({
           name: Type.atom("my_action"),
           params: Type.map([[Type.atom("event"), eventParam]]),
-          target: Type.bitstring("my_target"),
+          target: Type.bitstring2("my_target"),
         }),
       );
     });
@@ -236,9 +236,9 @@ describe("Operation", () => {
       // Spec DOM: [text: "aaa", expression: {123}, text: "bbb"],
       // which is equivalent to [{:text, "aaa"}, {:expression, {123}}, {:text, "bbb"}]
       const specDom = Type.keywordList([
-        [Type.atom("text"), Type.bitstring("aaa")],
+        [Type.atom("text"), Type.bitstring2("aaa")],
         [Type.atom("expression"), Type.tuple([Type.integer(123)])],
-        [Type.atom("text"), Type.bitstring("bbb")],
+        [Type.atom("text"), Type.bitstring2("bbb")],
       ]);
 
       const operation = Operation.fromSpecDom(
@@ -263,7 +263,7 @@ describe("Operation", () => {
       const action = Type.actionStruct({
         name: Type.atom("my_action"),
         params: Type.map(),
-        target: Type.bitstring("my_target"),
+        target: Type.bitstring2("my_target"),
       });
 
       assert.isTrue(Operation.isAction(action));
@@ -273,7 +273,7 @@ describe("Operation", () => {
       const command = Type.commandStruct({
         name: Type.atom("my_command"),
         params: Type.map(),
-        target: Type.bitstring("my_target"),
+        target: Type.bitstring2("my_target"),
       });
 
       assert.isFalse(Operation.isAction(command));
