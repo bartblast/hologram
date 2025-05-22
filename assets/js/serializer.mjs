@@ -4,11 +4,11 @@ import Bitstring2 from "./bitstring2.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 
 /*
-Format Changelog
+Serializer Format Changelog
 
 v2:
 2025-05-22 22:02 (CEST)
-__binary__:* and __bitstring__:* replaced with b:*
+__binary__:* and {type: "bitstring", bits: [...]} replaced with b:*
 */
 
 export default class Serializer {
