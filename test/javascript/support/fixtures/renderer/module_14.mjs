@@ -80,7 +80,7 @@ export function defineModule14Fixture() {
                   return Type.list([
                     Type.tuple([
                       Type.atom("text"),
-                      Type.bitstring("page template"),
+                      Type.bitstring2("page template"),
                     ]),
                   ]);
                 },

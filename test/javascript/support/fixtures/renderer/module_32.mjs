@@ -44,14 +44,14 @@ export function defineModule32Fixture() {
                   );
                   Interpreter.updateVarsToMatchedValues(context);
                   return Type.list([
-                    Type.tuple([Type.atom("text"), Type.bitstring("32a,")]),
+                    Type.tuple([Type.atom("text"), Type.bitstring2("32a,")]),
                     Type.tuple([
                       Type.atom("element"),
-                      Type.bitstring("slot"),
+                      Type.bitstring2("slot"),
                       Type.list(),
                       Type.list(),
                     ]),
-                    Type.tuple([Type.atom("text"), Type.bitstring("32z,")]),
+                    Type.tuple([Type.atom("text"), Type.bitstring2("32z,")]),
                   ]);
                 },
               },

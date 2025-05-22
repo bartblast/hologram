@@ -32,7 +32,7 @@ export function defineModule65Fixture() {
                 Type.atom("prop_1"),
                 Type.atom("string"),
                 Type.list([
-                  Type.tuple([Type.atom("default"), Type.bitstring("abc")]),
+                  Type.tuple([Type.atom("default"), Type.bitstring2("abc")]),
                 ]),
               ]),
             ]),
@@ -68,7 +68,7 @@ export function defineModule65Fixture() {
                   return Type.list([
                     Type.tuple([
                       Type.atom("text"),
-                      Type.bitstring("component vars = "),
+                      Type.bitstring2("component vars = "),
                     ]),
                     Type.tuple([
                       Type.atom("expression"),

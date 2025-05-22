@@ -46,17 +46,17 @@ export function defineModule15Fixture() {
                   return Type.list([
                     Type.tuple([
                       Type.atom("text"),
-                      Type.bitstring("layout template start, "),
+                      Type.bitstring2("layout template start, "),
                     ]),
                     Type.tuple([
                       Type.atom("element"),
-                      Type.bitstring("slot"),
+                      Type.bitstring2("slot"),
                       Type.list(),
                       Type.list(),
                     ]),
                     Type.tuple([
                       Type.atom("text"),
-                      Type.bitstring(", layout template end"),
+                      Type.bitstring2(", layout template end"),
                     ]),
                   ]);
                 },

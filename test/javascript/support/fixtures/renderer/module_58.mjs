@@ -62,20 +62,23 @@ export function defineModule58Fixture() {
                   return Type.list([
                     Type.tuple([
                       Type.atom("element"),
-                      Type.bitstring("div"),
+                      Type.bitstring2("div"),
                       Type.list(),
                       Type.list([
-                        Type.tuple([Type.atom("text"), Type.bitstring("\n  ")]),
+                        Type.tuple([
+                          Type.atom("text"),
+                          Type.bitstring2("\n  "),
+                        ]),
                         Type.tuple([
                           Type.atom("element"),
-                          Type.bitstring("button"),
+                          Type.bitstring2("button"),
                           Type.list([
                             Type.tuple([
-                              Type.bitstring("$click"),
+                              Type.bitstring2("$click"),
                               Type.list([
                                 Type.tuple([
                                   Type.atom("text"),
-                                  Type.bitstring("my_action"),
+                                  Type.bitstring2("my_action"),
                                 ]),
                               ]),
                             ]),
@@ -83,11 +86,11 @@ export function defineModule58Fixture() {
                           Type.list([
                             Type.tuple([
                               Type.atom("text"),
-                              Type.bitstring("Click me"),
+                              Type.bitstring2("Click me"),
                             ]),
                           ]),
                         ]),
-                        Type.tuple([Type.atom("text"), Type.bitstring("\n")]),
+                        Type.tuple([Type.atom("text"), Type.bitstring2("\n")]),
                       ]),
                     ]),
                   ]);

@@ -49,7 +49,7 @@ export function defineModule23Fixture() {
                   return Type.list([
                     Type.tuple([
                       Type.atom("text"),
-                      Type.bitstring("layout vars = "),
+                      Type.bitstring2("layout vars = "),
                     ]),
                     Type.tuple([
                       Type.atom("expression"),

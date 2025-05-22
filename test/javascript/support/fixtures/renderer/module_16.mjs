@@ -54,7 +54,7 @@ export function defineModule16Fixture() {
                   return Type.list([
                     Type.tuple([
                       Type.atom("text"),
-                      Type.bitstring("component vars = "),
+                      Type.bitstring2("component vars = "),
                     ]),
                     Type.tuple([
                       Type.atom("expression"),

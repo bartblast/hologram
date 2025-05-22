@@ -44,7 +44,7 @@ export function defineModule31Fixture() {
                   );
                   Interpreter.updateVarsToMatchedValues(context);
                   return Type.list([
-                    Type.tuple([Type.atom("text"), Type.bitstring("31a,")]),
+                    Type.tuple([Type.atom("text"), Type.bitstring2("31a,")]),
                     Type.tuple([
                       Type.atom("component"),
                       Type.atom(
@@ -52,7 +52,10 @@ export function defineModule31Fixture() {
                       ),
                       Type.list(),
                       Type.list([
-                        Type.tuple([Type.atom("text"), Type.bitstring("31b,")]),
+                        Type.tuple([
+                          Type.atom("text"),
+                          Type.bitstring2("31b,"),
+                        ]),
                         Type.tuple([
                           Type.atom("component"),
                           Type.atom(
@@ -62,24 +65,27 @@ export function defineModule31Fixture() {
                           Type.list([
                             Type.tuple([
                               Type.atom("text"),
-                              Type.bitstring("31c,"),
+                              Type.bitstring2("31c,"),
                             ]),
                             Type.tuple([
                               Type.atom("element"),
-                              Type.bitstring("slot"),
+                              Type.bitstring2("slot"),
                               Type.list(),
                               Type.list(),
                             ]),
                             Type.tuple([
                               Type.atom("text"),
-                              Type.bitstring(",31x,"),
+                              Type.bitstring2(",31x,"),
                             ]),
                           ]),
                         ]),
-                        Type.tuple([Type.atom("text"), Type.bitstring("31y,")]),
+                        Type.tuple([
+                          Type.atom("text"),
+                          Type.bitstring2("31y,"),
+                        ]),
                       ]),
                     ]),
-                    Type.tuple([Type.atom("text"), Type.bitstring("31z")]),
+                    Type.tuple([Type.atom("text"), Type.bitstring2("31z")]),
                   ]);
                 },
               },

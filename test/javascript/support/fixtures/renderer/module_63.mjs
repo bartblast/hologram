@@ -92,7 +92,7 @@ export function defineModule63Fixture() {
                   );
                   Interpreter.updateVarsToMatchedValues(context);
                   return Type.list([
-                    Type.tuple([Type.atom("text"), Type.bitstring("abc")]),
+                    Type.tuple([Type.atom("text"), Type.bitstring2("abc")]),
                   ]);
                 },
               },

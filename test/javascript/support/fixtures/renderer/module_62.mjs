@@ -76,26 +76,29 @@ export function defineModule62Fixture() {
                   );
                   Interpreter.updateVarsToMatchedValues(context);
                   return Type.list([
-                    Type.tuple([Type.atom("doctype"), Type.bitstring("html")]),
-                    Type.tuple([Type.atom("text"), Type.bitstring("\n")]),
+                    Type.tuple([Type.atom("doctype"), Type.bitstring2("html")]),
+                    Type.tuple([Type.atom("text"), Type.bitstring2("\n")]),
                     Type.tuple([
                       Type.atom("element"),
-                      Type.bitstring("html"),
+                      Type.bitstring2("html"),
                       Type.list(),
                       Type.list([
-                        Type.tuple([Type.atom("text"), Type.bitstring("\n  ")]),
+                        Type.tuple([
+                          Type.atom("text"),
+                          Type.bitstring2("\n  "),
+                        ]),
                         Type.tuple([
                           Type.atom("element"),
-                          Type.bitstring("body"),
+                          Type.bitstring2("body"),
                           Type.list(),
                           Type.list([
                             Type.tuple([
                               Type.atom("text"),
-                              Type.bitstring("\n    Module62\n  "),
+                              Type.bitstring2("\n    Module62\n  "),
                             ]),
                           ]),
                         ]),
-                        Type.tuple([Type.atom("text"), Type.bitstring("\n")]),
+                        Type.tuple([Type.atom("text"), Type.bitstring2("\n")]),
                       ]),
                     ]),
                   ]);

@@ -55,7 +55,7 @@ export function defineModule34Fixture() {
                         ),
                       ]),
                     ]),
-                    Type.tuple([Type.atom("text"), Type.bitstring(",")]),
+                    Type.tuple([Type.atom("text"), Type.bitstring2(",")]),
                     Type.tuple([
                       Type.atom("component"),
                       Type.atom(
@@ -63,20 +63,20 @@ export function defineModule34Fixture() {
                       ),
                       Type.list([
                         Type.tuple([
-                          Type.bitstring("cid"),
+                          Type.bitstring2("cid"),
                           Type.list([
                             Type.tuple([
                               Type.atom("text"),
-                              Type.bitstring("component_35"),
+                              Type.bitstring2("component_35"),
                             ]),
                           ]),
                         ]),
                         Type.tuple([
-                          Type.bitstring("a"),
+                          Type.bitstring2("a"),
                           Type.list([
                             Type.tuple([
                               Type.atom("text"),
-                              Type.bitstring("35a_prop"),
+                              Type.bitstring2("35a_prop"),
                             ]),
                           ]),
                         ]),
@@ -91,7 +91,7 @@ export function defineModule34Fixture() {
                             ),
                           ]),
                         ]),
-                        Type.tuple([Type.atom("text"), Type.bitstring(",")]),
+                        Type.tuple([Type.atom("text"), Type.bitstring2(",")]),
                         Type.tuple([
                           Type.atom("component"),
                           Type.atom(
@@ -99,20 +99,20 @@ export function defineModule34Fixture() {
                           ),
                           Type.list([
                             Type.tuple([
-                              Type.bitstring("cid"),
+                              Type.bitstring2("cid"),
                               Type.list([
                                 Type.tuple([
                                   Type.atom("text"),
-                                  Type.bitstring("component_36"),
+                                  Type.bitstring2("component_36"),
                                 ]),
                               ]),
                             ]),
                             Type.tuple([
-                              Type.bitstring("a"),
+                              Type.bitstring2("a"),
                               Type.list([
                                 Type.tuple([
                                   Type.atom("text"),
-                                  Type.bitstring("36a_prop"),
+                                  Type.bitstring2("36a_prop"),
                                 ]),
                               ]),
                             ]),
@@ -129,17 +129,17 @@ export function defineModule34Fixture() {
                             ]),
                             Type.tuple([
                               Type.atom("text"),
-                              Type.bitstring(","),
+                              Type.bitstring2(","),
                             ]),
                             Type.tuple([
                               Type.atom("element"),
-                              Type.bitstring("slot"),
+                              Type.bitstring2("slot"),
                               Type.list(),
                               Type.list(),
                             ]),
                             Type.tuple([
                               Type.atom("text"),
-                              Type.bitstring(","),
+                              Type.bitstring2(","),
                             ]),
                             Type.tuple([
                               Type.atom("expression"),
@@ -152,7 +152,7 @@ export function defineModule34Fixture() {
                             ]),
                             Type.tuple([
                               Type.atom("text"),
-                              Type.bitstring(","),
+                              Type.bitstring2(","),
                             ]),
                           ]),
                         ]),
@@ -165,7 +165,7 @@ export function defineModule34Fixture() {
                             ),
                           ]),
                         ]),
-                        Type.tuple([Type.atom("text"), Type.bitstring(",")]),
+                        Type.tuple([Type.atom("text"), Type.bitstring2(",")]),
                       ]),
                     ]),
                     Type.tuple([

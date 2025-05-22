@@ -46,7 +46,7 @@ export function defineLayoutFixture() {
                   return Type.list([
                     Type.tuple([
                       Type.atom("element"),
-                      Type.bitstring("slot"),
+                      Type.bitstring2("slot"),
                       Type.list(),
                       Type.list(),
                     ]),

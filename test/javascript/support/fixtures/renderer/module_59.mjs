@@ -66,11 +66,11 @@ export function defineModule59Fixture() {
                       ),
                       Type.list([
                         Type.tuple([
-                          Type.bitstring("cid"),
+                          Type.bitstring2("cid"),
                           Type.list([
                             Type.tuple([
                               Type.atom("text"),
-                              Type.bitstring("component_60"),
+                              Type.bitstring2("component_60"),
                             ]),
                           ]),
                         ]),

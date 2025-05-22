@@ -33,9 +33,9 @@ export function defineModule25Fixture() {
         guards: [],
         body: (_context) => {
           return Type.list([
-            Type.tuple([Type.atom("prop_1"), Type.bitstring("prop_value_1")]),
-            Type.tuple([Type.atom("prop_2"), Type.bitstring("prop_value_2")]),
-            Type.tuple([Type.atom("prop_3"), Type.bitstring("prop_value_3")]),
+            Type.tuple([Type.atom("prop_1"), Type.bitstring2("prop_value_1")]),
+            Type.tuple([Type.atom("prop_2"), Type.bitstring2("prop_value_2")]),
+            Type.tuple([Type.atom("prop_3"), Type.bitstring2("prop_value_3")]),
           ]);
         },
       },

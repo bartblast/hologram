@@ -91,7 +91,7 @@ export function defineModule21Fixture() {
                   return Type.list([
                     Type.tuple([
                       Type.atom("text"),
-                      Type.bitstring("page vars = "),
+                      Type.bitstring2("page vars = "),
                     ]),
                     Type.tuple([
                       Type.atom("expression"),

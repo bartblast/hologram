@@ -73,12 +73,12 @@ export function defineModule3Fixture() {
                   return Type.list([
                     Type.tuple([
                       Type.atom("element"),
-                      Type.bitstring("div"),
+                      Type.bitstring2("div"),
                       Type.list(),
                       Type.list([
                         Type.tuple([
                           Type.atom("text"),
-                          Type.bitstring("state_a = "),
+                          Type.bitstring2("state_a = "),
                         ]),
                         Type.tuple([
                           Type.atom("expression"),
@@ -91,7 +91,7 @@ export function defineModule3Fixture() {
                         ]),
                         Type.tuple([
                           Type.atom("text"),
-                          Type.bitstring(", state_b = "),
+                          Type.bitstring2(", state_b = "),
                         ]),
                         Type.tuple([
                           Type.atom("expression"),
