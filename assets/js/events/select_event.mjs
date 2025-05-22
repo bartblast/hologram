@@ -9,7 +9,7 @@ export default class SelectEvent {
       event.target.selectionEnd,
     );
 
-    return Type.map([[Type.atom("value"), Type.bitstring(value)]]);
+    return Type.map([[Type.atom("value"), Type.bitstring2(value)]]);
   }
 
   static isEventIgnored(_event) {

@@ -10,7 +10,7 @@ import Type from "../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
-describe.only("ChangeEvent", () => {
+describe("ChangeEvent", () => {
   const event = {target: {value: "my_value"}};
 
   it("buildOperationParam()", () => {
