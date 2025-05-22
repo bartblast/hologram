@@ -197,7 +197,7 @@ defmodule Hologram.Compiler.EncoderTest do
       # <<>>
       ir = %IR.BitstringType{segments: []}
 
-      assert encode_ir(ir, @context) == "Type.bitstringPattern([])"
+      assert encode_ir(ir, @context) == "Type.bitstringPattern2([])"
     end
 
     test "single segment" do
@@ -212,7 +212,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir, @context) ==
-               ~s/Type.bitstringPattern([Type.bitstringSegment(Type.integer(1n), {type: "integer"})])/
+               ~s/Type.bitstringPattern2([Type.bitstringSegment(Type.integer(1n), {type: "integer"})])/
     end
 
     test "multiple segments" do
@@ -231,7 +231,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir, @context) ==
-               ~s/Type.bitstringPattern([Type.bitstringSegment(Type.integer(1n), {type: "integer"}), Type.bitstringSegment(Type.integer(2n), {type: "integer"})])/
+               ~s/Type.bitstringPattern2([Type.bitstringSegment(Type.integer(1n), {type: "integer"}), Type.bitstringSegment(Type.integer(2n), {type: "integer"})])/
     end
   end
 
@@ -242,7 +242,7 @@ defmodule Hologram.Compiler.EncoderTest do
       # <<>>
       ir = %IR.BitstringType{segments: []}
 
-      assert encode_ir(ir, @context) == "Type.bitstring([])"
+      assert encode_ir(ir, @context) == "Type.bitstring2([])"
     end
 
     test "single segment" do
@@ -257,7 +257,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir, @context) ==
-               ~s/Type.bitstring([Type.bitstringSegment(Type.integer(1n), {type: "integer"})])/
+               ~s/Type.bitstring2([Type.bitstringSegment(Type.integer(1n), {type: "integer"})])/
     end
 
     test "multiple segments" do
@@ -276,7 +276,7 @@ defmodule Hologram.Compiler.EncoderTest do
       }
 
       assert encode_ir(ir, @context) ==
-               ~s/Type.bitstring([Type.bitstringSegment(Type.integer(1n), {type: "integer"}), Type.bitstringSegment(Type.integer(2n), {type: "integer"})])/
+               ~s/Type.bitstring2([Type.bitstringSegment(Type.integer(1n), {type: "integer"}), Type.bitstringSegment(Type.integer(2n), {type: "integer"})])/
     end
   end
 
@@ -1681,105 +1681,105 @@ defmodule Hologram.Compiler.EncoderTest do
       # "a"
       ir = %IR.StringType{value: "a"}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("a")/
+      assert encode_ir(ir) == ~s/Type.bitstring2("a")/
     end
 
     test "printable Unicode char" do
       # "全"
       ir = %IR.StringType{value: "全"}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("全")/
+      assert encode_ir(ir) == ~s/Type.bitstring2("全")/
     end
 
     test "multiple printable chars" do
       # "abc全息图"
       ir = %IR.StringType{value: "abc全息图"}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("abc全息图")/
+      assert encode_ir(ir) == ~s/Type.bitstring2("abc全息图")/
     end
 
     test "backslash char" do
       # "\\"
       ir = %IR.StringType{value: "\\"}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("\\\\")/
+      assert encode_ir(ir) == ~s/Type.bitstring2("\\\\")/
     end
 
     test "double quote char" do
       # "\""
       ir = %IR.StringType{value: "\""}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("\\\"")/
+      assert encode_ir(ir) == ~s/Type.bitstring2("\\\"")/
     end
 
     test "beep (special) char" do
       # "\a"
       ir = %IR.StringType{value: "\a"}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("\\x07")/
+      assert encode_ir(ir) == ~s/Type.bitstring2("\\x07")/
     end
 
     test "backspace (non-printable) char" do
       # "\b"
       ir = %IR.StringType{value: "\b"}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("\\b")/
+      assert encode_ir(ir) == ~s/Type.bitstring2("\\b")/
     end
 
     test "form feed (non-printable) char" do
       # "\f"
       ir = %IR.StringType{value: "\f"}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("\\f")/
+      assert encode_ir(ir) == ~s/Type.bitstring2("\\f")/
     end
 
     test "line feed (non-printable) char" do
       # "\n"
       ir = %IR.StringType{value: "\n"}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("\\n")/
+      assert encode_ir(ir) == ~s/Type.bitstring2("\\n")/
     end
 
     test "carriage return (non-printable) char" do
       # "\r"
       ir = %IR.StringType{value: "\r"}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("\\r")/
+      assert encode_ir(ir) == ~s/Type.bitstring2("\\r")/
     end
 
     test "horizontal tab (non-printable) char" do
       # "\t"
       ir = %IR.StringType{value: "\t"}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("\\t")/
+      assert encode_ir(ir) == ~s/Type.bitstring2("\\t")/
     end
 
     test "vertical tab (non-printable) char" do
       # "\v"
       ir = %IR.StringType{value: "\v"}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("\\v")/
+      assert encode_ir(ir) == ~s/Type.bitstring2("\\v")/
     end
 
     test "line seperator char" do
       # <<8_232::utf8>>
       ir = %IR.StringType{value: <<8_232::utf8>>}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("\\u{2028}")/
+      assert encode_ir(ir) == ~s/Type.bitstring2("\\u{2028}")/
     end
 
     test "paragraph seperator char" do
       # <<8_233::utf8>>
       ir = %IR.StringType{value: <<8_233::utf8>>}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("\\u{2029}")/
+      assert encode_ir(ir) == ~s/Type.bitstring2("\\u{2029}")/
     end
 
     test "non-printable Unicode char" do
       # <<133::utf8>> (equivalent to <<194, 133>>)
       ir = %IR.StringType{value: <<133::utf8>>}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("\\u{85}")/
+      assert encode_ir(ir) == ~s/Type.bitstring2("\\u{85}")/
     end
 
     test "multiple non-printable Unicode chars" do
@@ -1787,19 +1787,19 @@ defmodule Hologram.Compiler.EncoderTest do
       # equivalent to: <<194, 133, 194, 134, 194, 135>>
       ir = %IR.StringType{value: <<133::utf8, 134::utf8, 135::utf8>>}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("\\u{85}\\u{86}\\u{87}")/
+      assert encode_ir(ir) == ~s/Type.bitstring2("\\u{85}\\u{86}\\u{87}")/
     end
 
     test "single-byte char outside of the standard ASCII range" do
       ir = %IR.StringType{value: <<240>>}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("\\xF0")/
+      assert encode_ir(ir) == ~s/Type.bitstring2("\\xF0")/
     end
 
     test "multiple single-byte chars outside of the standard ASCII range" do
       ir = %IR.StringType{value: <<240, 145, 163>>}
 
-      assert encode_ir(ir) == ~s/Type.bitstring("\\xF0\\x91\\xA3")/
+      assert encode_ir(ir) == ~s/Type.bitstring2("\\xF0\\x91\\xA3")/
     end
 
     test "multiple printable and non-printable chars" do
@@ -1812,7 +1812,7 @@ defmodule Hologram.Compiler.EncoderTest do
             194, 135>>
       }
 
-      assert encode_ir(ir) == ~s/Type.bitstring("abc\\n全息图\\t\\u{85}\\u{86}\\u{87}")/
+      assert encode_ir(ir) == ~s/Type.bitstring2("abc\\n全息图\\t\\u{85}\\u{86}\\u{87}")/
     end
   end
 
@@ -2122,7 +2122,7 @@ defmodule Hologram.Compiler.EncoderTest do
     end
 
     test "bistring" do
-      assert encode_term!("abc") == ~s/Type.bitstring("abc")/
+      assert encode_term!("abc") == ~s/Type.bitstring2("abc")/
     end
 
     test "float, non-zero" do
@@ -2147,7 +2147,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
     test "map" do
       assert encode_term!(%{:a => 1, "b" => 2.0}) ==
-               ~s/Type.map([[Type.atom("a"), Type.integer(1n)], [Type.bitstring("b"), Type.float(2.0)]])/
+               ~s/Type.map([[Type.atom("a"), Type.integer(1n)], [Type.bitstring2("b"), Type.float(2.0)]])/
     end
 
     test "pid" do
