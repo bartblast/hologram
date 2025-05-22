@@ -514,6 +514,24 @@ export default class Bitstring2 {
     }
   }
 
+  static serialize(bitstring) {
+    $.maybeResolveHex(bitstring);
+
+    let serialized = "b";
+    const hex = bitstring.hex;
+    const leftoverBitCount = bitstring.leftoverBitCount;
+
+    if (hex !== "") {
+      serialized += `:${hex}`;
+    }
+
+    if (leftoverBitCount > 0) {
+      serialized += `:${leftoverBitCount}`;
+    }
+
+    return serialized;
+  }
+
   static takeChunk(bitstring, chunkOffset, chunkSize) {
     const bitstringBitCount = $.calculateBitCount(bitstring);
 

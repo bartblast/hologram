@@ -410,29 +410,11 @@ describe("Type", () => {
       assert.equal(result, "atom(abc)");
     });
 
-    describe("encodes boxed bitstring value as map key", () => {
-      it("for empty bitstring", () => {
-        const bitstring = Type.bitstring2("");
-        const result = Type.encodeMapKey(bitstring);
+    it("encodes boxed bitstring value as map key", () => {
+      const bitstring = Type.bitstring2("Hologram");
+      const result = Type.encodeMapKey(bitstring);
 
-        assert.equal(result, "b");
-      });
-
-      it("for bitstring without leftover bits", () => {
-        const bitstring = Type.bitstring2("Hologram");
-        const result = Type.encodeMapKey(bitstring);
-
-        assert.equal(result, "b:486f6c6f6772616d");
-      });
-
-      it("for bitstring with leftover bits", () => {
-        const bitstring = Bitstring2.fromBytes([1, 52, 103]);
-        bitstring.leftoverBitCount = 5;
-
-        const result = Type.encodeMapKey(bitstring);
-
-        assert.equal(result, "b:013467:5");
-      });
+      assert.equal(result, "b:486f6c6f6772616d");
     });
 
     it("encodes boxed float value as map key", () => {

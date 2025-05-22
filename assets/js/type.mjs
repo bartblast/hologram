@@ -169,7 +169,7 @@ export default class Type {
         return Type.#encodeBitstringTypeMapKey(term);
 
       case "bitstring2":
-        return Type.#encodeBitstring2TypeMapKey(term);
+        return Bitstring2.serialize(term);
 
       case "list":
       case "tuple":
@@ -492,24 +492,6 @@ export default class Type {
 
   static #encodeBitstringTypeMapKey(bitstring) {
     return "bitstring(" + bitstring.bits.join("") + ")";
-  }
-
-  static #encodeBitstring2TypeMapKey(bitstring) {
-    Bitstring2.maybeResolveHex(bitstring);
-
-    let key = "b";
-    const hex = bitstring.hex;
-    const leftoverBitCount = bitstring.leftoverBitCount;
-
-    if (hex !== "") {
-      key += `:${hex}`;
-    }
-
-    if (leftoverBitCount > 0) {
-      key += `:${leftoverBitCount}`;
-    }
-
-    return key;
   }
 
   static #encodeEnumTypeMapKey(term) {

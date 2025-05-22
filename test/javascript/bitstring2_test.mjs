@@ -4550,6 +4550,31 @@ describe("Bitstring2", () => {
     });
   });
 
+  describe("serialize()", () => {
+    it("empty bitstring", () => {
+      const bitstring = Type.bitstring2("");
+      const result = Bitstring2.serialize(bitstring);
+
+      assert.equal(result, "b");
+    });
+
+    it("non-empty bitstring without leftover bits", () => {
+      const bitstring = Type.bitstring2("Hologram");
+      const result = Bitstring2.serialize(bitstring);
+
+      assert.equal(result, "b:486f6c6f6772616d");
+    });
+
+    it("non-empty bitstring with leftover bits", () => {
+      const bitstring = Bitstring2.fromBytes([1, 52, 103]);
+      bitstring.leftoverBitCount = 5;
+
+      const result = Bitstring2.serialize(bitstring);
+
+      assert.equal(result, "b:013467:5");
+    });
+  });
+
   describe("takeChunk()", () => {
     describe("take entire bitstring", () => {
       it("when text-based", () => {
