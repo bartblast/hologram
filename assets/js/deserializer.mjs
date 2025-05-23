@@ -12,6 +12,10 @@ export default class Deserializer {
           return Type.atom(value.slice(2));
         }
 
+        if (value.startsWith("f:")) {
+          return Type.float(Number(value.slice(2)));
+        }
+
         // v1 (see Serializer Format Changelog in serializer.mjs)
         if (value.startsWith("__atom__:")) {
           return Type.atom(value.slice(9));
@@ -26,6 +30,7 @@ export default class Deserializer {
           return Type.bitstring(value.slice(11));
         }
 
+        // v1 (see Serializer Format Changelog in serializer.mjs)
         if (value.startsWith("__float__:")) {
           return Type.float(Number(value.slice(10)));
         }
