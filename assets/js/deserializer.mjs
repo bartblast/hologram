@@ -87,6 +87,10 @@ export default class Deserializer {
       if (value.startsWith("f:")) {
         return Type.float(Number(value.slice(2)));
       }
+
+      if (value.startsWith("i:")) {
+        return Type.integer(BigInt(value.slice(2)));
+      }
     }
 
     if (value.startsWith("__atom__:")) {
