@@ -190,22 +190,6 @@ describe("Deserializer", () => {
         });
       });
 
-      describe("atom", () => {
-        const term = Type.atom("abc");
-
-        it("top-level", () => {
-          testTopLevelDeserialization(term);
-        });
-
-        it("nested", () => {
-          testNestedDeserialization(term);
-        });
-
-        it("not versioned", () => {
-          testNotVersionedDeserialization(term);
-        });
-      });
-
       describe("float", () => {
         const term = Type.float(1.23);
 
@@ -533,7 +517,23 @@ describe("Deserializer", () => {
       });
     });
 
-    describe("v2", () => {
+    describe("version 2 (current)", () => {
+      describe("atom", () => {
+        const term = Type.atom("abc");
+
+        it("top-level", () => {
+          testTopLevelDeserialization(term);
+        });
+
+        it("nested", () => {
+          testNestedDeserialization(term);
+        });
+
+        it("not versioned", () => {
+          testNotVersionedDeserialization(term);
+        });
+      });
+
       describe("bitstring", () => {
         describe("empty", () => {
           const term = Type.bitstring2("");
@@ -581,6 +581,34 @@ describe("Deserializer", () => {
           it("not versioned", () => {
             testNotVersionedBitstringDeserialization(term);
           });
+        });
+      });
+    });
+
+    describe("old versions", () => {
+      describe("version 1", () => {
+        const term = Type.atom("abc");
+
+        it("top-level", () => {
+          const serialized = '[2,"__atom__:abc"]';
+          const deserialized = deserialize(serialized);
+
+          assert.deepStrictEqual(deserialized, term);
+        });
+
+        it("nested", () => {
+          const serialized = '[2,{"x":"__atom__:abc","y":2}]';
+          const deserialized = deserialize(serialized);
+          const expected = {x: term, y: 2};
+
+          assert.deepStrictEqual(deserialized, expected);
+        });
+
+        it("not versioned", () => {
+          const serialized = '"__atom__:abc"';
+          const deserialized = deserialize(serialized, false);
+
+          assert.deepStrictEqual(deserialized, term);
         });
       });
     });

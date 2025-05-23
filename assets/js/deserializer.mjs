@@ -8,6 +8,11 @@ export default class Deserializer {
   static deserialize(serialized, isVersioned = true) {
     const deserialized = JSON.parse(serialized, (_key, value) => {
       if (typeof value === "string") {
+        if (value.startsWith("a:")) {
+          return Type.atom(value.slice(2));
+        }
+
+        // v1 (see Serializer Format Changelog in serializer.mjs)
         if (value.startsWith("__atom__:")) {
           return Type.atom(value.slice(9));
         }
