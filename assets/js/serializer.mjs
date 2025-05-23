@@ -29,7 +29,7 @@ export default class Serializer {
       }
 
       if (boxedValueType === "float") {
-        return `__float__:${value.value.toString()}`;
+        return `f:${value.value.toString()}`;
       }
 
       if (boxedValueType === "integer") {
