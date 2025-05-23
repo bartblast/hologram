@@ -605,12 +605,8 @@ describe("Deserializer", () => {
             assert.deepStrictEqual(deserialized, expected);
           });
 
-          it("not versioned", () => {
-            const serialized = '"__atom__:abc"';
-            const deserialized = deserialize(serialized, false);
-
-            assert.deepStrictEqual(deserialized, term);
-          });
+          // Not applicable
+          // it("not versioned", () => {});
         });
 
         describe("float", () => {
@@ -631,12 +627,8 @@ describe("Deserializer", () => {
             assert.deepStrictEqual(deserialized, expected);
           });
 
-          it("not versioned", () => {
-            const serialized = '"__float__:1.23"';
-            const deserialized = deserialize(serialized, false);
-
-            assert.deepStrictEqual(deserialized, term);
-          });
+          // Not applicable
+          // it("not versioned", () => {});
         });
       });
     });
