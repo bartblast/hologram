@@ -38,7 +38,7 @@ describe("Serializer", () => {
               );
 
               const expected =
-                '[2,{"type":"anonymous_function","arity":2,"capturedFunction":"parse_date","capturedModule":"Calendar.ISO","clauses":["__function__:(param) => Type.integer(param)","__function__:(param) => Type.bitstring2(param)"],"context":{"module":"__atom__:Elixir.MyModule","vars":{}},"uniqueId":1}]';
+                '[2,{"type":"anonymous_function","arity":2,"capturedFunction":"parse_date","capturedModule":"Calendar.ISO","clauses":["__function__:(param) => Type.integer(param)","__function__:(param) => Type.bitstring2(param)"],"context":{"module":"a:Elixir.MyModule","vars":{}},"uniqueId":1}]';
 
               assert.equal(serialize(term, true), expected);
             });
@@ -81,7 +81,7 @@ describe("Serializer", () => {
               );
 
               const expected =
-                '[2,{"type":"anonymous_function","arity":1,"capturedFunction":null,"capturedModule":null,"clauses":[{"params":"__function__:(_context) => [Type.variablePattern(\\"x\\")]","guards":[],"body":"__function__:(_context) => { return Type.atom(\\"expr_a\\"); }"},{"params":"__function__:(_context) => [Type.variablePattern(\\"y\\")]","guards":[],"body":"__function__:(_context) => { return Type.atom(\\"expr_b\\"); }"}],"context":{"module":"__atom__:Elixir.MyModule","vars":{"a":10,"b":20}},"uniqueId":1}]';
+                '[2,{"type":"anonymous_function","arity":1,"capturedFunction":null,"capturedModule":null,"clauses":[{"params":"__function__:(_context) => [Type.variablePattern(\\"x\\")]","guards":[],"body":"__function__:(_context) => { return Type.atom(\\"expr_a\\"); }"},{"params":"__function__:(_context) => [Type.variablePattern(\\"y\\")]","guards":[],"body":"__function__:(_context) => { return Type.atom(\\"expr_b\\"); }"}],"context":{"module":"a:Elixir.MyModule","vars":{"a":10,"b":20}},"uniqueId":1}]';
 
               assert.equal(serialize(term, true), expected);
             });
@@ -116,7 +116,7 @@ describe("Serializer", () => {
               };
 
               const expected =
-                '[2,{"a":{"type":"anonymous_function","arity":2,"capturedFunction":"parse_date","capturedModule":"Calendar.ISO","clauses":["__function__:(param) => Type.integer(param)","__function__:(param) => Type.bitstring2(param)"],"context":{"module":"__atom__:Elixir.MyModule","vars":{}},"uniqueId":1},"b":2}]';
+                '[2,{"a":{"type":"anonymous_function","arity":2,"capturedFunction":"parse_date","capturedModule":"Calendar.ISO","clauses":["__function__:(param) => Type.integer(param)","__function__:(param) => Type.bitstring2(param)"],"context":{"module":"a:Elixir.MyModule","vars":{}},"uniqueId":1},"b":2}]';
 
               assert.equal(serialize(term, true), expected);
             });
@@ -165,7 +165,7 @@ describe("Serializer", () => {
               };
 
               const expected =
-                '[2,{"a":{"type":"anonymous_function","arity":1,"capturedFunction":null,"capturedModule":null,"clauses":[{"params":"__function__:(_context) => [Type.variablePattern(\\"x\\")]","guards":[],"body":"__function__:(_context) => { return Type.atom(\\"expr_a\\"); }"},{"params":"__function__:(_context) => [Type.variablePattern(\\"y\\")]","guards":[],"body":"__function__:(_context) => { return Type.atom(\\"expr_b\\"); }"}],"context":{"module":"__atom__:Elixir.MyModule","vars":{"a":10,"b":20}},"uniqueId":1},"b":2}]';
+                '[2,{"a":{"type":"anonymous_function","arity":1,"capturedFunction":null,"capturedModule":null,"clauses":[{"params":"__function__:(_context) => [Type.variablePattern(\\"x\\")]","guards":[],"body":"__function__:(_context) => { return Type.atom(\\"expr_a\\"); }"},{"params":"__function__:(_context) => [Type.variablePattern(\\"y\\")]","guards":[],"body":"__function__:(_context) => { return Type.atom(\\"expr_b\\"); }"}],"context":{"module":"a:Elixir.MyModule","vars":{"a":10,"b":20}},"uniqueId":1},"b":2}]';
 
               assert.equal(serialize(term, true), expected);
             });
@@ -195,7 +195,7 @@ describe("Serializer", () => {
           );
 
           const expected =
-            '{"type":"anonymous_function","arity":2,"capturedFunction":"parse_date","capturedModule":"Calendar.ISO","clauses":["__function__:(param) => Type.integer(param)","__function__:(param) => Type.bitstring2(param)"],"context":{"module":"__atom__:Elixir.MyModule","vars":{}},"uniqueId":1}';
+            '{"type":"anonymous_function","arity":2,"capturedFunction":"parse_date","capturedModule":"Calendar.ISO","clauses":["__function__:(param) => Type.integer(param)","__function__:(param) => Type.bitstring2(param)"],"context":{"module":"a:Elixir.MyModule","vars":{}},"uniqueId":1}';
 
           assert.equal(serialize(term, true, false), expected);
         });
@@ -204,21 +204,21 @@ describe("Serializer", () => {
       describe("atom", () => {
         it("top-level", () => {
           const term = Type.atom('a"bc');
-          const expected = '[2,"__atom__:a\\"bc"]';
+          const expected = '[2,"a:a\\"bc"]';
 
           assert.equal(serialize(term), expected);
         });
 
         it("nested", () => {
           const term = {a: Type.atom('a"bc'), b: 2};
-          const expected = '[2,{"a":"__atom__:a\\"bc","b":2}]';
+          const expected = '[2,{"a":"a:a\\"bc","b":2}]';
 
           assert.equal(serialize(term), expected);
         });
 
         it("not versioned", () => {
           const term = Type.atom('a"bc');
-          const expected = '"__atom__:a\\"bc"';
+          const expected = '"a:a\\"bc"';
 
           assert.equal(serialize(term, true, false), expected);
         });
@@ -359,7 +359,7 @@ describe("Serializer", () => {
           ]);
 
           const expected =
-            '[2,{"type":"map","data":[["__atom__:x","__integer__:1"],["b:79","__float__:1.23"]]}]';
+            '[2,{"type":"map","data":[["a:x","__integer__:1"],["b:79","__float__:1.23"]]}]';
 
           assert.equal(serialize(term), expected);
         });
@@ -374,7 +374,7 @@ describe("Serializer", () => {
           };
 
           const expected =
-            '[2,{"a":{"type":"map","data":[["__atom__:x","__integer__:1"],["b:79","__float__:1.23"]]},"b":2}]';
+            '[2,{"a":{"type":"map","data":[["a:x","__integer__:1"],["b:79","__float__:1.23"]]},"b":2}]';
 
           assert.equal(serialize(term), expected);
         });
@@ -386,7 +386,7 @@ describe("Serializer", () => {
           ]);
 
           const expected =
-            '{"type":"map","data":[["__atom__:x","__integer__:1"],["b:79","__float__:1.23"]]}';
+            '{"type":"map","data":[["a:x","__integer__:1"],["b:79","__float__:1.23"]]}';
 
           assert.equal(serialize(term, true, false), expected);
         });

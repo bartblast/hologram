@@ -6,9 +6,7 @@ import HologramRuntimeError from "./errors/runtime_error.mjs";
 /*
 Serializer Format Changelog
 
-v2:
-2025-05-22 22:02 (CEST)
-__binary__:* and {type: "bitstring", bits: [...]} replaced with b:*
+Release 0.5.0: switched to version 2.
 */
 
 export default class Serializer {
@@ -23,7 +21,7 @@ export default class Serializer {
       }
 
       if (boxedValueType === "atom") {
-        return `__atom__:${value.value}`;
+        return `a:${value.value}`;
       }
 
       if (boxedValueType === "bitstring2") {
