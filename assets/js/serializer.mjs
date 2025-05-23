@@ -10,6 +10,8 @@ Release 0.5.0: switched to version 2.
 */
 
 export default class Serializer {
+  static CURRENT_VERSION = 2;
+
   // When isFullScope is set to true, then everything is serialized,
   // including anonymous functions and all objects' fields (such as boxed PID node).
   static serialize(term, isFullScope = true, isVersioned = true) {
@@ -74,7 +76,7 @@ export default class Serializer {
     ) {
       if (isVersioned) {
         // [version, data]
-        return `[2,"${serialized}"]`;
+        return `[${$.CURRENT_VERSION},"${serialized}"]`;
       }
 
       return `"${serialized}"`;
@@ -82,7 +84,7 @@ export default class Serializer {
 
     if (isVersioned) {
       // [version, data]
-      return `[2,${serialized}]`;
+      return `[${$.CURRENT_VERSION},${serialized}]`;
     }
 
     return serialized;
