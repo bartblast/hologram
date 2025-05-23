@@ -637,6 +637,7 @@ describe("Deserializer", () => {
           it("top-level", () => {
             const serialized =
               '[1,"__integer__:90071992547409919007199254740991"]';
+
             const deserialized = deserialize(serialized);
 
             assert.deepStrictEqual(deserialized, term);
@@ -645,6 +646,7 @@ describe("Deserializer", () => {
           it("nested", () => {
             const serialized =
               '[1,{"x":"__integer__:90071992547409919007199254740991","y":2}]';
+
             const deserialized = deserialize(serialized);
             const expected = {x: term, y: 2};
 
