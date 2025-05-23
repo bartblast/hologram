@@ -43,7 +43,6 @@ function testNotVersionedDeserialization(term) {
 
 function testNotVersionedBitstringDeserialization(term) {
   const serialized = serialize(term, true, false);
-  console.log(serialized);
   const deserialized = deserialize(serialized, false);
 
   assert.isTrue(Interpreter.isStrictlyEqual(deserialized, term));
