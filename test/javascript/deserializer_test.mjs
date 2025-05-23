@@ -17,7 +17,7 @@ const deserialize = Deserializer.deserialize;
 const serialize = Serializer.serialize;
 
 function testNestedDeserialization(nestedTerm) {
-  const term = {a: nestedTerm, b: 2};
+  const term = {x: nestedTerm, y: 2};
   const serialized = serialize(term);
   const deserialized = deserialize(serialized);
 
@@ -122,29 +122,29 @@ describe("Deserializer", () => {
         });
 
         it("nested", () => {
-          const nestedTerm = {a: term, b: 2};
+          const nestedTerm = {x: term, y: 2};
           const serialized = serialize(nestedTerm);
           const deserialized = deserialize(serialized);
 
           assert.deepStrictEqual(deserialized, {
-            a: {
+            x: {
               ...term,
-              clauses: deserialized.a.clauses,
+              clauses: deserialized.x.clauses,
             },
-            b: 2,
+            y: 2,
           });
 
-          assert.equal(deserialized.a.clauses.length, 2);
+          assert.equal(deserialized.x.clauses.length, 2);
 
-          assert.isFunction(deserialized.a.clauses[0].params);
-          assert.isFunction(deserialized.a.clauses[0].guards[0]);
-          assert.isFunction(deserialized.a.clauses[0].body);
+          assert.isFunction(deserialized.x.clauses[0].params);
+          assert.isFunction(deserialized.x.clauses[0].guards[0]);
+          assert.isFunction(deserialized.x.clauses[0].body);
 
-          assert.isFunction(deserialized.a.clauses[1].params);
-          assert.isFunction(deserialized.a.clauses[1].guards[0]);
-          assert.isFunction(deserialized.a.clauses[1].body);
+          assert.isFunction(deserialized.x.clauses[1].params);
+          assert.isFunction(deserialized.x.clauses[1].guards[0]);
+          assert.isFunction(deserialized.x.clauses[1].body);
 
-          const callResult = Interpreter.callAnonymousFunction(deserialized.a, [
+          const callResult = Interpreter.callAnonymousFunction(deserialized.x, [
             Type.integer(1),
           ]);
 
@@ -403,13 +403,13 @@ describe("Deserializer", () => {
           });
 
           it("nested", () => {
-            const term = {a: fun, b: 2};
+            const term = {x: fun, y: 2};
             const serialized = serialize(term);
             const result = deserialize(serialized);
 
-            assert.isFunction(result.a);
-            assert.deepStrictEqual(result.a(1, 2), Type.integer(3));
-            assert.deepStrictEqual(result, {a: result.a, b: 2});
+            assert.isFunction(result.x);
+            assert.deepStrictEqual(result.x(1, 2), Type.integer(3));
+            assert.deepStrictEqual(result, {x: result.x, y: 2});
           });
 
           it("not versioned", () => {
@@ -433,13 +433,13 @@ describe("Deserializer", () => {
           });
 
           it("nested", () => {
-            const term = {a: fun, b: 2};
+            const term = {x: fun, y: 2};
             const serialized = serialize(term);
             const deserialized = deserialize(serialized);
 
-            assert.isFunction(deserialized.a);
-            assert.deepStrictEqual(deserialized.a(1, 2), Type.integer(3));
-            assert.deepStrictEqual(deserialized, {a: deserialized.a, b: 2});
+            assert.isFunction(deserialized.x);
+            assert.deepStrictEqual(deserialized.x(1, 2), Type.integer(3));
+            assert.deepStrictEqual(deserialized, {x: deserialized.x, y: 2});
           });
 
           it("not versioned", () => {
