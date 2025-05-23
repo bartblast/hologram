@@ -39,7 +39,7 @@ export default class Serializer {
       }
 
       if (boxedValueType === "map") {
-        return {...value, data: Object.values(value.data)};
+        return {t: "m", d: Object.values(value.data)};
       }
 
       if (boxedValueType === "pid") {

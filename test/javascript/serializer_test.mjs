@@ -359,7 +359,7 @@ describe("Serializer", () => {
           ]);
 
           const expected =
-            '[2,{"type":"map","data":[["a:x","i:1"],["b:79","f:1.23"]]}]';
+            '[2,{"t":"m","d":[["a:x","i:1"],["b:79","f:1.23"]]}]';
 
           assert.equal(serialize(term), expected);
         });
@@ -374,7 +374,7 @@ describe("Serializer", () => {
           };
 
           const expected =
-            '[2,{"a":{"type":"map","data":[["a:x","i:1"],["b:79","f:1.23"]]},"b":2}]';
+            '[2,{"a":{"t":"m","d":[["a:x","i:1"],["b:79","f:1.23"]]},"b":2}]';
 
           assert.equal(serialize(term), expected);
         });
@@ -385,8 +385,7 @@ describe("Serializer", () => {
             [Type.bitstring2("y"), Type.float(1.23)],
           ]);
 
-          const expected =
-            '{"type":"map","data":[["a:x","i:1"],["b:79","f:1.23"]]}';
+          const expected = '{"t":"m","d":[["a:x","i:1"],["b:79","f:1.23"]]}';
 
           assert.equal(serialize(term, true, false), expected);
         });
