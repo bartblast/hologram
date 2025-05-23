@@ -2,6 +2,12 @@ defmodule Hologram.Socket.DecoderTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Socket.Decoder
 
+  describe "version 2" do
+    test "atom" do
+      assert decode(2, "a:abc") == :abc
+    end
+  end
+
   describe "version 1" do
     test "top-level data" do
       assert decode([1, "__atom__:abc"]) == :abc
