@@ -45,6 +45,8 @@ export default class Bitstring2 {
       return $.fromText(text);
     }
 
+    bitstrings.forEach((bs) => $.maybeSetBytesFromText(bs));
+
     // Fast path: no bitstrings with leftover bits
     if (bitstrings.every((bs) => bs.leftoverBitCount === 0)) {
       return $.#concatBitstringsWithoutLeftoverBits(bitstrings);
@@ -802,7 +804,6 @@ export default class Bitstring2 {
 
   static #concatBitstringsWithoutLeftoverBits(bitstrings) {
     const totalByteCount = bitstrings.reduce((acc, bs) => {
-      $.maybeSetBytesFromText(bs);
       return acc + bs.bytes.length;
     }, 0);
 

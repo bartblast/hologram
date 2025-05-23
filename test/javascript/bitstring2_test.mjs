@@ -163,7 +163,7 @@ describe("Bitstring2", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("converts text bitstrings to bytes when concatenating with byte bitstrings", () => {
+    it("converts text bitstring to bytes when concatenating with byte bitstring without leftover bits", () => {
       const bs1 = Bitstring2.fromText("ab");
       const bs2 = Bitstring2.fromBytes([99, 100]); // "cd" in ASCII
 
@@ -174,6 +174,25 @@ describe("Bitstring2", () => {
         text: null,
         bytes: new Uint8Array([97, 98, 99, 100]), // "abcd" in ASCII
         leftoverBitCount: 0,
+        hex: null,
+      };
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts text bitstring to bytes when concatenating with byte bitstring with leftover bits", () => {
+      const bs1 = Bitstring2.fromText("ab");
+
+      const bs2 = Bitstring2.fromBytes([99, 255]);
+      bs2.leftoverBitCount = 3;
+
+      const result = Bitstring2.concat([bs1, bs2]);
+
+      const expected = {
+        type: "bitstring2",
+        text: null,
+        bytes: new Uint8Array([97, 98, 99, 224]),
+        leftoverBitCount: 3,
         hex: null,
       };
 
