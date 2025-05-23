@@ -299,21 +299,21 @@ describe("Serializer", () => {
       describe("integer", () => {
         it("top-level", () => {
           const term = Type.integer(123);
-          const expected = '[2,"__integer__:123"]';
+          const expected = '[2,"i:123"]';
 
           assert.equal(serialize(term), expected);
         });
 
         it("nested", () => {
           const term = {a: Type.integer(123), b: 2};
-          const expected = '[2,{"a":"__integer__:123","b":2}]';
+          const expected = '[2,{"a":"i:123","b":2}]';
 
           assert.equal(serialize(term), expected);
         });
 
         it("not versioned", () => {
           const term = Type.integer(123);
-          const expected = '"__integer__:123"';
+          const expected = '"i:123"';
 
           assert.equal(serialize(term, true, false), expected);
         });
@@ -324,7 +324,7 @@ describe("Serializer", () => {
           const term = Type.list([Type.integer(1), Type.float(1.23)]);
 
           const expected =
-            '[2,{"type":"list","data":["__integer__:1","f:1.23"],"isProper":true}]';
+            '[2,{"type":"list","data":["i:1","f:1.23"],"isProper":true}]';
 
           assert.equal(serialize(term), expected);
         });
@@ -336,7 +336,7 @@ describe("Serializer", () => {
           };
 
           const expected =
-            '[2,{"a":{"type":"list","data":["__integer__:1","f:1.23"],"isProper":true},"b":2}]';
+            '[2,{"a":{"type":"list","data":["i:1","f:1.23"],"isProper":true},"b":2}]';
 
           assert.equal(serialize(term), expected);
         });
@@ -345,7 +345,7 @@ describe("Serializer", () => {
           const term = Type.list([Type.integer(1), Type.float(1.23)]);
 
           const expected =
-            '{"type":"list","data":["__integer__:1","f:1.23"],"isProper":true}';
+            '{"type":"list","data":["i:1","f:1.23"],"isProper":true}';
 
           assert.equal(serialize(term, true, false), expected);
         });
@@ -359,7 +359,7 @@ describe("Serializer", () => {
           ]);
 
           const expected =
-            '[2,{"type":"map","data":[["a:x","__integer__:1"],["b:79","f:1.23"]]}]';
+            '[2,{"type":"map","data":[["a:x","i:1"],["b:79","f:1.23"]]}]';
 
           assert.equal(serialize(term), expected);
         });
@@ -374,7 +374,7 @@ describe("Serializer", () => {
           };
 
           const expected =
-            '[2,{"a":{"type":"map","data":[["a:x","__integer__:1"],["b:79","f:1.23"]]},"b":2}]';
+            '[2,{"a":{"type":"map","data":[["a:x","i:1"],["b:79","f:1.23"]]},"b":2}]';
 
           assert.equal(serialize(term), expected);
         });
@@ -386,7 +386,7 @@ describe("Serializer", () => {
           ]);
 
           const expected =
-            '{"type":"map","data":[["a:x","__integer__:1"],["b:79","f:1.23"]]}';
+            '{"type":"map","data":[["a:x","i:1"],["b:79","f:1.23"]]}';
 
           assert.equal(serialize(term, true, false), expected);
         });
@@ -691,8 +691,7 @@ describe("Serializer", () => {
         it("top-level", () => {
           const term = Type.tuple([Type.integer(1), Type.float(1.23)]);
 
-          const expected =
-            '[2,{"type":"tuple","data":["__integer__:1","f:1.23"]}]';
+          const expected = '[2,{"type":"tuple","data":["i:1","f:1.23"]}]';
 
           assert.equal(serialize(term), expected);
         });
@@ -704,7 +703,7 @@ describe("Serializer", () => {
           };
 
           const expected =
-            '[2,{"a":{"type":"tuple","data":["__integer__:1","f:1.23"]},"b":2}]';
+            '[2,{"a":{"type":"tuple","data":["i:1","f:1.23"]},"b":2}]';
 
           assert.equal(serialize(term), expected);
         });
@@ -712,7 +711,7 @@ describe("Serializer", () => {
         it("not versioned", () => {
           const term = Type.tuple([Type.integer(1), Type.float(1.23)]);
 
-          const expected = '{"type":"tuple","data":["__integer__:1","f:1.23"]}';
+          const expected = '{"type":"tuple","data":["i:1","f:1.23"]}';
 
           assert.equal(serialize(term, true, false), expected);
         });

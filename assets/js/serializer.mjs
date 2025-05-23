@@ -35,7 +35,7 @@ export default class Serializer {
       }
 
       if (boxedValueType === "integer") {
-        return `__integer__:${value.value.toString()}`;
+        return `i:${value.value.toString()}`;
       }
 
       if (boxedValueType === "map") {
