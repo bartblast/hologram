@@ -43,6 +43,7 @@ function testNotVersionedDeserialization(term) {
 
 function testNotVersionedBitstringDeserialization(term) {
   const serialized = serialize(term, true, false);
+  console.log(serialized);
   const deserialized = deserialize(serialized, false);
 
   assert.isTrue(Interpreter.isStrictlyEqual(deserialized, term));
@@ -551,7 +552,7 @@ describe("Deserializer", () => {
           });
         });
 
-        it("non-empty without leftover bits", () => {
+        describe("non-empty without leftover bits", () => {
           const term = Type.bitstring2("Hologram");
 
           it("top-level", () => {
@@ -567,7 +568,7 @@ describe("Deserializer", () => {
           });
         });
 
-        it("non-empty with leftover bits", () => {
+        describe("non-empty with leftover bits", () => {
           const term = Type.bitstring2([1, 0, 1, 0]);
 
           it("top-level", () => {
