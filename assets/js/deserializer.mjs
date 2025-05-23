@@ -2,65 +2,30 @@
 
 import Bitstring2 from "./bitstring2.mjs";
 import Interpreter from "./interpreter.mjs";
+import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
 
 export default class Deserializer {
   static deserialize(serialized, isVersioned = true) {
+    let version = null;
+
     const deserialized = JSON.parse(serialized, (_key, value) => {
+      if (version === null) {
+        version = isVersioned ? parseInt(value) : Serializer.CURRENT_VERSION;
+      }
+
       if (typeof value === "string") {
-        if (value.startsWith("a:")) {
-          return Type.atom(value.slice(2));
-        }
+        const result = $.#maybeDeserializeStringTerm(value, version);
 
-        if (value.startsWith("f:")) {
-          return Type.float(Number(value.slice(2)));
-        }
-
-        // v1 (see Serializer Format Changelog in serializer.mjs)
-        if (value.startsWith("__atom__:")) {
-          return Type.atom(value.slice(9));
-        }
-
-        if (value.startsWith("__bigint__:")) {
-          return BigInt(value.slice(11));
-        }
-
-        // v1 (see Serializer Format Changelog in serializer.mjs)
-        if (value.startsWith("__binary__:")) {
-          return Type.bitstring(value.slice(11));
-        }
-
-        // v1 (see Serializer Format Changelog in serializer.mjs)
-        if (value.startsWith("__float__:")) {
-          return Type.float(Number(value.slice(10)));
-        }
-
-        if (value.startsWith("__function__:")) {
-          return Interpreter.evaluateJavaScriptExpression(value.slice(13));
-        }
-
-        if (value.startsWith("__integer__:")) {
-          return Type.integer(BigInt(value.slice(12)));
-        }
-
-        if (value.startsWith("b:")) {
-          return $.#deserializeBitstring(value);
-        }
-
-        if (value === "b") {
-          return Type.bitstring2("");
+        if (result !== null) {
+          return result;
         }
       }
 
-      const boxedValueType = value?.type;
+      const result = $.#maybeDeserializeObjectTerm(value, version);
 
-      // v1 (see Serializer Format Changelog in serializer.mjs)
-      if (boxedValueType === "bitstring") {
-        return Type.bitstring(value.bits);
-      }
-
-      if (boxedValueType === "map") {
-        return Type.map(value.data);
+      if (result !== null) {
+        return result;
       }
 
       return value;
@@ -87,6 +52,68 @@ export default class Deserializer {
     }
 
     return bitstring;
+  }
+
+  static #maybeDeserializeObjectTerm(value, version) {
+    const boxedValueType = value?.type;
+
+    if (boxedValueType === "map") {
+      return Type.map(value.data);
+    }
+
+    if (version === 1) {
+      if (boxedValueType === "bitstring") {
+        return Type.bitstring(value.bits);
+      }
+    }
+
+    return null;
+  }
+
+  static #maybeDeserializeStringTerm(value, version) {
+    if (version >= 2) {
+      if (value.startsWith("a:")) {
+        return Type.atom(value.slice(2));
+      }
+
+      if (value.startsWith("b:")) {
+        return $.#deserializeBitstring(value);
+      }
+
+      if (value === "b") {
+        return Type.bitstring2("");
+      }
+
+      if (value.startsWith("f:")) {
+        return Type.float(Number(value.slice(2)));
+      }
+    }
+
+    if (value.startsWith("__atom__:")) {
+      return Type.atom(value.slice(9));
+    }
+
+    if (value.startsWith("__bigint__:")) {
+      return BigInt(value.slice(11));
+    }
+
+    if (value.startsWith("__binary__:")) {
+      return Type.bitstring(value.slice(11));
+    }
+
+    if (value.startsWith("__float__:")) {
+      return Type.float(Number(value.slice(10)));
+    }
+
+    if (value.startsWith("__function__:")) {
+      return Interpreter.evaluateJavaScriptExpression(value.slice(13));
+    }
+
+    if (value.startsWith("__integer__:")) {
+      return Type.integer(BigInt(value.slice(12)));
+    }
+
+    return null;
   }
 }
 
