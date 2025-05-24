@@ -6,7 +6,6 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
-import Bitstring2 from "../../assets/js/bitstring2.mjs";
 import Deserializer from "../../assets/js/deserializer.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
@@ -63,7 +62,7 @@ function testTopLevelBitstringDeserialization(term) {
   assert.isTrue(Interpreter.isStrictlyEqual(deserialized, term));
 }
 
-describe("Deserializer", () => {
+describe.only("Deserializer", () => {
   describe("deserialize()", () => {
     describe("boxed terms", () => {
       describe("anonymous_function", () => {
@@ -647,6 +646,35 @@ describe("Deserializer", () => {
           it("nested", () => {
             const serialized =
               '[1,{"x":"__integer__:90071992547409919007199254740991","y":2}]';
+
+            const deserialized = deserialize(serialized);
+            const expected = {x: term, y: 2};
+
+            assert.deepStrictEqual(deserialized, expected);
+          });
+
+          // Not applicable
+          // it("not versioned", () => {});
+        });
+
+        describe("map", () => {
+          const term = Type.map([
+            [Type.atom("a"), Type.integer(1)],
+            [Type.atom("b"), Type.float(2.34)],
+          ]);
+
+          it("top-level", () => {
+            const serialized =
+              '[1,{"type":"map","data":[["__atom__:a", "__integer__:1"],["__atom__:b", "__float__:2.34"]]}]';
+
+            const deserialized = deserialize(serialized);
+
+            assert.deepStrictEqual(deserialized, term);
+          });
+
+          it("nested", () => {
+            const serialized =
+              '[1,{"x":{"type":"map","data":[["__atom__:a", "__integer__:1"],["__atom__:b", "__float__:2.34"]]},"y":2}]';
 
             const deserialized = deserialize(serialized);
             const expected = {x: term, y: 2};
