@@ -6,6 +6,26 @@ defmodule Hologram.Socket.DecoderTest do
     test "atom" do
       assert decode(2, "a:abc") == :abc
     end
+
+    test "bitstring, empty" do
+      assert decode(2, "b") == ""
+    end
+
+    test "bitstring, single-byte, without leftover bits" do
+      assert decode(2, "b:61") == "a"
+    end
+
+    test "bitstring, single-byte, with leftover bits" do
+      assert decode(2, "b:a0:3") == <<5::size(3)>>
+    end
+
+    test "bitstring, multiple-byte, without leftover bits" do
+      assert decode(2, "b:486f6c6f6772616d") == "Hologram"
+    end
+
+    test "bitstring, multiple-byte, with leftover bits" do
+      assert decode(2, "b:616263a0:3") == <<97, 98, 99, 5::size(3)>>
+    end
   end
 
   describe "version 1" do

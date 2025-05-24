@@ -40,6 +40,22 @@ defmodule Hologram.Socket.Decoder do
     String.to_existing_atom(value)
   end
 
+  def decode(2, "b:" <> value) do
+    case String.split(value, ":", parts: 2) do
+      [hex, leftover_bit_count] ->
+        bytes = Base.decode16!(hex, case: :lower)
+        leftover_bit_count = String.to_integer(leftover_bit_count)
+        <<full_bytes::binary-size(byte_size(bytes) - 1), leftover_bits_byte::integer>> = bytes
+        leftover_bits_byte = Bitwise.bsr(leftover_bits_byte, 8 - leftover_bit_count)
+        <<full_bytes::binary, leftover_bits_byte::size(leftover_bit_count)>>
+
+      [hex] ->
+        Base.decode16!(hex, case: :lower)
+    end
+  end
+
+  def decode(2, "b"), do: ""
+
   def decode(_version, %{
         "type" => "anonymous_function",
         "capturedModule" => module_str,
