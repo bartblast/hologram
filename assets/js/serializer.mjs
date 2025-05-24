@@ -54,6 +54,10 @@ export default class Serializer {
         return $.#serializeBoxedReference(value, isFullScope);
       }
 
+      if (boxedValueType === "tuple") {
+        return {t: "t", d: value.data};
+      }
+
       if (typeof value === "bigint") {
         return `__bigint__:${value.toString()}`;
       }
