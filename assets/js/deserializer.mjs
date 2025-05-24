@@ -75,7 +75,7 @@ export default class Deserializer {
       }
 
       if (boxedValueType === "bitstring") {
-        return Type.bitstring(value.bits);
+        return Type.bitstring2(value.bits);
       }
     }
 
@@ -114,7 +114,7 @@ export default class Deserializer {
     }
 
     if (value.startsWith("__binary__:")) {
-      return Type.bitstring(value.slice(11));
+      return Type.bitstring2(value.slice(11));
     }
 
     if (value.startsWith("__float__:")) {
