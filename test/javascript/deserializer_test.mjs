@@ -306,7 +306,7 @@ describe("Deserializer", () => {
       });
 
       describe("tuple", () => {
-        const term = Type.tuple([Type.integer(1), Type.float(1.23)]);
+        const term = Type.tuple([Type.integer(1), Type.float(2.34)]);
 
         it("top-level", () => {
           testTopLevelDeserialization(term);

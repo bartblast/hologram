@@ -61,6 +61,10 @@ export default class Deserializer {
       if (boxedValueType === "m") {
         return Type.map(value.d);
       }
+
+      if (boxedValueType === "t") {
+        return Type.tuple(value.d);
+      }
     }
 
     if (version === 1) {
