@@ -6,6 +6,7 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
+import Bitstring2 from "../../assets/js/bitstring2.mjs";
 import Deserializer from "../../assets/js/deserializer.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
@@ -646,6 +647,32 @@ describe("Deserializer", () => {
           it("nested", () => {
             const serialized =
               '[1,{"x":"__integer__:90071992547409919007199254740991","y":2}]';
+
+            const deserialized = deserialize(serialized);
+            const expected = {x: term, y: 2};
+
+            assert.deepStrictEqual(deserialized, expected);
+          });
+
+          // Not applicable
+          // it("not versioned", () => {});
+        });
+
+        describe("tuple", () => {
+          const term = Type.tuple([Type.integer(1), Type.float(1.23)]);
+
+          it("top-level", () => {
+            const serialized =
+              '[1,{"type":"tuple","data":["__integer__:1","__float__:1.23"]}]';
+
+            const deserialized = deserialize(serialized);
+
+            assert.deepStrictEqual(deserialized, term);
+          });
+
+          it("nested", () => {
+            const serialized =
+              '[1,{"x":{"type":"tuple","data":["__integer__:1","__float__:1.23"]},"y":2}]';
 
             const deserialized = deserialize(serialized);
             const expected = {x: term, y: 2};
