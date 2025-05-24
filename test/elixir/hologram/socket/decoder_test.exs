@@ -34,6 +34,10 @@ defmodule Hologram.Socket.DecoderTest do
     test "float, encoded as integer" do
       assert decode(2, "f:1") === 1.0
     end
+
+    test "integer" do
+      assert decode(2, "i:123") == 123
+    end
   end
 
   describe "version 1" do

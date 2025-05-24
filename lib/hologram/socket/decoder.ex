@@ -62,6 +62,10 @@ defmodule Hologram.Socket.Decoder do
     |> elem(0)
   end
 
+  def decode(2, "i:" <> value) do
+    IntegerUtils.parse!(value)
+  end
+
   def decode(_version, %{
         "type" => "anonymous_function",
         "capturedModule" => module_str,
