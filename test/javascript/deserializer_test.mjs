@@ -518,68 +518,70 @@ describe("Deserializer", () => {
     });
 
     describe("version 2 (current)", () => {
-      describe("atom", () => {
-        const term = Type.atom("abc");
-
-        it("top-level", () => {
-          testTopLevelDeserialization(term);
-        });
-
-        it("nested", () => {
-          testNestedDeserialization(term);
-        });
-
-        it("not versioned", () => {
-          testNotVersionedDeserialization(term);
-        });
-      });
-
-      describe("bitstring", () => {
-        describe("empty", () => {
-          const term = Type.bitstring2("");
+      describe("boxed terms", () => {
+        describe("atom", () => {
+          const term = Type.atom("abc");
 
           it("top-level", () => {
-            testTopLevelBitstringDeserialization(term);
+            testTopLevelDeserialization(term);
           });
 
           it("nested", () => {
-            testNestedBitstringDeserialization(term);
+            testNestedDeserialization(term);
           });
 
           it("not versioned", () => {
-            testNotVersionedBitstringDeserialization(term);
+            testNotVersionedDeserialization(term);
           });
         });
 
-        describe("non-empty without leftover bits", () => {
-          const term = Type.bitstring2("Hologram");
+        describe("bitstring", () => {
+          describe("empty", () => {
+            const term = Type.bitstring2("");
 
-          it("top-level", () => {
-            testTopLevelBitstringDeserialization(term);
+            it("top-level", () => {
+              testTopLevelBitstringDeserialization(term);
+            });
+
+            it("nested", () => {
+              testNestedBitstringDeserialization(term);
+            });
+
+            it("not versioned", () => {
+              testNotVersionedBitstringDeserialization(term);
+            });
           });
 
-          it("nested", () => {
-            testNestedBitstringDeserialization(term);
+          describe("non-empty without leftover bits", () => {
+            const term = Type.bitstring2("Hologram");
+
+            it("top-level", () => {
+              testTopLevelBitstringDeserialization(term);
+            });
+
+            it("nested", () => {
+              testNestedBitstringDeserialization(term);
+            });
+
+            it("not versioned", () => {
+              testNotVersionedBitstringDeserialization(term);
+            });
           });
 
-          it("not versioned", () => {
-            testNotVersionedBitstringDeserialization(term);
-          });
-        });
+          describe("non-empty with leftover bits", () => {
+            const term = Type.bitstring2([1, 0, 1, 0]);
 
-        describe("non-empty with leftover bits", () => {
-          const term = Type.bitstring2([1, 0, 1, 0]);
+            it("top-level", () => {
+              testTopLevelBitstringDeserialization(term);
+            });
 
-          it("top-level", () => {
-            testTopLevelBitstringDeserialization(term);
-          });
+            it("nested", () => {
+              testNestedBitstringDeserialization(term);
+            });
 
-          it("nested", () => {
-            testNestedBitstringDeserialization(term);
-          });
-
-          it("not versioned", () => {
-            testNotVersionedBitstringDeserialization(term);
+            it("not versioned", () => {
+              testNotVersionedBitstringDeserialization(term);
+            });
           });
         });
       });
@@ -587,129 +589,131 @@ describe("Deserializer", () => {
 
     describe("old versions", () => {
       describe("version 1", () => {
-        describe("atom", () => {
-          const term = Type.atom("abc");
+        describe("boxded terms", () => {
+          describe("atom", () => {
+            const term = Type.atom("abc");
 
-          it("top-level", () => {
-            const serialized = '[1,"__atom__:abc"]';
-            const deserialized = deserialize(serialized);
+            it("top-level", () => {
+              const serialized = '[1,"__atom__:abc"]';
+              const deserialized = deserialize(serialized);
 
-            assert.deepStrictEqual(deserialized, term);
+              assert.deepStrictEqual(deserialized, term);
+            });
+
+            it("nested", () => {
+              const serialized = '[1,{"x":"__atom__:abc","y":2}]';
+              const deserialized = deserialize(serialized);
+              const expected = {x: term, y: 2};
+
+              assert.deepStrictEqual(deserialized, expected);
+            });
+
+            // Not applicable
+            // it("not versioned", () => {});
           });
 
-          it("nested", () => {
-            const serialized = '[1,{"x":"__atom__:abc","y":2}]';
-            const deserialized = deserialize(serialized);
-            const expected = {x: term, y: 2};
+          describe("float", () => {
+            const term = Type.float(1.23);
 
-            assert.deepStrictEqual(deserialized, expected);
+            it("top-level", () => {
+              const serialized = '[1,"__float__:1.23"]';
+              const deserialized = deserialize(serialized);
+
+              assert.deepStrictEqual(deserialized, term);
+            });
+
+            it("nested", () => {
+              const serialized = '[1,{"x":"__float__:1.23","y":2}]';
+              const deserialized = deserialize(serialized);
+              const expected = {x: term, y: 2};
+
+              assert.deepStrictEqual(deserialized, expected);
+            });
+
+            // Not applicable
+            // it("not versioned", () => {});
           });
 
-          // Not applicable
-          // it("not versioned", () => {});
-        });
+          describe("integer", () => {
+            const term = Type.integer(90071992547409919007199254740991n);
 
-        describe("float", () => {
-          const term = Type.float(1.23);
+            it("top-level", () => {
+              const serialized =
+                '[1,"__integer__:90071992547409919007199254740991"]';
 
-          it("top-level", () => {
-            const serialized = '[1,"__float__:1.23"]';
-            const deserialized = deserialize(serialized);
+              const deserialized = deserialize(serialized);
 
-            assert.deepStrictEqual(deserialized, term);
+              assert.deepStrictEqual(deserialized, term);
+            });
+
+            it("nested", () => {
+              const serialized =
+                '[1,{"x":"__integer__:90071992547409919007199254740991","y":2}]';
+
+              const deserialized = deserialize(serialized);
+              const expected = {x: term, y: 2};
+
+              assert.deepStrictEqual(deserialized, expected);
+            });
+
+            // Not applicable
+            // it("not versioned", () => {});
           });
 
-          it("nested", () => {
-            const serialized = '[1,{"x":"__float__:1.23","y":2}]';
-            const deserialized = deserialize(serialized);
-            const expected = {x: term, y: 2};
+          describe("map", () => {
+            const term = Type.map([
+              [Type.atom("a"), Type.integer(1)],
+              [Type.atom("b"), Type.float(2.34)],
+            ]);
 
-            assert.deepStrictEqual(deserialized, expected);
+            it("top-level", () => {
+              const serialized =
+                '[1,{"type":"map","data":[["__atom__:a", "__integer__:1"],["__atom__:b", "__float__:2.34"]]}]';
+
+              const deserialized = deserialize(serialized);
+
+              assert.deepStrictEqual(deserialized, term);
+            });
+
+            it("nested", () => {
+              const serialized =
+                '[1,{"x":{"type":"map","data":[["__atom__:a", "__integer__:1"],["__atom__:b", "__float__:2.34"]]},"y":2}]';
+
+              const deserialized = deserialize(serialized);
+              const expected = {x: term, y: 2};
+
+              assert.deepStrictEqual(deserialized, expected);
+            });
+
+            // Not applicable
+            // it("not versioned", () => {});
           });
 
-          // Not applicable
-          // it("not versioned", () => {});
-        });
+          describe("tuple", () => {
+            const term = Type.tuple([Type.integer(1), Type.float(1.23)]);
 
-        describe("integer", () => {
-          const term = Type.integer(90071992547409919007199254740991n);
+            it("top-level", () => {
+              const serialized =
+                '[1,{"type":"tuple","data":["__integer__:1","__float__:1.23"]}]';
 
-          it("top-level", () => {
-            const serialized =
-              '[1,"__integer__:90071992547409919007199254740991"]';
+              const deserialized = deserialize(serialized);
 
-            const deserialized = deserialize(serialized);
+              assert.deepStrictEqual(deserialized, term);
+            });
 
-            assert.deepStrictEqual(deserialized, term);
+            it("nested", () => {
+              const serialized =
+                '[1,{"x":{"type":"tuple","data":["__integer__:1","__float__:1.23"]},"y":2}]';
+
+              const deserialized = deserialize(serialized);
+              const expected = {x: term, y: 2};
+
+              assert.deepStrictEqual(deserialized, expected);
+            });
+
+            // Not applicable
+            // it("not versioned", () => {});
           });
-
-          it("nested", () => {
-            const serialized =
-              '[1,{"x":"__integer__:90071992547409919007199254740991","y":2}]';
-
-            const deserialized = deserialize(serialized);
-            const expected = {x: term, y: 2};
-
-            assert.deepStrictEqual(deserialized, expected);
-          });
-
-          // Not applicable
-          // it("not versioned", () => {});
-        });
-
-        describe("map", () => {
-          const term = Type.map([
-            [Type.atom("a"), Type.integer(1)],
-            [Type.atom("b"), Type.float(2.34)],
-          ]);
-
-          it("top-level", () => {
-            const serialized =
-              '[1,{"type":"map","data":[["__atom__:a", "__integer__:1"],["__atom__:b", "__float__:2.34"]]}]';
-
-            const deserialized = deserialize(serialized);
-
-            assert.deepStrictEqual(deserialized, term);
-          });
-
-          it("nested", () => {
-            const serialized =
-              '[1,{"x":{"type":"map","data":[["__atom__:a", "__integer__:1"],["__atom__:b", "__float__:2.34"]]},"y":2}]';
-
-            const deserialized = deserialize(serialized);
-            const expected = {x: term, y: 2};
-
-            assert.deepStrictEqual(deserialized, expected);
-          });
-
-          // Not applicable
-          // it("not versioned", () => {});
-        });
-
-        describe("tuple", () => {
-          const term = Type.tuple([Type.integer(1), Type.float(1.23)]);
-
-          it("top-level", () => {
-            const serialized =
-              '[1,{"type":"tuple","data":["__integer__:1","__float__:1.23"]}]';
-
-            const deserialized = deserialize(serialized);
-
-            assert.deepStrictEqual(deserialized, term);
-          });
-
-          it("nested", () => {
-            const serialized =
-              '[1,{"x":{"type":"tuple","data":["__integer__:1","__float__:1.23"]},"y":2}]';
-
-            const deserialized = deserialize(serialized);
-            const expected = {x: term, y: 2};
-
-            assert.deepStrictEqual(deserialized, expected);
-          });
-
-          // Not applicable
-          // it("not versioned", () => {});
         });
       });
     });
