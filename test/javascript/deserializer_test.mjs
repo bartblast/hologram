@@ -62,7 +62,7 @@ function testTopLevelBitstringDeserialization(term) {
   assert.isTrue(Interpreter.isStrictlyEqual(deserialized, term));
 }
 
-describe.only("Deserializer", () => {
+describe("Deserializer", () => {
   describe("deserialize()", () => {
     describe("OVERHAUL: boxed terms", () => {
       describe("float", () => {
