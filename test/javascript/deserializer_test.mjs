@@ -62,7 +62,7 @@ function testTopLevelBitstringDeserialization(term) {
   assert.isTrue(Interpreter.isStrictlyEqual(deserialized, term));
 }
 
-describe.only("Deserializer", () => {
+describe("Deserializer", () => {
   describe("deserialize()", () => {
     describe("boxed terms", () => {
       describe("anonymous_function", () => {
@@ -241,7 +241,7 @@ describe.only("Deserializer", () => {
       describe("map", () => {
         const term = Type.map([
           [Type.atom("x"), Type.integer(1)],
-          [Type.atom("y"), Type.float(1.23)],
+          [Type.atom("y"), Type.float(2.34)],
         ]);
 
         it("top-level", () => {

@@ -55,13 +55,21 @@ export default class Deserializer {
   }
 
   static #maybeDeserializeObjectTerm(value, version) {
-    const boxedValueType = value?.type;
+    if (version >= 2) {
+      const boxedValueType = value?.t;
 
-    if (boxedValueType === "map") {
-      return Type.map(value.data);
+      if (boxedValueType === "m") {
+        return Type.map(value.d);
+      }
     }
 
     if (version === 1) {
+      const boxedValueType = value?.type;
+
+      if (boxedValueType === "map") {
+        return Type.map(value.data);
+      }
+
       if (boxedValueType === "bitstring") {
         return Type.bitstring(value.bits);
       }
