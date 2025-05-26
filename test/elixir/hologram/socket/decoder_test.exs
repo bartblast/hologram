@@ -20,6 +20,14 @@ defmodule Hologram.Socket.DecoderTest do
     test "atom" do
       assert decode(1, "__atom__:xyz") == :xyz
     end
+
+    test "float, encoded as float" do
+      assert decode(1, "__float__:1.23") === 1.23
+    end
+
+    test "float, encoded as integer" do
+      assert decode(1, "__float__:123") === 123.0
+    end
   end
 
   #   describe "version 2" do
@@ -83,14 +91,6 @@ defmodule Hologram.Socket.DecoderTest do
   #     test "non-binary bitstring" do
   #       assert decode(1, %{"type" => "bitstring", "bits" => [1, 0, 1, 0]}) ==
   #                <<1::1, 0::1, 1::1, 0::1>>
-  #     end
-
-  #     test "float, encoded as float" do
-  #       assert decode(1, "__float__:1.23") === 1.23
-  #     end
-
-  #     test "float, encoded as integer" do
-  #       assert decode(1, "__float__:1") === 1.0
   #     end
 
   #     test "integer" do

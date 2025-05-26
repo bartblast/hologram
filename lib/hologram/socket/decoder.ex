@@ -50,6 +50,12 @@ defmodule Hologram.Socket.Decoder do
     String.to_existing_atom(value)
   end
 
+  def decode(1, "__float__:" <> value) do
+    value
+    |> Float.parse()
+    |> elem(0)
+  end
+
   #   def decode(2, "b:" <> value) do
   #     case String.split(value, ":", parts: 2) do
   #       [hex, leftover_bit_count] ->
@@ -116,12 +122,6 @@ defmodule Hologram.Socket.Decoder do
 
   #   def decode(1, %{"type" => "bitstring", "bits" => bits}) do
   #     BitstringUtils.from_bit_list(bits)
-  #   end
-
-  #   def decode(1, "__float__:" <> value) do
-  #     value
-  #     |> Float.parse()
-  #     |> elem(0)
   #   end
 
   #   def decode(1, "__integer__:" <> value) do
