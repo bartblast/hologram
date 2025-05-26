@@ -72,14 +72,28 @@ describe("Deserializer", () => {
         });
 
         describe("float", () => {
-          const term = Type.float(1.23);
+          describe("encoded as float", () => {
+            const term = Type.float(1.23);
 
-          it("top-level", () => {
-            testTopLevelDeserialization(term);
+            it("top-level", () => {
+              testTopLevelDeserialization(term);
+            });
+
+            it("nested", () => {
+              testNestedDeserialization(term);
+            });
           });
 
-          it("nested", () => {
-            testNestedDeserialization(term);
+          describe("encoded as integer", () => {
+            const term = Type.float(123);
+
+            it("top-level", () => {
+              testTopLevelDeserialization(term);
+            });
+
+            it("nested", () => {
+              testNestedDeserialization(term);
+            });
           });
         });
       });
@@ -182,21 +196,42 @@ describe("Deserializer", () => {
           });
 
           describe("float", () => {
-            const term = Type.float(2.34);
+            describe("encoded as float", () => {
+              const term = Type.float(2.34);
 
-            it("top-level", () => {
-              const serialized = '[1,"__float__:2.34"]';
-              const deserialized = deserialize(serialized);
+              it("top-level", () => {
+                const serialized = '[1,"__float__:2.34"]';
+                const deserialized = deserialize(serialized);
 
-              assert.deepStrictEqual(deserialized, term);
+                assert.deepStrictEqual(deserialized, term);
+              });
+
+              it("nested", () => {
+                const serialized = '[1,{"x":"__float__:2.34"}]';
+                const deserialized = deserialize(serialized);
+                const expected = {x: term};
+
+                assert.deepStrictEqual(deserialized, expected);
+              });
             });
 
-            it("nested", () => {
-              const serialized = '[1,{"x":"__float__:2.34"}]';
-              const deserialized = deserialize(serialized);
-              const expected = {x: term};
+            describe("encoded as integer", () => {
+              const term = Type.float(234);
 
-              assert.deepStrictEqual(deserialized, expected);
+              it("top-level", () => {
+                const serialized = '[1,"__float__:234"]';
+                const deserialized = deserialize(serialized);
+
+                assert.deepStrictEqual(deserialized, term);
+              });
+
+              it("nested", () => {
+                const serialized = '[1,{"x":"__float__:234"}]';
+                const deserialized = deserialize(serialized);
+                const expected = {x: term};
+
+                assert.deepStrictEqual(deserialized, expected);
+              });
             });
           });
         });
