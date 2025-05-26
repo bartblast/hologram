@@ -22,16 +22,16 @@ export default class Serializer {
       //         return $.#serializeBoxedAnonymousFunction(value, isFullScope);
       //       }
 
-      if (boxedValueType === "atom") {
-        return `a${value.value}`;
+      switch (boxedValueType) {
+        case "atom":
+          return `a${value.value}`;
+
+        case "float":
+          return `f${value.value.toString()}`;
       }
 
       //       if (boxedValueType === "bitstring2") {
       //         return Bitstring2.serialize(value);
-      //       }
-
-      //       if (boxedValueType === "float") {
-      //         return `f:${value.value.toString()}`;
       //       }
 
       //       if (boxedValueType === "integer") {

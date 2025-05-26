@@ -13,7 +13,7 @@ import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
-describe.only("Serializer", () => {
+describe("Serializer", () => {
   describe("serialize()", () => {
     const serialize = Serializer.serialize;
 
@@ -27,8 +27,24 @@ describe.only("Serializer", () => {
         });
 
         it("nested", () => {
-          const term = {k: Type.atom('x"yz'), m: 9};
-          const expected = '[2,{"k":"ax\\"yz","m":9}]';
+          const term = {k: Type.atom('x"yz')};
+          const expected = '[2,{"k":"ax\\"yz"}]';
+
+          assert.equal(serialize(term), expected);
+        });
+      });
+
+      describe("float", () => {
+        it("top-level", () => {
+          const term = Type.float(1.23);
+          const expected = '[2,"f1.23"]';
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("nested", () => {
+          const term = {a: Type.float(1.23)};
+          const expected = '[2,{"a":"f1.23"}]';
 
           assert.equal(serialize(term), expected);
         });
@@ -459,29 +475,6 @@ describe.only("Serializer", () => {
 
     //             assert.equal(serialize(term, true, false), expected);
     //           });
-    //         });
-    //       });
-
-    //       describe("float", () => {
-    //         it("top-level", () => {
-    //           const term = Type.float(1.23);
-    //           const expected = '[2,"f:1.23"]';
-
-    //           assert.equal(serialize(term), expected);
-    //         });
-
-    //         it("nested", () => {
-    //           const term = {a: Type.float(1.23), b: 2};
-    //           const expected = '[2,{"a":"f:1.23","b":2}]';
-
-    //           assert.equal(serialize(term), expected);
-    //         });
-
-    //         it("not versioned", () => {
-    //           const term = Type.float(1.23);
-    //           const expected = '"f:1.23"';
-
-    //           assert.equal(serialize(term, true, false), expected);
     //         });
     //       });
 
