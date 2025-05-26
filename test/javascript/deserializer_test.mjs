@@ -109,6 +109,18 @@ describe("Deserializer", () => {
           });
         });
 
+        describe("null", () => {
+          const term = null;
+
+          it("top-level", () => {
+            testTopLevelDeserialization(term);
+          });
+
+          it("nested", () => {
+            testNestedDeserialization(term);
+          });
+        });
+
         describe("object", () => {
           const term = {v: 9, 'x"yz': 8.76};
 
