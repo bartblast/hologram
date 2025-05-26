@@ -16,15 +16,15 @@ export default class Serializer {
   // including anonymous functions and all objects' fields (such as boxed PID node).
   static serialize(term) {
     const serialized = JSON.stringify(term, (_key, value) => {
-      //       const boxedValueType = value?.type;
+      const boxedValueType = value?.type;
 
       //       if (boxedValueType === "anonymous_function") {
       //         return $.#serializeBoxedAnonymousFunction(value, isFullScope);
       //       }
 
-      //       if (boxedValueType === "atom") {
-      //         return `a:${value.value}`;
-      //       }
+      if (boxedValueType === "atom") {
+        return `a${value.value}`;
+      }
 
       //       if (boxedValueType === "bitstring2") {
       //         return Bitstring2.serialize(value);

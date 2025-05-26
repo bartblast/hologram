@@ -9,13 +9,31 @@ import {
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 // import Sequence from "../../assets/js/sequence.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
-// import Type from "../../assets/js/type.mjs";
+import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
 describe("Serializer", () => {
   describe("serialize()", () => {
     const serialize = Serializer.serialize;
+
+    describe("boxed terms", () => {
+      describe("atom", () => {
+        it("top-level", () => {
+          const term = Type.atom('x"yz');
+          const expected = '[2,"ax\\"yz"]';
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("nested", () => {
+          const term = {k: Type.atom('x"yz'), m: 9};
+          const expected = '[2,{"k":"ax\\"yz","m":9}]';
+
+          assert.equal(serialize(term), expected);
+        });
+      });
+    });
 
     describe("JS terms", () => {
       describe("supported", () => {
@@ -374,29 +392,6 @@ describe("Serializer", () => {
 
     //           const expected =
     //             '{"type":"anonymous_function","arity":2,"capturedFunction":"parse_date","capturedModule":"Calendar.ISO","clauses":["__function__:(param) => Type.integer(param)","__function__:(param) => Type.bitstring2(param)"],"context":{"module":"a:Elixir.MyModule","vars":{}},"uniqueId":1}';
-
-    //           assert.equal(serialize(term, true, false), expected);
-    //         });
-    //       });
-
-    //       describe("atom", () => {
-    //         it("top-level", () => {
-    //           const term = Type.atom('a"bc');
-    //           const expected = '[2,"a:a\\"bc"]';
-
-    //           assert.equal(serialize(term), expected);
-    //         });
-
-    //         it("nested", () => {
-    //           const term = {a: Type.atom('a"bc'), b: 2};
-    //           const expected = '[2,{"a":"a:a\\"bc","b":2}]';
-
-    //           assert.equal(serialize(term), expected);
-    //         });
-
-    //         it("not versioned", () => {
-    //           const term = Type.atom('a"bc');
-    //           const expected = '"a:a\\"bc"';
 
     //           assert.equal(serialize(term, true, false), expected);
     //         });
