@@ -1,4 +1,4 @@
-// "use strict";
+"use strict";
 
 // import Bitstring2 from "./bitstring2.mjs";
 // import Interpreter from "./interpreter.mjs";
@@ -6,26 +6,23 @@
 // import Type from "./type.mjs";
 
 export default class Deserializer {
-  //   static deserialize(serialized, isVersioned = true) {
-  //     let version = null;
-  //     const deserialized = JSON.parse(serialized, (_key, value) => {
-  //       if (version === null) {
-  //         version = isVersioned ? parseInt(value) : Serializer.CURRENT_VERSION;
-  //       }
-  //       if (typeof value === "string") {
-  //         const result = $.#maybeDeserializeStringTerm(value, version);
-  //         if (result !== null) {
-  //           return result;
-  //         }
-  //       }
-  //       const result = $.#maybeDeserializeObjectTerm(value, version);
-  //       if (result !== null) {
-  //         return result;
-  //       }
-  //       return value;
-  //     });
-  //     return isVersioned ? deserialized[1] : deserialized;
-  //   }
+  static deserialize(serialized) {
+    return JSON.parse(serialized, (_key, value) => {
+      //       if (typeof value === "string") {
+      //         const result = $.#maybeDeserializeStringTerm(value, version);
+      //         if (result !== null) {
+      //           return result;
+      //         }
+      //       }
+
+      //       const result = $.#maybeDeserializeObjectTerm(value, version);
+      //       if (result !== null) {
+      //         return result;
+      //       }
+      return value;
+    })[1];
+  }
+
   //   static #deserializeBitstring(serialized) {
   //     const parts = serialized.split(":");
   //     const hex = parts[1];

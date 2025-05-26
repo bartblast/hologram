@@ -53,15 +53,15 @@ describe("Serializer", () => {
 
         describe("integer", () => {
           it("top-level", () => {
-            const term = 9;
-            const expected = "[2,9]";
+            const term = 987;
+            const expected = "[2,987]";
 
             assert.equal(serialize(term), expected);
           });
 
           it("nested", () => {
-            const term = {a: 9};
-            const expected = '[2,{"a":9}]';
+            const term = {a: 987};
+            const expected = '[2,{"a":987}]';
 
             assert.equal(serialize(term), expected);
           });
