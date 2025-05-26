@@ -28,10 +28,10 @@ defmodule Hologram.Socket.ChannelTest do
         %{
           "type" => "map",
           "data" => [
-            ["__atom__:module", "__atom__:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module1"],
-            ["__atom__:name", "__atom__:my_command_a"],
-            ["__atom__:params", %{"type" => "map", "data" => []}],
-            ["__atom__:target", "__binary__:my_target_1"]
+            ["a:module", "a:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module1"],
+            ["a:name", "a:my_command_a"],
+            ["a:params", %{"t" => "m", "d" => []}],
+            ["a:target", "b:6d795f7461726765745f31"]
           ]
         }
       ]
@@ -46,19 +46,19 @@ defmodule Hologram.Socket.ChannelTest do
         %{
           "type" => "map",
           "data" => [
-            ["__atom__:module", "__atom__:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module1"],
-            ["__atom__:name", "__atom__:my_command_b"],
+            ["a:module", "a:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module1"],
+            ["a:name", "a:my_command_b"],
             [
-              "__atom__:params",
+              "a:params",
               %{
                 "type" => "map",
                 "data" => [
-                  ["__atom__:a", "__integer__:1"],
-                  ["__atom__:b", "__integer__:2"]
+                  ["a:a", "i:1"],
+                  ["a:b", "i:2"]
                 ]
               }
             ],
-            ["__atom__:target", "__binary__:my_target_1"]
+            ["a:target", "b:6d795f7461726765745f31"]
           ]
         }
       ]
@@ -66,7 +66,7 @@ defmodule Hologram.Socket.ChannelTest do
       assert handle_in("command", payload, :dummy_socket) ==
                {:reply,
                 {:ok,
-                 ~s/Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("my_action_b")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_1")]])/},
+                 ~s/Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("my_action_b")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring2("my_target_1")]])/},
                 :dummy_socket}
     end
 
@@ -74,21 +74,21 @@ defmodule Hologram.Socket.ChannelTest do
       payload = [
         1,
         %{
-          "type" => "map",
-          "data" => [
-            ["__atom__:module", "__atom__:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module1"],
-            ["__atom__:name", "__atom__:my_command_c"],
+          "type" => "m",
+          "d" => [
+            ["a:module", "a:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module1"],
+            ["a:name", "a:my_command_c"],
             [
-              "__atom__:params",
+              "a:params",
               %{
-                "type" => "map",
-                "data" => [
-                  ["__atom__:a", "__integer__:1"],
-                  ["__atom__:b", "__integer__:2"]
+                "t" => "m",
+                "d" => [
+                  ["a:a", "i:1"],
+                  ["a:b", "i:2"]
                 ]
               }
             ],
-            ["__atom__:target", "__binary__:my_target_1"]
+            ["a:target", "b:6d795f7461726765745f31"]
           ]
         }
       ]
@@ -96,7 +96,7 @@ defmodule Hologram.Socket.ChannelTest do
       assert handle_in("command", payload, :dummy_socket) ==
                {:reply,
                 {:ok,
-                 ~s/Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("my_action_c")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_2")]])/},
+                 ~s/Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("my_action_c")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring2("my_target_2")]])/},
                 :dummy_socket}
     end
 
@@ -104,12 +104,12 @@ defmodule Hologram.Socket.ChannelTest do
       payload = [
         1,
         %{
-          "type" => "map",
-          "data" => [
-            ["__atom__:module", "__atom__:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module6"],
-            ["__atom__:name", "__atom__:my_command_6"],
-            ["__atom__:params", %{"type" => "map", "data" => []}],
-            ["__atom__:target", "__binary__:my_target_1"]
+          "t" => "m",
+          "d" => [
+            ["a:module", "a:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module6"],
+            ["a:name", "a:my_command_6"],
+            ["a:params", %{"t" => "m", "d" => []}],
+            ["a:target", "b:6d795f7461726765745f31"]
           ]
         }
       ]
@@ -137,7 +137,7 @@ defmodule Hologram.Socket.ChannelTest do
     test "module payload" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module2, :dummy_module_2_digest)
 
-      payload = [1, "__atom__:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module2"]
+      payload = [1, "a:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module2"]
 
       assert handle_in("page", payload, :dummy_socket) ==
                {:reply, {:ok, "page Module2 template"}, :dummy_socket}
@@ -151,12 +151,12 @@ defmodule Hologram.Socket.ChannelTest do
         %{
           "type" => "tuple",
           "data" => [
-            "__atom__:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module3",
+            "a:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module3",
             %{
               "type" => "map",
               "data" => [
-                ["__atom__:a", "__integer__:1"],
-                ["__atom__:b", "__integer__:2"]
+                ["a:a", "i:1"],
+                ["a:b", "i:2"]
               ]
             }
           ]
@@ -170,7 +170,7 @@ defmodule Hologram.Socket.ChannelTest do
     test "rendered page is not treated as initial page" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
 
-      payload = [1, "__atom__:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module5"]
+      payload = [1, "a:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module5"]
 
       assert {:reply, {:ok, html}, :dummy_socket} = handle_in("page", payload, :dummy_socket)
 
@@ -182,7 +182,7 @@ defmodule Hologram.Socket.ChannelTest do
     setup_page_digest_registry(PageDigestRegistryStub)
     ETS.put(PageDigestRegistryStub.ets_table_name(), Module2, "12345678901234567890123456789012")
 
-    payload = [1, "__atom__:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module2"]
+    payload = [1, "a:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module2"]
 
     assert handle_in("page_bundle_path", payload, :dummy_socket) ==
              {:reply, {:ok, "/hologram/page-12345678901234567890123456789012.js"}, :dummy_socket}
