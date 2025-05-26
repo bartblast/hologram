@@ -74,6 +74,10 @@ export default class Serializer {
         return value;
       }
 
+      if (valueType === "string") {
+        return `s${value}`;
+      }
+
       throw new HologramRuntimeError(
         `type "${valueType}" is not supported by the serializer`,
       );

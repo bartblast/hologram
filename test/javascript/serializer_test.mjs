@@ -2,7 +2,7 @@
 
 import {
   assert,
-  //   contextFixture,
+  // contextFixture,
   defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
@@ -116,6 +116,22 @@ describe("Serializer", () => {
             assert.equal(serialize(term), expected);
           });
         });
+
+        describe("string", () => {
+          it("top-level", () => {
+            const term = 'x"yz';
+            const expected = '[2,"sx\\"yz"]';
+
+            assert.equal(serialize(term), expected);
+          });
+
+          it("nested", () => {
+            const term = {a: 'x"yz', b: 2};
+            const expected = '[2,{"a":"sx\\"yz","b":2}]';
+
+            assert.equal(serialize(term), expected);
+          });
+        });
       });
 
       describe("not supported", () => {
@@ -169,24 +185,6 @@ describe("Serializer", () => {
               () => serialize({a: () => 123}),
               HologramRuntimeError,
               'type "function" is not supported by the serializer',
-            );
-          });
-        });
-
-        describe("string", () => {
-          it("top-level", () => {
-            assert.throw(
-              () => serialize("abc"),
-              HologramRuntimeError,
-              'type "string" is not supported by the serializer',
-            );
-          });
-
-          it("nested", () => {
-            assert.throw(
-              () => serialize({a: "abc"}),
-              HologramRuntimeError,
-              'type "string" is not supported by the serializer',
             );
           });
         });
