@@ -40,6 +40,12 @@ defmodule Hologram.Socket.Decoder do
     String.to_existing_atom(value)
   end
 
+  def decode(2, "f" <> value) do
+    value
+    |> Float.parse()
+    |> elem(0)
+  end
+
   def decode(1, "__atom__:" <> value) do
     String.to_existing_atom(value)
   end
@@ -59,12 +65,6 @@ defmodule Hologram.Socket.Decoder do
   #   end
 
   #   def decode(2, "b"), do: ""
-
-  #   def decode(2, "f:" <> value) do
-  #     value
-  #     |> Float.parse()
-  #     |> elem(0)
-  #   end
 
   #   def decode(2, "i:" <> value) do
   #     IntegerUtils.parse!(value)
