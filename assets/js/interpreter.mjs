@@ -460,7 +460,7 @@ export default class Interpreter {
 
   static getErrorMessage(jsError) {
     // TODO: use transpiled Elixir code
-    return Bitstring.toText(jsError.struct.data["atom(message)"][1]);
+    return Bitstring2.toText(jsError.struct.data["atom(message)"][1]);
   }
 
   static getErrorType(jsError) {
