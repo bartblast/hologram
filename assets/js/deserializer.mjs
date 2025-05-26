@@ -3,17 +3,20 @@
 // import Bitstring2 from "./bitstring2.mjs";
 // import Interpreter from "./interpreter.mjs";
 // import Serializer from "./serializer.mjs";
-// import Type from "./type.mjs";
+import Type from "./type.mjs";
 
 export default class Deserializer {
   static deserialize(serialized) {
+    let version = null;
+
     return JSON.parse(serialized, (_key, value) => {
-      //       if (typeof value === "string") {
-      //         const result = $.#maybeDeserializeStringTerm(value, version);
-      //         if (result !== null) {
-      //           return result;
-      //         }
-      //       }
+      if (version === null) {
+        version = parseInt(value);
+      }
+
+      if (typeof value === "string") {
+        return $.#maybeDeserializeStringTerm(value, version);
+      }
 
       //       const result = $.#maybeDeserializeObjectTerm(value, version);
       //       if (result !== null) {
@@ -59,44 +62,45 @@ export default class Deserializer {
   //     }
   //     return null;
   //   }
-  //   static #maybeDeserializeStringTerm(value, version) {
-  //     if (version >= 2) {
-  //       if (value.startsWith("a:")) {
-  //         return Type.atom(value.slice(2));
-  //       }
-  //       if (value.startsWith("b:")) {
-  //         return $.#deserializeBitstring(value);
-  //       }
-  //       if (value === "b") {
-  //         return Type.bitstring2("");
-  //       }
-  //       if (value.startsWith("f:")) {
-  //         return Type.float(Number(value.slice(2)));
-  //       }
-  //       if (value.startsWith("i:")) {
-  //         return Type.integer(BigInt(value.slice(2)));
-  //       }
-  //     }
-  //     if (value.startsWith("__atom__:")) {
-  //       return Type.atom(value.slice(9));
-  //     }
-  //     if (value.startsWith("__bigint__:")) {
-  //       return BigInt(value.slice(11));
-  //     }
-  //     if (value.startsWith("__binary__:")) {
-  //       return Type.bitstring2(value.slice(11));
-  //     }
-  //     if (value.startsWith("__float__:")) {
-  //       return Type.float(Number(value.slice(10)));
-  //     }
-  //     if (value.startsWith("__function__:")) {
-  //       return Interpreter.evaluateJavaScriptExpression(value.slice(13));
-  //     }
-  //     if (value.startsWith("__integer__:")) {
-  //       return Type.integer(BigInt(value.slice(12)));
-  //     }
-  //     return null;
-  //   }
+  static #maybeDeserializeStringTerm(value, version) {
+    if (version >= 2) {
+      //       if (value.startsWith("a:")) {
+      //         return Type.atom(value.slice(2));
+      //       }
+      //       if (value.startsWith("b:")) {
+      //         return $.#deserializeBitstring(value);
+      //       }
+      //       if (value === "b") {
+      //         return Type.bitstring2("");
+      //       }
+      //       if (value.startsWith("f:")) {
+      //         return Type.float(Number(value.slice(2)));
+      //       }
+      //       if (value.startsWith("i:")) {
+      //         return Type.integer(BigInt(value.slice(2)));
+      //       }
+    }
+
+    if (value.startsWith("__atom__:")) {
+      return Type.atom(value.slice(9));
+    }
+
+    //     if (value.startsWith("__bigint__:")) {
+    //       return BigInt(value.slice(11));
+    //     }
+    //     if (value.startsWith("__binary__:")) {
+    //       return Type.bitstring2(value.slice(11));
+    //     }
+    //     if (value.startsWith("__float__:")) {
+    //       return Type.float(Number(value.slice(10)));
+    //     }
+    //     if (value.startsWith("__function__:")) {
+    //       return Interpreter.evaluateJavaScriptExpression(value.slice(13));
+    //     }
+    //     if (value.startsWith("__integer__:")) {
+    //       return Type.integer(BigInt(value.slice(12)));
+    //     }
+  }
 }
 
-// const $ = Deserializer;
+const $ = Deserializer;

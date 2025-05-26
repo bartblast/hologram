@@ -9,7 +9,7 @@ import {
 import Deserializer from "../../assets/js/deserializer.mjs";
 // import Interpreter from "../../assets/js/interpreter.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
-// import Type from "../../assets/js/type.mjs";
+import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
@@ -55,7 +55,7 @@ function testTopLevelDeserialization(term) {
 //   assert.isTrue(Interpreter.isStrictlyEqual(deserialized, term));
 // }
 
-describe.only("Deserializer", () => {
+describe("Deserializer", () => {
   describe("deserialize()", () => {
     describe("version 2 (current)", () => {
       describe("JS terms", () => {
@@ -111,6 +111,27 @@ describe.only("Deserializer", () => {
 
     describe("old versions", () => {
       describe("version 1", () => {
+        describe("boxed terms", () => {
+          describe("atom", () => {
+            const term = Type.atom("abc");
+
+            it("top-level", () => {
+              const serialized = '[1,"__atom__:abc"]';
+              const deserialized = deserialize(serialized);
+
+              assert.deepStrictEqual(deserialized, term);
+            });
+
+            it("nested", () => {
+              const serialized = '[1,{"x":"__atom__:abc","y":2}]';
+              const deserialized = deserialize(serialized);
+              const expected = {x: term, y: 2};
+
+              assert.deepStrictEqual(deserialized, expected);
+            });
+          });
+        });
+
         describe("JS terms", () => {
           describe("array", () => {
             const term = [9, 8.76];
@@ -660,28 +681,6 @@ describe.only("Deserializer", () => {
     //               ]);
 
     //               assert.deepStrictEqual(callResult, expectedCallResult);
-    //             });
-
-    //             // Not applicable
-    //             // it("not versioned", () => {});
-    //           });
-
-    //           describe("atom", () => {
-    //             const term = Type.atom("abc");
-
-    //             it("top-level", () => {
-    //               const serialized = '[1,"__atom__:abc"]';
-    //               const deserialized = deserialize(serialized);
-
-    //               assert.deepStrictEqual(deserialized, term);
-    //             });
-
-    //             it("nested", () => {
-    //               const serialized = '[1,{"x":"__atom__:abc","y":2}]';
-    //               const deserialized = deserialize(serialized);
-    //               const expected = {x: term, y: 2};
-
-    //               assert.deepStrictEqual(deserialized, expected);
     //             });
 
     //             // Not applicable
