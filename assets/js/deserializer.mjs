@@ -93,15 +93,16 @@ export default class Deserializer {
       return Type.atom(value.slice(9));
     }
 
+    if (value.startsWith("__float__:")) {
+      return Type.float(Number(value.slice(10)));
+    }
+
     return value;
     //     if (value.startsWith("__bigint__:")) {
     //       return BigInt(value.slice(11));
     //     }
     //     if (value.startsWith("__binary__:")) {
     //       return Type.bitstring2(value.slice(11));
-    //     }
-    //     if (value.startsWith("__float__:")) {
-    //       return Type.float(Number(value.slice(10)));
     //     }
     //     if (value.startsWith("__function__:")) {
     //       return Interpreter.evaluateJavaScriptExpression(value.slice(13));

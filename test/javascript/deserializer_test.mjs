@@ -180,6 +180,25 @@ describe("Deserializer", () => {
               assert.deepStrictEqual(deserialized, expected);
             });
           });
+
+          describe("float", () => {
+            const term = Type.float(2.34);
+
+            it("top-level", () => {
+              const serialized = '[1,"__float__:2.34"]';
+              const deserialized = deserialize(serialized);
+
+              assert.deepStrictEqual(deserialized, term);
+            });
+
+            it("nested", () => {
+              const serialized = '[1,{"x":"__float__:2.34"}]';
+              const deserialized = deserialize(serialized);
+              const expected = {x: term};
+
+              assert.deepStrictEqual(deserialized, expected);
+            });
+          });
         });
 
         describe("JS terms", () => {
@@ -833,28 +852,6 @@ describe("Deserializer", () => {
     //               // Not applicable
     //               // it("not versioned", () => {});
     //             });
-    //           });
-
-    //           describe("float", () => {
-    //             const term = Type.float(1.23);
-
-    //             it("top-level", () => {
-    //               const serialized = '[1,"__float__:1.23"]';
-    //               const deserialized = deserialize(serialized);
-
-    //               assert.deepStrictEqual(deserialized, term);
-    //             });
-
-    //             it("nested", () => {
-    //               const serialized = '[1,{"x":"__float__:1.23","y":2}]';
-    //               const deserialized = deserialize(serialized);
-    //               const expected = {x: term, y: 2};
-
-    //               assert.deepStrictEqual(deserialized, expected);
-    //             });
-
-    //             // Not applicable
-    //             // it("not versioned", () => {});
     //           });
 
     //           describe("integer", () => {
