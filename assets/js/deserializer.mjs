@@ -71,6 +71,9 @@ export default class Deserializer {
         case "a":
           return Type.atom(data);
 
+        case "f":
+          return Type.float(Number(data));
+
         case "s":
           return data;
       }
@@ -80,9 +83,6 @@ export default class Deserializer {
       //       }
       //       if (value === "b") {
       //         return Type.bitstring2("");
-      //       }
-      //       if (value.startsWith("f:")) {
-      //         return Type.float(Number(value.slice(2)));
       //       }
       //       if (value.startsWith("i:")) {
       //         return Type.integer(BigInt(value.slice(2)));
