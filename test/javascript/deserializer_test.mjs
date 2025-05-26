@@ -134,7 +134,7 @@ describe("Deserializer", () => {
         });
 
         describe("string", () => {
-          const term = 'x"yz';
+          const term = 'a"bc';
 
           it("top-level", () => {
             testTopLevelDeserialization(term);
@@ -259,6 +259,25 @@ describe("Deserializer", () => {
 
             it("nested", () => {
               const serialized = '[1,{"x":{"a":9,"b\\"cd":8.76},"y":2}]';
+              const deserialized = deserialize(serialized);
+              const expected = {x: term, y: 2};
+
+              assert.deepStrictEqual(deserialized, expected);
+            });
+          });
+
+          describe("string", () => {
+            const term = 'a"bc';
+
+            it("top-level", () => {
+              const serialized = '[1,"a\\"bc"]';
+              const deserialized = deserialize(serialized);
+
+              assert.deepStrictEqual(deserialized, term);
+            });
+
+            it("nested", () => {
+              const serialized = '[1,{"x":"a\\"bc","y":2}]';
               const deserialized = deserialize(serialized);
               const expected = {x: term, y: 2};
 

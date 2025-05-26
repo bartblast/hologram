@@ -93,6 +93,7 @@ export default class Deserializer {
       return Type.atom(value.slice(9));
     }
 
+    return value;
     //     if (value.startsWith("__bigint__:")) {
     //       return BigInt(value.slice(11));
     //     }
