@@ -17,7 +17,7 @@ const deserialize = Deserializer.deserialize;
 const serialize = Serializer.serialize;
 
 function testNestedDeserialization(nestedTerm) {
-  const term = {x: nestedTerm, y: 2};
+  const term = {x: nestedTerm};
   const serialized = serialize(term);
   const deserialized = deserialize(serialized);
 
@@ -173,9 +173,9 @@ describe("Deserializer", () => {
             });
 
             it("nested", () => {
-              const serialized = '[1,{"x":"__atom__:abc","y":2}]';
+              const serialized = '[1,{"x":"__atom__:abc"}]';
               const deserialized = deserialize(serialized);
-              const expected = {x: term, y: 2};
+              const expected = {x: term};
 
               assert.deepStrictEqual(deserialized, expected);
             });
@@ -213,9 +213,9 @@ describe("Deserializer", () => {
             });
 
             it("nested", () => {
-              const serialized = '[1,{"x":[9,8.76],"y":2}]';
+              const serialized = '[1,{"x":[9,8.76]}]';
               const deserialized = deserialize(serialized);
-              const expected = {x: term, y: 2};
+              const expected = {x: term};
 
               assert.deepStrictEqual(deserialized, expected);
             });
@@ -232,9 +232,9 @@ describe("Deserializer", () => {
             });
 
             it("nested", () => {
-              const serialized = '[1,{"x":9.87,"y":2}]';
+              const serialized = '[1,{"x":9.87}]';
               const deserialized = deserialize(serialized);
-              const expected = {x: term, y: 2};
+              const expected = {x: term};
 
               assert.deepStrictEqual(deserialized, expected);
             });
@@ -251,9 +251,9 @@ describe("Deserializer", () => {
             });
 
             it("nested", () => {
-              const serialized = '[1,{"x":987,"y":2}]';
+              const serialized = '[1,{"x":987}]';
               const deserialized = deserialize(serialized);
-              const expected = {x: term, y: 2};
+              const expected = {x: term};
 
               assert.deepStrictEqual(deserialized, expected);
             });
@@ -270,9 +270,9 @@ describe("Deserializer", () => {
             });
 
             it("nested", () => {
-              const serialized = '[1,{"x":null,"y":2}]';
+              const serialized = '[1,{"x":null}]';
               const deserialized = deserialize(serialized);
-              const expected = {x: term, y: 2};
+              const expected = {x: term};
 
               assert.deepStrictEqual(deserialized, expected);
             });
@@ -289,9 +289,9 @@ describe("Deserializer", () => {
             });
 
             it("nested", () => {
-              const serialized = '[1,{"x":{"a":9,"b\\"cd":8.76},"y":2}]';
+              const serialized = '[1,{"x":{"a":9,"b\\"cd":8.76}}]';
               const deserialized = deserialize(serialized);
-              const expected = {x: term, y: 2};
+              const expected = {x: term};
 
               assert.deepStrictEqual(deserialized, expected);
             });
@@ -308,9 +308,9 @@ describe("Deserializer", () => {
             });
 
             it("nested", () => {
-              const serialized = '[1,{"x":"a\\"bc","y":2}]';
+              const serialized = '[1,{"x":"a\\"bc"}]';
               const deserialized = deserialize(serialized);
-              const expected = {x: term, y: 2};
+              const expected = {x: term};
 
               assert.deepStrictEqual(deserialized, expected);
             });
