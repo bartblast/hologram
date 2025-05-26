@@ -132,6 +132,18 @@ describe("Deserializer", () => {
             testNestedDeserialization(term);
           });
         });
+
+        describe("string", () => {
+          const term = 'x"yz';
+
+          it("top-level", () => {
+            testTopLevelDeserialization(term);
+          });
+
+          it("nested", () => {
+            testNestedDeserialization(term);
+          });
+        });
       });
     });
 

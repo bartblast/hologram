@@ -70,6 +70,9 @@ export default class Deserializer {
       switch (typeCode) {
         case "a":
           return Type.atom(data);
+
+        case "s":
+          return data;
       }
 
       //       if (value.startsWith("b:")) {
