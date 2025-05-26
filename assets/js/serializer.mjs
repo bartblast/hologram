@@ -68,7 +68,7 @@ export default class Serializer {
 
       //       return typeof value === "undefined" ? null : value;
 
-      const valueType = value === null ? "null" : typeof value;
+      const valueType = typeof value;
 
       if (valueType === "number" || valueType === "object") {
         return value;

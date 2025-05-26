@@ -85,6 +85,22 @@ describe("Serializer", () => {
           });
         });
 
+        describe("null", () => {
+          it("top-level", () => {
+            const term = null;
+            const expected = "[2,null]";
+
+            assert.equal(serialize(term), expected);
+          });
+
+          it("nested", () => {
+            const term = {a: null};
+            const expected = '[2,{"a":null}]';
+
+            assert.equal(serialize(term), expected);
+          });
+        });
+
         describe("object", () => {
           it("top-level", () => {
             const term = {a: 9, 'b"cd': 8.76};
@@ -153,24 +169,6 @@ describe("Serializer", () => {
               () => serialize({a: () => 123}),
               HologramRuntimeError,
               'type "function" is not supported by the serializer',
-            );
-          });
-        });
-
-        describe("null", () => {
-          it("top-level", () => {
-            assert.throw(
-              () => serialize(null),
-              HologramRuntimeError,
-              'type "null" is not supported by the serializer',
-            );
-          });
-
-          it("nested", () => {
-            assert.throw(
-              () => serialize({a: null}),
-              HologramRuntimeError,
-              'type "null" is not supported by the serializer',
             );
           });
         });
