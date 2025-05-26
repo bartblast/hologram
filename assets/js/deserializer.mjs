@@ -64,9 +64,14 @@ export default class Deserializer {
   //   }
   static #maybeDeserializeStringTerm(value, version) {
     if (version >= 2) {
-      //       if (value.startsWith("a:")) {
-      //         return Type.atom(value.slice(2));
-      //       }
+      const typeCode = value[0];
+      const data = value.slice(1);
+
+      switch (typeCode) {
+        case "a":
+          return Type.atom(data);
+      }
+
       //       if (value.startsWith("b:")) {
       //         return $.#deserializeBitstring(value);
       //       }

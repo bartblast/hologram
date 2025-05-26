@@ -58,6 +58,20 @@ function testTopLevelDeserialization(term) {
 describe("Deserializer", () => {
   describe("deserialize()", () => {
     describe("version 2 (current)", () => {
+      describe("boxed terms", () => {
+        describe("atom", () => {
+          const term = Type.atom("abc");
+
+          it("top-level", () => {
+            testTopLevelDeserialization(term);
+          });
+
+          it("nested", () => {
+            testNestedDeserialization(term);
+          });
+        });
+      });
+
       describe("JS terms", () => {
         describe("array", () => {
           const term = [9, 8.76];
@@ -470,22 +484,6 @@ describe("Deserializer", () => {
     //             ]);
 
     //             assert.deepStrictEqual(callResult, expectedCallResult);
-    //           });
-    //         });
-
-    //         describe("atom", () => {
-    //           const term = Type.atom("abc");
-
-    //           it("top-level", () => {
-    //             testTopLevelDeserialization(term);
-    //           });
-
-    //           it("nested", () => {
-    //             testNestedDeserialization(term);
-    //           });
-
-    //           it("not versioned", () => {
-    //             testNotVersionedDeserialization(term);
     //           });
     //         });
 
