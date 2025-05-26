@@ -216,6 +216,25 @@ describe("Deserializer", () => {
             });
           });
 
+          describe("null", () => {
+            const term = null;
+
+            it("top-level", () => {
+              const serialized = "[1,null]";
+              const deserialized = deserialize(serialized);
+
+              assert.deepStrictEqual(deserialized, term);
+            });
+
+            it("nested", () => {
+              const serialized = '[1,{"x":null,"y":2}]';
+              const deserialized = deserialize(serialized);
+              const expected = {x: term, y: 2};
+
+              assert.deepStrictEqual(deserialized, expected);
+            });
+          });
+
           describe("object", () => {
             const term = {a: 9, 'b"cd': 8.76};
 
