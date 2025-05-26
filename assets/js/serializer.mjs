@@ -62,10 +62,6 @@ export default class Serializer {
       //         return `__bigint__:${value.toString()}`;
       //       }
 
-      //       if (typeof value === "function") {
-      //         return `__function__:${value.toString()}`;
-      //       }
-
       //       return typeof value === "undefined" ? null : value;
 
       const valueType = typeof value;
@@ -74,8 +70,17 @@ export default class Serializer {
         return value;
       }
 
-      if (valueType === "string") {
-        return `s${value}`;
+      // Cases ordered by expected frequency (most common first)
+      switch (valueType) {
+        case "object":
+        case "number":
+          return value;
+
+        case "string":
+          return `s${value}`;
+
+        case "function":
+          return `u${value}`;
       }
 
       throw new HologramRuntimeError(

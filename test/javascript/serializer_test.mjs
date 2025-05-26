@@ -13,7 +13,7 @@ import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
-describe("Serializer", () => {
+describe.only("Serializer", () => {
   describe("serialize()", () => {
     const serialize = Serializer.serialize;
 
@@ -66,6 +66,44 @@ describe("Serializer", () => {
             const expected = '[2,{"a":9.87}]';
 
             assert.equal(serialize(term), expected);
+          });
+        });
+
+        describe("function", () => {
+          describe("longhand syntax", () => {
+            // prettier-ignore
+            const fun = function (param1, param2) { const integer = Type.integer(param1); const binary = Type.bitstring2('a"bc'); return Type.list([integer, binary, param2]); };
+
+            it("top-level", () => {
+              const expected = `[2,"ufunction (param1, param2) { const integer = Type.integer(param1); const binary = Type.bitstring2('a\\"bc'); return Type.list([integer, binary, param2]); }"]`;
+
+              assert.equal(serialize(fun), expected);
+            });
+
+            it("nested", () => {
+              const term = {a: fun};
+              const expected = `[2,{"a":"ufunction (param1, param2) { const integer = Type.integer(param1); const binary = Type.bitstring2('a\\"bc'); return Type.list([integer, binary, param2]); }"}]`;
+
+              assert.equal(serialize(term), expected);
+            });
+          });
+
+          describe("shorthand syntax", () => {
+            // prettier-ignore
+            const fun = (param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring2('a"bc'); return Type.list([integer, binary, param2]); };
+
+            it("top-level", () => {
+              const expected = `[2,"u(param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring2('a\\"bc'); return Type.list([integer, binary, param2]); }"]`;
+
+              assert.equal(serialize(fun), expected);
+            });
+
+            it("nested", () => {
+              const term = {a: fun};
+              const expected = `[2,{"a":"u(param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring2('a\\"bc'); return Type.list([integer, binary, param2]); }"}]`;
+
+              assert.equal(serialize(term), expected);
+            });
           });
         });
 
@@ -167,24 +205,6 @@ describe("Serializer", () => {
               () => serialize({a: true}),
               HologramRuntimeError,
               'type "boolean" is not supported by the serializer',
-            );
-          });
-        });
-
-        describe("function", () => {
-          it("top-level", () => {
-            assert.throw(
-              () => serialize(() => 123),
-              HologramRuntimeError,
-              'type "function" is not supported by the serializer',
-            );
-          });
-
-          it("nested", () => {
-            assert.throw(
-              () => serialize({a: () => 123}),
-              HologramRuntimeError,
-              'type "function" is not supported by the serializer',
             );
           });
         });
