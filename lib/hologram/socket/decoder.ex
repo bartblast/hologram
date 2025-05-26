@@ -36,13 +36,13 @@ defmodule Hologram.Socket.Decoder do
   @spec decode(integer, map | String.t()) :: any
   def decode(version, term)
 
-  def decode(1, "__atom__:" <> value) do
+  def decode(2, "a" <> value) do
     String.to_existing_atom(value)
   end
 
-  #   def decode(2, "a:" <> value) do
-  #     String.to_existing_atom(value)
-  #   end
+  def decode(1, "__atom__:" <> value) do
+    String.to_existing_atom(value)
+  end
 
   #   def decode(2, "b:" <> value) do
   #     case String.split(value, ":", parts: 2) do

@@ -2,9 +2,15 @@ defmodule Hologram.Socket.DecoderTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Socket.Decoder
 
+  describe "version 2" do
+    test "atom" do
+      assert decode(2, "axyz") == :xyz
+    end
+  end
+
   describe "version 1" do
     test "atom" do
-      assert decode(1, "__atom__:abc") == :abc
+      assert decode(1, "__atom__:xyz") == :xyz
     end
   end
 
@@ -16,10 +22,6 @@ defmodule Hologram.Socket.DecoderTest do
   #                "capturedFunction" => "parse_date",
   #                "arity" => 2
   #              }) == (&Calendar.ISO.parse_date/2)
-  #     end
-
-  #     test "atom" do
-  #       assert decode(2, "a:abc") == :abc
   #     end
 
   #     test "bitstring, empty" do
