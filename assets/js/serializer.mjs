@@ -1,6 +1,6 @@
 "use strict";
 
-// import Bitstring2 from "./bitstring2.mjs";
+import Bitstring2 from "./bitstring2.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 
 /*
@@ -26,16 +26,15 @@ export default class Serializer {
         case "atom":
           return `a${value.value}`;
 
+        case "bitstring2":
+          return Bitstring2.serialize(value);
+
         case "float":
           return `f${value.value}`;
 
         case "integer":
           return `i${value.value}`;
       }
-
-      //       if (boxedValueType === "bitstring2") {
-      //         return Bitstring2.serialize(value);
-      //       }
 
       //       if (boxedValueType === "map") {
       //         return {t: "m", d: Object.values(value.data)};

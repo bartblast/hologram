@@ -5276,7 +5276,7 @@ describe("Bitstring2", () => {
       const bitstring = Type.bitstring2("Hologram");
       const result = Bitstring2.serialize(bitstring);
 
-      assert.equal(result, "b:486f6c6f6772616d");
+      assert.equal(result, "b0486f6c6f6772616d");
     });
 
     it("non-empty bitstring with leftover bits", () => {
@@ -5285,7 +5285,7 @@ describe("Bitstring2", () => {
 
       const result = Bitstring2.serialize(bitstring);
 
-      assert.equal(result, "b:013467:5");
+      assert.equal(result, "b5013467");
     });
   });
 

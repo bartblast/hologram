@@ -517,21 +517,13 @@ export default class Bitstring2 {
   }
 
   static serialize(bitstring) {
+    if ($.isEmpty(bitstring)) {
+      return "b";
+    }
+
     $.maybeResolveHex(bitstring);
 
-    let serialized = "b";
-    const hex = bitstring.hex;
-    const leftoverBitCount = bitstring.leftoverBitCount;
-
-    if (hex !== "") {
-      serialized += `:${hex}`;
-    }
-
-    if (leftoverBitCount > 0) {
-      serialized += `:${leftoverBitCount}`;
-    }
-
-    return serialized;
+    return `b${bitstring.leftoverBitCount}${bitstring.hex}`;
   }
 
   static takeChunk(bitstring, chunkOffset, chunkSize) {

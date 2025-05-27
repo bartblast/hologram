@@ -34,6 +34,22 @@ describe("Serializer", () => {
         });
       });
 
+      describe("bitstring", () => {
+        it("top-level", () => {
+          const term = Type.bitstring2('a"bc');
+          const expected = '[2,"b061226263"]';
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("nested", () => {
+          const term = {a: Type.bitstring2('a"bc')};
+          const expected = '[2,{"a":"b061226263"}]';
+
+          assert.equal(serialize(term), expected);
+        });
+      });
+
       describe("float", () => {
         describe("encoded as float", () => {
           it("top-level", () => {
@@ -460,55 +476,6 @@ describe("Serializer", () => {
     //             '{"type":"anonymous_function","arity":2,"capturedFunction":"parse_date","capturedModule":"Calendar.ISO","clauses":["__function__:(param) => Type.integer(param)","__function__:(param) => Type.bitstring2(param)"],"context":{"module":"a:Elixir.MyModule","vars":{}},"uniqueId":1}';
 
     //           assert.equal(serialize(term, true, false), expected);
-    //         });
-    //       });
-
-    //       describe("bitstring", () => {
-    //         describe("binary", () => {
-    //           it("top-level", () => {
-    //             const term = Type.bitstring2('a"bc');
-    //             const expected = '[2,"b:61226263"]';
-
-    //             assert.equal(serialize(term), expected);
-    //           });
-
-    //           it("nested", () => {
-    //             const term = {a: Type.bitstring2('a"bc'), b: 2};
-    //             const expected = '[2,{"a":"b:61226263","b":2}]';
-
-    //             assert.equal(serialize(term), expected);
-    //           });
-
-    //           it("not versioned", () => {
-    //             const term = Type.bitstring2('a"bc');
-    //             const expected = '"b:61226263"';
-
-    //             assert.equal(serialize(term, true, false), expected);
-    //           });
-    //         });
-
-    //         describe("non-binary", () => {
-    //           it("top-level", () => {
-    //             const term = Type.bitstring2([1, 0, 1, 0]);
-    //             const expected = '[2,"b:a0:4"]';
-
-    //             assert.equal(serialize(term), expected);
-    //           });
-
-    //           it("nested", () => {
-    //             const term = {a: Type.bitstring2([1, 0, 1, 0]), b: 2};
-
-    //             const expected = '[2,{"a":"b:a0:4","b":2}]';
-
-    //             assert.equal(serialize(term), expected);
-    //           });
-
-    //           it("not versioned", () => {
-    //             const term = Type.bitstring2([1, 0, 1, 0]);
-    //             const expected = '"b:a0:4"';
-
-    //             assert.equal(serialize(term, true, false), expected);
-    //           });
     //         });
     //       });
 
