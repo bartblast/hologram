@@ -42,17 +42,17 @@ defmodule Hologram.Socket.Decoder do
 
   def decode(2, "b"), do: ""
 
+  def decode(2, "b0" <> <<hex::binary>>) do
+    Base.decode16!(hex, case: :lower)
+  end
+
   def decode(2, "b" <> <<leftover_bits::binary-size(1), hex::binary>>) do
     bytes = Base.decode16!(hex, case: :lower)
     leftover_bit_count = String.to_integer(leftover_bits)
 
-    if leftover_bit_count == 0 do
-      bytes
-    else
-      <<full_bytes::binary-size(byte_size(bytes) - 1), leftover_bits_byte::integer>> = bytes
-      leftover_bits_byte = Bitwise.bsr(leftover_bits_byte, 8 - leftover_bit_count)
-      <<full_bytes::binary, leftover_bits_byte::size(leftover_bit_count)>>
-    end
+    <<full_bytes::binary-size(byte_size(bytes) - 1), leftover_bits_byte::integer>> = bytes
+    leftover_bits_byte = Bitwise.bsr(leftover_bits_byte, 8 - leftover_bit_count)
+    <<full_bytes::binary, leftover_bits_byte::size(leftover_bit_count)>>
   end
 
   def decode(2, "f" <> value) do
