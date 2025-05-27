@@ -2,7 +2,7 @@ defmodule Hologram.Socket.Decoder do
   @moduledoc false
 
   #   alias Hologram.Commons.BitstringUtils
-  #   alias Hologram.Commons.IntegerUtils
+  alias Hologram.Commons.IntegerUtils
 
   # This is added only to make String.to_existing_atom/1 recognize atoms related to client DOM events
   @atoms_whitelist [
@@ -46,6 +46,10 @@ defmodule Hologram.Socket.Decoder do
     |> elem(0)
   end
 
+  def decode(2, "i" <> value) do
+    IntegerUtils.parse!(value)
+  end
+
   def decode(1, "__atom__:" <> value) do
     String.to_existing_atom(value)
   end
@@ -71,10 +75,6 @@ defmodule Hologram.Socket.Decoder do
   #   end
 
   #   def decode(2, "b"), do: ""
-
-  #   def decode(2, "i:" <> value) do
-  #     IntegerUtils.parse!(value)
-  #   end
 
   #   def decode(2, %{"t" => "m", "d" => data}) do
   #     data
