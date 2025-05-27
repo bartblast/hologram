@@ -7,6 +7,26 @@ defmodule Hologram.Socket.DecoderTest do
       assert decode(2, "axyz") == :xyz
     end
 
+    test "bitstring, empty" do
+      assert decode(2, "b") == ""
+    end
+
+    test "bitstring, single-byte, without leftover bits" do
+      assert decode(2, "b061") == "a"
+    end
+
+    test "bitstring, single-byte, with leftover bits" do
+      assert decode(2, "b3a0") == <<5::size(3)>>
+    end
+
+    test "bitstring, multiple-byte, without leftover bits" do
+      assert decode(2, "b0486f6c6f6772616d") == "Hologram"
+    end
+
+    test "bitstring, multiple-byte, with leftover bits" do
+      assert decode(2, "b3616263a0") == <<97, 98, 99, 5::size(3)>>
+    end
+
     test "float, encoded as float" do
       assert decode(2, "f1.23") === 1.23
     end
@@ -46,26 +66,6 @@ defmodule Hologram.Socket.DecoderTest do
   #                "capturedFunction" => "parse_date",
   #                "arity" => 2
   #              }) == (&Calendar.ISO.parse_date/2)
-  #     end
-
-  #     test "bitstring, empty" do
-  #       assert decode(2, "b") == ""
-  #     end
-
-  #     test "bitstring, single-byte, without leftover bits" do
-  #       assert decode(2, "b:61") == "a"
-  #     end
-
-  #     test "bitstring, single-byte, with leftover bits" do
-  #       assert decode(2, "b:a0:3") == <<5::size(3)>>
-  #     end
-
-  #     test "bitstring, multiple-byte, without leftover bits" do
-  #       assert decode(2, "b:486f6c6f6772616d") == "Hologram"
-  #     end
-
-  #     test "bitstring, multiple-byte, with leftover bits" do
-  #       assert decode(2, "b:616263a0:3") == <<97, 98, 99, 5::size(3)>>
   #     end
 
   #     test "map" do
