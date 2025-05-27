@@ -57,9 +57,9 @@ export default class Deserializer {
     if (version === 1) {
       const boxedTermType = obj?.type;
 
-      //       if (boxedValueType === "map") {
-      //         return Type.map(value.data);
-      //       }
+      if (boxedTermType === "map") {
+        return Type.map(obj.data);
+      }
 
       if (boxedTermType === "bitstring") {
         return Type.bitstring2(obj.bits);

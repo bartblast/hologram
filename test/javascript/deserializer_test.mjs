@@ -437,6 +437,32 @@ describe("Deserializer", () => {
               assert.deepStrictEqual(deserialized, expected);
             });
           });
+
+          describe("map", () => {
+            const term = Type.map([
+              [Type.atom("a"), Type.integer(1)],
+              [Type.atom("b"), Type.float(2.34)],
+            ]);
+
+            it("top-level", () => {
+              const serialized =
+                '[1,{"type":"map","data":[["__atom__:a", "__integer__:1"],["__atom__:b", "__float__:2.34"]]}]';
+
+              const deserialized = deserialize(serialized);
+
+              assert.deepStrictEqual(deserialized, term);
+            });
+
+            it("nested", () => {
+              const serialized =
+                '[1,{"x":{"type":"map","data":[["__atom__:a", "__integer__:1"],["__atom__:b", "__float__:2.34"]]}}]';
+
+              const deserialized = deserialize(serialized);
+              const expected = {x: term};
+
+              assert.deepStrictEqual(deserialized, expected);
+            });
+          });
         });
 
         describe("JS terms", () => {
@@ -870,35 +896,6 @@ describe("Deserializer", () => {
     //               ]);
 
     //               assert.deepStrictEqual(callResult, expectedCallResult);
-    //             });
-
-    //             // Not applicable
-    //             // it("not versioned", () => {});
-    //           });
-
-    //           describe("map", () => {
-    //             const term = Type.map([
-    //               [Type.atom("a"), Type.integer(1)],
-    //               [Type.atom("b"), Type.float(2.34)],
-    //             ]);
-
-    //             it("top-level", () => {
-    //               const serialized =
-    //                 '[1,{"type":"map","data":[["__atom__:a", "__integer__:1"],["__atom__:b", "__float__:2.34"]]}]';
-
-    //               const deserialized = deserialize(serialized);
-
-    //               assert.deepStrictEqual(deserialized, term);
-    //             });
-
-    //             it("nested", () => {
-    //               const serialized =
-    //                 '[1,{"x":{"type":"map","data":[["__atom__:a", "__integer__:1"],["__atom__:b", "__float__:2.34"]]},"y":2}]';
-
-    //               const deserialized = deserialize(serialized);
-    //               const expected = {x: term, y: 2};
-
-    //               assert.deepStrictEqual(deserialized, expected);
     //             });
 
     //             // Not applicable
