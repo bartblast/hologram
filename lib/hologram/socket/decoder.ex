@@ -93,6 +93,12 @@ defmodule Hologram.Socket.Decoder do
     IntegerUtils.parse!(value)
   end
 
+  def decode(1, %{"type" => "map", "data" => data}) do
+    data
+    |> Enum.map(fn [key, value] -> {decode(1, key), decode(1, value)} end)
+    |> Enum.into(%{})
+  end
+
   #   def decode(_version, %{
   #         "type" => "anonymous_function",
   #         "capturedModule" => module_str,
@@ -126,10 +132,4 @@ defmodule Hologram.Socket.Decoder do
   #   |> Enum.map(&decode(version, &1))
   #   |> List.to_tuple()
   # end
-
-  #   def decode(1, %{"type" => "map", "data" => data}) do
-  #     data
-  #     |> Enum.map(fn [key, value] -> {decode(1, key), decode(1, value)} end)
-  #     |> Enum.into(%{})
-  #   end
 end
