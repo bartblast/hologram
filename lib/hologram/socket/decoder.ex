@@ -60,6 +60,10 @@ defmodule Hologram.Socket.Decoder do
     |> elem(0)
   end
 
+  def decode(1, "__integer__:" <> value) do
+    IntegerUtils.parse!(value)
+  end
+
   #   def decode(2, "b:" <> value) do
   #     case String.split(value, ":", parts: 2) do
   #       [hex, leftover_bit_count] ->
@@ -122,10 +126,6 @@ defmodule Hologram.Socket.Decoder do
 
   #   def decode(1, %{"type" => "bitstring", "bits" => bits}) do
   #     BitstringUtils.from_bit_list(bits)
-  #   end
-
-  #   def decode(1, "__integer__:" <> value) do
-  #     IntegerUtils.parse!(value)
   #   end
 
   #   def decode(1, %{"type" => "map", "data" => data}) do
