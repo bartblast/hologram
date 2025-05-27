@@ -96,6 +96,18 @@ describe("Deserializer", () => {
             });
           });
         });
+
+        describe("integer", () => {
+          const term = Type.integer(90071992547409919007199254740991n);
+
+          it("top-level", () => {
+            testTopLevelDeserialization(term);
+          });
+
+          it("nested", () => {
+            testNestedDeserialization(term);
+          });
+        });
       });
 
       describe("JS terms", () => {
@@ -355,22 +367,6 @@ describe("Deserializer", () => {
     });
 
     //     describe("OVERHAUL: boxed terms", () => {
-    //       describe("integer", () => {
-    //         const term = Type.integer(90071992547409919007199254740991n);
-
-    //         it("top-level", () => {
-    //           testTopLevelDeserialization(term);
-    //         });
-
-    //         it("nested", () => {
-    //           testNestedDeserialization(term);
-    //         });
-
-    //         it("not versioned", () => {
-    //           testNotVersionedDeserialization(term);
-    //         });
-    //       });
-
     //       describe("list", () => {
     //         const term = Type.list([Type.integer(1), Type.float(1.23)]);
 
