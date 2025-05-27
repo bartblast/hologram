@@ -67,6 +67,22 @@ describe("Serializer", () => {
           });
         });
       });
+
+      describe("integer", () => {
+        it("top-level", () => {
+          const term = Type.integer(123);
+          const expected = '[2,"i123"]';
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("nested", () => {
+          const term = {a: Type.integer(123)};
+          const expected = '[2,{"a":"i123"}]';
+
+          assert.equal(serialize(term), expected);
+        });
+      });
     });
 
     describe("JS terms", () => {
@@ -493,29 +509,6 @@ describe("Serializer", () => {
 
     //             assert.equal(serialize(term, true, false), expected);
     //           });
-    //         });
-    //       });
-
-    //       describe("integer", () => {
-    //         it("top-level", () => {
-    //           const term = Type.integer(123);
-    //           const expected = '[2,"i:123"]';
-
-    //           assert.equal(serialize(term), expected);
-    //         });
-
-    //         it("nested", () => {
-    //           const term = {a: Type.integer(123), b: 2};
-    //           const expected = '[2,{"a":"i:123","b":2}]';
-
-    //           assert.equal(serialize(term), expected);
-    //         });
-
-    //         it("not versioned", () => {
-    //           const term = Type.integer(123);
-    //           const expected = '"i:123"';
-
-    //           assert.equal(serialize(term, true, false), expected);
     //         });
     //       });
 

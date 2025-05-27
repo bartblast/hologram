@@ -27,15 +27,14 @@ export default class Serializer {
           return `a${value.value}`;
 
         case "float":
-          return `f${value.value.toString()}`;
+          return `f${value.value}`;
+
+        case "integer":
+          return `i${value.value}`;
       }
 
       //       if (boxedValueType === "bitstring2") {
       //         return Bitstring2.serialize(value);
-      //       }
-
-      //       if (boxedValueType === "integer") {
-      //         return `i:${value.value.toString()}`;
       //       }
 
       //       if (boxedValueType === "map") {
