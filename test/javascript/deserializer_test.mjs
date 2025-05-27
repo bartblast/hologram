@@ -504,6 +504,46 @@ describe("Deserializer", () => {
             });
           });
 
+          describe("function", () => {
+            describe("longhand syntax", () => {
+              it("top-level", () => {
+                const serialized = `[1,"__function__:function (a, b) { const result = Type.integer(a + b); return result; }"]`;
+                const deserialized = deserialize(serialized);
+
+                assert.isFunction(deserialized);
+                assert.deepStrictEqual(deserialized(1, 2), Type.integer(3));
+              });
+
+              it("nested", () => {
+                const serialized = `[1,{"x":"__function__:function (a, b) { const result = Type.integer(a + b); return result; }"}]`;
+                const deserialized = deserialize(serialized);
+
+                assert.deepStrictEqual(Object.keys(deserialized), ["x"]);
+                assert.isFunction(deserialized.x);
+                assert.deepStrictEqual(deserialized.x(1, 2), Type.integer(3));
+              });
+            });
+
+            describe("shorthand syntax", () => {
+              it("top-level", () => {
+                const serialized = `[1,"__function__:(a, b) => Type.integer(a + b)"]`;
+                const deserialized = deserialize(serialized);
+
+                assert.isFunction(deserialized);
+                assert.deepStrictEqual(deserialized(1, 2), Type.integer(3));
+              });
+
+              it("nested", () => {
+                const serialized = `[1,{"x":"__function__:(a, b) => Type.integer(a + b)"}]`;
+                const deserialized = deserialize(serialized);
+
+                assert.deepStrictEqual(Object.keys(deserialized), ["x"]);
+                assert.isFunction(deserialized.x);
+                assert.deepStrictEqual(deserialized.x(1, 2), Type.integer(3));
+              });
+            });
+          });
+
           describe("integer", () => {
             const term = 987;
 

@@ -1,8 +1,7 @@
 "use strict";
 
 import Bitstring2 from "./bitstring2.mjs";
-// import Interpreter from "./interpreter.mjs";
-// import Serializer from "./serializer.mjs";
+import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 
 export default class Deserializer {
@@ -105,17 +104,15 @@ export default class Deserializer {
       return Type.float(Number(serialized.slice(10)));
     }
 
+    if (serialized.startsWith("__function__:")) {
+      return Interpreter.evaluateJavaScriptExpression(serialized.slice(13));
+    }
+
     if (serialized.startsWith("__integer__:")) {
       return Type.integer(BigInt(serialized.slice(12)));
     }
 
     return serialized;
-    //     if (value.startsWith("__bigint__:")) {
-    //       return BigInt(value.slice(11));
-    //     }
-    //     if (value.startsWith("__function__:")) {
-    //       return Interpreter.evaluateJavaScriptExpression(value.slice(13));
-    //     }
   }
 }
 
