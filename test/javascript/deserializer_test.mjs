@@ -7,7 +7,7 @@ import {
 } from "./support/helpers.mjs";
 
 import Deserializer from "../../assets/js/deserializer.mjs";
-// import Interpreter from "../../assets/js/interpreter.mjs";
+import Interpreter from "../../assets/js/interpreter.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -15,6 +15,17 @@ defineGlobalErlangAndElixirModules();
 
 const deserialize = Deserializer.deserialize;
 const serialize = Serializer.serialize;
+
+function testNestedBitstringDeserialization(nestedTerm) {
+  const term = {x: nestedTerm};
+  const serialized = serialize(term);
+  const deserialized = deserialize(serialized);
+
+  assert.equal(typeof deserialized, "object");
+  assert.deepStrictEqual(Object.keys(deserialized), ["x"]);
+  assert.isTrue(Type.isBitstring2(deserialized.x));
+  assert.isTrue(Interpreter.isStrictlyEqual(deserialized.x, term.x));
+}
 
 function testNestedDeserialization(nestedTerm) {
   const term = {x: nestedTerm};
@@ -24,22 +35,12 @@ function testNestedDeserialization(nestedTerm) {
   assert.deepStrictEqual(deserialized, term);
 }
 
-// function testNestedBitstringDeserialization(nestedTerm) {
-//   const term = {x: nestedTerm, y: 2};
-//   const serialized = serialize(term);
-//   const deserialized = deserialize(serialized);
+function testTopLevelBitstringDeserialization(term) {
+  const serialized = serialize(term);
+  const deserialized = deserialize(serialized);
 
-//   assert.equal(typeof deserialized, "object");
-//   assert.deepStrictEqual(Object.keys(deserialized), ["x", "y"]);
-//   assert.isTrue(Interpreter.isStrictlyEqual(deserialized.x, term.x));
-// }
-
-// function testNotVersionedBitstringDeserialization(term) {
-//   const serialized = serialize(term, true, false);
-//   const deserialized = deserialize(serialized, false);
-
-//   assert.isTrue(Interpreter.isStrictlyEqual(deserialized, term));
-// }
+  assert.isTrue(Interpreter.isStrictlyEqual(deserialized, term));
+}
 
 function testTopLevelDeserialization(term) {
   const serialized = serialize(term);
@@ -47,13 +48,6 @@ function testTopLevelDeserialization(term) {
 
   assert.deepStrictEqual(deserialized, term);
 }
-
-// function testTopLevelBitstringDeserialization(term) {
-//   const serialized = serialize(term);
-//   const deserialized = deserialize(serialized);
-
-//   assert.isTrue(Interpreter.isStrictlyEqual(deserialized, term));
-// }
 
 describe("Deserializer", () => {
   describe("deserialize()", () => {
@@ -68,6 +62,74 @@ describe("Deserializer", () => {
 
           it("nested", () => {
             testNestedDeserialization(term);
+          });
+        });
+
+        describe("bitstring", () => {
+          describe("empty", () => {
+            const term = Type.bitstring2("");
+
+            it("top-level", () => {
+              testTopLevelBitstringDeserialization(term);
+            });
+
+            it("nested", () => {
+              testNestedBitstringDeserialization(term);
+            });
+          });
+
+          describe("single-byte", () => {
+            describe("without leftover bits", () => {
+              const term = Type.bitstring2("a");
+
+              it("top-level", () => {
+                testTopLevelBitstringDeserialization(term);
+              });
+
+              it("nested", () => {
+                testNestedBitstringDeserialization(term);
+              });
+            });
+
+            describe("with leftover bits", () => {
+              const term = Type.bitstring2([1, 0, 1, 0]);
+
+              it("top-level", () => {
+                testTopLevelBitstringDeserialization(term);
+              });
+
+              it("nested", () => {
+                testNestedBitstringDeserialization(term);
+              });
+            });
+          });
+
+          describe("multiple-byte", () => {
+            describe("without leftover bits", () => {
+              const term = Type.bitstring2("Hologram");
+
+              it("top-level", () => {
+                testTopLevelBitstringDeserialization(term);
+              });
+
+              it("nested", () => {
+                testNestedBitstringDeserialization(term);
+              });
+            });
+
+            describe("with leftover bits", () => {
+              const term = Type.bitstring2([
+                1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
+              ]);
+
+              it("top-level", () => {
+                testTopLevelBitstringDeserialization(term);
+              });
+
+              it("nested", () => {
+                testNestedBitstringDeserialization(term);
+              });
+            });
           });
         });
 
@@ -617,95 +679,6 @@ describe("Deserializer", () => {
     //             assert.deepStrictEqual(callResult, expectedCallResult);
     //           });
     //         });
-
-    //         describe("bitstring", () => {
-    //           describe("empty", () => {
-    //             const term = Type.bitstring2("");
-
-    //             it("top-level", () => {
-    //               testTopLevelBitstringDeserialization(term);
-    //             });
-
-    //             it("nested", () => {
-    //               testNestedBitstringDeserialization(term);
-    //             });
-
-    //             it("not versioned", () => {
-    //               testNotVersionedBitstringDeserialization(term);
-    //             });
-    //           });
-
-    //           describe("single-byte", () => {
-    //             describe("without leftover bits", () => {
-    //               const term = Type.bitstring2("a");
-
-    //               it("top-level", () => {
-    //                 testTopLevelBitstringDeserialization(term);
-    //               });
-
-    //               it("nested", () => {
-    //                 testNestedBitstringDeserialization(term);
-    //               });
-
-    //               it("not versioned", () => {
-    //                 testNotVersionedBitstringDeserialization(term);
-    //               });
-    //             });
-
-    //             describe("with leftover bits", () => {
-    //               const term = Type.bitstring2([1, 0, 1, 0]);
-
-    //               it("top-level", () => {
-    //                 testTopLevelBitstringDeserialization(term);
-    //               });
-
-    //               it("nested", () => {
-    //                 testNestedBitstringDeserialization(term);
-    //               });
-
-    //               it("not versioned", () => {
-    //                 testNotVersionedBitstringDeserialization(term);
-    //               });
-    //             });
-    //           });
-
-    //           describe("multiple-byte", () => {
-    //             describe("without leftover bits", () => {
-    //               const term = Type.bitstring2("Hologram");
-
-    //               it("top-level", () => {
-    //                 testTopLevelBitstringDeserialization(term);
-    //               });
-
-    //               it("nested", () => {
-    //                 testNestedBitstringDeserialization(term);
-    //               });
-
-    //               it("not versioned", () => {
-    //                 testNotVersionedBitstringDeserialization(term);
-    //               });
-    //             });
-
-    //             describe("with leftover bits", () => {
-    //               const term = Type.bitstring2([
-    //                 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
-    //               ]);
-
-    //               it("top-level", () => {
-    //                 testTopLevelBitstringDeserialization(term);
-    //               });
-
-    //               it("nested", () => {
-    //                 testNestedBitstringDeserialization(term);
-    //               });
-
-    //               it("not versioned", () => {
-    //                 testNotVersionedBitstringDeserialization(term);
-    //               });
-    //             });
-    //           });
-    //         });
-    //       });
     //     });
 
     //     describe("old versions", () => {

@@ -1,6 +1,6 @@
 "use strict";
 
-// import Bitstring2 from "./bitstring2.mjs";
+import Bitstring2 from "./bitstring2.mjs";
 // import Interpreter from "./interpreter.mjs";
 // import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
@@ -26,21 +26,26 @@ export default class Deserializer {
     })[1];
   }
 
-  //   static #deserializeBitstring(serialized) {
-  //     const parts = serialized.split(":");
-  //     const hex = parts[1];
-  //     const hexLength = hex.length;
-  //     const bytes = new Uint8Array(hexLength >> 1);
-  //     // Use separate j index variable to avoid division in each iteration
-  //     for (let i = 0, j = 0; i < hexLength; i += 2, j++) {
-  //       bytes[j] = parseInt(hex.slice(i, i + 2), 16);
-  //     }
-  //     const bitstring = Bitstring2.fromBytes(bytes);
-  //     if (parts.length === 3) {
-  //       bitstring.leftoverBitCount = parseInt(parts[2]);
-  //     }
-  //     return bitstring;
-  //   }
+  static #deserializeBitstring(serialized) {
+    if (serialized === "b") {
+      return Type.bitstring2("");
+    }
+
+    const hex = serialized.slice(2);
+    const hexLength = hex.length;
+    const bytes = new Uint8Array(hexLength >> 1);
+
+    // Use separate j index variable to avoid division in each iteration
+    for (let i = 0, j = 0; i < hexLength; i += 2, j++) {
+      bytes[j] = parseInt(hex.slice(i, i + 2), 16);
+    }
+
+    const bitstring = Bitstring2.fromBytes(bytes);
+    bitstring.leftoverBitCount = serialized[1];
+
+    return bitstring;
+  }
+
   //   static #maybeDeserializeObjectTerm(value, version) {
   //     if (version >= 2) {
   //       const boxedValueType = value?.t;
@@ -62,14 +67,17 @@ export default class Deserializer {
   //     }
   //     return null;
   //   }
-  static #maybeDeserializeStringTerm(value, version) {
+  static #maybeDeserializeStringTerm(serialized, version) {
     if (version >= 2) {
-      const typeCode = value[0];
-      const data = value.slice(1);
+      const typeCode = serialized[0];
+      const data = serialized.slice(1);
 
       switch (typeCode) {
         case "a":
           return Type.atom(data);
+
+        case "b":
+          return $.#deserializeBitstring(serialized);
 
         case "f":
           return Type.float(Number(data));
@@ -81,27 +89,24 @@ export default class Deserializer {
           return data;
       }
 
-      //       if (value.startsWith("b:")) {
-      //         return $.#deserializeBitstring(value);
-      //       }
       //       if (value === "b") {
       //         return Type.bitstring2("");
       //       }
     }
 
-    if (value.startsWith("__atom__:")) {
-      return Type.atom(value.slice(9));
+    if (serialized.startsWith("__atom__:")) {
+      return Type.atom(serialized.slice(9));
     }
 
-    if (value.startsWith("__float__:")) {
-      return Type.float(Number(value.slice(10)));
+    if (serialized.startsWith("__float__:")) {
+      return Type.float(Number(serialized.slice(10)));
     }
 
-    if (value.startsWith("__integer__:")) {
-      return Type.integer(BigInt(value.slice(12)));
+    if (serialized.startsWith("__integer__:")) {
+      return Type.integer(BigInt(serialized.slice(12)));
     }
 
-    return value;
+    return serialized;
     //     if (value.startsWith("__bigint__:")) {
     //       return BigInt(value.slice(11));
     //     }
