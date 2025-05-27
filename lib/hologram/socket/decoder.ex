@@ -1,7 +1,7 @@
 defmodule Hologram.Socket.Decoder do
   @moduledoc false
 
-  #   alias Hologram.Commons.BitstringUtils
+  alias Hologram.Commons.BitstringUtils
   alias Hologram.Commons.IntegerUtils
 
   # This is added only to make String.to_existing_atom/1 recognize atoms related to client DOM events
@@ -69,6 +69,14 @@ defmodule Hologram.Socket.Decoder do
     String.to_existing_atom(value)
   end
 
+  def decode(1, "__binary__:" <> value) do
+    value
+  end
+
+  def decode(1, %{"type" => "bitstring", "bits" => bits}) do
+    BitstringUtils.from_bit_list(bits)
+  end
+
   def decode(1, "__float__:" <> value) do
     value
     |> Float.parse()
@@ -118,14 +126,6 @@ defmodule Hologram.Socket.Decoder do
   #   |> Enum.map(&decode(version, &1))
   #   |> List.to_tuple()
   # end
-
-  #   def decode(1, "__binary__:" <> value) do
-  #     value
-  #   end
-
-  #   def decode(1, %{"type" => "bitstring", "bits" => bits}) do
-  #     BitstringUtils.from_bit_list(bits)
-  #   end
 
   #   def decode(1, %{"type" => "map", "data" => data}) do
   #     data

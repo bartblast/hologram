@@ -45,6 +45,15 @@ defmodule Hologram.Socket.DecoderTest do
       assert decode(1, "__atom__:xyz") == :xyz
     end
 
+    test "bitstring, binary" do
+      assert decode(1, "__binary__:a\"bc") == "a\"bc"
+    end
+
+    test "bitstring, non-binary" do
+      assert decode(1, %{"type" => "bitstring", "bits" => [1, 0, 1, 0]}) ==
+               <<1::1, 0::1, 1::1, 0::1>>
+    end
+
     test "float, encoded as float" do
       assert decode(1, "__float__:1.23") === 1.23
     end
@@ -86,15 +95,6 @@ defmodule Hologram.Socket.DecoderTest do
   #                "capturedFunction" => "parse_date",
   #                "arity" => 2
   #              }) == (&Calendar.ISO.parse_date/2)
-  #     end
-
-  #     test "binary bitstring" do
-  #       assert decode(1, "__binary__:a\"bc") == "a\"bc"
-  #     end
-
-  #     test "non-binary bitstring" do
-  #       assert decode(1, %{"type" => "bitstring", "bits" => [1, 0, 1, 0]}) ==
-  #                <<1::1, 0::1, 1::1, 0::1>>
   #     end
 
   #     test "list" do
