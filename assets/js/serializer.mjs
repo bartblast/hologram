@@ -15,7 +15,7 @@ export default class Serializer {
   // When isFullScope is set to true, then everything is serialized,
   // including anonymous functions and all objects' fields (such as boxed PID node).
   static serialize(term) {
-    const serialized = JSON.stringify(term, (_key, value) => {
+    const serialized = JSON.stringify(term, (key, value) => {
       const boxedValueType = value?.type;
 
       //       if (boxedValueType === "anonymous_function") {
@@ -34,11 +34,10 @@ export default class Serializer {
 
         case "integer":
           return `i${value.value}`;
-      }
 
-      //       if (boxedValueType === "map") {
-      //         return {t: "m", d: Object.values(value.data)};
-      //       }
+        case "map":
+          return {t: "m", d: Object.values(value.data)};
+      }
 
       //       if (boxedValueType === "pid") {
       //         return $.#serializeBoxedPid(value, isFullScope);
@@ -75,7 +74,7 @@ export default class Serializer {
           return value;
 
         case "string":
-          return `s${value}`;
+          return $.#serializeJsString(value, key);
 
         case "function":
           return `u${value}`;
@@ -87,6 +86,15 @@ export default class Serializer {
     });
 
     return `[${$.CURRENT_VERSION},${serialized}]`;
+  }
+
+  static #serializeJsString(value, key) {
+    // Don't add prefix for the type marker in serialized boxed map objects
+    if (value === "m" && key === "t") {
+      return value;
+    }
+
+    return `s${value}`;
   }
 
   //   static #serializeBoxedAnonymousFunction(term, isFullScope) {
