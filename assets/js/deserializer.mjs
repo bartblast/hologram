@@ -19,12 +19,6 @@ export default class Deserializer {
       }
 
       return $.#maybeDeserializeObjectTerm(value, version);
-
-      //       const result = $.#maybeDeserializeObjectTerm(value, version);
-      //       if (result !== null) {
-      //         return result;
-      //       }
-      return value;
     })[1];
   }
 
