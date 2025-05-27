@@ -97,6 +97,10 @@ export default class Deserializer {
       return Type.float(Number(value.slice(10)));
     }
 
+    if (value.startsWith("__integer__:")) {
+      return Type.integer(BigInt(value.slice(12)));
+    }
+
     return value;
     //     if (value.startsWith("__bigint__:")) {
     //       return BigInt(value.slice(11));
@@ -106,9 +110,6 @@ export default class Deserializer {
     //     }
     //     if (value.startsWith("__function__:")) {
     //       return Interpreter.evaluateJavaScriptExpression(value.slice(13));
-    //     }
-    //     if (value.startsWith("__integer__:")) {
-    //       return Type.integer(BigInt(value.slice(12)));
     //     }
   }
 }
