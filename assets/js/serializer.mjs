@@ -16,13 +16,13 @@ export default class Serializer {
   // including anonymous functions and all objects' fields (such as boxed PID node).
   static serialize(term) {
     const serialized = JSON.stringify(term, (key, value) => {
-      const boxedValueType = value?.type;
+      const boxedTermType = value?.type;
 
-      //       if (boxedValueType === "anonymous_function") {
+      //       if (boxedTermType === "anonymous_function") {
       //         return $.#serializeBoxedAnonymousFunction(value, isFullScope);
       //       }
 
-      switch (boxedValueType) {
+      switch (boxedTermType) {
         case "atom":
           return `a${value.value}`;
 
@@ -39,19 +39,19 @@ export default class Serializer {
           return {t: "m", d: Object.values(value.data)};
       }
 
-      //       if (boxedValueType === "pid") {
+      //       if (boxedTermType === "pid") {
       //         return $.#serializeBoxedPid(value, isFullScope);
       //       }
 
-      //       if (boxedValueType === "port") {
+      //       if (boxedTermType === "port") {
       //         return $.#serializeBoxedPort(value, isFullScope);
       //       }
 
-      //       if (boxedValueType === "reference") {
+      //       if (boxedTermType === "reference") {
       //         return $.#serializeBoxedReference(value, isFullScope);
       //       }
 
-      //       if (boxedValueType === "tuple") {
+      //       if (boxedTermType === "tuple") {
       //         return {t: "t", d: value.data};
       //       }
 

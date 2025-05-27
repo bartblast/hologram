@@ -15,14 +15,14 @@ export default class Deserializer {
       }
 
       if (typeof value === "string") {
-        return $.#maybeDeserializeStringTerm(value, version);
+        return $.#maybeDeserializeString(value, version);
       }
 
       return $.#maybeDeserializeObject(value, version);
     })[1];
   }
 
-  static #deserializeBitstring(serialized) {
+  static #deserializeBoxedBitstring(serialized) {
     if (serialized === "b") {
       return Type.bitstring2("");
     }
@@ -70,7 +70,7 @@ export default class Deserializer {
     return obj;
   }
 
-  static #maybeDeserializeStringTerm(serialized, version) {
+  static #maybeDeserializeString(serialized, version) {
     if (version >= 2) {
       const typeCode = serialized[0];
       const data = serialized.slice(1);
@@ -80,7 +80,7 @@ export default class Deserializer {
           return Type.atom(data);
 
         case "b":
-          return $.#deserializeBitstring(serialized);
+          return $.#deserializeBoxedBitstring(serialized);
 
         case "f":
           return Type.float(Number(data));
