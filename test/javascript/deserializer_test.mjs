@@ -49,7 +49,7 @@ function testTopLevelDeserialization(term) {
   assert.deepStrictEqual(deserialized, term);
 }
 
-describe("Deserializer", () => {
+describe.only("Deserializer", () => {
   describe("deserialize()", () => {
     describe("version 2 (current)", () => {
       describe("boxed terms", () => {
@@ -266,6 +266,97 @@ describe("Deserializer", () => {
               const expected = {x: term};
 
               assert.deepStrictEqual(deserialized, expected);
+            });
+          });
+
+          describe("bitstring", () => {
+            describe("binary", () => {
+              describe("empty", () => {
+                const term = Type.bitstring2("");
+
+                it("top-level", () => {
+                  const serialized = '[1,"__binary__:"]';
+                  const deserialized = deserialize(serialized);
+
+                  assert.isTrue(Type.isBitstring2(deserialized));
+
+                  assert.isTrue(
+                    Interpreter.isStrictlyEqual(deserialized, term),
+                  );
+                });
+
+                it("nested", () => {
+                  const nestedTerm = {x: term};
+                  const serialized = '[1,{"x":"__binary__:"}]';
+                  const deserialized = deserialize(serialized);
+
+                  assert.equal(typeof deserialized, "object");
+                  assert.deepStrictEqual(Object.keys(deserialized), ["x"]);
+                  assert.isTrue(Type.isBitstring2(deserialized.x));
+
+                  assert.isTrue(
+                    Interpreter.isStrictlyEqual(deserialized.x, nestedTerm.x),
+                  );
+                });
+              });
+
+              describe("non-empty", () => {
+                const term = Type.bitstring2('a"bc');
+
+                it("top-level", () => {
+                  const serialized = '[1,"__binary__:a\\"bc"]';
+                  const deserialized = deserialize(serialized);
+
+                  assert.isTrue(Type.isBitstring2(deserialized));
+
+                  assert.isTrue(
+                    Interpreter.isStrictlyEqual(deserialized, term),
+                  );
+                });
+
+                it("nested", () => {
+                  const nestedTerm = {x: term};
+                  const serialized = '[1,{"x":"__binary__:a\\"bc"}]';
+                  const deserialized = deserialize(serialized);
+
+                  assert.equal(typeof deserialized, "object");
+                  assert.deepStrictEqual(Object.keys(deserialized), ["x"]);
+                  assert.isTrue(Type.isBitstring2(deserialized.x));
+
+                  assert.isTrue(
+                    Interpreter.isStrictlyEqual(deserialized.x, nestedTerm.x),
+                  );
+                });
+              });
+            });
+
+            describe("non-binary", () => {
+              const term = Type.bitstring2([1, 0, 1, 0]);
+
+              it("top-level", () => {
+                const serialized = '[1,{"type":"bitstring","bits":[1,0,1,0]}]';
+                const deserialized = deserialize(serialized);
+
+                assert.isTrue(Type.isBitstring2(deserialized));
+                assert.isTrue(Interpreter.isStrictlyEqual(deserialized, term));
+              });
+
+              it("nested", () => {
+                const nestedTerm = {x: term};
+
+                const serialized =
+                  '[1,{"x":{"type":"bitstring","bits":[1,0,1,0]}}]';
+
+                const deserialized = deserialize(serialized);
+
+                assert.equal(typeof deserialized, "object");
+                assert.deepStrictEqual(Object.keys(deserialized), ["x"]);
+                assert.isTrue(Type.isBitstring2(deserialized.x));
+
+                assert.isTrue(
+                  Interpreter.isStrictlyEqual(deserialized.x, nestedTerm.x),
+                );
+              });
             });
           });
 
@@ -787,98 +878,6 @@ describe("Deserializer", () => {
 
     //             // Not applicable
     //             // it("not versioned", () => {});
-    //           });
-
-    //           describe("bitstring", () => {
-    //             describe("binary", () => {
-    //               describe("empty", () => {
-    //                 const term = Type.bitstring2("");
-
-    //                 it("top-level", () => {
-    //                   const serialized = '[1,"__binary__:"]';
-    //                   const deserialized = deserialize(serialized);
-
-    //                   assert.isTrue(
-    //                     Interpreter.isStrictlyEqual(deserialized, term),
-    //                   );
-    //                 });
-
-    //                 it("nested", () => {
-    //                   const nestedTerm = {x: term, y: 2};
-    //                   const serialized = '[1,{"x":"__binary__:","y":2}]';
-    //                   const deserialized = deserialize(serialized);
-
-    //                   assert.equal(typeof deserialized, "object");
-    //                   assert.deepStrictEqual(Object.keys(deserialized), ["x", "y"]);
-
-    //                   assert.isTrue(
-    //                     Interpreter.isStrictlyEqual(deserialized.x, nestedTerm.x),
-    //                   );
-    //                 });
-
-    //                 // Not applicable
-    //                 // it("not versioned", () => {});
-    //               });
-
-    //               describe("non-empty", () => {
-    //                 const term = Type.bitstring2('a"bc');
-
-    //                 it("top-level", () => {
-    //                   const serialized = '[1,"__binary__:a\\"bc"]';
-    //                   const deserialized = deserialize(serialized);
-
-    //                   assert.isTrue(
-    //                     Interpreter.isStrictlyEqual(deserialized, term),
-    //                   );
-    //                 });
-
-    //                 it("nested", () => {
-    //                   const nestedTerm = {x: term, y: 2};
-    //                   const serialized = '[1,{"x":"__binary__:a\\"bc","y":2}]';
-    //                   const deserialized = deserialize(serialized);
-
-    //                   assert.equal(typeof deserialized, "object");
-    //                   assert.deepStrictEqual(Object.keys(deserialized), ["x", "y"]);
-
-    //                   assert.isTrue(
-    //                     Interpreter.isStrictlyEqual(deserialized.x, nestedTerm.x),
-    //                   );
-    //                 });
-
-    //                 // Not applicable
-    //                 // it("not versioned", () => {});
-    //               });
-    //             });
-
-    //             describe("non-binary", () => {
-    //               const term = Type.bitstring2([1, 0, 1, 0]);
-
-    //               it("top-level", () => {
-    //                 const serialized = '[1,{"type":"bitstring","bits":[1,0,1,0]}]';
-    //                 const deserialized = deserialize(serialized);
-
-    //                 assert.isTrue(Interpreter.isStrictlyEqual(deserialized, term));
-    //               });
-
-    //               it("nested", () => {
-    //                 const nestedTerm = {x: term, y: 2};
-
-    //                 const serialized =
-    //                   '[1,{"x":{"type":"bitstring","bits":[1,0,1,0]},"y":2}]';
-
-    //                 const deserialized = deserialize(serialized);
-
-    //                 assert.equal(typeof deserialized, "object");
-    //                 assert.deepStrictEqual(Object.keys(deserialized), ["x", "y"]);
-
-    //                 assert.isTrue(
-    //                   Interpreter.isStrictlyEqual(deserialized.x, nestedTerm.x),
-    //                 );
-    //               });
-
-    //               // Not applicable
-    //               // it("not versioned", () => {});
-    //             });
     //           });
 
     //           describe("map", () => {

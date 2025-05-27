@@ -18,6 +18,8 @@ export default class Deserializer {
         return $.#maybeDeserializeStringTerm(value, version);
       }
 
+      return $.#maybeDeserializeObjectTerm(value, version);
+
       //       const result = $.#maybeDeserializeObjectTerm(value, version);
       //       if (result !== null) {
       //         return result;
@@ -46,27 +48,33 @@ export default class Deserializer {
     return bitstring;
   }
 
-  //   static #maybeDeserializeObjectTerm(value, version) {
-  //     if (version >= 2) {
-  //       const boxedValueType = value?.t;
-  //       if (boxedValueType === "m") {
-  //         return Type.map(value.d);
-  //       }
-  //       if (boxedValueType === "t") {
-  //         return Type.tuple(value.d);
-  //       }
-  //     }
-  //     if (version === 1) {
-  //       const boxedValueType = value?.type;
-  //       if (boxedValueType === "map") {
-  //         return Type.map(value.data);
-  //       }
-  //       if (boxedValueType === "bitstring") {
-  //         return Type.bitstring2(value.bits);
-  //       }
-  //     }
-  //     return null;
-  //   }
+  static #maybeDeserializeObjectTerm(obj, version) {
+    //     if (version >= 2) {
+    //       const boxedValueType = value?.t;
+    //       if (boxedValueType === "m") {
+    //         return Type.map(value.d);
+    //       }
+    //       if (boxedValueType === "t") {
+    //         return Type.tuple(value.d);
+    //       }
+    //     }
+
+    if (version === 1) {
+      const boxedValueType = obj?.type;
+
+      //       if (boxedValueType === "map") {
+      //         return Type.map(value.data);
+      //       }
+
+      if (boxedValueType === "bitstring") {
+        return Type.bitstring2(obj.bits);
+      }
+    }
+
+    // return null;
+    return obj;
+  }
+
   static #maybeDeserializeStringTerm(serialized, version) {
     if (version >= 2) {
       const typeCode = serialized[0];
@@ -88,14 +96,14 @@ export default class Deserializer {
         case "s":
           return data;
       }
-
-      //       if (value === "b") {
-      //         return Type.bitstring2("");
-      //       }
     }
 
     if (serialized.startsWith("__atom__:")) {
       return Type.atom(serialized.slice(9));
+    }
+
+    if (serialized.startsWith("__binary__:")) {
+      return Type.bitstring2(serialized.slice(11));
     }
 
     if (serialized.startsWith("__float__:")) {
@@ -109,9 +117,6 @@ export default class Deserializer {
     return serialized;
     //     if (value.startsWith("__bigint__:")) {
     //       return BigInt(value.slice(11));
-    //     }
-    //     if (value.startsWith("__binary__:")) {
-    //       return Type.bitstring2(value.slice(11));
     //     }
     //     if (value.startsWith("__function__:")) {
     //       return Interpreter.evaluateJavaScriptExpression(value.slice(13));
