@@ -38,6 +38,11 @@ defmodule Hologram.Socket.DecoderTest do
     test "integer" do
       assert decode(2, "i123") == 123
     end
+
+    test "map" do
+      term = %{"t" => "m", "d" => [["ax", "i1"], ["b079", "f2.34"]]}
+      assert decode(2, term) == %{:x => 1, "y" => 2.34}
+    end
   end
 
   describe "version 1" do
@@ -75,11 +80,6 @@ defmodule Hologram.Socket.DecoderTest do
   #                "capturedFunction" => "parse_date",
   #                "arity" => 2
   #              }) == (&Calendar.ISO.parse_date/2)
-  #     end
-
-  #     test "map" do
-  #       term = %{"t" => "m", "d" => [["a:x", "i:1"], ["b:79", "f:2.34"]]}
-  #       assert decode(2, term) == %{:x => 1, "y" => 2.34}
   #     end
   #   end
 

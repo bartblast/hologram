@@ -65,6 +65,12 @@ defmodule Hologram.Socket.Decoder do
     IntegerUtils.parse!(value)
   end
 
+  def decode(2, %{"t" => "m", "d" => data}) do
+    data
+    |> Enum.map(fn [key, value] -> {decode(2, key), decode(2, value)} end)
+    |> Enum.into(%{})
+  end
+
   def decode(1, "__atom__:" <> value) do
     String.to_existing_atom(value)
   end
@@ -86,12 +92,6 @@ defmodule Hologram.Socket.Decoder do
   def decode(1, "__integer__:" <> value) do
     IntegerUtils.parse!(value)
   end
-
-  #   def decode(2, %{"t" => "m", "d" => data}) do
-  #     data
-  #     |> Enum.map(fn [key, value] -> {decode(2, key), decode(2, value)} end)
-  #     |> Enum.into(%{})
-  #   end
 
   #   def decode(_version, %{
   #         "type" => "anonymous_function",
