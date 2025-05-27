@@ -18,7 +18,7 @@ export default class Deserializer {
         return $.#maybeDeserializeStringTerm(value, version);
       }
 
-      return $.#maybeDeserializeObjectTerm(value, version);
+      return $.#maybeDeserializeObject(value, version);
     })[1];
   }
 
@@ -42,25 +42,26 @@ export default class Deserializer {
     return bitstring;
   }
 
-  static #maybeDeserializeObjectTerm(obj, version) {
-    //     if (version >= 2) {
-    //       const boxedValueType = value?.t;
-    //       if (boxedValueType === "m") {
-    //         return Type.map(value.d);
-    //       }
-    //       if (boxedValueType === "t") {
-    //         return Type.tuple(value.d);
-    //       }
-    //     }
+  static #maybeDeserializeObject(obj, version) {
+    if (version >= 2) {
+      const boxedTermType = obj?.t;
+
+      if (boxedTermType === "m") {
+        return Type.map(obj.d);
+      }
+      //       if (boxedValueType === "t") {
+      //         return Type.tuple(value.d);
+      //       }
+    }
 
     if (version === 1) {
-      const boxedValueType = obj?.type;
+      const boxedTermType = obj?.type;
 
       //       if (boxedValueType === "map") {
       //         return Type.map(value.data);
       //       }
 
-      if (boxedValueType === "bitstring") {
+      if (boxedTermType === "bitstring") {
         return Type.bitstring2(obj.bits);
       }
     }

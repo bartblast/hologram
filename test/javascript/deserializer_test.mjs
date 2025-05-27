@@ -49,7 +49,7 @@ function testTopLevelDeserialization(term) {
   assert.deepStrictEqual(deserialized, term);
 }
 
-describe.only("Deserializer", () => {
+describe("Deserializer", () => {
   describe("deserialize()", () => {
     describe("version 2 (current)", () => {
       describe("boxed terms", () => {
@@ -161,6 +161,21 @@ describe.only("Deserializer", () => {
 
         describe("integer", () => {
           const term = Type.integer(90071992547409919007199254740991n);
+
+          it("top-level", () => {
+            testTopLevelDeserialization(term);
+          });
+
+          it("nested", () => {
+            testNestedDeserialization(term);
+          });
+        });
+
+        describe("map", () => {
+          const term = Type.map([
+            [Type.atom("x"), Type.integer(1)],
+            [Type.atom("y"), Type.float(2.34)],
+          ]);
 
           it("top-level", () => {
             testTopLevelDeserialization(term);
@@ -545,25 +560,6 @@ describe.only("Deserializer", () => {
     //     describe("OVERHAUL: boxed terms", () => {
     //       describe("list", () => {
     //         const term = Type.list([Type.integer(1), Type.float(1.23)]);
-
-    //         it("top-level", () => {
-    //           testTopLevelDeserialization(term);
-    //         });
-
-    //         it("nested", () => {
-    //           testNestedDeserialization(term);
-    //         });
-
-    //         it("not versioned", () => {
-    //           testNotVersionedDeserialization(term);
-    //         });
-    //       });
-
-    //       describe("map", () => {
-    //         const term = Type.map([
-    //           [Type.atom("x"), Type.integer(1)],
-    //           [Type.atom("y"), Type.float(2.34)],
-    //         ]);
 
     //         it("top-level", () => {
     //           testTopLevelDeserialization(term);
