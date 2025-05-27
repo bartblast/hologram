@@ -319,8 +319,7 @@ export function inspectEx(term) {
 }
 
 export function inspectJs(term) {
-  console.log(Serializer.serialize(term, true, false));
-
+  console.log(Serializer.serialize(term, "client"));
   return term;
 }
 

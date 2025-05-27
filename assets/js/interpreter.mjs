@@ -543,7 +543,7 @@ export default class Interpreter {
 
       // TODO: remove when all types are supported
       default:
-        return Serializer.serialize(term, true, false);
+        return Serializer.serialize(term, "client");
     }
   }
 

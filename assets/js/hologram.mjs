@@ -696,12 +696,15 @@ export default class Hologram {
   }
 
   static #savePageSnapshot() {
-    const serializedPageSnapshot = Serializer.serialize({
-      componentRegistryEntries: ComponentRegistry.entries,
-      pageModule: Hologram.#pageModule,
-      pageParams: Hologram.#pageParams,
-      scrollPosition: [window.scrollX, window.scrollY],
-    });
+    const serializedPageSnapshot = Serializer.serialize(
+      {
+        componentRegistryEntries: ComponentRegistry.entries,
+        pageModule: Hologram.#pageModule,
+        pageParams: Hologram.#pageParams,
+        scrollPosition: [window.scrollX, window.scrollY],
+      },
+      "client",
+    );
 
     sessionStorage.setItem($.#historyId, serializedPageSnapshot);
   }

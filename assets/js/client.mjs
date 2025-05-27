@@ -51,7 +51,7 @@ export default class Client {
     let encoded;
 
     if (msg.topic === "hologram") {
-      const serializedPayload = Serializer.serialize(msg.payload, false, true);
+      const serializedPayload = Serializer.serialize(msg.payload, "server");
       encoded = `["${msg.join_ref}","${msg.ref}","${msg.topic}","${msg.event}",${serializedPayload}]`;
     } else {
       encoded = JSON.stringify([

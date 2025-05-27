@@ -215,7 +215,7 @@ export default class Type {
     if (data.length < 2) {
       throw new HologramInterpreterError(
         "improper list must have at least 2 items, received " +
-          Serializer.serialize(data, true, false),
+          Serializer.serialize(data, "client"),
       );
     }
 
