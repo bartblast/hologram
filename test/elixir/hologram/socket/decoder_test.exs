@@ -93,6 +93,13 @@ defmodule Hologram.Socket.DecoderTest do
                ]
              }) == %{:a => 1, "b" => 2.34}
     end
+
+    test "tuple" do
+      assert decode(1, %{
+               "type" => "tuple",
+               "data" => ["__integer__:1", "__float__:2.34"]
+             }) == {1, 2.34}
+    end
   end
 
   #   describe "version 2" do
@@ -128,13 +135,6 @@ defmodule Hologram.Socket.DecoderTest do
 
   #     test "reference" do
   #       assert decode(1, %{"type" => "reference", "value" => "0.1.2.3"}) == ref("0.1.2.3")
-  #     end
-
-  #     test "tuple" do
-  #       assert decode(1, %{
-  #                "type" => "tuple",
-  #                "data" => ["__integer__:1", "__float__:2.34"]
-  #              }) == {1, 2.34}
   #     end
   #   end
 end
