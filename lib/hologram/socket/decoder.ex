@@ -121,6 +121,10 @@ defmodule Hologram.Socket.Decoder do
     IntegerUtils.parse!(value)
   end
 
+  def decode(1, %{"type" => "list", "data" => data}) do
+    Enum.map(data, &decode(1, &1))
+  end
+
   def decode(1, %{"type" => "map", "data" => data}) do
     data
     |> Enum.map(fn [key, value] -> {decode(1, key), decode(1, value)} end)
@@ -132,10 +136,6 @@ defmodule Hologram.Socket.Decoder do
     |> Enum.map(&decode(1, &1))
     |> List.to_tuple()
   end
-
-  #   def decode(version, %{"type" => "list", "data" => data}) do
-  #     Enum.map(data, &decode(version, &1))
-  #   end
 
   #   def decode(_version, %{"type" => "pid", "segments" => [x, y, z]}) do
   #     IEx.Helpers.pid(x, y, z)

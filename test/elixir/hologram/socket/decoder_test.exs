@@ -91,6 +91,15 @@ defmodule Hologram.Socket.DecoderTest do
       assert decode(1, "__integer__:123") == 123
     end
 
+    test "list" do
+      data = %{
+        "type" => "list",
+        "data" => ["__integer__:1", "__float__:2.34"]
+      }
+
+      assert decode(1, data) == [1, 2.34]
+    end
+
     test "map" do
       data = %{
         "type" => "map",
@@ -116,13 +125,6 @@ defmodule Hologram.Socket.DecoderTest do
   #   describe "version 1" do
   #     test "top-level data" do
   #       assert decode([1, "__atom__:abc"]) == :abc
-  #     end
-
-  #     test "list" do
-  #       assert decode(1, %{
-  #                "type" => "list",
-  #                "data" => ["__integer__:1", "__float__:2.34"]
-  #              }) == [1, 2.34]
   #     end
 
   #     test "pid" do
