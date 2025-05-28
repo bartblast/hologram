@@ -32,6 +32,9 @@ export default class Serializer {
         case "integer":
           return `i${value.value}`;
 
+        case "list":
+          return {t: "l", d: value.data};
+
         case "map":
           return {t: "m", d: Object.values(value.data)};
 
@@ -95,7 +98,7 @@ export default class Serializer {
 
   static #serializeJsString(value, key) {
     // Don't add prefix for the type marker in serialized boxed map and tuple objects
-    if (key === "t" && (value === "m" || value === "t")) {
+    if (key === "t" && (value === "l" || value === "m" || value === "t")) {
       return value;
     }
 

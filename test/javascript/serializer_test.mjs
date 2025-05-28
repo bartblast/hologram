@@ -267,6 +267,23 @@ describe("Serializer", () => {
         });
       });
 
+      describe("list", () => {
+        it("top-level", () => {
+          const term = Type.list([Type.atom("x"), Type.float(1.23)]);
+          const expected = '[2,{"t":"l","d":["ax","f1.23"]}]';
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("nested", () => {
+          const term = {b: Type.list([Type.atom("x"), Type.float(1.23)])};
+
+          const expected = '[2,{"b":{"t":"l","d":["ax","f1.23"]}}]';
+
+          assert.equal(serialize(term), expected);
+        });
+      });
+
       describe("map", () => {
         it("top-level", () => {
           const term = Type.map([
