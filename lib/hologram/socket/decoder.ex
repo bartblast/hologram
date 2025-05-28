@@ -79,6 +79,18 @@ defmodule Hologram.Socket.Decoder do
     value
   end
 
+  def decode(1, %{
+        "type" => "anonymous_function",
+        "capturedModule" => module_str,
+        "capturedFunction" => function_str,
+        "arity" => arity
+      }) do
+    module = Module.safe_concat([module_str])
+    function = String.to_existing_atom(function_str)
+
+    Function.capture(module, function, arity)
+  end
+
   def decode(1, %{"type" => "bitstring", "bits" => bits}) do
     BitstringUtils.from_bit_list(bits)
   end
@@ -98,18 +110,6 @@ defmodule Hologram.Socket.Decoder do
     |> Enum.map(fn [key, value] -> {decode(1, key), decode(1, value)} end)
     |> Enum.into(%{})
   end
-
-  #   def decode(_version, %{
-  #         "type" => "anonymous_function",
-  #         "capturedModule" => module_str,
-  #         "capturedFunction" => function_str,
-  #         "arity" => arity
-  #       }) do
-  #     module = Module.safe_concat([module_str])
-  #     function = String.to_existing_atom(function_str)
-
-  #     Function.capture(module, function, arity)
-  #   end
 
   #   def decode(version, %{"type" => "list", "data" => data}) do
   #     Enum.map(data, &decode(version, &1))

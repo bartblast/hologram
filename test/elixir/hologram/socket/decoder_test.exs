@@ -46,6 +46,15 @@ defmodule Hologram.Socket.DecoderTest do
   end
 
   describe "version 1" do
+    test "anonymous function" do
+      assert decode(1, %{
+               "type" => "anonymous_function",
+               "capturedModule" => "Calendar.ISO",
+               "capturedFunction" => "parse_date",
+               "arity" => 2
+             }) == (&Calendar.ISO.parse_date/2)
+    end
+
     test "atom" do
       assert decode(1, "__atom__:xyz") == :xyz
     end
@@ -96,15 +105,6 @@ defmodule Hologram.Socket.DecoderTest do
   #   describe "version 1" do
   #     test "top-level data" do
   #       assert decode([1, "__atom__:abc"]) == :abc
-  #     end
-
-  #     test "anonymous function" do
-  #       assert decode(1, %{
-  #                "type" => "anonymous_function",
-  #                "capturedModule" => "Calendar.ISO",
-  #                "capturedFunction" => "parse_date",
-  #                "arity" => 2
-  #              }) == (&Calendar.ISO.parse_date/2)
   #     end
 
   #     test "list" do
