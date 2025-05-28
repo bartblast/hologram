@@ -43,9 +43,9 @@ function testNestedDeserialization(
   let expected;
 
   if (expectedNestedTerm === null) {
-    expected = {x: expectedNestedTerm};
-  } else {
     expected = term;
+  } else {
+    expected = {x: expectedNestedTerm};
   }
 
   assert.deepStrictEqual(deserialized, expected);
@@ -73,7 +73,7 @@ function testTopLevelDeserialization(
   assert.deepStrictEqual(deserialized, expected);
 }
 
-describe("Deserializer", () => {
+describe.only("Deserializer", () => {
   describe("deserialize()", () => {
     describe("version 2 (current)", () => {
       describe("boxed terms", () => {
@@ -233,6 +233,46 @@ describe("Deserializer", () => {
 
           it("nested", () => {
             testNestedDeserialization(term);
+          });
+        });
+
+        describe("function", () => {
+          describe("longhand syntax", () => {
+            it("top-level", () => {
+              const serialized = `[2,"ufunction (a, b) { const result = Type.integer(a + b); return result; }"]`;
+              const deserialized = deserialize(serialized);
+
+              assert.isFunction(deserialized);
+              assert.deepStrictEqual(deserialized(1, 2), Type.integer(3));
+            });
+
+            it("nested", () => {
+              const serialized = `[2,{"x":"ufunction (a, b) { const result = Type.integer(a + b); return result; }"}]`;
+              const deserialized = deserialize(serialized);
+
+              assert.deepStrictEqual(Object.keys(deserialized), ["x"]);
+              assert.isFunction(deserialized.x);
+              assert.deepStrictEqual(deserialized.x(1, 2), Type.integer(3));
+            });
+          });
+
+          describe("shorthand syntax", () => {
+            it("top-level", () => {
+              const serialized = `[2,"u(a, b) => Type.integer(a + b)"]`;
+              const deserialized = deserialize(serialized);
+
+              assert.isFunction(deserialized);
+              assert.deepStrictEqual(deserialized(1, 2), Type.integer(3));
+            });
+
+            it("nested", () => {
+              const serialized = `[2,{"x":"u(a, b) => Type.integer(a + b)"}]`;
+              const deserialized = deserialize(serialized);
+
+              assert.deepStrictEqual(Object.keys(deserialized), ["x"]);
+              assert.isFunction(deserialized.x);
+              assert.deepStrictEqual(deserialized.x(1, 2), Type.integer(3));
+            });
           });
         });
 

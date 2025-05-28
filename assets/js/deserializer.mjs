@@ -91,6 +91,9 @@ export default class Deserializer {
 
         case "s":
           return data;
+
+        case "u":
+          return Interpreter.evaluateJavaScriptExpression(data);
       }
     }
 
