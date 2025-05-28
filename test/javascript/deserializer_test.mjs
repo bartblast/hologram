@@ -75,23 +75,35 @@ function testTopLevelDeserialization(
 
 describe.only("Deserializer", () => {
   describe("deserialize()", () => {
-    describe("version 2 (current)", () => {
-      describe("boxed terms", () => {
-        describe("atom", () => {
-          const term = Type.atom("abc");
+    describe("boxed terms", () => {
+      describe("atom", () => {
+        const term = Type.atom("abc");
+
+        it("top-level", () => {
+          testTopLevelDeserialization(term);
+        });
+
+        it("nested", () => {
+          testNestedDeserialization(term);
+        });
+      });
+
+      describe("bitstring", () => {
+        describe("empty", () => {
+          const term = Type.bitstring2("");
 
           it("top-level", () => {
-            testTopLevelDeserialization(term);
+            testTopLevelBitstringDeserialization(term);
           });
 
           it("nested", () => {
-            testNestedDeserialization(term);
+            testNestedBitstringDeserialization(term);
           });
         });
 
-        describe("bitstring", () => {
-          describe("empty", () => {
-            const term = Type.bitstring2("");
+        describe("single-byte", () => {
+          describe("without leftover bits", () => {
+            const term = Type.bitstring2("a");
 
             it("top-level", () => {
               testTopLevelBitstringDeserialization(term);
@@ -102,221 +114,49 @@ describe.only("Deserializer", () => {
             });
           });
 
-          describe("single-byte", () => {
-            describe("without leftover bits", () => {
-              const term = Type.bitstring2("a");
+          describe("with leftover bits", () => {
+            const term = Type.bitstring2([1, 0, 1, 0]);
 
-              it("top-level", () => {
-                testTopLevelBitstringDeserialization(term);
-              });
-
-              it("nested", () => {
-                testNestedBitstringDeserialization(term);
-              });
+            it("top-level", () => {
+              testTopLevelBitstringDeserialization(term);
             });
 
-            describe("with leftover bits", () => {
-              const term = Type.bitstring2([1, 0, 1, 0]);
-
-              it("top-level", () => {
-                testTopLevelBitstringDeserialization(term);
-              });
-
-              it("nested", () => {
-                testNestedBitstringDeserialization(term);
-              });
-            });
-          });
-
-          describe("multiple-byte", () => {
-            describe("without leftover bits", () => {
-              const term = Type.bitstring2("Hologram");
-
-              it("top-level", () => {
-                testTopLevelBitstringDeserialization(term);
-              });
-
-              it("nested", () => {
-                testNestedBitstringDeserialization(term);
-              });
-            });
-
-            describe("with leftover bits", () => {
-              const term = Type.bitstring2([
-                1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
-              ]);
-
-              it("top-level", () => {
-                testTopLevelBitstringDeserialization(term);
-              });
-
-              it("nested", () => {
-                testNestedBitstringDeserialization(term);
-              });
+            it("nested", () => {
+              testNestedBitstringDeserialization(term);
             });
           });
         });
 
-        describe("float", () => {
-          describe("encoded as float", () => {
-            const term = Type.float(1.23);
+        describe("multiple-byte", () => {
+          describe("without leftover bits", () => {
+            const term = Type.bitstring2("Hologram");
 
             it("top-level", () => {
-              testTopLevelDeserialization(term);
+              testTopLevelBitstringDeserialization(term);
             });
 
             it("nested", () => {
-              testNestedDeserialization(term);
+              testNestedBitstringDeserialization(term);
             });
           });
 
-          describe("encoded as integer", () => {
-            const term = Type.float(123);
+          describe("with leftover bits", () => {
+            const term = Type.bitstring2([1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]);
 
             it("top-level", () => {
-              testTopLevelDeserialization(term);
+              testTopLevelBitstringDeserialization(term);
             });
 
             it("nested", () => {
-              testNestedDeserialization(term);
+              testNestedBitstringDeserialization(term);
             });
           });
         });
+      });
 
-        describe("function", () => {
-          beforeEach(() => {
-            Sequence.reset();
-          });
-
-          const context = contextFixture({
-            module: Type.alias("MyModule"),
-            vars: {x: Type.integer(10), y: Type.integer(20)},
-          });
-
-          describe("capture", () => {
-            const term = Type.functionCapture(
-              "Calendar.ISO",
-              "date_to_string",
-              4,
-              [],
-              context,
-            );
-
-            const expectedContext = contextFixture({
-              module: null,
-              vars: {},
-            });
-
-            const expectedTerm = {...term, context: expectedContext};
-
-            it("top-level", () => {
-              testTopLevelDeserialization(term, "server", expectedTerm);
-            });
-
-            it("nested", () => {
-              testNestedDeserialization(term, "server", expectedTerm);
-            });
-          });
-
-          describe("non-capture", () => {
-            const term = Type.anonymousFunction(
-              1,
-              [
-                {
-                  params: (_context) => [Type.variablePattern("a")],
-                  guards: [
-                    (context) =>
-                      Erlang["/=/2"](context.vars.a, Type.integer(1)),
-                  ],
-                  // prettier-ignore
-                  body: (context) => { return Type.list([Type.atom("m"), context.vars.a, context.vars.x]) },
-                },
-                {
-                  params: (_context) => [Type.variablePattern("a")],
-                  guards: [
-                    (context) =>
-                      Erlang["/=/2"](context.vars.a, Type.integer(2)),
-                  ],
-                  // prettier-ignore
-                  body: (context) => { return Type.list([Type.atom("n"), context.vars.a, context.vars.y]) },
-                },
-              ],
-              context,
-            );
-
-            it("top-level", () => {
-              const serialized = serialize(term, "client");
-              const deserialized = deserialize(serialized);
-
-              assert.deepStrictEqual(deserialized, {
-                ...term,
-                clauses: deserialized.clauses,
-              });
-
-              assert.equal(deserialized.clauses.length, 2);
-
-              assert.isFunction(deserialized.clauses[0].params);
-              assert.isFunction(deserialized.clauses[0].guards[0]);
-              assert.isFunction(deserialized.clauses[0].body);
-
-              assert.isFunction(deserialized.clauses[1].params);
-              assert.isFunction(deserialized.clauses[1].guards[0]);
-              assert.isFunction(deserialized.clauses[1].body);
-
-              const callResult = Interpreter.callAnonymousFunction(
-                deserialized,
-                [Type.integer(1)],
-              );
-
-              const expectedCallResult = Type.list([
-                Type.atom("n"),
-                Type.integer(1),
-                Type.integer(20),
-              ]);
-
-              assert.deepStrictEqual(callResult, expectedCallResult);
-            });
-
-            it("nested", () => {
-              const nestedTerm = {t: term};
-              const serialized = serialize(nestedTerm, "client");
-              const deserialized = deserialize(serialized);
-
-              assert.deepStrictEqual(deserialized, {
-                t: {
-                  ...term,
-                  clauses: deserialized.t.clauses,
-                },
-              });
-
-              assert.equal(deserialized.t.clauses.length, 2);
-
-              assert.isFunction(deserialized.t.clauses[0].params);
-              assert.isFunction(deserialized.t.clauses[0].guards[0]);
-              assert.isFunction(deserialized.t.clauses[0].body);
-
-              assert.isFunction(deserialized.t.clauses[1].params);
-              assert.isFunction(deserialized.t.clauses[1].guards[0]);
-              assert.isFunction(deserialized.t.clauses[1].body);
-
-              const callResult = Interpreter.callAnonymousFunction(
-                deserialized.t,
-                [Type.integer(1)],
-              );
-
-              const expectedCallResult = Type.list([
-                Type.atom("n"),
-                Type.integer(1),
-                Type.integer(20),
-              ]);
-
-              assert.deepStrictEqual(callResult, expectedCallResult);
-            });
-          });
-        });
-
-        describe("integer", () => {
-          const term = Type.integer(90071992547409919007199254740991n);
+      describe("float", () => {
+        describe("encoded as float", () => {
+          const term = Type.float(1.23);
 
           it("top-level", () => {
             testTopLevelDeserialization(term);
@@ -327,11 +167,8 @@ describe.only("Deserializer", () => {
           });
         });
 
-        describe("map", () => {
-          const term = Type.map([
-            [Type.atom("x"), Type.integer(1)],
-            [Type.atom("y"), Type.float(2.34)],
-          ]);
+        describe("encoded as integer", () => {
+          const term = Type.float(123);
 
           it("top-level", () => {
             testTopLevelDeserialization(term);
@@ -343,585 +180,273 @@ describe.only("Deserializer", () => {
         });
       });
 
-      describe("JS terms", () => {
-        describe("array", () => {
-          const term = [9, 8.76];
+      describe("function", () => {
+        beforeEach(() => {
+          Sequence.reset();
+        });
+
+        const context = contextFixture({
+          module: Type.alias("MyModule"),
+          vars: {x: Type.integer(10), y: Type.integer(20)},
+        });
+
+        describe("capture", () => {
+          const term = Type.functionCapture(
+            "Calendar.ISO",
+            "date_to_string",
+            4,
+            [],
+            context,
+          );
+
+          const expectedContext = contextFixture({
+            module: null,
+            vars: {},
+          });
+
+          const expectedTerm = {...term, context: expectedContext};
 
           it("top-level", () => {
-            testTopLevelDeserialization(term);
+            testTopLevelDeserialization(term, "server", expectedTerm);
           });
 
           it("nested", () => {
-            testNestedDeserialization(term);
+            testNestedDeserialization(term, "server", expectedTerm);
           });
         });
 
-        describe("float", () => {
-          const term = 1.23;
+        describe("non-capture", () => {
+          const term = Type.anonymousFunction(
+            1,
+            [
+              {
+                params: (_context) => [Type.variablePattern("a")],
+                guards: [
+                  (context) => Erlang["/=/2"](context.vars.a, Type.integer(1)),
+                ],
+                // prettier-ignore
+                body: (context) => { return Type.list([Type.atom("m"), context.vars.a, context.vars.x]) },
+              },
+              {
+                params: (_context) => [Type.variablePattern("a")],
+                guards: [
+                  (context) => Erlang["/=/2"](context.vars.a, Type.integer(2)),
+                ],
+                // prettier-ignore
+                body: (context) => { return Type.list([Type.atom("n"), context.vars.a, context.vars.y]) },
+              },
+            ],
+            context,
+          );
 
           it("top-level", () => {
-            testTopLevelDeserialization(term);
-          });
+            const serialized = serialize(term, "client");
+            const deserialized = deserialize(serialized);
 
-          it("nested", () => {
-            testNestedDeserialization(term);
-          });
-        });
-
-        describe("function", () => {
-          describe("longhand syntax", () => {
-            it("top-level", () => {
-              const serialized = `[2,"ufunction (a, b) { const result = Type.integer(a + b); return result; }"]`;
-              const deserialized = deserialize(serialized);
-
-              assert.isFunction(deserialized);
-              assert.deepStrictEqual(deserialized(1, 2), Type.integer(3));
+            assert.deepStrictEqual(deserialized, {
+              ...term,
+              clauses: deserialized.clauses,
             });
 
-            it("nested", () => {
-              const serialized = `[2,{"x":"ufunction (a, b) { const result = Type.integer(a + b); return result; }"}]`;
-              const deserialized = deserialize(serialized);
+            assert.equal(deserialized.clauses.length, 2);
 
-              assert.deepStrictEqual(Object.keys(deserialized), ["x"]);
-              assert.isFunction(deserialized.x);
-              assert.deepStrictEqual(deserialized.x(1, 2), Type.integer(3));
+            assert.isFunction(deserialized.clauses[0].params);
+            assert.isFunction(deserialized.clauses[0].guards[0]);
+            assert.isFunction(deserialized.clauses[0].body);
+
+            assert.isFunction(deserialized.clauses[1].params);
+            assert.isFunction(deserialized.clauses[1].guards[0]);
+            assert.isFunction(deserialized.clauses[1].body);
+
+            const callResult = Interpreter.callAnonymousFunction(deserialized, [
+              Type.integer(1),
+            ]);
+
+            const expectedCallResult = Type.list([
+              Type.atom("n"),
+              Type.integer(1),
+              Type.integer(20),
+            ]);
+
+            assert.deepStrictEqual(callResult, expectedCallResult);
+          });
+
+          it("nested", () => {
+            const nestedTerm = {t: term};
+            const serialized = serialize(nestedTerm, "client");
+            const deserialized = deserialize(serialized);
+
+            assert.deepStrictEqual(deserialized, {
+              t: {
+                ...term,
+                clauses: deserialized.t.clauses,
+              },
             });
-          });
 
-          describe("shorthand syntax", () => {
-            it("top-level", () => {
-              const serialized = `[2,"u(a, b) => Type.integer(a + b)"]`;
-              const deserialized = deserialize(serialized);
+            assert.equal(deserialized.t.clauses.length, 2);
 
-              assert.isFunction(deserialized);
-              assert.deepStrictEqual(deserialized(1, 2), Type.integer(3));
-            });
+            assert.isFunction(deserialized.t.clauses[0].params);
+            assert.isFunction(deserialized.t.clauses[0].guards[0]);
+            assert.isFunction(deserialized.t.clauses[0].body);
 
-            it("nested", () => {
-              const serialized = `[2,{"x":"u(a, b) => Type.integer(a + b)"}]`;
-              const deserialized = deserialize(serialized);
+            assert.isFunction(deserialized.t.clauses[1].params);
+            assert.isFunction(deserialized.t.clauses[1].guards[0]);
+            assert.isFunction(deserialized.t.clauses[1].body);
 
-              assert.deepStrictEqual(Object.keys(deserialized), ["x"]);
-              assert.isFunction(deserialized.x);
-              assert.deepStrictEqual(deserialized.x(1, 2), Type.integer(3));
-            });
-          });
-        });
+            const callResult = Interpreter.callAnonymousFunction(
+              deserialized.t,
+              [Type.integer(1)],
+            );
 
-        describe("integer", () => {
-          const term = 123;
+            const expectedCallResult = Type.list([
+              Type.atom("n"),
+              Type.integer(1),
+              Type.integer(20),
+            ]);
 
-          it("top-level", () => {
-            testTopLevelDeserialization(term);
-          });
-
-          it("nested", () => {
-            testNestedDeserialization(term);
+            assert.deepStrictEqual(callResult, expectedCallResult);
           });
         });
+      });
 
-        describe("null", () => {
-          const term = null;
+      describe("integer", () => {
+        const term = Type.integer(90071992547409919007199254740991n);
 
-          it("top-level", () => {
-            testTopLevelDeserialization(term);
-          });
-
-          it("nested", () => {
-            testNestedDeserialization(term);
-          });
+        it("top-level", () => {
+          testTopLevelDeserialization(term);
         });
 
-        describe("object", () => {
-          const term = {v: 9, 'x"yz': 8.76};
+        it("nested", () => {
+          testNestedDeserialization(term);
+        });
+      });
 
-          it("top-level", () => {
-            testTopLevelDeserialization(term);
-          });
+      describe("map", () => {
+        const term = Type.map([
+          [Type.atom("x"), Type.integer(1)],
+          [Type.atom("y"), Type.float(2.34)],
+        ]);
 
-          it("nested", () => {
-            testNestedDeserialization(term);
-          });
+        it("top-level", () => {
+          testTopLevelDeserialization(term);
         });
 
-        describe("string", () => {
-          const term = 'a"bc';
-
-          it("top-level", () => {
-            testTopLevelDeserialization(term);
-          });
-
-          it("nested", () => {
-            testNestedDeserialization(term);
-          });
+        it("nested", () => {
+          testNestedDeserialization(term);
         });
       });
     });
 
-    describe("old versions", () => {
-      describe("version 1", () => {
-        describe("boxed terms", () => {
-          describe("atom", () => {
-            const term = Type.atom("abc");
+    describe("JS terms", () => {
+      describe("array", () => {
+        const term = [9, 8.76];
 
-            it("top-level", () => {
-              const serialized = '[1,"__atom__:abc"]';
-              const deserialized = deserialize(serialized);
+        it("top-level", () => {
+          testTopLevelDeserialization(term);
+        });
 
-              assert.deepStrictEqual(deserialized, term);
-            });
+        it("nested", () => {
+          testNestedDeserialization(term);
+        });
+      });
 
-            it("nested", () => {
-              const serialized = '[1,{"x":"__atom__:abc"}]';
-              const deserialized = deserialize(serialized);
-              const expected = {x: term};
+      describe("float", () => {
+        const term = 1.23;
 
-              assert.deepStrictEqual(deserialized, expected);
-            });
+        it("top-level", () => {
+          testTopLevelDeserialization(term);
+        });
+
+        it("nested", () => {
+          testNestedDeserialization(term);
+        });
+      });
+
+      describe("function", () => {
+        describe("longhand syntax", () => {
+          it("top-level", () => {
+            const serialized = `[2,"ufunction (a, b) { const result = Type.integer(a + b); return result; }"]`;
+            const deserialized = deserialize(serialized);
+
+            assert.isFunction(deserialized);
+            assert.deepStrictEqual(deserialized(1, 2), Type.integer(3));
           });
 
-          describe("bitstring", () => {
-            describe("binary", () => {
-              describe("empty", () => {
-                const term = Type.bitstring2("");
-
-                it("top-level", () => {
-                  const serialized = '[1,"__binary__:"]';
-                  const deserialized = deserialize(serialized);
-
-                  assert.isTrue(Type.isBitstring2(deserialized));
-
-                  assert.isTrue(
-                    Interpreter.isStrictlyEqual(deserialized, term),
-                  );
-                });
-
-                it("nested", () => {
-                  const nestedTerm = {x: term};
-                  const serialized = '[1,{"x":"__binary__:"}]';
-                  const deserialized = deserialize(serialized);
-
-                  assert.equal(typeof deserialized, "object");
-                  assert.deepStrictEqual(Object.keys(deserialized), ["x"]);
-                  assert.isTrue(Type.isBitstring2(deserialized.x));
-
-                  assert.isTrue(
-                    Interpreter.isStrictlyEqual(deserialized.x, nestedTerm.x),
-                  );
-                });
-              });
-
-              describe("non-empty", () => {
-                const term = Type.bitstring2('a"bc');
-
-                it("top-level", () => {
-                  const serialized = '[1,"__binary__:a\\"bc"]';
-                  const deserialized = deserialize(serialized);
-
-                  assert.isTrue(Type.isBitstring2(deserialized));
-
-                  assert.isTrue(
-                    Interpreter.isStrictlyEqual(deserialized, term),
-                  );
-                });
-
-                it("nested", () => {
-                  const nestedTerm = {x: term};
-                  const serialized = '[1,{"x":"__binary__:a\\"bc"}]';
-                  const deserialized = deserialize(serialized);
-
-                  assert.equal(typeof deserialized, "object");
-                  assert.deepStrictEqual(Object.keys(deserialized), ["x"]);
-                  assert.isTrue(Type.isBitstring2(deserialized.x));
-
-                  assert.isTrue(
-                    Interpreter.isStrictlyEqual(deserialized.x, nestedTerm.x),
-                  );
-                });
-              });
-            });
-
-            describe("non-binary", () => {
-              const term = Type.bitstring2([1, 0, 1, 0]);
-
-              it("top-level", () => {
-                const serialized = '[1,{"type":"bitstring","bits":[1,0,1,0]}]';
-                const deserialized = deserialize(serialized);
-
-                assert.isTrue(Type.isBitstring2(deserialized));
-                assert.isTrue(Interpreter.isStrictlyEqual(deserialized, term));
-              });
-
-              it("nested", () => {
-                const nestedTerm = {x: term};
-
-                const serialized =
-                  '[1,{"x":{"type":"bitstring","bits":[1,0,1,0]}}]';
-
-                const deserialized = deserialize(serialized);
-
-                assert.equal(typeof deserialized, "object");
-                assert.deepStrictEqual(Object.keys(deserialized), ["x"]);
-                assert.isTrue(Type.isBitstring2(deserialized.x));
-
-                assert.isTrue(
-                  Interpreter.isStrictlyEqual(deserialized.x, nestedTerm.x),
-                );
-              });
-            });
-          });
-
-          describe("float", () => {
-            describe("encoded as float", () => {
-              const term = Type.float(2.34);
-
-              it("top-level", () => {
-                const serialized = '[1,"__float__:2.34"]';
-                const deserialized = deserialize(serialized);
-
-                assert.deepStrictEqual(deserialized, term);
-              });
-
-              it("nested", () => {
-                const serialized = '[1,{"x":"__float__:2.34"}]';
-                const deserialized = deserialize(serialized);
-                const expected = {x: term};
-
-                assert.deepStrictEqual(deserialized, expected);
-              });
-            });
-
-            describe("encoded as integer", () => {
-              const term = Type.float(234);
-
-              it("top-level", () => {
-                const serialized = '[1,"__float__:234"]';
-                const deserialized = deserialize(serialized);
-
-                assert.deepStrictEqual(deserialized, term);
-              });
-
-              it("nested", () => {
-                const serialized = '[1,{"x":"__float__:234"}]';
-                const deserialized = deserialize(serialized);
-                const expected = {x: term};
-
-                assert.deepStrictEqual(deserialized, expected);
-              });
-            });
-          });
-
-          describe("function", () => {
-            const context = contextFixture({
-              module: Type.alias("MyModule"),
-              vars: {x: Type.integer(10), y: Type.integer(20)},
-            });
-
-            const term = Type.anonymousFunction(
-              1,
-              [
-                {
-                  params: (_context) => [Type.variablePattern("a")],
-                  guards: [
-                    (context) =>
-                      Erlang["/=/2"](context.vars.a, Type.integer(1)),
-                  ],
-                  // prettier-ignore
-                  body: (context) => { return Type.list([Type.atom("m"), context.vars.a, context.vars.x]) },
-                },
-                {
-                  params: (_context) => [Type.variablePattern("a")],
-                  guards: [
-                    (context) =>
-                      Erlang["/=/2"](context.vars.a, Type.integer(2)),
-                  ],
-                  // prettier-ignore
-                  body: (context) => { return Type.list([Type.atom("n"), context.vars.a, context.vars.y]) },
-                },
-              ],
-              context,
-            );
-
-            term.uniqueId = 1;
-
-            it("top-level", () => {
-              const serialized =
-                '[1,{"type":"anonymous_function","arity":1,"capturedFunction":null,"capturedModule":null,"clauses":[{"params":"__function__:(_context) => [Type.variablePattern(\\"a\\")]","guards":["__function__:(context) =>\\n                      Erlang[\\"/=/2\\"](context.vars.a, Type.integer(1))"],"body":"__function__:(context) => { return Type.list([Type.atom(\\"m\\"), context.vars.a, context.vars.x]) }"},{"params":"__function__:(_context) => [Type.variablePattern(\\"a\\")]","guards":["__function__:(context) =>\\n                      Erlang[\\"/=/2\\"](context.vars.a, Type.integer(2))"],"body":"__function__:(context) => { return Type.list([Type.atom(\\"n\\"), context.vars.a, context.vars.y]) }"}],"context":{"module":"__atom__:Elixir.MyModule","vars":{"x":"__integer__:10","y":"__integer__:20"}},"uniqueId":1}]';
-
-              const deserialized = deserialize(serialized);
-
-              assert.deepStrictEqual(deserialized, {
-                ...term,
-                clauses: deserialized.clauses,
-              });
-
-              assert.equal(deserialized.clauses.length, 2);
-
-              assert.isFunction(deserialized.clauses[0].params);
-              assert.isFunction(deserialized.clauses[0].guards[0]);
-              assert.isFunction(deserialized.clauses[0].body);
-
-              assert.isFunction(deserialized.clauses[1].params);
-              assert.isFunction(deserialized.clauses[1].guards[0]);
-              assert.isFunction(deserialized.clauses[1].body);
-
-              const callResult = Interpreter.callAnonymousFunction(
-                deserialized,
-                [Type.integer(1)],
-              );
-
-              const expectedCallResult = Type.list([
-                Type.atom("n"),
-                Type.integer(1),
-                Type.integer(20),
-              ]);
-
-              assert.deepStrictEqual(callResult, expectedCallResult);
-            });
-
-            it("nested", () => {
-              // {t: term};
-              const serialized =
-                '[1,{"t":{"type":"anonymous_function","arity":1,"capturedFunction":null,"capturedModule":null,"clauses":[{"params":"__function__:(_context) => [Type.variablePattern(\\"a\\")]","guards":["__function__:(context) =>\\n                      Erlang[\\"/=/2\\"](context.vars.a, Type.integer(1))"],"body":"__function__:(context) => { return Type.list([Type.atom(\\"m\\"), context.vars.a, context.vars.x]) }"},{"params":"__function__:(_context) => [Type.variablePattern(\\"a\\")]","guards":["__function__:(context) =>\\n                      Erlang[\\"/=/2\\"](context.vars.a, Type.integer(2))"],"body":"__function__:(context) => { return Type.list([Type.atom(\\"n\\"), context.vars.a, context.vars.y]) }"}],"context":{"module":"__atom__:Elixir.MyModule","vars":{"x":"__integer__:10","y":"__integer__:20"}},"uniqueId":1}}]';
-
-              const deserialized = deserialize(serialized);
-
-              assert.deepStrictEqual(deserialized, {
-                t: {
-                  ...term,
-                  clauses: deserialized.t.clauses,
-                },
-              });
-
-              assert.equal(deserialized.t.clauses.length, 2);
-
-              assert.isFunction(deserialized.t.clauses[0].params);
-              assert.isFunction(deserialized.t.clauses[0].guards[0]);
-              assert.isFunction(deserialized.t.clauses[0].body);
-
-              assert.isFunction(deserialized.t.clauses[1].params);
-              assert.isFunction(deserialized.t.clauses[1].guards[0]);
-              assert.isFunction(deserialized.t.clauses[1].body);
-
-              const callResult = Interpreter.callAnonymousFunction(
-                deserialized.t,
-                [Type.integer(1)],
-              );
-
-              const expectedCallResult = Type.list([
-                Type.atom("n"),
-                Type.integer(1),
-                Type.integer(20),
-              ]);
-
-              assert.deepStrictEqual(callResult, expectedCallResult);
-            });
-          });
-
-          describe("integer", () => {
-            const term = Type.integer(90071992547409919007199254740991n);
-
-            it("top-level", () => {
-              const serialized =
-                '[1,"__integer__:90071992547409919007199254740991"]';
-
-              const deserialized = deserialize(serialized);
-
-              assert.deepStrictEqual(deserialized, term);
-            });
-
-            it("nested", () => {
-              const serialized =
-                '[1,{"x":"__integer__:90071992547409919007199254740991"}]';
-
-              const deserialized = deserialize(serialized);
-              const expected = {x: term};
-
-              assert.deepStrictEqual(deserialized, expected);
-            });
-          });
-
-          describe("map", () => {
-            const term = Type.map([
-              [Type.atom("a"), Type.integer(1)],
-              [Type.atom("b"), Type.float(2.34)],
-            ]);
-
-            it("top-level", () => {
-              const serialized =
-                '[1,{"type":"map","data":[["__atom__:a", "__integer__:1"],["__atom__:b", "__float__:2.34"]]}]';
-
-              const deserialized = deserialize(serialized);
-
-              assert.deepStrictEqual(deserialized, term);
-            });
-
-            it("nested", () => {
-              const serialized =
-                '[1,{"x":{"type":"map","data":[["__atom__:a", "__integer__:1"],["__atom__:b", "__float__:2.34"]]}}]';
-
-              const deserialized = deserialize(serialized);
-              const expected = {x: term};
-
-              assert.deepStrictEqual(deserialized, expected);
-            });
+          it("nested", () => {
+            const serialized = `[2,{"x":"ufunction (a, b) { const result = Type.integer(a + b); return result; }"}]`;
+            const deserialized = deserialize(serialized);
+
+            assert.deepStrictEqual(Object.keys(deserialized), ["x"]);
+            assert.isFunction(deserialized.x);
+            assert.deepStrictEqual(deserialized.x(1, 2), Type.integer(3));
           });
         });
 
-        describe("JS terms", () => {
-          describe("array", () => {
-            const term = [9, 8.76];
+        describe("shorthand syntax", () => {
+          it("top-level", () => {
+            const serialized = `[2,"u(a, b) => Type.integer(a + b)"]`;
+            const deserialized = deserialize(serialized);
 
-            it("top-level", () => {
-              const serialized = "[1,[9,8.76]]";
-              const deserialized = deserialize(serialized);
-
-              assert.deepStrictEqual(deserialized, term);
-            });
-
-            it("nested", () => {
-              const serialized = '[1,{"x":[9,8.76]}]';
-              const deserialized = deserialize(serialized);
-              const expected = {x: term};
-
-              assert.deepStrictEqual(deserialized, expected);
-            });
+            assert.isFunction(deserialized);
+            assert.deepStrictEqual(deserialized(1, 2), Type.integer(3));
           });
 
-          describe("float", () => {
-            const term = 9.87;
+          it("nested", () => {
+            const serialized = `[2,{"x":"u(a, b) => Type.integer(a + b)"}]`;
+            const deserialized = deserialize(serialized);
 
-            it("top-level", () => {
-              const serialized = "[1,9.87]";
-              const deserialized = deserialize(serialized);
-
-              assert.deepStrictEqual(deserialized, term);
-            });
-
-            it("nested", () => {
-              const serialized = '[1,{"x":9.87}]';
-              const deserialized = deserialize(serialized);
-              const expected = {x: term};
-
-              assert.deepStrictEqual(deserialized, expected);
-            });
+            assert.deepStrictEqual(Object.keys(deserialized), ["x"]);
+            assert.isFunction(deserialized.x);
+            assert.deepStrictEqual(deserialized.x(1, 2), Type.integer(3));
           });
+        });
+      });
 
-          describe("function", () => {
-            describe("longhand syntax", () => {
-              it("top-level", () => {
-                const serialized = `[1,"__function__:function (a, b) { const result = Type.integer(a + b); return result; }"]`;
-                const deserialized = deserialize(serialized);
+      describe("integer", () => {
+        const term = 123;
 
-                assert.isFunction(deserialized);
-                assert.deepStrictEqual(deserialized(1, 2), Type.integer(3));
-              });
+        it("top-level", () => {
+          testTopLevelDeserialization(term);
+        });
 
-              it("nested", () => {
-                const serialized = `[1,{"x":"__function__:function (a, b) { const result = Type.integer(a + b); return result; }"}]`;
-                const deserialized = deserialize(serialized);
+        it("nested", () => {
+          testNestedDeserialization(term);
+        });
+      });
 
-                assert.deepStrictEqual(Object.keys(deserialized), ["x"]);
-                assert.isFunction(deserialized.x);
-                assert.deepStrictEqual(deserialized.x(1, 2), Type.integer(3));
-              });
-            });
+      describe("null", () => {
+        const term = null;
 
-            describe("shorthand syntax", () => {
-              it("top-level", () => {
-                const serialized = `[1,"__function__:(a, b) => Type.integer(a + b)"]`;
-                const deserialized = deserialize(serialized);
+        it("top-level", () => {
+          testTopLevelDeserialization(term);
+        });
 
-                assert.isFunction(deserialized);
-                assert.deepStrictEqual(deserialized(1, 2), Type.integer(3));
-              });
+        it("nested", () => {
+          testNestedDeserialization(term);
+        });
+      });
 
-              it("nested", () => {
-                const serialized = `[1,{"x":"__function__:(a, b) => Type.integer(a + b)"}]`;
-                const deserialized = deserialize(serialized);
+      describe("object", () => {
+        const term = {v: 9, 'x"yz': 8.76};
 
-                assert.deepStrictEqual(Object.keys(deserialized), ["x"]);
-                assert.isFunction(deserialized.x);
-                assert.deepStrictEqual(deserialized.x(1, 2), Type.integer(3));
-              });
-            });
-          });
+        it("top-level", () => {
+          testTopLevelDeserialization(term);
+        });
 
-          describe("integer", () => {
-            const term = 987;
+        it("nested", () => {
+          testNestedDeserialization(term);
+        });
+      });
 
-            it("top-level", () => {
-              const serialized = "[1,987]";
-              const deserialized = deserialize(serialized);
+      describe("string", () => {
+        const term = 'a"bc';
 
-              assert.deepStrictEqual(deserialized, term);
-            });
+        it("top-level", () => {
+          testTopLevelDeserialization(term);
+        });
 
-            it("nested", () => {
-              const serialized = '[1,{"x":987}]';
-              const deserialized = deserialize(serialized);
-              const expected = {x: term};
-
-              assert.deepStrictEqual(deserialized, expected);
-            });
-          });
-
-          describe("null", () => {
-            const term = null;
-
-            it("top-level", () => {
-              const serialized = "[1,null]";
-              const deserialized = deserialize(serialized);
-
-              assert.deepStrictEqual(deserialized, term);
-            });
-
-            it("nested", () => {
-              const serialized = '[1,{"x":null}]';
-              const deserialized = deserialize(serialized);
-              const expected = {x: term};
-
-              assert.deepStrictEqual(deserialized, expected);
-            });
-          });
-
-          describe("object", () => {
-            const term = {a: 9, 'b"cd': 8.76};
-
-            it("top-level", () => {
-              const serialized = '[1,{"a":9,"b\\"cd":8.76}]';
-              const deserialized = deserialize(serialized);
-
-              assert.deepStrictEqual(deserialized, term);
-            });
-
-            it("nested", () => {
-              const serialized = '[1,{"x":{"a":9,"b\\"cd":8.76}}]';
-              const deserialized = deserialize(serialized);
-              const expected = {x: term};
-
-              assert.deepStrictEqual(deserialized, expected);
-            });
-          });
-
-          describe("string", () => {
-            const term = 'a"bc';
-
-            it("top-level", () => {
-              const serialized = '[1,"a\\"bc"]';
-              const deserialized = deserialize(serialized);
-
-              assert.deepStrictEqual(deserialized, term);
-            });
-
-            it("nested", () => {
-              const serialized = '[1,{"x":"a\\"bc"}]';
-              const deserialized = deserialize(serialized);
-              const expected = {x: term};
-
-              assert.deepStrictEqual(deserialized, expected);
-            });
-          });
+        it("nested", () => {
+          testNestedDeserialization(term);
         });
       });
     });

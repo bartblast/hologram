@@ -6,18 +6,10 @@ import Type from "./type.mjs";
 
 export default class Deserializer {
   static deserialize(serialized) {
-    let version = null;
-
     return JSON.parse(serialized, (_key, value) => {
-      if (version === null) {
-        version = parseInt(value);
-      }
-
-      if (typeof value === "string") {
-        return $.#maybeDeserializeString(value, version);
-      }
-
-      return $.#maybeDeserializeObject(value, version);
+      return typeof value === "string"
+        ? $.#maybeDeserializeFromString(value)
+        : $.#maybeDeserializeFromObject(value);
     })[1];
   }
 
@@ -54,83 +46,43 @@ export default class Deserializer {
     );
   }
 
-  static #maybeDeserializeObject(obj, version) {
-    if (version >= 2) {
-      const boxedTermType = obj?.t;
-
-      switch (boxedTermType) {
-        case "m":
-          return Type.map(obj.d);
-      }
-
-      //       if (boxedValueType === "t") {
-      //         return Type.tuple(value.d);
-      //       }
+  static #maybeDeserializeFromObject(obj) {
+    switch (obj?.t) {
+      case "m":
+        return Type.map(obj.d);
     }
 
-    if (version === 1) {
-      const boxedTermType = obj?.type;
+    //       if (boxedValueType === "t") {
+    //         return Type.tuple(value.d);
+    //       }
 
-      if (boxedTermType === "map") {
-        return Type.map(obj.data);
-      }
-
-      if (boxedTermType === "bitstring") {
-        return Type.bitstring2(obj.bits);
-      }
-    }
-
-    // return null;
     return obj;
   }
 
-  static #maybeDeserializeString(serialized, version) {
-    if (version >= 2) {
-      const typeCode = serialized[0];
-      const data = serialized.slice(1);
+  static #maybeDeserializeFromString(serialized) {
+    const data = serialized.slice(1);
 
-      switch (typeCode) {
-        case "a":
-          return Type.atom(data);
+    switch (serialized[0]) {
+      case "a":
+        return Type.atom(data);
 
-        case "b":
-          return $.#deserializeBoxedBitstring(serialized);
+      case "b":
+        return $.#deserializeBoxedBitstring(serialized);
 
-        case "c":
-          return $.#deserializeBoxedFunctionCapture(data);
+      case "c":
+        return $.#deserializeBoxedFunctionCapture(data);
 
-        case "f":
-          return Type.float(Number(data));
+      case "f":
+        return Type.float(Number(data));
 
-        case "i":
-          return Type.integer(BigInt(data));
+      case "i":
+        return Type.integer(BigInt(data));
 
-        case "s":
-          return data;
+      case "s":
+        return data;
 
-        case "u":
-          return Interpreter.evaluateJavaScriptExpression(data);
-      }
-    }
-
-    if (serialized.startsWith("__atom__:")) {
-      return Type.atom(serialized.slice(9));
-    }
-
-    if (serialized.startsWith("__binary__:")) {
-      return Type.bitstring2(serialized.slice(11));
-    }
-
-    if (serialized.startsWith("__float__:")) {
-      return Type.float(Number(serialized.slice(10)));
-    }
-
-    if (serialized.startsWith("__function__:")) {
-      return Interpreter.evaluateJavaScriptExpression(serialized.slice(13));
-    }
-
-    if (serialized.startsWith("__integer__:")) {
-      return Type.integer(BigInt(serialized.slice(12)));
+      case "u":
+        return Interpreter.evaluateJavaScriptExpression(data);
     }
 
     return serialized;
