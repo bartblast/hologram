@@ -45,9 +45,11 @@ export default class Deserializer {
     if (version >= 2) {
       const boxedTermType = obj?.t;
 
-      if (boxedTermType === "m") {
-        return Type.map(obj.d);
+      switch (boxedTermType) {
+        case "m":
+          return Type.map(obj.d);
       }
+
       //       if (boxedValueType === "t") {
       //         return Type.tuple(value.d);
       //       }
