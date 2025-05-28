@@ -34,6 +34,9 @@ export default class Serializer {
 
         case "map":
           return {t: "m", d: Object.values(value.data)};
+
+        case "tuple":
+          return {t: "t", d: value.data};
       }
 
       //       if (boxedTermType === "pid") {
@@ -46,10 +49,6 @@ export default class Serializer {
 
       //       if (boxedTermType === "reference") {
       //         return $.#serializeBoxedReference(value, isFullScope);
-      //       }
-
-      //       if (boxedTermType === "tuple") {
-      //         return {t: "t", d: value.data};
       //       }
 
       //       if (typeof value === "bigint") {
@@ -101,8 +100,8 @@ export default class Serializer {
   }
 
   static #serializeJsString(value, key) {
-    // Don't add prefix for the type marker in serialized boxed map objects
-    if (value === "m" && key === "t") {
+    // Don't add prefix for the type marker in serialized boxed map and tuple objects
+    if (key === "t" && (value === "m" || value === "t")) {
       return value;
     }
 

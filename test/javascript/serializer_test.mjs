@@ -293,6 +293,23 @@ describe("Serializer", () => {
           assert.equal(serialize(term), expected);
         });
       });
+
+      describe("tuple", () => {
+        it("top-level", () => {
+          const term = Type.tuple([Type.atom("x"), Type.float(1.23)]);
+          const expected = '[2,{"t":"t","d":["ax","f1.23"]}]';
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("nested", () => {
+          const term = {b: Type.tuple([Type.atom("x"), Type.float(1.23)])};
+
+          const expected = '[2,{"b":{"t":"t","d":["ax","f1.23"]}}]';
+
+          assert.equal(serialize(term), expected);
+        });
+      });
     });
 
     describe("JS terms", () => {

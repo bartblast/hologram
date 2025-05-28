@@ -73,7 +73,7 @@ function testTopLevelDeserialization(
   assert.deepStrictEqual(deserialized, expected);
 }
 
-describe.only("Deserializer", () => {
+describe("Deserializer", () => {
   describe("deserialize()", () => {
     describe("boxed terms", () => {
       describe("atom", () => {
