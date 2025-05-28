@@ -44,8 +44,8 @@ defmodule Hologram.Socket.DecoderTest do
     end
 
     test "map" do
-      term = %{"t" => "m", "d" => [["ax", "i1"], ["b079", "f2.34"]]}
-      assert decode(2, term) == %{:x => 1, "y" => 2.34}
+      data = %{"t" => "m", "d" => [["ax", "i1"], ["b079", "f2.34"]]}
+      assert decode(2, data) == %{:x => 1, "y" => 2.34}
     end
 
     test "tuple" do
@@ -64,8 +64,8 @@ defmodule Hologram.Socket.DecoderTest do
     end
 
     test "bitstring, non-binary" do
-      assert decode(1, %{"type" => "bitstring", "bits" => [1, 0, 1, 0]}) ==
-               <<1::1, 0::1, 1::1, 0::1>>
+      data = %{"type" => "bitstring", "bits" => [1, 0, 1, 0]}
+      assert decode(1, data) == <<1::1, 0::1, 1::1, 0::1>>
     end
 
     test "float, encoded as float" do
@@ -77,12 +77,14 @@ defmodule Hologram.Socket.DecoderTest do
     end
 
     test "function capture" do
-      assert decode(1, %{
-               "type" => "anonymous_function",
-               "capturedModule" => "Calendar.ISO",
-               "capturedFunction" => "parse_date",
-               "arity" => 2
-             }) == (&Calendar.ISO.parse_date/2)
+      data = %{
+        "type" => "anonymous_function",
+        "capturedModule" => "Calendar.ISO",
+        "capturedFunction" => "parse_date",
+        "arity" => 2
+      }
+
+      assert decode(1, data) == (&Calendar.ISO.parse_date/2)
     end
 
     test "integer" do
@@ -90,20 +92,24 @@ defmodule Hologram.Socket.DecoderTest do
     end
 
     test "map" do
-      assert decode(1, %{
-               "type" => "map",
-               "data" => [
-                 ["__atom__:a", "__integer__:1"],
-                 ["__binary__:b", "__float__:2.34"]
-               ]
-             }) == %{:a => 1, "b" => 2.34}
+      data = %{
+        "type" => "map",
+        "data" => [
+          ["__atom__:a", "__integer__:1"],
+          ["__binary__:b", "__float__:2.34"]
+        ]
+      }
+
+      assert decode(1, data) == %{:a => 1, "b" => 2.34}
     end
 
     test "tuple" do
-      assert decode(1, %{
-               "type" => "tuple",
-               "data" => ["__integer__:1", "__float__:2.34"]
-             }) == {1, 2.34}
+      data = %{
+        "type" => "tuple",
+        "data" => ["__integer__:1", "__float__:2.34"]
+      }
+
+      assert decode(1, data) == {1, 2.34}
     end
   end
 
