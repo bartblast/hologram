@@ -55,6 +55,16 @@ defmodule Hologram.Socket.Decoder do
     <<full_bytes::binary, leftover_bits_byte::size(leftover_bit_count)>>
   end
 
+  def decode(2, "c" <> data) do
+    [module_str, function_str, arity_str] = String.split(data, ":")
+
+    module = Module.safe_concat([module_str])
+    function = String.to_existing_atom(function_str)
+    arity = IntegerUtils.parse!(arity_str)
+
+    Function.capture(module, function, arity)
+  end
+
   def decode(2, "f" <> value) do
     value
     |> Float.parse()

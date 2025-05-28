@@ -35,6 +35,10 @@ defmodule Hologram.Socket.DecoderTest do
       assert decode(2, "f123") === 123.0
     end
 
+    test "function capture" do
+      assert decode(2, "cCalendar.ISO:parse_date:2") == (&Calendar.ISO.parse_date/2)
+    end
+
     test "integer" do
       assert decode(2, "i123") == 123
     end
@@ -46,15 +50,6 @@ defmodule Hologram.Socket.DecoderTest do
   end
 
   describe "version 1" do
-    test "anonymous function" do
-      assert decode(1, %{
-               "type" => "anonymous_function",
-               "capturedModule" => "Calendar.ISO",
-               "capturedFunction" => "parse_date",
-               "arity" => 2
-             }) == (&Calendar.ISO.parse_date/2)
-    end
-
     test "atom" do
       assert decode(1, "__atom__:xyz") == :xyz
     end
@@ -74,6 +69,15 @@ defmodule Hologram.Socket.DecoderTest do
 
     test "float, encoded as integer" do
       assert decode(1, "__float__:123") === 123.0
+    end
+
+    test "function capture" do
+      assert decode(1, %{
+               "type" => "anonymous_function",
+               "capturedModule" => "Calendar.ISO",
+               "capturedFunction" => "parse_date",
+               "arity" => 2
+             }) == (&Calendar.ISO.parse_date/2)
     end
 
     test "integer" do
