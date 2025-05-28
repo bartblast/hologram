@@ -34,7 +34,7 @@ defmodule Hologram.Socket.Decoder do
   Decodes a term serialized by the client and pre-decoded from JSON.
   """
   @spec decode(integer, map | String.t()) :: any
-  def decode(version, term)
+  def decode(version, data)
 
   def decode(2, "a" <> value) do
     String.to_existing_atom(value)
@@ -79,6 +79,12 @@ defmodule Hologram.Socket.Decoder do
     data
     |> Enum.map(fn [key, value] -> {decode(2, key), decode(2, value)} end)
     |> Enum.into(%{})
+  end
+
+  def decode(2, %{"t" => "t", "d" => data}) do
+    data
+    |> Enum.map(&decode(2, &1))
+    |> List.to_tuple()
   end
 
   def decode(1, "__atom__:" <> value) do

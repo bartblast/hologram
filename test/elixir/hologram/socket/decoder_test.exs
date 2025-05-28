@@ -47,6 +47,11 @@ defmodule Hologram.Socket.DecoderTest do
       term = %{"t" => "m", "d" => [["ax", "i1"], ["b079", "f2.34"]]}
       assert decode(2, term) == %{:x => 1, "y" => 2.34}
     end
+
+    test "tuple" do
+      data = %{"t" => "t", "d" => ["i1", "f2.34"]}
+      assert decode(2, data) == {1, 2.34}
+    end
   end
 
   describe "version 1" do
