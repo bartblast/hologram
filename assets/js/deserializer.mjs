@@ -48,6 +48,9 @@ export default class Deserializer {
 
   static #maybeDeserializeFromObject(obj) {
     switch (obj?.t) {
+      case "l":
+        return Type.list(obj.d);
+
       case "m":
         return Type.map(obj.d);
 
