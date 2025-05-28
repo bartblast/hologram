@@ -51,12 +51,6 @@ export default class Serializer {
       //         return $.#serializeBoxedReference(value, isFullScope);
       //       }
 
-      //       if (typeof value === "bigint") {
-      //         return `__bigint__:${value.toString()}`;
-      //       }
-
-      //       return typeof value === "undefined" ? null : value;
-
       const valueType = typeof value;
 
       if (valueType === "number" || valueType === "object") {

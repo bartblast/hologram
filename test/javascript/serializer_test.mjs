@@ -833,35 +833,6 @@ describe("Serializer", () => {
     //           assert.equal(serialize(term, true, false), expected);
     //         });
     //       });
-
-    //       describe("tuple", () => {
-    //         it("top-level", () => {
-    //           const term = Type.tuple([Type.integer(1), Type.float(1.23)]);
-
-    //           const expected = '[2,{"t":"t","d":["i:1","f:1.23"]}]';
-
-    //           assert.equal(serialize(term), expected);
-    //         });
-
-    //         it("nested", () => {
-    //           const term = {
-    //             a: Type.tuple([Type.integer(1), Type.float(1.23)]),
-    //             b: 2,
-    //           };
-
-    //           const expected = '[2,{"a":{"t":"t","d":["i:1","f:1.23"]},"b":2}]';
-
-    //           assert.equal(serialize(term), expected);
-    //         });
-
-    //         it("not versioned", () => {
-    //           const term = Type.tuple([Type.integer(1), Type.float(1.23)]);
-
-    //           const expected = '{"t":"t","d":["i:1","f:1.23"]}';
-
-    //           assert.equal(serialize(term, true, false), expected);
-    //         });
-    //       });
     //     });
   });
 });

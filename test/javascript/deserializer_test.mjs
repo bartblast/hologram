@@ -528,37 +528,5 @@ describe("Deserializer", () => {
     //         });
     //       });
     //     });
-
-    //     describe("old versions", () => {
-    //       describe("version 1", () => {
-    //         describe("boxed terms", () => {
-    //           describe("tuple", () => {
-    //             const term = Type.tuple([Type.integer(1), Type.float(1.23)]);
-
-    //             it("top-level", () => {
-    //               const serialized =
-    //                 '[1,{"type":"tuple","data":["__integer__:1","__float__:1.23"]}]';
-
-    //               const deserialized = deserialize(serialized);
-
-    //               assert.deepStrictEqual(deserialized, term);
-    //             });
-
-    //             it("nested", () => {
-    //               const serialized =
-    //                 '[1,{"x":{"type":"tuple","data":["__integer__:1","__float__:1.23"]},"y":2}]';
-
-    //               const deserialized = deserialize(serialized);
-    //               const expected = {x: term, y: 2};
-
-    //               assert.deepStrictEqual(deserialized, expected);
-    //             });
-
-    //             // Not applicable
-    //             // it("not versioned", () => {});
-    //           });
-    //         });
-    //       });
-    //     });
   });
 });
