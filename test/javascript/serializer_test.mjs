@@ -13,25 +13,30 @@ import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
-describe.only("Serializer", () => {
+describe("Serializer", () => {
   describe("serialize()", () => {
     const serialize = Serializer.serialize;
 
     describe("boxed terms", () => {
-      describe("anonymous function", () => {
+      describe("function", () => {
         beforeEach(() => {
           Sequence.reset();
         });
 
-        describe("top-level", () => {
-          describe("having capture info", () => {
+        const context = contextFixture({
+          module: Type.alias("MyModule"),
+          vars: {x: Type.integer(10), y: Type.integer(20)},
+        });
+
+        describe("capture", () => {
+          describe("top-level", () => {
             it("server destination", () => {
               const term = Type.functionCapture(
                 "Calendar.ISO",
                 "date_to_string",
                 4,
                 [],
-                contextFixture(),
+                context,
               );
 
               const expected = '[2,"cCalendar.ISO:date_to_string:4"]';
@@ -48,7 +53,7 @@ describe.only("Serializer", () => {
                   (param) => Type.integer(param),
                   (param) => Type.bitstring2(param),
                 ],
-                contextFixture(),
+                context,
               );
 
               const expected =
@@ -58,9 +63,49 @@ describe.only("Serializer", () => {
             });
           });
 
-          describe("not having capture info", () => {
+          describe("nested", () => {
             it("server destination", () => {
-              const term = Type.anonymousFunction(4, [], contextFixture());
+              const term = {
+                a: Type.functionCapture(
+                  "Calendar.ISO",
+                  "date_to_string",
+                  4,
+                  [],
+                  context,
+                ),
+              };
+
+              const expected = '[2,{"a":"cCalendar.ISO:date_to_string:4"}]';
+
+              assert.equal(serialize(term, "server"), expected);
+            });
+
+            it("client destination", () => {
+              const term = {
+                a: Type.functionCapture(
+                  "Calendar.ISO",
+                  "date_to_string",
+                  4,
+                  [
+                    (param) => Type.integer(param),
+                    (param) => Type.bitstring2(param),
+                  ],
+                  context,
+                ),
+              };
+
+              const expected =
+                '[2,{"a":{"type":"sanonymous_function","arity":4,"capturedFunction":"sdate_to_string","capturedModule":"sCalendar.ISO","clauses":["u(param) => Type.integer(param)","u(param) => Type.bitstring2(param)"],"context":{"module":"aElixir.MyModule","vars":{}},"uniqueId":1}}]';
+
+              assert.equal(serialize(term, "client"), expected);
+            });
+          });
+        });
+
+        describe("non-capture", () => {
+          describe("top-level", () => {
+            it("server destination", () => {
+              const term = Type.anonymousFunction(4, [], context);
 
               assert.throw(
                 () => serialize(term, "server"),
@@ -86,60 +131,20 @@ describe.only("Serializer", () => {
                     body: (_context) => { return Type.atom("expr_b"); },
                   },
                 ],
-                contextFixture({vars: {a: 10, b: 20}}),
+                context,
               );
 
               const expected =
-                '[2,{"type":"sanonymous_function","arity":4,"capturedFunction":null,"capturedModule":null,"clauses":[{"params":"u(_context) => [Type.variablePattern(\\"x\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_a\\"); }"},{"params":"u(_context) => [Type.variablePattern(\\"y\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_b\\"); }"}],"context":{"module":"aElixir.MyModule","vars":{"a":10,"b":20}},"uniqueId":1}]';
-
-              assert.equal(serialize(term, "client"), expected);
-            });
-          });
-        });
-
-        describe("nested", () => {
-          describe("having capture info", () => {
-            it("server destination", () => {
-              const term = {
-                a: Type.functionCapture(
-                  "Calendar.ISO",
-                  "date_to_string",
-                  4,
-                  [],
-                  contextFixture(),
-                ),
-              };
-
-              const expected = '[2,{"a":"cCalendar.ISO:date_to_string:4"}]';
-
-              assert.equal(serialize(term, "server"), expected);
-            });
-
-            it("client destination", () => {
-              const term = {
-                a: Type.functionCapture(
-                  "Calendar.ISO",
-                  "date_to_string",
-                  4,
-                  [
-                    (param) => Type.integer(param),
-                    (param) => Type.bitstring2(param),
-                  ],
-                  contextFixture(),
-                ),
-              };
-
-              const expected =
-                '[2,{"a":{"type":"sanonymous_function","arity":4,"capturedFunction":"sdate_to_string","capturedModule":"sCalendar.ISO","clauses":["u(param) => Type.integer(param)","u(param) => Type.bitstring2(param)"],"context":{"module":"aElixir.MyModule","vars":{}},"uniqueId":1}}]';
+                '[2,{"type":"sanonymous_function","arity":4,"capturedFunction":null,"capturedModule":null,"clauses":[{"params":"u(_context) => [Type.variablePattern(\\"x\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_a\\"); }"},{"params":"u(_context) => [Type.variablePattern(\\"y\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_b\\"); }"}],"context":{"module":"aElixir.MyModule","vars":{"x":"i10","y":"i20"}},"uniqueId":1}]';
 
               assert.equal(serialize(term, "client"), expected);
             });
           });
 
-          describe("not having capture info", () => {
+          describe("nested", () => {
             it("server destination", () => {
               const term = {
-                a: Type.anonymousFunction(4, [], contextFixture()),
+                a: Type.anonymousFunction(4, [], context),
               };
 
               assert.throw(
@@ -167,12 +172,12 @@ describe.only("Serializer", () => {
                       body: (_context) => { return Type.atom("expr_b"); },
                     },
                   ],
-                  contextFixture({vars: {a: 10, b: 20}}),
+                  context,
                 ),
               };
 
               const expected =
-                '[2,{"a":{"type":"sanonymous_function","arity":4,"capturedFunction":null,"capturedModule":null,"clauses":[{"params":"u(_context) => [Type.variablePattern(\\"x\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_a\\"); }"},{"params":"u(_context) => [Type.variablePattern(\\"y\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_b\\"); }"}],"context":{"module":"aElixir.MyModule","vars":{"a":10,"b":20}},"uniqueId":1}}]';
+                '[2,{"a":{"type":"sanonymous_function","arity":4,"capturedFunction":null,"capturedModule":null,"clauses":[{"params":"u(_context) => [Type.variablePattern(\\"x\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_a\\"); }"},{"params":"u(_context) => [Type.variablePattern(\\"y\\")]","guards":[],"body":"u(_context) => { return Type.atom(\\"expr_b\\"); }"}],"context":{"module":"aElixir.MyModule","vars":{"x":"i10","y":"i20"}},"uniqueId":1}}]';
 
               assert.equal(serialize(term, "client"), expected);
             });
