@@ -75,6 +75,10 @@ defmodule Hologram.Socket.Decoder do
     IntegerUtils.parse!(value)
   end
 
+  def decode(2, %{"t" => "l", "d" => data}) do
+    Enum.map(data, &decode(2, &1))
+  end
+
   def decode(2, %{"t" => "m", "d" => data}) do
     data
     |> Enum.map(fn [key, value] -> {decode(2, key), decode(2, value)} end)

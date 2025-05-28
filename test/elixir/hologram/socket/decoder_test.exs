@@ -43,6 +43,11 @@ defmodule Hologram.Socket.DecoderTest do
       assert decode(2, "i123") == 123
     end
 
+    test "list" do
+      data = %{"t" => "l", "d" => ["i1", "f2.34"]}
+      assert decode(2, data) == [1, 2.34]
+    end
+
     test "map" do
       data = %{"t" => "m", "d" => [["ax", "i1"], ["b079", "f2.34"]]}
       assert decode(2, data) == %{:x => 1, "y" => 2.34}
