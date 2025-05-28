@@ -50,11 +50,10 @@ export default class Deserializer {
     switch (obj?.t) {
       case "m":
         return Type.map(obj.d);
-    }
 
-    //       if (boxedValueType === "t") {
-    //         return Type.tuple(value.d);
-    //       }
+      case "t":
+        return Type.tuple(obj.d);
+    }
 
     return obj;
   }

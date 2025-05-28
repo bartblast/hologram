@@ -335,6 +335,18 @@ describe("Deserializer", () => {
           testNestedDeserialization(term);
         });
       });
+
+      describe("tuple", () => {
+        const term = Type.tuple([Type.integer(1), Type.float(2.34)]);
+
+        it("top-level", () => {
+          testTopLevelDeserialization(term);
+        });
+
+        it("nested", () => {
+          testNestedDeserialization(term);
+        });
+      });
     });
 
     describe("JS terms", () => {
@@ -502,22 +514,6 @@ describe("Deserializer", () => {
 
     //       describe("reference", () => {
     //         const term = Type.reference("0.1.2.3", "client");
-
-    //         it("top-level", () => {
-    //           testTopLevelDeserialization(term);
-    //         });
-
-    //         it("nested", () => {
-    //           testNestedDeserialization(term);
-    //         });
-
-    //         it("not versioned", () => {
-    //           testNotVersionedDeserialization(term);
-    //         });
-    //       });
-
-    //       describe("tuple", () => {
-    //         const term = Type.tuple([Type.integer(1), Type.float(2.34)]);
 
     //         it("top-level", () => {
     //           testTopLevelDeserialization(term);
