@@ -18,7 +18,7 @@ export default class Serializer {
 
       switch (boxedTermType) {
         case "anonymous_function":
-          return $.#serializeBoxedAnonymousFunction(value, destination);
+          return $.#serializeBoxedFunction(value, destination);
 
         case "atom":
           return `a${value.value}`;
@@ -85,7 +85,7 @@ export default class Serializer {
     return `[${$.CURRENT_VERSION},${serialized}]`;
   }
 
-  static #serializeBoxedAnonymousFunction(term, destination) {
+  static #serializeBoxedFunction(term, destination) {
     if (destination === "client") {
       return term;
     }
@@ -96,7 +96,8 @@ export default class Serializer {
       );
     }
 
-    return `n${term.capturedModule}:${term.capturedFunction}:${term.arity}`;
+    // Function capture
+    return `c${term.capturedModule}:${term.capturedFunction}:${term.arity}`;
   }
 
   static #serializeJsString(value, key) {

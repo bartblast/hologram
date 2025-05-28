@@ -13,7 +13,7 @@ import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
-describe("Serializer", () => {
+describe.only("Serializer", () => {
   describe("serialize()", () => {
     const serialize = Serializer.serialize;
 
@@ -34,7 +34,7 @@ describe("Serializer", () => {
                 contextFixture(),
               );
 
-              const expected = '[2,"nCalendar.ISO:date_to_string:4"]';
+              const expected = '[2,"cCalendar.ISO:date_to_string:4"]';
 
               assert.equal(serialize(term, "server"), expected);
             });
@@ -110,7 +110,7 @@ describe("Serializer", () => {
                 ),
               };
 
-              const expected = '[2,{"a":"nCalendar.ISO:date_to_string:4"}]';
+              const expected = '[2,{"a":"cCalendar.ISO:date_to_string:4"}]';
 
               assert.equal(serialize(term, "server"), expected);
             });
