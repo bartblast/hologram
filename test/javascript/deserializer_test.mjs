@@ -2,12 +2,13 @@
 
 import {
   assert,
-  //   contextFixture,
+  // contextFixture,
   defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
 import Deserializer from "../../assets/js/deserializer.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
+// import Sequence from "../../assets/js/sequence.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -16,9 +17,12 @@ defineGlobalErlangAndElixirModules();
 const deserialize = Deserializer.deserialize;
 const serialize = Serializer.serialize;
 
-function testNestedBitstringDeserialization(nestedTerm) {
+function testNestedBitstringDeserialization(
+  nestedTerm,
+  destination = "server",
+) {
   const term = {x: nestedTerm};
-  const serialized = serialize(term);
+  const serialized = serialize(term, destination);
   const deserialized = deserialize(serialized);
 
   assert.equal(typeof deserialized, "object");
@@ -27,26 +31,46 @@ function testNestedBitstringDeserialization(nestedTerm) {
   assert.isTrue(Interpreter.isStrictlyEqual(deserialized.x, term.x));
 }
 
-function testNestedDeserialization(nestedTerm) {
+function testNestedDeserialization(
+  nestedTerm,
+  destination = "server",
+  expectedNestedTerm = null,
+) {
   const term = {x: nestedTerm};
-  const serialized = serialize(term);
+  const serialized = serialize(term, destination);
   const deserialized = deserialize(serialized);
 
-  assert.deepStrictEqual(deserialized, term);
+  let expected;
+
+  if (expectedNestedTerm === null) {
+    expected = {x: expectedNestedTerm};
+  } else {
+    expected = term;
+  }
+
+  assert.deepStrictEqual(deserialized, expected);
 }
 
-function testTopLevelBitstringDeserialization(term) {
-  const serialized = serialize(term);
+function testTopLevelBitstringDeserialization(term, destination = "server") {
+  const serialized = serialize(term, destination);
   const deserialized = deserialize(serialized);
 
   assert.isTrue(Interpreter.isStrictlyEqual(deserialized, term));
 }
 
-function testTopLevelDeserialization(term) {
-  const serialized = serialize(term);
+function testTopLevelDeserialization(
+  term,
+  destination = "server",
+  expected = null,
+) {
+  const serialized = serialize(term, destination);
   const deserialized = deserialize(serialized);
 
-  assert.deepStrictEqual(deserialized, term);
+  if (expected === null) {
+    expected = term;
+  }
+
+  assert.deepStrictEqual(deserialized, expected);
 }
 
 describe("Deserializer", () => {
