@@ -41,6 +41,19 @@ export default class Deserializer {
     return bitstring;
   }
 
+  static #deserializeBoxedFunctionCapture(serialized) {
+    const parts = serialized.split(":");
+    const context = Interpreter.buildContext();
+
+    return Type.functionCapture(
+      parts[0],
+      parts[1],
+      parseInt(parts[2]),
+      [],
+      context,
+    );
+  }
+
   static #maybeDeserializeObject(obj, version) {
     if (version >= 2) {
       const boxedTermType = obj?.t;
@@ -82,6 +95,9 @@ export default class Deserializer {
 
         case "b":
           return $.#deserializeBoxedBitstring(serialized);
+
+        case "c":
+          return $.#deserializeBoxedFunctionCapture(data);
 
         case "f":
           return Type.float(Number(data));

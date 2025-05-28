@@ -2,13 +2,13 @@
 
 import {
   assert,
-  // contextFixture,
+  contextFixture,
   defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
 import Deserializer from "../../assets/js/deserializer.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
-// import Sequence from "../../assets/js/sequence.mjs";
+import Sequence from "../../assets/js/sequence.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -73,7 +73,7 @@ function testTopLevelDeserialization(
   assert.deepStrictEqual(deserialized, expected);
 }
 
-describe.only("Deserializer", () => {
+describe("Deserializer", () => {
   describe("deserialize()", () => {
     describe("version 2 (current)", () => {
       describe("boxed terms", () => {
@@ -179,6 +179,138 @@ describe.only("Deserializer", () => {
 
             it("nested", () => {
               testNestedDeserialization(term);
+            });
+          });
+        });
+
+        describe("function", () => {
+          beforeEach(() => {
+            Sequence.reset();
+          });
+
+          const context = contextFixture({
+            module: Type.alias("MyModule"),
+            vars: {x: Type.integer(10), y: Type.integer(20)},
+          });
+
+          describe("capture", () => {
+            const term = Type.functionCapture(
+              "Calendar.ISO",
+              "date_to_string",
+              4,
+              [],
+              context,
+            );
+
+            const expectedContext = contextFixture({
+              module: null,
+              vars: {},
+            });
+
+            const expectedTerm = {...term, context: expectedContext};
+
+            it("top-level", () => {
+              testTopLevelDeserialization(term, "server", expectedTerm);
+            });
+
+            it("nested", () => {
+              testNestedDeserialization(term, "server", expectedTerm);
+            });
+          });
+
+          describe("non-capture", () => {
+            const term = Type.anonymousFunction(
+              1,
+              [
+                {
+                  params: (_context) => [Type.variablePattern("a")],
+                  guards: [
+                    (context) =>
+                      Erlang["/=/2"](context.vars.a, Type.integer(1)),
+                  ],
+                  // prettier-ignore
+                  body: (context) => { return Type.list([Type.atom("m"), context.vars.a, context.vars.x]) },
+                },
+                {
+                  params: (_context) => [Type.variablePattern("a")],
+                  guards: [
+                    (context) =>
+                      Erlang["/=/2"](context.vars.a, Type.integer(2)),
+                  ],
+                  // prettier-ignore
+                  body: (context) => { return Type.list([Type.atom("n"), context.vars.a, context.vars.y]) },
+                },
+              ],
+              context,
+            );
+
+            it("top-level", () => {
+              const serialized = serialize(term, "client");
+              const deserialized = deserialize(serialized);
+
+              assert.deepStrictEqual(deserialized, {
+                ...term,
+                clauses: deserialized.clauses,
+              });
+
+              assert.equal(deserialized.clauses.length, 2);
+
+              assert.isFunction(deserialized.clauses[0].params);
+              assert.isFunction(deserialized.clauses[0].guards[0]);
+              assert.isFunction(deserialized.clauses[0].body);
+
+              assert.isFunction(deserialized.clauses[1].params);
+              assert.isFunction(deserialized.clauses[1].guards[0]);
+              assert.isFunction(deserialized.clauses[1].body);
+
+              const callResult = Interpreter.callAnonymousFunction(
+                deserialized,
+                [Type.integer(1)],
+              );
+
+              const expectedCallResult = Type.list([
+                Type.atom("n"),
+                Type.integer(1),
+                Type.integer(20),
+              ]);
+
+              assert.deepStrictEqual(callResult, expectedCallResult);
+            });
+
+            it("nested", () => {
+              const nestedTerm = {t: term};
+              const serialized = serialize(nestedTerm, "client");
+              const deserialized = deserialize(serialized);
+
+              assert.deepStrictEqual(deserialized, {
+                t: {
+                  ...term,
+                  clauses: deserialized.t.clauses,
+                },
+              });
+
+              assert.equal(deserialized.t.clauses.length, 2);
+
+              assert.isFunction(deserialized.t.clauses[0].params);
+              assert.isFunction(deserialized.t.clauses[0].guards[0]);
+              assert.isFunction(deserialized.t.clauses[0].body);
+
+              assert.isFunction(deserialized.t.clauses[1].params);
+              assert.isFunction(deserialized.t.clauses[1].guards[0]);
+              assert.isFunction(deserialized.t.clauses[1].body);
+
+              const callResult = Interpreter.callAnonymousFunction(
+                deserialized.t,
+                [Type.integer(1)],
+              );
+
+              const expectedCallResult = Type.list([
+                Type.atom("n"),
+                Type.integer(1),
+                Type.integer(20),
+              ]);
+
+              assert.deepStrictEqual(callResult, expectedCallResult);
             });
           });
         });
