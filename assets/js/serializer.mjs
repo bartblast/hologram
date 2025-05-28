@@ -38,13 +38,12 @@ export default class Serializer {
         case "map":
           return {t: "m", d: Object.values(value.data)};
 
+        case "pid":
+          return $.#serializeBoxedPid(value, destination);
+
         case "tuple":
           return {t: "t", d: value.data};
       }
-
-      //       if (boxedTermType === "pid") {
-      //         return $.#serializeBoxedPid(value, isFullScope);
-      //       }
 
       //       if (boxedTermType === "port") {
       //         return $.#serializeBoxedPort(value, isFullScope);
@@ -96,6 +95,21 @@ export default class Serializer {
     return `c${term.capturedModule}:${term.capturedFunction}:${term.arity}`;
   }
 
+  static #serializeBoxedPid(term, destination) {
+    if (destination === "client") {
+      return term;
+    }
+
+    if (term.origin === "client") {
+      throw new HologramRuntimeError(
+        "can't encode client terms that are PIDs originating in client",
+      );
+    }
+
+    // PID originating in server
+    return `p${term.segments.join(",")}`;
+  }
+
   static #serializeJsString(value, key) {
     // Don't add prefix for the type marker in serialized boxed map and tuple objects
     if (key === "t" && (value === "l" || value === "m" || value === "t")) {
@@ -104,22 +118,6 @@ export default class Serializer {
 
     return `s${value}`;
   }
-
-  //   static #serializeBoxedPid(term, isFullScope) {
-  //     if (isFullScope) {
-  //       return term;
-  //     }
-
-  //     if (term.origin === "client") {
-  //       throw new HologramRuntimeError(
-  //         "can't encode client terms that are PIDs originating in client",
-  //       );
-  //     }
-
-  //     // eslint-disable-next-line no-unused-vars
-  //     const {node, origin, ...rest} = term;
-  //     return rest;
-  //   }
 
   //   static #serializeBoxedPort(term, isFullScope) {
   //     if (isFullScope) {

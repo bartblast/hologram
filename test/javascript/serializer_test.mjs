@@ -311,6 +311,99 @@ describe("Serializer", () => {
         });
       });
 
+      describe("pid", () => {
+        describe("originating in server", () => {
+          describe("top-level", () => {
+            it("server destination", () => {
+              const term = Type.pid("my_node@my_host", [0, 11, 222], "server");
+              const expected = '[2,"p0,11,222"]';
+
+              assert.equal(serialize(term, "server"), expected);
+            });
+
+            it("client destination", () => {
+              const term = Type.pid('my_node@my_"host', [0, 11, 222], "server");
+
+              const expected =
+                '[2,{"type":"spid","node":"smy_node@my_\\"host","origin":"sserver","segments":[0,11,222]}]';
+
+              assert.equal(serialize(term, "client"), expected);
+            });
+          });
+
+          describe("nested", () => {
+            it("server destination", () => {
+              const term = {
+                a: Type.pid("my_node@my_host", [0, 11, 222], "server"),
+              };
+
+              const expected = '[2,{"a":"p0,11,222"}]';
+
+              assert.equal(serialize(term, "server"), expected);
+            });
+
+            it("client destination", () => {
+              const term = {
+                a: Type.pid('my_node@my_"host', [0, 11, 222], "server"),
+              };
+
+              const expected =
+                '[2,{"a":{"type":"spid","node":"smy_node@my_\\"host","origin":"sserver","segments":[0,11,222]}}]';
+
+              assert.equal(serialize(term, "client"), expected);
+            });
+          });
+        });
+
+        describe("originating in client", () => {
+          describe("top-level", () => {
+            it("server destination", () => {
+              const term = Type.pid("my_node@my_host", [0, 11, 222], "client");
+
+              assert.throw(
+                () => serialize(term, "server"),
+                HologramRuntimeError,
+                "can't encode client terms that are PIDs originating in client",
+              );
+            });
+
+            it("client destination", () => {
+              const term = Type.pid('my_node@my_"host', [0, 11, 222], "client");
+
+              const expected =
+                '[2,{"type":"spid","node":"smy_node@my_\\"host","origin":"sclient","segments":[0,11,222]}]';
+
+              assert.equal(serialize(term, "client"), expected);
+            });
+          });
+
+          describe("nested", () => {
+            it("server destination", () => {
+              const term = {
+                a: Type.pid("my_node@my_host", [0, 11, 222], "client"),
+              };
+
+              assert.throw(
+                () => serialize(term, "server"),
+                HologramRuntimeError,
+                "can't encode client terms that are PIDs originating in client",
+              );
+            });
+
+            it("client destination", () => {
+              const term = {
+                a: Type.pid('my_node@my_"host', [0, 11, 222], "client"),
+              };
+
+              const expected =
+                '[2,{"a":{"type":"spid","node":"smy_node@my_\\"host","origin":"sclient","segments":[0,11,222]}}]';
+
+              assert.equal(serialize(term, "client"), expected);
+            });
+          });
+        });
+      });
+
       describe("tuple", () => {
         it("top-level", () => {
           const term = Type.tuple([Type.atom("x"), Type.float(1.23)]);
@@ -551,113 +644,6 @@ describe("Serializer", () => {
 
     //           const expected =
     //             '{"type":"list","data":["i:1","f:1.23"],"isProper":true}';
-
-    //           assert.equal(serialize(term, true, false), expected);
-    //         });
-    //       });
-
-    //       describe("pid", () => {
-    //         describe("top-level", () => {
-    //           describe("originating in client", () => {
-    //             it("full scope", () => {
-    //               const term = Type.pid('my_node@my_"host', [0, 11, 222], "client");
-
-    //               const expected =
-    //                 '[2,{"type":"pid","node":"my_node@my_\\"host","origin":"client","segments":[0,11,222]}]';
-
-    //               assert.equal(serialize(term, true), expected);
-    //             });
-
-    //             it("not full scope", () => {
-    //               const term = Type.pid("my_node@my_host", [0, 11, 222], "client");
-
-    //               assert.throw(
-    //                 () => serialize(term, false),
-    //                 HologramRuntimeError,
-    //                 "can't encode client terms that are PIDs originating in client",
-    //               );
-    //             });
-    //           });
-
-    //           describe("originating in server", () => {
-    //             it("full scope", () => {
-    //               const term = Type.pid('my_node@my_"host', [0, 11, 222], "server");
-
-    //               const expected =
-    //                 '[2,{"type":"pid","node":"my_node@my_\\"host","origin":"server","segments":[0,11,222]}]';
-
-    //               assert.equal(serialize(term, true), expected);
-    //             });
-
-    //             it("not full scope", () => {
-    //               const term = Type.pid("my_node@my_host", [0, 11, 222], "server");
-    //               const expected = '[2,{"type":"pid","segments":[0,11,222]}]';
-
-    //               assert.equal(serialize(term, false), expected);
-    //             });
-    //           });
-    //         });
-
-    //         describe("nested", () => {
-    //           describe("originating in client", () => {
-    //             it("full scope", () => {
-    //               const term = {
-    //                 a: Type.pid('my_node@my_"host', [0, 11, 222], "client"),
-    //                 b: 2,
-    //               };
-
-    //               const expected =
-    //                 '[2,{"a":{"type":"pid","node":"my_node@my_\\"host","origin":"client","segments":[0,11,222]},"b":2}]';
-
-    //               assert.equal(serialize(term, true), expected);
-    //             });
-
-    //             it("not full scope", () => {
-    //               const term = {
-    //                 a: Type.pid("my_node@my_host", [0, 11, 222], "client"),
-    //                 b: 2,
-    //               };
-
-    //               assert.throw(
-    //                 () => serialize(term, false),
-    //                 HologramRuntimeError,
-    //                 "can't encode client terms that are PIDs originating in client",
-    //               );
-    //             });
-    //           });
-
-    //           describe("originating in server", () => {
-    //             it("full scope", () => {
-    //               const term = {
-    //                 a: Type.pid('my_node@my_"host', [0, 11, 222], "server"),
-    //                 b: 2,
-    //               };
-
-    //               const expected =
-    //                 '[2,{"a":{"type":"pid","node":"my_node@my_\\"host","origin":"server","segments":[0,11,222]},"b":2}]';
-
-    //               assert.equal(serialize(term, true), expected);
-    //             });
-
-    //             it("not full scope", () => {
-    //               const term = {
-    //                 a: Type.pid("my_node@my_host", [0, 11, 222], "server"),
-    //                 b: 2,
-    //               };
-
-    //               const expected =
-    //                 '[2,{"a":{"type":"pid","segments":[0,11,222]},"b":2}]';
-
-    //               assert.equal(serialize(term, false), expected);
-    //             });
-    //           });
-    //         });
-
-    //         it("not versioned", () => {
-    //           const term = Type.pid('my_node@my_"host', [0, 11, 222], "client");
-
-    //           const expected =
-    //             '{"type":"pid","node":"my_node@my_\\"host","origin":"client","segments":[0,11,222]}';
 
     //           assert.equal(serialize(term, true, false), expected);
     //         });
