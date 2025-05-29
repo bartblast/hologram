@@ -365,7 +365,7 @@ describe("Serializer", () => {
               assert.throw(
                 () => serialize(term, "server"),
                 HologramRuntimeError,
-                "can't encode client terms that are PIDs originating in client",
+                "cannot serialize PID: origin is client but destination is server",
               );
             });
 
@@ -388,7 +388,7 @@ describe("Serializer", () => {
               assert.throw(
                 () => serialize(term, "server"),
                 HologramRuntimeError,
-                "can't encode client terms that are PIDs originating in client",
+                "cannot serialize PID: origin is client but destination is server",
               );
             });
 

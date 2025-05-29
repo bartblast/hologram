@@ -106,7 +106,7 @@ export default class Serializer {
 
     if (term.origin === "client") {
       throw new HologramRuntimeError(
-        "can't encode client terms that are PIDs originating in client",
+        "cannot serialize PID: origin is client but destination is server",
       );
     }
 

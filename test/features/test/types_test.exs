@@ -154,7 +154,7 @@ defmodule HologramFeatureTests.TypesTest do
   describe "PID" do
     feature "client origin", %{session: session} do
       assert_js_error session,
-                      "can't encode client terms that are PIDs originating in client",
+                      "cannot serialize PID: origin is client but destination is server",
                       fn ->
                         session
                         |> visit(TypesPage)
