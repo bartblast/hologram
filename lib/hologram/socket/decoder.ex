@@ -139,7 +139,7 @@ defmodule Hologram.Socket.Decoder do
     value
   end
 
-  def decode(1, %{"type" => "bitstring", "bits" => bits}) do
+  def decode(1, %{"type" => "bitstring2", "bits" => bits}) do
     BitstringUtils.from_bit_list(bits)
   end
 

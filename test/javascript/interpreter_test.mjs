@@ -1842,36 +1842,6 @@ describe("Interpreter", () => {
       });
     });
 
-    describe("bitstring", () => {
-      it("empty text", () => {
-        const result = Interpreter.inspect(Type.bitstring(""));
-        assert.equal(result, '""');
-      });
-
-      it("ASCII text", () => {
-        const result = Interpreter.inspect(Type.bitstring("abc"));
-        assert.equal(result, '"abc"');
-      });
-
-      it("Unicode text", () => {
-        const result = Interpreter.inspect(Type.bitstring("全息图"));
-        assert.equal(result, '"全息图"');
-      });
-
-      it("not text", () => {
-        const result = Interpreter.inspect(
-          // prettier-ignore
-          Type.bitstring([
-            1, 1, 0, 0, 1, 1, 0, 0,
-            1, 0, 1, 0, 1, 0, 1, 0,
-            1, 1,
-          ]),
-        );
-
-        assert.equal(result, "<<204, 170, 3::size(2)>>");
-      });
-    });
-
     describe("bitstring2", () => {
       describe("text", () => {
         it("empty", () => {
@@ -2008,7 +1978,7 @@ describe("Interpreter", () => {
       it("non-empty, with atom keys", () => {
         const map = Type.map([
           [Type.atom("a"), Type.integer(1)],
-          [Type.atom("b"), Type.bitstring("xyz")],
+          [Type.atom("b"), Type.bitstring2("xyz")],
         ]);
 
         const result = Interpreter.inspect(map);
@@ -2018,8 +1988,8 @@ describe("Interpreter", () => {
 
       it("non-empty, with non-atom keys", () => {
         const map = Type.map([
-          [Type.integer(9), Type.bitstring("xyz")],
-          [Type.bitstring("abc"), Type.float(2.3)],
+          [Type.integer(9), Type.bitstring2("xyz")],
+          [Type.bitstring2("abc"), Type.float(2.3)],
         ]);
 
         const result = Interpreter.inspect(map);
@@ -2148,7 +2118,7 @@ describe("Interpreter", () => {
     // non-number != non-number
     it("returns false for a boxed non-number not equal to another boxed non-number", () => {
       const left = Type.boolean(true);
-      const right = Type.bitstring("abc");
+      const right = Type.bitstring2("abc");
       const result = Interpreter.isEqual(left, right);
 
       assert.isFalse(result);
@@ -2193,7 +2163,7 @@ describe("Interpreter", () => {
     // integer != non-number
     it("returns false when a boxed integer is compared to a boxed value of non-number type", () => {
       const left = Type.integer(1);
-      const right = Type.bitstring("1");
+      const right = Type.bitstring2("1");
       const result = Interpreter.isEqual(left, right);
 
       assert.isFalse(result);
@@ -2238,7 +2208,7 @@ describe("Interpreter", () => {
     // float != non-number
     it("returns false when a boxed float is compared to a boxed value of non-number type", () => {
       const left = Type.float(1.0);
-      const right = Type.bitstring("1.0");
+      const right = Type.bitstring2("1.0");
       const result = Interpreter.isEqual(left, right);
 
       assert.isFalse(result);

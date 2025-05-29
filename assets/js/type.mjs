@@ -147,9 +147,6 @@ export default class Type {
       case "integer":
         return Type.#encodePrimitiveTypeMapKey(term);
 
-      case "bitstring":
-        return Type.#encodeBitstringTypeMapKey(term);
-
       case "bitstring2":
         return Bitstring2.serialize(term);
 
@@ -224,24 +221,12 @@ export default class Type {
     return term.type === "atom";
   }
 
-  static isBinary(term) {
-    return Type.isBitstring(term) && term.bits.length % 8 === 0;
-  }
-
   static isBinary2(term) {
     return Type.isBitstring2(term) && term.leftoverBitCount === 0;
   }
 
-  static isBitstring(term) {
-    return term.type === "bitstring";
-  }
-
   static isBitstring2(term) {
     return term.type === "bitstring2";
-  }
-
-  static isBitstringPattern(term) {
-    return term.type === "bitstring_pattern";
   }
 
   static isBitstringPattern2(term) {
@@ -470,10 +455,6 @@ export default class Type {
 
   static #encodeAnonymousFunctionTypeMapKey(anonymousFunction) {
     return "anonymous_function(" + anonymousFunction.uniqueId + ")";
-  }
-
-  static #encodeBitstringTypeMapKey(bitstring) {
-    return "bitstring(" + bitstring.bits.join("") + ")";
   }
 
   static #encodeEnumTypeMapKey(term) {

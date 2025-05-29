@@ -476,7 +476,7 @@ export default class Interpreter {
       case "atom":
         return 2;
 
-      case "bitstring":
+      case "bitstring2":
         return 10;
 
       case "float":
@@ -922,7 +922,7 @@ export default class Interpreter {
     if (
       termType === "anonymous_function" ||
       termType === "atom" ||
-      termType === "bitstring" ||
+      termType === "bitstring2" ||
       termType === "float" ||
       termType === "integer" ||
       termType === "match_placeholder"

@@ -34,7 +34,7 @@ describe("Type", () => {
         [Type.atom("b"), Type.integer(2)],
       ]);
 
-      const target = Type.bitstring("my_target");
+      const target = Type.bitstring2("my_target");
 
       const result = Type.actionStruct({name, params, target});
 
@@ -250,7 +250,7 @@ describe("Type", () => {
         [Type.atom("b"), Type.integer(2)],
       ]);
 
-      const target = Type.bitstring("my_target");
+      const target = Type.bitstring2("my_target");
 
       const result = Type.commandStruct({name, params, target});
 
@@ -532,7 +532,7 @@ describe("Type", () => {
     });
 
     it("returns false if the term is not an atom", () => {
-      const term = Type.bitstring("Aaa.Bbb");
+      const term = Type.bitstring2("Aaa.Bbb");
       assert.isFalse(Type.isAlias(term));
     });
   });
@@ -570,23 +570,6 @@ describe("Type", () => {
     });
   });
 
-  describe("isBinary()", () => {
-    it("returns true if the term is a binary bitsting", () => {
-      const term = Type.bitstring("abc");
-      assert.isTrue(Type.isBinary(term));
-    });
-
-    it("returns false if the term is a non-binary bitstring", () => {
-      const term = Type.bitstring([0, 1, 0]);
-      assert.isFalse(Type.isBinary(term));
-    });
-
-    it("returns false if the term is not a bitstring", () => {
-      const term = Type.atom("abc");
-      assert.isFalse(Type.isBinary(term));
-    });
-  });
-
   describe("isBinary2()", () => {
     it("returns true if the term is a binary bitsting2", () => {
       const term = Type.bitstring2("abc");
@@ -604,18 +587,6 @@ describe("Type", () => {
     });
   });
 
-  describe("isBitstring()", () => {
-    it("returns true if the term is a bitstring", () => {
-      const term = Type.bitstring("abc");
-      assert.isTrue(Type.isBitstring(term));
-    });
-
-    it("returns false if the term is not a bitstring", () => {
-      const term = Type.atom("abc");
-      assert.isFalse(Type.isBitstring(term));
-    });
-  });
-
   describe("isBitstring2()", () => {
     it("returns true if the term is a bitstring2", () => {
       const term = Type.bitstring2("abc");
@@ -625,18 +596,6 @@ describe("Type", () => {
     it("returns false if the term is not a bitstring2", () => {
       const term = Type.atom("abc");
       assert.isFalse(Type.isBitstring2(term));
-    });
-  });
-
-  describe("isBitstringPattern()", () => {
-    it("returns true if the given object is a boxed bitstring pattern", () => {
-      const result = Type.isBitstringPattern(Type.bitstringPattern([]));
-      assert.isTrue(result);
-    });
-
-    it("returns false if the given object is not a boxed bitstring pattern", () => {
-      const result = Type.isBitstringPattern(Type.atom("abc"));
-      assert.isFalse(result);
     });
   });
 
@@ -675,7 +634,7 @@ describe("Type", () => {
     });
 
     it("returns false for values which are not boxed booleans", () => {
-      const arg = Type.bitstring("true");
+      const arg = Type.bitstring2("true");
       const result = Type.isBoolean(arg);
 
       assert.isFalse(result);
@@ -937,7 +896,7 @@ describe("Type", () => {
     });
 
     it("returns false for values of type other than boxed atom", () => {
-      const arg = Type.bitstring("nil");
+      const arg = Type.bitstring2("nil");
       const result = Type.isNil(arg);
 
       assert.isFalse(result);
