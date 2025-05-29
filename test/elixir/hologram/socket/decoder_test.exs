@@ -1,9 +1,8 @@
 defmodule Hologram.Socket.DecoderTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Socket.Decoder
-  alias Hologram.Socket.Decoder
 
-  @delimiter Decoder.delimiter()
+  @delimiter delimiter()
 
   describe "version 2" do
     test "atom" do
