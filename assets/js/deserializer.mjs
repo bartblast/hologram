@@ -47,10 +47,10 @@ export default class Deserializer {
     );
   }
 
-  static #deserializeBoxedPid(serialized) {
+  static #deserializeBoxedIdentifier(identifierType, serialized) {
     const parts = serialized.split(Serializer.DELIMITER);
 
-    return Type.pid(
+    return Type[identifierType](
       parts[0],
       parts[1].split(",").map((segment) => parseInt(segment)),
       parts[2],
@@ -91,8 +91,11 @@ export default class Deserializer {
       case "i":
         return Type.integer(BigInt(data));
 
+      case "o":
+        return $.#deserializeBoxedIdentifier("port", data);
+
       case "p":
-        return $.#deserializeBoxedPid(data);
+        return $.#deserializeBoxedIdentifier("pid", data);
 
       case "s":
         return data;

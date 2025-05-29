@@ -360,6 +360,18 @@ describe("Deserializer", () => {
         });
       });
 
+      describe("port", () => {
+        const term = Type.port('my_node@my_"host', [0, 11], "server");
+
+        it("top-level", () => {
+          testTopLevelDeserialization(term);
+        });
+
+        it("nested", () => {
+          testNestedDeserialization(term);
+        });
+      });
+
       describe("tuple", () => {
         const term = Type.tuple([Type.integer(1), Type.float(2.34)]);
 
@@ -490,22 +502,6 @@ describe("Deserializer", () => {
     //     describe("OVERHAUL: boxed terms", () => {
     //       describe("list", () => {
     //         const term = Type.list([Type.integer(1), Type.float(1.23)]);
-
-    //         it("top-level", () => {
-    //           testTopLevelDeserialization(term);
-    //         });
-
-    //         it("nested", () => {
-    //           testNestedDeserialization(term);
-    //         });
-
-    //         it("not versioned", () => {
-    //           testNotVersionedDeserialization(term);
-    //         });
-    //       });
-
-    //       describe("port", () => {
-    //         const term = Type.port("0.11", "client");
 
     //         it("top-level", () => {
     //           testTopLevelDeserialization(term);
