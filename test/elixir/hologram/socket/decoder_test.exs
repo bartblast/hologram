@@ -117,6 +117,11 @@ defmodule Hologram.Socket.DecoderTest do
       assert decode(1, data) == %{:a => 1, "b" => 2.34}
     end
 
+    test "pid" do
+      data = %{"type" => "pid", "segments" => [0, 11, 222]}
+      assert decode(1, data) == pid("0.11.222")
+    end
+
     test "tuple" do
       data = %{
         "type" => "tuple",
@@ -130,10 +135,6 @@ defmodule Hologram.Socket.DecoderTest do
   #   describe "version 1" do
   #     test "top-level data" do
   #       assert decode([1, "__atom__:abc"]) == :abc
-  #     end
-
-  #     test "pid" do
-  #       assert decode(1, %{"type" => "pid", "segments" => [0, 11, 222]}) == pid("0.11.222")
   #     end
 
   #     test "port" do
