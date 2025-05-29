@@ -2,6 +2,7 @@
 
 import Bitstring2 from "./bitstring2.mjs";
 import Interpreter from "./interpreter.mjs";
+import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
 
 export default class Deserializer {
@@ -46,6 +47,16 @@ export default class Deserializer {
     );
   }
 
+  static #deserializeBoxedPid(serialized) {
+    const parts = serialized.split(Serializer.DELIMITER);
+
+    return Type.pid(
+      parts[0],
+      parts[1].split(",").map((segment) => parseInt(segment)),
+      parts[2],
+    );
+  }
+
   static #maybeDeserializeFromObject(obj) {
     switch (obj?.t) {
       case "l":
@@ -79,6 +90,9 @@ export default class Deserializer {
 
       case "i":
         return Type.integer(BigInt(data));
+
+      case "p":
+        return $.#deserializeBoxedPid(data);
 
       case "s":
         return data;

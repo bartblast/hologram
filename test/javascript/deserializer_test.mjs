@@ -348,6 +348,18 @@ describe("Deserializer", () => {
         });
       });
 
+      describe("pid", () => {
+        const term = Type.pid('my_node@my_"host', [0, 11, 222], "server");
+
+        it("top-level", () => {
+          testTopLevelDeserialization(term);
+        });
+
+        it("nested", () => {
+          testNestedDeserialization(term);
+        });
+      });
+
       describe("tuple", () => {
         const term = Type.tuple([Type.integer(1), Type.float(2.34)]);
 
@@ -478,22 +490,6 @@ describe("Deserializer", () => {
     //     describe("OVERHAUL: boxed terms", () => {
     //       describe("list", () => {
     //         const term = Type.list([Type.integer(1), Type.float(1.23)]);
-
-    //         it("top-level", () => {
-    //           testTopLevelDeserialization(term);
-    //         });
-
-    //         it("nested", () => {
-    //           testNestedDeserialization(term);
-    //         });
-
-    //         it("not versioned", () => {
-    //           testNotVersionedDeserialization(term);
-    //         });
-    //       });
-
-    //       describe("pid", () => {
-    //         const term = Type.pid('my_node@my_"host', [0, 11, 222], "client");
 
     //         it("top-level", () => {
     //           testTopLevelDeserialization(term);
