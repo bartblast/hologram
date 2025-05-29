@@ -140,6 +140,11 @@ defmodule Hologram.Socket.DecoderTest do
       assert decode(1, data) == port("0.11")
     end
 
+    test "reference" do
+      data = %{"type" => "reference", "value" => "0.1.2.3"}
+      assert decode(1, data) == ref("0.1.2.3")
+    end
+
     test "tuple" do
       data = %{
         "type" => "tuple",
@@ -153,10 +158,6 @@ defmodule Hologram.Socket.DecoderTest do
   #   describe "version 1" do
   #     test "top-level data" do
   #       assert decode([1, "__atom__:abc"]) == :abc
-  #     end
-
-  #     test "reference" do
-  #       assert decode(1, %{"type" => "reference", "value" => "0.1.2.3"}) == ref("0.1.2.3")
   #     end
   #   end
 end

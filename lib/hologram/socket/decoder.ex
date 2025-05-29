@@ -178,15 +178,15 @@ defmodule Hologram.Socket.Decoder do
     IEx.Helpers.port(value)
   end
 
+  def decode(1, %{"type" => "reference", "value" => value}) do
+    IEx.Helpers.ref(value)
+  end
+
   def decode(1, %{"type" => "tuple", "data" => data}) do
     data
     |> Enum.map(&decode(1, &1))
     |> List.to_tuple()
   end
-
-  #   def decode(_version, %{"type" => "reference", "value" => value}) do
-  #     IEx.Helpers.ref(value)
-  #   end
 
   @doc """
   Returns the delimiter string used for separating fields in serialized data.
