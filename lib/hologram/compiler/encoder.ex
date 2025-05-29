@@ -340,9 +340,9 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   # See info about the internal structure of PIDs: https://stackoverflow.com/a/262179/13040586
-  def encode_ir(%IR.PIDType{value: pid}, context) do
+  def encode_ir(%IR.PIDType{value: value}, context) do
     segments =
-      pid
+      value
       |> :erlang.pid_to_list()
       |> List.delete_at(0)
       |> List.delete_at(-1)
@@ -350,21 +350,16 @@ defmodule Hologram.Compiler.Encoder do
       |> String.split(".")
       |> Enum.map(&IntegerUtils.parse!/1)
 
-    encoded_node = encode_as_string(node(pid), true)
-
-    integer_encoder = fn integer, _context -> to_string(integer) end
-    encoded_segments = encode_as_array(segments, context, integer_encoder)
-
-    "Type.pid(#{encoded_node}, #{encoded_segments})"
+    encode_identifier(:pid, value, segments, context)
   end
 
   def encode_ir(%IR.PinOperator{variable: variable}, context) do
     encode_ir(variable, %{context | pattern?: false})
   end
 
-  def encode_ir(%IR.PortType{value: port}, context) do
+  def encode_ir(%IR.PortType{value: value}, context) do
     segments =
-      port
+      value
       |> :erlang.port_to_list()
       |> Enum.drop(6)
       |> List.delete_at(-1)
@@ -372,12 +367,7 @@ defmodule Hologram.Compiler.Encoder do
       |> String.split(".")
       |> Enum.map(&IntegerUtils.parse!/1)
 
-    encoded_node = encode_as_string(node(port), true)
-
-    integer_encoder = fn integer, _context -> to_string(integer) end
-    encoded_segments = encode_as_array(segments, context, integer_encoder)
-
-    "Type.port(#{encoded_node}, #{encoded_segments})"
+    encode_identifier(:port, value, segments, context)
   end
 
   def encode_ir(%IR.ReferenceType{value: value}, context) do
