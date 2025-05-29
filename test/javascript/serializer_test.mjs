@@ -15,6 +15,8 @@ defineGlobalErlangAndElixirModules();
 
 describe("Serializer", () => {
   describe("serialize()", () => {
+    const DELIMITER = Serializer.DELIMITER;
+
     const serialize = Serializer.serialize;
 
     describe("boxed terms", () => {
@@ -316,7 +318,7 @@ describe("Serializer", () => {
           describe("top-level", () => {
             it("server destination", () => {
               const term = Type.pid("my_node@my_host", [0, 11, 222], "server");
-              const expected = '[2,"p0,11,222"]';
+              const expected = `[2,"pmy_node@my_host${DELIMITER}0,11,222${DELIMITER}server"]`;
 
               assert.equal(serialize(term, "server"), expected);
             });
@@ -337,7 +339,7 @@ describe("Serializer", () => {
                 a: Type.pid("my_node@my_host", [0, 11, 222], "server"),
               };
 
-              const expected = '[2,{"a":"p0,11,222"}]';
+              const expected = `[2,{"a":"pmy_node@my_host${DELIMITER}0,11,222${DELIMITER}server"}]`;
 
               assert.equal(serialize(term, "server"), expected);
             });

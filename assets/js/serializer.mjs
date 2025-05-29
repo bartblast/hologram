@@ -12,6 +12,10 @@ Release 0.5.0: switched to version 2.
 export default class Serializer {
   static CURRENT_VERSION = 2;
 
+  // Can't use control characters in 0x00-0x1F range,
+  // because they are escaped in JSON and result in multi-byte delimiter
+  static DELIMITER = "\x80";
+
   static serialize(term, destination = "server") {
     const serialized = JSON.stringify(term, (key, value) => {
       const boxedTermType = value?.type;
@@ -107,7 +111,7 @@ export default class Serializer {
     }
 
     // PID originating in server
-    return `p${term.segments.join(",")}`;
+    return `p${term.node}${$.DELIMITER}${term.segments.join(",")}${$.DELIMITER}${term.origin}`;
   }
 
   static #serializeJsString(value, key) {
