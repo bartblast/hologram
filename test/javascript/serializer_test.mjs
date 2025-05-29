@@ -107,7 +107,7 @@ describe("Serializer", () => {
                 context,
               );
 
-              const expected = '[2,"cCalendar.ISO:date_to_string:4"]';
+              const expected = `[2,"cCalendar.ISO${DELIMITER}date_to_string${DELIMITER}4"]`;
 
               assert.equal(serialize(term, "server"), expected);
             });
@@ -143,7 +143,7 @@ describe("Serializer", () => {
                 ),
               };
 
-              const expected = '[2,{"a":"cCalendar.ISO:date_to_string:4"}]';
+              const expected = `[2,{"a":"cCalendar.ISO${DELIMITER}date_to_string${DELIMITER}4"}]`;
 
               assert.equal(serialize(term, "server"), expected);
             });

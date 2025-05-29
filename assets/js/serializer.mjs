@@ -96,7 +96,7 @@ export default class Serializer {
     }
 
     // Function capture
-    return `c${term.capturedModule}:${term.capturedFunction}:${term.arity}`;
+    return `c${term.capturedModule}${$.DELIMITER}${term.capturedFunction}${$.DELIMITER}${term.arity}`;
   }
 
   static #serializeBoxedPid(term, destination) {
