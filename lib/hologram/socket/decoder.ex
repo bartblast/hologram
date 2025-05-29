@@ -6,9 +6,18 @@ defmodule Hologram.Socket.Decoder do
 
   # This is added only to make String.to_existing_atom/1 recognize atoms related to client DOM events
   @atoms_whitelist [
-    # click event
+    # change event, select event
+    :value,
+
+    # mouse event, pointer event
     :page_x,
-    :page_y
+    :page_y,
+
+    # pointer event
+    :mouse,
+    :pen,
+    :touch,
+    :pointer_type
   ]
 
   @doc """
