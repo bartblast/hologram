@@ -120,6 +120,11 @@ defmodule Hologram.Socket.Decoder do
     IEx.Helpers.pid(x, y, z)
   end
 
+  def decode(2, "r" <> data) do
+    [w, x, y, z] = decode_identifier_segments(data)
+    IEx.Helpers.ref(w, x, y, z)
+  end
+
   def decode(2, %{"t" => "t", "d" => data}) do
     data
     |> Enum.map(&decode(2, &1))
@@ -186,6 +191,14 @@ defmodule Hologram.Socket.Decoder do
     data
     |> Enum.map(&decode(1, &1))
     |> List.to_tuple()
+  end
+
+  defp decode_identifier_segments(data) do
+    [_node, segments_str, _origin] = String.split(data, @delimiter)
+
+    segments_str
+    |> String.split(",")
+    |> Enum.map(&IntegerUtils.parse!/1)
   end
 
   @doc """
