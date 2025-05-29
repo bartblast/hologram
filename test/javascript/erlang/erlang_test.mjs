@@ -1928,7 +1928,8 @@ describe("Erlang", () => {
     const is_pid = Erlang["is_pid/1"];
 
     it("pid", () => {
-      assertBoxedTrue(is_pid(Type.pid("my_node@my_host", [0, 11, 222])));
+      const term = Type.pid("my_node@my_host", [0, 11, 222]);
+      assertBoxedTrue(is_pid(term));
     });
 
     it("non-pid", () => {
@@ -1940,7 +1941,8 @@ describe("Erlang", () => {
     const is_port = Erlang["is_port/1"];
 
     it("port", () => {
-      assertBoxedTrue(is_port(Type.port("nonode@nohost", [0, 11])));
+      const term = Type.port("nonode@nohost", [0, 11]);
+      assertBoxedTrue(is_port(term));
     });
 
     it("non-port", () => {
@@ -1952,7 +1954,8 @@ describe("Erlang", () => {
     const is_reference = Erlang["is_reference/1"];
 
     it("reference", () => {
-      assertBoxedTrue(is_reference(Type.reference("0.1.2.3")));
+      const term = Type.reference("nonode@nohost", [0, 1, 2, 3]);
+      assertBoxedTrue(is_reference(term));
     });
 
     it("non-reference", () => {

@@ -1099,7 +1099,7 @@ describe("Type", () => {
 
   describe("isReference()", () => {
     it("returns true if the term is a reference", () => {
-      const term = Type.reference("0.1.2.3");
+      const term = Type.reference("nonode@nohost", [0, 1, 2, 3]);
       assert.isTrue(Type.isReference(term));
     });
 
@@ -1370,8 +1370,14 @@ describe("Type", () => {
   });
 
   it("reference()", () => {
-    const result = Type.reference("0.1.2.3", "client");
-    const expected = {type: "reference", origin: "client", value: "0.1.2.3"};
+    const result = Type.reference("nonode@nohost", [0, 1, 2, 3], "client");
+
+    const expected = {
+      type: "reference",
+      node: "nonode@nohost",
+      segments: [0, 1, 2, 3],
+      origin: "client",
+    };
 
     assert.deepStrictEqual(result, expected);
   });

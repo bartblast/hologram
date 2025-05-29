@@ -380,8 +380,17 @@ defmodule Hologram.Compiler.Encoder do
     "Type.port(#{encoded_node}, #{encoded_segments})"
   end
 
-  def encode_ir(%IR.ReferenceType{value: value}, _context) do
-    encode_primitive_type(:reference, value, true)
+  def encode_ir(%IR.ReferenceType{value: value}, context) do
+    segments =
+      value
+      |> :erlang.ref_to_list()
+      |> Enum.drop(5)
+      |> List.delete_at(-1)
+      |> to_string()
+      |> String.split(".")
+      |> Enum.map(&IntegerUtils.parse!/1)
+
+    encode_identifier(:reference, value, segments, context)
   end
 
   def encode_ir(
@@ -497,14 +506,6 @@ defmodule Hologram.Compiler.Encoder do
     "nil"
   end
 
-  defp encode_as_string(value, false) when is_reference(value) do
-    value
-    |> :erlang.ref_to_list()
-    |> Enum.drop(5)
-    |> List.delete_at(-1)
-    |> to_string()
-  end
-
   defp encode_as_string(value, false) do
     value
     |> to_string()
@@ -612,6 +613,15 @@ defmodule Hologram.Compiler.Encoder do
     args_js = encode_ir(args, context)
 
     "Interpreter.callNamedFunction(#{module_js}, #{function_js}, #{args_js}, context)"
+  end
+
+  defp encode_identifier(type, value, segments, context) do
+    encoded_node = encode_as_string(node(value), true)
+
+    integer_encoder = fn integer, _context -> to_string(integer) end
+    encoded_segments = encode_as_array(segments, context, integer_encoder)
+
+    "Type.#{type}(#{encoded_node}, #{encoded_segments})"
   end
 
   defp encode_named_function_call(%IR.AtomType{value: :erlang}, :andalso, [left, right], context) do

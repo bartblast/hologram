@@ -1539,7 +1539,7 @@ defmodule Hologram.Compiler.EncoderTest do
     # #Reference<0.1.2.3>
     ir = %IR.ReferenceType{value: ref("0.1.2.3")}
 
-    assert encode_ir(ir) == ~s/Type.reference("0.1.2.3")/
+    assert encode_ir(ir) == ~s/Type.reference("nonode@nohost", [0, 1, 2, 3])/
   end
 
   describe "remote function call" do
@@ -2159,7 +2159,7 @@ defmodule Hologram.Compiler.EncoderTest do
     end
 
     test "reference" do
-      assert encode_term!(ref("0.1.2.3")) == ~s/Type.reference("0.1.2.3")/
+      assert encode_term!(ref("0.1.2.3")) == ~s/Type.reference("nonode@nohost", [0, 1, 2, 3])/
     end
 
     test "tuple" do
