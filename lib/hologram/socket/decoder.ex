@@ -20,6 +20,10 @@ defmodule Hologram.Socket.Decoder do
     :pointer_type
   ]
 
+  # Can't use control characters in 0x00-0x1F range,
+  # because they are escaped in JSON and result in multi-byte delimiter  
+  @delimiter "\x80"
+
   @doc """
   Returns the atoms whitelist related to client DOM events. 
   """
@@ -94,6 +98,17 @@ defmodule Hologram.Socket.Decoder do
     |> Enum.into(%{})
   end
 
+  def decode(2, "p" <> data) do
+    [_node, segments_str, _origin] = String.split(data, @delimiter)
+
+    [x, y, z] =
+      segments_str
+      |> String.split(",")
+      |> Enum.map(&IntegerUtils.parse!/1)
+
+    IEx.Helpers.pid(x, y, z)
+  end
+
   def decode(2, %{"t" => "t", "d" => data}) do
     data
     |> Enum.map(&decode(2, &1))
@@ -161,4 +176,6 @@ defmodule Hologram.Socket.Decoder do
   #   def decode(_version, %{"type" => "reference", "value" => value}) do
   #     IEx.Helpers.ref(value)
   #   end
+
+  def delimiter, do: @delimiter
 end

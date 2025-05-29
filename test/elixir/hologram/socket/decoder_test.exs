@@ -1,6 +1,9 @@
 defmodule Hologram.Socket.DecoderTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Socket.Decoder
+  alias Hologram.Socket.Decoder
+
+  @delimiter Decoder.delimiter()
 
   describe "version 2" do
     test "atom" do
@@ -51,6 +54,11 @@ defmodule Hologram.Socket.DecoderTest do
     test "map" do
       data = %{"t" => "m", "d" => [["ax", "i1"], ["b079", "f2.34"]]}
       assert decode(2, data) == %{:x => 1, "y" => 2.34}
+    end
+
+    test "pid" do
+      data = "pmy_node@my_host#{@delimiter}0,11,222#{@delimiter}server"
+      assert decode(2, data) == pid("0.11.222")
     end
 
     test "tuple" do
