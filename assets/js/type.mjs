@@ -464,7 +464,7 @@ export default class Type {
   }
 
   static reference(node, segments, origin = "server") {
-    return {type: "port", node: node, origin: origin, segments: segments};
+    return {type: "reference", node: node, origin: origin, segments: segments};
   }
 
   static string(value) {
