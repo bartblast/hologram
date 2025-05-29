@@ -2366,6 +2366,16 @@ describe("Interpreter", () => {
 
           assert.isFalse(Interpreter.isStrictlyEqual(left, right));
         });
+
+        it("leftover bits count is different", () => {
+          const left = Bitstring2.fromBytes([97, 98, 99]);
+          left.leftoverBitCount = 2;
+
+          const right = Bitstring2.fromBytes([97, 98, 99]);
+          right.leftoverBitCount = 3;
+
+          assert.isFalse(Interpreter.isStrictlyEqual(left, right));
+        });
       });
     });
 

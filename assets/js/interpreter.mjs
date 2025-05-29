@@ -591,6 +591,10 @@ export default class Interpreter {
         return true;
       }
 
+      if (left.leftoverBitCount !== right.leftoverBitCount) {
+        return false;
+      }
+
       Bitstring2.maybeSetBytesFromText(left);
       const leftBytes = left.bytes;
 
