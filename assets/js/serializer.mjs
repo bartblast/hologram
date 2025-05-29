@@ -43,22 +43,22 @@ export default class Serializer {
           return {t: "m", d: Object.values(value.data)};
 
         case "pid":
-          return $.#serializeBoxedPid(value, destination);
+          return $.#serializeBoxedIdentifier("PID", "p", value, destination);
 
         case "port":
-          return $.#serializeBoxedPort(value, destination);
+          return $.#serializeBoxedIdentifier("port", "o", value, destination);
+
+        case "reference":
+          return $.#serializeBoxedIdentifier(
+            "reference",
+            "r",
+            value,
+            destination,
+          );
 
         case "tuple":
           return {t: "t", d: value.data};
       }
-
-      //       if (boxedTermType === "port") {
-      //         return $.#serializeBoxedPort(value, isFullScope);
-      //       }
-
-      //       if (boxedTermType === "reference") {
-      //         return $.#serializeBoxedReference(value, isFullScope);
-      //       }
 
       const valueType = typeof value;
 
@@ -98,28 +98,17 @@ export default class Serializer {
       );
     }
 
-    // Function capture
     return `c${term.capturedModule}${$.DELIMITER}${term.capturedFunction}${$.DELIMITER}${term.arity}`;
   }
 
-  static #serializeBoxedPid(term, destination) {
+  static #serializeBoxedIdentifier(typeName, typePrefix, term, destination) {
     if (term.origin === "client" && destination === "server") {
       throw new HologramRuntimeError(
-        "cannot serialize PID: origin is client but destination is server",
+        `cannot serialize ${typeName}: origin is client but destination is server`,
       );
     }
 
-    return `p${term.node}${$.DELIMITER}${term.segments.join(",")}${$.DELIMITER}${term.origin}`;
-  }
-
-  static #serializeBoxedPort(term, destination) {
-    if (term.origin === "client" && destination === "server") {
-      throw new HologramRuntimeError(
-        "cannot serialize port: origin is client but destination is server",
-      );
-    }
-
-    return `o${term.node}${$.DELIMITER}${term.segments.join(",")}${$.DELIMITER}${term.origin}`;
+    return `${typePrefix}${term.node}${$.DELIMITER}${term.segments.join(",")}${$.DELIMITER}${term.origin}`;
   }
 
   static #serializeJsString(value, key) {
@@ -130,22 +119,6 @@ export default class Serializer {
 
     return `s${value}`;
   }
-
-  //   static #serializeBoxedReference(term, isFullScope) {
-  //     if (isFullScope) {
-  //       return term;
-  //     }
-
-  //     if (term.origin === "client") {
-  //       throw new HologramRuntimeError(
-  //         "can't encode client terms that are references originating in client",
-  //       );
-  //     }
-
-  //     // eslint-disable-next-line no-unused-vars
-  //     const {origin, ...rest} = term;
-  //     return rest;
-  //   }
 }
 
 const $ = Serializer;

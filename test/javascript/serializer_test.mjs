@@ -487,6 +487,88 @@ describe("Serializer", () => {
         });
       });
 
+      describe.only("reference", () => {
+        describe("originating in server", () => {
+          describe("top-level", () => {
+            const term = Type.reference(
+              'my_node@my_"host',
+              [0, 1, 2, 3],
+              "server",
+            );
+
+            const expected = `[2,"rmy_node@my_\\"host${DELIMITER}0,1,2,3${DELIMITER}server"]`;
+
+            it("server destination", () => {
+              assert.equal(serialize(term, "server"), expected);
+            });
+
+            it("client destination", () => {
+              assert.equal(serialize(term, "client"), expected);
+            });
+          });
+
+          describe("nested", () => {
+            const term = {
+              a: Type.reference('my_node@my_"host', [0, 1, 2, 3], "server"),
+            };
+
+            const expected = `[2,{"a":"rmy_node@my_\\"host${DELIMITER}0,1,2,3${DELIMITER}server"}]`;
+
+            it("server destination", () => {
+              assert.equal(serialize(term, "server"), expected);
+            });
+
+            it("client destination", () => {
+              assert.equal(serialize(term, "client"), expected);
+            });
+          });
+        });
+
+        describe("originating in client", () => {
+          describe("top-level", () => {
+            const term = Type.reference(
+              'my_node@my_"host',
+              [0, 1, 2, 3],
+              "client",
+            );
+
+            it("server destination", () => {
+              assert.throw(
+                () => serialize(term, "server"),
+                HologramRuntimeError,
+                "cannot serialize reference: origin is client but destination is server",
+              );
+            });
+
+            it("client destination", () => {
+              const expected = `[2,"rmy_node@my_\\"host${DELIMITER}0,1,2,3${DELIMITER}client"]`;
+
+              assert.equal(serialize(term, "client"), expected);
+            });
+          });
+
+          describe("nested", () => {
+            const term = {
+              a: Type.reference('my_node@my_"host', [0, 1, 2, 3], "client"),
+            };
+
+            it("server destination", () => {
+              assert.throw(
+                () => serialize(term, "server"),
+                HologramRuntimeError,
+                "cannot serialize reference: origin is client but destination is server",
+              );
+            });
+
+            it("client destination", () => {
+              const expected = `[2,{"a":"rmy_node@my_\\"host${DELIMITER}0,1,2,3${DELIMITER}client"}]`;
+
+              assert.equal(serialize(term, "client"), expected);
+            });
+          });
+        });
+      });
+
       describe("tuple", () => {
         it("top-level", () => {
           const term = Type.tuple([Type.atom("x"), Type.float(1.23)]);
@@ -698,227 +780,5 @@ describe("Serializer", () => {
         });
       });
     });
-
-    //     describe("boxed terms", () => {
-    //       describe("list", () => {
-    //         it("top-level", () => {
-    //           const term = Type.list([Type.integer(1), Type.float(1.23)]);
-
-    //           const expected =
-    //             '[2,{"type":"list","data":["i:1","f:1.23"],"isProper":true}]';
-
-    //           assert.equal(serialize(term), expected);
-    //         });
-
-    //         it("nested", () => {
-    //           const term = {
-    //             a: Type.list([Type.integer(1), Type.float(1.23)]),
-    //             b: 2,
-    //           };
-
-    //           const expected =
-    //             '[2,{"a":{"type":"list","data":["i:1","f:1.23"],"isProper":true},"b":2}]';
-
-    //           assert.equal(serialize(term), expected);
-    //         });
-
-    //         it("not versioned", () => {
-    //           const term = Type.list([Type.integer(1), Type.float(1.23)]);
-
-    //           const expected =
-    //             '{"type":"list","data":["i:1","f:1.23"],"isProper":true}';
-
-    //           assert.equal(serialize(term, true, false), expected);
-    //         });
-    //       });
-
-    //       describe("port", () => {
-    //         describe("top-level", () => {
-    //           describe("originating in client", () => {
-    //             it("full scope", () => {
-    //               const term = Type.port("0.11", "client");
-
-    //               const expected =
-    //                 '[2,{"type":"port","origin":"client","value":"0.11"}]';
-
-    //               assert.equal(serialize(term, true), expected);
-    //             });
-
-    //             it("not full scope", () => {
-    //               const term = Type.port("0.11", "client");
-
-    //               assert.throw(
-    //                 () => serialize(term, false),
-    //                 HologramRuntimeError,
-    //                 "can't encode client terms that are ports originating in client",
-    //               );
-    //             });
-    //           });
-
-    //           describe("originating in server", () => {
-    //             it("full scope", () => {
-    //               const term = Type.port("0.11", "server");
-
-    //               const expected =
-    //                 '[2,{"type":"port","origin":"server","value":"0.11"}]';
-
-    //               assert.equal(serialize(term, true), expected);
-    //             });
-
-    //             it("not full scope", () => {
-    //               const term = Type.port("0.11", "server");
-    //               const expected = '[2,{"type":"port","value":"0.11"}]';
-
-    //               assert.equal(serialize(term, false), expected);
-    //             });
-    //           });
-    //         });
-
-    //         describe("nested", () => {
-    //           describe("originating in client", () => {
-    //             it("full scope", () => {
-    //               const term = {a: Type.port("0.11", "client"), b: 2};
-
-    //               const expected =
-    //                 '[2,{"a":{"type":"port","origin":"client","value":"0.11"},"b":2}]';
-
-    //               assert.equal(serialize(term, true), expected);
-    //             });
-
-    //             it("not full scope", () => {
-    //               const term = {a: Type.port("0.11", "client"), b: 2};
-
-    //               assert.throw(
-    //                 () => serialize(term, false),
-    //                 HologramRuntimeError,
-    //                 "can't encode client terms that are ports originating in client",
-    //               );
-    //             });
-    //           });
-
-    //           describe("originating in server", () => {
-    //             it("full scope", () => {
-    //               const term = {a: Type.port("0.11", "server"), b: 2};
-
-    //               const expected =
-    //                 '[2,{"a":{"type":"port","origin":"server","value":"0.11"},"b":2}]';
-
-    //               assert.equal(serialize(term, true), expected);
-    //             });
-
-    //             it("not full scope", () => {
-    //               const term = {a: Type.port("0.11", "server"), b: 2};
-
-    //               const expected = '[2,{"a":{"type":"port","value":"0.11"},"b":2}]';
-
-    //               assert.equal(serialize(term, false), expected);
-    //             });
-    //           });
-    //         });
-
-    //         it("not versioned", () => {
-    //           const term = Type.port("0.11", "client");
-
-    //           const expected = '{"type":"port","origin":"client","value":"0.11"}';
-
-    //           assert.equal(serialize(term, true, false), expected);
-    //         });
-    //       });
-
-    //       describe("reference", () => {
-    //         describe("top-level", () => {
-    //           describe("originating in client", () => {
-    //             it("full scope", () => {
-    //               const term = Type.reference("0.1.2.3", "client");
-
-    //               const expected =
-    //                 '[2,{"type":"reference","origin":"client","value":"0.1.2.3"}]';
-
-    //               assert.equal(serialize(term, true), expected);
-    //             });
-
-    //             it("not full scope", () => {
-    //               const term = Type.reference("0.1.2.3", "client");
-
-    //               assert.throw(
-    //                 () => serialize(term, false),
-    //                 HologramRuntimeError,
-    //                 "can't encode client terms that are references originating in client",
-    //               );
-    //             });
-    //           });
-
-    //           describe("originating in server", () => {
-    //             it("full scope", () => {
-    //               const term = Type.reference("0.1.2.3", "server");
-
-    //               const expected =
-    //                 '[2,{"type":"reference","origin":"server","value":"0.1.2.3"}]';
-
-    //               assert.equal(serialize(term, true), expected);
-    //             });
-
-    //             it("not full scope", () => {
-    //               const term = Type.reference("0.1.2.3", "server");
-    //               const expected = '[2,{"type":"reference","value":"0.1.2.3"}]';
-
-    //               assert.equal(serialize(term, false), expected);
-    //             });
-    //           });
-    //         });
-
-    //         describe("nested", () => {
-    //           describe("originating in client", () => {
-    //             it("full scope", () => {
-    //               const term = {a: Type.reference("0.1.2.3", "client"), b: 2};
-
-    //               const expected =
-    //                 '[2,{"a":{"type":"reference","origin":"client","value":"0.1.2.3"},"b":2}]';
-
-    //               assert.equal(serialize(term, true), expected);
-    //             });
-
-    //             it("not full scope", () => {
-    //               const term = {a: Type.reference("0.1.2.3", "client"), b: 2};
-
-    //               assert.throw(
-    //                 () => serialize(term, false),
-    //                 HologramRuntimeError,
-    //                 "can't encode client terms that are references originating in client",
-    //               );
-    //             });
-    //           });
-
-    //           describe("originating in server", () => {
-    //             it("full scope", () => {
-    //               const term = {a: Type.reference("0.1.2.3", "server"), b: 2};
-
-    //               const expected =
-    //                 '[2,{"a":{"type":"reference","origin":"server","value":"0.1.2.3"},"b":2}]';
-
-    //               assert.equal(serialize(term, true), expected);
-    //             });
-
-    //             it("not full scope", () => {
-    //               const term = {a: Type.reference("0.1.2.3", "server"), b: 2};
-
-    //               const expected =
-    //                 '[2,{"a":{"type":"reference","value":"0.1.2.3"},"b":2}]';
-
-    //               assert.equal(serialize(term, false), expected);
-    //             });
-    //           });
-    //         });
-
-    //         it("not versioned", () => {
-    //           const term = Type.reference("0.1.2.3", "client");
-
-    //           const expected =
-    //             '{"type":"reference","origin":"client","value":"0.1.2.3"}';
-
-    //           assert.equal(serialize(term, true, false), expected);
-    //         });
-    //       });
-    //     });
   });
 });
