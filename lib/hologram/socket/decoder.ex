@@ -69,7 +69,7 @@ defmodule Hologram.Socket.Decoder do
   end
 
   def decode(2, "c" <> data) do
-    [module_str, function_str, arity_str] = String.split(data, ":")
+    [module_str, function_str, arity_str] = String.split(data, @delimiter)
 
     module = Module.safe_concat([module_str])
     function = String.to_existing_atom(function_str)

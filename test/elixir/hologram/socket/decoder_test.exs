@@ -38,7 +38,8 @@ defmodule Hologram.Socket.DecoderTest do
     end
 
     test "function capture" do
-      assert decode(2, "cCalendar.ISO:parse_date:2") == (&Calendar.ISO.parse_date/2)
+      data = "cCalendar.ISO#{@delimiter}parse_date#{@delimiter}2"
+      assert decode(2, data) == (&Calendar.ISO.parse_date/2)
     end
 
     test "integer" do
