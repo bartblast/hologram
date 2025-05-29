@@ -181,6 +181,12 @@ defmodule Hologram.Socket.Decoder do
     |> List.to_tuple()
   end
 
+  @doc """
+  Returns the delimiter string used for separating fields in serialized data.
+  """
+  @spec delimiter() :: String.t()
+  def delimiter, do: @delimiter
+
   defp decode_identifier_segments(data) do
     [_node, segments_str, _origin] = String.split(data, @delimiter)
 
@@ -188,10 +194,4 @@ defmodule Hologram.Socket.Decoder do
     |> String.split(",")
     |> Enum.map(&IntegerUtils.parse!/1)
   end
-
-  @doc """
-  Returns the delimiter string used for separating fields in serialized data.
-  """
-  @spec delimiter() :: String.t()
-  def delimiter, do: @delimiter
 end
