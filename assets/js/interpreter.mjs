@@ -513,9 +513,6 @@ export default class Interpreter {
       case "atom":
         return Interpreter.#inspectAtom(term, opts);
 
-      case "bitstring":
-        return Interpreter.#inspectBitstring(term, opts);
-
       case "bitstring2":
         return Interpreter.#inspectBitstring2(term, opts);
 
@@ -646,10 +643,6 @@ export default class Interpreter {
 
     if (Type.isConsPattern(left)) {
       return Interpreter.#matchConsPattern(right, left, context);
-    }
-
-    if (Type.isBitstringPattern(left)) {
-      return Interpreter.#matchBitstringPattern(right, left, context);
     }
 
     if (Type.isBitstringPattern2(left)) {

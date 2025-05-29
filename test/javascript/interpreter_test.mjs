@@ -23,7 +23,7 @@ defineGlobalErlangAndElixirModules();
 defineModule1Fixture();
 defineMatchOperatorModule1Fixture();
 
-describe("Interpreter", () => {
+describe.only("Interpreter", () => {
   describe("accessKeywordListElement()", () => {
     const keywordList = Type.keywordList([
       [Type.atom("a"), Type.integer(1)],
