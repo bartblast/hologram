@@ -29,7 +29,7 @@ export default class Deserializer {
     }
 
     const bitstring = Bitstring2.fromBytes(bytes);
-    bitstring.leftoverBitCount = serialized[1];
+    bitstring.leftoverBitCount = parseInt(serialized[1]);
 
     return bitstring;
   }
