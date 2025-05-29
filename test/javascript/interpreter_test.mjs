@@ -2084,7 +2084,7 @@ describe("Interpreter", () => {
     // TODO: remove when all types are supported
     it("default", () => {
       const result = Interpreter.inspect({type: "x"});
-      assert.equal(result, '{"type":"x"}');
+      assert.equal(result, '[2,{"type":"sx"}]');
     });
   });
 

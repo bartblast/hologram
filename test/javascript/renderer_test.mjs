@@ -853,14 +853,33 @@ describe("Renderer", () => {
 
           vdom.children[0].children[0].children[1].data.on.click("dummyEvent");
 
-          sinon.assert.calledWith(
-            stub,
-            "dummyEvent",
-            "click",
-            Type.list([
-              Type.tuple([Type.atom("text"), Type.bitstring2("my_action")]),
-            ]),
-            Type.bitstring2("layout"),
+          sinon.assert.calledOnce(stub);
+          const call = stub.getCall(0);
+
+          assert.equal(call.args[0], "dummyEvent");
+          assert.equal(call.args[1], "click");
+          assert.isTrue(Type.isList(call.args[2]));
+          assert.equal(call.args[2].data.length, 1);
+          assert.isTrue(Type.isTuple(call.args[2].data[0]));
+          assert.equal(call.args[2].data[0].data.length, 2);
+
+          assert.deepStrictEqual(
+            call.args[2].data[0].data[0],
+            Type.atom("text"),
+          );
+
+          assert.isTrue(
+            Interpreter.isStrictlyEqual(
+              call.args[2].data[0].data[1],
+              Type.bitstring2("my_action"),
+            ),
+          );
+
+          assert.isTrue(
+            Interpreter.isStrictlyEqual(
+              call.args[3],
+              Type.bitstring2("layout"),
+            ),
           );
 
           Hologram.handleUiEvent.restore();
@@ -900,14 +919,33 @@ describe("Renderer", () => {
 
           vdom[0].children[1].children[1].data.on.click("dummyEvent");
 
-          sinon.assert.calledWith(
-            stub,
-            "dummyEvent",
-            "click",
-            Type.list([
-              Type.tuple([Type.atom("text"), Type.bitstring2("my_action")]),
-            ]),
-            Type.bitstring2("component_61"),
+          sinon.assert.calledOnce(stub);
+          const call = stub.getCall(0);
+
+          assert.equal(call.args[0], "dummyEvent");
+          assert.equal(call.args[1], "click");
+          assert.isTrue(Type.isList(call.args[2]));
+          assert.equal(call.args[2].data.length, 1);
+          assert.isTrue(Type.isTuple(call.args[2].data[0]));
+          assert.equal(call.args[2].data[0].data.length, 2);
+
+          assert.deepStrictEqual(
+            call.args[2].data[0].data[0],
+            Type.atom("text"),
+          );
+
+          assert.isTrue(
+            Interpreter.isStrictlyEqual(
+              call.args[2].data[0].data[1],
+              Type.bitstring2("my_action"),
+            ),
+          );
+
+          assert.isTrue(
+            Interpreter.isStrictlyEqual(
+              call.args[3],
+              Type.bitstring2("component_61"),
+            ),
           );
 
           Hologram.handleUiEvent.restore();
