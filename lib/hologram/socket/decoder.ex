@@ -99,24 +99,12 @@ defmodule Hologram.Socket.Decoder do
   end
 
   def decode(2, "o" <> data) do
-    [_node, segments_str, _origin] = String.split(data, @delimiter)
-
-    [major, minor] =
-      segments_str
-      |> String.split(",")
-      |> Enum.map(&IntegerUtils.parse!/1)
-
+    [major, minor] = decode_identifier_segments(data)
     IEx.Helpers.port(major, minor)
   end
 
   def decode(2, "p" <> data) do
-    [_node, segments_str, _origin] = String.split(data, @delimiter)
-
-    [x, y, z] =
-      segments_str
-      |> String.split(",")
-      |> Enum.map(&IntegerUtils.parse!/1)
-
+    [x, y, z] = decode_identifier_segments(data)
     IEx.Helpers.pid(x, y, z)
   end
 
