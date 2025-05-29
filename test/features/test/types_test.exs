@@ -37,7 +37,7 @@ defmodule HologramFeatureTests.TypesTest do
   describe "function" do
     feature "anonymous (client origin, non-capture)", %{session: session} do
       assert_js_error session,
-                      "can't encode client terms that are anonymous functions that are not named function captures",
+                      "cannot serialize function: not a function capture",
                       fn ->
                         session
                         |> visit(TypesPage)
@@ -81,7 +81,7 @@ defmodule HologramFeatureTests.TypesTest do
 
     feature "anonymous (client origin, capture)", %{session: session} do
       assert_js_error session,
-                      "can't encode client terms that are anonymous functions that are not named function captures",
+                      "cannot serialize function: not a function capture",
                       fn ->
                         session
                         |> visit(TypesPage)

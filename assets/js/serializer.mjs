@@ -91,7 +91,7 @@ export default class Serializer {
 
     if (term.capturedModule === null) {
       throw new HologramRuntimeError(
-        "can't encode client terms that are anonymous functions that are not named function captures",
+        "cannot serialize function: not a function capture",
       );
     }
 
