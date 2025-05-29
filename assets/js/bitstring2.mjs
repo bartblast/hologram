@@ -104,7 +104,7 @@ export default class Bitstring2 {
 
     switch (segment.type) {
       case "binary":
-      case "bitstring":
+      case "bitstring2":
         return chunk;
 
       case "float":

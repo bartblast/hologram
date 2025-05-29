@@ -821,7 +821,7 @@ describe("Bitstring2", () => {
         const chunk = Type.bitstring2("abc");
 
         const segment = Type.bitstringSegment(Type.variablePattern("value"), {
-          type: "bitstring",
+          type: "bitstring2",
         });
 
         const result = Bitstring2.decodeSegmentChunk(segment, chunk);
@@ -1105,7 +1105,7 @@ describe("Bitstring2", () => {
     it("creates a bitstring from a single bitstring-valued segment", () => {
       const value = Type.bitstring2("Hologram");
 
-      const segments = [Type.bitstringSegment(value, {type: "bitstring"})];
+      const segments = [Type.bitstringSegment(value, {type: "bitstring2"})];
       const result = Bitstring2.fromSegments(segments);
 
       assert.equal(result, value);
@@ -1170,7 +1170,7 @@ describe("Bitstring2", () => {
   describe("fromSegmentWithBitstringValue()", () => {
     it("when size is not specified", () => {
       const value = Type.bitstring2("Hologram");
-      const segment = Type.bitstringSegment(value, {type: "bitstring"});
+      const segment = Type.bitstringSegment(value, {type: "bitstring2"});
       const result = Bitstring2.fromSegmentWithBitstringValue(segment);
 
       assert.equal(result, value);
@@ -1180,7 +1180,7 @@ describe("Bitstring2", () => {
       const value = Bitstring2.fromBytes([0xaa, 0xbb, 0xcc]); // 10101010, 10111011, 11001100
 
       const segment = Type.bitstringSegment(value, {
-        type: "bitstring",
+        type: "bitstring2",
         size: Type.integer(12),
       });
 
@@ -5204,7 +5204,7 @@ describe("Bitstring2", () => {
 
     it("returns null for segments of type that don't have default size", () => {
       const segment = Type.bitstringSegment(Type.bitstring2("abc"), {
-        type: "bitstring",
+        type: "bitstring2",
       });
 
       assert.isNull(Bitstring2.resolveSegmentSize(segment));
@@ -5257,7 +5257,7 @@ describe("Bitstring2", () => {
 
     it("returns null for segments of type that don't have default unit", () => {
       const segment = Type.bitstringSegment(Type.bitstring2("abc"), {
-        type: "bitstring",
+        type: "bitstring2",
       });
 
       assert.isNull(Bitstring2.resolveSegmentUnit(segment));
@@ -6913,7 +6913,7 @@ describe("Bitstring2", () => {
 
     describe("bitstring segments", () => {
       it("validates bitstring segment with bitstring value", () => {
-        const segment = Type.bitstringSegment(Type.bitstring("abc"), {
+        const segment = Type.bitstringSegment(Type.bitstring2("abc"), {
           type: "bitstring2",
         });
 
@@ -6945,7 +6945,7 @@ describe("Bitstring2", () => {
       });
 
       it("rejects bitstring segment with size specified", () => {
-        const segment = Type.bitstringSegment(Type.bitstring("abc"), {
+        const segment = Type.bitstringSegment(Type.bitstring2("abc"), {
           type: "bitstring2",
           size: Type.integer(16),
         });
@@ -6958,7 +6958,7 @@ describe("Bitstring2", () => {
       });
 
       it("rejects bitstring segment with signedness specified", () => {
-        const segment = Type.bitstringSegment(Type.bitstring("abc"), {
+        const segment = Type.bitstringSegment(Type.bitstring2("abc"), {
           type: "bitstring2",
           signedness: "unsigned",
         });
@@ -6997,7 +6997,7 @@ describe("Bitstring2", () => {
       });
 
       it("rejects float segment with bitstring value", () => {
-        const segment = Type.bitstringSegment(Type.bitstring("abc"), {
+        const segment = Type.bitstringSegment(Type.bitstring2("abc"), {
           type: "float",
         });
 
