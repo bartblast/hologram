@@ -316,39 +316,30 @@ describe("Serializer", () => {
       describe("pid", () => {
         describe("originating in server", () => {
           describe("top-level", () => {
-            it("server destination", () => {
-              const term = Type.pid('my_node@my_"host', [0, 11, 222], "server");
-              const expected = `[2,"pmy_node@my_\\"host${DELIMITER}0,11,222${DELIMITER}server"]`;
+            const term = Type.pid('my_node@my_"host', [0, 11, 222], "server");
+            const expected = `[2,"pmy_node@my_\\"host${DELIMITER}0,11,222${DELIMITER}server"]`;
 
+            it("server destination", () => {
               assert.equal(serialize(term, "server"), expected);
             });
 
             it("client destination", () => {
-              const term = Type.pid('my_node@my_"host', [0, 11, 222], "server");
-              const expected = `[2,"pmy_node@my_\\"host${DELIMITER}0,11,222${DELIMITER}server"]`;
-
               assert.equal(serialize(term, "client"), expected);
             });
           });
 
           describe("nested", () => {
+            const term = {
+              a: Type.pid('my_node@my_"host', [0, 11, 222], "server"),
+            };
+
+            const expected = `[2,{"a":"pmy_node@my_\\"host${DELIMITER}0,11,222${DELIMITER}server"}]`;
+
             it("server destination", () => {
-              const term = {
-                a: Type.pid('my_node@my_"host', [0, 11, 222], "server"),
-              };
-
-              const expected = `[2,{"a":"pmy_node@my_\\"host${DELIMITER}0,11,222${DELIMITER}server"}]`;
-
               assert.equal(serialize(term, "server"), expected);
             });
 
             it("client destination", () => {
-              const term = {
-                a: Type.pid('my_node@my_"host', [0, 11, 222], "server"),
-              };
-
-              const expected = `[2,{"a":"pmy_node@my_\\"host${DELIMITER}0,11,222${DELIMITER}server"}]`;
-
               assert.equal(serialize(term, "client"), expected);
             });
           });
@@ -356,9 +347,9 @@ describe("Serializer", () => {
 
         describe("originating in client", () => {
           describe("top-level", () => {
-            it("server destination", () => {
-              const term = Type.pid("my_node@my_host", [0, 11, 222], "client");
+            const term = Type.pid('my_node@my_"host', [0, 11, 222], "client");
 
+            it("server destination", () => {
               assert.throw(
                 () => serialize(term, "server"),
                 HologramRuntimeError,
@@ -367,7 +358,6 @@ describe("Serializer", () => {
             });
 
             it("client destination", () => {
-              const term = Type.pid('my_node@my_"host', [0, 11, 222], "client");
               const expected = `[2,"pmy_node@my_\\"host${DELIMITER}0,11,222${DELIMITER}client"]`;
 
               assert.equal(serialize(term, "client"), expected);
@@ -375,11 +365,11 @@ describe("Serializer", () => {
           });
 
           describe("nested", () => {
-            it("server destination", () => {
-              const term = {
-                a: Type.pid("my_node@my_host", [0, 11, 222], "client"),
-              };
+            const term = {
+              a: Type.pid('my_node@my_"host', [0, 11, 222], "client"),
+            };
 
+            it("server destination", () => {
               assert.throw(
                 () => serialize(term, "server"),
                 HologramRuntimeError,
@@ -388,10 +378,6 @@ describe("Serializer", () => {
             });
 
             it("client destination", () => {
-              const term = {
-                a: Type.pid('my_node@my_"host', [0, 11, 222], "client"),
-              };
-
               const expected = `[2,{"a":"pmy_node@my_\\"host${DELIMITER}0,11,222${DELIMITER}client"}]`;
 
               assert.equal(serialize(term, "client"), expected);
@@ -403,39 +389,30 @@ describe("Serializer", () => {
       describe("port", () => {
         describe("originating in server", () => {
           describe("top-level", () => {
-            it("server destination", () => {
-              const term = Type.port('my_node@my_"host', [0, 11], "server");
-              const expected = `[2,"omy_node@my_\\"host${DELIMITER}0,11${DELIMITER}server"]`;
+            const term = Type.port('my_node@my_"host', [0, 11], "server");
+            const expected = `[2,"omy_node@my_\\"host${DELIMITER}0,11${DELIMITER}server"]`;
 
+            it("server destination", () => {
               assert.equal(serialize(term, "server"), expected);
             });
 
             it("client destination", () => {
-              const term = Type.port('my_node@my_"host', [0, 11], "server");
-              const expected = `[2,"omy_node@my_\\"host${DELIMITER}0,11${DELIMITER}server"]`;
-
               assert.equal(serialize(term, "client"), expected);
             });
           });
 
           describe("nested", () => {
+            const term = {
+              a: Type.port('my_node@my_"host', [0, 11], "server"),
+            };
+
+            const expected = `[2,{"a":"omy_node@my_\\"host${DELIMITER}0,11${DELIMITER}server"}]`;
+
             it("server destination", () => {
-              const term = {
-                a: Type.port('my_node@my_"host', [0, 11], "server"),
-              };
-
-              const expected = `[2,{"a":"omy_node@my_\\"host${DELIMITER}0,11${DELIMITER}server"}]`;
-
               assert.equal(serialize(term, "server"), expected);
             });
 
             it("client destination", () => {
-              const term = {
-                a: Type.port('my_node@my_"host', [0, 11], "server"),
-              };
-
-              const expected = `[2,{"a":"omy_node@my_\\"host${DELIMITER}0,11${DELIMITER}server"}]`;
-
               assert.equal(serialize(term, "client"), expected);
             });
           });
@@ -443,9 +420,9 @@ describe("Serializer", () => {
 
         describe("originating in client", () => {
           describe("top-level", () => {
-            it("server destination", () => {
-              const term = Type.port("my_node@my_host", [0, 11], "client");
+            const term = Type.port('my_node@my_"host', [0, 11], "client");
 
+            it("server destination", () => {
               assert.throw(
                 () => serialize(term, "server"),
                 HologramRuntimeError,
@@ -454,7 +431,6 @@ describe("Serializer", () => {
             });
 
             it("client destination", () => {
-              const term = Type.port('my_node@my_"host', [0, 11], "client");
               const expected = `[2,"omy_node@my_\\"host${DELIMITER}0,11${DELIMITER}client"]`;
 
               assert.equal(serialize(term, "client"), expected);
@@ -462,11 +438,11 @@ describe("Serializer", () => {
           });
 
           describe("nested", () => {
-            it("server destination", () => {
-              const term = {
-                a: Type.port("my_node@my_host", [0, 11], "client"),
-              };
+            const term = {
+              a: Type.port('my_node@my_"host', [0, 11], "client"),
+            };
 
+            it("server destination", () => {
               assert.throw(
                 () => serialize(term, "server"),
                 HologramRuntimeError,
@@ -475,10 +451,6 @@ describe("Serializer", () => {
             });
 
             it("client destination", () => {
-              const term = {
-                a: Type.port('my_node@my_"host', [0, 11], "client"),
-              };
-
               const expected = `[2,{"a":"omy_node@my_\\"host${DELIMITER}0,11${DELIMITER}client"}]`;
 
               assert.equal(serialize(term, "client"), expected);
