@@ -163,15 +163,15 @@ defmodule Hologram.Socket.Decoder do
     IEx.Helpers.pid(x, y, z)
   end
 
+  def decode(1, %{"type" => "port", "value" => value}) do
+    IEx.Helpers.port(value)
+  end
+
   def decode(1, %{"type" => "tuple", "data" => data}) do
     data
     |> Enum.map(&decode(1, &1))
     |> List.to_tuple()
   end
-
-  #   def decode(_version, %{"type" => "port", "value" => value}) do
-  #     IEx.Helpers.port(value)
-  #   end
 
   #   def decode(_version, %{"type" => "reference", "value" => value}) do
   #     IEx.Helpers.ref(value)
