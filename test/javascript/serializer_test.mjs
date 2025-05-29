@@ -18,6 +18,72 @@ describe("Serializer", () => {
     const serialize = Serializer.serialize;
 
     describe("boxed terms", () => {
+      describe("atom", () => {
+        it("top-level", () => {
+          const term = Type.atom('x"yz');
+          const expected = '[2,"ax\\"yz"]';
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("nested", () => {
+          const term = {k: Type.atom('x"yz')};
+          const expected = '[2,{"k":"ax\\"yz"}]';
+
+          assert.equal(serialize(term), expected);
+        });
+      });
+
+      describe("bitstring", () => {
+        it("top-level", () => {
+          const term = Type.bitstring2('a"bc');
+          const expected = '[2,"b061226263"]';
+
+          assert.equal(serialize(term), expected);
+        });
+
+        it("nested", () => {
+          const term = {a: Type.bitstring2('a"bc')};
+          const expected = '[2,{"a":"b061226263"}]';
+
+          assert.equal(serialize(term), expected);
+        });
+      });
+
+      describe("float", () => {
+        describe("encoded as float", () => {
+          it("top-level", () => {
+            const term = Type.float(1.23);
+            const expected = '[2,"f1.23"]';
+
+            assert.equal(serialize(term), expected);
+          });
+
+          it("nested", () => {
+            const term = {a: Type.float(1.23)};
+            const expected = '[2,{"a":"f1.23"}]';
+
+            assert.equal(serialize(term), expected);
+          });
+        });
+
+        describe("encoded as integer", () => {
+          it("top-level", () => {
+            const term = Type.float(123);
+            const expected = '[2,"f123"]';
+
+            assert.equal(serialize(term), expected);
+          });
+
+          it("nested", () => {
+            const term = {a: Type.float(123)};
+            const expected = '[2,{"a":"f123"}]';
+
+            assert.equal(serialize(term), expected);
+          });
+        });
+      });
+
       describe("function", () => {
         beforeEach(() => {
           Sequence.reset();
@@ -181,72 +247,6 @@ describe("Serializer", () => {
 
               assert.equal(serialize(term, "client"), expected);
             });
-          });
-        });
-      });
-
-      describe("atom", () => {
-        it("top-level", () => {
-          const term = Type.atom('x"yz');
-          const expected = '[2,"ax\\"yz"]';
-
-          assert.equal(serialize(term), expected);
-        });
-
-        it("nested", () => {
-          const term = {k: Type.atom('x"yz')};
-          const expected = '[2,{"k":"ax\\"yz"}]';
-
-          assert.equal(serialize(term), expected);
-        });
-      });
-
-      describe("bitstring", () => {
-        it("top-level", () => {
-          const term = Type.bitstring2('a"bc');
-          const expected = '[2,"b061226263"]';
-
-          assert.equal(serialize(term), expected);
-        });
-
-        it("nested", () => {
-          const term = {a: Type.bitstring2('a"bc')};
-          const expected = '[2,{"a":"b061226263"}]';
-
-          assert.equal(serialize(term), expected);
-        });
-      });
-
-      describe("float", () => {
-        describe("encoded as float", () => {
-          it("top-level", () => {
-            const term = Type.float(1.23);
-            const expected = '[2,"f1.23"]';
-
-            assert.equal(serialize(term), expected);
-          });
-
-          it("nested", () => {
-            const term = {a: Type.float(1.23)};
-            const expected = '[2,{"a":"f1.23"}]';
-
-            assert.equal(serialize(term), expected);
-          });
-        });
-
-        describe("encoded as integer", () => {
-          it("top-level", () => {
-            const term = Type.float(123);
-            const expected = '[2,"f123"]';
-
-            assert.equal(serialize(term), expected);
-          });
-
-          it("nested", () => {
-            const term = {a: Type.float(123)};
-            const expected = '[2,{"a":"f123"}]';
-
-            assert.equal(serialize(term), expected);
           });
         });
       });
