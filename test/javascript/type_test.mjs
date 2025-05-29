@@ -1034,7 +1034,7 @@ describe("Type", () => {
 
   describe("isPort()", () => {
     it("returns true if the term is a port", () => {
-      const term = Type.port("0.11");
+      const term = Type.port("nonode@nohost", [0, 11]);
       assert.isTrue(Type.isPort(term));
     });
 
@@ -1344,8 +1344,14 @@ describe("Type", () => {
   });
 
   it("port()", () => {
-    const result = Type.port("0.11", "client");
-    const expected = {type: "port", origin: "client", value: "0.11"};
+    const result = Type.port("nonode@nohost", [0, 11], "client");
+
+    const expected = {
+      type: "port",
+      node: "nonode@nohost",
+      segments: [0, 11],
+      origin: "client",
+    };
 
     assert.deepStrictEqual(result, expected);
   });

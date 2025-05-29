@@ -1532,7 +1532,7 @@ defmodule Hologram.Compiler.EncoderTest do
     # #Port<0.11>
     ir = %IR.PortType{value: port("0.11")}
 
-    assert encode_ir(ir) == ~s/Type.port("0.11")/
+    assert encode_ir(ir) == ~s/Type.port("nonode@nohost", [0, 11])/
   end
 
   test "reference" do
@@ -2155,7 +2155,7 @@ defmodule Hologram.Compiler.EncoderTest do
     end
 
     test "port" do
-      assert encode_term!(port("0.11")) == ~s/Type.port("0.11")/
+      assert encode_term!(port("0.11")) == ~s/Type.port("nonode@nohost", [0, 11])/
     end
 
     test "reference" do

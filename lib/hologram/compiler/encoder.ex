@@ -362,8 +362,22 @@ defmodule Hologram.Compiler.Encoder do
     encode_ir(variable, %{context | pattern?: false})
   end
 
-  def encode_ir(%IR.PortType{value: value}, _context) do
-    encode_primitive_type(:port, value, true)
+  def encode_ir(%IR.PortType{value: port}, context) do
+    segments =
+      port
+      |> :erlang.port_to_list()
+      |> Enum.drop(6)
+      |> List.delete_at(-1)
+      |> to_string()
+      |> String.split(".")
+      |> Enum.map(&IntegerUtils.parse!/1)
+
+    encoded_node = encode_as_string(node(port), true)
+
+    integer_encoder = fn integer, _context -> to_string(integer) end
+    encoded_segments = encode_as_array(segments, context, integer_encoder)
+
+    "Type.port(#{encoded_node}, #{encoded_segments})"
   end
 
   def encode_ir(%IR.ReferenceType{value: value}, _context) do
@@ -481,14 +495,6 @@ defmodule Hologram.Compiler.Encoder do
 
   defp encode_as_string(nil, false) do
     "nil"
-  end
-
-  defp encode_as_string(value, false) when is_port(value) do
-    value
-    |> :erlang.port_to_list()
-    |> Enum.drop(6)
-    |> List.delete_at(-1)
-    |> to_string()
   end
 
   defp encode_as_string(value, false) when is_reference(value) do

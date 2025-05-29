@@ -451,8 +451,8 @@ export default class Type {
     return {type: "pid", node: node, origin: origin, segments: segments};
   }
 
-  static port(value, origin = "server") {
-    return {type: "port", origin: origin, value: value};
+  static port(node, segments, origin = "server") {
+    return {type: "port", node: node, origin: origin, segments: segments};
   }
 
   static range(first, last, step) {

@@ -1940,7 +1940,7 @@ describe("Erlang", () => {
     const is_port = Erlang["is_port/1"];
 
     it("port", () => {
-      assertBoxedTrue(is_port(Type.port("0.11")));
+      assertBoxedTrue(is_port(Type.port("nonode@nohost", [0, 11])));
     });
 
     it("non-port", () => {
