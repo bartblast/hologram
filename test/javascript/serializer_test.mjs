@@ -13,7 +13,7 @@ import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
-describe("Serializer", () => {
+describe.only("Serializer", () => {
   describe("serialize()", () => {
     const DELIMITER = Serializer.DELIMITER;
 
@@ -317,17 +317,15 @@ describe("Serializer", () => {
         describe("originating in server", () => {
           describe("top-level", () => {
             it("server destination", () => {
-              const term = Type.pid("my_node@my_host", [0, 11, 222], "server");
-              const expected = `[2,"pmy_node@my_host${DELIMITER}0,11,222${DELIMITER}server"]`;
+              const term = Type.pid('my_node@my_"host', [0, 11, 222], "server");
+              const expected = `[2,"pmy_node@my_\\"host${DELIMITER}0,11,222${DELIMITER}server"]`;
 
               assert.equal(serialize(term, "server"), expected);
             });
 
             it("client destination", () => {
               const term = Type.pid('my_node@my_"host', [0, 11, 222], "server");
-
-              const expected =
-                '[2,{"type":"spid","node":"smy_node@my_\\"host","origin":"sserver","segments":[0,11,222]}]';
+              const expected = `[2,"pmy_node@my_\\"host${DELIMITER}0,11,222${DELIMITER}server"]`;
 
               assert.equal(serialize(term, "client"), expected);
             });
@@ -336,10 +334,10 @@ describe("Serializer", () => {
           describe("nested", () => {
             it("server destination", () => {
               const term = {
-                a: Type.pid("my_node@my_host", [0, 11, 222], "server"),
+                a: Type.pid('my_node@my_"host', [0, 11, 222], "server"),
               };
 
-              const expected = `[2,{"a":"pmy_node@my_host${DELIMITER}0,11,222${DELIMITER}server"}]`;
+              const expected = `[2,{"a":"pmy_node@my_\\"host${DELIMITER}0,11,222${DELIMITER}server"}]`;
 
               assert.equal(serialize(term, "server"), expected);
             });
@@ -349,8 +347,7 @@ describe("Serializer", () => {
                 a: Type.pid('my_node@my_"host', [0, 11, 222], "server"),
               };
 
-              const expected =
-                '[2,{"a":{"type":"spid","node":"smy_node@my_\\"host","origin":"sserver","segments":[0,11,222]}}]';
+              const expected = `[2,{"a":"pmy_node@my_\\"host${DELIMITER}0,11,222${DELIMITER}server"}]`;
 
               assert.equal(serialize(term, "client"), expected);
             });
@@ -371,9 +368,7 @@ describe("Serializer", () => {
 
             it("client destination", () => {
               const term = Type.pid('my_node@my_"host', [0, 11, 222], "client");
-
-              const expected =
-                '[2,{"type":"spid","node":"smy_node@my_\\"host","origin":"sclient","segments":[0,11,222]}]';
+              const expected = `[2,"pmy_node@my_\\"host${DELIMITER}0,11,222${DELIMITER}client"]`;
 
               assert.equal(serialize(term, "client"), expected);
             });
@@ -397,8 +392,7 @@ describe("Serializer", () => {
                 a: Type.pid('my_node@my_"host', [0, 11, 222], "client"),
               };
 
-              const expected =
-                '[2,{"a":{"type":"spid","node":"smy_node@my_\\"host","origin":"sclient","segments":[0,11,222]}}]';
+              const expected = `[2,{"a":"pmy_node@my_\\"host${DELIMITER}0,11,222${DELIMITER}client"}]`;
 
               assert.equal(serialize(term, "client"), expected);
             });

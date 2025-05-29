@@ -100,17 +100,12 @@ export default class Serializer {
   }
 
   static #serializeBoxedPid(term, destination) {
-    if (destination === "client") {
-      return term;
-    }
-
-    if (term.origin === "client") {
+    if (term.origin === "client" && destination === "server") {
       throw new HologramRuntimeError(
         "cannot serialize PID: origin is client but destination is server",
       );
     }
 
-    // PID originating in server
     return `p${term.node}${$.DELIMITER}${term.segments.join(",")}${$.DELIMITER}${term.origin}`;
   }
 
