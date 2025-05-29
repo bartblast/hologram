@@ -1,6 +1,5 @@
 "use strict";
 
-import Bitstring from "./bitstring.mjs";
 import Bitstring2 from "./bitstring2.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
@@ -50,18 +49,6 @@ export default class Type {
     return {type: "atom", value: value};
   }
 
-  static bitstring(data) {
-    if (typeof data === "string") {
-      return Type.bitstring([
-        Type.bitstringSegment(Type.string(data), {type: "utf8"}),
-      ]);
-    } else if (data.length > 0 && typeof data[0] === "object") {
-      return Bitstring.from(data);
-    } else {
-      return {type: "bitstring", bits: new Uint8Array(data)};
-    }
-  }
-
   static bitstring2(arg) {
     if (typeof arg === "string") {
       return Bitstring2.fromText(arg);
@@ -74,11 +61,6 @@ export default class Type {
     return Bitstring2.fromBits(arg);
   }
 
-  static bitstringPattern(segments) {
-    return {type: "bitstring_pattern", segments: segments};
-  }
-
-  // TODO: test
   static bitstringPattern2(segments) {
     return {type: "bitstring_pattern2", segments: segments};
   }

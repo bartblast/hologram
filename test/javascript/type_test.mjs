@@ -6,7 +6,6 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
-import Bitstring2 from "../../assets/js/bitstring2.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Sequence from "../../assets/js/sequence.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -90,58 +89,6 @@ describe("Type", () => {
     assert.deepStrictEqual(result, expected);
   });
 
-  describe("bitstring()", () => {
-    it("builds bitstring from string value", () => {
-      const result = Type.bitstring("abc");
-
-      // ?a == 97 == 0b01100001
-      // ?b == 98 == 0b01100010
-      // ?c == 99 == 0b01100011
-
-      const expected = {
-        type: "bitstring",
-        // prettier-ignore
-        bits: new Uint8Array([
-              0, 1, 1, 0, 0, 0, 0, 1,
-              0, 1, 1, 0, 0, 0, 1, 0,
-              0, 1, 1, 0, 0, 0, 1, 1
-            ]),
-      };
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("builds bitstring from segments array", () => {
-      const segment1 = Type.bitstringSegment(Type.integer(170), {
-        type: "integer",
-      });
-
-      const segment2 = Type.bitstringSegment(Type.integer(-22), {
-        type: "integer",
-      });
-
-      const result = Type.bitstring([segment1, segment2]);
-
-      const expected = {
-        type: "bitstring",
-        // prettier-ignore
-        bits: new Uint8Array([
-          1, 0, 1, 0, 1, 0, 1, 0,
-          1, 1, 1, 0, 1, 0, 1, 0
-        ]),
-      };
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("builds bitstring from bits array", () => {
-      const result = Type.bitstring([1, 0, 1, 0]);
-      const expected = {type: "bitstring", bits: new Uint8Array([1, 0, 1, 0])};
-
-      assert.deepStrictEqual(result, expected);
-    });
-  });
-
   describe("bitstring2()", () => {
     it("builds bitstring from string value", () => {
       const result = Type.bitstring2("abc");
@@ -194,14 +141,14 @@ describe("Type", () => {
     });
   });
 
-  it("bitstringPattern()", () => {
+  it("bitstringPattern2()", () => {
     const segment1 = Type.bitstringSegment(Type.integer(1), {type: "integer"});
     const segment2 = Type.bitstringSegment(Type.integer(2), {type: "integer"});
 
-    const result = Type.bitstringPattern([segment1, segment2]);
+    const result = Type.bitstringPattern2([segment1, segment2]);
 
     const expected = {
-      type: "bitstring_pattern",
+      type: "bitstring_pattern2",
       segments: [segment1, segment2],
     };
 

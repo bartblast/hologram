@@ -3,7 +3,6 @@
 import isEqual from "lodash/isEqual.js";
 import uniqWith from "lodash/uniqWith.js";
 
-import Bitstring from "./bitstring.mjs";
 import Bitstring2 from "./bitstring2.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
@@ -997,19 +996,6 @@ export default class Interpreter {
     return ":" + term.value;
   }
 
-  static #inspectBitstring(term, _opts) {
-    if (Bitstring.isPrintableText(term)) {
-      return '"' + Bitstring.toText(term) + '"';
-    }
-
-    const segmentStrs = Utils.chunkArray(term.bits, 8).map((bits) => {
-      const value = Bitstring.buildUnsignedBigIntFromBitArray(bits).toString();
-      return bits.length === 8 ? value : `${value}::size(${bits.length})`;
-    });
-
-    return `<<${segmentStrs.join(", ")}>>`;
-  }
-
   static #inspectBitstring2(term, _opts) {
     if (Bitstring2.isPrintableText(term)) {
       return '"' + term.text.replace(/"/g, '\\"') + '"';
@@ -1227,53 +1213,6 @@ export default class Interpreter {
     }
 
     if (chunkOffset !== rightBitCount) {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
-    }
-
-    return right;
-  }
-
-  static #matchBitstringPattern(right, left, context) {
-    if (right.type !== "bitstring" && right.type !== "bitstring_pattern") {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
-    }
-
-    let offset = 0;
-
-    for (const segment of left.segments) {
-      if (segment.value.type === "variable_pattern") {
-        const valueInfo = Bitstring.buildValueFromBitstringChunk(
-          segment,
-          right.bits,
-          offset,
-        );
-
-        if (!valueInfo) {
-          Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
-        }
-
-        const [value, segmentLen] = valueInfo;
-        Interpreter.matchOperator(value, segment.value, context);
-        offset += segmentLen;
-      } else {
-        const segmentBitstring = Type.bitstring([segment]);
-        const segmentLen = segmentBitstring.bits.length;
-
-        if (right.bits.length - offset < segmentLen) {
-          Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
-        }
-
-        for (let i = 0; i < segmentLen; ++i) {
-          if (segmentBitstring.bits[i] !== right.bits[offset + i]) {
-            Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
-          }
-        }
-
-        offset += segmentLen;
-      }
-    }
-
-    if (offset < right.bits.length) {
       Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
     }
 
