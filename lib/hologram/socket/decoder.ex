@@ -119,14 +119,6 @@ defmodule Hologram.Socket.Decoder do
     |> List.to_tuple()
   end
 
-  def decode(1, "__atom__:" <> value) do
-    String.to_existing_atom(value)
-  end
-
-  def decode(1, "__binary__:" <> value) do
-    value
-  end
-
   def decode(1, %{
         "type" => "anonymous_function",
         "capturedModule" => module_str,
@@ -137,6 +129,14 @@ defmodule Hologram.Socket.Decoder do
     function = String.to_existing_atom(function_str)
 
     Function.capture(module, function, arity)
+  end
+
+  def decode(1, "__atom__:" <> value) do
+    String.to_existing_atom(value)
+  end
+
+  def decode(1, "__binary__:" <> value) do
+    value
   end
 
   def decode(1, %{"type" => "bitstring", "bits" => bits}) do
