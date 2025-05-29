@@ -45,6 +45,9 @@ export default class Serializer {
         case "pid":
           return $.#serializeBoxedPid(value, destination);
 
+        case "port":
+          return $.#serializeBoxedPort(value, destination);
+
         case "tuple":
           return {t: "t", d: value.data};
       }
@@ -109,6 +112,16 @@ export default class Serializer {
     return `p${term.node}${$.DELIMITER}${term.segments.join(",")}${$.DELIMITER}${term.origin}`;
   }
 
+  static #serializeBoxedPort(term, destination) {
+    if (term.origin === "client" && destination === "server") {
+      throw new HologramRuntimeError(
+        "cannot serialize port: origin is client but destination is server",
+      );
+    }
+
+    return `o${term.node}${$.DELIMITER}${term.segments.join(",")}${$.DELIMITER}${term.origin}`;
+  }
+
   static #serializeJsString(value, key) {
     // Don't add prefix for the type marker in serialized boxed map and tuple objects
     if (key === "t" && (value === "l" || value === "m" || value === "t")) {
@@ -117,22 +130,6 @@ export default class Serializer {
 
     return `s${value}`;
   }
-
-  //   static #serializeBoxedPort(term, isFullScope) {
-  //     if (isFullScope) {
-  //       return term;
-  //     }
-
-  //     if (term.origin === "client") {
-  //       throw new HologramRuntimeError(
-  //         "can't encode client terms that are ports originating in client",
-  //       );
-  //     }
-
-  //     // eslint-disable-next-line no-unused-vars
-  //     const {origin, ...rest} = term;
-  //     return rest;
-  //   }
 
   //   static #serializeBoxedReference(term, isFullScope) {
   //     if (isFullScope) {

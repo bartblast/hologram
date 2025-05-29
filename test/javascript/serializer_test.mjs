@@ -400,6 +400,93 @@ describe("Serializer", () => {
         });
       });
 
+      describe("port", () => {
+        describe("originating in server", () => {
+          describe("top-level", () => {
+            it("server destination", () => {
+              const term = Type.port('my_node@my_"host', [0, 11], "server");
+              const expected = `[2,"omy_node@my_\\"host${DELIMITER}0,11${DELIMITER}server"]`;
+
+              assert.equal(serialize(term, "server"), expected);
+            });
+
+            it("client destination", () => {
+              const term = Type.port('my_node@my_"host', [0, 11], "server");
+              const expected = `[2,"omy_node@my_\\"host${DELIMITER}0,11${DELIMITER}server"]`;
+
+              assert.equal(serialize(term, "client"), expected);
+            });
+          });
+
+          describe("nested", () => {
+            it("server destination", () => {
+              const term = {
+                a: Type.port('my_node@my_"host', [0, 11], "server"),
+              };
+
+              const expected = `[2,{"a":"omy_node@my_\\"host${DELIMITER}0,11${DELIMITER}server"}]`;
+
+              assert.equal(serialize(term, "server"), expected);
+            });
+
+            it("client destination", () => {
+              const term = {
+                a: Type.port('my_node@my_"host', [0, 11], "server"),
+              };
+
+              const expected = `[2,{"a":"omy_node@my_\\"host${DELIMITER}0,11${DELIMITER}server"}]`;
+
+              assert.equal(serialize(term, "client"), expected);
+            });
+          });
+        });
+
+        describe("originating in client", () => {
+          describe("top-level", () => {
+            it("server destination", () => {
+              const term = Type.port("my_node@my_host", [0, 11], "client");
+
+              assert.throw(
+                () => serialize(term, "server"),
+                HologramRuntimeError,
+                "cannot serialize port: origin is client but destination is server",
+              );
+            });
+
+            it("client destination", () => {
+              const term = Type.port('my_node@my_"host', [0, 11], "client");
+              const expected = `[2,"omy_node@my_\\"host${DELIMITER}0,11${DELIMITER}client"]`;
+
+              assert.equal(serialize(term, "client"), expected);
+            });
+          });
+
+          describe("nested", () => {
+            it("server destination", () => {
+              const term = {
+                a: Type.port("my_node@my_host", [0, 11], "client"),
+              };
+
+              assert.throw(
+                () => serialize(term, "server"),
+                HologramRuntimeError,
+                "cannot serialize port: origin is client but destination is server",
+              );
+            });
+
+            it("client destination", () => {
+              const term = {
+                a: Type.port('my_node@my_"host', [0, 11], "client"),
+              };
+
+              const expected = `[2,{"a":"omy_node@my_\\"host${DELIMITER}0,11${DELIMITER}client"}]`;
+
+              assert.equal(serialize(term, "client"), expected);
+            });
+          });
+        });
+      });
+
       describe("tuple", () => {
         it("top-level", () => {
           const term = Type.tuple([Type.atom("x"), Type.float(1.23)]);
