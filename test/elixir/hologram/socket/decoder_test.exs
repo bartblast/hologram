@@ -61,6 +61,11 @@ defmodule Hologram.Socket.DecoderTest do
       assert decode(2, data) == pid("0.11.222")
     end
 
+    test "port" do
+      data = "omy_node@my_host#{@delimiter}0,11#{@delimiter}server"
+      assert decode(2, data) == port("0.11")
+    end
+
     test "tuple" do
       data = %{"t" => "t", "d" => ["i1", "f2.34"]}
       assert decode(2, data) == {1, 2.34}
