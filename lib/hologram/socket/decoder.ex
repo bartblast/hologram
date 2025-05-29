@@ -177,5 +177,9 @@ defmodule Hologram.Socket.Decoder do
   #     IEx.Helpers.ref(value)
   #   end
 
+  @doc """
+  Returns the delimiter string used for separating fields in serialized data.
+  """
+  @spec delimiter() :: String.t()
   def delimiter, do: @delimiter
 end
