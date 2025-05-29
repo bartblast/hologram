@@ -487,7 +487,7 @@ describe("Serializer", () => {
         });
       });
 
-      describe.only("reference", () => {
+      describe("reference", () => {
         describe("originating in server", () => {
           describe("top-level", () => {
             const term = Type.reference(

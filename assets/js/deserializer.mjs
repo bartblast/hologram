@@ -97,6 +97,9 @@ export default class Deserializer {
       case "p":
         return $.#deserializeBoxedIdentifier("pid", data);
 
+      case "r":
+        return $.#deserializeBoxedIdentifier("reference", data);
+
       case "s":
         return data;
 
