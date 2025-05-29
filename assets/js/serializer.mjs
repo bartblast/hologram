@@ -112,7 +112,7 @@ export default class Serializer {
   }
 
   static #serializeJsString(value, key) {
-    // Don't add prefix for the type marker in serialized boxed map and tuple objects
+    // Don't add prefix for the type marker in serialized boxed collection types
     if (key === "t" && (value === "l" || value === "m" || value === "t")) {
       return value;
     }
