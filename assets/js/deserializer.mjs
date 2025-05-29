@@ -35,7 +35,7 @@ export default class Deserializer {
   }
 
   static #deserializeBoxedFunctionCapture(serialized) {
-    const parts = serialized.split(":");
+    const parts = serialized.split(Serializer.DELIMITER);
     const context = Interpreter.buildContext();
 
     return Type.functionCapture(
