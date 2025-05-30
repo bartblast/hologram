@@ -20,9 +20,11 @@ defmodule Hologram.Socket.Decoder do
     :pointer_type
   ]
 
-  # Can't use control characters in 0x00-0x1F range,
-  # because they are escaped in JSON and result in multi-byte delimiter
-  @delimiter "\x80"
+  # Can't use control characters in 0x00-0x1F (0-31) range
+  # because they are escaped in JSON and result in multi-byte delimiter.
+  # Can't use characters above 0x7F (128) because they mess up transmission encoding.
+  # Using \x7F (DEL character) which is practically unused.
+  @delimiter "\x7F"
 
   @doc """
   Returns the atoms whitelist related to client DOM events. 
@@ -40,6 +42,7 @@ defmodule Hologram.Socket.Decoder do
   def decode(list)
 
   def decode([version, data]) do
+    # Remove the UTF-8 conversion since we're using ASCII-safe delimiter
     decode(version, data)
   end
 

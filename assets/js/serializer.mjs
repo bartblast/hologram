@@ -12,9 +12,11 @@ Release 0.5.0: switched to version 2.
 export default class Serializer {
   static CURRENT_VERSION = 2;
 
-  // Can't use control characters in 0x00-0x1F range,
-  // because they are escaped in JSON and result in multi-byte delimiter
-  static DELIMITER = "\x80";
+  // Can't use control characters in 0x00-0x1F (0-31) range
+  // because they are escaped in JSON and result in multi-byte delimiter.
+  // Can't use characters above 0x7F (128) because they mess up transmission encoding.
+  // Using \x7F (DEL character) which is practically unused.
+  static DELIMITER = "\x7F";
 
   static serialize(term, destination = "server") {
     const serialized = JSON.stringify(term, (key, value) => {
