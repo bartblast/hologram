@@ -645,7 +645,7 @@ export default class Interpreter {
       return Interpreter.#matchConsPattern(right, left, context);
     }
 
-    if (Type.isbitstringPattern(left)) {
+    if (Type.isBitstringPattern(left)) {
       return Interpreter.#matchBitstringPattern(right, left, context);
     }
 
