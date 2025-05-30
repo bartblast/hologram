@@ -42,7 +42,6 @@ defmodule Hologram.Socket.Decoder do
   def decode(list)
 
   def decode([version, data]) do
-    # Remove the UTF-8 conversion since we're using ASCII-safe delimiter
     decode(version, data)
   end
 
