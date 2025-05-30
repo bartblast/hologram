@@ -570,7 +570,7 @@ export default class Interpreter {
 
   static isMatched(left, right, context) {
     try {
-      Interpreter.matchOperator(right, left, context);
+      Interpreter.matchOperator(right, left, context, false);
       return true;
     } catch {
       return false;
@@ -619,7 +619,7 @@ export default class Interpreter {
   // and to update the var values after pattern matching is finished.
   //
   // right param is before left param, because we need the right arg evaluated before left arg.
-  static matchOperator(right, left, context) {
+  static matchOperator(right, left, context, raiseMatchError = true) {
     if (!context.vars.__matched__) {
       context.vars.__matched__ = {};
     }
@@ -629,8 +629,13 @@ export default class Interpreter {
     }
 
     if (left.type === "match_pattern") {
-      Interpreter.matchOperator(right, left.right, context);
-      return Interpreter.matchOperator(right, left.left, context);
+      Interpreter.matchOperator(right, left.right, context, raiseMatchError);
+      return Interpreter.matchOperator(
+        right,
+        left.left,
+        context,
+        raiseMatchError,
+      );
     }
 
     if (Type.isMatchPlaceholder(left)) {
@@ -638,31 +643,51 @@ export default class Interpreter {
     }
 
     if (Type.isVariablePattern(left)) {
-      return Interpreter.#matchVariablePattern(right, left, context);
+      return Interpreter.#matchVariablePattern(
+        right,
+        left,
+        context,
+        raiseMatchError,
+      );
     }
 
     if (Type.isConsPattern(left)) {
-      return Interpreter.#matchConsPattern(right, left, context);
+      return Interpreter.#matchConsPattern(
+        right,
+        left,
+        context,
+        raiseMatchError,
+      );
     }
 
     if (Type.isBitstringPattern(left)) {
-      return Interpreter.#matchBitstringPattern(right, left, context);
+      return Interpreter.#matchBitstringPattern(
+        right,
+        left,
+        context,
+        raiseMatchError,
+      );
     }
 
     if (left.type !== right.type) {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
+      $.#handleMatchFail(right, raiseMatchError);
     }
 
     if (Type.isList(left) || Type.isTuple(left)) {
-      return Interpreter.#matchListOrTuple(right, left, context);
+      return Interpreter.#matchListOrTuple(
+        right,
+        left,
+        context,
+        raiseMatchError,
+      );
     }
 
     if (Type.isMap(left)) {
-      return Interpreter.#matchMap(right, left, context);
+      return Interpreter.#matchMap(right, left, context, raiseMatchError);
     }
 
     if (!Interpreter.isStrictlyEqual(left, right)) {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
+      $.#handleMatchFail(right, raiseMatchError);
     }
 
     return right;
@@ -916,6 +941,18 @@ export default class Interpreter {
     return false;
   }
 
+  static #handleMatchFail(right, raiseMatchError) {
+    if (raiseMatchError) {
+      $.raiseMatchError($.buildMatchErrorMsg(right));
+    }
+
+    // Used as a form of non-local control flow,
+    // essentially a "fast abort" back to the matchOperator() caller.
+    // Null (as a primitive type) minimizes the performance penalty
+    // by avoiding the overhead of error messages and stack traces.
+    throw null;
+  }
+
   static #hasUnresolvedVariablePattern(term) {
     const termType = term.type;
 
@@ -1152,9 +1189,9 @@ export default class Interpreter {
   //   Console.endGroup(mfa);
   // }
 
-  static #matchBitstringPattern(right, left, context) {
+  static #matchBitstringPattern(right, left, context, raiseMatchError) {
     if (right.type !== "bitstring" && right.type !== "bitstring_pattern") {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
+      $.#handleMatchFail(right, raiseMatchError);
     }
 
     let chunkOffset = 0;
@@ -1182,23 +1219,28 @@ export default class Interpreter {
         chunkBitCount !== 32 &&
         chunkBitCount !== 64
       ) {
-        Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
+        $.#handleMatchFail(right, raiseMatchError);
       }
 
       if (chunkOffset + chunkBitCount > rightBitCount) {
-        Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
+        $.#handleMatchFail(right, raiseMatchError);
       }
 
       const chunk = Bitstring.takeChunk(right, chunkOffset, chunkBitCount);
 
       if (segment.value.type === "variable_pattern") {
         const decodedChunk = Bitstring.decodeSegmentChunk(segment, chunk);
-        Interpreter.matchOperator(decodedChunk, segment.value, context);
+        Interpreter.matchOperator(
+          decodedChunk,
+          segment.value,
+          context,
+          raiseMatchError,
+        );
       } else {
         const segmentBitstring = Bitstring.fromSegments([segment]);
 
         if (!Interpreter.isStrictlyEqual(segmentBitstring, chunk)) {
-          Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
+          $.#handleMatchFail(right, raiseMatchError);
         }
       }
 
@@ -1206,7 +1248,7 @@ export default class Interpreter {
     }
 
     if (chunkOffset !== rightBitCount) {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
+      $.#handleMatchFail(right, raiseMatchError);
     }
 
     return right;
@@ -1220,16 +1262,16 @@ export default class Interpreter {
   }
 
   // Deps: [:erlang.hd/1, :erlang.tl/1]
-  static #matchConsPattern(right, left, context) {
+  static #matchConsPattern(right, left, context, raiseMatchError) {
     if (!Type.isList(right) || right.data.length === 0) {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
+      $.#handleMatchFail(right, raiseMatchError);
     }
 
     if (
       Type.isList(left.tail) &&
       Type.isProperList(left.tail) !== Type.isProperList(right)
     ) {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
+      $.#handleMatchFail(right, raiseMatchError);
     }
 
     const rightHead = Erlang["hd/1"](right);
@@ -1239,39 +1281,39 @@ export default class Interpreter {
       !Interpreter.isMatched(left.head, rightHead, context) ||
       !Interpreter.isMatched(left.tail, rightTail, context)
     ) {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
+      $.#handleMatchFail(right, raiseMatchError);
     }
 
     return right;
   }
 
-  static #matchListOrTuple(right, left, context) {
+  static #matchListOrTuple(right, left, context, raiseMatchError) {
     const count = left.data.length;
 
     if (left.data.length !== right.data.length) {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
+      $.#handleMatchFail(right, raiseMatchError);
     }
 
     if (Type.isList(left) && left.isProper !== right.isProper) {
-      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
+      $.#handleMatchFail(right, raiseMatchError);
     }
 
     for (let i = 0; i < count; ++i) {
       if (!Interpreter.isMatched(left.data[i], right.data[i], context)) {
-        Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
+        $.#handleMatchFail(right, raiseMatchError);
       }
     }
 
     return right;
   }
 
-  static #matchMap(right, left, context) {
+  static #matchMap(right, left, context, raiseMatchError) {
     for (const [key, value] of Object.entries(left.data)) {
       if (
         typeof right.data[key] === "undefined" ||
         !Interpreter.isMatched(value[1], right.data[key][1], context)
       ) {
-        Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
+        $.#handleMatchFail(right, raiseMatchError);
       }
     }
 
@@ -1285,12 +1327,12 @@ export default class Interpreter {
     );
   }
 
-  static #matchVariablePattern(right, left, context) {
+  static #matchVariablePattern(right, left, context, raiseMatchError) {
     if (context.vars.__matched__[left.name]) {
       if (
         !Interpreter.isStrictlyEqual(context.vars.__matched__[left.name], right)
       ) {
-        Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
+        $.#handleMatchFail(right, raiseMatchError);
       }
     } else {
       context.vars.__matched__[left.name] = right;
@@ -1306,3 +1348,5 @@ export default class Interpreter {
     );
   }
 }
+
+const $ = Interpreter;
