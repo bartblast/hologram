@@ -21,7 +21,7 @@ defmodule Hologram.Socket.Decoder do
   ]
 
   # Can't use control characters in 0x00-0x1F range,
-  # because they are escaped in JSON and result in multi-byte delimiter  
+  # because they are escaped in JSON and result in multi-byte delimiter
   @delimiter "\x80"
 
   @doc """
@@ -63,9 +63,9 @@ defmodule Hologram.Socket.Decoder do
     bytes = Base.decode16!(hex, case: :lower)
     leftover_bit_count = String.to_integer(leftover_bits)
 
-    <<full_bytes::binary-size(byte_size(bytes) - 1), leftover_bits_byte::integer>> = bytes
-    leftover_bits_byte = Bitwise.bsr(leftover_bits_byte, 8 - leftover_bit_count)
-    <<full_bytes::binary, leftover_bits_byte::size(leftover_bit_count)>>
+    <<full_bytes::binary-size(byte_size(bytes) - 1), left_aligned_leftover_byte::integer>> = bytes
+    right_aligned_leftover_byte = Bitwise.bsr(left_aligned_leftover_byte, 8 - leftover_bit_count)
+    <<full_bytes::binary, right_aligned_leftover_byte::size(leftover_bit_count)>>
   end
 
   def decode(2, "c" <> data) do
