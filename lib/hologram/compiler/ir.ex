@@ -521,9 +521,9 @@ defmodule Hologram.Compiler.IR do
       true ->
         message =
           if SystemUtils.otp_version() >= 23 do
-            "term contains an anonymous function that is not a named function capture"
+            "term contains a function that is not a named function capture"
           else
-            "term contains an anonymous function that is not a remote function capture"
+            "term contains a function that is not a remote function capture"
           end
 
         raise ArgumentError, message: message

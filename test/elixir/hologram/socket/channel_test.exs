@@ -116,9 +116,9 @@ defmodule Hologram.Socket.ChannelTest do
 
       expected_msg =
         if SystemUtils.otp_version() >= 23 do
-          "term contains an anonymous function that is not a named function capture"
+          "term contains a function that is not a named function capture"
         else
-          "term contains an anonymous function that is not a remote function capture"
+          "term contains a function that is not a remote function capture"
         end
 
       assert handle_in("command", payload, :dummy_socket) ==

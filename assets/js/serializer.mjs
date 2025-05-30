@@ -94,7 +94,7 @@ export default class Serializer {
 
     if (term.capturedModule === null) {
       throw new HologramRuntimeError(
-        "cannot serialize function: not a function capture",
+        "cannot serialize function: not a named function capture",
       );
     }
 

@@ -172,9 +172,9 @@ defmodule Hologram.Compiler.IRTest do
     test "can't be represented in IR" do
       expected_msg =
         if SystemUtils.otp_version() >= 23 do
-          "term contains an anonymous function that is not a named function capture"
+          "term contains a function that is not a named function capture"
         else
-          "term contains an anonymous function that is not a remote function capture"
+          "term contains a function that is not a remote function capture"
         end
 
       assert for_term(fn x -> x end) == {:error, expected_msg}
@@ -216,7 +216,7 @@ defmodule Hologram.Compiler.IRTest do
                }
       else
         assert_error ArgumentError,
-                     "term contains an anonymous function that is not a remote function capture",
+                     "term contains a function that is not a remote function capture",
                      fn ->
                        for_term!(term)
                      end
@@ -260,9 +260,9 @@ defmodule Hologram.Compiler.IRTest do
 
       expected_msg =
         if SystemUtils.otp_version() >= 23 do
-          "term contains an anonymous function that is not a named function capture"
+          "term contains a function that is not a named function capture"
         else
-          "term contains an anonymous function that is not a remote function capture"
+          "term contains a function that is not a remote function capture"
         end
 
       assert_error ArgumentError, expected_msg, fn -> for_term!(term) end
@@ -272,7 +272,7 @@ defmodule Hologram.Compiler.IRTest do
       term = &(&1 + &2)
 
       assert_error ArgumentError,
-                   "term contains an anonymous function that is not a named function capture",
+                   "term contains a function that is not a named function capture",
                    fn ->
                      for_term!(term)
                    end

@@ -37,7 +37,7 @@ defmodule HologramFeatureTests.TypesTest do
   describe "function" do
     feature "anonymous (client origin, non-capture)", %{session: session} do
       assert_js_error session,
-                      "cannot serialize function: not a function capture",
+                      "cannot serialize function: not a named function capture",
                       fn ->
                         session
                         |> visit(TypesPage)
@@ -52,9 +52,9 @@ defmodule HologramFeatureTests.TypesTest do
     feature "anonymous (server origin, non-capture)", %{session: session} do
       expected_msg =
         if SystemUtils.otp_version() >= 23 do
-          "command failed: term contains an anonymous function that is not a named function capture"
+          "command failed: term contains a function that is not a named function capture"
         else
-          "command failed: term contains an anonymous function that is not a remote function capture"
+          "command failed: term contains a function that is not a remote function capture"
         end
 
       assert_js_error session, expected_msg, fn ->
@@ -67,9 +67,9 @@ defmodule HologramFeatureTests.TypesTest do
     feature "anonymous (server origin, capture)", %{session: session} do
       expected_msg =
         if SystemUtils.otp_version() >= 23 do
-          "command failed: term contains an anonymous function that is not a named function capture"
+          "command failed: term contains a function that is not a named function capture"
         else
-          "command failed: term contains an anonymous function that is not a remote function capture"
+          "command failed: term contains a function that is not a remote function capture"
         end
 
       assert_js_error session, expected_msg, fn ->
@@ -81,7 +81,7 @@ defmodule HologramFeatureTests.TypesTest do
 
     feature "anonymous (client origin, capture)", %{session: session} do
       assert_js_error session,
-                      "cannot serialize function: not a function capture",
+                      "cannot serialize function: not a named function capture",
                       fn ->
                         session
                         |> visit(TypesPage)
@@ -106,7 +106,7 @@ defmodule HologramFeatureTests.TypesTest do
         |> assert_text(css("#result"), inspect(8))
       else
         assert_js_error session,
-                        "command failed: term contains an anonymous function that is not a remote function capture",
+                        "command failed: term contains a function that is not a remote function capture",
                         fn ->
                           session
                           |> visit(TypesPage)

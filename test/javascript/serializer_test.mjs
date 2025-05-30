@@ -178,7 +178,7 @@ describe("Serializer", () => {
               assert.throw(
                 () => serialize(term, "server"),
                 HologramRuntimeError,
-                "cannot serialize function: not a function capture",
+                "cannot serialize function: not a named function capture",
               );
             });
 
@@ -218,7 +218,7 @@ describe("Serializer", () => {
               assert.throw(
                 () => serialize(term, "server"),
                 HologramRuntimeError,
-                "cannot serialize function: not a function capture",
+                "cannot serialize function: not a named function capture",
               );
             });
 
