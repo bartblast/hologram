@@ -24,14 +24,14 @@ defmodule Hologram.Socket.ChannelTest do
   describe "handle_in/3, command" do
     test "next action is nil" do
       payload = [
-        1,
+        2,
         %{
-          "type" => "map",
-          "data" => [
-            ["a:module", "a:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module1"],
-            ["a:name", "a:my_command_a"],
-            ["a:params", %{"t" => "m", "d" => []}],
-            ["a:target", "b:6d795f7461726765745f31"]
+          "t" => "m",
+          "d" => [
+            ["amodule", "aElixir.Hologram.Test.Fixtures.Socket.Channel.Module1"],
+            ["aname", "amy_command_a"],
+            ["aparams", %{"t" => "m", "d" => []}],
+            ["atarget", "b06d795f7461726765745f31"]
           ]
         }
       ]
@@ -42,23 +42,23 @@ defmodule Hologram.Socket.ChannelTest do
 
     test "next action with target not specified" do
       payload = [
-        1,
+        2,
         %{
-          "type" => "map",
-          "data" => [
-            ["a:module", "a:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module1"],
-            ["a:name", "a:my_command_b"],
+          "t" => "m",
+          "d" => [
+            ["amodule", "aElixir.Hologram.Test.Fixtures.Socket.Channel.Module1"],
+            ["aname", "amy_command_b"],
             [
-              "a:params",
+              "aparams",
               %{
-                "type" => "map",
-                "data" => [
-                  ["a:a", "i:1"],
-                  ["a:b", "i:2"]
+                "t" => "m",
+                "d" => [
+                  ["aa", "i1"],
+                  ["ab", "i2"]
                 ]
               }
             ],
-            ["a:target", "b:6d795f7461726765745f31"]
+            ["atarget", "b06d795f7461726765745f31"]
           ]
         }
       ]
@@ -72,23 +72,23 @@ defmodule Hologram.Socket.ChannelTest do
 
     test "next action with target specified" do
       payload = [
-        1,
+        2,
         %{
-          "type" => "m",
+          "t" => "m",
           "d" => [
-            ["a:module", "a:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module1"],
-            ["a:name", "a:my_command_c"],
+            ["amodule", "aElixir.Hologram.Test.Fixtures.Socket.Channel.Module1"],
+            ["aname", "amy_command_c"],
             [
-              "a:params",
+              "aparams",
               %{
                 "t" => "m",
                 "d" => [
-                  ["a:a", "i:1"],
-                  ["a:b", "i:2"]
+                  ["aa", "i1"],
+                  ["ab", "i2"]
                 ]
               }
             ],
-            ["a:target", "b:6d795f7461726765745f31"]
+            ["atarget", "b06d795f7461726765745f31"]
           ]
         }
       ]
@@ -102,14 +102,14 @@ defmodule Hologram.Socket.ChannelTest do
 
     test "next action params contain an anonymous function that is not a named function capture" do
       payload = [
-        1,
+        2,
         %{
           "t" => "m",
           "d" => [
-            ["a:module", "a:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module6"],
-            ["a:name", "a:my_command_6"],
-            ["a:params", %{"t" => "m", "d" => []}],
-            ["a:target", "b:6d795f7461726765745f31"]
+            ["amodule", "aElixir.Hologram.Test.Fixtures.Socket.Channel.Module6"],
+            ["aname", "amy_command_6"],
+            ["aparams", %{"t" => "m", "d" => []}],
+            ["atarget", "b06d795f7461726765745f31"]
           ]
         }
       ]
@@ -137,7 +137,7 @@ defmodule Hologram.Socket.ChannelTest do
     test "module payload" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module2, :dummy_module_2_digest)
 
-      payload = [1, "a:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module2"]
+      payload = [2, "aElixir.Hologram.Test.Fixtures.Socket.Channel.Module2"]
 
       assert handle_in("page", payload, :dummy_socket) ==
                {:reply, {:ok, "page Module2 template"}, :dummy_socket}
@@ -147,16 +147,16 @@ defmodule Hologram.Socket.ChannelTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module3, :dummy_module_3_digest)
 
       payload = [
-        1,
+        2,
         %{
-          "type" => "tuple",
-          "data" => [
-            "a:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module3",
+          "t" => "t",
+          "d" => [
+            "aElixir.Hologram.Test.Fixtures.Socket.Channel.Module3",
             %{
-              "type" => "map",
-              "data" => [
-                ["a:a", "i:1"],
-                ["a:b", "i:2"]
+              "t" => "m",
+              "d" => [
+                ["aa", "i1"],
+                ["ab", "i2"]
               ]
             }
           ]
@@ -170,7 +170,7 @@ defmodule Hologram.Socket.ChannelTest do
     test "rendered page is not treated as initial page" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
 
-      payload = [1, "a:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module5"]
+      payload = [2, "aElixir.Hologram.Test.Fixtures.Socket.Channel.Module5"]
 
       assert {:reply, {:ok, html}, :dummy_socket} = handle_in("page", payload, :dummy_socket)
 
@@ -182,7 +182,7 @@ defmodule Hologram.Socket.ChannelTest do
     setup_page_digest_registry(PageDigestRegistryStub)
     ETS.put(PageDigestRegistryStub.ets_table_name(), Module2, "12345678901234567890123456789012")
 
-    payload = [1, "a:Elixir.Hologram.Test.Fixtures.Socket.Channel.Module2"]
+    payload = [2, "aElixir.Hologram.Test.Fixtures.Socket.Channel.Module2"]
 
     assert handle_in("page_bundle_path", payload, :dummy_socket) ==
              {:reply, {:ok, "/hologram/page-12345678901234567890123456789012.js"}, :dummy_socket}
