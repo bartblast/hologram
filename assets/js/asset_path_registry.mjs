@@ -19,8 +19,8 @@ export default class AssetPathRegistry {
     AssetPathRegistry.entries = Type.map();
 
     for (const [staticPath, assetPath] of Object.entries(assetManifest)) {
-      const key = Type.bitstring2(staticPath);
-      const value = Type.bitstring2(assetPath);
+      const key = Type.bitstring(staticPath);
+      const value = Type.bitstring(assetPath);
 
       AssetPathRegistry.entries = Erlang_Maps["put/3"](
         key,

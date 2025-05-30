@@ -70,39 +70,36 @@ export function defineModule60Fixture() {
                       ),
                       Type.list([
                         Type.tuple([
-                          Type.bitstring2("cid"),
+                          Type.bitstring("cid"),
                           Type.list([
                             Type.tuple([
                               Type.atom("text"),
-                              Type.bitstring2("component_61"),
+                              Type.bitstring("component_61"),
                             ]),
                           ]),
                         ]),
                       ]),
                       Type.list([
-                        Type.tuple([
-                          Type.atom("text"),
-                          Type.bitstring2("\n  "),
-                        ]),
+                        Type.tuple([Type.atom("text"), Type.bitstring("\n  ")]),
                         Type.tuple([
                           Type.atom("element"),
-                          Type.bitstring2("div"),
+                          Type.bitstring("div"),
                           Type.list(),
                           Type.list([
                             Type.tuple([
                               Type.atom("text"),
-                              Type.bitstring2("\n    "),
+                              Type.bitstring("\n    "),
                             ]),
                             Type.tuple([
                               Type.atom("element"),
-                              Type.bitstring2("button"),
+                              Type.bitstring("button"),
                               Type.list([
                                 Type.tuple([
-                                  Type.bitstring2("$click"),
+                                  Type.bitstring("$click"),
                                   Type.list([
                                     Type.tuple([
                                       Type.atom("text"),
-                                      Type.bitstring2("my_action"),
+                                      Type.bitstring("my_action"),
                                     ]),
                                   ]),
                                 ]),
@@ -110,19 +107,19 @@ export function defineModule60Fixture() {
                               Type.list([
                                 Type.tuple([
                                   Type.atom("text"),
-                                  Type.bitstring2("Click me"),
+                                  Type.bitstring("Click me"),
                                 ]),
                               ]),
                             ]),
                             Type.tuple([
                               Type.atom("text"),
-                              Type.bitstring2("\n  "),
+                              Type.bitstring("\n  "),
                             ]),
                           ]),
                         ]),
                         Type.tuple([
                           Type.atom("text"),
-                          Type.bitstring2("      \n"),
+                          Type.bitstring("      \n"),
                         ]),
                       ]),
                     ]),

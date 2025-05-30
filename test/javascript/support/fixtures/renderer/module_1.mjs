@@ -46,10 +46,10 @@ export function defineModule1Fixture() {
                   return Type.list([
                     Type.tuple([
                       Type.atom("element"),
-                      Type.bitstring2("div"),
+                      Type.bitstring("div"),
                       Type.list(),
                       Type.list([
-                        Type.tuple([Type.atom("text"), Type.bitstring2("abc")]),
+                        Type.tuple([Type.atom("text"), Type.bitstring("abc")]),
                       ]),
                     ]),
                   ]);

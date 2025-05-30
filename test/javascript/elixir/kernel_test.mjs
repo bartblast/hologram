@@ -18,7 +18,7 @@ describe("Elixir_Kernel", () => {
 
     it("delegates to inspect/2", () => {
       const result = inspect(Type.boolean(true));
-      assert.deepStrictEqual(result, Type.bitstring2("true"));
+      assert.deepStrictEqual(result, Type.bitstring("true"));
     });
   });
 
@@ -39,7 +39,7 @@ describe("Elixir_Kernel", () => {
     ]);
 
     const result = inspect(term, opts);
-    const expected = Type.bitstring2("%{a: 1, b: 2}");
+    const expected = Type.bitstring("%{a: 1, b: 2}");
 
     assert.deepStrictEqual(result, expected);
   });

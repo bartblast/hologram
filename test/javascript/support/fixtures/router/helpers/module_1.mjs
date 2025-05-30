@@ -30,7 +30,7 @@ export function defineModule1Fixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Type.bitstring2(
+          return Type.bitstring(
             "/hologram-test-fixtures-router-helpers-module1",
           );
         },

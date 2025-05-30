@@ -1,6 +1,6 @@
 "use strict";
 
-import Bitstring2 from "./bitstring2.mjs";
+import Bitstring from "./bitstring.mjs";
 import Interpreter from "./interpreter.mjs";
 import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
@@ -16,7 +16,7 @@ export default class Deserializer {
 
   static #deserializeBoxedBitstring(serialized) {
     if (serialized === "b") {
-      return Type.bitstring2("");
+      return Type.bitstring("");
     }
 
     const hex = serialized.slice(2);
@@ -28,7 +28,7 @@ export default class Deserializer {
       bytes[j] = parseInt(hex.slice(i, i + 2), 16);
     }
 
-    const bitstring = Bitstring2.fromBytes(bytes);
+    const bitstring = Bitstring.fromBytes(bytes);
     bitstring.leftoverBitCount = parseInt(serialized[1]);
 
     return bitstring;

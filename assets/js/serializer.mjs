@@ -1,6 +1,6 @@
 "use strict";
 
-import Bitstring2 from "./bitstring2.mjs";
+import Bitstring from "./bitstring.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 
 /*
@@ -27,8 +27,8 @@ export default class Serializer {
         case "atom":
           return `a${value.value}`;
 
-        case "bitstring2":
-          return Bitstring2.serialize(value);
+        case "bitstring":
+          return Bitstring.serialize(value);
 
         case "float":
           return `f${value.value}`;

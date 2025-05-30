@@ -1,6 +1,6 @@
 "use strict";
 
-import Bitstring2 from "./bitstring2.mjs";
+import Bitstring from "./bitstring.mjs";
 import Interpreter from "./interpreter.mjs";
 import Renderer from "./renderer.mjs";
 import Type from "./type.mjs";
@@ -109,7 +109,7 @@ export default class Operation {
   // which is equivalent to [{:text, "aaa"}, {:expression, {123}}, {:text, "bbb"}]
   #constructFromMultiChunkSyntaxSpec() {
     const nameBitstring = Renderer.valueDomToBitstring(this.#specDom);
-    const nameText = Bitstring2.toText(nameBitstring);
+    const nameText = Bitstring.toText(nameBitstring);
 
     this.name = Type.atom(nameText);
     this.params = Type.map([[Type.atom("event"), this.#eventParam]]);
@@ -120,7 +120,7 @@ export default class Operation {
   // Spec DOM: [text: "my_action"], which is equivalent to [{:text, "my_action"}]
   #constructFromTextSyntaxSpec() {
     const nameBitstring = this.#specDom.data[0].data[1];
-    const nameText = Bitstring2.toText(nameBitstring);
+    const nameText = Bitstring.toText(nameBitstring);
 
     this.name = Type.atom(nameText);
     this.params = Type.map([[Type.atom("event"), this.#eventParam]]);

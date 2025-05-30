@@ -12,7 +12,7 @@ import {
 import {defineModule1Fixture} from "./support/fixtures/ex_js_consistency/interpreter/module_1.mjs";
 import {defineModule1Fixture as defineMatchOperatorModule1Fixture} from "./support/fixtures/ex_js_consistency/match_operator/module_1.mjs";
 
-import Bitstring2 from "../../assets/js/bitstring2.mjs";
+import Bitstring from "../../assets/js/bitstring.mjs";
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
@@ -1842,20 +1842,20 @@ describe("Interpreter", () => {
       });
     });
 
-    describe("bitstring2", () => {
+    describe("bitstring", () => {
       describe("text", () => {
         it("empty", () => {
-          const result = Interpreter.inspect(Type.bitstring2(""));
+          const result = Interpreter.inspect(Type.bitstring(""));
           assert.equal(result, '""');
         });
 
         it("non-empty, printable", () => {
-          const result = Interpreter.inspect(Type.bitstring2("abc"));
+          const result = Interpreter.inspect(Type.bitstring("abc"));
           assert.equal(result, '"abc"');
         });
 
         it("non-empty, non-printable", () => {
-          const result = Interpreter.inspect(Type.bitstring2("a\x01b"));
+          const result = Interpreter.inspect(Type.bitstring("a\x01b"));
           assert.equal(result, "<<97, 1, 98>>");
         });
       });
@@ -1863,31 +1863,29 @@ describe("Interpreter", () => {
       describe("bytes", () => {
         it("that can be encoded as text", () => {
           // "abc"
-          const result = Interpreter.inspect(
-            Bitstring2.fromBytes([97, 98, 99]),
-          );
+          const result = Interpreter.inspect(Bitstring.fromBytes([97, 98, 99]));
           assert.equal(result, '"abc"');
         });
 
         it("byte-aligned, single", () => {
-          const result = Interpreter.inspect(Bitstring2.fromBytes([255]));
+          const result = Interpreter.inspect(Bitstring.fromBytes([255]));
           assert.equal(result, "<<255>>");
         });
 
         it("byte-aligned, multiple", () => {
-          const result = Interpreter.inspect(Bitstring2.fromBytes([255, 254]));
+          const result = Interpreter.inspect(Bitstring.fromBytes([255, 254]));
           assert.equal(result, "<<255, 254>>");
         });
 
         it("not byte-aligned, single", () => {
-          const result = Interpreter.inspect(Type.bitstring2([1, 1]));
+          const result = Interpreter.inspect(Type.bitstring([1, 1]));
           assert.equal(result, "<<3::size(2)>>");
         });
 
         it("not byte-aligned, multiple", () => {
           const result = Interpreter.inspect(
             // prettier-ignore
-            Type.bitstring2([
+            Type.bitstring([
               1, 1, 0, 0, 1, 1, 0, 0,
               1, 0, 1, 0, 1, 0, 1, 0,
               1, 1,
@@ -1978,7 +1976,7 @@ describe("Interpreter", () => {
       it("non-empty, with atom keys", () => {
         const map = Type.map([
           [Type.atom("a"), Type.integer(1)],
-          [Type.atom("b"), Type.bitstring2("xyz")],
+          [Type.atom("b"), Type.bitstring("xyz")],
         ]);
 
         const result = Interpreter.inspect(map);
@@ -1988,8 +1986,8 @@ describe("Interpreter", () => {
 
       it("non-empty, with non-atom keys", () => {
         const map = Type.map([
-          [Type.integer(9), Type.bitstring2("xyz")],
-          [Type.bitstring2("abc"), Type.float(2.3)],
+          [Type.integer(9), Type.bitstring("xyz")],
+          [Type.bitstring("abc"), Type.float(2.3)],
         ]);
 
         const result = Interpreter.inspect(map);
@@ -2118,7 +2116,7 @@ describe("Interpreter", () => {
     // non-number != non-number
     it("returns false for a boxed non-number not equal to another boxed non-number", () => {
       const left = Type.boolean(true);
-      const right = Type.bitstring2("abc");
+      const right = Type.bitstring("abc");
       const result = Interpreter.isEqual(left, right);
 
       assert.isFalse(result);
@@ -2163,7 +2161,7 @@ describe("Interpreter", () => {
     // integer != non-number
     it("returns false when a boxed integer is compared to a boxed value of non-number type", () => {
       const left = Type.integer(1);
-      const right = Type.bitstring2("1");
+      const right = Type.bitstring("1");
       const result = Interpreter.isEqual(left, right);
 
       assert.isFalse(result);
@@ -2208,7 +2206,7 @@ describe("Interpreter", () => {
     // float != non-number
     it("returns false when a boxed float is compared to a boxed value of non-number type", () => {
       const left = Type.float(1.0);
-      const right = Type.bitstring2("1.0");
+      const right = Type.bitstring("1.0");
       const result = Interpreter.isEqual(left, right);
 
       assert.isFalse(result);
@@ -2247,32 +2245,32 @@ describe("Interpreter", () => {
   });
 
   describe("isStrictlyEqual()", () => {
-    describe("bitstring2 type", () => {
+    describe("bitstring type", () => {
       describe("equal", () => {
         it("both have text field", () => {
-          const left = Type.bitstring2("abc");
-          const right = Type.bitstring2("abc");
+          const left = Type.bitstring("abc");
+          const right = Type.bitstring("abc");
 
           assert.isTrue(Interpreter.isStrictlyEqual(left, right));
         });
 
         it("both have bytes field", () => {
-          const left = Bitstring2.fromBytes([97, 98, 99]);
-          const right = Bitstring2.fromBytes([97, 98, 99]);
+          const left = Bitstring.fromBytes([97, 98, 99]);
+          const right = Bitstring.fromBytes([97, 98, 99]);
 
           assert.isTrue(Interpreter.isStrictlyEqual(left, right));
         });
 
         it("left has text field, right has bytes field", () => {
-          const left = Type.bitstring2("abc");
-          const right = Bitstring2.fromBytes([97, 98, 99]);
+          const left = Type.bitstring("abc");
+          const right = Bitstring.fromBytes([97, 98, 99]);
 
           assert.isTrue(Interpreter.isStrictlyEqual(left, right));
         });
 
         it("left has bytes field, right has text field", () => {
-          const left = Bitstring2.fromBytes([97, 98, 99]);
-          const right = Type.bitstring2("abc");
+          const left = Bitstring.fromBytes([97, 98, 99]);
+          const right = Type.bitstring("abc");
 
           assert.isTrue(Interpreter.isStrictlyEqual(left, right));
         });
@@ -2280,29 +2278,29 @@ describe("Interpreter", () => {
 
       describe("not equal - different length", () => {
         it("both have text field", () => {
-          const left = Type.bitstring2("abc");
-          const right = Type.bitstring2("ab");
+          const left = Type.bitstring("abc");
+          const right = Type.bitstring("ab");
 
           assert.isFalse(Interpreter.isStrictlyEqual(left, right));
         });
 
         it("both have bytes field", () => {
-          const left = Bitstring2.fromBytes([97, 98, 99]);
-          const right = Bitstring2.fromBytes([97, 98]);
+          const left = Bitstring.fromBytes([97, 98, 99]);
+          const right = Bitstring.fromBytes([97, 98]);
 
           assert.isFalse(Interpreter.isStrictlyEqual(left, right));
         });
 
         it("left has text field, right has bytes field", () => {
-          const left = Type.bitstring2("abc");
-          const right = Bitstring2.fromBytes([97, 98]);
+          const left = Type.bitstring("abc");
+          const right = Bitstring.fromBytes([97, 98]);
 
           assert.isFalse(Interpreter.isStrictlyEqual(left, right));
         });
 
         it("left has bytes field, right has text field", () => {
-          const left = Bitstring2.fromBytes([97, 98]);
-          const right = Type.bitstring2("abc");
+          const left = Bitstring.fromBytes([97, 98]);
+          const right = Type.bitstring("abc");
 
           assert.isFalse(Interpreter.isStrictlyEqual(left, right));
         });
@@ -2310,38 +2308,38 @@ describe("Interpreter", () => {
 
       describe("not equal - different content", () => {
         it("both have text field", () => {
-          const left = Type.bitstring2("abc");
-          const right = Type.bitstring2("xyz");
+          const left = Type.bitstring("abc");
+          const right = Type.bitstring("xyz");
 
           assert.isFalse(Interpreter.isStrictlyEqual(left, right));
         });
 
         it("both have bytes field", () => {
-          const left = Bitstring2.fromBytes([97, 98, 99]);
-          const right = Bitstring2.fromBytes([97, 98, 100]);
+          const left = Bitstring.fromBytes([97, 98, 99]);
+          const right = Bitstring.fromBytes([97, 98, 100]);
 
           assert.isFalse(Interpreter.isStrictlyEqual(left, right));
         });
 
         it("left has text field, right has bytes field", () => {
-          const left = Type.bitstring2("abc");
-          const right = Bitstring2.fromBytes([97, 98, 100]);
+          const left = Type.bitstring("abc");
+          const right = Bitstring.fromBytes([97, 98, 100]);
 
           assert.isFalse(Interpreter.isStrictlyEqual(left, right));
         });
 
         it("left has bytes field, right has text field", () => {
-          const left = Bitstring2.fromBytes([97, 98, 100]);
-          const right = Type.bitstring2("abc");
+          const left = Bitstring.fromBytes([97, 98, 100]);
+          const right = Type.bitstring("abc");
 
           assert.isFalse(Interpreter.isStrictlyEqual(left, right));
         });
 
         it("leftover bits count is different", () => {
-          const left = Bitstring2.fromBytes([97, 98, 99]);
+          const left = Bitstring.fromBytes([97, 98, 99]);
           left.leftoverBitCount = 2;
 
-          const right = Bitstring2.fromBytes([97, 98, 99]);
+          const right = Bitstring.fromBytes([97, 98, 99]);
           right.leftoverBitCount = 3;
 
           assert.isFalse(Interpreter.isStrictlyEqual(left, right));
@@ -2452,10 +2450,10 @@ describe("Interpreter", () => {
     });
 
     describe("bistring type", () => {
-      const emptyBitstringPattern = Type.bitstringPattern2([]);
-      const emptyBitstringValue = Type.bitstring2([]);
+      const emptyBitstringPattern = Type.bitstringPattern([]);
+      const emptyBitstringValue = Type.bitstring([]);
 
-      const multiSegmentBitstringValue = Type.bitstring2([
+      const multiSegmentBitstringValue = Type.bitstring([
         Type.bitstringSegment(Type.integer(1), {type: "integer"}),
         Type.bitstringSegment(Type.integer(2), {type: "integer"}),
       ]);
@@ -2473,7 +2471,7 @@ describe("Interpreter", () => {
 
       // <<>> = <<1::1, 0::1>>
       it("left empty bitstring != right non-empty bitstring", () => {
-        const myBitstring = Type.bitstring2([1, 0]);
+        const myBitstring = Type.bitstring([1, 0]);
 
         assertBoxedError(
           () =>
@@ -2501,16 +2499,16 @@ describe("Interpreter", () => {
 
       it("left literal single-segment bitstring == right literal single-segment bitstring", () => {
         const result = Interpreter.matchOperator(
-          Type.bitstring2([
+          Type.bitstring([
             Type.bitstringSegment(Type.integer(1), {type: "integer"}),
           ]),
-          Type.bitstringPattern2([
+          Type.bitstringPattern([
             Type.bitstringSegment(Type.integer(1), {type: "integer"}),
           ]),
           context,
         );
 
-        const expected = Type.bitstring2([
+        const expected = Type.bitstring([
           Type.bitstringSegment(Type.integer(1), {type: "integer"}),
         ]);
 
@@ -2518,7 +2516,7 @@ describe("Interpreter", () => {
       });
 
       it("left literal single-segment bitstring != right literal single-segment bitstring", () => {
-        const myBitstring = Type.bitstring2([
+        const myBitstring = Type.bitstring([
           Type.bitstringSegment(Type.integer(2), {type: "integer"}),
         ]);
 
@@ -2526,7 +2524,7 @@ describe("Interpreter", () => {
           () =>
             Interpreter.matchOperator(
               myBitstring,
-              Type.bitstringPattern2([
+              Type.bitstringPattern([
                 Type.bitstringSegment(Type.integer(1), {type: "integer"}),
               ]),
               context,
@@ -2543,7 +2541,7 @@ describe("Interpreter", () => {
           () =>
             Interpreter.matchOperator(
               myAtom,
-              Type.bitstringPattern2([
+              Type.bitstringPattern([
                 Type.bitstringSegment(Type.integer(1), {type: "integer"}),
               ]),
               context,
@@ -2555,7 +2553,7 @@ describe("Interpreter", () => {
 
       it("multiple literal bitstring segments", () => {
         const result = Interpreter.matchOperator(
-          Type.bitstring2([
+          Type.bitstring([
             Type.bitstringSegment(Type.integer(1), {
               type: "integer",
               size: Type.integer(1),
@@ -2565,7 +2563,7 @@ describe("Interpreter", () => {
               size: Type.integer(1),
             }),
           ]),
-          Type.bitstringPattern2([
+          Type.bitstringPattern([
             Type.bitstringSegment(Type.integer(1), {
               type: "integer",
               size: Type.integer(1),
@@ -2578,7 +2576,7 @@ describe("Interpreter", () => {
           context,
         );
 
-        const expected = Type.bitstring2([
+        const expected = Type.bitstring([
           Type.bitstringSegment(Type.integer(1), {
             type: "integer",
             size: Type.integer(1),
@@ -2594,18 +2592,18 @@ describe("Interpreter", () => {
 
       it("multiple literal float segments", () => {
         const result = Interpreter.matchOperator(
-          Type.bitstring2([
+          Type.bitstring([
             Type.bitstringSegment(Type.float(1.0), {type: "float"}),
             Type.bitstringSegment(Type.float(2.0), {type: "float"}),
           ]),
-          Type.bitstringPattern2([
+          Type.bitstringPattern([
             Type.bitstringSegment(Type.float(1.0), {type: "float"}),
             Type.bitstringSegment(Type.float(2.0), {type: "float"}),
           ]),
           context,
         );
 
-        const expected = Type.bitstring2([
+        const expected = Type.bitstring([
           Type.bitstringSegment(Type.float(1.0), {type: "float"}),
           Type.bitstringSegment(Type.float(2.0), {type: "float"}),
         ]);
@@ -2615,18 +2613,18 @@ describe("Interpreter", () => {
 
       it("multiple literal integer segments", () => {
         const result = Interpreter.matchOperator(
-          Type.bitstring2([
+          Type.bitstring([
             Type.bitstringSegment(Type.integer(1), {type: "integer"}),
             Type.bitstringSegment(Type.integer(2), {type: "integer"}),
           ]),
-          Type.bitstringPattern2([
+          Type.bitstringPattern([
             Type.bitstringSegment(Type.integer(1), {type: "integer"}),
             Type.bitstringSegment(Type.integer(2), {type: "integer"}),
           ]),
           context,
         );
 
-        const expected = Type.bitstring2([
+        const expected = Type.bitstring([
           Type.bitstringSegment(Type.integer(1), {type: "integer"}),
           Type.bitstringSegment(Type.integer(2), {type: "integer"}),
         ]);
@@ -2636,18 +2634,18 @@ describe("Interpreter", () => {
 
       it("multiple literal string segments", () => {
         const result = Interpreter.matchOperator(
-          Type.bitstring2([
+          Type.bitstring([
             Type.bitstringSegment(Type.string("aaa"), {type: "binary"}),
             Type.bitstringSegment(Type.string("bbb"), {type: "binary"}),
           ]),
-          Type.bitstringPattern2([
+          Type.bitstringPattern([
             Type.bitstringSegment(Type.string("aaa"), {type: "binary"}),
             Type.bitstringSegment(Type.string("bbb"), {type: "binary"}),
           ]),
           context,
         );
 
-        const expected = Type.bitstring2([
+        const expected = Type.bitstring([
           Type.bitstringSegment(Type.string("aaa"), {type: "binary"}),
           Type.bitstringSegment(Type.string("bbb"), {type: "binary"}),
         ]);
@@ -2657,13 +2655,13 @@ describe("Interpreter", () => {
 
       // <<x::integer>> = <<1>>
       it("left single-segment bitstring with variable pattern == right bistring", () => {
-        const myBitstring = Type.bitstring2([
+        const myBitstring = Type.bitstring([
           Type.bitstringSegment(Type.integer(1), {type: "integer"}),
         ]);
 
         const result = Interpreter.matchOperator(
           myBitstring,
-          Type.bitstringPattern2([
+          Type.bitstringPattern([
             Type.bitstringSegment(Type.variablePattern("x"), {type: "integer"}),
           ]),
           context,
@@ -2683,7 +2681,7 @@ describe("Interpreter", () => {
       it("left multiple-segment bitstring with variable patterns == right bitstring", () => {
         const result = Interpreter.matchOperator(
           multiSegmentBitstringValue,
-          Type.bitstringPattern2([
+          Type.bitstringPattern([
             Type.bitstringSegment(Type.variablePattern("x"), {type: "integer"}),
             Type.bitstringSegment(Type.variablePattern("y"), {type: "integer"}),
           ]),
@@ -2707,7 +2705,7 @@ describe("Interpreter", () => {
           () =>
             Interpreter.matchOperator(
               multiSegmentBitstringValue,
-              Type.bitstringPattern2([
+              Type.bitstringPattern([
                 Type.bitstringSegment(Type.integer(3), {type: "integer"}),
                 Type.bitstringSegment(Type.variablePattern("y"), {
                   type: "integer",
@@ -2726,7 +2724,7 @@ describe("Interpreter", () => {
           () =>
             Interpreter.matchOperator(
               multiSegmentBitstringValue,
-              Type.bitstringPattern2([
+              Type.bitstringPattern([
                 Type.bitstringSegment(Type.integer(1), {type: "integer"}),
                 Type.bitstringSegment(Type.integer(2), {
                   type: "integer",
@@ -2746,7 +2744,7 @@ describe("Interpreter", () => {
           () =>
             Interpreter.matchOperator(
               multiSegmentBitstringValue,
-              Type.bitstringPattern2([
+              Type.bitstringPattern([
                 Type.bitstringSegment(Type.integer(1), {type: "integer"}),
                 Type.bitstringSegment(Type.integer(2), {
                   type: "integer",
@@ -2774,7 +2772,7 @@ describe("Interpreter", () => {
 
       // <<value::float-size(64)-signed>> = <<123.45::size(64)>>
       it("float type modifier, 64-bit size modifier", () => {
-        const left = Type.bitstringPattern2([
+        const left = Type.bitstringPattern([
           Type.bitstringSegment(Type.variablePattern("value"), {
             type: "float",
             size: Type.integer(64),
@@ -2782,7 +2780,7 @@ describe("Interpreter", () => {
           }),
         ]);
 
-        const right = Type.bitstring2([
+        const right = Type.bitstring([
           Type.bitstringSegment(Type.float(123.45), {
             type: "float",
             size: Type.integer(64),
@@ -2801,7 +2799,7 @@ describe("Interpreter", () => {
 
       // <<value::float-size(32)-signed>> = <<123.45::size(32)>>
       it("float type modifier, 32-bit size modifier", () => {
-        const left = Type.bitstringPattern2([
+        const left = Type.bitstringPattern([
           Type.bitstringSegment(Type.variablePattern("value"), {
             type: "float",
             size: Type.integer(32),
@@ -2809,7 +2807,7 @@ describe("Interpreter", () => {
           }),
         ]);
 
-        const right = Type.bitstring2([
+        const right = Type.bitstring([
           Type.bitstringSegment(Type.float(123.45), {
             type: "float",
             size: Type.integer(32),
@@ -2828,7 +2826,7 @@ describe("Interpreter", () => {
 
       // <<value::float-size(16)-signed>> = <<123.45::size(16)>>
       it("float type modifier, 16-bit size modifier", () => {
-        const left = Type.bitstringPattern2([
+        const left = Type.bitstringPattern([
           Type.bitstringSegment(Type.variablePattern("value"), {
             type: "float",
             size: Type.integer(16),
@@ -2836,7 +2834,7 @@ describe("Interpreter", () => {
           }),
         ]);
 
-        const right = Type.bitstring2([
+        const right = Type.bitstring([
           Type.bitstringSegment(Type.float(123.45), {
             type: "float",
             size: Type.integer(16),
@@ -2855,7 +2853,7 @@ describe("Interpreter", () => {
 
       // <<_value::float-size(size)-signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
       it("float type modifier, unsupported size modifier", () => {
-        const left = Type.bitstringPattern2([
+        const left = Type.bitstringPattern([
           Type.bitstringSegment(Type.variablePattern("value"), {
             type: "float",
             size: Type.integer(8),
@@ -2864,7 +2862,7 @@ describe("Interpreter", () => {
         ]);
 
         // 170 == 0b10101010
-        const right = Type.bitstring2([1, 0, 1, 0, 1, 0, 1, 0]);
+        const right = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]);
 
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
@@ -2875,7 +2873,7 @@ describe("Interpreter", () => {
 
       // <<value::integer-signed>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
       it("integer type modifier", () => {
-        const left = Type.bitstringPattern2([
+        const left = Type.bitstringPattern([
           Type.bitstringSegment(Type.variablePattern("value"), {
             type: "integer",
             signedness: "signed",
@@ -2883,7 +2881,7 @@ describe("Interpreter", () => {
         ]);
 
         // 170 == 0b10101010
-        const right = Type.bitstring2([1, 0, 1, 0, 1, 0, 1, 0]);
+        const right = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]);
 
         const result = Interpreter.matchOperator(right, left, context);
 
@@ -2918,7 +2916,7 @@ describe("Interpreter", () => {
 
       // <<value::float-size(64)-unsigned>> = <<123.45::size(64)>>
       it("float type modifier, 64-bit size modifier", () => {
-        const left = Type.bitstringPattern2([
+        const left = Type.bitstringPattern([
           Type.bitstringSegment(Type.variablePattern("value"), {
             type: "float",
             size: Type.integer(64),
@@ -2926,7 +2924,7 @@ describe("Interpreter", () => {
           }),
         ]);
 
-        const right = Type.bitstring2([
+        const right = Type.bitstring([
           Type.bitstringSegment(Type.float(123.45), {
             type: "float",
             size: Type.integer(64),
@@ -2945,7 +2943,7 @@ describe("Interpreter", () => {
 
       // <<value::float-size(32)-unsigned>> = <<123.45::size(32)>>
       it("float type modifier, 32-bit size modifier", () => {
-        const left = Type.bitstringPattern2([
+        const left = Type.bitstringPattern([
           Type.bitstringSegment(Type.variablePattern("value"), {
             type: "float",
             size: Type.integer(32),
@@ -2953,7 +2951,7 @@ describe("Interpreter", () => {
           }),
         ]);
 
-        const right = Type.bitstring2([
+        const right = Type.bitstring([
           Type.bitstringSegment(Type.float(123.45), {
             type: "float",
             size: Type.integer(32),
@@ -2972,7 +2970,7 @@ describe("Interpreter", () => {
 
       // <<value::float-size(16)-unsigned>> = <<123.45::size(16)>>
       it("float type modifier, 16-bit size modifier", () => {
-        const left = Type.bitstringPattern2([
+        const left = Type.bitstringPattern([
           Type.bitstringSegment(Type.variablePattern("value"), {
             type: "float",
             size: Type.integer(16),
@@ -2980,7 +2978,7 @@ describe("Interpreter", () => {
           }),
         ]);
 
-        const right = Type.bitstring2([
+        const right = Type.bitstring([
           Type.bitstringSegment(Type.float(123.45), {
             type: "float",
             size: Type.integer(16),
@@ -2999,7 +2997,7 @@ describe("Interpreter", () => {
 
       // <<_value::float-size(size)-unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
       it("float type modifier, unsupported size modifier", () => {
-        const left = Type.bitstringPattern2([
+        const left = Type.bitstringPattern([
           Type.bitstringSegment(Type.variablePattern("value"), {
             type: "float",
             size: Type.integer(8),
@@ -3008,7 +3006,7 @@ describe("Interpreter", () => {
         ]);
 
         // 170 == 0b10101010
-        const right = Type.bitstring2([1, 0, 1, 0, 1, 0, 1, 0]);
+        const right = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]);
 
         assertBoxedError(
           () => Interpreter.matchOperator(right, left, context),
@@ -3019,7 +3017,7 @@ describe("Interpreter", () => {
 
       // <<value::integer-unsigned>> = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
       it("integer type modifier", () => {
-        const left = Type.bitstringPattern2([
+        const left = Type.bitstringPattern([
           Type.bitstringSegment(Type.variablePattern("value"), {
             type: "integer",
             signedness: "unsigned",
@@ -3027,7 +3025,7 @@ describe("Interpreter", () => {
         ]);
 
         // 170 == 0b10101010
-        const right = Type.bitstring2([1, 0, 1, 0, 1, 0, 1, 0]);
+        const right = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0]);
 
         const result = Interpreter.matchOperator(right, left, context);
 

@@ -306,14 +306,14 @@ describe("CommandQueue", () => {
   });
 
   describe("push()", () => {
-    const name = Type.bitstring2("my_command");
+    const name = Type.bitstring("my_command");
 
     const params = Type.map([
       [Type.atom("a"), Type.integer(1)],
       [Type.atom("b"), Type.integer(2)],
     ]);
 
-    const target = Type.bitstring2("my_component");
+    const target = Type.bitstring("my_component");
 
     beforeEach(() => {
       CommandQueue.items = {};

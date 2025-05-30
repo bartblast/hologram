@@ -11,10 +11,10 @@ import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
-const cid1 = Type.bitstring2("my_component_1");
-const cid2 = Type.bitstring2("my_component_2");
-const cid3 = Type.bitstring2("my_component_3");
-const cid4 = Type.bitstring2("my_component_4");
+const cid1 = Type.bitstring("my_component_1");
+const cid2 = Type.bitstring("my_component_2");
+const cid3 = Type.bitstring("my_component_3");
+const cid4 = Type.bitstring("my_component_4");
 
 const module1 = Type.alias("MyModule1");
 const module2 = Type.alias("MyModule2");

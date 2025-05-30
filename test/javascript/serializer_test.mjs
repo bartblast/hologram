@@ -38,14 +38,14 @@ describe("Serializer", () => {
 
       describe("bitstring", () => {
         it("top-level", () => {
-          const term = Type.bitstring2('a"bc');
+          const term = Type.bitstring('a"bc');
           const expected = '[2,"b061226263"]';
 
           assert.equal(serialize(term), expected);
         });
 
         it("nested", () => {
-          const term = {a: Type.bitstring2('a"bc')};
+          const term = {a: Type.bitstring('a"bc')};
           const expected = '[2,{"a":"b061226263"}]';
 
           assert.equal(serialize(term), expected);
@@ -119,13 +119,13 @@ describe("Serializer", () => {
                 4,
                 [
                   (param) => Type.integer(param),
-                  (param) => Type.bitstring2(param),
+                  (param) => Type.bitstring(param),
                 ],
                 context,
               );
 
               const expected =
-                '[2,{"type":"sanonymous_function","arity":4,"capturedFunction":"sdate_to_string","capturedModule":"sCalendar.ISO","clauses":["u(param) => Type.integer(param)","u(param) => Type.bitstring2(param)"],"context":{"module":"aElixir.MyModule","vars":{}},"uniqueId":1}]';
+                '[2,{"type":"sanonymous_function","arity":4,"capturedFunction":"sdate_to_string","capturedModule":"sCalendar.ISO","clauses":["u(param) => Type.integer(param)","u(param) => Type.bitstring(param)"],"context":{"module":"aElixir.MyModule","vars":{}},"uniqueId":1}]';
 
               assert.equal(serialize(term, "client"), expected);
             });
@@ -156,14 +156,14 @@ describe("Serializer", () => {
                   4,
                   [
                     (param) => Type.integer(param),
-                    (param) => Type.bitstring2(param),
+                    (param) => Type.bitstring(param),
                   ],
                   context,
                 ),
               };
 
               const expected =
-                '[2,{"a":{"type":"sanonymous_function","arity":4,"capturedFunction":"sdate_to_string","capturedModule":"sCalendar.ISO","clauses":["u(param) => Type.integer(param)","u(param) => Type.bitstring2(param)"],"context":{"module":"aElixir.MyModule","vars":{}},"uniqueId":1}}]';
+                '[2,{"a":{"type":"sanonymous_function","arity":4,"capturedFunction":"sdate_to_string","capturedModule":"sCalendar.ISO","clauses":["u(param) => Type.integer(param)","u(param) => Type.bitstring(param)"],"context":{"module":"aElixir.MyModule","vars":{}},"uniqueId":1}}]';
 
               assert.equal(serialize(term, "client"), expected);
             });
@@ -290,7 +290,7 @@ describe("Serializer", () => {
         it("top-level", () => {
           const term = Type.map([
             [Type.atom("x"), Type.integer(1)],
-            [Type.bitstring2("y"), Type.float(1.23)],
+            [Type.bitstring("y"), Type.float(1.23)],
           ]);
 
           const expected = '[2,{"t":"m","d":[["ax","i1"],["b079","f1.23"]]}]';
@@ -302,7 +302,7 @@ describe("Serializer", () => {
           const term = {
             a: Type.map([
               [Type.atom("x"), Type.integer(1)],
-              [Type.bitstring2("y"), Type.float(1.23)],
+              [Type.bitstring("y"), Type.float(1.23)],
             ]),
           };
 
@@ -596,17 +596,17 @@ describe("Serializer", () => {
         describe("function", () => {
           describe("longhand syntax", () => {
             // prettier-ignore
-            const fun = function (param1, param2) { const integer = Type.integer(param1); const binary = Type.bitstring2('a"bc'); return Type.list([integer, binary, param2]); };
+            const fun = function (param1, param2) { const integer = Type.integer(param1); const binary = Type.bitstring('a"bc'); return Type.list([integer, binary, param2]); };
 
             it("top-level", () => {
-              const expected = `[2,"ufunction (param1, param2) { const integer = Type.integer(param1); const binary = Type.bitstring2('a\\"bc'); return Type.list([integer, binary, param2]); }"]`;
+              const expected = `[2,"ufunction (param1, param2) { const integer = Type.integer(param1); const binary = Type.bitstring('a\\"bc'); return Type.list([integer, binary, param2]); }"]`;
 
               assert.equal(serialize(fun), expected);
             });
 
             it("nested", () => {
               const term = {a: fun};
-              const expected = `[2,{"a":"ufunction (param1, param2) { const integer = Type.integer(param1); const binary = Type.bitstring2('a\\"bc'); return Type.list([integer, binary, param2]); }"}]`;
+              const expected = `[2,{"a":"ufunction (param1, param2) { const integer = Type.integer(param1); const binary = Type.bitstring('a\\"bc'); return Type.list([integer, binary, param2]); }"}]`;
 
               assert.equal(serialize(term), expected);
             });
@@ -614,17 +614,17 @@ describe("Serializer", () => {
 
           describe("shorthand syntax", () => {
             // prettier-ignore
-            const fun = (param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring2('a"bc'); return Type.list([integer, binary, param2]); };
+            const fun = (param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring('a"bc'); return Type.list([integer, binary, param2]); };
 
             it("top-level", () => {
-              const expected = `[2,"u(param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring2('a\\"bc'); return Type.list([integer, binary, param2]); }"]`;
+              const expected = `[2,"u(param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring('a\\"bc'); return Type.list([integer, binary, param2]); }"]`;
 
               assert.equal(serialize(fun), expected);
             });
 
             it("nested", () => {
               const term = {a: fun};
-              const expected = `[2,{"a":"u(param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring2('a\\"bc'); return Type.list([integer, binary, param2]); }"}]`;
+              const expected = `[2,{"a":"u(param1, param2) => { const integer = Type.integer(param1); const binary = Type.bitstring('a\\"bc'); return Type.list([integer, binary, param2]); }"}]`;
 
               assert.equal(serialize(term), expected);
             });

@@ -57,7 +57,7 @@ export function defineModule38Fixture() {
                   return Type.list([
                     Type.tuple([
                       Type.atom("text"),
-                      Type.bitstring2("prop_aaa = "),
+                      Type.bitstring("prop_aaa = "),
                     ]),
                     Type.tuple([
                       Type.atom("expression"),

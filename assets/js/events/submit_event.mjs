@@ -7,8 +7,8 @@ export default class SubmitEvent {
     const formData = new FormData(event.target);
 
     const mapData = [...formData.entries()].map(([name, value]) => [
-      Type.bitstring2(name),
-      Type.bitstring2(value),
+      Type.bitstring(name),
+      Type.bitstring(value),
     ]);
 
     return Type.map(mapData);

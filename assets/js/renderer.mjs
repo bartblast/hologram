@@ -2,7 +2,7 @@
 
 "use strict";
 
-import Bitstring2 from "./bitstring2.mjs";
+import Bitstring from "./bitstring.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Hologram from "./hologram.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
@@ -34,7 +34,7 @@ export default class Renderer {
         return Renderer.#renderElement(dom, context, slots, defaultTarget);
 
       case "expression":
-        return Bitstring2.toText(
+        return Bitstring.toText(
           Elixir_String_Chars["to_string/1"](dom.data[1].data[0]),
         );
 
@@ -43,7 +43,7 @@ export default class Renderer {
           dom.data[1],
           context,
           slots,
-          Type.bitstring2("page"),
+          Type.bitstring("page"),
         );
 
       case "public_comment":
@@ -55,7 +55,7 @@ export default class Renderer {
         );
 
       case "text":
-        return Bitstring2.toText(dom.data[1]);
+        return Bitstring.toText(dom.data[1]);
     }
   }
 
@@ -63,7 +63,7 @@ export default class Renderer {
   static renderPage(pageModule, pageParams) {
     const pageModuleRef = Interpreter.moduleRef(pageModule);
 
-    const cid = Type.bitstring2("page");
+    const cid = Type.bitstring("page");
     const pageComponentStruct = ComponentRegistry.getComponentStruct(cid);
 
     const pageVdom = Renderer.#renderPageInsideLayout(
@@ -95,7 +95,7 @@ export default class Renderer {
       }
     });
 
-    return Bitstring2.concat(bitstringChunks);
+    return Bitstring.concat(bitstringChunks);
   }
 
   // Based on build_layout_props_dom/2
@@ -107,7 +107,7 @@ export default class Renderer {
 
     const propsWithCid = Erlang_Maps["merge/2"](
       propsFromPage,
-      Type.map([[Type.atom("cid"), Type.bitstring2("layout")]]),
+      Type.map([[Type.atom("cid"), Type.bitstring("layout")]]),
     );
 
     const propsWithPageState = Erlang_Maps["merge/2"](propsWithCid, pageState);
@@ -115,7 +115,7 @@ export default class Renderer {
     return Type.list(
       Object.values(propsWithPageState.data).map(([name, value]) =>
         Type.tuple([
-          Type.bitstring2(name.value),
+          Type.bitstring(name.value),
           Type.keywordList([[Type.atom("expression"), Type.tuple([value])]]),
         ]),
       ),
@@ -172,7 +172,7 @@ export default class Renderer {
   static #expandSlotsInElementNode(dom, slots) {
     const [nodeType, tagName, attrsDom, childrenDom] = dom.data;
 
-    if (Interpreter.isStrictlyEqual(tagName, Type.bitstring2("slot"))) {
+    if (Interpreter.isStrictlyEqual(tagName, Type.bitstring("slot"))) {
       const slotDom = Interpreter.accessKeywordListElement(
         slots,
         Type.atom("default"),
@@ -232,7 +232,7 @@ export default class Renderer {
       .data.filter((prop) => Renderer.#contextKey(prop.data[2]) === null)
       .map((prop) => Elixir_String_Chars["to_string/1"](prop.data[0]));
 
-    const allowedPropNames = registeredPropNames.concat(Type.bitstring2("cid"));
+    const allowedPropNames = registeredPropNames.concat(Type.bitstring("cid"));
 
     return propsDom.data.filter((propDom) =>
       allowedPropNames.some((name) =>
@@ -369,7 +369,7 @@ export default class Renderer {
 
   // Based on render_attribute/2
   static #renderAttribute(name, valueDom) {
-    const nameText = Bitstring2.toText(name);
+    const nameText = Bitstring.toText(name);
 
     // []
     if (valueDom.data.length === 0) {
@@ -398,7 +398,7 @@ export default class Renderer {
     }
 
     return attrsDom.data
-      .filter((attrDom) => !Bitstring2.toText(attrDom.data[0]).startsWith("$"))
+      .filter((attrDom) => !Bitstring.toText(attrDom.data[0]).startsWith("$"))
       .reduce((acc, attrDom) => {
         const [nameText, valueText] = Renderer.#renderAttribute(
           attrDom.data[0],
@@ -449,7 +449,7 @@ export default class Renderer {
 
   // Based on render_dom/3 (element & slot case)
   static #renderElement(dom, context, slots, defaultTarget) {
-    const tagName = Bitstring2.toText(dom.data[1]);
+    const tagName = Bitstring.toText(dom.data[1]);
 
     if (tagName === "slot") {
       return Renderer.#renderSlotElement(slots, context, defaultTarget);
@@ -500,9 +500,9 @@ export default class Renderer {
     }
 
     return attrsDom.data
-      .filter((attrDom) => Bitstring2.toText(attrDom.data[0]).startsWith("$"))
+      .filter((attrDom) => Bitstring.toText(attrDom.data[0]).startsWith("$"))
       .reduce((acc, attrDom) => {
-        const nameText = Bitstring2.toText(attrDom.data[0]).substring(1);
+        const nameText = Bitstring.toText(attrDom.data[0]).substring(1);
         acc[nameText] = (event) =>
           Hologram.handleUiEvent(
             event,
@@ -566,7 +566,7 @@ export default class Renderer {
       layoutNode,
       pageEmittedContext,
       Type.keywordList(),
-      Type.bitstring2("layout"),
+      Type.bitstring("layout"),
     );
   }
 
@@ -635,6 +635,6 @@ export default class Renderer {
   }
 
   static #valueDomToText(valueDom) {
-    return Bitstring2.toText(Renderer.valueDomToBitstring(valueDom));
+    return Bitstring.toText(Renderer.valueDomToBitstring(valueDom));
   }
 }

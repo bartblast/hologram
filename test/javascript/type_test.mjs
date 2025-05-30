@@ -34,7 +34,7 @@ describe("Type", () => {
         [Type.atom("b"), Type.integer(2)],
       ]);
 
-      const target = Type.bitstring2("my_target");
+      const target = Type.bitstring("my_target");
 
       const result = Type.actionStruct({name, params, target});
 
@@ -89,12 +89,12 @@ describe("Type", () => {
     assert.deepStrictEqual(result, expected);
   });
 
-  describe("bitstring2()", () => {
+  describe("bitstring()", () => {
     it("builds bitstring from string value", () => {
-      const result = Type.bitstring2("abc");
+      const result = Type.bitstring("abc");
 
       const expected = {
-        type: "bitstring2",
+        type: "bitstring",
         text: "abc",
         bytes: null,
         leftoverBitCount: 0,
@@ -113,10 +113,10 @@ describe("Type", () => {
         type: "integer",
       });
 
-      const result = Type.bitstring2([segment1, segment2]);
+      const result = Type.bitstring([segment1, segment2]);
 
       const expected = {
-        type: "bitstring2",
+        type: "bitstring",
         text: null,
         bytes: new Uint8Array([97, 98]),
         leftoverBitCount: 0,
@@ -127,10 +127,10 @@ describe("Type", () => {
     });
 
     it("builds bitstring from bits array", () => {
-      const result = Type.bitstring2([1, 0, 1, 0, 1]);
+      const result = Type.bitstring([1, 0, 1, 0, 1]);
 
       const expected = {
-        type: "bitstring2",
+        type: "bitstring",
         text: null,
         bytes: new Uint8Array([168]),
         leftoverBitCount: 5,
@@ -141,14 +141,14 @@ describe("Type", () => {
     });
   });
 
-  it("bitstringPattern2()", () => {
+  it("bitstringPattern()", () => {
     const segment1 = Type.bitstringSegment(Type.integer(1), {type: "integer"});
     const segment2 = Type.bitstringSegment(Type.integer(2), {type: "integer"});
 
-    const result = Type.bitstringPattern2([segment1, segment2]);
+    const result = Type.bitstringPattern([segment1, segment2]);
 
     const expected = {
-      type: "bitstring_pattern2",
+      type: "bitstring_pattern",
       segments: [segment1, segment2],
     };
 
@@ -250,7 +250,7 @@ describe("Type", () => {
         [Type.atom("b"), Type.integer(2)],
       ]);
 
-      const target = Type.bitstring2("my_target");
+      const target = Type.bitstring("my_target");
 
       const result = Type.commandStruct({name, params, target});
 
@@ -358,7 +358,7 @@ describe("Type", () => {
     });
 
     it("encodes boxed bitstring value as map key", () => {
-      const bitstring = Type.bitstring2("Hologram");
+      const bitstring = Type.bitstring("Hologram");
       const result = Type.encodeMapKey(bitstring);
 
       assert.equal(result, "b0486f6c6f6772616d");
@@ -430,7 +430,7 @@ describe("Type", () => {
       data: {
         "atom(__exception__)": [Type.atom("__exception__"), Type.boolean(true)],
         "atom(__struct__)": [Type.atom("__struct__"), Type.alias("Aaa.Bbb")],
-        "atom(message)": [Type.atom("message"), Type.bitstring2("abc")],
+        "atom(message)": [Type.atom("message"), Type.bitstring("abc")],
       },
     };
 
@@ -532,7 +532,7 @@ describe("Type", () => {
     });
 
     it("returns false if the term is not an atom", () => {
-      const term = Type.bitstring2("Aaa.Bbb");
+      const term = Type.bitstring("Aaa.Bbb");
       assert.isFalse(Type.isAlias(term));
     });
   });
@@ -570,43 +570,43 @@ describe("Type", () => {
     });
   });
 
-  describe("isBinary2()", () => {
-    it("returns true if the term is a binary bitsting2", () => {
-      const term = Type.bitstring2("abc");
-      assert.isTrue(Type.isBinary2(term));
+  describe("isBinary()", () => {
+    it("returns true if the term is a binary bitsting", () => {
+      const term = Type.bitstring("abc");
+      assert.isTrue(Type.isBinary(term));
     });
 
-    it("returns false if the term is a non-binary bitstring2", () => {
-      const term = Type.bitstring2([0, 1, 0]);
-      assert.isFalse(Type.isBinary2(term));
+    it("returns false if the term is a non-binary bitstring", () => {
+      const term = Type.bitstring([0, 1, 0]);
+      assert.isFalse(Type.isBinary(term));
     });
 
-    it("returns false if the term is not a bitstring2", () => {
+    it("returns false if the term is not a bitstring", () => {
       const term = Type.atom("abc");
-      assert.isFalse(Type.isBinary2(term));
+      assert.isFalse(Type.isBinary(term));
     });
   });
 
-  describe("isBitstring2()", () => {
-    it("returns true if the term is a bitstring2", () => {
-      const term = Type.bitstring2("abc");
-      assert.isTrue(Type.isBitstring2(term));
+  describe("isBitstring()", () => {
+    it("returns true if the term is a ", () => {
+      const term = Type.bitstring("abc");
+      assert.isTrue(Type.isBitstring(term));
     });
 
-    it("returns false if the term is not a bitstring2", () => {
+    it("returns false if the term is not a bitstring", () => {
       const term = Type.atom("abc");
-      assert.isFalse(Type.isBitstring2(term));
+      assert.isFalse(Type.isBitstring(term));
     });
   });
 
-  describe("isBitstringPattern2()", () => {
+  describe("isBitstringPattern()", () => {
     it("returns true if the given object is a boxed bitstring pattern", () => {
-      const result = Type.isBitstringPattern2(Type.bitstringPattern2([]));
+      const result = Type.isBitstringPattern(Type.bitstringPattern([]));
       assert.isTrue(result);
     });
 
     it("returns false if the given object is not a boxed bitstring pattern", () => {
-      const result = Type.isBitstringPattern2(Type.atom("abc"));
+      const result = Type.isBitstringPattern(Type.atom("abc"));
       assert.isFalse(result);
     });
   });
@@ -634,7 +634,7 @@ describe("Type", () => {
     });
 
     it("returns false for values which are not boxed booleans", () => {
-      const arg = Type.bitstring2("true");
+      const arg = Type.bitstring("true");
       const result = Type.isBoolean(arg);
 
       assert.isFalse(result);
@@ -896,7 +896,7 @@ describe("Type", () => {
     });
 
     it("returns false for values of type other than boxed atom", () => {
-      const arg = Type.bitstring2("nil");
+      const arg = Type.bitstring("nil");
       const result = Type.isNil(arg);
 
       assert.isFalse(result);

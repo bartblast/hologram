@@ -1,6 +1,6 @@
 "use strict";
 
-import Bitstring2 from "../bitstring2.mjs";
+import Bitstring from "../bitstring.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
@@ -36,7 +36,7 @@ const Erlang_Unicode = {
       );
     }
 
-    if (Type.isBinary2(input)) {
+    if (Type.isBinary(input)) {
       return input;
     }
 
@@ -55,18 +55,18 @@ const Erlang_Unicode = {
     for (let i = 0; i < flatInput.data.length; ++i) {
       const elem = flatInput.data[i];
 
-      if (Type.isBinary2(elem)) {
+      if (Type.isBinary(elem)) {
         chunks.push(elem);
       } else if (Type.isInteger(elem)) {
-        if (Bitstring2.validateCodePoint(elem.value)) {
+        if (Bitstring.validateCodePoint(elem.value)) {
           const segment = Type.bitstringSegment(elem, {type: "utf8"});
-          chunks.push(Bitstring2.fromSegments([segment]));
+          chunks.push(Bitstring.fromSegments([segment]));
         } else {
           const remainingElems = flatInput.data.slice(i);
 
           return Type.tuple([
             Type.atom("error"),
-            Bitstring2.concat(chunks),
+            Bitstring.concat(chunks),
             Type.list(remainingElems),
           ]);
         }
@@ -80,7 +80,7 @@ const Erlang_Unicode = {
       }
     }
 
-    return Bitstring2.concat(chunks);
+    return Bitstring.concat(chunks);
   },
   // End characters_to_binary/3
   // Deps: [:lists.flatten/1]
@@ -91,9 +91,9 @@ const Erlang_Unicode = {
     let isValidArg = true;
 
     if (Type.isList(data)) {
-      isValidArg = data.data.every((item) => Bitstring2.isText(item));
+      isValidArg = data.data.every((item) => Bitstring.isText(item));
     } else {
-      isValidArg = Bitstring2.isText(data);
+      isValidArg = Bitstring.isText(data);
     }
 
     if (!isValidArg) {
@@ -107,12 +107,12 @@ const Erlang_Unicode = {
     let bitstring;
 
     if (Type.isList(data)) {
-      bitstring = Bitstring2.concat(data.data);
+      bitstring = Bitstring.concat(data.data);
     } else {
       bitstring = data;
     }
 
-    return Bitstring2.toCodepoints(bitstring);
+    return Bitstring.toCodepoints(bitstring);
   },
   // End characters_to_list/1
   // Deps: []

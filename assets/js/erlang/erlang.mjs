@@ -1,6 +1,6 @@
 "use strict";
 
-import Bitstring2 from "../bitstring2.mjs";
+import Bitstring from "../bitstring.mjs";
 import HologramBoxedError from "../errors/boxed_error.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
@@ -278,7 +278,7 @@ const Erlang = {
       );
     }
 
-    return Type.bitstring2(atom.value);
+    return Type.bitstring(atom.value);
   },
   // End atom_to_binary/2
   // Deps: []
@@ -291,7 +291,7 @@ const Erlang = {
       );
     }
 
-    return Bitstring2.toCodepoints(Type.bitstring2(atom.value));
+    return Bitstring.toCodepoints(Type.bitstring(atom.value));
   },
   // End atom_to_list/1
   // Deps: []
@@ -305,7 +305,7 @@ const Erlang = {
 
   // Start binary_to_atom/2
   "binary_to_atom/2": (binary, encoding) => {
-    if (!Type.isBinary2(binary)) {
+    if (!Type.isBinary(binary)) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
@@ -320,7 +320,7 @@ const Erlang = {
       );
     }
 
-    return Type.atom(Bitstring2.toText(binary));
+    return Type.atom(Bitstring.toText(binary));
   },
   // End binary_to_atom/2
   // Deps: []
@@ -345,13 +345,13 @@ const Erlang = {
 
   // Start bit_size/1
   "bit_size/1": (term) => {
-    if (!Type.isBitstring2(term)) {
+    if (!Type.isBitstring(term)) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
       );
     }
 
-    return Type.integer(Bitstring2.calculateBitCount(term));
+    return Type.integer(Bitstring.calculateBitCount(term));
   },
   // End bit_size/1
   // Deps: []
@@ -437,7 +437,7 @@ const Erlang = {
 
     const str = integer.value.toString(Number(base.value)).toUpperCase();
 
-    return Type.bitstring2(str);
+    return Type.bitstring(str);
   },
   // End integer_to_binary/2
   // Deps: []
@@ -451,14 +451,14 @@ const Erlang = {
 
   // Start is_binary/1
   "is_binary/1": (term) => {
-    return Type.boolean(Type.isBinary2(term));
+    return Type.boolean(Type.isBinary(term));
   },
   // End is_binary/1
   // Deps: []
 
   // Start is_bitstring/1
   "is_bitstring/1": (term) => {
-    return Type.boolean(Type.isBitstring2(term));
+    return Type.boolean(Type.isBitstring(term));
   },
   // End is_bitstring/1
   // Deps: []
@@ -571,8 +571,7 @@ const Erlang = {
     }
 
     const areCodePointsValid = codePoints.data.every(
-      (item) =>
-        Type.isInteger(item) && Bitstring2.validateCodePoint(item.value),
+      (item) => Type.isInteger(item) && Bitstring.validateCodePoint(item.value),
     );
 
     if (!areCodePointsValid) {
@@ -589,7 +588,7 @@ const Erlang = {
     );
 
     const regex = /^<([0-9]+)\.([0-9]+)\.([0-9]+)>$/;
-    const matches = Bitstring2.toText(Type.bitstring2(segments)).match(regex);
+    const matches = Bitstring.toText(Type.bitstring(segments)).match(regex);
 
     if (matches === null) {
       Interpreter.raiseArgumentError(

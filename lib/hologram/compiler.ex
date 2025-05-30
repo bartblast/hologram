@@ -153,7 +153,7 @@ defmodule Hologram.Compiler do
 
     globalThis.hologram.pageReachableFunctionDefs = (deps) => {
       const {
-        Bitstring2,
+        Bitstring,
         HologramBoxedError,
         HologramInterpreterError,
         Interpreter,
@@ -188,7 +188,7 @@ defmodule Hologram.Compiler do
     """
     "use strict";
 
-    import Bitstring2 from "#{js_dir}/bitstring2.mjs";
+    import Bitstring from "#{js_dir}/bitstring.mjs";
     import Hologram from "#{js_dir}/hologram.mjs";
     import HologramBoxedError from "#{js_dir}/errors/boxed_error.mjs";
     import HologramInterpreterError from "#{js_dir}/errors/interpreter_error.mjs";

@@ -27,7 +27,7 @@ function testNestedBitstringDeserialization(
 
   assert.equal(typeof deserialized, "object");
   assert.deepStrictEqual(Object.keys(deserialized), ["x"]);
-  assert.isTrue(Type.isBitstring2(deserialized.x));
+  assert.isTrue(Type.isBitstring(deserialized.x));
   assert.isTrue(Interpreter.isStrictlyEqual(deserialized.x, term.x));
 }
 
@@ -90,7 +90,7 @@ describe("Deserializer", () => {
 
       describe("bitstring", () => {
         describe("empty", () => {
-          const term = Type.bitstring2("");
+          const term = Type.bitstring("");
 
           it("top-level", () => {
             testTopLevelBitstringDeserialization(term);
@@ -103,7 +103,7 @@ describe("Deserializer", () => {
 
         describe("single-byte", () => {
           describe("without leftover bits", () => {
-            const term = Type.bitstring2("a");
+            const term = Type.bitstring("a");
 
             it("top-level", () => {
               testTopLevelBitstringDeserialization(term);
@@ -115,7 +115,7 @@ describe("Deserializer", () => {
           });
 
           describe("with leftover bits", () => {
-            const term = Type.bitstring2([1, 0, 1, 0]);
+            const term = Type.bitstring([1, 0, 1, 0]);
 
             it("top-level", () => {
               testTopLevelBitstringDeserialization(term);
@@ -129,7 +129,7 @@ describe("Deserializer", () => {
 
         describe("multiple-byte", () => {
           describe("without leftover bits", () => {
-            const term = Type.bitstring2("Hologram");
+            const term = Type.bitstring("Hologram");
 
             it("top-level", () => {
               testTopLevelBitstringDeserialization(term);
@@ -141,7 +141,7 @@ describe("Deserializer", () => {
           });
 
           describe("with leftover bits", () => {
-            const term = Type.bitstring2([1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]);
+            const term = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]);
 
             it("top-level", () => {
               testTopLevelBitstringDeserialization(term);

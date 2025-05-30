@@ -53,10 +53,10 @@ export function defineModule11Fixture() {
                         ),
                       ]),
                     ]),
-                    Type.tuple([Type.atom("text"), Type.bitstring2(",")]),
+                    Type.tuple([Type.atom("text"), Type.bitstring(",")]),
                     Type.tuple([
                       Type.atom("element"),
-                      Type.bitstring2("slot"),
+                      Type.bitstring("slot"),
                       Type.list(),
                       Type.list(),
                     ]),

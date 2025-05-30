@@ -45,11 +45,11 @@ describe("Erlang_Elixir_Aliases", () => {
       assert.deepStrictEqual(result, expectedAlias);
     });
 
-    it("works with binary bitstring2 segments", () => {
+    it("works with binary bitstring segments", () => {
       const segments = Type.list([
-        Type.bitstring2("Aaa"),
-        Type.bitstring2("Bbb"),
-        Type.bitstring2("Ccc"),
+        Type.bitstring("Aaa"),
+        Type.bitstring("Bbb"),
+        Type.bitstring("Ccc"),
       ]);
 
       const result = concat(segments);
@@ -72,9 +72,9 @@ describe("Erlang_Elixir_Aliases", () => {
 
     it("removes the first dot character from the segment before joining segments with a dot character", () => {
       const segments = Type.list([
-        Type.bitstring2("...Aaa"),
-        Type.bitstring2("...Bbb"),
-        Type.bitstring2("...Ccc"),
+        Type.bitstring("...Aaa"),
+        Type.bitstring("...Bbb"),
+        Type.bitstring("...Ccc"),
       ]);
 
       const result = concat(segments);
@@ -85,7 +85,7 @@ describe("Erlang_Elixir_Aliases", () => {
 
     it("doesn't prepend 'Elixir' segment if it is already present as the first element", () => {
       const segments = Type.list([
-        Type.bitstring2("Elixir"),
+        Type.bitstring("Elixir"),
         Type.alias("Aaa"),
         Type.alias("Bbb"),
         Type.alias("Ccc"),
@@ -102,13 +102,13 @@ describe("Erlang_Elixir_Aliases", () => {
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
           Type.atom("abc"),
-          Type.bitstring2("Elixir"),
+          Type.bitstring("Elixir"),
         ]),
       );
     });
 
-    it("raises FunctionClauseError if a non-binary bitstring2 segment is present", () => {
-      const bitstringSize2 = Type.bitstring2([
+    it("raises FunctionClauseError if a non-binary bitstring segment is present", () => {
+      const bitstringSize2 = Type.bitstring([
         Type.bitstringSegment(Type.integer(1), {
           type: "integer",
           size: Type.integer(2),
@@ -116,65 +116,65 @@ describe("Erlang_Elixir_Aliases", () => {
       ]);
 
       const segments = Type.list([
-        Type.bitstring2("Aaa"),
+        Type.bitstring("Aaa"),
         bitstringSize2,
-        Type.bitstring2("Ccc"),
+        Type.bitstring("Ccc"),
       ]);
 
       assertBoxedError(
         () => concat(segments),
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
-          Type.list([bitstringSize2, Type.bitstring2("Ccc")]),
-          Type.bitstring2("Elixir.Aaa"),
+          Type.list([bitstringSize2, Type.bitstring("Ccc")]),
+          Type.bitstring("Elixir.Aaa"),
         ]),
       );
     });
 
-    it("raises FunctionClauseError if any non-atom or non-bitstring2 segments are present", () => {
+    it("raises FunctionClauseError if any non-atom or non-bitstring segments are present", () => {
       const segments = Type.list([
-        Type.bitstring2("Aaa"),
+        Type.bitstring("Aaa"),
         Type.integer(123),
-        Type.bitstring2("Ccc"),
+        Type.bitstring("Ccc"),
       ]);
 
       assertBoxedError(
         () => concat(segments),
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
-          Type.list([Type.integer(123), Type.bitstring2("Ccc")]),
-          Type.bitstring2("Elixir.Aaa"),
+          Type.list([Type.integer(123), Type.bitstring("Ccc")]),
+          Type.bitstring("Elixir.Aaa"),
         ]),
       );
     });
 
     it("raises FunctionClauseError if invalid segment is present and the segments contain 'Elixir' as the first segment", () => {
       const segments = Type.list([
-        Type.bitstring2("Elixir"),
-        Type.bitstring2("Aaa"),
+        Type.bitstring("Elixir"),
+        Type.bitstring("Aaa"),
         Type.integer(123),
-        Type.bitstring2("Ccc"),
+        Type.bitstring("Ccc"),
       ]);
 
       assertBoxedError(
         () => concat(segments),
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
-          Type.list([Type.integer(123), Type.bitstring2("Ccc")]),
-          Type.bitstring2("Elixir.Aaa"),
+          Type.list([Type.integer(123), Type.bitstring("Ccc")]),
+          Type.bitstring("Elixir.Aaa"),
         ]),
       );
     });
 
     it("raises FunctionClauseError if invalid segment is present as the first segment", () => {
-      const segments = Type.list([Type.integer(123), Type.bitstring2("Ccc")]);
+      const segments = Type.list([Type.integer(123), Type.bitstring("Ccc")]);
 
       assertBoxedError(
         () => concat(segments),
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
-          Type.list([Type.integer(123), Type.bitstring2("Ccc")]),
-          Type.bitstring2("Elixir"),
+          Type.list([Type.integer(123), Type.bitstring("Ccc")]),
+          Type.bitstring("Elixir"),
         ]),
       );
     });

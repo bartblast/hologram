@@ -1,13 +1,13 @@
 "use strict";
 
-import Bitstring2 from "../../../../../../assets/js/bitstring2.mjs";
+import Bitstring from "../../../../../../assets/js/bitstring.mjs";
 import Type from "../../../../../../assets/js/type.mjs";
 
 import {benchmark} from "../../../../support/helpers.mjs";
 
-const bitstring = Type.bitstring2("全息图全息图全息图全");
+const bitstring = Type.bitstring("全息图全息图全息图全");
 
-Bitstring2.maybeSetBytesFromText(bitstring);
+Bitstring.maybeSetBytesFromText(bitstring);
 
 benchmark(() => {
   let _hexString = "";

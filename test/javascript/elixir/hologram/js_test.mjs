@@ -15,7 +15,7 @@ describe("Elixir_Hologram_JS", () => {
     const exec = Elixir_Hologram_JS["exec/1"];
 
     it("delegates to Interpreter.evaluateJavaScriptCode()", () => {
-      const code = Type.bitstring2("return 1 + 2");
+      const code = Type.bitstring("return 1 + 2");
       assert.equal(exec(code), 3);
     });
   });

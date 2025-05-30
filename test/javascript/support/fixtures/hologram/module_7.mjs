@@ -47,7 +47,7 @@ export function defineModule7Fixture() {
         params: (_context) => [],
         guards: [],
         body: (_context) => {
-          return Type.bitstring2("/hologram-test-fixtures-module7");
+          return Type.bitstring("/hologram-test-fixtures-module7");
         },
       },
     ],

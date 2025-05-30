@@ -95,7 +95,7 @@ defmodule Hologram.Socket.DecoderTest do
     end
 
     test "bitstring, non-binary" do
-      data = %{"type" => "bitstring2", "bits" => [1, 0, 1, 0]}
+      data = %{"type" => "bitstring", "bits" => [1, 0, 1, 0]}
       assert decode(1, data) == <<1::1, 0::1, 1::1, 0::1>>
     end
 

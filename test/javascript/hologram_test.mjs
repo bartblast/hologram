@@ -21,7 +21,7 @@ defineGlobalErlangAndElixirModules();
 registerWebApis();
 defineModule7Fixture();
 
-const cid1 = Type.bitstring2("my_component_1");
+const cid1 = Type.bitstring("my_component_1");
 const module7 = Type.alias("Hologram.Test.Fixtures.Module7");
 
 describe("Hologram", () => {
@@ -372,7 +372,7 @@ describe("Hologram", () => {
       executePrefetchPageActionStub;
 
     const actionSpecDom = Type.keywordList([
-      [Type.atom("text"), Type.bitstring2("my_action")],
+      [Type.atom("text"), Type.bitstring("my_action")],
     ]);
 
     const defaultTarget = cid1;

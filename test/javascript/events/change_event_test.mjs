@@ -18,7 +18,7 @@ describe("ChangeEvent", () => {
 
     assert.deepStrictEqual(
       result,
-      Type.map([[Type.atom("value"), Type.bitstring2("my_value")]]),
+      Type.map([[Type.atom("value"), Type.bitstring("my_value")]]),
     );
   });
 

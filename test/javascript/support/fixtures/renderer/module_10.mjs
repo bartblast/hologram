@@ -53,7 +53,7 @@ export function defineModule10Fixture() {
                         ),
                       ]),
                     ]),
-                    Type.tuple([Type.atom("text"), Type.bitstring2(",")]),
+                    Type.tuple([Type.atom("text"), Type.bitstring(",")]),
                     Type.tuple([
                       Type.atom("component"),
                       Type.atom(
@@ -61,11 +61,11 @@ export function defineModule10Fixture() {
                       ),
                       Type.list([
                         Type.tuple([
-                          Type.bitstring2("cid"),
+                          Type.bitstring("cid"),
                           Type.list([
                             Type.tuple([
                               Type.atom("text"),
-                              Type.bitstring2("component_11"),
+                              Type.bitstring("component_11"),
                             ]),
                           ]),
                         ]),
@@ -80,7 +80,7 @@ export function defineModule10Fixture() {
                             ),
                           ]),
                         ]),
-                        Type.tuple([Type.atom("text"), Type.bitstring2(",")]),
+                        Type.tuple([Type.atom("text"), Type.bitstring(",")]),
                         Type.tuple([
                           Type.atom("component"),
                           Type.atom(
@@ -88,11 +88,11 @@ export function defineModule10Fixture() {
                           ),
                           Type.list([
                             Type.tuple([
-                              Type.bitstring2("cid"),
+                              Type.bitstring("cid"),
                               Type.list([
                                 Type.tuple([
                                   Type.atom("text"),
-                                  Type.bitstring2("component_12"),
+                                  Type.bitstring("component_12"),
                                 ]),
                               ]),
                             ]),

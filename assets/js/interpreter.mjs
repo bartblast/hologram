@@ -3,7 +3,7 @@
 import isEqual from "lodash/isEqual.js";
 import uniqWith from "lodash/uniqWith.js";
 
-import Bitstring2 from "./bitstring2.mjs";
+import Bitstring from "./bitstring.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
 import Serializer from "./serializer.mjs";
@@ -459,7 +459,7 @@ export default class Interpreter {
 
   static getErrorMessage(jsError) {
     // TODO: use transpiled Elixir code
-    return Bitstring2.toText(jsError.struct.data["atom(message)"][1]);
+    return Bitstring.toText(jsError.struct.data["atom(message)"][1]);
   }
 
   static getErrorType(jsError) {
@@ -476,7 +476,7 @@ export default class Interpreter {
       case "atom":
         return 2;
 
-      case "bitstring2":
+      case "bitstring":
         return 10;
 
       case "float":
@@ -513,8 +513,8 @@ export default class Interpreter {
       case "atom":
         return Interpreter.#inspectAtom(term, opts);
 
-      case "bitstring2":
-        return Interpreter.#inspectBitstring2(term, opts);
+      case "bitstring":
+        return Interpreter.#inspectBitstring(term, opts);
 
       case "float":
         return Interpreter.#inspectFloat(term, opts);
@@ -582,7 +582,7 @@ export default class Interpreter {
       return false;
     }
 
-    if (left.type === "bitstring2") {
+    if (left.type === "bitstring") {
       if (left.text !== null && left.text === right.text) {
         return true;
       }
@@ -591,10 +591,10 @@ export default class Interpreter {
         return false;
       }
 
-      Bitstring2.maybeSetBytesFromText(left);
+      Bitstring.maybeSetBytesFromText(left);
       const leftBytes = left.bytes;
 
-      Bitstring2.maybeSetBytesFromText(right);
+      Bitstring.maybeSetBytesFromText(right);
       const rightBytes = right.bytes;
 
       if (leftBytes.length !== rightBytes.length) {
@@ -645,8 +645,8 @@ export default class Interpreter {
       return Interpreter.#matchConsPattern(right, left, context);
     }
 
-    if (Type.isBitstringPattern2(left)) {
-      return Interpreter.#matchBitstringPattern2(right, left, context);
+    if (Type.isbitstringPattern(left)) {
+      return Interpreter.#matchBitstringPattern(right, left, context);
     }
 
     if (left.type !== right.type) {
@@ -922,7 +922,7 @@ export default class Interpreter {
     if (
       termType === "anonymous_function" ||
       termType === "atom" ||
-      termType === "bitstring2" ||
+      termType === "bitstring" ||
       termType === "float" ||
       termType === "integer" ||
       termType === "match_placeholder"
@@ -989,12 +989,12 @@ export default class Interpreter {
     return ":" + term.value;
   }
 
-  static #inspectBitstring2(term, _opts) {
-    if (Bitstring2.isPrintableText(term)) {
+  static #inspectBitstring(term, _opts) {
+    if (Bitstring.isPrintableText(term)) {
       return '"' + term.text.replace(/"/g, '\\"') + '"';
     }
 
-    Bitstring2.maybeSetBytesFromText(term);
+    Bitstring.maybeSetBytesFromText(term);
 
     const {bytes, leftoverBitCount} = term;
 
@@ -1152,13 +1152,13 @@ export default class Interpreter {
   //   Console.endGroup(mfa);
   // }
 
-  static #matchBitstringPattern2(right, left, context) {
-    if (right.type !== "bitstring2" && right.type !== "bitstring_pattern2") {
+  static #matchBitstringPattern(right, left, context) {
+    if (right.type !== "bitstring" && right.type !== "bitstring_pattern") {
       Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
     }
 
     let chunkOffset = 0;
-    const rightBitCount = Bitstring2.calculateBitCount(right);
+    const rightBitCount = Bitstring.calculateBitCount(right);
 
     for (const segment of left.segments) {
       const segmentType = segment.type;
@@ -1174,7 +1174,7 @@ export default class Interpreter {
         throw new HologramInterpreterError(message);
       }
 
-      const chunkBitCount = Bitstring2.calculateSegmentBitCount(segment);
+      const chunkBitCount = Bitstring.calculateSegmentBitCount(segment);
 
       if (
         segment.type === "float" &&
@@ -1189,13 +1189,13 @@ export default class Interpreter {
         Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));
       }
 
-      const chunk = Bitstring2.takeChunk(right, chunkOffset, chunkBitCount);
+      const chunk = Bitstring.takeChunk(right, chunkOffset, chunkBitCount);
 
       if (segment.value.type === "variable_pattern") {
-        const decodedChunk = Bitstring2.decodeSegmentChunk(segment, chunk);
+        const decodedChunk = Bitstring.decodeSegmentChunk(segment, chunk);
         Interpreter.matchOperator(decodedChunk, segment.value, context);
       } else {
-        const segmentBitstring = Bitstring2.fromSegments([segment]);
+        const segmentBitstring = Bitstring.fromSegments([segment]);
 
         if (!Interpreter.isStrictlyEqual(segmentBitstring, chunk)) {
           Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(right));

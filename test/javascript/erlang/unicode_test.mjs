@@ -20,7 +20,7 @@ defineGlobalErlangAndElixirModules();
 describe("Erlang_Unicode", () => {
   describe("characters_to_binary/1", () => {
     it("delegates to :unicode.characters_to_binary/3", () => {
-      const input = Type.bitstring2("全息图");
+      const input = Type.bitstring("全息图");
       const encoding = Type.atom("utf8");
 
       const result = Erlang_Unicode["characters_to_binary/1"](input);
@@ -42,7 +42,7 @@ describe("Erlang_Unicode", () => {
     it("input is an empty list", () => {
       const result = characters_to_binary(Type.list(), utf8Atom, utf8Atom);
 
-      assert.deepStrictEqual(result, Type.bitstring2(""));
+      assert.deepStrictEqual(result, Type.bitstring(""));
     });
 
     it("input is a list of ASCII code points", () => {
@@ -54,7 +54,7 @@ describe("Erlang_Unicode", () => {
 
       const result = characters_to_binary(input, utf8Atom, utf8Atom);
 
-      const expected = Type.bitstring2("abc");
+      const expected = Type.bitstring("abc");
 
       assert.deepStrictEqual(result, expected);
     });
@@ -68,13 +68,13 @@ describe("Erlang_Unicode", () => {
 
       const result = characters_to_binary(input, utf8Atom, utf8Atom);
 
-      const expected = Type.bitstring2("全息图");
+      const expected = Type.bitstring("全息图");
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("input is a binary bitstring", () => {
-      const input = Type.bitstring2("abc");
+      const input = Type.bitstring("abc");
 
       const result = characters_to_binary(input, utf8Atom, utf8Atom);
 
@@ -84,7 +84,7 @@ describe("Erlang_Unicode", () => {
     it("input is a non-binary bitstring", () => {
       assertBoxedError(
         () =>
-          characters_to_binary(Type.bitstring2([1, 0, 1]), utf8Atom, utf8Atom),
+          characters_to_binary(Type.bitstring([1, 0, 1]), utf8Atom, utf8Atom),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
@@ -95,23 +95,23 @@ describe("Erlang_Unicode", () => {
 
     it("input is a list of binary bitstrings", () => {
       const input = Type.list([
-        Type.bitstring2("abc"),
-        Type.bitstring2("def"),
-        Type.bitstring2("ghi"),
+        Type.bitstring("abc"),
+        Type.bitstring("def"),
+        Type.bitstring("ghi"),
       ]);
 
       const result = characters_to_binary(input, utf8Atom, utf8Atom);
 
-      const expected = Type.bitstring2("abcdefghi");
+      const expected = Type.bitstring("abcdefghi");
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("input is a list of non-binary bitstrings", () => {
       const input = Type.list([
-        Type.bitstring2([1, 1, 0]),
-        Type.bitstring2([1, 0, 1]),
-        Type.bitstring2([0, 1, 1]),
+        Type.bitstring([1, 1, 0]),
+        Type.bitstring([1, 0, 1]),
+        Type.bitstring([0, 1, 1]),
       ]);
 
       assertBoxedError(
@@ -127,15 +127,15 @@ describe("Erlang_Unicode", () => {
     it("input is a list of code points mixed with binary bitstrings", () => {
       const input = Type.list([
         Type.integer(97), // a
-        Type.bitstring2("bcd"),
+        Type.bitstring("bcd"),
         Type.integer(101), // e
-        Type.bitstring2("fgh"),
+        Type.bitstring("fgh"),
         Type.integer(105), // i
       ]);
 
       const result = characters_to_binary(input, utf8Atom, utf8Atom);
 
-      const expected = Type.bitstring2("abcdefghi");
+      const expected = Type.bitstring("abcdefghi");
 
       assert.deepStrictEqual(result, expected);
     });
@@ -171,7 +171,7 @@ describe("Erlang_Unicode", () => {
           Type.integer(98), // b
           Type.list([
             Type.integer(99), // c
-            Type.bitstring2("def"),
+            Type.bitstring("def"),
             Type.integer(103), // g
           ]),
           Type.integer(104), // h
@@ -181,7 +181,7 @@ describe("Erlang_Unicode", () => {
 
       const result = characters_to_binary(input, utf8Atom, utf8Atom);
 
-      const expected = Type.bitstring2("abcdefghi");
+      const expected = Type.bitstring("abcdefghi");
 
       assert.deepStrictEqual(result, expected);
     });
@@ -189,18 +189,18 @@ describe("Erlang_Unicode", () => {
     it("input contains invalid code points", () => {
       const input = Type.list([
         Type.integer(97), // a
-        Type.bitstring2("bcd"),
+        Type.bitstring("bcd"),
         // Max Unicode code point value is 1,114,112
         Type.integer(1114113),
-        Type.bitstring2("efg"),
+        Type.bitstring("efg"),
       ]);
 
       const result = characters_to_binary(input, utf8Atom, utf8Atom);
 
       const expected = Type.tuple([
         Type.atom("error"),
-        Type.bitstring2("abcd"),
-        Type.list([Type.integer(1114113), Type.bitstring2("efg")]),
+        Type.bitstring("abcd"),
+        Type.list([Type.integer(1114113), Type.bitstring("efg")]),
       ]);
 
       assert.deepStrictEqual(result, expected);
@@ -229,7 +229,7 @@ describe("Erlang_Unicode", () => {
     const fun = Erlang_Unicode["characters_to_list/1"];
 
     it("UTF8 binary", () => {
-      const result = fun(Type.bitstring2("全息图"));
+      const result = fun(Type.bitstring("全息图"));
 
       const expected = Type.list([
         Type.integer(20840),
@@ -243,9 +243,9 @@ describe("Erlang_Unicode", () => {
     it("list of UTF8 binaries", () => {
       const result = fun(
         Type.list([
-          Type.bitstring2("abc"),
-          Type.bitstring2("全息图"),
-          Type.bitstring2("xyz"),
+          Type.bitstring("abc"),
+          Type.bitstring("全息图"),
+          Type.bitstring("xyz"),
         ]),
       );
 
@@ -266,9 +266,9 @@ describe("Erlang_Unicode", () => {
 
     it("a list that contains some items that are not UTF8 binaries", () => {
       const data = Type.list([
-        Type.bitstring2("abc"),
+        Type.bitstring("abc"),
         Type.integer(123),
-        Type.bitstring2("xyz"),
+        Type.bitstring("xyz"),
       ]);
 
       assert.throw(

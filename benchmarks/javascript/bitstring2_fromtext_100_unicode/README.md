@@ -1,6 +1,6 @@
 Benchmark
 
-Function: Bitstring2.fromText()\
+Function: Bitstring.fromText()\
 Argument: a string consisting of 100 Unicode characters
 
 ## System

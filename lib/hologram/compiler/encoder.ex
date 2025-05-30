@@ -183,13 +183,13 @@ defmodule Hologram.Compiler.Encoder do
   def encode_ir(%IR.BitstringType{segments: segments}, %{pattern?: true} = context) do
     segments
     |> encode_bitstring_segments(context)
-    |> StringUtils.wrap("Type.bitstringPattern2([", "])")
+    |> StringUtils.wrap("Type.bitstringPattern([", "])")
   end
 
   def encode_ir(%IR.BitstringType{segments: segments}, %{pattern?: false} = context) do
     segments
     |> encode_bitstring_segments(context)
-    |> StringUtils.wrap("Type.bitstring2([", "])")
+    |> StringUtils.wrap("Type.bitstring([", "])")
   end
 
   def encode_ir(%IR.Block{} = block, context) do
@@ -395,7 +395,7 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode_ir(%IR.StringType{value: value}, _context) do
-    encode_primitive_type(:bitstring2, value, true)
+    encode_primitive_type(:bitstring, value, true)
   end
 
   # TODO: catch_clauses, else_clauses, after_block

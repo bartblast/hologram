@@ -4,7 +4,7 @@ import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 
-export default class Bitstring2 {
+export default class Bitstring {
   static #decoder = new TextDecoder("utf-8", {fatal: true});
   static #encoder = new TextEncoder("utf-8");
 
@@ -90,7 +90,7 @@ export default class Bitstring2 {
     }
 
     return {
-      type: "bitstring2",
+      type: "bitstring",
       text: null,
       bytes: resultBytes,
       leftoverBitCount: resultLeftoverBitCount,
@@ -104,7 +104,7 @@ export default class Bitstring2 {
 
     switch (segment.type) {
       case "binary":
-      case "bitstring2":
+      case "bitstring":
         return chunk;
 
       case "float":
@@ -160,7 +160,7 @@ export default class Bitstring2 {
     }
 
     return {
-      type: "bitstring2",
+      type: "bitstring",
       text: null,
       bytes,
       leftoverBitCount,
@@ -173,7 +173,7 @@ export default class Bitstring2 {
       bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
 
     return {
-      type: "bitstring2",
+      type: "bitstring",
       text: null,
       bytes: uint8Bytes,
       leftoverBitCount: 0,
@@ -184,7 +184,7 @@ export default class Bitstring2 {
   static fromSegments(segments) {
     const bitstrings = segments.map((segment) => {
       switch (segment.value.type) {
-        case "bitstring2":
+        case "bitstring":
           return $.fromSegmentWithBitstringValue(segment);
 
         case "float":
@@ -238,7 +238,7 @@ export default class Bitstring2 {
     }
 
     return {
-      type: "bitstring2",
+      type: "bitstring",
       text: null,
       bytes: new Uint8Array(buffer),
       leftoverBitCount: 0,
@@ -252,7 +252,7 @@ export default class Bitstring2 {
 
     if (segment.type === "utf8") {
       return {
-        type: "bitstring2",
+        type: "bitstring",
         text: String.fromCodePoint(Number(value)),
         bytes: null,
         leftoverBitCount: 0,
@@ -277,7 +277,7 @@ export default class Bitstring2 {
     // Fast path: if no size specified, use the entire string
     if (segment.size === null) {
       return {
-        type: "bitstring2",
+        type: "bitstring",
         text: valueStr,
         bytes: null,
         leftoverBitCount: 0,
@@ -295,7 +295,7 @@ export default class Bitstring2 {
     // If we know we need the complete string and no leftover bits, avoid encoding
     if (completeBytes === byteLength && leftoverBits === 0) {
       return {
-        type: "bitstring2",
+        type: "bitstring",
         text: valueStr,
         bytes: null,
         leftoverBitCount: 0,
@@ -309,7 +309,7 @@ export default class Bitstring2 {
     if (leftoverBits === 0) {
       // We can use a subarray view of the original bytes to avoid copying
       return {
-        type: "bitstring2",
+        type: "bitstring",
         text: null,
         bytes: sourceBytes.subarray(0, completeBytes),
         leftoverBitCount: 0,
@@ -336,7 +336,7 @@ export default class Bitstring2 {
     bytes[completeBytes] = sourceBytes[completeBytes] & mask;
 
     return {
-      type: "bitstring2",
+      type: "bitstring",
       text: null,
       bytes,
       leftoverBitCount: leftoverBits,
@@ -346,7 +346,7 @@ export default class Bitstring2 {
 
   static fromText(text) {
     return {
-      type: "bitstring2",
+      type: "bitstring",
       text,
       bytes: null,
       leftoverBitCount: 0,
@@ -428,7 +428,7 @@ export default class Bitstring2 {
   }
 
   static isText(bitstring) {
-    if (!Type.isBinary2(bitstring)) {
+    if (!Type.isBinary(bitstring)) {
       return false;
     }
 
@@ -479,12 +479,12 @@ export default class Bitstring2 {
           return $.calculateTextByteCount(segment.value.value);
         }
 
-        // bitstring2
+        // bitstring
         if (segment.value.text !== null) {
           return $.calculateTextByteCount(segment.value.text);
         }
 
-        // bitstring2
+        // bitstring
         return segment.value.bytes.length;
 
       case "float":
@@ -544,7 +544,7 @@ export default class Bitstring2 {
     // Fast path: if byte-aligned and no leftover bits
     if (startBitOffset === 0 && resultLeftoverBits === 0) {
       return {
-        type: "bitstring2",
+        type: "bitstring",
         text: null,
         bytes: bitstring.bytes.subarray(
           startByteIndex,
@@ -590,7 +590,7 @@ export default class Bitstring2 {
     }
 
     return {
-      type: "bitstring2",
+      type: "bitstring",
       text: null,
       bytes: resultBytes,
       leftoverBitCount: resultLeftoverBits,
@@ -702,7 +702,7 @@ export default class Bitstring2 {
       case "binary":
         return $.#validateSegmentWithBinaryType(segment, index);
 
-      case "bitstring2":
+      case "bitstring":
         return $.#validateSegmentWithBitstringType(segment, index);
 
       case "float":
@@ -809,7 +809,7 @@ export default class Bitstring2 {
     }
 
     return {
-      type: "bitstring2",
+      type: "bitstring",
       text: null,
       bytes: resultBytes,
       leftoverBitCount: 0,
@@ -857,7 +857,7 @@ export default class Bitstring2 {
       dataView.setUint8(0, numberValue & 0xff);
 
       return {
-        type: "bitstring2",
+        type: "bitstring",
         text: null,
         bytes: bytesArray,
         leftoverBitCount: leftoverBits,
@@ -867,7 +867,7 @@ export default class Bitstring2 {
       dataView.setUint16(0, numberValue & 0xffff, isLittleEndian);
 
       return {
-        type: "bitstring2",
+        type: "bitstring",
         text: null,
         bytes: bytesArray,
         leftoverBitCount: leftoverBits,
@@ -877,7 +877,7 @@ export default class Bitstring2 {
       dataView.setUint32(0, numberValue & 0xffffffff, isLittleEndian);
 
       return {
-        type: "bitstring2",
+        type: "bitstring",
         text: null,
         bytes: bytesArray,
         leftoverBitCount: leftoverBits,
@@ -968,7 +968,7 @@ export default class Bitstring2 {
     }
 
     return {
-      type: "bitstring2",
+      type: "bitstring",
       text: null,
       bytes: bytesArray,
       leftoverBitCount: leftoverBits,
@@ -1005,7 +1005,7 @@ export default class Bitstring2 {
       }
 
       return {
-        type: "bitstring2",
+        type: "bitstring",
         text: null,
         bytes: bytesArray,
         leftoverBitCount: leftoverBits,
@@ -1038,7 +1038,7 @@ export default class Bitstring2 {
       }
 
       return {
-        type: "bitstring2",
+        type: "bitstring",
         text: null,
         bytes: bytesArray,
         leftoverBitCount: leftoverBits,
@@ -1101,7 +1101,7 @@ export default class Bitstring2 {
     }
 
     return {
-      type: "bitstring2",
+      type: "bitstring",
       text: null,
       bytes: bytesArray,
       leftoverBitCount: leftoverBits,
@@ -1297,11 +1297,11 @@ export default class Bitstring2 {
   static #validateSegmentWithBinaryType(segment, index) {
     const valueType = segment.value.type;
 
-    if (valueType !== "bitstring2" && valueType !== "string") {
+    if (valueType !== "bitstring" && valueType !== "string") {
       $.#raiseTypeMismatchError(index, "binary", "a binary", segment.value);
     }
 
-    if (valueType === "bitstring2" && segment.value.leftoverBitCount !== 0) {
+    if (valueType === "bitstring" && segment.value.leftoverBitCount !== 0) {
       const inspectedValue = Interpreter.inspect(segment.value);
 
       Interpreter.raiseArgumentError(
@@ -1370,7 +1370,7 @@ export default class Bitstring2 {
   static #validateSegmentWithUtfType(segment, index) {
     const valueType = segment.value.type;
 
-    if (valueType === "bitstring2" || valueType === "float") {
+    if (valueType === "bitstring" || valueType === "float") {
       $.#raiseTypeMismatchError(
         index,
         segment.type,
@@ -1391,4 +1391,4 @@ export default class Bitstring2 {
   }
 }
 
-const $ = Bitstring2;
+const $ = Bitstring;

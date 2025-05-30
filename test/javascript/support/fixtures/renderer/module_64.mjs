@@ -50,7 +50,7 @@ export function defineModule64Fixture() {
                   return Type.list([
                     Type.tuple([
                       Type.atom("text"),
-                      Type.bitstring2("my_prop = "),
+                      Type.bitstring("my_prop = "),
                     ]),
                     Type.tuple([
                       Type.atom("expression"),

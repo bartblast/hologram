@@ -1,6 +1,6 @@
 "use strict";
 
-import Bitstring2 from "./bitstring2.mjs";
+import Bitstring from "./bitstring.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Sequence from "./sequence.mjs";
@@ -49,20 +49,20 @@ export default class Type {
     return {type: "atom", value: value};
   }
 
-  static bitstring2(arg) {
+  static bitstring(arg) {
     if (typeof arg === "string") {
-      return Bitstring2.fromText(arg);
+      return Bitstring.fromText(arg);
     }
 
     if (arg.length > 0 && typeof arg[0] === "object") {
-      return Bitstring2.fromSegments(arg);
+      return Bitstring.fromSegments(arg);
     }
 
-    return Bitstring2.fromBits(arg);
+    return Bitstring.fromBits(arg);
   }
 
-  static bitstringPattern2(segments) {
-    return {type: "bitstring_pattern2", segments: segments};
+  static bitstringPattern(segments) {
+    return {type: "bitstring_pattern", segments: segments};
   }
 
   static bitstringSegment(value, modifiers = {}) {
@@ -147,8 +147,8 @@ export default class Type {
       case "integer":
         return Type.#encodePrimitiveTypeMapKey(term);
 
-      case "bitstring2":
-        return Bitstring2.serialize(term);
+      case "bitstring":
+        return Bitstring.serialize(term);
 
       case "list":
       case "tuple":
@@ -162,7 +162,7 @@ export default class Type {
   static errorStruct(aliasStr, message) {
     const data = [
       [Type.atom("__exception__"), Type.boolean(true)],
-      [Type.atom("message"), Type.bitstring2(message)],
+      [Type.atom("message"), Type.bitstring(message)],
     ];
 
     return Type.struct(aliasStr, data);
@@ -221,16 +221,16 @@ export default class Type {
     return term.type === "atom";
   }
 
-  static isBinary2(term) {
-    return Type.isBitstring2(term) && term.leftoverBitCount === 0;
+  static isBinary(term) {
+    return Type.isBitstring(term) && term.leftoverBitCount === 0;
   }
 
-  static isBitstring2(term) {
-    return term.type === "bitstring2";
+  static isBitstring(term) {
+    return term.type === "bitstring";
   }
 
-  static isBitstringPattern2(term) {
-    return term.type === "bitstring_pattern2";
+  static isBitstringPattern(term) {
+    return term.type === "bitstring_pattern";
   }
 
   static isBoolean(term) {

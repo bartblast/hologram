@@ -1,6 +1,6 @@
 "use strict";
 
-import Bitstring2 from "../bitstring2.mjs";
+import Bitstring from "../bitstring.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
@@ -15,13 +15,13 @@ const Erlang_Elixir_Aliases = {
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(":elixir_aliases.do_concat/2", [
           arguments[0],
-          Type.bitstring2("Elixir"),
+          Type.bitstring("Elixir"),
         ]),
       );
     }
 
     const normalizedSegments = segments.data.reduce((acc, segment, index) => {
-      if (!Type.isAtom(segment) && !Type.isBinary2(segment)) {
+      if (!Type.isAtom(segment) && !Type.isBinary(segment)) {
         if (acc.length === 0 || !Interpreter.isEqual(acc[0], "Elixir")) {
           acc.unshift("Elixir");
         }
@@ -31,7 +31,7 @@ const Erlang_Elixir_Aliases = {
             ":elixir_aliases.do_concat/2",
             [
               Type.list(segments.data.slice(index)),
-              Type.bitstring2(acc.join(".")),
+              Type.bitstring(acc.join(".")),
             ],
           ),
         );
@@ -43,7 +43,7 @@ const Erlang_Elixir_Aliases = {
 
       let str = Type.isAtom(segment)
         ? segment.value
-        : Bitstring2.toText(segment);
+        : Bitstring.toText(segment);
 
       if (str.startsWith("Elixir.")) {
         str = str.substring(7);

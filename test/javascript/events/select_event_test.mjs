@@ -20,7 +20,7 @@ describe("SelectEvent", () => {
 
     assert.deepStrictEqual(
       result,
-      Type.map([[Type.atom("value"), Type.bitstring2("am 1 Holo")]]),
+      Type.map([[Type.atom("value"), Type.bitstring("am 1 Holo")]]),
     );
   });
 

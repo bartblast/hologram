@@ -20,8 +20,8 @@ describe("Elixir_String", () => {
     const downcase = Elixir_String["downcase/1"];
 
     it("delegates to downcase/2", () => {
-      const result = downcase(Type.bitstring2("HoLoGrAm"));
-      const expected = Type.bitstring2("hologram");
+      const result = downcase(Type.bitstring("HoLoGrAm"));
+      const expected = Type.bitstring("hologram");
 
       assert.deepStrictEqual(result, expected);
     });
@@ -30,20 +30,20 @@ describe("Elixir_String", () => {
   describe("downcase/2", () => {
     const downcase = Elixir_String["downcase/2"];
 
-    const string = Type.bitstring2("HoLoGrAm");
+    const string = Type.bitstring("HoLoGrAm");
     const mode = Type.atom("default");
 
     describe("default mode", () => {
       it("ASCII string", () => {
         const result = downcase(string, mode);
-        const expected = Type.bitstring2("hologram");
+        const expected = Type.bitstring("hologram");
 
         assert.deepStrictEqual(result, expected);
       });
 
       it("Unicode string", () => {
-        const result = downcase(Type.bitstring2("ŹRÓDŁO"), mode);
-        const expected = Type.bitstring2("źródło");
+        const result = downcase(Type.bitstring("ŹRÓDŁO"), mode);
+        const expected = Type.bitstring("źródło");
 
         assert.deepStrictEqual(result, expected);
       });
@@ -65,7 +65,7 @@ describe("Elixir_String", () => {
 
     // TODO: client error message for this case is inconsistent with server error message
     it("raises FunctionClauseError if the first arg is a non-binary bitstring", () => {
-      const arg1 = Type.bitstring2([1, 0, 1, 0]);
+      const arg1 = Type.bitstring([1, 0, 1, 0]);
 
       assertBoxedError(
         () => downcase(arg1, mode),
@@ -120,49 +120,49 @@ describe("Elixir_String", () => {
   describe("replace/3", () => {
     const replace = Elixir_String["replace/3"];
 
-    const subject = Type.bitstring2("abcabc");
-    const pattern = Type.bitstring2("ab");
-    const replacement = Type.bitstring2("xy");
+    const subject = Type.bitstring("abcabc");
+    const pattern = Type.bitstring("ab");
+    const replacement = Type.bitstring("xy");
 
     it("ASCII text", () => {
       const result = replace(subject, pattern, replacement);
-      const expected = Type.bitstring2("xycxyc");
+      const expected = Type.bitstring("xycxyc");
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("Unicode text", () => {
-      const subject = Type.bitstring2("全息图全息图");
-      const pattern = Type.bitstring2("全息");
+      const subject = Type.bitstring("全息图全息图");
+      const pattern = Type.bitstring("全息");
 
       const result = replace(subject, pattern, replacement);
-      const expected = Type.bitstring2("xy图xy图");
+      const expected = Type.bitstring("xy图xy图");
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("grapheme 'é' which is made of the characters 'e' and the acute accent (replacing across grapheme boundaries)", () => {
       // String.normalize("é", :nfd)
-      const subject = Type.bitstring2("é");
+      const subject = Type.bitstring("é");
 
-      const pattern = Type.bitstring2("e");
-      const replacement = Type.bitstring2("o");
+      const pattern = Type.bitstring("e");
+      const replacement = Type.bitstring("o");
 
       const result = replace(subject, pattern, replacement);
-      const expected = Type.bitstring2("ó");
+      const expected = Type.bitstring("ó");
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("grapheme 'é' which is represented by the single character 'e with acute' accent (no replacing at all)", () => {
       // String.normalize("é", :nfc)
-      const subject = Type.bitstring2("é");
+      const subject = Type.bitstring("é");
 
-      const pattern = Type.bitstring2("e");
-      const replacement = Type.bitstring2("o");
+      const pattern = Type.bitstring("e");
+      const replacement = Type.bitstring("o");
 
       const result = replace(subject, pattern, replacement);
-      const expected = Type.bitstring2("é");
+      const expected = Type.bitstring("é");
 
       assert.deepStrictEqual(result, expected);
     });
@@ -195,7 +195,7 @@ describe("Elixir_String", () => {
       });
 
       it("empty binary pattern arg", () => {
-        const pattern = Type.bitstring2("");
+        const pattern = Type.bitstring("");
 
         assert.throw(
           () => replace(subject, pattern, replacement),
@@ -220,8 +220,8 @@ describe("Elixir_String", () => {
     const upcase = Elixir_String["upcase/1"];
 
     it("delegates to upcase/2", () => {
-      const result = upcase(Type.bitstring2("HoLoGrAm"));
-      const expected = Type.bitstring2("HOLOGRAM");
+      const result = upcase(Type.bitstring("HoLoGrAm"));
+      const expected = Type.bitstring("HOLOGRAM");
 
       assert.deepStrictEqual(result, expected);
     });
@@ -230,20 +230,20 @@ describe("Elixir_String", () => {
   describe("upcase/2", () => {
     const upcase = Elixir_String["upcase/2"];
 
-    const string = Type.bitstring2("HoLoGrAm");
+    const string = Type.bitstring("HoLoGrAm");
     const mode = Type.atom("default");
 
     describe("default mode", () => {
       it("ASCII string", () => {
         const result = upcase(string, mode);
-        const expected = Type.bitstring2("HOLOGRAM");
+        const expected = Type.bitstring("HOLOGRAM");
 
         assert.deepStrictEqual(result, expected);
       });
 
       it("Unicode string", () => {
-        const result = upcase(Type.bitstring2("źródło"), mode);
-        const expected = Type.bitstring2("ŹRÓDŁO");
+        const result = upcase(Type.bitstring("źródło"), mode);
+        const expected = Type.bitstring("ŹRÓDŁO");
 
         assert.deepStrictEqual(result, expected);
       });
@@ -265,7 +265,7 @@ describe("Elixir_String", () => {
 
     // TODO: client error message for this case is inconsistent with server error message
     it("raises FunctionClauseError if the first arg is a non-binary bitstring", () => {
-      const arg1 = Type.bitstring2([1, 0, 1, 0]);
+      const arg1 = Type.bitstring([1, 0, 1, 0]);
 
       assertBoxedError(
         () => upcase(arg1, mode),
