@@ -41,10 +41,10 @@ Argument: equal atoms
 <table>
   <tr>
     <th>Average Cold Execution Time</th>
-    <td>275.42 μs</td>
+    <td>260.25 μs</td>
   </tr>
   <tr>
     <th>Average Warm Execution Time</th>
-    <td>1.49 μs</td>
+    <td>1.50 μs</td>
   </tr>
 </table>
