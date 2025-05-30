@@ -17,5 +17,6 @@ const context = contextFixture();
 benchmark(() => {
   try {
     Interpreter.matchOperator(Type.atom("abc"), Type.atom("xyz"), context);
+    // eslint-disable-next-line no-empty
   } catch {}
 });
