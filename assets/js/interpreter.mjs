@@ -601,7 +601,7 @@ export default class Interpreter {
       case "tuple":
         return $.#areCollectionsItemsStrictlyEqual(left.data, right.data);
 
-      case "function":
+      case "anonymous_function":
         return $.#areFunctionsEqual(left, right);
 
       case "float":
@@ -951,10 +951,11 @@ export default class Interpreter {
   }
 
   static #areMapsEqual(map1, map2) {
-    if (data1.length !== data2.length) return false;
-
     const data1 = map1.data;
     const data2 = map2.data;
+
+    if (data1.length !== data2.length) return false;
+
     const keys = Object.keys(data1);
 
     for (let i = 0; i < keys.length; ++i) {
