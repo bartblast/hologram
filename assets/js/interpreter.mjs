@@ -579,9 +579,7 @@ export default class Interpreter {
   static isStrictlyEqual(left, right) {
     const leftType = left.type;
 
-    if (leftType !== right.type) {
-      return false;
-    }
+    if (leftType !== right.type) return false;
 
     // Cases ordered by expected frequency (most common first)
     switch (leftType) {
@@ -953,20 +951,16 @@ export default class Interpreter {
   }
 
   static #areMapsEqual(map1, map2) {
-    const data1 = map1.data;
-    const data2 = map2.data;
-
     if (data1.length !== data2.length) return false;
 
-    const entries1 = Object.entries(data1);
+    const data1 = map1.data;
+    const data2 = map2.data;
+    const keys = Object.keys(data1);
 
-    for (let i = 0; i < entries1.length; ++i) {
-      const entry1 = entries1[i];
-      const key1 = entry1[0];
-      const value1 = entry1[1];
-      const value2 = data2[key1]?.[1];
+    for (let i = 0; i < keys.length; ++i) {
+      const key = keys[i];
 
-      if (typeof value2 === "undefined" || !$.isStrictlyEqual(value1, value2)) {
+      if (!(key in data2) || !$.isStrictlyEqual(data1[key][1], data2[key][1])) {
         return false;
       }
     }
