@@ -1,14 +1,13 @@
 "use strict";
 
-import isEqual from "lodash/isEqual.js";
-import uniqWith from "lodash/uniqWith.js";
-
 import Bitstring from "./bitstring.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
 import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
+
+import uniqWith from "lodash/uniqWith.js";
 
 export default class Interpreter {
   // Deps: [:lists.keyfind/3]
@@ -565,7 +564,7 @@ export default class Interpreter {
       }
     }
 
-    return isEqual(left, right);
+    return $.isStrictlyEqual(left, right);
   }
 
   static isMatched(left, right, context) {
@@ -578,39 +577,47 @@ export default class Interpreter {
   }
 
   static isStrictlyEqual(left, right) {
-    if (left.type !== right.type) {
+    const leftType = left.type;
+
+    if (leftType !== right.type) {
       return false;
     }
 
-    if (left.type === "bitstring") {
-      if (left.text !== null && left.text === right.text) {
-        return true;
-      }
+    // Cases ordered by expected frequency (most common first)
+    switch (leftType) {
+      case "atom":
+        return left.value === right.value;
 
-      if (left.leftoverBitCount !== right.leftoverBitCount) {
-        return false;
-      }
+      case "map":
+        return $.#areMapsEqual(left, right);
 
-      Bitstring.maybeSetBytesFromText(left);
-      const leftBytes = left.bytes;
+      case "bitstring":
+        return $.#areBitstringsEqual(left, right);
 
-      Bitstring.maybeSetBytesFromText(right);
-      const rightBytes = right.bytes;
+      case "list":
+        return $.#areListsEqual(left, right);
 
-      if (leftBytes.length !== rightBytes.length) {
-        return false;
-      }
+      case "integer":
+        return left.value === right.value;
 
-      for (let i = 0; i < leftBytes.length; i++) {
-        if (leftBytes[i] !== rightBytes[i]) {
-          return false;
-        }
-      }
+      case "tuple":
+        return $.#areCollectionsItemsStrictlyEqual(left.data, right.data);
 
-      return true;
+      case "function":
+        return $.#areFunctionsEqual(left, right);
+
+      case "float":
+        return left.value === right.value;
+
+      case "pid":
+        return $.#areIdentifiersEqual(left, right);
+
+      case "reference":
+        return $.#areIdentifiersEqual(left, right);
+
+      case "port":
+        return $.#areIdentifiersEqual(left, right);
     }
-
-    return isEqual(left, right);
   }
 
   // context.vars.__matched__ keeps track of already pattern matched variables,
@@ -870,6 +877,101 @@ export default class Interpreter {
     throw new HologramInterpreterError(
       '"with" expression is not yet implemented in Hologram',
     );
+  }
+
+  static #areBitstringsEqual(bitstring1, bitstring2) {
+    if (bitstring1.text !== null && bitstring1.text === bitstring2.text) {
+      return true;
+    }
+
+    if (bitstring1.leftoverBitCount !== bitstring2.leftoverBitCount) {
+      return false;
+    }
+
+    Bitstring.maybeSetBytesFromText(bitstring1);
+    const bytes1 = bitstring1.bytes;
+
+    Bitstring.maybeSetBytesFromText(bitstring2);
+    const bytes2 = bitstring2.bytes;
+
+    if (bytes1.length !== bytes2.length) {
+      return false;
+    }
+
+    for (let i = 0; i < bytes1.length; i++) {
+      if (bytes1[i] !== bytes2[i]) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  static #areCollectionsItemsStrictlyEqual(items1, items2) {
+    if (items1.length !== items2.length) return false;
+
+    for (let i = 0; i < items1.length; i++) {
+      if (!$.isStrictlyEqual(items1[i], items2[i])) return false;
+    }
+
+    return true;
+  }
+
+  static #areFunctionsEqual(function1, function2) {
+    if (function1.capturedModule === null) return false;
+
+    return (
+      function1.capturedModule === function2.capturedModule &&
+      function1.capturedFunction === function2.capturedFunction &&
+      function1.arity === function2.arity
+    );
+  }
+
+  static #areIdentifiersEqual(identifier1, identifier2) {
+    return (
+      $.#areIntegerArraysEqual(identifier1.segments, identifier2.segments) &&
+      identifier1.origin === identifier2.origin &&
+      identifier1.node === identifier2.node
+    );
+  }
+
+  static #areIntegerArraysEqual(array1, array2) {
+    if (array1.length !== array2.length) return false;
+
+    for (let i = 0; i < array1.length; i++) {
+      if (array1[i] !== array2[i]) return false;
+    }
+
+    return true;
+  }
+
+  static #areListsEqual(list1, list2) {
+    return (
+      $.#areCollectionsItemsStrictlyEqual(list1.data, list2.data) &&
+      list1.isProper === list2.isProper
+    );
+  }
+
+  static #areMapsEqual(map1, map2) {
+    const data1 = map1.data;
+    const data2 = map2.data;
+
+    if (data1.length !== data2.length) return false;
+
+    const entries1 = Object.entries(data1);
+
+    for (let i = 0; i < entries1.length; ++i) {
+      const entry1 = entries1[i];
+      const key1 = entry1[0];
+      const value1 = entry1[1];
+      const value2 = data2[key1]?.[1];
+
+      if (typeof value2 === "undefined" || !$.isStrictlyEqual(value1, value2)) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   static #comparePids(pid1, pid2) {
