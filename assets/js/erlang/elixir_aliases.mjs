@@ -22,7 +22,7 @@ const Erlang_Elixir_Aliases = {
 
     const normalizedSegments = segments.data.reduce((acc, segment, index) => {
       if (!Type.isAtom(segment) && !Type.isBinary(segment)) {
-        if (acc.length === 0 || !Interpreter.isEqual(acc[0], "Elixir")) {
+        if (acc.length === 0 || acc[0] !== "Elixir") {
           acc.unshift("Elixir");
         }
 
