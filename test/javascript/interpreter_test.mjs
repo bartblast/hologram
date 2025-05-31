@@ -2245,7 +2245,25 @@ describe("Interpreter", () => {
   });
 
   describe("isStrictlyEqual()", () => {
-    describe("bitstring type", () => {
+    const isStrictlyEqual = Interpreter.isStrictlyEqual;
+
+    describe("atoms", () => {
+      it("equal", () => {
+        const atom1 = Type.atom("abc");
+        const atom2 = Type.atom("abc");
+
+        assert.isTrue(isStrictlyEqual(atom1, atom2));
+      });
+
+      it("not equal", () => {
+        const atom1 = Type.atom("abc");
+        const atom2 = Type.atom("xyz");
+
+        assert.isFalse(isStrictlyEqual(atom1, atom2));
+      });
+    });
+
+    describe("bitstrings", () => {
       describe("equal", () => {
         it("both have text field", () => {
           const left = Type.bitstring("abc");
@@ -2347,54 +2365,294 @@ describe("Interpreter", () => {
       });
     });
 
-    it("returns true if the args are of the same boxed primitive type and have equal values", () => {
-      const result = Interpreter.isStrictlyEqual(
-        Type.integer(1),
-        Type.integer(1),
-      );
+    describe("floats", () => {
+      it("equal", () => {
+        const float1 = Type.float(1.23);
+        const float2 = Type.float(1.23);
 
-      assert.isTrue(result);
+        assert.isTrue(isStrictlyEqual(float1, float2));
+      });
+
+      it("not equal", () => {
+        const float1 = Type.float(1.23);
+        const float2 = Type.float(2.34);
+
+        assert.isFalse(isStrictlyEqual(float1, float2));
+      });
     });
 
-    it("returns false if the args are not of the same boxed primitive type but have equal values", () => {
-      const result = Interpreter.isStrictlyEqual(
-        Type.integer(1),
-        Type.float(1.0),
-      );
+    describe("functions", () => {
+      const dummyClauses = ["clause_dummy_1", "clause_dummy_2"];
+      const context = contextFixture({});
 
-      assert.isFalse(result);
+      describe("captures", () => {
+        it("equal", () => {
+          const function1 = Type.functionCapture(
+            "MyModule",
+            "my_function",
+            3,
+            dummyClauses,
+            context,
+          );
+
+          const function2 = Type.functionCapture(
+            "MyModule",
+            "my_function",
+            3,
+            dummyClauses,
+            context,
+          );
+
+          assert.isTrue(isStrictlyEqual(function1, function2));
+        });
+
+        describe("not equal", () => {
+          it("different module", () => {
+            const function1 = Type.functionCapture(
+              "MyModule1",
+              "my_function",
+              3,
+              dummyClauses,
+              context,
+            );
+
+            const function2 = Type.functionCapture(
+              "MyModule2",
+              "my_function",
+              3,
+              dummyClauses,
+              context,
+            );
+
+            assert.isFalse(isStrictlyEqual(function1, function2));
+          });
+
+          it("different function", () => {
+            const function1 = Type.functionCapture(
+              "MyModule",
+              "my_function_1",
+              3,
+              dummyClauses,
+              context,
+            );
+
+            const function2 = Type.functionCapture(
+              "MyModule",
+              "my_function_2",
+              3,
+              dummyClauses,
+              context,
+            );
+
+            assert.isFalse(isStrictlyEqual(function1, function2));
+          });
+
+          it("different arity", () => {
+            const function1 = Type.functionCapture(
+              "MyModule",
+              "my_function",
+              3,
+              dummyClauses,
+              context,
+            );
+
+            const function2 = Type.functionCapture(
+              "MyModule",
+              "my_function",
+              4,
+              dummyClauses,
+              context,
+            );
+
+            assert.isFalse(isStrictlyEqual(function1, function2));
+          });
+        });
+      });
+
+      it("not captures", () => {
+        const function1 = Type.anonymousFunction(3, dummyClauses, context);
+        const function2 = structuredClone(function1);
+
+        assert.isFalse(isStrictlyEqual(function1, function2));
+      });
     });
 
-    it("returns true if the left boxed arg of a composite type is deeply equal to the right boxed arg of a composite type", () => {
-      const left = Type.map([
-        [Type.atom("a"), Type.integer(1)],
-        [Type.atom("b"), Type.map([[Type.atom("c"), Type.integer(3)]])],
-      ]);
+    describe("integers", () => {
+      it("equal", () => {
+        const integer1 = Type.integer(123);
+        const integer2 = Type.integer(123);
 
-      const right = Type.map([
-        [Type.atom("a"), Type.integer(1)],
-        [Type.atom("b"), Type.map([[Type.atom("c"), Type.integer(3)]])],
-      ]);
+        assert.isTrue(isStrictlyEqual(integer1, integer2));
+      });
 
-      const result = Interpreter.isStrictlyEqual(left, right);
+      it("not equal", () => {
+        const integer1 = Type.integer(123);
+        const integer2 = Type.integer(234);
 
-      assert.isTrue(result);
+        assert.isFalse(isStrictlyEqual(integer1, integer2));
+      });
     });
 
-    it("returns false if the left boxed arg of a composite type is not deeply equal to the right boxed arg of a composite type", () => {
-      const left = Type.map([
-        [Type.atom("a"), Type.integer(1)],
-        [Type.atom("b"), Type.map([[Type.atom("c"), Type.integer(3)]])],
-      ]);
+    describe("lists", () => {
+      it("equal", () => {
+        const list1 = Type.list([Type.integer(1), Type.float(2.34)]);
+        const list2 = Type.list([Type.integer(1), Type.float(2.34)]);
 
-      const right = Type.map([
-        [Type.atom("a"), Type.integer(1)],
-        [Type.atom("b"), Type.map([[Type.atom("c"), Type.integer(4)]])],
-      ]);
+        assert.isTrue(isStrictlyEqual(list1, list2));
+      });
 
-      const result = Interpreter.isStrictlyEqual(left, right);
+      it("not equal", () => {
+        const list1 = Type.list([Type.integer(1), Type.float(2.34)]);
+        const list2 = Type.list([Type.integer(1), Type.float(3.45)]);
 
-      assert.isFalse(result);
+        assert.isFalse(isStrictlyEqual(list1, list2));
+      });
+    });
+
+    describe("maps", () => {
+      it("equal", () => {
+        const map1 = Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.bitstring("b"), Type.float(2.34)],
+        ]);
+
+        const map2 = Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.bitstring("b"), Type.float(2.34)],
+        ]);
+
+        assert.isTrue(isStrictlyEqual(map1, map2));
+      });
+
+      it("not equal", () => {
+        const map1 = Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.bitstring("b"), Type.float(2.34)],
+        ]);
+
+        const map2 = Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.bitstring("b"), Type.float(3.45)],
+        ]);
+
+        assert.isFalse(isStrictlyEqual(map1, map2));
+      });
+    });
+
+    describe("PIDs", () => {
+      it("equal", () => {
+        const pid1 = Type.pid("my_node", [0, 11, 222], "server");
+        const pid2 = Type.pid("my_node", [0, 11, 222], "server");
+
+        assert.isTrue(isStrictlyEqual(pid1, pid2));
+      });
+
+      describe("not equal", () => {
+        it("different node", () => {
+          const pid1 = Type.pid("my_node_1", [0, 11, 222], "server");
+          const pid2 = Type.pid("my_node_2", [0, 11, 222], "server");
+
+          assert.isFalse(isStrictlyEqual(pid1, pid2));
+        });
+
+        it("different segments", () => {
+          const pid1 = Type.pid("my_node", [0, 11, 222], "server");
+          const pid2 = Type.pid("my_node", [0, 11, 333], "server");
+
+          assert.isFalse(isStrictlyEqual(pid1, pid2));
+        });
+
+        it("different origin", () => {
+          const pid1 = Type.pid("my_node", [0, 11, 222], "server");
+          const pid2 = Type.pid("my_node", [0, 11, 222], "client");
+
+          assert.isFalse(isStrictlyEqual(pid1, pid2));
+        });
+      });
+    });
+
+    describe("ports", () => {
+      it("equal", () => {
+        const port1 = Type.port("my_node", [0, 11], "server");
+        const port2 = Type.port("my_node", [0, 11], "server");
+
+        assert.isTrue(isStrictlyEqual(port1, port2));
+      });
+
+      describe("not equal", () => {
+        it("different node", () => {
+          const port1 = Type.port("my_node_1", [0, 11], "server");
+          const port2 = Type.port("my_node_2", [0, 11], "server");
+
+          assert.isFalse(isStrictlyEqual(port1, port2));
+        });
+
+        it("different segments", () => {
+          const port1 = Type.port("my_node", [0, 11], "server");
+          const port2 = Type.port("my_node", [0, 22], "server");
+
+          assert.isFalse(isStrictlyEqual(port1, port2));
+        });
+
+        it("different origin", () => {
+          const port1 = Type.port("my_node", [0, 11], "server");
+          const port2 = Type.port("my_node", [0, 11], "client");
+
+          assert.isFalse(isStrictlyEqual(port1, port2));
+        });
+      });
+    });
+
+    describe("references", () => {
+      it("equal", () => {
+        const ref1 = Type.reference("my_node", [0, 1, 2, 3], "server");
+        const ref2 = Type.reference("my_node", [0, 1, 2, 3], "server");
+
+        assert.isTrue(isStrictlyEqual(ref1, ref2));
+      });
+
+      describe("not equal", () => {
+        it("different node", () => {
+          const ref1 = Type.reference("my_node_1", [0, 1, 2, 3], "server");
+          const ref2 = Type.reference("my_node_2", [0, 1, 2, 3], "server");
+
+          assert.isFalse(isStrictlyEqual(ref1, ref2));
+        });
+
+        it("different segments", () => {
+          const ref1 = Type.reference("my_node", [0, 1, 2, 3], "server");
+          const ref2 = Type.reference("my_node", [0, 1, 2, 4], "server");
+
+          assert.isFalse(isStrictlyEqual(ref1, ref2));
+        });
+
+        it("different origin", () => {
+          const ref1 = Type.reference("my_node", [0, 1, 2, 3], "server");
+          const ref2 = Type.reference("my_node", [0, 1, 2, 3], "client");
+
+          assert.isFalse(isStrictlyEqual(ref1, ref2));
+        });
+      });
+    });
+
+    describe("tuples", () => {
+      it("equal", () => {
+        const tuple1 = Type.tuple([Type.integer(1), Type.float(2.34)]);
+        const tuple2 = Type.tuple([Type.integer(1), Type.float(2.34)]);
+
+        assert.isTrue(isStrictlyEqual(tuple1, tuple2));
+      });
+
+      it("not equal", () => {
+        const tuple1 = Type.tuple([Type.integer(1), Type.float(2.34)]);
+        const tuple2 = Type.tuple([Type.integer(1), Type.float(3.45)]);
+
+        assert.isFalse(isStrictlyEqual(tuple1, tuple2));
+      });
+    });
+
+    it("equal but not strictly equal", () => {
+      assert.isFalse(isStrictlyEqual(Type.integer(1), Type.float(1.0)));
     });
   });
 
