@@ -15,7 +15,6 @@ import vnodeToHtml from "snabbdom-to-html";
 
 export default class Renderer {
   // Based on render_dom/3
-  // Deps: [String.Chars.to_string/1]
   static renderDom(dom, context, slots, defaultTarget) {
     if (Type.isList(dom)) {
       return Renderer.#renderNodes(dom, context, slots, defaultTarget);
