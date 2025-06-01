@@ -111,17 +111,31 @@ export default class Renderer {
     }
   }
 
-  // Deps: [String.Chars.to_string/1]
   static valueDomToBitstring(valueDom) {
-    const bitstringChunks = valueDom.data.map((node) => {
-      const nodeType = node.data[0].value;
+    // Cache the property access
+    const valueParts = valueDom.data;
 
-      if (nodeType === "text") {
-        return node.data[1];
+    // Early exit for empty case
+    if (valueParts.length === 0) {
+      return Type.bitstring("");
+    }
+
+    const bitstringChunks = new Array(valueParts.length);
+
+    for (let i = 0; i < valueParts.length; ++i) {
+      // Cache the property access
+      const valuePartData = valueParts[i].data;
+
+      if (valuePartData[0].value === "text") {
+        bitstringChunks[i] = valuePartData[1];
       } else {
-        return Elixir_String_Chars["to_string/1"](node.data[1].data[0]);
+        const expressionResult = valuePartData[1].data[0];
+
+        bitstringChunks[i] = Type.isBitstring(expressionResult)
+          ? expressionResult
+          : Type.bitstring($.toText(expressionResult));
       }
-    });
+    }
 
     return Bitstring.concat(bitstringChunks);
   }
