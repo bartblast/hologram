@@ -2463,6 +2463,20 @@ describe("Renderer", () => {
     });
   });
 
+  describe("toBitstring()", () => {
+    const toBitstring = Renderer.toBitstring;
+
+    it("is a bitstring", () => {
+      const term = Bitstring.fromBytes([97, 98, 99]);
+      assert.equal(toBitstring(term), term);
+    });
+
+    it("is not a bitstring", () => {
+      const term = Type.integer(123);
+      assert.deepStrictEqual(toBitstring(term), Type.bitstring("123"));
+    });
+  });
+
   describe("toText()", () => {
     const toText = Renderer.toText;
 
