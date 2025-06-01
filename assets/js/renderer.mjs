@@ -133,11 +133,7 @@ export default class Renderer {
       if (valuePartData[0].value === "text") {
         bitstringChunks[i] = valuePartData[1];
       } else {
-        const expressionResult = valuePartData[1].data[0];
-
-        bitstringChunks[i] = Type.isBitstring(expressionResult)
-          ? expressionResult
-          : Type.bitstring($.toText(expressionResult));
+        bitstringChunks[i] = $.toBitstring(valuePartData[1].data[0]);
       }
     }
 
