@@ -337,7 +337,7 @@ export default class Renderer {
     return Erlang_Maps["merge/2"](propsFromTemplate, propsFromContext);
   }
 
-  // Deps: [Hologram.Component.__struct__/0, :maps.get/2]
+  // Deps: [:maps.get/2]
   static #maybeInitComponent(cid, moduleRef, props) {
     let componentState = ComponentRegistry.getComponentState(cid);
     let componentEmittedContext;

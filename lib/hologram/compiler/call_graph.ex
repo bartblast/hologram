@@ -103,7 +103,6 @@ defmodule Hologram.Compiler.CallGraph do
       {:maps, :put, 3}
     ],
     renderer_class: [
-      {Hologram.Component, :__struct__, 0},
       {String.Chars, :to_string, 1},
       {:erlang, :binary_to_atom, 1},
       {:lists, :flatten, 1},
