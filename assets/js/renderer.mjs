@@ -34,9 +34,7 @@ export default class Renderer {
         return Renderer.#renderElement(dom, context, slots, defaultTarget);
 
       case "expression":
-        return Bitstring.toText(
-          Elixir_String_Chars["to_string/1"](dom.data[1].data[0]),
-        );
+        return $.toText(dom.data[1].data[0]);
 
       case "page":
         return Renderer.renderDom(
