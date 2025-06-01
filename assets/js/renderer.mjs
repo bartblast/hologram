@@ -268,11 +268,10 @@ export default class Renderer {
   }
 
   // Based on filter_allowed_props/2
-  // Deps: [String.Chars.to_string/1]
   static #filterAllowedProps(propsDom, moduleRef) {
     const registeredPropNames = moduleRef["__props__/0"]()
       .data.filter((prop) => Renderer.#contextKey(prop.data[2]) === null)
-      .map((prop) => Elixir_String_Chars["to_string/1"](prop.data[0]));
+      .map((prop) => $.toBitstring(prop.data[0]));
 
     const allowedPropNames = registeredPropNames.concat(Type.bitstring("cid"));
 
