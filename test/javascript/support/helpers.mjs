@@ -260,8 +260,14 @@ function defineElixirStringCharsModule() {
         case "bitstring":
           return term;
 
+        case "float":
+          return Type.bitstring(term.value.toString());
+
         case "integer":
           return Type.bitstring(term.value.toString());
+
+        case "dummy_type":
+          return Type.bitstring("dummy_value");
 
         default: {
           const inspectedTerm = Interpreter.inspect(term);

@@ -13,9 +13,9 @@ import Utils from "./utils.mjs";
 import {h as vnode} from "snabbdom";
 import vnodeToHtml from "snabbdom-to-html";
 
-// Deps: [String.Chars.to_string/1]
 export default class Renderer {
   // Based on render_dom/3
+  // Deps: [String.Chars.to_string/1]
   static renderDom(dom, context, slots, defaultTarget) {
     if (Type.isList(dom)) {
       return Renderer.#renderNodes(dom, context, slots, defaultTarget);
@@ -81,6 +81,36 @@ export default class Renderer {
     }
 
     return htmlVnode;
+  }
+
+  // Deps: [String.Chars.to_string/1]
+  static toText(term) {
+    // Cases ordered by expected frequency (most common first)
+    switch (term.type) {
+      case "atom":
+        return term.value;
+
+      case "bitstring":
+        return Bitstring.toText(term);
+
+      case "integer":
+        return term.value.toString();
+
+      case "float":
+        return term.value.toString();
+
+      case "pid":
+        return `#PID<${term.segments.join(".")}>`;
+
+      case "reference":
+        return `#Reference<${term.segments.join(".")}>`;
+
+      case "port":
+        return `#Port<${term.segments.join(".")}>`;
+
+      default:
+        return Bitstring.toText(Elixir_String_Chars["to_string/1"](term));
+    }
   }
 
   // Deps: [String.Chars.to_string/1]
@@ -638,3 +668,5 @@ export default class Renderer {
     return Bitstring.toText(Renderer.valueDomToBitstring(valueDom));
   }
 }
+
+const $ = Renderer;

@@ -66,6 +66,7 @@ import {defineModule7Fixture} from "./support/fixtures/renderer/module_7.mjs";
 import {defineModule8Fixture} from "./support/fixtures/renderer/module_8.mjs";
 import {defineModule9Fixture} from "./support/fixtures/renderer/module_9.mjs";
 
+import Bitstring from "../../assets/js/bitstring.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
@@ -2459,6 +2460,66 @@ describe("Renderer", () => {
       ]);
 
       assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("toText()", () => {
+    const toText = Renderer.toText;
+
+    it("atom", () => {
+      const term = Type.atom("abc");
+      const result = toText(term);
+
+      assert.deepStrictEqual(result, "abc");
+    });
+
+    it("bitstring", () => {
+      const term = Bitstring.fromBytes([97, 98, 99]);
+      const result = toText(term);
+
+      assert.deepStrictEqual(result, "abc");
+    });
+
+    it("float", () => {
+      const term = Type.float(1.23);
+      const result = toText(term);
+
+      assert.deepStrictEqual(result, "1.23");
+    });
+
+    it("integer", () => {
+      const term = Type.integer(123);
+      const result = toText(term);
+
+      assert.deepStrictEqual(result, "123");
+    });
+
+    it("PID", () => {
+      const term = Type.pid("my_node", [0, 11, 222], "server");
+      const result = toText(term);
+
+      assert.deepStrictEqual(result, "#PID<0.11.222>");
+    });
+
+    it("port", () => {
+      const term = Type.port("my_node", [0, 11], "server");
+      const result = toText(term);
+
+      assert.deepStrictEqual(result, "#Port<0.11>");
+    });
+
+    it("reference", () => {
+      const term = Type.reference("my_node", [0, 1, 2, 3], "server");
+      const result = toText(term);
+
+      assert.deepStrictEqual(result, "#Reference<0.1.2.3>");
+    });
+
+    it("delegates to String.Chars.to_string/1 for cases that it can't handle by itself", () => {
+      const term = {type: "dummy_type"};
+      const result = toText(term);
+
+      assert.deepStrictEqual(result, "dummy_value");
     });
   });
 
