@@ -23,15 +23,16 @@ export default class Renderer {
 
     const nodeType = dom.data[0].value;
 
+    // Cases ordered by expected frequency (most common first)
     switch (nodeType) {
-      case "component":
-        return Renderer.#renderComponent(dom, context, slots, defaultTarget);
-
-      case "doctype":
-        return Type.nil();
+      case "text":
+        return Bitstring.toText(dom.data[1]);
 
       case "element":
         return Renderer.#renderElement(dom, context, slots, defaultTarget);
+
+      case "component":
+        return Renderer.#renderComponent(dom, context, slots, defaultTarget);
 
       case "expression":
         return $.toText(dom.data[1].data[0]);
@@ -44,6 +45,9 @@ export default class Renderer {
           Type.bitstring("page"),
         );
 
+      case "doctype":
+        return Type.nil();
+
       case "public_comment":
         return Renderer.#renderPublicComment(
           dom,
@@ -51,9 +55,6 @@ export default class Renderer {
           slots,
           defaultTarget,
         );
-
-      case "text":
-        return Bitstring.toText(dom.data[1]);
     }
   }
 
