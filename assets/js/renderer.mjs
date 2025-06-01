@@ -81,6 +81,10 @@ export default class Renderer {
     return htmlVnode;
   }
 
+  static toBitstring(term) {
+    return Type.isBitstring(term) ? term : Type.bitstring($.toText(term));
+  }
+
   // Deps: [String.Chars.to_string/1]
   static toText(term) {
     // Cases ordered by expected frequency (most common first)
