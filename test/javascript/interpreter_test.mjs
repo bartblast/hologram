@@ -5893,17 +5893,17 @@ describe("Interpreter", () => {
     });
   });
 
-  describe("moduleRef()", () => {
+  describe("moduleProxy()", () => {
     it("boxed alias argument", () => {
       const alias = Type.alias("String.Chars");
-      const result = Interpreter.moduleRef(alias);
+      const result = Interpreter.moduleProxy(alias);
 
       assert.equal(result, Elixir_String_Chars);
     });
 
     it("JS string argument", () => {
       const alias = "Elixir.String.Chars";
-      const result = Interpreter.moduleRef(alias);
+      const result = Interpreter.moduleProxy(alias);
 
       assert.equal(result, Elixir_String_Chars);
     });

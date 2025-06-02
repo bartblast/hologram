@@ -20,7 +20,7 @@ const Erlang_Code = {
       );
     }
 
-    return typeof Interpreter.moduleRef(module) === "undefined"
+    return typeof Interpreter.moduleProxy(module) === "undefined"
       ? Type.tuple([Type.atom("error"), Type.atom("nofile")])
       : Type.tuple([Type.atom("module"), module]);
   },

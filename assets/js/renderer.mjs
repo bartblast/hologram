@@ -59,13 +59,13 @@ export default class Renderer {
 
   // Based on: render_page/2
   static renderPage(pageModule, pageParams) {
-    const pageModuleRef = Interpreter.moduleRef(pageModule);
+    const pageModuleProxy = Interpreter.moduleProxy(pageModule);
 
     const cid = Type.bitstring("page");
     const pageComponentStruct = ComponentRegistry.getComponentStruct(cid);
 
     const pageVdom = Renderer.#renderPageInsideLayout(
-      pageModuleRef,
+      pageModuleProxy,
       pageParams,
       pageComponentStruct,
     );
@@ -142,9 +142,9 @@ export default class Renderer {
 
   // Based on build_layout_props_dom/2
   // Deps: [:maps.from_list/1, :maps.merge/2]
-  static #buildLayoutPropsDom(pageModuleRef, pageState) {
+  static #buildLayoutPropsDom(pageModuleProxy, pageState) {
     const propsFromPage = Erlang_Maps["from_list/1"](
-      pageModuleRef["__layout_props__/0"](),
+      pageModuleProxy["__layout_props__/0"](),
     );
 
     const propsWithCid = Erlang_Maps["merge/2"](
@@ -166,8 +166,8 @@ export default class Renderer {
 
   // Based on cast_props/2
   // Deps: [:maps.from_list/1]
-  static #castProps(propsDom, moduleRef) {
-    const propsTuples = Renderer.#filterAllowedProps(propsDom, moduleRef)
+  static #castProps(propsDom, moduleProxy) {
+    const propsTuples = Renderer.#filterAllowedProps(propsDom, moduleProxy)
       .map((propDom) => Renderer.#evalutatePropValue(propDom))
       .map((propDom) => Renderer.#normalizePropName(propDom));
 
@@ -263,13 +263,15 @@ export default class Renderer {
     return Type.tuple([name, evaluatedValue]);
   }
 
-  static #evaluateTemplate(moduleRef, vars) {
-    return Interpreter.callAnonymousFunction(moduleRef["template/0"](), [vars]);
+  static #evaluateTemplate(moduleProxy, vars) {
+    return Interpreter.callAnonymousFunction(moduleProxy["template/0"](), [
+      vars,
+    ]);
   }
 
   // Based on filter_allowed_props/2
-  static #filterAllowedProps(propsDom, moduleRef) {
-    const registeredPropNames = Renderer.#getPropDefinitions(moduleRef)
+  static #filterAllowedProps(propsDom, moduleProxy) {
+    const registeredPropNames = Renderer.#getPropDefinitions(moduleProxy)
       .data.filter((prop) => Renderer.#contextKey(prop.data[2]) === null)
       .map((prop) => $.toBitstring(prop.data[0]));
 
@@ -282,12 +284,12 @@ export default class Renderer {
     );
   }
 
-  static #getPropDefinitions(moduleRef) {
-    if (!("__props__" in moduleRef)) {
-      moduleRef.__props__ = moduleRef["__props__/0"]();
+  static #getPropDefinitions(moduleProxy) {
+    if (!("__props__" in moduleProxy)) {
+      moduleProxy.__props__ = moduleProxy["__props__/0"]();
     }
 
-    return moduleRef.__props__;
+    return moduleProxy.__props__;
   }
 
   // Based on has_cid_prop?/1
@@ -297,37 +299,40 @@ export default class Renderer {
 
   // Based on inject_default_prop_values/2
   // Deps: [:lists.keyfind/3, :lists.keymember/3, :maps.is_key/2]
-  static #injectDefaultPropValues(props, moduleRef) {
-    return Renderer.#getPropDefinitions(moduleRef).data.reduce((acc, prop) => {
-      if (
-        Type.isFalse(Erlang_Maps["is_key/2"](prop.data[0], acc)) &&
-        Type.isTrue(
-          Erlang_Lists["keymember/3"](
-            Type.atom("default"),
-            Type.integer(1),
-            prop.data[2],
-          ),
-        )
-      ) {
-        // Optimized (mutates map)
-        acc.data[Type.encodeMapKey(prop.data[0])] = [
-          prop.data[0],
-          Erlang_Lists["keyfind/3"](
-            Type.atom("default"),
-            Type.integer(1),
-            prop.data[2],
-          ).data[1],
-        ];
-      }
+  static #injectDefaultPropValues(props, moduleProxy) {
+    return Renderer.#getPropDefinitions(moduleProxy).data.reduce(
+      (acc, prop) => {
+        if (
+          Type.isFalse(Erlang_Maps["is_key/2"](prop.data[0], acc)) &&
+          Type.isTrue(
+            Erlang_Lists["keymember/3"](
+              Type.atom("default"),
+              Type.integer(1),
+              prop.data[2],
+            ),
+          )
+        ) {
+          // Optimized (mutates map)
+          acc.data[Type.encodeMapKey(prop.data[0])] = [
+            prop.data[0],
+            Erlang_Lists["keyfind/3"](
+              Type.atom("default"),
+              Type.integer(1),
+              prop.data[2],
+            ).data[1],
+          ];
+        }
 
-      return acc;
-    }, Utils.shallowCloneObject(props));
+        return acc;
+      },
+      Utils.shallowCloneObject(props),
+    );
   }
 
   // Based on inject_props_from_context/3
   // Deps: [:maps.from_list/1, :maps.get/2, :maps.merge/2]
-  static #injectPropsFromContext(propsFromTemplate, moduleRef, context) {
-    const propsFromContextTuples = Renderer.#getPropDefinitions(moduleRef)
+  static #injectPropsFromContext(propsFromTemplate, moduleProxy, context) {
+    const propsFromContextTuples = Renderer.#getPropDefinitions(moduleProxy)
       .data.filter((prop) => Renderer.#contextKey(prop.data[2]) !== null)
       .map((prop) => {
         const contextKey = Renderer.#contextKey(prop.data[2]);
@@ -346,15 +351,15 @@ export default class Renderer {
   }
 
   // Deps: [:maps.get/2]
-  static #maybeInitComponent(cid, moduleRef, props) {
+  static #maybeInitComponent(cid, moduleProxy, props) {
     let componentState = ComponentRegistry.getComponentState(cid);
     let componentEmittedContext;
 
     if (componentState === null) {
-      if ("init/2" in moduleRef) {
+      if ("init/2" in moduleProxy) {
         const emptyComponentStruct = Type.componentStruct();
 
-        const componentStruct = moduleRef["init/2"](
+        const componentStruct = moduleProxy["init/2"](
           props,
           emptyComponentStruct,
         );
@@ -362,7 +367,7 @@ export default class Renderer {
         ComponentRegistry.putEntry(
           cid,
           Type.map([
-            [Type.atom("module"), moduleRef.__exModule__],
+            [Type.atom("module"), moduleProxy.__exModule__],
             [Type.atom("struct"), componentStruct],
           ]),
         );
@@ -378,7 +383,7 @@ export default class Renderer {
         );
       } else {
         const message = `component ${Interpreter.inspectModuleJsName(
-          moduleRef.__jsName__,
+          moduleProxy.__jsName__,
         )} is initialized on the client, but doesn't have init/2 implemented`;
 
         throw new HologramInterpreterError(message);
@@ -464,30 +469,30 @@ export default class Renderer {
 
   // Based on render_dom/3 (component case)
   static #renderComponent(dom, context, slots, defaultTarget) {
-    const moduleRef = Interpreter.moduleRef(dom.data[1]);
+    const moduleProxy = Interpreter.moduleProxy(dom.data[1]);
     const propsDom = dom.data[2];
     let childrenDom = dom.data[3];
 
     const expandedChildrenDom = Renderer.#expandSlots(childrenDom, slots);
 
     let props = Renderer.#injectPropsFromContext(
-      Renderer.#castProps(propsDom, moduleRef),
-      moduleRef,
+      Renderer.#castProps(propsDom, moduleProxy),
+      moduleProxy,
       context,
     );
 
-    props = Renderer.#injectDefaultPropValues(props, moduleRef);
+    props = Renderer.#injectDefaultPropValues(props, moduleProxy);
 
     if (Renderer.#hasCidProp(props)) {
       return Renderer.#renderStatefulComponent(
-        moduleRef,
+        moduleProxy,
         props,
         expandedChildrenDom,
         context,
       );
     } else {
       return Renderer.#renderTemplate(
-        moduleRef,
+        moduleProxy,
         props,
         expandedChildrenDom,
         context,
@@ -578,7 +583,7 @@ export default class Renderer {
   // Based on render_page_inside_layout/3
   // Deps: [:maps.get/2, :maps.merge/2]
   static #renderPageInsideLayout(
-    pageModuleRef,
+    pageModuleProxy,
     pageParams,
     pageComponentStruct,
   ) {
@@ -593,12 +598,12 @@ export default class Renderer {
     );
 
     const vars = Erlang_Maps["merge/2"](pageParams, pageState);
-    const pageDom = Renderer.#evaluateTemplate(pageModuleRef, vars);
+    const pageDom = Renderer.#evaluateTemplate(pageModuleProxy, vars);
 
-    const layoutModule = pageModuleRef["__layout_module__/0"]();
+    const layoutModule = pageModuleProxy["__layout_module__/0"]();
 
     const layoutPropsDom = Renderer.#buildLayoutPropsDom(
-      pageModuleRef,
+      pageModuleProxy,
       pageState,
     );
 
@@ -654,11 +659,11 @@ export default class Renderer {
 
   // Based on render_stateful_component/4
   // Deps: [:maps.get/2, :maps.merge/2]
-  static #renderStatefulComponent(moduleRef, props, childrenDom, context) {
+  static #renderStatefulComponent(moduleProxy, props, childrenDom, context) {
     const cid = Erlang_Maps["get/2"](Type.atom("cid"), props);
 
     const [componentState, componentEmittedContext] =
-      Renderer.#maybeInitComponent(cid, moduleRef, props);
+      Renderer.#maybeInitComponent(cid, moduleProxy, props);
 
     const vars = Erlang_Maps["merge/2"](props, componentState);
     const mergedContext = Erlang_Maps["merge/2"](
@@ -667,7 +672,7 @@ export default class Renderer {
     );
 
     return Renderer.#renderTemplate(
-      moduleRef,
+      moduleProxy,
       vars,
       childrenDom,
       mergedContext,
@@ -676,8 +681,14 @@ export default class Renderer {
   }
 
   // Based on render_template/4
-  static #renderTemplate(moduleRef, vars, childrenDom, context, defaultTarget) {
-    const dom = Renderer.#evaluateTemplate(moduleRef, vars);
+  static #renderTemplate(
+    moduleProxy,
+    vars,
+    childrenDom,
+    context,
+    defaultTarget,
+  ) {
+    const dom = Renderer.#evaluateTemplate(moduleProxy, vars);
     const slots = Type.keywordList([[Type.atom("default"), childrenDom]]);
 
     return Renderer.renderDom(dom, context, slots, defaultTarget);

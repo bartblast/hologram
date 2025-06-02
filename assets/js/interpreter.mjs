@@ -160,11 +160,11 @@ export default class Interpreter {
   // Unit test maintenance in interpreter_test.mjs would be problematic because tests would need to be updated
   // each time Hologram.Compiler.Encoder's implementation changes.
   static callNamedFunction(module, functionName, args, context) {
-    const moduleRef = Interpreter.moduleRef(module);
+    const moduleProxy = Interpreter.moduleProxy(module);
     const arity = args.data.length;
     const functionArityStr = `${functionName.value}/${arity}`;
 
-    if (typeof moduleRef === "undefined") {
+    if (typeof moduleProxy === "undefined") {
       Interpreter.raiseUndefinedFunctionError(
         Interpreter.buildUndefinedFunctionErrorMsg(
           module,
@@ -176,7 +176,7 @@ export default class Interpreter {
     }
 
     if (
-      !moduleRef.__exports__.has(functionArityStr) &&
+      !moduleProxy.__exports__.has(functionArityStr) &&
       !Interpreter.isEqual(module, context.module)
     ) {
       Interpreter.raiseUndefinedFunctionError(
@@ -188,7 +188,7 @@ export default class Interpreter {
       );
     }
 
-    return moduleRef[functionArityStr](...args.data);
+    return moduleProxy[functionArityStr](...args.data);
   }
 
   // case() has no unit tests in interpreter_test.mjs, only feature tests in test/features/test/control_flow/case_test.exs
@@ -434,7 +434,7 @@ export default class Interpreter {
     // if left argument is a boxed atom, treat the operator as a remote function call
     if (Type.isAtom(left)) {
       const functionArityStr = `${right.value}/0`;
-      return Interpreter.moduleRef(left)[functionArityStr]();
+      return Interpreter.moduleProxy(left)[functionArityStr]();
     }
 
     // otherwise treat the operator as map key access
@@ -696,16 +696,16 @@ export default class Interpreter {
   static maybeInitModuleProxy(moduleExName, moduleJsName) {
     if (!globalThis[moduleJsName]) {
       const handler = {
-        get(moduleRef, functionArityStr) {
-          if (functionArityStr in moduleRef) {
-            return moduleRef[functionArityStr];
+        get(target, functionArityStr) {
+          if (functionArityStr in target) {
+            return target[functionArityStr];
           }
 
           const [functionName, arity] = functionArityStr.split("/");
 
           Interpreter.raiseUndefinedFunctionError(
             Interpreter.buildUndefinedFunctionErrorMsg(
-              moduleRef.__exModule__,
+              target.__exModule__,
               functionName,
               arity,
             ),
@@ -737,7 +737,7 @@ export default class Interpreter {
     return segments.map((segment) => Utils.capitalize(segment)).join("_");
   }
 
-  static moduleRef(alias) {
+  static moduleProxy(alias) {
     return globalThis[Interpreter.moduleJsName(alias)];
   }
 
