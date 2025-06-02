@@ -713,10 +713,11 @@ export default class Interpreter {
         },
       };
 
-      globalThis[moduleJsName] = new Proxy({}, handler);
-      globalThis[moduleJsName].__exModule__ = Type.alias(moduleExName);
-      globalThis[moduleJsName].__exports__ = new Set();
-      globalThis[moduleJsName].__jsName__ = moduleJsName;
+      const moduleProxy = new Proxy({}, handler);
+      globalThis[moduleJsName] = moduleProxy;
+      moduleProxy.__exModule__ = Type.alias(moduleExName);
+      moduleProxy.__exports__ = new Set();
+      moduleProxy.__jsName__ = moduleJsName;
     }
   }
 
