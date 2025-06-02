@@ -243,7 +243,7 @@ defmodule Hologram.Compiler do
       "--minify",
       "--outfile=#{output_bundle_path}",
       "--sourcemap",
-      "--target=es2020"
+      "--target=es2021"
     ]
 
     {_exit_msg, exit_status} = System.cmd(opts[:esbuild_bin_path], esbuild_cmd, parallelism: true)
