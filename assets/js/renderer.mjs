@@ -269,7 +269,7 @@ export default class Renderer {
 
   // Based on filter_allowed_props/2
   static #filterAllowedProps(propsDom, moduleRef) {
-    const registeredPropNames = Renderer.#getCachedProps(moduleRef)
+    const registeredPropNames = Renderer.#getPropDefinitions(moduleRef)
       .data.filter((prop) => Renderer.#contextKey(prop.data[2]) === null)
       .map((prop) => $.toBitstring(prop.data[0]));
 
@@ -282,7 +282,7 @@ export default class Renderer {
     );
   }
 
-  static #getCachedProps(moduleRef) {
+  static #getPropDefinitions(moduleRef) {
     if (!("__props__" in moduleRef)) {
       moduleRef.__props__ = moduleRef["__props__/0"]();
     }
@@ -298,7 +298,7 @@ export default class Renderer {
   // Based on inject_default_prop_values/2
   // Deps: [:lists.keyfind/3, :lists.keymember/3, :maps.is_key/2]
   static #injectDefaultPropValues(props, moduleRef) {
-    return Renderer.#getCachedProps(moduleRef).data.reduce((acc, prop) => {
+    return Renderer.#getPropDefinitions(moduleRef).data.reduce((acc, prop) => {
       if (
         Type.isFalse(Erlang_Maps["is_key/2"](prop.data[0], acc)) &&
         Type.isTrue(
@@ -327,7 +327,7 @@ export default class Renderer {
   // Based on inject_props_from_context/3
   // Deps: [:maps.from_list/1, :maps.get/2, :maps.merge/2]
   static #injectPropsFromContext(propsFromTemplate, moduleRef, context) {
-    const propsFromContextTuples = Renderer.#getCachedProps(moduleRef)
+    const propsFromContextTuples = Renderer.#getPropDefinitions(moduleRef)
       .data.filter((prop) => Renderer.#contextKey(prop.data[2]) !== null)
       .map((prop) => {
         const contextKey = Renderer.#contextKey(prop.data[2]);
