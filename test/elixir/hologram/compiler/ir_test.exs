@@ -283,12 +283,12 @@ defmodule Hologram.Compiler.IRTest do
       assert for_term!(term) == %IR.AtomType{value: term}
     end
 
-    test "bistring (binary)" do
+    test "bitstring (binary)" do
       term = "abc"
       assert for_term!(term) == %IR.StringType{value: "abc"}
     end
 
-    test "bistring (non-binary)" do
+    test "bitstring (non-binary)" do
       term = <<1::1, 0::1>>
 
       assert for_term!(term) == %IR.BitstringType{

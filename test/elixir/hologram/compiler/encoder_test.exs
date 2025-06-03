@@ -2121,7 +2121,7 @@ defmodule Hologram.Compiler.EncoderTest do
       assert encode_term!(:abc) == ~s/Type.atom("abc")/
     end
 
-    test "bistring" do
+    test "bitstring" do
       assert encode_term!("abc") == ~s/Type.bitstring("abc")/
     end
 

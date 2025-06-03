@@ -38,7 +38,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
-  describe "bistring type" do
+  describe "bitstring type" do
     # <<>> = <<>>
     test "left empty bitstring == right empty bitstring" do
       result = <<>> = <<>>
@@ -101,7 +101,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
 
     # <<x::integer>> = <<1>>
-    test "left single-segment bitstring with variable pattern == right bistring" do
+    test "left single-segment bitstring with variable pattern == right bitstring" do
       result = <<x::integer>> = <<1>>
 
       assert result == <<1>>

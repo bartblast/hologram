@@ -2707,7 +2707,7 @@ describe("Interpreter", () => {
       });
     });
 
-    describe("bistring type", () => {
+    describe("bitstring type", () => {
       const emptyBitstringPattern = Type.bitstringPattern([]);
       const emptyBitstringValue = Type.bitstring([]);
 
@@ -2912,7 +2912,7 @@ describe("Interpreter", () => {
       });
 
       // <<x::integer>> = <<1>>
-      it("left single-segment bitstring with variable pattern == right bistring", () => {
+      it("left single-segment bitstring with variable pattern == right bitstring", () => {
         const myBitstring = Type.bitstring([
           Type.bitstringSegment(Type.integer(1), {type: "integer"}),
         ]);
