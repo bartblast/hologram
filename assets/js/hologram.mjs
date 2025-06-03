@@ -314,11 +314,7 @@ export default class Hologram {
       newVirtualDocument,
     );
 
-    console.log(
-      "Hologram: page rendered in",
-      Math.round(performance.now() - startTime),
-      "ms",
-    );
+    console.log("Hologram: page rendered in", PerformanceTimer.diff(startTime));
   }
 
   static run() {
