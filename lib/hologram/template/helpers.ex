@@ -21,7 +21,7 @@ defmodule Hologram.Template.Helpers do
 
   # TODO: specify void SVG elements (https://github.com/segmetric/hologram/issues/21)
   # See: https://developer.mozilla.org/en-US/docs/Web/SVG/Element
-  @void_svg_elements ["path", "rect"]
+  @void_svg_elements ["circle", "path", "rect"]
 
   @doc """
   Determines whether the given tag is an element or a component.
