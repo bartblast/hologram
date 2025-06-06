@@ -235,7 +235,11 @@ export default class Renderer {
   // Deps: [:lists.flatten/1]
   static #expandSlotsInNodes(nodes, slots) {
     return Erlang_Lists["flatten/1"](
-      Type.list(nodes.data.map((node) => Renderer.#expandSlots(node, slots))),
+      Type.list(
+        nodes.data
+          .filter((node) => !Type.isNil(node))
+          .map((node) => Renderer.#expandSlots(node, slots)),
+      ),
     );
   }
 

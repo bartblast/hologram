@@ -54,6 +54,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module64
   alias Hologram.Test.Fixtures.Template.Renderer.Module65
   alias Hologram.Test.Fixtures.Template.Renderer.Module66
+  alias Hologram.Test.Fixtures.Template.Renderer.Module67
   alias Hologram.Test.Fixtures.Template.Renderer.Module7
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
@@ -577,6 +578,12 @@ defmodule Hologram.Template.RendererTest do
                     }
                   }
                 }}
+    end
+
+    test "with nested nil node resulting from if block" do
+      node = {:component, Module67, [], []}
+
+      assert render_dom(node, @env) == {"\n  \n", %{}}
     end
   end
 

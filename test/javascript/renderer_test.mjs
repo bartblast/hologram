@@ -62,6 +62,8 @@ import {defineModule63Fixture} from "./support/fixtures/renderer/module_63.mjs";
 import {defineModule64Fixture} from "./support/fixtures/renderer/module_64.mjs";
 import {defineModule65Fixture} from "./support/fixtures/renderer/module_65.mjs";
 import {defineModule66Fixture} from "./support/fixtures/renderer/module_66.mjs";
+import {defineModule67Fixture} from "./support/fixtures/renderer/module_67.mjs";
+import {defineModule68Fixture} from "./support/fixtures/renderer/module_68.mjs";
 import {defineModule7Fixture} from "./support/fixtures/renderer/module_7.mjs";
 import {defineModule8Fixture} from "./support/fixtures/renderer/module_8.mjs";
 import {defineModule9Fixture} from "./support/fixtures/renderer/module_9.mjs";
@@ -125,6 +127,8 @@ defineModule63Fixture();
 defineModule64Fixture();
 defineModule65Fixture();
 defineModule66Fixture();
+defineModule67Fixture();
+defineModule68Fixture();
 defineModule7Fixture();
 defineModule8Fixture();
 defineModule9Fixture();
@@ -2140,6 +2144,19 @@ describe("Renderer", () => {
           [cid36, entry36],
         ]),
       );
+    });
+
+    it("with nested nil node resulting from if block", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module67"),
+        Type.list(),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+
+      assert.deepStrictEqual(result, ["\n  \n"]);
     });
   });
 
