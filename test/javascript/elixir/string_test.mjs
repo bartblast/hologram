@@ -216,6 +216,46 @@ describe("Elixir_String", () => {
     });
   });
 
+  describe("trim/1", () => {
+    const trim = Elixir_String["trim/1"];
+
+    it("handles empty bitstrings", () => {
+      const bitstring = Type.bitstring("");
+      const result = trim(bitstring);
+
+      assert.deepStrictEqual(result, Type.bitstring(""));
+    });
+
+    it("trims non-empty bitstrings", () => {
+      const bitstring = Type.bitstring("  \n\tabc\t\n  ");
+      const result = trim(bitstring);
+
+      assert.deepStrictEqual(result, Type.bitstring("abc"));
+    });
+
+    // TODO: client error message for this case is inconsistent with server error message
+    it("raises FunctionClauseError if the arg is a non-binary bitstring", () => {
+      const bitstring = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]);
+
+      assertBoxedError(
+        () => trim(bitstring),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg("String.trim/1", [bitstring]),
+      );
+    });
+
+    // TODO: client error message for this case is inconsistent with server error message
+    it("raises FunctionClauseError if the arg is not a bitstring", () => {
+      const atom = Type.atom("abc");
+
+      assertBoxedError(
+        () => trim(atom),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg("String.trim/1", [atom]),
+      );
+    });
+  });
+
   describe("upcase/1", () => {
     const upcase = Elixir_String["upcase/1"];
 

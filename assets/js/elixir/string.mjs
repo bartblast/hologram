@@ -63,6 +63,19 @@ const Elixir_String = {
     return Type.bitstring(subjectStr.replaceAll(patternStr, replacementStr));
   },
 
+  "trim/1": function (bitstring) {
+    if (!Type.isBinary(bitstring)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg("String.trim/1", arguments),
+      );
+    }
+
+    Bitstring.maybeSetTextFromBytes(bitstring);
+
+    // TODO: handle non-textual binary data (text is null)
+    return Type.bitstring(bitstring.text.trim());
+  },
+
   // Deps: [String.upcase/2]
   "upcase/1": (string) => {
     return Elixir_String["upcase/2"](string, Type.atom("default"));
