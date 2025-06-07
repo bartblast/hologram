@@ -1330,6 +1330,27 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "byte_size/1" do
+    test "empty bitstring" do
+      assert :erlang.byte_size("") == 0
+    end
+
+    test "binary bitstring" do
+      assert :erlang.byte_size("abc") == 3
+    end
+
+    test "non-binary bitstring" do
+      bitstring = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+      assert :erlang.byte_size(bitstring) == 2
+    end
+
+    test "not bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a bitstring"),
+                   {:erlang, :byte_size, [:abc]}
+    end
+  end
+
   describe "element/2" do
     test "returns the element at the one-based index in the tuple" do
       assert :erlang.element(2, {5, 6, 7}) == 6
