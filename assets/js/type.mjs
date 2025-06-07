@@ -239,6 +239,21 @@ export default class Type {
     );
   }
 
+  static isCompiledPattern(term) {
+    if (!Type.isTuple(term)) return false;
+
+    const data = term.data;
+    if (data.length !== 2) return false;
+
+    const algo = data[0];
+
+    return (
+      Type.isAtom(algo) &&
+      (algo.value === "bm" || algo.value === "ac") &&
+      Type.isReference(data[1])
+    );
+  }
+
   static isConsPattern(term) {
     return term.type === "cons_pattern";
   }

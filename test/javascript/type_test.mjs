@@ -641,6 +641,50 @@ describe("Type", () => {
     });
   });
 
+  describe("isCompiledPattern()", () => {
+    const ref = Type.reference("nonode@nohost", [0, 1, 2, 3]);
+
+    it("returns true for valid compiled pattern with 'bm' algorithm", () => {
+      const term = Type.tuple([Type.atom("bm"), ref]);
+      assert.isTrue(Type.isCompiledPattern(term));
+    });
+
+    it("returns true for valid compiled pattern with 'ac' algorithm", () => {
+      const term = Type.tuple([Type.atom("ac"), ref]);
+      assert.isTrue(Type.isCompiledPattern(term));
+    });
+
+    it("returns false if term is not a tuple", () => {
+      const term = Type.atom("bm");
+      assert.isFalse(Type.isCompiledPattern(term));
+    });
+
+    it("returns false if tuple has too few elements", () => {
+      const term = Type.tuple([Type.atom("bm")]);
+      assert.isFalse(Type.isCompiledPattern(term));
+    });
+
+    it("returns false if tuple has too many elements", () => {
+      const term = Type.tuple([Type.atom("bm"), ref, Type.atom("extra")]);
+      assert.isFalse(Type.isCompiledPattern(term));
+    });
+
+    it("returns false if first element is not an atom", () => {
+      const term = Type.tuple([Type.integer(123), ref]);
+      assert.isFalse(Type.isCompiledPattern(term));
+    });
+
+    it("returns false if first element is atom with wrong value", () => {
+      const term = Type.tuple([Type.atom("wrong"), ref]);
+      assert.isFalse(Type.isCompiledPattern(term));
+    });
+
+    it("returns false if second element is not a reference", () => {
+      const term = Type.tuple([Type.atom("bm"), Type.integer(123)]);
+      assert.isFalse(Type.isCompiledPattern(term));
+    });
+  });
+
   describe("isConsPattern()", () => {
     it("returns true if the given object is a boxed cons pattern", () => {
       const head = Type.integer(1);
