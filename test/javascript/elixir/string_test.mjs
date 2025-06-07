@@ -16,6 +16,276 @@ defineGlobalErlangAndElixirModules();
 // Always update both together.
 
 describe("Elixir_String", () => {
+  describe("contains?/2", () => {
+    const contains = Elixir_String["contains?/2"];
+
+    describe("with a single pattern", () => {
+      it("returns true when pattern is found", () => {
+        const subject = Type.bitstring("hello world");
+        const pattern = Type.bitstring("world");
+
+        const result = contains(subject, pattern);
+        const expected = Type.boolean(true);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("returns false when pattern is not found", () => {
+        const subject = Type.bitstring("hello world");
+        const pattern = Type.bitstring("xyz");
+
+        const result = contains(subject, pattern);
+        const expected = Type.boolean(false);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("returns true when subject is non-empty and pattern is empty", () => {
+        const subject = Type.bitstring("hello");
+        const pattern = Type.bitstring("");
+
+        const result = contains(subject, pattern);
+        const expected = Type.boolean(true);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("returns true when subject is empty and pattern is empty", () => {
+        const subject = Type.bitstring("");
+        const pattern = Type.bitstring("");
+
+        const result = contains(subject, pattern);
+        const expected = Type.boolean(true);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("returns false when subject is empty and pattern is non-empty", () => {
+        const subject = Type.bitstring("");
+        const pattern = Type.bitstring("test");
+
+        const result = contains(subject, pattern);
+        const expected = Type.boolean(false);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("works with Unicode text", () => {
+        const subject = Type.bitstring("全息图测试");
+        const pattern = Type.bitstring("息图");
+
+        const result = contains(subject, pattern);
+        const expected = Type.boolean(true);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("is case sensitive", () => {
+        const subject = Type.bitstring("Hello World");
+        const pattern = Type.bitstring("hello");
+
+        const result = contains(subject, pattern);
+        const expected = Type.boolean(false);
+
+        assert.deepStrictEqual(result, expected);
+      });
+    });
+
+    describe("with multiple patterns", () => {
+      it("returns true when first pattern is found", () => {
+        const subject = Type.bitstring("hello world");
+
+        const patterns = Type.list([
+          Type.bitstring("world"),
+          Type.bitstring("xyz"),
+          Type.bitstring("abc"),
+        ]);
+
+        const result = contains(subject, patterns);
+        const expected = Type.boolean(true);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("returns true when non-first pattern is found", () => {
+        const subject = Type.bitstring("hello world");
+
+        const patterns = Type.list([
+          Type.bitstring("xyz"),
+          Type.bitstring("world"),
+          Type.bitstring("abc"),
+        ]);
+
+        const result = contains(subject, patterns);
+        const expected = Type.boolean(true);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("returns true when multiple patterns are found", () => {
+        const subject = Type.bitstring("hello world");
+
+        const patterns = Type.list([
+          Type.bitstring("hello"),
+          Type.bitstring("world"),
+        ]);
+
+        const result = contains(subject, patterns);
+        const expected = Type.boolean(true);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("returns false when no patterns are found", () => {
+        const subject = Type.bitstring("hello world");
+
+        const patterns = Type.list([
+          Type.bitstring("xyz"),
+          Type.bitstring("abc"),
+          Type.bitstring("def"),
+        ]);
+
+        const result = contains(subject, patterns);
+        const expected = Type.boolean(false);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("returns false when pattern list is empty", () => {
+        const subject = Type.bitstring("hello world");
+        const patterns = Type.list([]);
+
+        const result = contains(subject, patterns);
+        const expected = Type.boolean(false);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("works with Unicode patterns", () => {
+        const subject = Type.bitstring("全息图测试");
+
+        const patterns = Type.list([
+          Type.bitstring("ąćł"),
+          Type.bitstring("测试"),
+        ]);
+
+        const result = contains(subject, patterns);
+        const expected = Type.boolean(true);
+
+        assert.deepStrictEqual(result, expected);
+      });
+    });
+
+    describe("error cases", () => {
+      it("raises FunctionClauseError when subject is not a bitstring", () => {
+        const subject = Type.atom("hello");
+        const pattern = Type.bitstring("test");
+
+        assertBoxedError(
+          () => contains(subject, pattern),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg("String.contains?/2", [
+            subject,
+            pattern,
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError when subject is a non-binary bitstring", () => {
+        const subject = Type.bitstring([1, 0, 1, 0]);
+        const pattern = Type.bitstring("test");
+
+        assertBoxedError(
+          () => contains(subject, pattern),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg("String.contains?/2", [
+            subject,
+            pattern,
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError when pattern is invalid type", () => {
+        const subject = Type.bitstring("hello world");
+        const pattern = Type.integer(123);
+
+        assertBoxedError(
+          () => contains(subject, pattern),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg("String.contains?/2", [
+            subject,
+            pattern,
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError when pattern is a non-binary bitstring", () => {
+        const subject = Type.bitstring("hello world");
+        const pattern = Type.bitstring([1, 0, 1, 0]);
+
+        assertBoxedError(
+          () => contains(subject, pattern),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg("String.contains?/2", [
+            subject,
+            pattern,
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError when pattern list contains non-bitstring pattern", () => {
+        const subject = Type.bitstring("hello world");
+
+        const patterns = Type.list([
+          Type.bitstring("hello"),
+          Type.atom("world"),
+        ]);
+
+        assertBoxedError(
+          () => contains(subject, patterns),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg("String.contains?/2", [
+            subject,
+            patterns,
+          ]),
+        );
+      });
+
+      it("raises FunctionClauseError when pattern list contains non-binary bitstring pattern", () => {
+        const subject = Type.bitstring("hello world");
+
+        const patterns = Type.list([
+          Type.bitstring("hello"),
+          Type.bitstring([1, 0, 1, 0]),
+        ]);
+
+        assertBoxedError(
+          () => contains(subject, patterns),
+          "FunctionClauseError",
+          Interpreter.buildFunctionClauseErrorMsg("String.contains?/2", [
+            subject,
+            patterns,
+          ]),
+        );
+      });
+
+      it("raises HologramInterpreterError for compiled patterns", () => {
+        const subject = Type.bitstring("hello world");
+
+        const compiledPattern = Type.tuple([
+          Type.atom("bm"),
+          Type.reference("my_node", [0, 1, 2, 3]),
+        ]);
+
+        assert.throw(
+          () => contains(subject, compiledPattern),
+          HologramInterpreterError,
+          "String.contains?/2 with compiled patterns is not yet implemented in Hologram",
+        );
+      });
+    });
+  });
+
   describe("downcase/1", () => {
     const downcase = Elixir_String["downcase/1"];
 

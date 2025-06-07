@@ -6,6 +6,60 @@ import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
 const Elixir_String = {
+  "contains?/2": function (subject, patternOrPatterns) {
+    if (!Type.isBinary(subject)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(
+          "String.contains?/2",
+          arguments,
+        ),
+      );
+    }
+
+    const subjectText = Bitstring.toText(subject);
+
+    if (Type.isBinary(patternOrPatterns)) {
+      const patternText = Bitstring.toText(patternOrPatterns);
+      return Type.boolean(subjectText.includes(patternText));
+    }
+
+    if (Type.isList(patternOrPatterns)) {
+      const patternCount = patternOrPatterns.data.length;
+      let result = false;
+
+      for (let i = 0; i < patternCount; i++) {
+        const pattern = patternOrPatterns.data[i];
+
+        if (!Type.isBinary(pattern)) {
+          Interpreter.raiseFunctionClauseError(
+            Interpreter.buildFunctionClauseErrorMsg(
+              "String.contains?/2",
+              arguments,
+            ),
+          );
+        }
+
+        const patternText = Bitstring.toText(pattern);
+
+        if (subjectText.includes(patternText)) {
+          result = true;
+        }
+      }
+
+      return Type.boolean(result);
+    }
+
+    if (Type.isCompiledPattern(patternOrPatterns)) {
+      throw new HologramInterpreterError(
+        "String.contains?/2 with compiled patterns is not yet implemented in Hologram",
+      );
+    }
+
+    Interpreter.raiseFunctionClauseError(
+      Interpreter.buildFunctionClauseErrorMsg("String.contains?/2", arguments),
+    );
+  },
+
   // Deps: [String.downcase/2]
   "downcase/1": (string) => {
     return Elixir_String["downcase/2"](string, Type.atom("default"));
