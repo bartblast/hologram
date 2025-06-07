@@ -116,6 +116,42 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
     end
   end
 
+  describe "trim/1" do
+    test "handles empty bitstrings" do
+      assert String.trim("") == ""
+    end
+
+    test "trims non-empty bitstrings" do
+      assert String.trim("  \n\tabc\t\n  ") == "abc"
+    end
+
+    # TODO: client error message for this case is inconsistent with server error message
+    test "raises FunctionClauseError if the arg is a non-binary bitstring" do
+      bitstring = <<1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1, 1::1, 0::1>>
+
+      expected_msg =
+        build_function_clause_error_msg("String.trim/1", [bitstring], [
+          "def trim(string) when -is_binary(string)-"
+        ])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        String.trim(bitstring)
+      end
+    end
+
+    # TODO: client error message for this case is inconsistent with server error message
+    test "raises FunctionClauseError if the arg is not a bitstring" do
+      expected_msg =
+        build_function_clause_error_msg("String.trim/1", [:abc], [
+          "def trim(string) when -is_binary(string)-"
+        ])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        String.trim(:abc)
+      end
+    end
+  end
+
   describe "upcase/1" do
     test "delegates to upcase/2" do
       assert String.upcase("HoLoGrAm") == "HOLOGRAM"
