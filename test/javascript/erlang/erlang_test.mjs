@@ -499,7 +499,7 @@ describe("Erlang", () => {
     });
 
     it("pid < tuple (always)", () => {
-      assertBoxedTrue(testedFun(pid1, tuple3));
+      assertBoxedTrue(testedFun(pid1, tuple2));
     });
 
     it("tuple < tuple", () => {
@@ -1576,7 +1576,7 @@ describe("Erlang", () => {
     });
   });
 
-  describe.only("byte_size/1", () => {
+  describe("byte_size/1", () => {
     const byte_size = Erlang["byte_size/1"];
 
     it("empty bitstring", () => {
