@@ -356,6 +356,21 @@ const Erlang = {
   // End bit_size/1
   // Deps: []
 
+  // Start byte_size/1
+  "byte_size/1": (bitstring) => {
+    if (!Type.isBitstring(bitstring)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
+      );
+    }
+
+    Bitstring.maybeSetBytesFromText(bitstring);
+
+    return Type.integer(bitstring.bytes.length);
+  },
+  // End byte_size/1
+  // Deps: []
+
   // Start element/2
   "element/2": (index, tuple) => {
     if (!Type.isInteger(index)) {

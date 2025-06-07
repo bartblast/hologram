@@ -499,7 +499,7 @@ describe("Erlang", () => {
     });
 
     it("pid < tuple (always)", () => {
-      assertBoxedTrue(testedFun(pid1, tuple2));
+      assertBoxedTrue(testedFun(pid1, tuple3));
     });
 
     it("tuple < tuple", () => {
@@ -1570,6 +1570,41 @@ describe("Erlang", () => {
 
       assertBoxedError(
         () => bit_size(myAtom),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
+      );
+    });
+  });
+
+  describe.only("byte_size/1", () => {
+    const byte_size = Erlang["byte_size/1"];
+
+    it("empty bitstring", () => {
+      const bitstring = Type.bitstring("");
+      const result = byte_size(bitstring);
+
+      assert.deepStrictEqual(result, Type.integer(0));
+    });
+
+    it("binary bitstring", () => {
+      const bitstring = Type.bitstring("abc");
+      const result = byte_size(bitstring);
+
+      assert.deepStrictEqual(result, Type.integer(3));
+    });
+
+    it("non-binary bitstring", () => {
+      const bitstring = Type.bitstring([1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0]);
+      const result = byte_size(bitstring);
+
+      assert.deepStrictEqual(result, Type.integer(2));
+    });
+
+    it("not bitstring", () => {
+      const atom = Type.atom("abc");
+
+      assertBoxedError(
+        () => byte_size(atom),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
       );
