@@ -87,7 +87,7 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
     end
   end
 
-  describe "String.replace/3" do
+  describe "replace/3" do
     test "ASCII text" do
       assert String.replace("abcabc", "ab", "xy") == "xycxyc"
     end
