@@ -4,6 +4,8 @@ defmodule HologramFeatureTests.FunctionCalls.LocalFunctionPage do
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
+  @dialyzer {:no_fail_call, action: 3}
+
   route "/function-calls/local-function"
 
   layout HologramFeatureTests.Components.DefaultLayout

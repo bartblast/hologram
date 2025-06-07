@@ -7,6 +7,8 @@ defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionPage do
 
   alias HologramFeatureTests.ModuleFixture2
 
+  @dialyzer {:no_fail_call, action: 3}
+
   route "/function-calls/remote-function"
 
   layout HologramFeatureTests.Components.DefaultLayout

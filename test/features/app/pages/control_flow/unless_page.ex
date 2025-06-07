@@ -4,6 +4,8 @@ defmodule HologramFeatureTests.ControlFlow.UnlessPage do
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
+  @dialyzer {:no_match, action: 3}
+
   route "/control-flow/unless"
 
   layout HologramFeatureTests.Components.DefaultLayout

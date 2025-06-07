@@ -5,6 +5,8 @@ defmodule HologramFeatureTests.GuardsPage do
   import Hologram.Commons.TestUtils, only: [wrap_term: 1]
   import Kernel, except: [inspect: 1]
 
+  @dialyzer :no_match
+
   route "/guards"
 
   layout HologramFeatureTests.Components.DefaultLayout

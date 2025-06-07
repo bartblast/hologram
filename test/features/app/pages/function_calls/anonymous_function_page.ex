@@ -5,6 +5,10 @@ defmodule HologramFeatureTests.FunctionCalls.AnonymousFunctionPage do
   import Hologram.Commons.TestUtils, only: [wrap_term: 1]
   import Kernel, except: [inspect: 1]
 
+  @dialyzer {:no_fail_call, action: 3}
+  @dialyzer {:no_match, action: 3}
+  @dialyzer {:no_return, action: 3}
+
   route "/function-calls/anonymous-function"
 
   layout HologramFeatureTests.Components.DefaultLayout

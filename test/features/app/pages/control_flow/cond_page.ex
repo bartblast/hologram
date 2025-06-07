@@ -5,6 +5,8 @@ defmodule HologramFeatureTests.ControlFlow.CondPage do
   import Hologram.Commons.TestUtils, only: [wrap_term: 1]
   import Kernel, except: [inspect: 1]
 
+  @dialyzer {:no_match, action: 3}
+
   route "/control-flow/cond"
 
   layout HologramFeatureTests.Components.DefaultLayout

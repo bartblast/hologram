@@ -1,6 +1,8 @@
 defmodule HologramFeatureTests.TemplateSyntax.IfBlockPage do
   use Hologram.Page
 
+  @dialyzer {:no_match, template: 0}
+
   route "/template-syntax/if-block"
 
   layout HologramFeatureTests.Components.DefaultLayout

@@ -7,6 +7,9 @@ defmodule HologramFeatureTests.FunctionCalls.FunctionCapturePage do
 
   alias HologramFeatureTests.ModuleFixture1
 
+  @dialyzer {:no_fail_call, action: 3}
+  @dialyzer {:no_return, action: 3}
+
   route "/function-calls/function-capture"
 
   layout HologramFeatureTests.Components.DefaultLayout
