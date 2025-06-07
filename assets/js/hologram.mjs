@@ -419,6 +419,13 @@ export default class Hologram {
 
     Interpreter.defineManuallyPortedFunction(
       "String",
+      "contains?/2",
+      "public",
+      ManuallyPortedElixirString["contains?/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "String",
       "downcase/1",
       "public",
       ManuallyPortedElixirString["downcase/1"],

@@ -49,6 +49,7 @@ defmodule Hologram.Compiler.CallGraph do
     {IO, :inspect, 3},
     {Kernel, :inspect, 1},
     {Kernel, :inspect, 2},
+    {String, :contains?, 2},
     {String, :downcase, 1},
     {String, :downcase, 2},
     {String, :replace, 3},
