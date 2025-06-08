@@ -177,6 +177,7 @@ describe("Elixir_String", () => {
     });
 
     describe("error cases", () => {
+      // TODO: client error message for this case is inconsistent with server error message
       it("raises FunctionClauseError when subject is not a bitstring", () => {
         const subject = Type.atom("hello");
         const pattern = Type.bitstring("test");
@@ -191,6 +192,7 @@ describe("Elixir_String", () => {
         );
       });
 
+      // TODO: client error message for this case is inconsistent with server error message
       it("raises FunctionClauseError when subject is a non-binary bitstring", () => {
         const subject = Type.bitstring([1, 0, 1, 0]);
         const pattern = Type.bitstring("test");
@@ -205,35 +207,29 @@ describe("Elixir_String", () => {
         );
       });
 
-      it("raises FunctionClauseError when pattern is invalid type", () => {
+      it("raises ArgumentError when pattern is invalid type", () => {
         const subject = Type.bitstring("hello world");
         const pattern = Type.integer(123);
 
         assertBoxedError(
           () => contains(subject, pattern),
-          "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg("String.contains?/2", [
-            subject,
-            pattern,
-          ]),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
-      it("raises FunctionClauseError when pattern is a non-binary bitstring", () => {
+      it("raises ArgumentError when pattern is a non-binary bitstring", () => {
         const subject = Type.bitstring("hello world");
         const pattern = Type.bitstring([1, 0, 1, 0]);
 
         assertBoxedError(
           () => contains(subject, pattern),
-          "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg("String.contains?/2", [
-            subject,
-            pattern,
-          ]),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 
-      it("raises FunctionClauseError when pattern list contains non-bitstring pattern", () => {
+      it("raises ArgumentError when pattern list contains non-bitstring pattern", () => {
         const subject = Type.bitstring("hello world");
 
         const patterns = Type.list([
@@ -243,15 +239,12 @@ describe("Elixir_String", () => {
 
         assertBoxedError(
           () => contains(subject, patterns),
-          "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg("String.contains?/2", [
-            subject,
-            patterns,
-          ]),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
         );
       });
 
-      it("raises FunctionClauseError when pattern list contains non-binary bitstring pattern", () => {
+      it("raises ArgumentError when pattern list contains non-binary bitstring pattern", () => {
         const subject = Type.bitstring("hello world");
 
         const patterns = Type.list([
@@ -261,11 +254,8 @@ describe("Elixir_String", () => {
 
         assertBoxedError(
           () => contains(subject, patterns),
-          "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg("String.contains?/2", [
-            subject,
-            patterns,
-          ]),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
         );
       });
 

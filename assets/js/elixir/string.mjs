@@ -30,12 +30,15 @@ const Elixir_String = {
       for (let i = 0; i < patternCount; i++) {
         const pattern = patternOrPatterns.data[i];
 
+        if (!Type.isBitstring(pattern)) {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
+          );
+        }
+
         if (!Type.isBinary(pattern)) {
-          Interpreter.raiseFunctionClauseError(
-            Interpreter.buildFunctionClauseErrorMsg(
-              "String.contains?/2",
-              arguments,
-            ),
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
           );
         }
 
@@ -55,8 +58,8 @@ const Elixir_String = {
       );
     }
 
-    Interpreter.raiseFunctionClauseError(
-      Interpreter.buildFunctionClauseErrorMsg("String.contains?/2", arguments),
+    Interpreter.raiseArgumentError(
+      Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
     );
   },
 

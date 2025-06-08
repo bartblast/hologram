@@ -9,6 +9,122 @@ defmodule Hologram.ExJsConsistency.Elixir.StringTest do
 
   @moduletag :consistency
 
+  describe "contains?/2, with a single pattern" do
+    test "returns true when pattern is found" do
+      assert String.contains?("hello world", "world")
+    end
+
+    test "returns false when pattern is not found" do
+      refute String.contains?("hello world", "xyz")
+    end
+
+    test "returns true when subject is non-empty and pattern is empty" do
+      assert String.contains?("hello", "")
+    end
+
+    test "returns true when subject is empty and pattern is empty" do
+      assert String.contains?("", "")
+    end
+
+    test "returns false when subject is empty and pattern is non-empty" do
+      refute String.contains?("", "test")
+    end
+
+    test "works with Unicode text" do
+      assert String.contains?("全息图测试", "息图")
+    end
+
+    test "is case sensitive" do
+      refute String.contains?("Hello World", "hello")
+    end
+  end
+
+  describe "contains?/2, with multiple patterns" do
+    test "returns true when first pattern is found" do
+      assert String.contains?("hello world", ["world", "xyz", "abc"])
+    end
+
+    test "returns true when non-first pattern is found" do
+      assert String.contains?("hello world", ["xyz", "world", "abc"])
+    end
+
+    test "returns true when multiple patterns are found" do
+      assert String.contains?("hello world", ["hello", "world"])
+    end
+
+    test "returns false when no patterns are found" do
+      refute String.contains?("hello world", ["xyz", "abc", "def"])
+    end
+
+    test "returns false when pattern list is empty" do
+      refute String.contains?("hello world", [])
+    end
+
+    test "works with Unicode patterns" do
+      assert String.contains?("全息图测试", ["ąćł", "测试"])
+    end
+  end
+
+  describe "contains?/2, error cases" do
+    # TODO: client error message for this case is inconsistent with server error message
+    test "raises FunctionClauseError when subject is not a bitstring" do
+      expected_msg =
+        build_function_clause_error_msg("String.contains?/2", [:hello, "test"], [
+          "def contains?(string, contents) when -is_binary(string)- and -is_list(contents)-",
+          "def contains?(string, contents) when -is_binary(string)-"
+        ])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        String.contains?(:hello, "test")
+      end
+    end
+
+    # TODO: client error message for this case is inconsistent with server error message
+    test "raises FunctionClauseError when subject is a non-binary bitstring" do
+      subject = <<1::1, 0::1, 1::1, 0::1>>
+
+      expected_msg =
+        build_function_clause_error_msg("String.contains?/2", [subject, "test"], [
+          "def contains?(string, contents) when -is_binary(string)- and -is_list(contents)-",
+          "def contains?(string, contents) when -is_binary(string)-"
+        ])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        String.contains?(subject, "test")
+      end
+    end
+
+    test "raises ArgumentError when pattern is invalid type" do
+      assert_error ArgumentError, build_argument_error_msg(2, "not a valid pattern"), fn ->
+        String.contains?("hello world", 123)
+      end
+    end
+
+    test "raises ArgumentError when pattern is a non-binary bitstring" do
+      pattern = <<1::1, 0::1, 1::1, 0::1>>
+
+      assert_error ArgumentError, build_argument_error_msg(2, "not a valid pattern"), fn ->
+        String.contains?("hello world", pattern)
+      end
+    end
+
+    test "raises ArgumentError when pattern list contains non-bitstring pattern" do
+      patterns = ["hello", :world]
+
+      assert_error ArgumentError, build_argument_error_msg(1, "not a bitstring"), fn ->
+        String.contains?("hello world", patterns)
+      end
+    end
+
+    test "raises ArgumentError when pattern list contains non-binary bitstring pattern" do
+      patterns = ["hello", <<1::1, 0::1, 1::1, 0::1>>]
+
+      assert_error ArgumentError, build_argument_error_msg(2, "not a valid pattern"), fn ->
+        String.contains?("hello world", patterns)
+      end
+    end
+  end
+
   describe "downcase/1" do
     test "delegates to downcase/2" do
       assert String.downcase("HoLoGrAm") == "hologram"
