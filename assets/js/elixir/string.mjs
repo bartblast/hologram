@@ -117,17 +117,15 @@ const Elixir_String = {
     return Type.bitstring(subjectStr.replaceAll(patternStr, replacementStr));
   },
 
-  "trim/1": function (bitstring) {
-    if (!Type.isBinary(bitstring)) {
+  "trim/1": function (string) {
+    if (!Type.isBinary(string)) {
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg("String.trim/1", arguments),
       );
     }
 
-    Bitstring.maybeSetTextFromBytes(bitstring);
-
     // TODO: handle non-textual binary data (text is null)
-    return Type.bitstring(bitstring.text.trim());
+    return Type.bitstring(Bitstring.toText(string).trim());
   },
 
   // Deps: [String.upcase/2]
