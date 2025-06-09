@@ -6,10 +6,7 @@ defmodule Hologram.Application do
   @impl Application
   def start(_type, _args) do
     opts = [strategy: :one_for_one, name: Hologram.Supervisor]
-
-    Hologram.env()
-    |> children()
-    |> Supervisor.start_link(opts)
+    Supervisor.start_link(children(), opts)
   end
 
   defp all_envs_children do
@@ -25,11 +22,11 @@ defmodule Hologram.Application do
   # constant (module attribute). Pattern matching would cause "unused clause" warnings,
   # and runtime conditionals would cause Dialyzer warnings about unreachable code.
   if Hologram.env() == :dev do
-    defp children(_env) do
+    defp children() do
       # credo:disable-for-next-line Credo.Check.Refactor.AppendSingleItem
       all_envs_children() ++ [Hologram.LiveReload]
     end
   else
-    defp children(_env), do: all_envs_children()
+    defp children(), do: all_envs_children()
   end
 end

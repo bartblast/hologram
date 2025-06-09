@@ -5,5 +5,7 @@ defmodule Hologram do
   Returns the current environment.
   """
   @spec env() :: atom
-  def env, do: @mix_env
+  def env do
+    System.get_env("MIX_ENV") || @mix_env
+  end
 end
