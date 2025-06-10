@@ -6,6 +6,10 @@ defmodule Hologram do
   """
   @spec env() :: atom
   def env do
-    System.get_env("MIX_ENV") || @mix_env
+    if env_string = System.get_env("MIX_ENV") do
+      String.to_existing_atom(env_string)
+    else
+      @mix_env
+    end
   end
 end
