@@ -1,15 +1,23 @@
 defmodule Hologram do
-  @mix_env Mix.env()
-
   @doc """
   Returns the current environment.
   """
   @spec env() :: atom
   def env do
-    if env_string = System.get_env("MIX_ENV") do
-      String.to_existing_atom(env_string)
+    env_str = System.get_env("HOLOGRAM_ENV") || System.get_env("MIX_ENV")
+
+    if env_str do
+      String.to_existing_atom(env_str)
     else
-      @mix_env
+      detect_env()
+    end
+  end
+
+  defp detect_env do
+    if Process.whereis(ExUnit.Server) do
+      :test
+    else
+      :dev
     end
   end
 end
