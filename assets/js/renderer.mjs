@@ -573,6 +573,7 @@ export default class Renderer {
         const nameText = $.#mapEventType(
           Bitstring.toText(attrDom.data[0]).substring(1),
         );
+
         acc[nameText] = (event) =>
           Hologram.handleUiEvent(
             event,
