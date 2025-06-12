@@ -735,6 +735,38 @@ describe("Renderer", () => {
 
           Hologram.handleUiEvent.restore();
         });
+
+        describe("event type mapping", () => {
+          // TODO: test other event types mapping
+
+          it("mouse_move", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("div"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("$mouse_move"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("my_action"),
+                    ]),
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const vdom = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+            );
+
+            assert.deepStrictEqual(Object.keys(vdom.data.on), ["mousemove"]);
+          });
+        });
       });
 
       describe("default operation target", () => {

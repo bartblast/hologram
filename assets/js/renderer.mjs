@@ -354,6 +354,16 @@ export default class Renderer {
     return Erlang_Maps["merge/2"](propsFromTemplate, propsFromContext);
   }
 
+  static #mapEventType(eventType) {
+    switch (eventType) {
+      case "mouse_move":
+        return "mousemove";
+
+      default:
+        return eventType;
+    }
+  }
+
   // Deps: [:maps.get/2]
   static #maybeInitComponent(cid, moduleProxy, props) {
     let componentState = ComponentRegistry.getComponentState(cid);
@@ -560,7 +570,9 @@ export default class Renderer {
     return attrsDom.data
       .filter((attrDom) => Bitstring.toText(attrDom.data[0]).startsWith("$"))
       .reduce((acc, attrDom) => {
-        const nameText = Bitstring.toText(attrDom.data[0]).substring(1);
+        const nameText = $.#mapEventType(
+          Bitstring.toText(attrDom.data[0]).substring(1),
+        );
         acc[nameText] = (event) =>
           Hologram.handleUiEvent(
             event,
