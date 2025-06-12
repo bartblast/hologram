@@ -495,7 +495,7 @@ export default class Hologram {
         // See: https://bugs.webkit.org/show_bug.cgi?id=218665
         return MouseEvent;
 
-      case "mouse_move":
+      case "mousemove":
         return MouseMoveEvent;
 
       case "pointerdown":
