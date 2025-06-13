@@ -31,10 +31,10 @@ defmodule Hologram.CookieStore do
       iex> CookieStore.diff(%{"old" => "value"}, %{})
       [{"old", nil}]
 
-      iex>HologramCookieStore.diff(%{"key" => "old"}, %{"key" => "new"})
+      iex> CookieStore.diff(%{"key" => "old"}, %{"key" => "new"})
       [{"key", "new"}]
 
-      iex> Hologram.CookieStore.diff(%{"same" => "value"}, %{"same" => "value"})
+      iex> CookieStore.diff(%{"same" => "value"}, %{"same" => "value"})
       []
   """
   @spec diff(%{String.t() => any()}, %{String.t() => any()}) :: [{String.t(), any()}]
