@@ -9,9 +9,19 @@ defmodule Hologram.Socket.Decoder do
     # change event, select event
     :value,
 
-    # mouse event, pointer event
+    # mouse event, mouse move event, pointer event
     :page_x,
     :page_y,
+
+    # mouse move event
+    :client_x,
+    :client_y,
+    :movement_x,
+    :movement_y,
+    :offset_x,
+    :offset_y,
+    :screen_x,
+    :screen_y,
 
     # pointer event
     :mouse,
