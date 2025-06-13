@@ -53,7 +53,8 @@ defmodule Hologram.MixProject do
       {:mox, "~> 1.0", only: :test},
       {:phoenix, "~> 1.7"},
       {:recode, "~> 0.7", only: :dev, runtime: false},
-      {:sobelow, "~> 0.12", only: [:dev, :test], runtime: false}
+      {:sobelow, "~> 0.12", only: [:dev, :test], runtime: false},
+      {:uuid, "~> 1.0"}
     ]
   end
 
