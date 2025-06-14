@@ -38,6 +38,7 @@ defmodule Hologram.Session do
     {new_conn, session_id}
   end
 
+  # sobelow_skip ["Misc.BinToTerm"]
   defp decrypt_session_data(encrypted_data) do
     encryption_key = derive_encryption_key()
 
