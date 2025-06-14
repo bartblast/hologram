@@ -1,6 +1,7 @@
 defmodule Hologram.Controller do
   @moduledoc false
 
+  alias Hologram.Session
   alias Hologram.Template.Renderer
   alias Phoenix.Controller
 
@@ -34,7 +35,9 @@ defmodule Hologram.Controller do
 
     {html, _component_structs} = Renderer.render_page(page_module, params, initial_page?: true)
 
-    conn
+    {conn_with_session, _session_id} = Session.init(conn)
+
+    conn_with_session
     |> Controller.html(html)
     |> Plug.Conn.halt()
   end

@@ -12,6 +12,15 @@ defmodule Hologram.ControllerTest do
 
   setup :set_mox_global
 
+  setup do
+    System.put_env(
+      "SECRET_KEY_BASE",
+      "test_secret_key_base_that_is_long_enough_for_testing_purposes_in_hologram"
+    )
+
+    :ok
+  end
+
   test "extract_params/2" do
     url_path = "/hologram-test-fixtures-runtime-controller-module1/111/ccc/222"
 
@@ -27,19 +36,17 @@ defmodule Hologram.ControllerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
 
       conn =
-        Plug.Test.conn(:get, "/hologram-test-fixtures-runtime-controller-module1/111/ccc/222")
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module1/111/ccc/222")
+        |> Plug.Conn.fetch_cookies()
+        |> handle_request(Module1)
 
-      assert handle_request(conn, Module1) == %{
-               conn
-               | halted: true,
-                 resp_body: "param_aaa = 111, param_bbb = 222",
-                 resp_headers: [
-                   {"content-type", "text/html; charset=utf-8"},
-                   {"cache-control", "max-age=0, private, must-revalidate"}
-                 ],
-                 state: :sent,
-                 status: 200
-             }
+      assert conn.halted == true
+      assert conn.resp_body == "param_aaa = 111, param_bbb = 222"
+      assert conn.state == :sent
+      assert conn.status == 200
+
+      assert Map.has_key?(conn.resp_cookies, "hologram_session")
     end
   end
 end
