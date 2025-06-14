@@ -12,15 +12,6 @@ defmodule Hologram.ControllerTest do
 
   setup :set_mox_global
 
-  setup do
-    System.put_env(
-      "SECRET_KEY_BASE",
-      "test_secret_key_base_that_is_long_enough_for_testing_purposes_in_hologram"
-    )
-
-    :ok
-  end
-
   test "extract_params/2" do
     url_path = "/hologram-test-fixtures-runtime-controller-module1/111/ccc/222"
 

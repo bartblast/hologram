@@ -18,15 +18,6 @@ defmodule Hologram.SessionTest do
     }
   end
 
-  setup do
-    System.put_env(
-      "SECRET_KEY_BASE",
-      "test_secret_key_base_that_is_long_enough_for_testing_purposes_in_hologram"
-    )
-
-    :ok
-  end
-
   describe "init/1" do
     test "creates new session when no cookie exists" do
       conn = build_conn_without_session_cookie()

@@ -14,11 +14,6 @@ defmodule Hologram.RouterTest do
   setup :set_mox_global
 
   setup do
-    System.put_env(
-      "SECRET_KEY_BASE",
-      "test_secret_key_base_that_is_long_enough_for_testing_purposes_in_hologram"
-    )
-
     setup_page_digest_registry(PageDigestRegistryStub)
     setup_page_module_resolver(PageModuleResolverStub)
   end
