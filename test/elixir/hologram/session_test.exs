@@ -2,9 +2,35 @@ defmodule Hologram.SessionTest do
   use Hologram.Test.BasicCase, async: true
   alias Hologram.Session
 
+  defp assert_session_cookie_properties(conn, secure_flag) do
+    resp_cookies = conn.resp_cookies
+    assert Map.has_key?(resp_cookies, "hologram_session")
+
+    cookie = resp_cookies["hologram_session"]
+    assert cookie.http_only == true
+    assert cookie.same_site == "Lax"
+    assert cookie.secure == secure_flag
+  end
+
+  defp assert_valid_session_id(session_id) do
+    assert is_binary(session_id)
+    assert String.length(session_id) == 36
+
+    assert session_id =~
+             ~r/\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/
+  end
+
   defp build_conn_with_session_cookie(cookie_value) do
     %Plug.Conn{
       req_cookies: %{"hologram_session" => cookie_value},
+      resp_cookies: %{},
+      scheme: :https
+    }
+  end
+
+  defp build_conn_with_unfetched_cookies do
+    %Plug.Conn{
+      req_cookies: %Plug.Conn.Unfetched{aspect: :cookies},
       resp_cookies: %{},
       scheme: :https
     }
@@ -24,19 +50,9 @@ defmodule Hologram.SessionTest do
 
       {updated_conn, session_id} = Session.init(conn)
 
-      assert is_binary(session_id)
-      assert String.length(session_id) == 36
+      assert_valid_session_id(session_id)
 
-      assert session_id =~
-               ~r/\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/
-
-      resp_cookies = updated_conn.resp_cookies
-      assert Map.has_key?(resp_cookies, "hologram_session")
-
-      cookie = resp_cookies["hologram_session"]
-      assert cookie.http_only == true
-      assert cookie.same_site == "Lax"
-      assert cookie.secure == true
+      assert_session_cookie_properties(updated_conn, true)
     end
 
     test "retrieves existing session when valid cookie exists" do
@@ -63,23 +79,13 @@ defmodule Hologram.SessionTest do
 
       {updated_conn, session_id} = Session.init(conn)
 
-      assert is_binary(session_id)
-      assert String.length(session_id) == 36
+      assert_valid_session_id(session_id)
 
-      assert session_id =~
-               ~r/\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/
-
-      resp_cookies = updated_conn.resp_cookies
-      assert Map.has_key?(resp_cookies, "hologram_session")
-
-      cookie = resp_cookies["hologram_session"]
-      assert cookie.http_only == true
-      assert cookie.same_site == "Lax"
-      assert cookie.secure == true
+      assert_session_cookie_properties(updated_conn, true)
     end
 
     test "sets secure flag to true for HTTPS connections" do
-      conn = Map.put(build_conn_without_session_cookie(), :scheme, :https)
+      conn = %{build_conn_without_session_cookie() | scheme: :https}
 
       {updated_conn, _session_id} = Session.init(conn)
 
@@ -87,7 +93,7 @@ defmodule Hologram.SessionTest do
     end
 
     test "sets secure flag to false for HTTP connections" do
-      conn = Map.put(build_conn_without_session_cookie(), :scheme, :http)
+      conn = %{build_conn_without_session_cookie() | scheme: :http}
 
       {updated_conn, _session_id} = Session.init(conn)
 
@@ -102,6 +108,16 @@ defmodule Hologram.SessionTest do
       {_updated_conn_2, session_id_2} = Session.init(conn_2)
 
       assert session_id_1 != session_id_2
+    end
+
+    test "handles unfetched cookies by fetching them and creating new session" do
+      conn = build_conn_with_unfetched_cookies()
+
+      {updated_conn, session_id} = Session.init(conn)
+
+      assert_valid_session_id(session_id)
+
+      assert_session_cookie_properties(updated_conn, true)
     end
   end
 end

@@ -12,7 +12,10 @@ defmodule Hologram.Session do
   - `session_id` is the UUID of the session
   """
   @spec init(Plug.Conn.t()) :: {Plug.Conn.t(), String.t()}
-  def init(conn) do
+  def init(initial_conn) do
+    # This is idempotent
+    conn = Plug.Conn.fetch_cookies(initial_conn)
+
     case conn.req_cookies["hologram_session"] do
       nil ->
         create_new_session(conn)
