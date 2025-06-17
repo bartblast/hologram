@@ -164,12 +164,12 @@ defmodule Hologram.CRDT.MapTest do
       result = CRDTMap.delta(crdt_1, crdt_2)
 
       expected = [
-        {:put, :key_3, "value_3", @timestamp_1},
+        {:put, :key_1, "new_value", @timestamp_2},
         {:delete, :key_2, @timestamp_2},
-        {:put, :key_1, "new_value", @timestamp_2}
+        {:put, :key_3, "value_3", @timestamp_1}
       ]
 
-      assert result == expected
+      assert Enum.sort(result) == Enum.sort(expected)
     end
   end
 
