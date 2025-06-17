@@ -7,12 +7,10 @@ alias Hologram.Router.PageModuleResolver
 # Create tmp dir if it doesn't exist yet.
 File.mkdir_p!(Reflection.tmp_dir())
 
-if !System.get_env("SECRET_KEY_BASE") do
-  System.put_env(
-    "SECRET_KEY_BASE",
-    "test_secret_key_base_that_is_long_enough_for_testing_purposes_in_hologram"
-  )
-end
+System.put_env(
+  "SECRET_KEY_BASE",
+  "test_secret_key_base_that_is_long_enough_for_testing_purposes_in_hologram"
+)
 
 ExUnit.start()
 
