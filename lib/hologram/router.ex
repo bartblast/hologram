@@ -1,16 +1,14 @@
 defmodule Hologram.Router do
-  @behaviour Plug
+  use Plug.Router
 
   alias Hologram.Controller
   alias Hologram.Router.PageModuleResolver
-  alias Plug.Conn
 
-  @impl Plug
-  def init(opts), do: opts
+  plug :match
+  plug :dispatch
 
-  @impl Plug
-  def call(%Conn{request_path: request_path} = conn, _opts) do
-    if page_module = PageModuleResolver.resolve(request_path) do
+  match _ do
+    if page_module = PageModuleResolver.resolve(conn.request_path) do
       Controller.handle_request(conn, page_module)
     else
       conn

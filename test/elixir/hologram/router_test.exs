@@ -18,7 +18,7 @@ defmodule Hologram.RouterTest do
     setup_page_module_resolver(PageModuleResolverStub)
   end
 
-  describe "call/2" do
+  describe "HTTP requests" do
     test "request path is matched" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
 
