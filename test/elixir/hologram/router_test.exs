@@ -18,7 +18,7 @@ defmodule Hologram.RouterTest do
     setup_page_module_resolver(PageModuleResolverStub)
   end
 
-  describe "HTTP requests" do
+  describe "regular HTTP requests" do
     test "request path is matched" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
 
@@ -46,5 +46,27 @@ defmodule Hologram.RouterTest do
       assert conn.state == :unset
       assert conn.status == nil
     end
+  end
+
+  test "websocket upgrade request" do
+    conn =
+      :get
+      |> Plug.Test.conn("/hologram/websocket")
+      |> Map.put(:req_headers, [
+        {"host", "localhost"},
+        {"upgrade", "websocket"},
+        {"connection", "Upgrade"},
+        {"sec-websocket-key", "dGhlIHNhbXBsZSBub25jZQ=="},
+        {"sec-websocket-version", "13"}
+      ])
+      |> call([])
+
+    assert conn.halted == true
+    assert conn.state == :upgraded
+
+    # Note: In production, WebSocket upgrades should set status to 101 (Switching Protocols),
+    # but Plug.Adapters.Test.Conn.upgrade/3 doesn't simulate this HTTP protocol behavior.
+    # The :upgraded state confirms the upgrade was processed correctly in the test environment.
+    assert conn.status == nil
   end
 end
