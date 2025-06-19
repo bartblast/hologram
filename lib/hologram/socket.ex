@@ -1,7 +1,7 @@
 defmodule Hologram.Socket do
   use Phoenix.Socket
 
-  channel "hologram", Hologram.Socket.Channel, websocket: true, longpoll: true
+  channel "hologram", Hologram.Socket.Channel, websocket: true
 
   @impl Phoenix.Socket
   def connect(_params, socket, _connect_info) do
