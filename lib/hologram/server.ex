@@ -33,6 +33,7 @@ defmodule Hologram.Server do
   # TODO: remove
   @impl WebSock
   def handle_in(arg, http_conn) do
+    # credo:disable-for-next-line Credo.Check.Warning.IoInspect
     IO.inspect(arg)
     {:reply, :ok, {:text, "placeholder"}, http_conn}
   end
