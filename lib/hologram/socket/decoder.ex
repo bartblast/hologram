@@ -56,7 +56,9 @@ defmodule Hologram.Socket.Decoder do
   def decode(json_or_list)
 
   def decode(json) when is_binary(json) do
-    decode(Jason.decode!(json))
+    json
+    |> Jason.decode!()
+    |> decode()
   end
 
   def decode([version, data]) do
