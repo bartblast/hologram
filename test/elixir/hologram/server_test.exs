@@ -1,6 +1,6 @@
-defmodule Hologram.ConnectionTest do
+defmodule Hologram.ServerTest do
   use Hologram.Test.BasicCase, async: true
-  alias Hologram.Connection
+  alias Hologram.Server
 
   @http_conn %Plug.Conn{
     method: "GET",
@@ -11,7 +11,7 @@ defmodule Hologram.ConnectionTest do
 
   describe "init/1" do
     test "returns {:ok, http_conn} tuple" do
-      assert Connection.init(@http_conn) == {:ok, @http_conn}
+      assert Server.init(@http_conn) == {:ok, @http_conn}
     end
   end
 
@@ -19,7 +19,7 @@ defmodule Hologram.ConnectionTest do
     test "responds with pong for ping message" do
       message = {"ping", [opcode: :text]}
 
-      assert Connection.handle_in(message, @http_conn) ==
+      assert Server.handle_in(message, @http_conn) ==
                {:reply, :ok, {:text, "pong"}, @http_conn}
     end
   end
@@ -28,7 +28,7 @@ defmodule Hologram.ConnectionTest do
     test "returns {:ok, http_conn} tuple" do
       message = :dummy
 
-      assert Connection.handle_info(message, @http_conn) == {:ok, @http_conn}
+      assert Server.handle_info(message, @http_conn) == {:ok, @http_conn}
     end
   end
 end
