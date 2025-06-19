@@ -23,4 +23,12 @@ defmodule Hologram.ConnectionTest do
                {:reply, :ok, {:text, "pong"}, @http_conn}
     end
   end
+
+  describe "handle_info/2" do
+    test "returns {:ok, http_conn} tuple" do
+      message = :dummy
+
+      assert Connection.handle_info(message, @http_conn) == {:ok, @http_conn}
+    end
+  end
 end
