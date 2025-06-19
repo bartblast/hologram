@@ -1,6 +1,6 @@
 defmodule Hologram.SessionTest do
   use Hologram.Test.BasicCase, async: true
-  alias Hologram.Session
+  import Hologram.Session
 
   defp assert_session_cookie_properties(conn, secure_flag) do
     resp_cookies = conn.resp_cookies
@@ -48,7 +48,7 @@ defmodule Hologram.SessionTest do
     test "creates new session when no cookie exists" do
       conn = build_conn_without_session_cookie()
 
-      {updated_conn, session_id} = Session.init(conn)
+      {updated_conn, session_id} = init(conn)
 
       assert_valid_session_id(session_id)
 
@@ -58,14 +58,14 @@ defmodule Hologram.SessionTest do
     test "retrieves existing session when valid cookie exists" do
       # First, create a session to get a valid encrypted cookie
       initial_conn = build_conn_without_session_cookie()
-      {conn_after_init, original_session_id} = Session.init(initial_conn)
+      {conn_after_init, original_session_id} = init(initial_conn)
 
       # Extract the encrypted cookie value and create a new connection that has it
       encrypted_session = conn_after_init.resp_cookies["hologram_session"].value
       conn_with_session_cookie = build_conn_with_session_cookie(encrypted_session)
 
       # Now test init with the existing cookie
-      {updated_conn, session_id} = Session.init(conn_with_session_cookie)
+      {updated_conn, session_id} = init(conn_with_session_cookie)
 
       assert session_id == original_session_id
 
@@ -77,7 +77,7 @@ defmodule Hologram.SessionTest do
       # Create a connection with an invalid/corrupted session cookie
       conn = build_conn_with_session_cookie("invalid_encrypted_data")
 
-      {updated_conn, session_id} = Session.init(conn)
+      {updated_conn, session_id} = init(conn)
 
       assert_valid_session_id(session_id)
 
@@ -87,7 +87,7 @@ defmodule Hologram.SessionTest do
     test "sets secure flag to true for HTTPS connections" do
       conn = %{build_conn_without_session_cookie() | scheme: :https}
 
-      {updated_conn, _session_id} = Session.init(conn)
+      {updated_conn, _session_id} = init(conn)
 
       assert updated_conn.resp_cookies["hologram_session"].secure == true
     end
@@ -95,7 +95,7 @@ defmodule Hologram.SessionTest do
     test "sets secure flag to false for HTTP connections" do
       conn = %{build_conn_without_session_cookie() | scheme: :http}
 
-      {updated_conn, _session_id} = Session.init(conn)
+      {updated_conn, _session_id} = init(conn)
 
       assert updated_conn.resp_cookies["hologram_session"].secure == false
     end
@@ -104,8 +104,8 @@ defmodule Hologram.SessionTest do
       conn_1 = build_conn_without_session_cookie()
       conn_2 = build_conn_without_session_cookie()
 
-      {_updated_conn_1, session_id_1} = Session.init(conn_1)
-      {_updated_conn_2, session_id_2} = Session.init(conn_2)
+      {_updated_conn_1, session_id_1} = init(conn_1)
+      {_updated_conn_2, session_id_2} = init(conn_2)
 
       assert session_id_1 != session_id_2
     end
@@ -113,7 +113,7 @@ defmodule Hologram.SessionTest do
     test "handles unfetched cookies by fetching them and creating new session" do
       conn = build_conn_with_unfetched_cookies()
 
-      {updated_conn, session_id} = Session.init(conn)
+      {updated_conn, session_id} = init(conn)
 
       assert_valid_session_id(session_id)
 

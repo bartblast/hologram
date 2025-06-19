@@ -1,5 +1,6 @@
 defmodule Hologram.ServerTest do
   use Hologram.Test.BasicCase, async: true
+  import Hologram.Server
   alias Hologram.Server
 
   @http_conn %Plug.Conn{
@@ -11,7 +12,7 @@ defmodule Hologram.ServerTest do
 
   describe "init/1" do
     test "returns {:ok, http_conn} tuple" do
-      assert Server.init(@http_conn) == {:ok, @http_conn}
+      assert init(@http_conn) == {:ok, @http_conn}
     end
   end
 
@@ -19,7 +20,7 @@ defmodule Hologram.ServerTest do
     test "responds with pong for ping message" do
       message = {"ping", [opcode: :text]}
 
-      assert Server.handle_in(message, @http_conn) ==
+      assert handle_in(message, @http_conn) ==
                {:reply, :ok, {:text, "pong"}, @http_conn}
     end
   end
@@ -28,13 +29,13 @@ defmodule Hologram.ServerTest do
     test "returns {:ok, http_conn} tuple" do
       message = :dummy
 
-      assert Server.handle_info(message, @http_conn) == {:ok, @http_conn}
+      assert handle_info(message, @http_conn) == {:ok, @http_conn}
     end
   end
 
   describe "put_cookie/4" do
     test "adds a cookie with default options" do
-      result = Server.put_cookie(%Server{}, "my_cookie", "abc123")
+      result = put_cookie(%Server{}, "my_cookie", "abc123")
 
       expected_cookie = %{
         value: "abc123",
@@ -57,7 +58,7 @@ defmodule Hologram.ServerTest do
         secure: false
       ]
 
-      result = Server.put_cookie(%Server{}, "my_cookie", "abc123", opts)
+      result = put_cookie(%Server{}, "my_cookie", "abc123", opts)
 
       expected_cookie = %{
         value: "abc123",
@@ -76,8 +77,8 @@ defmodule Hologram.ServerTest do
 
       result =
         server
-        |> Server.put_cookie("first", "value_1")
-        |> Server.put_cookie("second", "value_2")
+        |> put_cookie("first", "value_1")
+        |> put_cookie("second", "value_2")
 
       assert Map.has_key?(result.cookies, "existing")
       assert Map.has_key?(result.cookies, "first")
@@ -90,7 +91,7 @@ defmodule Hologram.ServerTest do
     test "overwrites existing cookie with same key" do
       server = %Server{cookies: %{"theme" => %{value: "light"}}}
 
-      result = Server.put_cookie(server, "theme", "dark")
+      result = put_cookie(server, "theme", "dark")
 
       assert result.cookies["theme"].value == "dark"
       assert map_size(result.cookies) == 1
@@ -99,10 +100,10 @@ defmodule Hologram.ServerTest do
     test "supports different value types" do
       result =
         %Server{}
-        |> Server.put_cookie("string", "text")
-        |> Server.put_cookie("integer", 42)
-        |> Server.put_cookie("boolean", true)
-        |> Server.put_cookie("list", [1, 2, 3])
+        |> put_cookie("string", "text")
+        |> put_cookie("integer", 42)
+        |> put_cookie("boolean", true)
+        |> put_cookie("list", [1, 2, 3])
 
       assert result.cookies["string"].value == "text"
       assert result.cookies["integer"].value == 42
@@ -119,12 +120,12 @@ defmodule Hologram.ServerTest do
       """
 
       assert_error ArgumentError, expected_msg, fn ->
-        Server.put_cookie(%Server{}, :abc, "value")
+        put_cookie(%Server{}, :abc, "value")
       end
     end
 
     test "partial options override defaults" do
-      result = Server.put_cookie(%Server{}, "my_cookie", "abc123", secure: false, path: "/app")
+      result = put_cookie(%Server{}, "my_cookie", "abc123", secure: false, path: "/app")
 
       expected_cookie = %{
         value: "abc123",
