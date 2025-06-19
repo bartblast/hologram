@@ -7,7 +7,6 @@ defmodule Hologram.Socket.ChannelTest do
 
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
-  alias Hologram.Commons.SystemUtils
   alias Hologram.Test.Fixtures.Socket.Channel.Module2
   alias Hologram.Test.Fixtures.Socket.Channel.Module3
   alias Hologram.Test.Fixtures.Socket.Channel.Module5
