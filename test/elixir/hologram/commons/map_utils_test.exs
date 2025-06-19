@@ -3,148 +3,127 @@ defmodule Hologram.Commons.MapUtilsTest do
   import Hologram.Commons.MapUtils
 
   describe "diff/2" do
-    test "returns empty list when both maps are empty" do
-      assert diff(%{}, %{}) == []
+    test "both maps are empty" do
+      result = diff(%{}, %{})
+
+      assert result == %{
+               added: [],
+               removed: [],
+               edited: []
+             }
     end
 
-    test "returns empty list when maps are identical" do
-      old_map = %{"session_id" => "abc123", "theme" => "dark"}
-      new_map = %{"session_id" => "abc123", "theme" => "dark"}
+    test "empty map to non-empty map" do
+      result = diff(%{}, %{new: "value"})
 
-      assert diff(old_map, new_map) == []
+      assert result == %{
+               added: [{:new, "value"}],
+               removed: [],
+               edited: []
+             }
     end
 
-    test "detects new entries" do
-      old_map = %{"session_id" => "abc123"}
-      new_map = %{"session_id" => "abc123", "theme" => "dark", "lang" => "en"}
+    test "non-empty map to empty map" do
+      result = diff(%{"old" => "value"}, %{})
+
+      assert result == %{
+               added: [],
+               removed: ["old"],
+               edited: []
+             }
+    end
+
+    test "map with edited values" do
+      result = diff(%{key: "old"}, %{key: "new"})
+
+      assert result == %{
+               added: [],
+               removed: [],
+               edited: [{:key, "new"}]
+             }
+    end
+
+    test "identical maps" do
+      result = diff(%{"same" => "value"}, %{"same" => "value"})
+
+      assert result == %{
+               added: [],
+               removed: [],
+               edited: []
+             }
+    end
+
+    test "complex case with added, removed, and edited entries" do
+      result = diff(%{:abc => 1, 2 => "two"}, %{:abc => 10, 3 => "three"})
+
+      assert result == %{
+               added: [{3, "three"}],
+               removed: [2],
+               edited: [{:abc, 10}]
+             }
+    end
+
+    test "nested maps with same content are equal" do
+      nested_map = %{nested: "value"}
+      old_map = %{data: nested_map}
+      new_map = %{data: %{nested: "value"}}
 
       result = diff(old_map, new_map)
 
-      assert length(result) == 2
-      assert {"theme", "dark"} in result
-      assert {"lang", "en"} in result
+      assert result == %{
+               added: [],
+               removed: [],
+               edited: []
+             }
     end
 
-    test "detects modified entries" do
-      old_map = %{"session_id" => "abc123", "theme" => "dark"}
-      new_map = %{"session_id" => "xyz789", "theme" => "light"}
+    test "nil to not nil" do
+      result = diff(%{key: nil}, %{key: "value"})
+
+      assert result == %{
+               added: [],
+               removed: [],
+               edited: [{:key, "value"}]
+             }
+    end
+
+    test "nil to nil" do
+      result = diff(%{key: nil}, %{key: nil})
+
+      assert result == %{
+               added: [],
+               removed: [],
+               edited: []
+             }
+    end
+
+    test "strict equality is used for value comparison" do
+      result = diff(%{number: 1}, %{number: 1.0})
+
+      assert result == %{
+               added: [],
+               removed: [],
+               edited: [{:number, 1.0}]
+             }
+    end
+
+    test "large number of changes" do
+      old_map = Enum.into(1..50, %{}, fn x -> {x, "old_#{x}"} end)
+      new_map = Enum.into(26..75, %{}, fn x -> {x, "new_#{x}"} end)
 
       result = diff(old_map, new_map)
 
-      assert length(result) == 2
-      assert {"session_id", "xyz789"} in result
-      assert {"theme", "light"} in result
-    end
+      # Keys 1-25 should be removed
+      assert length(result.removed) == 25
+      assert Enum.all?(result.removed, fn key -> key in 1..25 end)
 
-    test "detects deleted entries" do
-      old_map = %{"session_id" => "abc123", "theme" => "dark", "lang" => "en"}
-      new_map = %{"session_id" => "abc123"}
+      # Keys 26-50 should be edited
+      assert length(result.edited) == 25
+      assert Enum.all?(result.edited, fn {key, _} -> key in 26..50 end)
 
-      result = diff(old_map, new_map)
-
-      assert length(result) == 2
-      assert {"theme", nil} in result
-      assert {"lang", nil} in result
-    end
-
-    test "handles mixed scenario: new, modified, unchanged, and deleted entries" do
-      old_map = %{
-        # will be modified
-        "session_id" => "abc123",
-        # will remain unchanged
-        "theme" => "dark",
-        # will be deleted
-        "lang" => "en",
-        # will be deleted
-        "timezone" => "UTC"
-      }
-
-      new_map = %{
-        # modified
-        "session_id" => "xyz789",
-        # unchanged
-        "theme" => "dark",
-        # new
-        "user_id" => "42",
-        # new with complex value
-        "preferences" => %{"sound" => true}
-      }
-
-      result = diff(old_map, new_map)
-
-      assert length(result) == 5
-
-      # Modified
-      assert {"session_id", "xyz789"} in result
-
-      # New
-      assert {"user_id", "42"} in result
-      assert {"preferences", %{"sound" => true}} in result
-
-      # Deleted
-      assert {"lang", nil} in result
-      assert {"timezone", nil} in result
-
-      # Unchanged should not be present
-      refute {"theme", "dark"} in result
-    end
-
-    test "handles empty old map (all new)" do
-      old_map = %{}
-      new_map = %{"session_id" => "abc123", "theme" => "dark"}
-
-      result = diff(old_map, new_map)
-
-      assert length(result) == 2
-      assert {"session_id", "abc123"} in result
-      assert {"theme", "dark"} in result
-    end
-
-    test "handles empty new map (all deleted)" do
-      old_map = %{"session_id" => "abc123", "theme" => "dark"}
-      new_map = %{}
-
-      result = diff(old_map, new_map)
-
-      assert length(result) == 2
-      assert {"session_id", nil} in result
-      assert {"theme", nil} in result
-    end
-
-    test "handles various value types correctly" do
-      old_map = %{
-        "string" => "old_value",
-        "integer" => 42,
-        "boolean" => true,
-        "map" => %{"nested" => "old"},
-        "list" => [1, 2, 3]
-      }
-
-      new_map = %{
-        "string" => "new_value",
-        "integer" => 100,
-        "boolean" => false,
-        "map" => %{"nested" => "new"},
-        "list" => [4, 5, 6]
-      }
-
-      result = diff(old_map, new_map)
-
-      assert length(result) == 5
-      assert {"string", "new_value"} in result
-      assert {"integer", 100} in result
-      assert {"boolean", false} in result
-      assert {"map", %{"nested" => "new"}} in result
-      assert {"list", [4, 5, 6]} in result
-    end
-
-    test "handles setting existing entries to nil" do
-      old_map = %{"to_clear" => "some_value", "keep" => "value"}
-      new_map = %{"to_clear" => nil, "keep" => "value"}
-
-      result = diff(old_map, new_map)
-
-      assert result == [{"to_clear", nil}]
+      # Keys 51-75 should be added
+      assert length(result.added) == 25
+      assert Enum.all?(result.added, fn {key, _} -> key in 51..75 end)
     end
   end
 end
