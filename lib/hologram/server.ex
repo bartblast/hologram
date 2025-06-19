@@ -2,6 +2,7 @@ defmodule Hologram.Server do
   @behaviour WebSock
 
   alias Hologram.Component.Action
+  alias Hologram.Commons.MapUtils
 
   defstruct cookies: %{}, next_action: nil, session: %{}
 
@@ -58,17 +59,7 @@ defmodule Hologram.Server do
   """
   @spec diff_cookies(%{String.t() => any()}, %{String.t() => any()}) :: [{String.t(), any()}]
   def diff_cookies(old_cookies, new_cookies) do
-    changed_or_new =
-      for {key, value} <- new_cookies,
-          old_cookies[key] != value,
-          do: {key, value}
-
-    deleted =
-      for {key, _value} <- old_cookies,
-          not Map.has_key?(new_cookies, key),
-          do: {key, nil}
-
-    changed_or_new ++ deleted
+    MapUtils.diff(old_cookies, new_cookies)
   end
 
   @impl WebSock
