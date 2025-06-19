@@ -71,7 +71,7 @@ defmodule Hologram.ServerTest do
       assert result.cookies == %{"my_cookie" => expected_cookie}
     end
 
-    test "adds multiple cookies to existing server" do
+    test "adds multiple cookies to existing server struct" do
       server = %Server{cookies: %{"existing" => %{value: "old"}}}
 
       result =
