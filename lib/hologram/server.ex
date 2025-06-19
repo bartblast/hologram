@@ -6,7 +6,15 @@ defmodule Hologram.Server do
   defstruct cookies: %{}, next_action: nil, session: %{}
 
   @type t :: %__MODULE__{
-          cookies: %{atom => any},
+          cookies: %{
+            String.t() => %{
+              domain: String.t() | nil,
+              max_age: integer | nil,
+              path: String.t() | nil,
+              same_site: :lax | :none | :strict,
+              secure: :boolean
+            }
+          },
           next_action: Action.t() | nil,
           session: %{atom => any}
         }
