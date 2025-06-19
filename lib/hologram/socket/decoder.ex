@@ -43,13 +43,21 @@ defmodule Hologram.Socket.Decoder do
   def atoms_whitelist, do: @atoms_whitelist
 
   @doc """
-  Decodes the top-level term serialized by the client that has been pre-decoded from JSON.
-  The term is expected to be a list in the format [version, data] where version is an integer
-  and data is the serialized content to be decoded. This is the entry point for decoding,
-  which then recursively uses decode/2 for nested structures.
+  Decodes the top-level term serialized by the client in Hologram format into Elixir terms.
+
+  The input can be either:
+  - A binary containing raw JSON that will be parsed first, then decoded from Hologram format
+  - Already JSON-decoded data in the format [version, data] where version is an integer
+    and data is the serialized content in Hologram format
+
+  This is the entry point for decoding, which then recursively uses decode/2 for nested structures.
   """
-  @spec decode(list()) :: any
-  def decode(list)
+  @spec decode(binary() | list()) :: any
+  def decode(json_or_list)
+
+  def decode(json) when is_binary(json) do
+    decode(Jason.decode!(json))
+  end
 
   def decode([version, data]) do
     decode(version, data)

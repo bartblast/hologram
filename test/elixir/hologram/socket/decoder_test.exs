@@ -5,7 +5,11 @@ defmodule Hologram.Socket.DecoderTest do
   @delimiter delimiter()
 
   describe "version 2" do
-    test "top-level data" do
+    test "top-level data, raw JSON" do
+      assert decode(~s'[2,"axyz"]') == :xyz
+    end
+
+    test "top-level data, already JSON-decoded" do
       assert decode([2, "axyz"]) == :xyz
     end
 
@@ -82,7 +86,11 @@ defmodule Hologram.Socket.DecoderTest do
   end
 
   describe "version 1" do
-    test "top-level data" do
+    test "top-level data, raw JSON" do
+      assert decode(~s'[1,"__atom__:xyz"]') == :xyz
+    end
+
+    test "top-level data, already JSON-decoded" do
       assert decode([1, "__atom__:xyz"]) == :xyz
     end
 
