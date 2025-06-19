@@ -2,7 +2,6 @@ defmodule Hologram.Server do
   @behaviour WebSock
 
   alias Hologram.Component.Action
-  alias Hologram.Commons.MapUtils
 
   defstruct cookies: %{}, next_action: nil, session: %{}
 
