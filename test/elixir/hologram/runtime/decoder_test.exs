@@ -1,6 +1,6 @@
-defmodule Hologram.Socket.DecoderTest do
+defmodule Hologram.Runtime.DecoderTest do
   use Hologram.Test.BasicCase, async: true
-  import Hologram.Socket.Decoder
+  import Hologram.Runtime.Decoder
 
   @delimiter delimiter()
 

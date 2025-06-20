@@ -1,4 +1,4 @@
-defmodule Hologram.Socket.Decoder do
+defmodule Hologram.Runtime.Decoder do
   @moduledoc false
 
   alias Hologram.Commons.BitstringUtils

@@ -1,7 +1,7 @@
-defmodule Hologram.Test.Fixtures.Connection.Module3 do
+defmodule Hologram.Test.Fixtures.Runtime.MessageHandler.Module3 do
   use Hologram.Page
 
-  route "/hologram-test-fixtures-connection-module3/:a/:b"
+  route "/hologram-test-fixtures-runtime-message-handler-module3/:a/:b"
 
   param :a, :integer
   param :b, :integer

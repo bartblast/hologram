@@ -1,4 +1,4 @@
-defmodule Hologram.Test.Fixtures.Connection.Module4 do
+defmodule Hologram.Test.Fixtures.Runtime.MessageHandler.Module4 do
   use Hologram.Component
   alias Hologram.UI.Runtime
 
