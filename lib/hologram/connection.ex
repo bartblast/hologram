@@ -5,6 +5,7 @@ defmodule Hologram.Connection do
   alias Hologram.Component.Action
   alias Hologram.Server
   alias Hologram.Socket.Decoder
+  alias Hologram.Template.Renderer
 
   @impl WebSock
   def init(http_conn) do
@@ -47,5 +48,20 @@ defmodule Hologram.Connection do
       end
 
     Encoder.encode_term(next_action)
+  end
+
+  defp dispatch("page", payload) do
+    opts = [initial_page?: false]
+
+    {html, _component_registry} =
+      case payload do
+        {page_module, params} ->
+          Renderer.render_page(page_module, params, opts)
+
+        page_module ->
+          Renderer.render_page(page_module, %{}, opts)
+      end
+
+    {:ok, html}
   end
 end
