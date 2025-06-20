@@ -1,8 +1,10 @@
 defmodule Hologram.Connection do
   @behaviour WebSock
 
+  alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
+  alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Server
   alias Hologram.Socket.Decoder
   alias Hologram.Template.Renderer
@@ -63,5 +65,14 @@ defmodule Hologram.Connection do
       end
 
     {:ok, html}
+  end
+
+  defp dispatch("page_bundle_path", page_module) do
+    page_bundle_path =
+      page_module
+      |> PageDigestRegistry.lookup()
+      |> RouterHelpers.page_bundle_path()
+
+    {:ok, page_bundle_path}
   end
 end

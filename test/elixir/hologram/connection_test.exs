@@ -136,6 +136,19 @@ defmodule Hologram.ConnectionTest do
     end
   end
 
+  test "handle_in/2, page bundle path" do
+    setup_page_digest_registry(PageDigestRegistryStub)
+    ETS.put(PageDigestRegistryStub.ets_table_name(), Module2, "12345678901234567890123456789012")
+
+    message =
+      {~s'[2,{"d":["b0706167655f62756e646c655f70617468","aElixir.Hologram.Test.Fixtures.Connection.Module2"],"t":"l"}]',
+       [opcode: :text]}
+
+    assert handle_in(message, @http_conn) ==
+             {:reply, :ok, {:text, "/hologram/page-12345678901234567890123456789012.js"},
+              @http_conn}
+  end
+
   describe "handle_info/2" do
     test "returns {:ok, http_conn} tuple" do
       message = :dummy
