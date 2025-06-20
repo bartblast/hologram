@@ -1,6 +1,5 @@
 defmodule Hologram.Test.Fixtures.Runtime.MessageHandler.Module6 do
   use Hologram.Component
-
   alias Hologram.Component.Action
 
   def command(:my_command_6, _params, server) do
