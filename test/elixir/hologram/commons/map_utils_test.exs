@@ -119,11 +119,11 @@ defmodule Hologram.Commons.MapUtilsTest do
 
       # Keys 26-50 should be edited
       assert length(result.edited) == 25
-      assert Enum.all?(result.edited, fn {key, _} -> key in 26..50 end)
+      assert Enum.all?(result.edited, fn {key, _value} -> key in 26..50 end)
 
       # Keys 51-75 should be added
       assert length(result.added) == 25
-      assert Enum.all?(result.added, fn {key, _} -> key in 51..75 end)
+      assert Enum.all?(result.added, fn {key, _value} -> key in 51..75 end)
     end
   end
 end
