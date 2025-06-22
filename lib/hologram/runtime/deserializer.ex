@@ -1,4 +1,4 @@
-defmodule Hologram.Runtime.Decoder do
+defmodule Hologram.Runtime.Deserializer do
   @moduledoc false
 
   alias Hologram.Commons.BitstringUtils
@@ -43,45 +43,45 @@ defmodule Hologram.Runtime.Decoder do
   def atoms_whitelist, do: @atoms_whitelist
 
   @doc """
-  Decodes the top-level term serialized by the client in Hologram format into Elixir terms.
+  Deserializes the top-level term serialized by the client in Hologram format into Elixir terms.
 
   The input can be either:
-  - A binary containing raw JSON that will be parsed first, then decoded from Hologram format
+  - A binary containing raw JSON that will be parsed first, then deserialized from Hologram format
   - Already JSON-decoded data in the format [version, data] where version is an integer
     and data is the serialized content in Hologram format
 
-  This is the entry point for decoding, which then recursively uses decode/2 for nested structures.
+  This is the entry point for deserializing, which then recursively uses deserialize/2 for nested structures.
   """
-  @spec decode(binary() | list()) :: any
-  def decode(json_or_list)
+  @spec deserialize(binary() | list()) :: any
+  def deserialize(json_or_list)
 
-  def decode(json) when is_binary(json) do
+  def deserialize(json) when is_binary(json) do
     json
     |> Jason.decode!()
-    |> decode()
+    |> deserialize()
   end
 
-  def decode([version, data]) do
-    decode(version, data)
+  def deserialize([version, data]) do
+    deserialize(version, data)
   end
 
   @doc """
-  Decodes a term serialized by the client and pre-decoded from JSON.
+  Deserializes a term serialized by the client and pre-decoded from JSON.
   """
-  @spec decode(integer, map | String.t()) :: any
-  def decode(version, data)
+  @spec deserialize(integer, map | String.t()) :: any
+  def deserialize(version, data)
 
-  def decode(2, "a" <> value) do
+  def deserialize(2, "a" <> value) do
     String.to_existing_atom(value)
   end
 
-  def decode(2, "b"), do: ""
+  def deserialize(2, "b"), do: ""
 
-  def decode(2, "b0" <> <<hex::binary>>) do
+  def deserialize(2, "b0" <> <<hex::binary>>) do
     Base.decode16!(hex, case: :lower)
   end
 
-  def decode(2, "b" <> <<leftover_bits::binary-size(1), hex::binary>>) do
+  def deserialize(2, "b" <> <<leftover_bits::binary-size(1), hex::binary>>) do
     bytes = Base.decode16!(hex, case: :lower)
     leftover_bit_count = String.to_integer(leftover_bits)
 
@@ -90,7 +90,7 @@ defmodule Hologram.Runtime.Decoder do
     <<full_bytes::binary, right_aligned_leftover_byte::size(leftover_bit_count)>>
   end
 
-  def decode(2, "c" <> data) do
+  def deserialize(2, "c" <> data) do
     [module_str, function_str, arity_str] = String.split(data, @delimiter)
 
     module = Module.safe_concat([module_str])
@@ -100,48 +100,48 @@ defmodule Hologram.Runtime.Decoder do
     Function.capture(module, function, arity)
   end
 
-  def decode(2, "f" <> value) do
+  def deserialize(2, "f" <> value) do
     value
     |> Float.parse()
     |> elem(0)
   end
 
-  def decode(2, "i" <> value) do
+  def deserialize(2, "i" <> value) do
     IntegerUtils.parse!(value)
   end
 
-  def decode(2, %{"t" => "l", "d" => data}) do
-    Enum.map(data, &decode(2, &1))
+  def deserialize(2, %{"t" => "l", "d" => data}) do
+    Enum.map(data, &deserialize(2, &1))
   end
 
-  def decode(2, %{"t" => "m", "d" => data}) do
+  def deserialize(2, %{"t" => "m", "d" => data}) do
     data
-    |> Enum.map(fn [key, value] -> {decode(2, key), decode(2, value)} end)
+    |> Enum.map(fn [key, value] -> {deserialize(2, key), deserialize(2, value)} end)
     |> Enum.into(%{})
   end
 
-  def decode(2, "o" <> data) do
+  def deserialize(2, "o" <> data) do
     [major, minor] = decode_identifier_segments(data)
     IEx.Helpers.port(major, minor)
   end
 
-  def decode(2, "p" <> data) do
+  def deserialize(2, "p" <> data) do
     [x, y, z] = decode_identifier_segments(data)
     IEx.Helpers.pid(x, y, z)
   end
 
-  def decode(2, "r" <> data) do
+  def deserialize(2, "r" <> data) do
     [w, x, y, z] = decode_identifier_segments(data)
     IEx.Helpers.ref(w, x, y, z)
   end
 
-  def decode(2, %{"t" => "t", "d" => data}) do
+  def deserialize(2, %{"t" => "t", "d" => data}) do
     data
-    |> Enum.map(&decode(2, &1))
+    |> Enum.map(&deserialize(2, &1))
     |> List.to_tuple()
   end
 
-  def decode(1, %{
+  def deserialize(1, %{
         "type" => "anonymous_function",
         "capturedModule" => module_str,
         "capturedFunction" => function_str,
@@ -153,53 +153,53 @@ defmodule Hologram.Runtime.Decoder do
     Function.capture(module, function, arity)
   end
 
-  def decode(1, "__atom__:" <> value) do
+  def deserialize(1, "__atom__:" <> value) do
     String.to_existing_atom(value)
   end
 
-  def decode(1, "__binary__:" <> value) do
+  def deserialize(1, "__binary__:" <> value) do
     value
   end
 
-  def decode(1, %{"type" => "bitstring", "bits" => bits}) do
+  def deserialize(1, %{"type" => "bitstring", "bits" => bits}) do
     BitstringUtils.from_bit_list(bits)
   end
 
-  def decode(1, "__float__:" <> value) do
+  def deserialize(1, "__float__:" <> value) do
     value
     |> Float.parse()
     |> elem(0)
   end
 
-  def decode(1, "__integer__:" <> value) do
+  def deserialize(1, "__integer__:" <> value) do
     IntegerUtils.parse!(value)
   end
 
-  def decode(1, %{"type" => "list", "data" => data}) do
-    Enum.map(data, &decode(1, &1))
+  def deserialize(1, %{"type" => "list", "data" => data}) do
+    Enum.map(data, &deserialize(1, &1))
   end
 
-  def decode(1, %{"type" => "map", "data" => data}) do
+  def deserialize(1, %{"type" => "map", "data" => data}) do
     data
-    |> Enum.map(fn [key, value] -> {decode(1, key), decode(1, value)} end)
+    |> Enum.map(fn [key, value] -> {deserialize(1, key), deserialize(1, value)} end)
     |> Enum.into(%{})
   end
 
-  def decode(1, %{"type" => "pid", "segments" => [x, y, z]}) do
+  def deserialize(1, %{"type" => "pid", "segments" => [x, y, z]}) do
     IEx.Helpers.pid(x, y, z)
   end
 
-  def decode(1, %{"type" => "port", "value" => value}) do
+  def deserialize(1, %{"type" => "port", "value" => value}) do
     IEx.Helpers.port(value)
   end
 
-  def decode(1, %{"type" => "reference", "value" => value}) do
+  def deserialize(1, %{"type" => "reference", "value" => value}) do
     IEx.Helpers.ref(value)
   end
 
-  def decode(1, %{"type" => "tuple", "data" => data}) do
+  def deserialize(1, %{"type" => "tuple", "data" => data}) do
     data
-    |> Enum.map(&decode(1, &1))
+    |> Enum.map(&deserialize(1, &1))
     |> List.to_tuple()
   end
 
