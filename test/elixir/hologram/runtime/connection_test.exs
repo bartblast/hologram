@@ -19,23 +19,24 @@ defmodule Hologram.Runtime.ConnectionTest do
     end
   end
 
-  describe "handle_in/2, control messages" do
-    test "responds with pong for ping message" do
-      message = {"ping", [opcode: :text]}
+  describe "handle_in/2" do
+    test "handles messages with type only" do
+      message = {~s'"ping"', [opcode: :text]}
 
       assert handle_in(message, @http_conn) ==
-               {:reply, :ok, {:text, "pong"}, @http_conn}
+               {:reply, :ok, {:text, ~s'"pong"'}, @http_conn}
     end
-  end
 
-  describe "handle_in/2, runtime messages" do
-    test "decodes message and delegates to MessageHandler" do
+    # Not needed (yet)
+    # test "handles messages with type and payload"
+
+    test "handles messages with type, payload and correlation ID" do
       message =
-        {~s'[2,{"d":["b0636f6d6d616e64",{"d":[["amodule","aElixir.Hologram.Test.Fixtures.Runtime.MessageHandler.Module1"],["aname","amy_command_a"],["aparams",{"d":[],"t":"m"}],["atarget","b06d795f7461726765745f31"]],"t":"m"}],"t":"l"}]',
+        {~s'["command",[2,{"d":[["amodule","aElixir.Hologram.Test.Fixtures.Runtime.MessageHandler.Module1"],["aname","amy_command_a"],["aparams",{"d":[],"t":"m"}],["atarget","b06d795f7461726765745f31"]],"t":"m"}],123]',
          [opcode: :text]}
 
       assert handle_in(message, @http_conn) ==
-               {:reply, :ok, {:text, ~s'Type.atom("nil")'}, @http_conn}
+               {:reply, :ok, {:text, ~s'["reply",[1,"Type.atom(\\"nil\\")"],123]'}, @http_conn}
     end
   end
 

@@ -33,7 +33,7 @@ defmodule Hologram.Runtime.MessageHandlerTest do
       }
 
       assert MessageHandler.handle("command", payload) ==
-               {:ok, ~s'Type.atom("nil")'}
+               {"reply", [1, ~s'Type.atom("nil")']}
     end
 
     test "next action with target not specified" do
@@ -45,8 +45,11 @@ defmodule Hologram.Runtime.MessageHandlerTest do
       }
 
       assert MessageHandler.handle("command", payload) ==
-               {:ok,
-                ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("my_action_b")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'}
+               {"reply",
+                [
+                  1,
+                  ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("my_action_b")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+                ]}
     end
 
     test "next action with target specified" do
@@ -58,8 +61,11 @@ defmodule Hologram.Runtime.MessageHandlerTest do
       }
 
       assert MessageHandler.handle("command", payload) ==
-               {:ok,
-                ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("my_action_c")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_2")]])'}
+               {"reply",
+                [
+                  1,
+                  ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("my_action_c")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_2")]])'
+                ]}
     end
 
     test "next action params contain an anonymous function that is not a named function capture" do
@@ -77,7 +83,7 @@ defmodule Hologram.Runtime.MessageHandlerTest do
           "term contains a function that is not a remote function capture"
         end
 
-      assert MessageHandler.handle("command", payload) == {:error, expected_msg}
+      assert MessageHandler.handle("command", payload) == {"reply", [0, expected_msg]}
     end
   end
 
@@ -93,7 +99,7 @@ defmodule Hologram.Runtime.MessageHandlerTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module2, :dummy_module_2_digest)
 
       assert MessageHandler.handle("page", Module2) ==
-               {:ok, "page Module2 template"}
+               {"reply", "page Module2 template"}
     end
 
     test "tuple payload" do
@@ -102,13 +108,13 @@ defmodule Hologram.Runtime.MessageHandlerTest do
       payload = {Module3, %{a: 1, b: 2}}
 
       assert MessageHandler.handle("page", payload) ==
-               {:ok, "page Module3 template, params: a = 1, b = 2"}
+               {"reply", "page Module3 template, params: a = 1, b = 2"}
     end
 
     test "rendered page is not treated as initial page" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
 
-      assert {:ok, html} = MessageHandler.handle("page", Module5)
+      assert {"reply", html} = MessageHandler.handle("page", Module5)
 
       refute String.contains?(html, "__hologramAssetManifest__")
     end
@@ -125,7 +131,7 @@ defmodule Hologram.Runtime.MessageHandlerTest do
       )
 
       assert MessageHandler.handle("page_bundle_path", Module2) ==
-               {:ok, "/hologram/page-12345678901234567890123456789012.js"}
+               {"reply", "/hologram/page-12345678901234567890123456789012.js"}
     end
   end
 end
