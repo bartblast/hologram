@@ -24,7 +24,10 @@ defmodule Hologram.Runtime.MessageHandler do
           nil
       end
 
-    {"reply", Encoder.encode_term(next_action)}
+    {status_atom, encoded_result} = Encoder.encode_term(next_action)
+    status_integer = if status_atom == :ok, do: 1, else: 0
+
+    {"reply", [status_integer, encoded_result]}
   end
 
   def handle("page", payload) do
