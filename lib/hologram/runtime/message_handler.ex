@@ -24,7 +24,7 @@ defmodule Hologram.Runtime.MessageHandler do
           nil
       end
 
-    Encoder.encode_term(next_action)
+    {"reply", Encoder.encode_term(next_action)}
   end
 
   def handle("page", payload) do
@@ -39,7 +39,7 @@ defmodule Hologram.Runtime.MessageHandler do
           Renderer.render_page(page_module, %{}, opts)
       end
 
-    {:ok, html}
+    {"reply", html}
   end
 
   def handle("page_bundle_path", page_module) do
@@ -48,6 +48,10 @@ defmodule Hologram.Runtime.MessageHandler do
       |> PageDigestRegistry.lookup()
       |> RouterHelpers.page_bundle_path()
 
-    {:ok, page_bundle_path}
+    {"reply", page_bundle_path}
+  end
+
+  def handle("ping", nil) do
+    {"pong", :__no_payload__}
   end
 end
