@@ -200,7 +200,12 @@ export default class Connection {
       } catch {}
     }
 
-    console.error("Hologram: failed to send message to server", encodedMessage);
+    console.error(
+      "Hologram: failed to send message to server",
+      type,
+      payload,
+      correlationId,
+    );
 
     return false;
   }
@@ -220,7 +225,7 @@ export default class Connection {
       timerId,
     });
 
-    if (!$.sendMessage(type, payload, correlationId)) {
+    if (!$.sendMessage(type, payload, requestId)) {
       $.pendingRequests.delete(requestId);
       clearTimeout(timerId);
       onError();
