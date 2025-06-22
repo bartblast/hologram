@@ -28,8 +28,9 @@ defmodule Hologram.Runtime.Connection do
       [type, payload, correlation_id] ->
         {type, Deserializer.deserialize(payload), correlation_id}
 
-      [type, payload] ->
-        {type, Deserializer.deserialize(payload), nil}
+      # Not needed (yet)
+      # [type, payload] ->
+      #   {type, Deserializer.deserialize(payload), nil}
 
       type ->
         {type, nil, nil}
@@ -40,9 +41,10 @@ defmodule Hologram.Runtime.Connection do
     Jason.encode!(type)
   end
 
-  defp encode(type, payload, nil) do
-    Jason.encode!([type, payload])
-  end
+  # Not needed (yet)
+  # defp encode(type, payload, nil) do
+  #   Jason.encode!([type, payload])
+  # end
 
   defp encode(type, payload, correlation_id) do
     Jason.encode!([type, payload, correlation_id])
