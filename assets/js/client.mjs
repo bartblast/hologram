@@ -6,8 +6,6 @@ import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Serializer from "./serializer.mjs";
 import Utils from "./utils.mjs";
 
-import {Socket} from "phoenix";
-
 // TODO: test
 export default class Client {
   static #channel = null;
@@ -37,8 +35,6 @@ export default class Client {
           GlobalRegistry.set("connected?", false);
           throw new HologramRuntimeError("unable to connect to a server");
         });
-
-      Client.#channel.on("reload", (_payload) => document.location.reload());
     });
   }
 
