@@ -42,7 +42,7 @@ export default class Connection {
   }
 
   static clearPendingRequests(triggerErrorCallbacks) {
-    for (const [_requestId, request] of $.pendingRequests.entries()) {
+    for (const [_correlationId, request] of $.pendingRequests.entries()) {
       clearTimeout(request.timerId);
 
       if (triggerErrorCallbacks) {
@@ -211,28 +211,28 @@ export default class Connection {
   }
 
   static sendRequest(type, payload = null, {onSuccess, onError, onTimeout}) {
-    const requestId = crypto.randomUUID();
+    const correlationId = crypto.randomUUID();
 
     const timerId = setTimeout(() => {
-      $.pendingRequests.delete(requestId);
+      $.pendingRequests.delete(correlationId);
       onTimeout();
     }, $.REQUEST_TIMEOUT);
 
-    $.pendingRequests.set(requestId, {
+    $.pendingRequests.set(correlationId, {
       onSuccess,
       onError,
       onTimeout,
       timerId,
     });
 
-    if (!$.sendMessage(type, payload, requestId)) {
-      $.pendingRequests.delete(requestId);
+    if (!$.sendMessage(type, payload, correlationId)) {
+      $.pendingRequests.delete(correlationId);
       clearTimeout(timerId);
       onError();
       return false;
     }
 
-    return requestId;
+    return correlationId;
   }
 
   static sendPing() {
