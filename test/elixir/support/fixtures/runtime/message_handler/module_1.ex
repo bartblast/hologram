@@ -1,3 +1,4 @@
+# credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Runtime.MessageHandler.Module1 do
   use Hologram.Component
   alias Hologram.Component.Action
@@ -26,6 +27,7 @@ defmodule Hologram.Test.Fixtures.Runtime.MessageHandler.Module1 do
     %{server | next_action: action}
   end
 
+  @impl Component
   def template do
     ~HOLO""
   end
