@@ -1,4 +1,6 @@
 defmodule Hologram.Runtime.MessageHandler do
+  @moduledoc false
+
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
@@ -6,6 +8,25 @@ defmodule Hologram.Runtime.MessageHandler do
   alias Hologram.Server
   alias Hologram.Template.Renderer
 
+  @doc """
+  Handles various types of WebSocket messages from the client runtime.
+
+  ## Parameters
+    - `type` - String identifying the type of message to handle
+    - `payload` - Message-specific payload (varies by message type)
+
+  ## Returns
+  A tuple containing the response type and payload.
+
+  ## Examples
+
+      iex> MessageHandler.handle("ping", nil)
+      {"pong", :__no_payload__}
+
+      iex> MessageHandler.handle("page", MyPageModule)
+      {"reply", "<html>...</html>"}
+  """
+  @spec handle(String.t(), any) :: {String.t(), any()}
   def handle("command", payload) do
     %{module: module, name: name, params: params, target: target} = payload
 
