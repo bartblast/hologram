@@ -59,7 +59,7 @@ export default class CommandQueue {
                 Hologram.executeAction(nextAction);
               }
             } else {
-              $.failAndThrowError(currentItem.id, responsePayload);
+              $.failAndThrowError(currentItem.id, result);
             }
           };
         })(item);

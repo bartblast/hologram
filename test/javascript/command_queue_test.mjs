@@ -290,7 +290,7 @@ describe("CommandQueue", () => {
         assert.throw(
           () => callback([0, "error_message"]),
           HologramRuntimeError,
-          "command failed: 0,error_message",
+          "command failed: error_message",
         );
       });
 
