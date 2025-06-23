@@ -152,7 +152,7 @@ export default class Connection {
     }
 
     // Currently, the only supported message type except "pong" is "reply" (with correlation ID)
-    const [_type, _payload, correlationId] = JSON.parse(message);
+    const [_type, payload, correlationId] = JSON.parse(message);
 
     if ($.pendingRequests.has(correlationId)) {
       const request = $.pendingRequests.get(correlationId);
@@ -160,7 +160,7 @@ export default class Connection {
       clearTimeout(request.timerId);
       $.pendingRequests.delete(correlationId);
 
-      request.onSuccess();
+      request.onSuccess(payload);
     }
   }
 
@@ -233,9 +233,9 @@ export default class Connection {
       }, timeout);
 
       $.pendingRequests.set(correlationId, {
-        onSuccess: () => {
-          if (onSuccess) onSuccess();
-          resolve();
+        onSuccess: (responsePayload) => {
+          if (onSuccess) onSuccess(responsePayload);
+          resolve(responsePayload);
         },
         onError: () => {
           if (onError) onError();

@@ -640,14 +640,16 @@ describe("Connection", () => {
       const promise = Connection.sendRequest("test", Type.atom("abc"), opts);
 
       // Simulate successful WebSocket response
-      const message = `["reply","payload","mock-uuid"]`;
+      const responsePayload = "test response payload";
+      const message = `["reply","${responsePayload}","mock-uuid"]`;
       const event = {data: message};
       Connection.handleMessage(event);
 
-      sinon.assert.calledOnce(opts.onSuccess);
+      sinon.assert.calledOnceWithExactly(opts.onSuccess, responsePayload);
 
-      // Test that promise resolves successfully (will throw and fail test if it rejects)
-      await promise;
+      // Test that promise resolves with the response payload
+      const result = await promise;
+      assert.equal(result, responsePayload);
     });
 
     it("calls callbacks and rejects promise on send failure", async () => {
@@ -701,12 +703,14 @@ describe("Connection", () => {
       const promise = Connection.sendRequest("test", Type.atom("abc"));
 
       // Simulate successful WebSocket response
-      const message = `["reply","payload","mock-uuid"]`;
+      const responsePayload = "test response payload";
+      const message = `["reply","${responsePayload}","mock-uuid"]`;
       const event = {data: message};
       Connection.handleMessage(event);
 
-      // Test that promise resolves successfully (will throw and fail test if it rejects)
-      await promise;
+      // Test that promise resolves with the response payload
+      const result = await promise;
+      assert.equal(result, responsePayload);
     });
 
     it("works with promise-only (no callbacks) on error", async () => {
