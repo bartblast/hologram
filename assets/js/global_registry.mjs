@@ -1,5 +1,8 @@
 "use strict";
 
+// This module is mainly used to make it easier for feature tests
+// to access information about the state of the app
+
 export default class GlobalRegistry {
   // Made public to make tests easier
   static rootKey = "hologram";
