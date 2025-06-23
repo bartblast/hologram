@@ -1,91 +1,47 @@
 "use strict";
 
 import Config from "./config.mjs";
-import GlobalRegistry from "./global_registry.mjs";
-import HologramRuntimeError from "./errors/runtime_error.mjs";
-import Serializer from "./serializer.mjs";
-import Utils from "./utils.mjs";
+import Connection from "./connection.mjs";
 
-// TODO: test
+// Covered in feature tests
 export default class Client {
-  static #channel = null;
-
-  // Made public to make tests easier
-  static socket = null;
-
   static connect() {
-    Utils.runAsyncTask(() => {
-      Client.socket = new Socket("/hologram", {encode: Client.encoder});
-
-      Client.socket.connect();
-
-      Client.#channel = Client.socket.channel("hologram");
-
-      Client.#channel
-        .join()
-        .receive("ok", (_resp) => {
-          console.debug("Hologram: connected to a server");
-          GlobalRegistry.set("connected?", true);
-        })
-        .receive("error", (_resp) => {
-          GlobalRegistry.set("connected?", false);
-          throw new HologramRuntimeError("unable to connect to a server");
-        })
-        .receive("timeout", (_resp) => {
-          GlobalRegistry.set("connected?", false);
-          throw new HologramRuntimeError("unable to connect to a server");
-        });
-    });
+    return Connection.connect();
   }
 
-  static encoder(msg, callback) {
-    let encoded;
+  static fetchPage(toParam, onSuccess, onFail) {
+    const opts = {
+      onSuccess,
+      onError: onFail,
+      onTimeout: onFail,
+      timeout: Config.fetchPageTimeoutMs,
+    };
 
-    if (msg.topic === "hologram") {
-      const serializedPayload = Serializer.serialize(msg.payload, "server");
-      encoded = `["${msg.join_ref}","${msg.ref}","${msg.topic}","${msg.event}",${serializedPayload}]`;
-    } else {
-      encoded = JSON.stringify([
-        msg.join_ref,
-        msg.ref,
-        msg.topic,
-        msg.event,
-        msg.payload,
-      ]);
-    }
-
-    return callback(encoded);
+    return Connection.sendRequest("page", toParam, opts);
   }
 
-  static fetchPage(toParam, successCallback, failureCallback) {
-    return Utils.runAsyncTask(() => {
-      Client.#channel
-        .push("page", toParam, Config.fetchPageTimeoutMs)
-        .receive("ok", successCallback)
-        .receive("error", failureCallback)
-        .receive("timeout", failureCallback);
-    });
-  }
+  static fetchPageBundlePath(pageModule, onSuccess, onFail) {
+    const opts = {
+      onSuccess,
+      onError: onFail,
+      onTimeout: onFail,
+      timeout: Config.clientFetchTimeoutMs,
+    };
 
-  static fetchPageBundlePath(pageModule, successCallback, failureCallback) {
-    return Utils.runAsyncTask(() => {
-      Client.#channel
-        .push("page_bundle_path", pageModule, Config.clientFetchTimeoutMs)
-        .receive("ok", successCallback)
-        .receive("error", failureCallback)
-        .receive("timeout", failureCallback);
-    });
+    return Connection.sendRequest("page", pageModule, opts);
   }
 
   static isConnected() {
-    return Client.socket === null ? false : Client.socket.isConnected();
+    return Connection.isConnected();
   }
 
-  static sendCommand(payload, successCallback, failureCallback) {
-    Client.#channel
-      .push("command", payload)
-      .receive("ok", successCallback)
-      .receive("error", failureCallback)
-      .receive("timeout", failureCallback);
+  static sendCommand(payload, onSuccess, onFail) {
+    const opts = {
+      onSuccess,
+      onError: onFail,
+      onTimeout: onFail,
+    };
+
+    return Connection.sendRequest("command", payload, opts);
   }
 }
