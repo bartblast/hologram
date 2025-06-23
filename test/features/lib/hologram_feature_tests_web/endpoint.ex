@@ -1,6 +1,5 @@
 defmodule HologramFeatureTestsWeb.Endpoint do
   use Phoenix.Endpoint, otp_app: :hologram_feature_tests
-  use Hologram.Endpoint
 
   @session_options [
     key: "phoenix_session",
@@ -8,8 +7,6 @@ defmodule HologramFeatureTestsWeb.Endpoint do
     signing_salt: "KEknrT4D",
     store: :cookie
   ]
-
-  hologram_socket()
 
   plug Plug.Static,
     at: "/",
