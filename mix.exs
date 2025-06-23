@@ -113,7 +113,7 @@ defmodule Hologram.MixProject do
             Hologram.Page,
             Hologram.Server
           ],
-          Plug: [Hologram.Router, Hologram.Router.Helpers, Hologram.Socket],
+          Plug: [Hologram.Router, Hologram.Router.Helpers],
           UI: [Hologram.UI.Link, Hologram.UI.Runtime],
           Errors: [
             Hologram.AssetNotFoundError,
