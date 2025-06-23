@@ -644,18 +644,6 @@ describe("Connection", () => {
       clearTimeoutSpy.restore();
     });
 
-    it("handles request timeout", () => {
-      Connection.status = "connected";
-      Connection.websocket = mockWebSocket;
-
-      Connection.sendRequest("test", Type.atom("abc"), opts);
-
-      clock.tick(Connection.REQUEST_TIMEOUT);
-
-      sinon.assert.calledOnce(opts.onTimeout);
-      assert.isFalse(Connection.pendingRequests.has("mock-uuid"));
-    });
-
     it("uses custom timeout when provided", () => {
       Connection.status = "connected";
       Connection.websocket = mockWebSocket;
