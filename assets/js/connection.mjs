@@ -1,5 +1,6 @@
 "use strict";
 
+import GlobalRegistry from "./global_registry.mjs";
 import Serializer from "./serializer.mjs";
 
 export default class Connection {
@@ -113,6 +114,7 @@ export default class Connection {
     console.warn("Hologram: disconnected from server", event);
 
     $.status = "disconnected";
+    GlobalRegistry.set("connected?", false);
 
     $.clearConnectionTimer();
     $.clearPingTimer();
@@ -134,6 +136,8 @@ export default class Connection {
     console.error("Hologram: server connection error", event);
 
     $.status = "error";
+    GlobalRegistry.set("connected?", false);
+
     $.clearConnectionTimer();
 
     $.reconnect();
@@ -162,6 +166,8 @@ export default class Connection {
     console.log("Hologram: connected to server");
 
     $.status = "connected";
+    GlobalRegistry.set("connected?", true);
+
     $.reconnectAttempts = 0;
     $.clearConnectionTimer();
 

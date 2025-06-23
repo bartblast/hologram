@@ -7,6 +7,7 @@ import {
 } from "./support/helpers.mjs";
 
 import Connection from "../../assets/js/connection.mjs";
+import GlobalRegistry from "../../assets/js/global_registry.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -27,6 +28,7 @@ describe("Connection", () => {
     Connection.clearPongTimer();
     Connection.clearPendingRequests(false);
 
+    sinon.stub(GlobalRegistry, "set");
     clock = sinon.useFakeTimers();
 
     mockWebSocket = {
@@ -253,7 +255,7 @@ describe("Connection", () => {
       consoleWarnStub.restore();
     });
 
-    it("logs warning and updates status", () => {
+    it("logs warning, updates status, and sets global registry", () => {
       Connection.handleClose(event);
 
       sinon.assert.calledWith(
@@ -261,7 +263,9 @@ describe("Connection", () => {
         "Hologram: disconnected from server",
         event,
       );
+
       assert.equal(Connection.status, "disconnected");
+      sinon.assert.calledWith(GlobalRegistry.set, "connected?", false);
     });
 
     it("clears timers and pending requests", () => {
@@ -336,7 +340,7 @@ describe("Connection", () => {
       consoleErrorStub.restore();
     });
 
-    it("logs error and updates status", () => {
+    it("logs error, updates status, and sets global registry", () => {
       Connection.handleError(event);
 
       sinon.assert.calledWith(
@@ -344,7 +348,9 @@ describe("Connection", () => {
         "Hologram: server connection error",
         event,
       );
+
       assert.equal(Connection.status, "error");
+      sinon.assert.calledWith(GlobalRegistry.set, "connected?", false);
     });
 
     it("clears connection timer and triggers reconnection", () => {
@@ -412,11 +418,12 @@ describe("Connection", () => {
       consoleLogStub.restore();
     });
 
-    it("logs connection and updates status", () => {
+    it("logs connection, updates status, and sets global registry", () => {
       Connection.handleOpen(event);
 
       sinon.assert.calledWith(consoleLogStub, "Hologram: connected to server");
       assert.equal(Connection.status, "connected");
+      sinon.assert.calledWith(GlobalRegistry.set, "connected?", true);
     });
 
     it("resets reconnect attempts and clears connection timer", () => {
