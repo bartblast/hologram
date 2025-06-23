@@ -26,6 +26,8 @@ updates:
     directory: "/test/features"
     schedule:
       interval: "weekly"
+    ignore:
+      - dependency-name: "hologram"
     groups:
       feature-tests:
         patterns:
