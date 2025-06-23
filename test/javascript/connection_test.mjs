@@ -603,16 +603,16 @@ describe("Connection", () => {
   });
 
   describe("sendRequest()", () => {
-    const callbacks = {
-      onSuccess: sinon.spy(),
-      onError: sinon.spy(),
-      onTimeout: sinon.spy(),
-    };
-
-    let cryptoStub;
+    let cryptoStub, opts;
 
     beforeEach(() => {
       cryptoStub = sinon.stub(crypto, "randomUUID").returns("mock-uuid");
+
+      opts = {
+        onSuccess: sinon.spy(),
+        onError: sinon.spy(),
+        onTimeout: sinon.spy(),
+      };
     });
 
     afterEach(() => {
@@ -623,11 +623,7 @@ describe("Connection", () => {
       Connection.status = "connected";
       Connection.websocket = mockWebSocket;
 
-      const result = Connection.sendRequest(
-        "test",
-        Type.atom("abc"),
-        callbacks,
-      );
+      const result = Connection.sendRequest("test", Type.atom("abc"), opts);
 
       assert.equal(result, "mock-uuid");
       assert.isTrue(Connection.pendingRequests.has("mock-uuid"));
@@ -638,14 +634,10 @@ describe("Connection", () => {
       Connection.status = "disconnected";
       const clearTimeoutSpy = sinon.spy(globalThis, "clearTimeout");
 
-      const result = Connection.sendRequest(
-        "test",
-        Type.atom("abc"),
-        callbacks,
-      );
+      const result = Connection.sendRequest("test", Type.atom("abc"), opts);
 
       assert.isFalse(result);
-      sinon.assert.calledOnce(callbacks.onError);
+      sinon.assert.calledOnce(opts.onError);
       assert.isFalse(Connection.pendingRequests.has("mock-uuid"));
       sinon.assert.calledOnce(clearTimeoutSpy);
 
@@ -656,11 +648,48 @@ describe("Connection", () => {
       Connection.status = "connected";
       Connection.websocket = mockWebSocket;
 
-      Connection.sendRequest("test", Type.atom("abc"), callbacks);
+      Connection.sendRequest("test", Type.atom("abc"), opts);
 
       clock.tick(Connection.REQUEST_TIMEOUT);
 
-      sinon.assert.calledOnce(callbacks.onTimeout);
+      sinon.assert.calledOnce(opts.onTimeout);
+      assert.isFalse(Connection.pendingRequests.has("mock-uuid"));
+    });
+
+    it("uses custom timeout when provided", () => {
+      Connection.status = "connected";
+      Connection.websocket = mockWebSocket;
+
+      const customTimeout = 5_000;
+      opts.timeout = customTimeout;
+
+      Connection.sendRequest("test", Type.atom("abc"), opts);
+
+      // Should not timeout before custom timeout
+      clock.tick(customTimeout - 1);
+      sinon.assert.notCalled(opts.onTimeout);
+      assert.isTrue(Connection.pendingRequests.has("mock-uuid"));
+
+      // Should timeout at custom timeout
+      clock.tick(1);
+      sinon.assert.calledOnce(opts.onTimeout);
+      assert.isFalse(Connection.pendingRequests.has("mock-uuid"));
+    });
+
+    it("uses default timeout when custom timeout not provided", () => {
+      Connection.status = "connected";
+      Connection.websocket = mockWebSocket;
+
+      Connection.sendRequest("test", Type.atom("abc"), opts);
+
+      // Should not timeout before default timeout
+      clock.tick(Connection.REQUEST_TIMEOUT - 1);
+      sinon.assert.notCalled(opts.onTimeout);
+      assert.isTrue(Connection.pendingRequests.has("mock-uuid"));
+
+      // Should timeout at default timeout
+      clock.tick(1);
+      sinon.assert.calledOnce(opts.onTimeout);
       assert.isFalse(Connection.pendingRequests.has("mock-uuid"));
     });
   });

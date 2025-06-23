@@ -216,13 +216,17 @@ export default class Connection {
     return false;
   }
 
-  static sendRequest(type, payload = null, {onSuccess, onError, onTimeout}) {
+  static sendRequest(
+    type,
+    payload = null,
+    {onSuccess, onError, onTimeout, timeout = $.REQUEST_TIMEOUT},
+  ) {
     const correlationId = crypto.randomUUID();
 
     const timerId = setTimeout(() => {
       $.pendingRequests.delete(correlationId);
       onTimeout();
-    }, $.REQUEST_TIMEOUT);
+    }, timeout);
 
     $.pendingRequests.set(correlationId, {
       onSuccess,
