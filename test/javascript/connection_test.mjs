@@ -625,50 +625,51 @@ describe("Connection", () => {
 
       const result = Connection.sendRequest("test", Type.atom("abc"), opts);
 
-      assert.equal(result, "mock-uuid");
+      assert.instanceOf(result, Promise);
       assert.isTrue(Connection.pendingRequests.has("mock-uuid"));
       sinon.assert.calledOnce(mockWebSocket.send);
     });
 
-    it("handles send failure", () => {
+    it("calls callbacks and resolves promise on success", async () => {
+      Connection.status = "connected";
+      Connection.websocket = mockWebSocket;
+
+      const promise = Connection.sendRequest("test", Type.atom("abc"), opts);
+
+      // Simulate successful WebSocket response
+      const message = `["reply","payload","mock-uuid"]`;
+      Connection.handleMessage(message);
+
+      sinon.assert.calledOnce(opts.onSuccess);
+
+      // Test that promise resolves successfully (will throw and fail test if it rejects)
+      await promise;
+    });
+
+    it("calls callbacks and rejects promise on send failure", async () => {
       Connection.status = "disconnected";
       const clearTimeoutSpy = sinon.spy(globalThis, "clearTimeout");
 
-      const result = Connection.sendRequest("test", Type.atom("abc"), opts);
+      const promise = Connection.sendRequest("test", Type.atom("abc"), opts);
 
-      assert.isFalse(result);
       sinon.assert.calledOnce(opts.onError);
       assert.isFalse(Connection.pendingRequests.has("mock-uuid"));
       sinon.assert.calledOnce(clearTimeoutSpy);
 
-      clearTimeoutSpy.restore();
+      try {
+        await promise;
+        assert.fail("Promise should have rejected");
+      } catch (error) {
+        assert.instanceOf(error, Error);
+        assert.equal(error.message, "Failed to send message");
+      }
     });
 
-    it("uses custom timeout when provided", () => {
+    it("calls callbacks and rejects promise on timeout", async () => {
       Connection.status = "connected";
       Connection.websocket = mockWebSocket;
 
-      const customTimeout = 5_000;
-      opts.timeout = customTimeout;
-
-      Connection.sendRequest("test", Type.atom("abc"), opts);
-
-      // Should not timeout before custom timeout
-      clock.tick(customTimeout - 1);
-      sinon.assert.notCalled(opts.onTimeout);
-      assert.isTrue(Connection.pendingRequests.has("mock-uuid"));
-
-      // Should timeout at custom timeout
-      clock.tick(1);
-      sinon.assert.calledOnce(opts.onTimeout);
-      assert.isFalse(Connection.pendingRequests.has("mock-uuid"));
-    });
-
-    it("uses default timeout when custom timeout not provided", () => {
-      Connection.status = "connected";
-      Connection.websocket = mockWebSocket;
-
-      Connection.sendRequest("test", Type.atom("abc"), opts);
+      const promise = Connection.sendRequest("test", Type.atom("abc"), opts);
 
       // Should not timeout before default timeout
       clock.tick(Connection.REQUEST_TIMEOUT - 1);
@@ -679,6 +680,93 @@ describe("Connection", () => {
       clock.tick(1);
       sinon.assert.calledOnce(opts.onTimeout);
       assert.isFalse(Connection.pendingRequests.has("mock-uuid"));
+
+      try {
+        await promise;
+        assert.fail("Promise should have rejected");
+      } catch (error) {
+        assert.instanceOf(error, Error);
+        assert.equal(error.message, "Request timeout");
+      }
+    });
+
+    it("works with promise-only (no callbacks) on success", async () => {
+      Connection.status = "connected";
+      Connection.websocket = mockWebSocket;
+
+      const promise = Connection.sendRequest("test", Type.atom("abc"));
+
+      // Simulate successful WebSocket response
+      const message = `["reply","payload","mock-uuid"]`;
+      Connection.handleMessage(message);
+
+      // Test that promise resolves successfully (will throw and fail test if it rejects)
+      await promise;
+    });
+
+    it("works with promise-only (no callbacks) on error", async () => {
+      Connection.status = "disconnected";
+
+      const promise = Connection.sendRequest("test", Type.atom("abc"));
+
+      try {
+        await promise;
+        assert.fail("Promise should have rejected");
+      } catch (error) {
+        assert.instanceOf(error, Error);
+        assert.equal(error.message, "Failed to send message");
+      }
+    });
+
+    it("works with promise-only (no callbacks) on timeout", async () => {
+      Connection.status = "connected";
+      Connection.websocket = mockWebSocket;
+
+      const promise = Connection.sendRequest("test", Type.atom("abc"));
+
+      // Should not timeout before default timeout
+      clock.tick(Connection.REQUEST_TIMEOUT - 1);
+      assert.isTrue(Connection.pendingRequests.has("mock-uuid"));
+
+      // Should timeout at default timeout
+      clock.tick(1);
+      assert.isFalse(Connection.pendingRequests.has("mock-uuid"));
+
+      try {
+        await promise;
+        assert.fail("Promise should have rejected");
+      } catch (error) {
+        assert.instanceOf(error, Error);
+        assert.equal(error.message, "Request timeout");
+      }
+    });
+
+    it("uses custom timeout value", async () => {
+      Connection.status = "connected";
+      Connection.websocket = mockWebSocket;
+
+      const customTimeout = 5_000;
+      opts.timeout = customTimeout;
+
+      const promise = Connection.sendRequest("test", Type.atom("abc"), opts);
+
+      // Should not timeout before custom timeout
+      clock.tick(customTimeout - 1);
+      sinon.assert.notCalled(opts.onTimeout);
+      assert.isTrue(Connection.pendingRequests.has("mock-uuid"));
+
+      // Should timeout at custom timeout
+      clock.tick(1);
+      sinon.assert.calledOnce(opts.onTimeout);
+      assert.isFalse(Connection.pendingRequests.has("mock-uuid"));
+
+      try {
+        await promise;
+        assert.fail("Promise should have rejected");
+      } catch (error) {
+        assert.instanceOf(error, Error);
+        assert.equal(error.message, "Request timeout");
+      }
     });
   });
 

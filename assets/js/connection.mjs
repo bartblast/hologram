@@ -219,30 +219,40 @@ export default class Connection {
   static sendRequest(
     type,
     payload = null,
-    {onSuccess, onError, onTimeout, timeout = $.REQUEST_TIMEOUT},
+    {onSuccess, onError, onTimeout, timeout = $.REQUEST_TIMEOUT} = {},
   ) {
-    const correlationId = crypto.randomUUID();
+    return new Promise((resolve, reject) => {
+      const correlationId = crypto.randomUUID();
 
-    const timerId = setTimeout(() => {
-      $.pendingRequests.delete(correlationId);
-      onTimeout();
-    }, timeout);
+      const timerId = setTimeout(() => {
+        $.pendingRequests.delete(correlationId);
+        if (onTimeout) onTimeout();
+        reject(new Error("Request timeout"));
+      }, timeout);
 
-    $.pendingRequests.set(correlationId, {
-      onSuccess,
-      onError,
-      onTimeout,
-      timerId,
+      $.pendingRequests.set(correlationId, {
+        onSuccess: () => {
+          if (onSuccess) onSuccess();
+          resolve();
+        },
+        onError: () => {
+          if (onError) onError();
+          reject(new Error("Request failed"));
+        },
+        onTimeout: () => {
+          if (onTimeout) onTimeout();
+          reject(new Error("Request timeout"));
+        },
+        timerId,
+      });
+
+      if (!$.sendMessage(type, payload, correlationId)) {
+        $.pendingRequests.delete(correlationId);
+        clearTimeout(timerId);
+        if (onError) onError();
+        reject(new Error("Failed to send message"));
+      }
     });
-
-    if (!$.sendMessage(type, payload, correlationId)) {
-      $.pendingRequests.delete(correlationId);
-      clearTimeout(timerId);
-      onError();
-      return false;
-    }
-
-    return correlationId;
   }
 
   static sendPing() {
