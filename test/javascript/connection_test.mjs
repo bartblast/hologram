@@ -368,7 +368,8 @@ describe("Connection", () => {
     it("handles pong message", () => {
       Connection.pongTimer = setTimeout(() => {}, 10_000);
 
-      Connection.handleMessage('"pong"');
+      const event = {data: '"pong"'};
+      Connection.handleMessage(event);
 
       assert.isNull(Connection.pongTimer);
     });
@@ -387,8 +388,9 @@ describe("Connection", () => {
       });
 
       const message = `["reply","payload","${correlationId}"]`;
+      const event = {data: message};
 
-      Connection.handleMessage(message);
+      Connection.handleMessage(event);
 
       sinon.assert.calledOnce(onSuccess);
       sinon.assert.notCalled(onError);
@@ -400,9 +402,10 @@ describe("Connection", () => {
 
     it("ignores reply message with unknown correlation ID", () => {
       const message = '["reply","payload","234"]';
+      const event = {data: message};
 
       // Should not throw
-      Connection.handleMessage(message);
+      Connection.handleMessage(event);
     });
   });
 
@@ -638,7 +641,8 @@ describe("Connection", () => {
 
       // Simulate successful WebSocket response
       const message = `["reply","payload","mock-uuid"]`;
-      Connection.handleMessage(message);
+      const event = {data: message};
+      Connection.handleMessage(event);
 
       sinon.assert.calledOnce(opts.onSuccess);
 
@@ -698,7 +702,8 @@ describe("Connection", () => {
 
       // Simulate successful WebSocket response
       const message = `["reply","payload","mock-uuid"]`;
-      Connection.handleMessage(message);
+      const event = {data: message};
+      Connection.handleMessage(event);
 
       // Test that promise resolves successfully (will throw and fail test if it rejects)
       await promise;

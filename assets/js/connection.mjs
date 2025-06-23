@@ -143,7 +143,9 @@ export default class Connection {
     $.reconnect();
   }
 
-  static handleMessage(message) {
+  static handleMessage(event) {
+    const message = event.data;
+
     if (message === '"pong"') {
       $.clearPongTimer();
       return;
