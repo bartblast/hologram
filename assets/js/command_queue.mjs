@@ -19,6 +19,11 @@ export default class CommandQueue {
     ++CommandQueue.items[id].failCount;
   }
 
+  static failAndThrowError(id, message) {
+    CommandQueue.fail(id);
+    throw new HologramRuntimeError(`command failed: ${message}`);
+  }
+
   // Made public to make tests easier
   static getNextPending() {
     // The traversal order for string keys is ascending chronological (so we get FIFO behaviour)
@@ -41,21 +46,27 @@ export default class CommandQueue {
         item.status = "sending";
 
         const successCallback = ((currentItem) => {
-          return (resp) => {
-            CommandQueue.remove(currentItem.id);
+          return (responsePayload) => {
+            const [status, result] = responsePayload;
 
-            const nextAction = Interpreter.evaluateJavaScriptExpression(resp);
+            if (status === 1) {
+              CommandQueue.remove(currentItem.id);
 
-            if (!Type.isNil(nextAction)) {
-              Hologram.executeAction(nextAction);
+              const nextAction =
+                Interpreter.evaluateJavaScriptExpression(result);
+
+              if (!Type.isNil(nextAction)) {
+                Hologram.executeAction(nextAction);
+              }
+            } else {
+              $.failAndThrowError(currentItem.id, responsePayload);
             }
           };
         })(item);
 
         const failureCallback = ((currentItem) => {
-          return (resp) => {
-            CommandQueue.fail(currentItem.id);
-            throw new HologramRuntimeError(`command failed: ${resp}`);
+          return (responsePayload) => {
+            $.failAndThrowError(currentItem.id, responsePayload);
           };
         })(item);
 
@@ -108,3 +119,5 @@ export default class CommandQueue {
     ]);
   }
 }
+
+const $ = CommandQueue;

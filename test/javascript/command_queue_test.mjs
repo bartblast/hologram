@@ -19,7 +19,7 @@ import Type from "../../assets/js/type.mjs";
 defineGlobalErlangAndElixirModules();
 
 describe("CommandQueue", () => {
-  describe("fail()", () => {
+  describe("fail() and failAndThrowError()", () => {
     beforeEach(() => {
       CommandQueue.items = {
         a: commandQueueItemFixture({id: "a", command: "dummy_command_a"}),
@@ -32,36 +32,57 @@ describe("CommandQueue", () => {
       };
     });
 
-    it("not failed yet", () => {
-      CommandQueue.fail("a");
-
-      assert.deepStrictEqual(CommandQueue.items, {
-        a: commandQueueItemFixture({
-          id: "a",
-          command: "dummy_command_a",
-          status: "failed",
-          failCount: 1,
-        }),
+    const assertFailState = (itemId, expectedFailCount) => {
+      const expectedItems = {
+        a: commandQueueItemFixture({id: "a", command: "dummy_command_a"}),
         b: commandQueueItemFixture({
           id: "b",
           command: "dummy_command_b",
           status: "failed",
           failCount: 2,
         }),
+      };
+
+      expectedItems[itemId] = {
+        ...expectedItems[itemId],
+        status: "failed",
+        failCount: expectedFailCount,
+      };
+
+      assert.deepStrictEqual(CommandQueue.items, expectedItems);
+    };
+
+    describe("fail()", () => {
+      it("not failed yet", () => {
+        CommandQueue.fail("a");
+        assertFailState("a", 1);
+      });
+
+      it("already failed", () => {
+        CommandQueue.fail("b");
+        assertFailState("b", 3);
       });
     });
 
-    it("already failed", () => {
-      CommandQueue.fail("b");
+    describe("failAndThrowError()", () => {
+      it("not failed yet", () => {
+        assert.throw(
+          () => CommandQueue.failAndThrowError("a", "test error message"),
+          HologramRuntimeError,
+          "command failed: test error message",
+        );
 
-      assert.deepStrictEqual(CommandQueue.items, {
-        a: commandQueueItemFixture({id: "a", command: "dummy_command_a"}),
-        b: commandQueueItemFixture({
-          id: "b",
-          command: "dummy_command_b",
-          status: "failed",
-          failCount: 3,
-        }),
+        assertFailState("a", 1);
+      });
+
+      it("already failed", () => {
+        assert.throw(
+          () => CommandQueue.failAndThrowError("b", "another error message"),
+          HologramRuntimeError,
+          "command failed: another error message",
+        );
+
+        assertFailState("b", 3);
       });
     });
   });
@@ -194,7 +215,7 @@ describe("CommandQueue", () => {
 
       assert.isFalse(CommandQueue.isProcessing);
 
-      successCallbacks.forEach((callback) => callback("Type.nil()"));
+      successCallbacks.forEach((callback) => callback([1, "Type.nil()"]));
 
       assert.deepStrictEqual(CommandQueue.items, {
         a: commandQueueItemFixture({
@@ -240,7 +261,7 @@ describe("CommandQueue", () => {
 
       CommandQueue.process();
 
-      successCallbacks.forEach((callback) => callback('"dummy_action"'));
+      successCallbacks.forEach((callback) => callback([1, '"dummy_action"']));
 
       Client.isConnected.restore();
       Client.sendCommand.restore();
@@ -248,6 +269,60 @@ describe("CommandQueue", () => {
       sinon.assert.calledTwice(executeAction);
       sinon.assert.alwaysCalledWithExactly(executeAction, "dummy_action");
       Hologram.executeAction.restore();
+    });
+
+    it("success callback flags command as failed when status is not 1", () => {
+      CommandQueue.isProcessing = false;
+
+      sinon.stub(Client, "isConnected").callsFake(() => true);
+
+      const successCallbacks = [];
+
+      sinon
+        .stub(Client, "sendCommand")
+        .callsFake((_payload, successCallback, _failureCallback) =>
+          successCallbacks.push(successCallback),
+        );
+
+      CommandQueue.process();
+
+      successCallbacks.forEach((callback) => {
+        assert.throw(
+          () => callback([0, "error_message"]),
+          HologramRuntimeError,
+          "command failed: 0,error_message",
+        );
+      });
+
+      assert.deepStrictEqual(CommandQueue.items, {
+        a: commandQueueItemFixture({
+          id: "a",
+          command: "dummy_command_a",
+          status: "failed",
+          failCount: 2,
+        }),
+        b: commandQueueItemFixture({
+          id: "b",
+          command: "dummy_command_b",
+          status: "failed",
+          failCount: 1,
+        }),
+        c: commandQueueItemFixture({
+          id: "c",
+          command: "dummy_command_c",
+          status: "failed",
+          failCount: 2,
+        }),
+        d: commandQueueItemFixture({
+          id: "d",
+          command: "dummy_command_d",
+          status: "failed",
+          failCount: 1,
+        }),
+      });
+
+      Client.isConnected.restore();
+      Client.sendCommand.restore();
     });
 
     it("commands fail", () => {
