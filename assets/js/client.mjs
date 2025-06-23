@@ -28,7 +28,7 @@ export default class Client {
       timeout: Config.clientFetchTimeoutMs,
     };
 
-    return Connection.sendRequest("page", pageModule, opts);
+    return Connection.sendRequest("page_bundle_path", pageModule, opts);
   }
 
   static isConnected() {
