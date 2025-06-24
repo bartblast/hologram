@@ -54,7 +54,7 @@ defmodule Hologram.Runtime.MessageHandler do
   def handle("page", payload) do
     opts = [initial_page?: false]
 
-    {html, _component_registry} =
+    {html, _component_registry, _server_struct} =
       case payload do
         {page_module, params} ->
           Renderer.render_page(page_module, params, opts)

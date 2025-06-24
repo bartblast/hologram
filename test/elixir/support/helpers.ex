@@ -203,7 +203,9 @@ defmodule Hologram.Test.Helpers do
     props_dom = Enum.map(props, fn {name, value} -> {to_string(name), [expression: {value}]} end)
 
     node = {:component, module, props_dom, []}
-    {html, _component_structs} = Renderer.render_dom(node, %Renderer.Env{context: context})
+
+    {html, _component_structs, _server_struct} =
+      Renderer.render_dom(node, %Renderer.Env{context: context}, %Server{})
 
     html
   end
@@ -215,7 +217,7 @@ defmodule Hologram.Test.Helpers do
   def render_markup(template, vars \\ %{}, env \\ %Env{}) do
     vars
     |> template.()
-    |> Renderer.render_dom(env)
+    |> Renderer.render_dom(env, %Server{})
     |> elem(0)
   end
 
