@@ -373,4 +373,5 @@ export function registerWebApis() {
   globalThis.history = window.history;
   globalThis.indexedDB = fakeIndexedDB;
   globalThis.sessionStorage = window.sessionStorage;
+  globalThis.WebSocket = window.WebSocket;
 }

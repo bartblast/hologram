@@ -3,6 +3,7 @@
 import {
   assert,
   defineGlobalErlangAndElixirModules,
+  registerWebApis,
   sinon,
 } from "./support/helpers.mjs";
 
@@ -12,6 +13,7 @@ import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
+registerWebApis();
 
 describe("Connection", () => {
   let clock;
@@ -41,11 +43,16 @@ describe("Connection", () => {
       readyState: WebSocket.CONNECTING,
     };
 
+    const connecting = WebSocket.CONNECTING;
+    const open = WebSocket.OPEN;
+    const closing = WebSocket.CLOSING;
+    const closed = WebSocket.CLOSED;
+
     globalThis.WebSocket = sinon.stub().returns(mockWebSocket);
-    globalThis.WebSocket.CONNECTING = 0;
-    globalThis.WebSocket.OPEN = 1;
-    globalThis.WebSocket.CLOSING = 2;
-    globalThis.WebSocket.CLOSED = 3;
+    globalThis.WebSocket.CONNECTING = connecting;
+    globalThis.WebSocket.OPEN = open;
+    globalThis.WebSocket.CLOSING = closing;
+    globalThis.WebSocket.CLOSED = closed;
   });
 
   afterEach(() => {
