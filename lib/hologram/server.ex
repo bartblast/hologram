@@ -8,6 +8,7 @@ defmodule Hologram.Server do
             String.t() => %{
               value: any,
               domain: String.t() | nil,
+              http_only: boolean,
               max_age: integer | nil,
               path: String.t() | nil,
               same_site: :lax | :none | :strict,
@@ -31,6 +32,7 @@ defmodule Hologram.Server do
   ## Options
 
     * `:domain` - The domain for the cookie (default: `nil`)
+    * `:http_only` - Whether the cookie should be accessible only through HTTP(S) requests (default: `true`)
     * `:max_age` - Maximum age in seconds (default: `nil`)
     * `:path` - The path for the cookie (default: `nil`)
     * `:same_site` - SameSite attribute (default: `:lax`)
@@ -40,11 +42,11 @@ defmodule Hologram.Server do
 
       iex> server = %Hologram.Server{}
       iex> put_cookie(server, "user_id", 123)
-      %Hologram.Server{cookies: %{"session_id" => %{value: "abc123", domain: nil, max_age: nil, path: nil, same_site: :lax, secure: true}}}
+      %Hologram.Server{cookies: %{"user_id" => %{value: 123, domain: nil, http_only: true, max_age: nil, path: nil, same_site: :lax, secure: true}}}
 
       iex> server = %Hologram.Server{}
       iex> put_cookie(server, "theme", "dark", secure: false, path: "/")
-      %Hologram.Server{cookies: %{"theme" => %{value: "dark", domain: nil, max_age: nil, path: "/", same_site: :lax, secure: false}}}
+      %Hologram.Server{cookies: %{"theme" => %{value: "dark", domain: nil, http_only: true, max_age: nil, path: "/", same_site: :lax, secure: false}}}
   """
   @spec put_cookie(t(), String.t(), any(), keyword()) :: t()
   def put_cookie(server, key, value, opts \\ [])
@@ -52,6 +54,7 @@ defmodule Hologram.Server do
   def put_cookie(server, key, value, opts) when is_binary(key) do
     cookie = %{
       domain: Keyword.get(opts, :domain, nil),
+      http_only: Keyword.get(opts, :http_only, true),
       max_age: Keyword.get(opts, :max_age, nil),
       path: Keyword.get(opts, :path, nil),
       same_site: Keyword.get(opts, :same_site, :lax),

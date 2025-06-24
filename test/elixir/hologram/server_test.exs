@@ -10,6 +10,7 @@ defmodule Hologram.ServerTest do
       expected_cookie = %{
         value: "abc123",
         domain: nil,
+        http_only: true,
         max_age: nil,
         path: nil,
         same_site: :lax,
@@ -22,6 +23,7 @@ defmodule Hologram.ServerTest do
     test "adds a cookie with custom options" do
       opts = [
         domain: "example.com",
+        http_only: false,
         max_age: 3_600,
         path: "/admin",
         same_site: :strict,
@@ -33,6 +35,7 @@ defmodule Hologram.ServerTest do
       expected_cookie = %{
         value: "abc123",
         domain: "example.com",
+        http_only: false,
         max_age: 3_600,
         path: "/admin",
         same_site: :strict,
@@ -100,6 +103,7 @@ defmodule Hologram.ServerTest do
       expected_cookie = %{
         value: "abc123",
         domain: nil,
+        http_only: true,
         max_age: nil,
         path: "/app",
         same_site: :lax,
