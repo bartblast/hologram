@@ -33,17 +33,18 @@ defmodule Hologram.Template.Renderer do
   ## Examples
 
       iex> dom = {:component, MyModule, [{"cid", [text: "my_component"]}], []}
-      iex> render_dom(dom, %Env{})
+      iex> render_dom(dom, %Env{}, %Server{})
       {
         "<div>state_a = 1, state_b = 2</div>",
-        %{"my_component" => %{module: MyModule, struct: %Component{state: %{a: 1, b: 2}}}}
+        %{"my_component" => %{module: MyModule, struct: %Component{state: %{a: 1, b: 2}}}},
+        %Server{session: %{user_id: 123}}
       }
   """
-  @spec render_dom(DOM.t(), Env.t()) ::
-          {String.t(), %{String.t() => %{module: module, struct: Component.t()}}}
-  def render_dom(dom, env)
+  @spec render_dom(DOM.t(), Env.t(), Server.t()) ::
+          {String.t(), %{String.t() => %{module: module, struct: Component.t()}}, Server.t()}
+  def render_dom(dom, env, server_struct)
 
-  def render_dom({:component, module, props_dom, children_dom}, env) do
+  def render_dom({:component, module, props_dom, children_dom}, env, server_struct) do
     expanded_children_dom = expand_slots(children_dom, env.slots)
 
     props =
@@ -53,25 +54,27 @@ defmodule Hologram.Template.Renderer do
       |> inject_default_prop_values(module)
 
     if has_cid_prop?(props) do
-      render_stateful_component(module, props, expanded_children_dom, env.context)
+      render_stateful_component(module, props, expanded_children_dom, env.context, server_struct)
     else
-      render_template(module, props, expanded_children_dom, env.context)
+      render_template(module, props, expanded_children_dom, env.context, server_struct)
     end
   end
 
-  def render_dom({:doctype, content}, _env) do
-    {"<!DOCTYPE #{content}>", %{}}
+  def render_dom({:doctype, content}, _env, server_struct) do
+    {"<!DOCTYPE #{content}>", %{}, server_struct}
   end
 
-  def render_dom({:element, "slot", _attrs_dom, []}, env) do
-    render_dom(env.slots[:default], %Env{env | slots: []})
+  def render_dom({:element, "slot", _attrs_dom, []}, env, server_struct) do
+    render_dom(env.slots[:default], %Env{env | slots: []}, server_struct)
   end
 
-  def render_dom({:element, tag_name, attrs_dom, children_dom}, env) do
+  def render_dom({:element, tag_name, attrs_dom, children_dom}, env, server_struct) do
     attrs_html = render_attributes(attrs_dom)
 
     children_env = %Env{env | node_type: :element, tag_name: tag_name}
-    {children_html, component_registry} = render_dom(children_dom, children_env)
+
+    {children_html, component_registry, mutated_server_struct} =
+      render_dom(children_dom, children_env, server_struct)
 
     html =
       if tag_name in @void_elems do
@@ -80,49 +83,60 @@ defmodule Hologram.Template.Renderer do
         "<#{tag_name}#{attrs_html}>#{children_html}</#{tag_name}>"
       end
 
-    {html, component_registry}
+    {html, component_registry, mutated_server_struct}
   end
 
-  def render_dom({:expression, {value}}, %Env{node_type: :element, tag_name: "script"}) do
-    {to_string(value), %{}}
+  def render_dom(
+        {:expression, {value}},
+        %Env{node_type: :element, tag_name: "script"},
+        server_struct
+      ) do
+    {to_string(value), %{}, server_struct}
   end
 
-  def render_dom({:expression, {value}}, _env) do
+  def render_dom({:expression, {value}}, _env, server_struct) do
     html =
       value
       |> to_string()
       |> HtmlEntities.encode()
 
-    {html, %{}}
+    {html, %{}, server_struct}
   end
 
-  def render_dom({:public_comment, children_dom}, env) do
+  def render_dom({:public_comment, children_dom}, env, server_struct) do
     children_env = %Env{env | node_type: :public_comment}
-    {children_html, component_registry} = render_dom(children_dom, children_env)
+
+    {children_html, component_registry, mutated_server_struct} =
+      render_dom(children_dom, children_env, server_struct)
+
     html = "<!--#{children_html}-->"
 
-    {html, component_registry}
+    {html, component_registry, mutated_server_struct}
   end
 
-  def render_dom({:text, text}, %Env{node_type: :element, tag_name: "script"}) do
-    {text, %{}}
+  def render_dom({:text, text}, %Env{node_type: :element, tag_name: "script"}, server_struct) do
+    {text, %{}, server_struct}
   end
 
-  def render_dom({:text, text}, %Env{node_type: :public_comment}) do
-    {text, %{}}
+  def render_dom({:text, text}, %Env{node_type: :public_comment}, server_struct) do
+    {text, %{}, server_struct}
   end
 
-  def render_dom({:text, text}, _env) do
-    {HtmlEntities.encode(text), %{}}
+  def render_dom({:text, text}, _env, server_struct) do
+    {HtmlEntities.encode(text), %{}, server_struct}
   end
 
-  def render_dom(nodes, env) when is_list(nodes) do
+  def render_dom(nodes, env, server_struct) when is_list(nodes) do
     nodes
     # There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if}
     |> Enum.filter(& &1)
-    |> Enum.reduce({"", %{}}, fn node, {acc_html, acc_component_registry} ->
-      {html, component_registry} = render_dom(node, env)
-      {acc_html <> html, Map.merge(acc_component_registry, component_registry)}
+    |> Enum.reduce({"", %{}, server_struct}, fn node,
+                                                {acc_html, acc_component_registry,
+                                                 acc_server_struct} ->
+      {html, component_registry, mutated_server_struct} = render_dom(node, env, acc_server_struct)
+
+      {acc_html <> html, Map.merge(acc_component_registry, component_registry),
+       mutated_server_struct}
     end)
   end
 
@@ -136,15 +150,18 @@ defmodule Hologram.Template.Renderer do
       iex> render_page(MyPage, %{param: "value"}, initial_page?: true)
       {
         "<div>full page content including layout</div>",
-        %{"page" => %{module: MyPage, struct: %Component{state: %{a: 1, b: 2}}}}
+        %{"page" => %{module: MyPage, struct: %Component{state: %{a: 1, b: 2}}}},
+        %Server{session: %{user_id: 123}}
       }
   """
   @spec render_page(module, %{atom => String.t()}, T.opts()) ::
-          {String.t(), %{String.t() => %{module: module, struct: Component.t()}}}
+          {String.t(), %{String.t() => %{module: module, struct: Component.t()}}, Server.t()}
   def render_page(page_module, params, opts) do
     initial_page? = opts[:initial_page?] || false
     casted_params = Page.cast_params(page_module, params)
-    {page_component_struct, _server_struct} = init_component(page_module, casted_params)
+
+    {page_component_struct, page_server_struct} =
+      init_component(page_module, casted_params, %Server{})
 
     page_digest = PageDigestRegistry.lookup(page_module)
 
@@ -154,11 +171,12 @@ defmodule Hologram.Template.Renderer do
       |> put_page_digest_context(page_digest)
       |> put_page_mounted_flag_context(false)
 
-    {initial_html, initial_component_registry} =
+    {initial_html, initial_component_registry, final_server_struct} =
       render_page_inside_layout(
         page_module,
         casted_params,
-        page_component_struct_with_emitted_context_before_rendering
+        page_component_struct_with_emitted_context_before_rendering,
+        page_server_struct
       )
 
     page_component_struct_with_emitted_context_after_rendering =
@@ -179,7 +197,7 @@ defmodule Hologram.Template.Renderer do
       |> interpolate_page_module_js(page_module)
       |> interpolate_page_params_js(casted_params)
 
-    {html_with_interpolated_js, component_registry_with_page_struct}
+    {html_with_interpolated_js, component_registry_with_page_struct, final_server_struct}
   end
 
   defp build_layout_props_dom(page_module, page_state) do
@@ -206,7 +224,9 @@ defmodule Hologram.Template.Renderer do
   end
 
   defp evaluate_prop_value({name, value_dom}) do
-    {value_str, %{}} = render_dom(value_dom, %Env{node_type: :property})
+    {value_str, %{}, _server_struct} =
+      render_dom(value_dom, %Env{node_type: :property}, %Server{})
+
     {name, value_str}
   end
 
@@ -247,23 +267,23 @@ defmodule Hologram.Template.Renderer do
     Enum.any?(props, fn {name, _value} -> name == :cid end)
   end
 
-  defp init_component(module, props) do
+  defp init_component(module, props, server_struct) do
     init_result =
       if Reflection.has_function?(module, :init, 3) do
-        module.init(props, %Component{}, %Server{})
+        module.init(props, %Component{}, server_struct)
       else
-        {%Component{}, %Server{}}
+        {%Component{}, server_struct}
       end
 
     case init_result do
-      {component, server} ->
-        {component, server}
+      {component_struct, mutaded_server_struct} ->
+        {component_struct, mutaded_server_struct}
 
-      %Component{} = component ->
-        {component, %Server{}}
+      %Component{} = component_struct ->
+        {component_struct, server_struct}
 
-      %Server{} = server ->
-        {%Component{}, server}
+      %Server{} = mutated_server_struct ->
+        {%Component{}, mutated_server_struct}
     end
   end
 
@@ -337,7 +357,8 @@ defmodule Hologram.Template.Renderer do
   defp render_attribute(_name, expression: {nil}), do: ""
 
   defp render_attribute(name, value_dom) do
-    {value_str, %{}} = render_dom(value_dom, %Env{node_type: :attribute})
+    {value_str, %{}, _server_struct} =
+      render_dom(value_dom, %Env{node_type: :attribute}, %Server{})
 
     if value_str == "" do
       name
@@ -359,10 +380,15 @@ defmodule Hologram.Template.Renderer do
     |> StringUtils.prepend_if_not_empty(" ")
   end
 
-  defp render_page_inside_layout(page_module, params, %{
-         emitted_context: page_emitted_context,
-         state: page_state
-       }) do
+  defp render_page_inside_layout(
+         page_module,
+         params,
+         %{
+           emitted_context: page_emitted_context,
+           state: page_state
+         },
+         server_struct
+       ) do
     vars = Map.merge(params, page_state)
     page_dom = page_module.template().(vars)
 
@@ -370,26 +396,26 @@ defmodule Hologram.Template.Renderer do
     layout_props_dom = build_layout_props_dom(page_module, page_state)
     layout_node = {:component, layout_module, layout_props_dom, page_dom}
 
-    render_dom(layout_node, %Env{context: page_emitted_context})
+    render_dom(layout_node, %Env{context: page_emitted_context}, server_struct)
   end
 
-  defp render_stateful_component(module, props, children_dom, context) do
-    {component_struct, _server_struct} = init_component(module, props)
+  defp render_stateful_component(module, props, children_dom, context, server_struct) do
+    {component_struct, mutated_server_struct} = init_component(module, props, server_struct)
     vars = Map.merge(props, component_struct.state)
     merged_context = Map.merge(context, component_struct.emitted_context)
 
-    {html, children_component_registry} =
-      render_template(module, vars, children_dom, merged_context)
+    {html, children_component_registry, final_server_struct} =
+      render_template(module, vars, children_dom, merged_context, mutated_server_struct)
 
     component_registry =
       Map.put(children_component_registry, vars.cid, %{module: module, struct: component_struct})
 
-    {html, component_registry}
+    {html, component_registry, final_server_struct}
   end
 
-  defp render_template(module, vars, children_dom, context) do
+  defp render_template(module, vars, children_dom, context, server_struct) do
     vars
     |> module.template().()
-    |> render_dom(%Env{context: context, slots: [default: children_dom]})
+    |> render_dom(%Env{context: context, slots: [default: children_dom]}, server_struct)
   end
 end
