@@ -59,6 +59,7 @@ defmodule Hologram.Component do
 
         import Hologram.JS, only: [sigil_JS: 2]
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
+        import Hologram.Server, only: [put_cookie: 3]
         import Hologram.Template, only: [sigil_HOLO: 2]
 
         alias Hologram.Component
