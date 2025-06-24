@@ -530,22 +530,16 @@ export default class Hologram {
 
     const serializedPageSnapshot = sessionStorage.getItem(event.state);
 
-    const {componentRegistryEntries, pageModule, pageParams, scrollPosition} =
-      Deserializer.deserialize(serializedPageSnapshot);
+    if (serializedPageSnapshot) {
+      $.#restorePageSnapshot(serializedPageSnapshot);
+    }
 
-    ComponentRegistry.populate(componentRegistryEntries);
-    Hologram.#pageModule = pageModule;
-    Hologram.#pageParams = pageParams;
-
-    $.#scrollPosition = scrollPosition;
-    $.#shouldLoadMountData = false;
-
-    if ($.#isPageModuleRegistered(pageModule)) {
+    if ($.#isPageModuleRegistered(Hologram.#pageModule)) {
       return $.#mountPage(true);
     }
 
     await Client.fetchPageBundlePath(
-      pageModule,
+      Hologram.#pageModule,
       (resp) => {
         const script = document.createElement("script");
         script.src = resp;
@@ -555,7 +549,7 @@ export default class Hologram {
       (_resp) => {
         throw new HologramRuntimeError(
           "Failed to fetch page bundle path for: " +
-            Interpreter.inspect(pageModule),
+            Interpreter.inspect(Hologram.#pageModule),
         );
       },
     );
@@ -590,13 +584,24 @@ export default class Hologram {
     window.addEventListener("popstate", Hologram.#handlePopstateEvent);
 
     window.addEventListener("pageshow", (event) => {
-      if (event.persisted) {
+      // Reconnect when page is restored from bfcache OR when navigating back from external page
+      if (event.persisted || !Client.isConnected()) {
         Client.connect();
       }
     });
 
-    $.#historyId = crypto.randomUUID();
-    history.replaceState($.#historyId, null, window.location.pathname);
+    // Check if there's already a history state (e.g., when navigating back from external page)
+    if (history.state) {
+      $.#historyId = history.state;
+      const serializedPageSnapshot = sessionStorage.getItem(history.state);
+
+      if (serializedPageSnapshot) {
+        $.#restorePageSnapshot(serializedPageSnapshot);
+      }
+    } else {
+      $.#historyId = crypto.randomUUID();
+      history.replaceState($.#historyId, null, window.location.pathname);
+    }
 
     Client.connect();
 
@@ -707,6 +712,19 @@ export default class Hologram {
 
   static #registerPageModule(pageModule) {
     $.#registeredPageModules.add(pageModule.value);
+  }
+
+  static #restorePageSnapshot(serializedPageSnapshot) {
+    const {componentRegistryEntries, pageModule, pageParams, scrollPosition} =
+      Deserializer.deserialize(serializedPageSnapshot);
+
+    ComponentRegistry.populate(componentRegistryEntries);
+
+    Hologram.#pageModule = pageModule;
+    Hologram.#pageParams = pageParams;
+
+    $.#scrollPosition = scrollPosition;
+    $.#shouldLoadMountData = false;
   }
 
   static #savePageSnapshot() {
