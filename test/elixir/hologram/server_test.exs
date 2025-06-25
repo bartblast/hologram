@@ -1,13 +1,15 @@
 defmodule Hologram.ServerTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Server
+
   alias Hologram.Server
+  alias Hologram.Server.Cookie
 
   describe "put_cookie/4" do
     test "adds a cookie with default options" do
       result = put_cookie(%Server{}, "my_cookie", "abc123")
 
-      expected_cookie = %{
+      expected_cookie = %Cookie{
         value: "abc123",
         domain: nil,
         http_only: true,
@@ -32,7 +34,7 @@ defmodule Hologram.ServerTest do
 
       result = put_cookie(%Server{}, "my_cookie", "abc123", opts)
 
-      expected_cookie = %{
+      expected_cookie = %Cookie{
         value: "abc123",
         domain: "example.com",
         http_only: false,
@@ -46,7 +48,7 @@ defmodule Hologram.ServerTest do
     end
 
     test "adds multiple cookies to existing server struct" do
-      server = %Server{cookies: %{"existing" => %{value: "old"}}}
+      server = %Server{cookies: %{"existing" => %Cookie{value: "old"}}}
 
       result =
         server
@@ -62,7 +64,7 @@ defmodule Hologram.ServerTest do
     end
 
     test "overwrites existing cookie with same key" do
-      server = %Server{cookies: %{"theme" => %{value: "light"}}}
+      server = %Server{cookies: %{"theme" => %Cookie{value: "light"}}}
 
       result = put_cookie(server, "theme", "dark")
 
@@ -100,7 +102,7 @@ defmodule Hologram.ServerTest do
     test "partial options override defaults" do
       result = put_cookie(%Server{}, "my_cookie", "abc123", secure: false, path: "/app")
 
-      expected_cookie = %{
+      expected_cookie = %Cookie{
         value: "abc123",
         domain: nil,
         http_only: true,
