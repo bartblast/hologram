@@ -99,6 +99,12 @@ defmodule Hologram.ServerTest do
       end
     end
 
+    test "raises KeyError when invalid option is given" do
+      assert_error KeyError, "key :invalid_opt not found", fn ->
+        put_cookie(%Server{}, "abc", :value, invalid_opt: 123)
+      end
+    end
+
     test "partial options override defaults" do
       result = put_cookie(%Server{}, "my_cookie", "abc123", secure: false, path: "/app")
 

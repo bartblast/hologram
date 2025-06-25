@@ -6,15 +6,13 @@ defmodule Hologram.Server do
     Represents a cookie to be set in the client's browser.
     """
 
-    defstruct [
-      :value,
-      :domain,
-      :http_only,
-      :max_age,
-      :path,
-      :same_site,
-      :secure
-    ]
+    defstruct value: nil,
+              domain: nil,
+              http_only: true,
+              max_age: nil,
+              path: nil,
+              same_site: :lax,
+              secure: true
 
     @type t :: %__MODULE__{
             value: any(),
@@ -68,15 +66,8 @@ defmodule Hologram.Server do
   def put_cookie(server, key, value, opts \\ [])
 
   def put_cookie(server, key, value, opts) when is_binary(key) do
-    cookie = %Cookie{
-      domain: Keyword.get(opts, :domain, nil),
-      http_only: Keyword.get(opts, :http_only, true),
-      max_age: Keyword.get(opts, :max_age, nil),
-      path: Keyword.get(opts, :path, nil),
-      same_site: Keyword.get(opts, :same_site, :lax),
-      secure: Keyword.get(opts, :secure, true),
-      value: value
-    }
+    attrs = Keyword.put(opts, :value, value)
+    cookie = struct!(Cookie, attrs)
 
     %{server | cookies: Map.put(server.cookies, key, cookie)}
   end
