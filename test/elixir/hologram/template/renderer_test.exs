@@ -9,7 +9,6 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Commons.ETS
   alias Hologram.Component
   alias Hologram.Server
-  alias Hologram.Server.Cookie
   alias Hologram.Template.Renderer
   alias Hologram.Test.Fixtures.LayoutFixture
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
@@ -74,13 +73,10 @@ defmodule Hologram.Template.RendererTest do
 
   setup :set_mox_global
 
-  # Must be defined 
+  # Must be defined after setting up Server stub.
   @server %Server{
     cookies: %{
-      "initial_cookie_key" => %Cookie{
-        value: :initial_cookie_value,
-        __meta__: %{node: :nonode@nohost, source: :server, timestamp: ServerStub.timestamp()}
-      }
+      "initial_cookie_key" => cookie(:initial_cookie_value)
     }
   }
 
