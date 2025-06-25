@@ -9,6 +9,7 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Commons.ETS
   alias Hologram.Component
   alias Hologram.Server
+  alias Hologram.Server.Cookie
   alias Hologram.Template.Renderer
   alias Hologram.Test.Fixtures.LayoutFixture
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
@@ -68,15 +69,7 @@ defmodule Hologram.Template.RendererTest do
 
   @server %Server{
     cookies: %{
-      "initial_cookie_key" => %{
-        value: :initial_cookie_value,
-        path: nil,
-        domain: nil,
-        http_only: true,
-        max_age: nil,
-        same_site: :lax,
-        secure: true
-      }
+      "initial_cookie_key" => %Cookie{value: :initial_cookie_value}
     }
   }
 
@@ -85,18 +78,6 @@ defmodule Hologram.Template.RendererTest do
   use_module_stub :page_digest_registry
 
   setup :set_mox_global
-
-  defp cookie(value) do
-    %{
-      value: value,
-      path: nil,
-      domain: nil,
-      http_only: true,
-      max_age: nil,
-      same_site: :lax,
-      secure: true
-    }
-  end
 
   test "text node" do
     node = {:text, "Tom & Jerry"}
@@ -155,9 +136,9 @@ defmodule Hologram.Template.RendererTest do
                 },
                 %Server{
                   cookies: %{
-                    "initial_cookie_key" => cookie(:initial_cookie_value),
-                    "cookie_key_3" => cookie(:cookie_value_3),
-                    "cookie_key_7" => cookie(:cookie_value_7)
+                    "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                    "cookie_key_3" => %Cookie{value: :cookie_value_3},
+                    "cookie_key_7" => %Cookie{value: :cookie_value_7}
                   }
                 }}
     end
@@ -323,9 +304,9 @@ defmodule Hologram.Template.RendererTest do
                 },
                 %Server{
                   cookies: %{
-                    "initial_cookie_key" => cookie(:initial_cookie_value),
-                    "cookie_key_3" => cookie(:cookie_value_3),
-                    "cookie_key_7" => cookie(:cookie_value_7)
+                    "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                    "cookie_key_3" => %Cookie{value: :cookie_value_3},
+                    "cookie_key_7" => %Cookie{value: :cookie_value_7}
                   }
                 }}
     end
@@ -379,9 +360,9 @@ defmodule Hologram.Template.RendererTest do
                  },
                  %Server{
                    cookies: %{
-                     "initial_cookie_key" => cookie(:initial_cookie_value),
-                     "cookie_key_3" => cookie(:cookie_value_3),
-                     "cookie_key_7" => cookie(:cookie_value_7)
+                     "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                     "cookie_key_3" => %Cookie{value: :cookie_value_3},
+                     "cookie_key_7" => %Cookie{value: :cookie_value_7}
                    }
                  }
                }
@@ -404,9 +385,9 @@ defmodule Hologram.Template.RendererTest do
                  },
                  %Server{
                    cookies: %{
-                     "initial_cookie_key" => cookie(:initial_cookie_value),
-                     "cookie_key_51" => cookie(:cookie_value_51),
-                     "cookie_key_52" => cookie(:cookie_value_52)
+                     "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                     "cookie_key_51" => %Cookie{value: :cookie_value_51},
+                     "cookie_key_52" => %Cookie{value: :cookie_value_52}
                    }
                  }
                }
@@ -553,8 +534,8 @@ defmodule Hologram.Template.RendererTest do
                  %{"my_component" => %{module: Module5, struct: %Component{state: %{}}}},
                  %Server{
                    cookies: %{
-                     "initial_cookie_key" => cookie(:initial_cookie_value),
-                     "cookie_key_5" => cookie(:cookie_value_5)
+                     "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                     "cookie_key_5" => %Cookie{value: :cookie_value_5}
                    }
                  }
                }
@@ -571,8 +552,8 @@ defmodule Hologram.Template.RendererTest do
                  },
                  %Server{
                    cookies: %{
-                     "initial_cookie_key" => cookie(:initial_cookie_value),
-                     "cookie_key_6" => cookie(:cookie_value_6)
+                     "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                     "cookie_key_6" => %Cookie{value: :cookie_value_6}
                    }
                  }
                }
@@ -619,10 +600,10 @@ defmodule Hologram.Template.RendererTest do
                 },
                 %Server{
                   cookies: %{
-                    "initial_cookie_key" => cookie(:initial_cookie_value),
-                    "cookie_key_10" => cookie(:cookie_value_10),
-                    "cookie_key_11" => cookie(:cookie_value_11),
-                    "cookie_key_12" => cookie(:cookie_value_12)
+                    "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                    "cookie_key_10" => %Cookie{value: :cookie_value_10},
+                    "cookie_key_11" => %Cookie{value: :cookie_value_11},
+                    "cookie_key_12" => %Cookie{value: :cookie_value_12}
                   }
                 }}
     end
@@ -671,10 +652,10 @@ defmodule Hologram.Template.RendererTest do
                 },
                 %Server{
                   cookies: %{
-                    "initial_cookie_key" => cookie(:initial_cookie_value),
-                    "cookie_key_34" => cookie(:cookie_value_34),
-                    "cookie_key_35" => cookie(:cookie_value_35),
-                    "cookie_key_36" => cookie(:cookie_value_36)
+                    "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                    "cookie_key_34" => %Cookie{value: :cookie_value_34},
+                    "cookie_key_35" => %Cookie{value: :cookie_value_35},
+                    "cookie_key_36" => %Cookie{value: :cookie_value_36}
                   }
                 }}
     end
@@ -964,13 +945,13 @@ defmodule Hologram.Template.RendererTest do
 
       assert server_struct == %Server{
                cookies: %{
-                 "initial_cookie_key" => cookie(:initial_cookie_value),
-                 "cookie_key_page" => cookie(:cookie_value_page),
-                 "cookie_key_layout" => cookie(:cookie_value_layout),
-                 "cookie_key_72" => cookie(:cookie_value_72),
-                 "cookie_key_73" => cookie(:cookie_value_73),
-                 "cookie_key_74" => cookie(:cookie_value_74),
-                 "cookie_key_75" => cookie(:cookie_value_75)
+                 "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                 "cookie_key_page" => %Cookie{value: :cookie_value_page},
+                 "cookie_key_layout" => %Cookie{value: :cookie_value_layout},
+                 "cookie_key_72" => %Cookie{value: :cookie_value_72},
+                 "cookie_key_73" => %Cookie{value: :cookie_value_73},
+                 "cookie_key_74" => %Cookie{value: :cookie_value_74},
+                 "cookie_key_75" => %Cookie{value: :cookie_value_75}
                }
              }
     end
