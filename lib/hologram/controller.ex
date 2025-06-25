@@ -1,6 +1,7 @@
 defmodule Hologram.Controller do
   @moduledoc false
 
+  alias Hologram.Server
   alias Hologram.Session
   alias Hologram.Template.Renderer
   alias Phoenix.Controller
@@ -34,7 +35,7 @@ defmodule Hologram.Controller do
     params = extract_params(conn.request_path, page_module)
 
     {html, _component_registry, _server_struct} =
-      Renderer.render_page(page_module, params, initial_page?: true)
+      Renderer.render_page(page_module, params, %Server{}, initial_page?: true)
 
     {conn_with_session, _session_id} = Session.init(conn)
 

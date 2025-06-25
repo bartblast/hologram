@@ -14,23 +14,24 @@ defmodule Hologram.Runtime.MessageHandler do
   ## Parameters
     - `type` - String identifying the type of message to handle
     - `payload` - Message-specific payload (varies by message type)
+    - `server_struct` - Server state containing server-side data (e.g., cookies, session, next action)
 
   ## Returns
   A tuple containing the response type and payload.
 
   ## Examples
 
-      iex> MessageHandler.handle("ping", nil)
+      iex> MessageHandler.handle("ping", nil, %Server{})
       {"pong", :__no_payload__}
 
-      iex> MessageHandler.handle("page", MyPageModule)
+      iex> MessageHandler.handle("page", MyPageModule, %Server{})
       {"reply", "<html>...</html>"}
   """
-  @spec handle(String.t(), any) :: {String.t(), any()}
-  def handle("command", payload) do
+  @spec handle(String.t(), any, Server.t()) :: {String.t(), any()}
+  def handle("command", payload, server_struct) do
     %{module: module, name: name, params: params, target: target} = payload
 
-    result = module.command(name, params, %Server{})
+    result = module.command(name, params, server_struct)
 
     # TODO: handle session & cookies
     next_action =
@@ -51,22 +52,22 @@ defmodule Hologram.Runtime.MessageHandler do
     {"reply", [status_integer, encoded_result]}
   end
 
-  def handle("page", payload) do
+  def handle("page", payload, server_struct) do
     opts = [initial_page?: false]
 
-    {html, _component_registry, _server_struct} =
+    {html, _component_registry, _mutateds_server_struct} =
       case payload do
         {page_module, params} ->
-          Renderer.render_page(page_module, params, opts)
+          Renderer.render_page(page_module, params, server_struct, opts)
 
         page_module ->
-          Renderer.render_page(page_module, %{}, opts)
+          Renderer.render_page(page_module, %{}, server_struct, opts)
       end
 
     {"reply", html}
   end
 
-  def handle("page_bundle_path", page_module) do
+  def handle("page_bundle_path", page_module, _server_struct) do
     page_bundle_path =
       page_module
       |> PageDigestRegistry.lookup()
@@ -75,7 +76,7 @@ defmodule Hologram.Runtime.MessageHandler do
     {"reply", page_bundle_path}
   end
 
-  def handle("ping", nil) do
+  def handle("ping", nil, _server_struct) do
     {"pong", :__no_payload__}
   end
 end

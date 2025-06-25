@@ -8,6 +8,7 @@ defmodule Hologram.Runtime.MessageHandlerTest do
   alias Hologram.Commons.ETS
   alias Hologram.Commons.SystemUtils
   alias Hologram.Runtime.MessageHandler
+  alias Hologram.Server
   alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module1
   alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module2
   alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module3
@@ -23,7 +24,7 @@ defmodule Hologram.Runtime.MessageHandlerTest do
   Code.ensure_loaded(Module1)
   Code.ensure_loaded(Module6)
 
-  describe "handle/2, command" do
+  describe "handle/3, command" do
     test "next action is nil" do
       payload = %{
         module: Module1,
@@ -32,7 +33,7 @@ defmodule Hologram.Runtime.MessageHandlerTest do
         target: "my_target_1"
       }
 
-      assert MessageHandler.handle("command", payload) ==
+      assert MessageHandler.handle("command", payload, %Server{}) ==
                {"reply", [1, ~s'Type.atom("nil")']}
     end
 
@@ -44,7 +45,7 @@ defmodule Hologram.Runtime.MessageHandlerTest do
         target: "my_target_1"
       }
 
-      assert MessageHandler.handle("command", payload) ==
+      assert MessageHandler.handle("command", payload, %Server{}) ==
                {"reply",
                 [
                   1,
@@ -60,7 +61,7 @@ defmodule Hologram.Runtime.MessageHandlerTest do
         target: "my_target_1"
       }
 
-      assert MessageHandler.handle("command", payload) ==
+      assert MessageHandler.handle("command", payload, %Server{}) ==
                {"reply",
                 [
                   1,
@@ -83,11 +84,11 @@ defmodule Hologram.Runtime.MessageHandlerTest do
           "term contains a function that is not a remote function capture"
         end
 
-      assert MessageHandler.handle("command", payload) == {"reply", [0, expected_msg]}
+      assert MessageHandler.handle("command", payload, %Server{}) == {"reply", [0, expected_msg]}
     end
   end
 
-  describe "handle/2, page" do
+  describe "handle/3, page" do
     setup do
       setup_asset_path_registry(AssetPathRegistryStub)
       AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
@@ -98,7 +99,7 @@ defmodule Hologram.Runtime.MessageHandlerTest do
     test "module payload" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module2, :dummy_module_2_digest)
 
-      assert MessageHandler.handle("page", Module2) ==
+      assert MessageHandler.handle("page", Module2, %Server{}) ==
                {"reply", "page Module2 template"}
     end
 
@@ -107,20 +108,20 @@ defmodule Hologram.Runtime.MessageHandlerTest do
 
       payload = {Module3, %{a: 1, b: 2}}
 
-      assert MessageHandler.handle("page", payload) ==
+      assert MessageHandler.handle("page", payload, %Server{}) ==
                {"reply", "page Module3 template, params: a = 1, b = 2"}
     end
 
     test "rendered page is not treated as initial page" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
 
-      assert {"reply", html} = MessageHandler.handle("page", Module5)
+      assert {"reply", html} = MessageHandler.handle("page", Module5, %Server{})
 
       refute String.contains?(html, "__hologramAssetManifest__")
     end
   end
 
-  describe "handle/2, page_bundle_path" do
+  describe "handle/3, page_bundle_path" do
     test "returns page bundle path" do
       setup_page_digest_registry(PageDigestRegistryStub)
 
@@ -130,7 +131,7 @@ defmodule Hologram.Runtime.MessageHandlerTest do
         "12345678901234567890123456789012"
       )
 
-      assert MessageHandler.handle("page_bundle_path", Module2) ==
+      assert MessageHandler.handle("page_bundle_path", Module2, %Server{}) ==
                {"reply", "/hologram/page-12345678901234567890123456789012.js"}
     end
   end

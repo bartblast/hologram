@@ -147,21 +147,21 @@ defmodule Hologram.Template.Renderer do
 
   ## Examples
 
-      iex> render_page(MyPage, %{param: "value"}, initial_page?: true)
+      iex> render_page(MyPage, %{param: "value"}, %Server{}, initial_page?: true)
       {
         "<div>full page content including layout</div>",
         %{"page" => %{module: MyPage, struct: %Component{state: %{a: 1, b: 2}}}},
         %Server{session: %{user_id: 123}}
       }
   """
-  @spec render_page(module, %{atom => String.t()}, T.opts()) ::
+  @spec render_page(module, %{atom => String.t()}, Server.t(), T.opts()) ::
           {String.t(), %{String.t() => %{module: module, struct: Component.t()}}, Server.t()}
-  def render_page(page_module, params, opts) do
+  def render_page(page_module, params, server_struct, opts) do
     initial_page? = opts[:initial_page?] || false
     casted_params = Page.cast_params(page_module, params)
 
     {page_component_struct, page_server_struct} =
-      init_component(page_module, casted_params, %Server{})
+      init_component(page_module, casted_params, server_struct)
 
     page_digest = PageDigestRegistry.lookup(page_module)
 
