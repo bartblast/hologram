@@ -6,6 +6,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module70 do
 
   layout Hologram.Test.Fixtures.Template.Renderer.Module71
 
+  @impl Page
   def init(_params, _component, server) do
     put_cookie(server, "cookie_key_page", :cookie_value_page)
   end

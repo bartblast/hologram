@@ -2,6 +2,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module72 do
   use Hologram.Component
   alias Hologram.Test.Fixtures.Template.Renderer.Module73
 
+  @impl Component
   def init(_props, _component, server) do
     put_cookie(server, "cookie_key_72", :cookie_value_72)
   end

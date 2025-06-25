@@ -1,7 +1,7 @@
-# credo:disable-for-this-file Credo.Check.Readability.Specs
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module69 do
   use Hologram.Component
 
+  @impl Component
   def init(_props, component, _server) do
     put_state(component, a: 1, b: 2)
   end
