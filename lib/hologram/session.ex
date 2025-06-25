@@ -5,7 +5,7 @@ defmodule Hologram.Session do
   alias Plug.Crypto.MessageEncryptor
 
   @doc """
-  Initializes or retrieves an existing session from the "hologram_session" cookie.
+  Initializes or retrieves an existing session ID from the "hologram_session" cookie.
 
   Returns `{conn, session_id}` where:
   - `conn` is the connection with the session cookie set
