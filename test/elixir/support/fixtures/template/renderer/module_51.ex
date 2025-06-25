@@ -2,8 +2,11 @@
 defmodule Hologram.Test.Fixtures.Template.Renderer.Module51 do
   use Hologram.Component
 
-  def init(_props, component, _server) do
-    put_state(component, a: 1, b: 2)
+  def init(_props, component, server) do
+    {
+      put_state(component, a: 1, b: 2),
+      put_cookie(server, "cookie_key_51", :cookie_value_51)
+    }
   end
 
   @impl Component

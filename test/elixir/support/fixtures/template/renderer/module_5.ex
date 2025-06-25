@@ -6,7 +6,7 @@ defmodule Hologram.Test.Fixtures.Template.Renderer.Module5 do
   prop :b, :string
 
   def init(_props, _component, server) do
-    server
+    put_cookie(server, "cookie_key_5", :cookie_value_5)
   end
 
   @impl Component
