@@ -1,9 +1,20 @@
 defmodule Hologram.ServerTest do
-  use Hologram.Test.BasicCase, async: true
+  use Hologram.Test.BasicCase, async: false
+
   import Hologram.Server
+  import Hologram.Test.Stubs
+  import Mox
 
   alias Hologram.Server
   alias Hologram.Server.Cookie
+
+  use_module_stub :server
+
+  setup :set_mox_global
+
+  setup do
+    setup_server(ServerStub)
+  end
 
   describe "put_cookie/4" do
     test "adds a cookie with default options" do
@@ -16,7 +27,8 @@ defmodule Hologram.ServerTest do
         max_age: nil,
         path: nil,
         same_site: :lax,
-        secure: true
+        secure: true,
+        __meta__: %{node: :nonode@nohost, source: :server, timestamp: ServerStub.timestamp()}
       }
 
       assert result.cookies == %{"my_cookie" => expected_cookie}
@@ -41,7 +53,8 @@ defmodule Hologram.ServerTest do
         max_age: 3_600,
         path: "/admin",
         same_site: :strict,
-        secure: false
+        secure: false,
+        __meta__: %{node: :nonode@nohost, source: :server, timestamp: ServerStub.timestamp()}
       }
 
       assert result.cookies == %{"my_cookie" => expected_cookie}
@@ -115,7 +128,8 @@ defmodule Hologram.ServerTest do
         max_age: nil,
         path: "/app",
         same_site: :lax,
-        secure: false
+        secure: false,
+        __meta__: %{node: :nonode@nohost, source: :server, timestamp: ServerStub.timestamp()}
       }
 
       assert result.cookies == %{"my_cookie" => expected_cookie}
