@@ -3,6 +3,7 @@ alias Hologram.Assets.PageDigestRegistry
 alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
 alias Hologram.Reflection
 alias Hologram.Router.PageModuleResolver
+alias Hologram.Server
 
 # Create tmp dir if it doesn't exist yet.
 File.mkdir_p!(Reflection.tmp_dir())
@@ -25,3 +26,6 @@ Application.put_env(:hologram, :page_module_resolver_impl, PageModuleResolverMoc
 
 Mox.defmock(PageDigestRegistryMock, for: PageDigestRegistry)
 Application.put_env(:hologram, :page_digest_registry_impl, PageDigestRegistryMock)
+
+Mox.defmock(ServerMock, for: Server)
+Application.put_env(:hologram, :server_impl, ServerMock)

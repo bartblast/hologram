@@ -12,6 +12,7 @@ defmodule Hologram.Test.Stubs do
   alias Hologram.Commons.ProcessUtils
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
+  alias Hologram.Server
 
   def setup_asset_manifest_cache(stub, start_link \\ true) do
     stub_with(AssetManifestCacheMock, stub)
@@ -81,6 +82,11 @@ defmodule Hologram.Test.Stubs do
     :ok
   end
 
+  def setup_server(stub) do
+    stub_with(ServerMock, stub)
+    :ok
+  end
+
   defmacro use_module_stub(:asset_manifest_cache) do
     random_module = random_module()
 
@@ -147,17 +153,17 @@ defmodule Hologram.Test.Stubs do
     end
   end
 
-  defmacro use_module_stub(:page_module_resolver) do
+  defmacro use_module_stub(:server) do
     random_module = random_module()
 
     quote do
-      defmodule alias!(unquote(random_module).PageModuleResolverStub) do
-        @behaviour PageModuleResolver
+      defmodule alias!(unquote(random_module).ServerStub) do
+        @behaviour Server
 
-        def persistent_term_key, do: unquote(random_atom())
+        def timestamp, do: unquote(123_456_789)
       end
 
-      alias alias!(unquote(random_module).PageModuleResolverStub)
+      alias alias!(unquote(random_module).ServerStub)
     end
   end
 

@@ -36,6 +36,11 @@ defmodule Hologram.Server do
         }
 
   @doc """
+  Returns the current system time in microseconds since the Unix epoch.
+  """
+  @callback timestamp() :: non_neg_integer
+
+  @doc """
   Adds a cookie to be set in the client's browser.
 
   ## Parameters
@@ -68,7 +73,15 @@ defmodule Hologram.Server do
   def put_cookie(server, key, value, opts \\ [])
 
   def put_cookie(server, key, value, opts) when is_binary(key) do
-    attrs = Keyword.put(opts, :value, value)
+    attrs =
+      opts
+      |> Keyword.put(:value, value)
+      |> Keyword.put(:__meta__, %{
+        node: node(),
+        source: :server,
+        timestamp: impl().timestamp()
+      })
+
     cookie = struct!(Cookie, attrs)
 
     %{server | cookies: Map.put(server.cookies, key, cookie)}
@@ -82,5 +95,17 @@ defmodule Hologram.Server do
     Cookie keys must be strings according to web standards.
     Try converting your key to a string: "#{key}".\
     """
+  end
+
+  @doc """
+  Returns the current system time in microseconds since the Unix epoch.
+  """
+  @spec timestamp :: non_neg_integer
+  def timestamp do
+    :os.system_time(:microsecond)
+  end
+
+  defp impl do
+    Application.get_env(:hologram, :server_impl, __MODULE__)
   end
 end
