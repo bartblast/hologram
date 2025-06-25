@@ -153,6 +153,20 @@ defmodule Hologram.Test.Stubs do
     end
   end
 
+  defmacro use_module_stub(:page_module_resolver) do
+    random_module = random_module()
+
+    quote do
+      defmodule alias!(unquote(random_module).PageModuleResolverStub) do
+        @behaviour PageModuleResolver
+
+        def persistent_term_key, do: unquote(random_atom())
+      end
+
+      alias alias!(unquote(random_module).PageModuleResolverStub)
+    end
+  end
+
   defmacro use_module_stub(:server) do
     random_module = random_module()
 
