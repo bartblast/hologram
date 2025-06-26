@@ -20,6 +20,15 @@ defmodule Hologram.Compiler.Digraph do
   @type vertex :: any
 
   @doc """
+  Adds a vertex to the graph.
+  """
+  @spec add_vertex(t, vertex) :: t
+  def add_vertex(%__MODULE__{vertices_table: vertices_table} = graph, vertex) do
+    :ets.insert(vertices_table, {vertex})
+    graph
+  end
+
+  @doc """
   Creates a new directed graph.
   """
   @spec new :: t
