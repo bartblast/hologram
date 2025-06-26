@@ -29,10 +29,10 @@ defmodule Hologram.Server do
 
   ## Examples
 
-      iex> conn = %Plug.Conn{cookies: %{"use_id" => 123}}
+      iex> conn = %Plug.Conn{cookies: %{"use_id" => "abc123"}}
       iex> server = Hologram.Server.from(conn)
       iex> server.cookies
-      %{"user_id" => 123}
+      %{"user_id" => "abc123"}
   """
   @spec from(Plug.Conn.t()) :: t()
   def from(conn) do
