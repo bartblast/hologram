@@ -16,6 +16,9 @@ defmodule Hologram.Compiler.Digraph do
           reverse_edges_table: :ets.tid()
         }
 
+  @type edge :: {vertex, vertex}
+  @type vertex :: any
+
   @doc """
   Creates a new directed graph.
   """
