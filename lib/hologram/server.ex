@@ -18,6 +18,32 @@ defmodule Hologram.Server do
   @callback timestamp() :: non_neg_integer
 
   @doc """
+  Creates a new Hologram.Server struct from a Plug connection.
+
+  Extracts cookies from the connection and initializes a server struct
+  with those cookies. Other fields are set to their default values.
+
+  ## Parameters
+
+    * `conn` - A Plug connection struct
+
+  ## Examples
+
+      iex> conn = %Plug.Conn{cookies: %{"use_id" => 123}}
+      iex> server = Hologram.Server.from(conn)
+      iex> server.cookies
+      %{"user_id" => 123}
+  """
+  @spec from(Plug.Conn.t()) :: t()
+  def from(conn) do
+    conn_with_cookies = Plug.Conn.fetch_cookies(conn)
+
+    %__MODULE__{
+      cookies: conn_with_cookies.cookies
+    }
+  end
+
+  @doc """
   Adds a cookie to be set in the client's browser.
 
   ## Parameters

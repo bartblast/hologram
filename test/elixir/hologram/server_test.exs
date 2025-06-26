@@ -20,6 +20,43 @@ defmodule Hologram.ServerTest do
     setup_server(ServerStub)
   end
 
+  describe "from/1" do
+    test "creates server struct from connection with cookies" do
+      conn = %Plug.Conn{
+        cookies: %{"user_id" => "abc123", "theme" => "dark"},
+        req_cookies: %{"user_id" => "abc123", "theme" => "dark"}
+      }
+
+      result = Server.from(conn)
+
+      assert result == %Server{cookies: %{"user_id" => "abc123", "theme" => "dark"}}
+    end
+
+    test "creates server struct from connection with no cookies" do
+      conn = %Plug.Conn{cookies: %{}, req_cookies: %{}}
+
+      result = Server.from(conn)
+
+      assert result == %Server{cookies: %{}}
+    end
+
+    test "fetches cookies from connection that hasn't been processed yet" do
+      # This simulates a connection that hasn't had fetch_cookies/1 called on it.
+      # The actual cookies must be fetched from headers.
+      conn = %Plug.Conn{
+        cookies: %Plug.Conn.Unfetched{aspect: :cookies},
+        req_cookies: %Plug.Conn.Unfetched{aspect: :cookies},
+        req_headers: [
+          {"cookie", "user_id=abc123; theme=dark"}
+        ]
+      }
+
+      result = Server.from(conn)
+
+      assert result == %Server{cookies: %{"user_id" => "abc123", "theme" => "dark"}}
+    end
+  end
+
   describe "put_cookie/4" do
     test "adds a cookie with default options" do
       result = put_cookie(%Server{}, "my_cookie", "abc123")
