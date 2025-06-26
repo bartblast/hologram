@@ -13,7 +13,6 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Compiler.IR
   alias Hologram.Component
   alias Hologram.Server
-  alias Hologram.Server.Cookie
   alias Hologram.Template.Parser
   alias Hologram.Template.Renderer
   alias Hologram.Template.Renderer.Env
@@ -96,40 +95,6 @@ defmodule Hologram.Test.Helpers do
   @spec build_server_struct() :: Server.t()
   def build_server_struct do
     %Server{}
-  end
-
-  @doc """
-  Creates a Cookie struct for testing purposes.
-
-  ## Examples
-
-      iex> cookie("abc123")
-      %Hologram.Server.Cookie{
-        value: "abc123",
-        domain: nil,
-        http_only: true,
-        max_age: nil,
-        path: nil,
-        same_site: :lax,
-        secure: true,        
-        __meta__: %{
-          node: :nonode@nohost,
-          source: :server,
-          timestamp: 123456789
-        }
-      }
-  """
-  defmacro cookie(value) do
-    quote do
-      %Cookie{
-        value: unquote(value),
-        __meta__: %{
-          node: :nonode@nohost,
-          source: :server,
-          timestamp: alias!(ServerStub).timestamp()
-        }
-      }
-    end
   end
 
   @doc """

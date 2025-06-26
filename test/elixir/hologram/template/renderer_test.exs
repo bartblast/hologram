@@ -9,6 +9,8 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Commons.ETS
   alias Hologram.Component
   alias Hologram.Server
+  alias Hologram.Server.Cookie
+  alias Hologram.Server.Metadata
   alias Hologram.Template.Renderer
   alias Hologram.Test.Fixtures.LayoutFixture
   alias Hologram.Test.Fixtures.Template.Renderer.Module1
@@ -65,6 +67,18 @@ defmodule Hologram.Template.RendererTest do
   @env %Renderer.Env{}
   @opts [initial_page?: true]
   @params %{}
+  @timestamp_1 987_654_321
+
+  @server %Server{
+    cookies: %{
+      "initial_cookie_key" => :initial_cookie_value
+    },
+    __meta__: %Metadata{
+      cookie_ops: %{
+        "initial_cookie_key" => {:put, @timestamp_1, %Cookie{value: :initial_cookie_value}}
+      }
+    }
+  }
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -74,11 +88,7 @@ defmodule Hologram.Template.RendererTest do
   setup :set_mox_global
 
   # Must be defined after setting up Server stub.
-  @server %Server{
-    cookies: %{
-      "initial_cookie_key" => cookie(:initial_cookie_value)
-    }
-  }
+  @timestamp_2 ServerStub.timestamp()
 
   test "text node" do
     node = {:text, "Tom & Jerry"}
@@ -141,9 +151,17 @@ defmodule Hologram.Template.RendererTest do
                 },
                 %Server{
                   cookies: %{
-                    "initial_cookie_key" => cookie(:initial_cookie_value),
-                    "cookie_key_3" => cookie(:cookie_value_3),
-                    "cookie_key_7" => cookie(:cookie_value_7)
+                    "initial_cookie_key" => :initial_cookie_value,
+                    "cookie_key_3" => :cookie_value_3,
+                    "cookie_key_7" => :cookie_value_7
+                  },
+                  __meta__: %Metadata{
+                    cookie_ops: %{
+                      "initial_cookie_key" =>
+                        {:put, @timestamp_1, %Cookie{value: :initial_cookie_value}},
+                      "cookie_key_3" => {:put, @timestamp_2, %Cookie{value: :cookie_value_3}},
+                      "cookie_key_7" => {:put, @timestamp_2, %Cookie{value: :cookie_value_7}}
+                    }
                   }
                 }}
     end
@@ -313,9 +331,17 @@ defmodule Hologram.Template.RendererTest do
                 },
                 %Server{
                   cookies: %{
-                    "initial_cookie_key" => cookie(:initial_cookie_value),
-                    "cookie_key_3" => cookie(:cookie_value_3),
-                    "cookie_key_7" => cookie(:cookie_value_7)
+                    "initial_cookie_key" => :initial_cookie_value,
+                    "cookie_key_3" => :cookie_value_3,
+                    "cookie_key_7" => :cookie_value_7
+                  },
+                  __meta__: %Metadata{
+                    cookie_ops: %{
+                      "initial_cookie_key" =>
+                        {:put, @timestamp_1, %Cookie{value: :initial_cookie_value}},
+                      "cookie_key_3" => {:put, @timestamp_2, %Cookie{value: :cookie_value_3}},
+                      "cookie_key_7" => {:put, @timestamp_2, %Cookie{value: :cookie_value_7}}
+                    }
                   }
                 }}
     end
@@ -373,9 +399,17 @@ defmodule Hologram.Template.RendererTest do
                  },
                  %Server{
                    cookies: %{
-                     "initial_cookie_key" => cookie(:initial_cookie_value),
-                     "cookie_key_3" => cookie(:cookie_value_3),
-                     "cookie_key_7" => cookie(:cookie_value_7)
+                     "initial_cookie_key" => :initial_cookie_value,
+                     "cookie_key_3" => :cookie_value_3,
+                     "cookie_key_7" => :cookie_value_7
+                   },
+                   __meta__: %Metadata{
+                     cookie_ops: %{
+                       "initial_cookie_key" =>
+                         {:put, @timestamp_1, %Cookie{value: :initial_cookie_value}},
+                       "cookie_key_3" => {:put, @timestamp_2, %Cookie{value: :cookie_value_3}},
+                       "cookie_key_7" => {:put, @timestamp_2, %Cookie{value: :cookie_value_7}}
+                     }
                    }
                  }
                }
@@ -398,9 +432,17 @@ defmodule Hologram.Template.RendererTest do
                  },
                  %Server{
                    cookies: %{
-                     "initial_cookie_key" => cookie(:initial_cookie_value),
-                     "cookie_key_51" => cookie(:cookie_value_51),
-                     "cookie_key_52" => cookie(:cookie_value_52)
+                     "initial_cookie_key" => :initial_cookie_value,
+                     "cookie_key_51" => :cookie_value_51,
+                     "cookie_key_52" => :cookie_value_52
+                   },
+                   __meta__: %Metadata{
+                     cookie_ops: %{
+                       "initial_cookie_key" =>
+                         {:put, @timestamp_1, %Cookie{value: :initial_cookie_value}},
+                       "cookie_key_51" => {:put, @timestamp_2, %Cookie{value: :cookie_value_51}},
+                       "cookie_key_52" => {:put, @timestamp_2, %Cookie{value: :cookie_value_52}}
+                     }
                    }
                  }
                }
@@ -551,8 +593,15 @@ defmodule Hologram.Template.RendererTest do
                  %{"my_component" => %{module: Module5, struct: %Component{state: %{}}}},
                  %Server{
                    cookies: %{
-                     "initial_cookie_key" => cookie(:initial_cookie_value),
-                     "cookie_key_5" => cookie(:cookie_value_5)
+                     "initial_cookie_key" => :initial_cookie_value,
+                     "cookie_key_5" => :cookie_value_5
+                   },
+                   __meta__: %Metadata{
+                     cookie_ops: %{
+                       "initial_cookie_key" =>
+                         {:put, @timestamp_1, %Cookie{value: :initial_cookie_value}},
+                       "cookie_key_5" => {:put, @timestamp_2, %Cookie{value: :cookie_value_5}}
+                     }
                    }
                  }
                }
@@ -569,8 +618,15 @@ defmodule Hologram.Template.RendererTest do
                  },
                  %Server{
                    cookies: %{
-                     "initial_cookie_key" => cookie(:initial_cookie_value),
-                     "cookie_key_6" => cookie(:cookie_value_6)
+                     "initial_cookie_key" => :initial_cookie_value,
+                     "cookie_key_6" => :cookie_value_6
+                   },
+                   __meta__: %Metadata{
+                     cookie_ops: %{
+                       "initial_cookie_key" =>
+                         {:put, @timestamp_1, %Cookie{value: :initial_cookie_value}},
+                       "cookie_key_6" => {:put, @timestamp_2, %Cookie{value: :cookie_value_6}}
+                     }
                    }
                  }
                }
@@ -621,10 +677,19 @@ defmodule Hologram.Template.RendererTest do
                 },
                 %Server{
                   cookies: %{
-                    "initial_cookie_key" => cookie(:initial_cookie_value),
-                    "cookie_key_10" => cookie(:cookie_value_10),
-                    "cookie_key_11" => cookie(:cookie_value_11),
-                    "cookie_key_12" => cookie(:cookie_value_12)
+                    "initial_cookie_key" => :initial_cookie_value,
+                    "cookie_key_10" => :cookie_value_10,
+                    "cookie_key_11" => :cookie_value_11,
+                    "cookie_key_12" => :cookie_value_12
+                  },
+                  __meta__: %Metadata{
+                    cookie_ops: %{
+                      "initial_cookie_key" =>
+                        {:put, @timestamp_1, %Cookie{value: :initial_cookie_value}},
+                      "cookie_key_10" => {:put, @timestamp_2, %Cookie{value: :cookie_value_10}},
+                      "cookie_key_11" => {:put, @timestamp_2, %Cookie{value: :cookie_value_11}},
+                      "cookie_key_12" => {:put, @timestamp_2, %Cookie{value: :cookie_value_12}}
+                    }
                   }
                 }}
     end
@@ -673,10 +738,19 @@ defmodule Hologram.Template.RendererTest do
                 },
                 %Server{
                   cookies: %{
-                    "initial_cookie_key" => cookie(:initial_cookie_value),
-                    "cookie_key_34" => cookie(:cookie_value_34),
-                    "cookie_key_35" => cookie(:cookie_value_35),
-                    "cookie_key_36" => cookie(:cookie_value_36)
+                    "initial_cookie_key" => :initial_cookie_value,
+                    "cookie_key_34" => :cookie_value_34,
+                    "cookie_key_35" => :cookie_value_35,
+                    "cookie_key_36" => :cookie_value_36
+                  },
+                  __meta__: %Metadata{
+                    cookie_ops: %{
+                      "initial_cookie_key" =>
+                        {:put, @timestamp_1, %Cookie{value: :initial_cookie_value}},
+                      "cookie_key_34" => {:put, @timestamp_2, %Cookie{value: :cookie_value_34}},
+                      "cookie_key_35" => {:put, @timestamp_2, %Cookie{value: :cookie_value_35}},
+                      "cookie_key_36" => {:put, @timestamp_2, %Cookie{value: :cookie_value_36}}
+                    }
                   }
                 }}
     end
@@ -968,13 +1042,26 @@ defmodule Hologram.Template.RendererTest do
 
       assert server_struct == %Server{
                cookies: %{
-                 "initial_cookie_key" => cookie(:initial_cookie_value),
-                 "cookie_key_page" => cookie(:cookie_value_page),
-                 "cookie_key_layout" => cookie(:cookie_value_layout),
-                 "cookie_key_72" => cookie(:cookie_value_72),
-                 "cookie_key_73" => cookie(:cookie_value_73),
-                 "cookie_key_74" => cookie(:cookie_value_74),
-                 "cookie_key_75" => cookie(:cookie_value_75)
+                 "initial_cookie_key" => :initial_cookie_value,
+                 "cookie_key_page" => :cookie_value_page,
+                 "cookie_key_layout" => :cookie_value_layout,
+                 "cookie_key_72" => :cookie_value_72,
+                 "cookie_key_73" => :cookie_value_73,
+                 "cookie_key_74" => :cookie_value_74,
+                 "cookie_key_75" => :cookie_value_75
+               },
+               __meta__: %Metadata{
+                 cookie_ops: %{
+                   "initial_cookie_key" =>
+                     {:put, @timestamp_1, %Cookie{value: :initial_cookie_value}},
+                   "cookie_key_page" => {:put, @timestamp_2, %Cookie{value: :cookie_value_page}},
+                   "cookie_key_layout" =>
+                     {:put, @timestamp_2, %Cookie{value: :cookie_value_layout}},
+                   "cookie_key_72" => {:put, @timestamp_2, %Cookie{value: :cookie_value_72}},
+                   "cookie_key_73" => {:put, @timestamp_2, %Cookie{value: :cookie_value_73}},
+                   "cookie_key_74" => {:put, @timestamp_2, %Cookie{value: :cookie_value_74}},
+                   "cookie_key_75" => {:put, @timestamp_2, %Cookie{value: :cookie_value_75}}
+                 }
                }
              }
     end
