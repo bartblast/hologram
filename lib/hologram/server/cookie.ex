@@ -9,17 +9,15 @@ defmodule Hologram.Server.Cookie do
             max_age: nil,
             path: nil,
             same_site: :lax,
-            secure: true,
-            __meta__: %{node: nil, source: :server, timestamp: nil}
+            secure: true
 
   @type t :: %__MODULE__{
           value: any(),
-          domain: String.t() | nil | :unknown,
-          http_only: boolean() | :unknown,
-          max_age: integer() | nil | :unknown,
-          path: String.t() | nil | :unknown,
-          same_site: :lax | :none | :strict | :unknown,
-          secure: boolean() | :unknown,
-          __meta__: %{node: node | nil, source: :client | :server, timestamp: integer | nil}
+          domain: String.t() | nil,
+          http_only: boolean(),
+          max_age: integer() | nil,
+          path: String.t() | nil,
+          same_site: :lax | :none | :strict,
+          secure: boolean()
         }
 end

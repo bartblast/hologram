@@ -1,13 +1,15 @@
 defmodule Hologram.Server do
   alias Hologram.Component.Action
   alias Hologram.Server.Cookie
+  alias Hologram.Server.Metadata
 
-  defstruct cookies: %{}, next_action: nil, session: %{}
+  defstruct cookies: %{}, next_action: nil, session: %{}, __meta__: %Metadata{}
 
   @type t :: %__MODULE__{
-          cookies: %{String.t() => Cookie.t()},
+          cookies: %{String.t() => any()},
           next_action: Action.t() | nil,
-          session: %{atom => any}
+          session: %{atom => any},
+          __meta__: Metadata.t()
         }
 
   @doc """
@@ -38,28 +40,26 @@ defmodule Hologram.Server do
 
       iex> server = %Hologram.Server{}
       iex> put_cookie(server, "user_id", 123)
-      %Hologram.Server{cookies: %{"user_id" => %Hologram.Server.Cookie{value: 123, domain: nil, http_only: true, max_age: nil, path: nil, same_site: :lax, secure: true}}}
+      %Hologram.Server{cookies: %{"user_id" => 123}}
 
       iex> server = %Hologram.Server{}
-      iex> put_cookie(server, "theme", "dark", secure: false, path: "/")
-      %Hologram.Server{cookies: %{"theme" => %Hologram.Server.Cookie{value: "dark", domain: nil, http_only: true, max_age: nil, path: "/", same_site: :lax, secure: false}}}
+      iex> put_cookie(server, "theme", "dark", secure: false, path: "/admin")
+      %Hologram.Server{cookies: %{"theme" => "dark"}}
   """
   @spec put_cookie(t(), String.t(), any(), keyword()) :: t()
   def put_cookie(server, key, value, opts \\ [])
 
   def put_cookie(server, key, value, opts) when is_binary(key) do
-    attrs =
-      opts
-      |> Keyword.put(:value, value)
-      |> Keyword.put(:__meta__, %{
-        node: node(),
-        source: :server,
-        timestamp: impl().timestamp()
-      })
+    new_cookies = Map.put(server.cookies, key, value)
 
-    cookie = struct!(Cookie, attrs)
+    cookie_struct = struct!(Cookie, Keyword.put(opts, :value, value))
 
-    %{server | cookies: Map.put(server.cookies, key, cookie)}
+    new_cookie_ops =
+      Map.put(server.__meta__.cookie_ops, key, {:put, impl().timestamp(), cookie_struct})
+
+    new_meta = %{server.__meta__ | cookie_ops: new_cookie_ops}
+
+    %{server | cookies: new_cookies, __meta__: new_meta}
   end
 
   # TODO: reconsider if this argument validation is needed once Elixir has static typing

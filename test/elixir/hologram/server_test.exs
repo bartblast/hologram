@@ -7,10 +7,14 @@ defmodule Hologram.ServerTest do
 
   alias Hologram.Server
   alias Hologram.Server.Cookie
+  alias Hologram.Server.Metadata
 
   use_module_stub :server
 
   setup :set_mox_global
+
+  # Must be defined after setting up Server stub.
+  @timestamp ServerStub.timestamp()
 
   setup do
     setup_server(ServerStub)
@@ -27,11 +31,11 @@ defmodule Hologram.ServerTest do
         max_age: nil,
         path: nil,
         same_site: :lax,
-        secure: true,
-        __meta__: %{node: :nonode@nohost, source: :server, timestamp: ServerStub.timestamp()}
+        secure: true
       }
 
-      assert result.cookies == %{"my_cookie" => expected_cookie}
+      assert result.cookies["my_cookie"] == "abc123"
+      assert result.__meta__.cookie_ops["my_cookie"] == {:put, @timestamp, expected_cookie}
     end
 
     test "adds a cookie with custom options" do
@@ -39,7 +43,7 @@ defmodule Hologram.ServerTest do
         domain: "example.com",
         http_only: false,
         max_age: 3_600,
-        path: "/admin",
+        path: "/app",
         same_site: :strict,
         secure: false
       ]
@@ -51,38 +55,58 @@ defmodule Hologram.ServerTest do
         domain: "example.com",
         http_only: false,
         max_age: 3_600,
-        path: "/admin",
+        path: "/app",
         same_site: :strict,
-        secure: false,
-        __meta__: %{node: :nonode@nohost, source: :server, timestamp: ServerStub.timestamp()}
+        secure: false
       }
 
-      assert result.cookies == %{"my_cookie" => expected_cookie}
+      assert result.cookies["my_cookie"] == "abc123"
+      assert result.__meta__.cookie_ops["my_cookie"] == {:put, @timestamp, expected_cookie}
     end
 
     test "adds multiple cookies to existing server struct" do
-      server = %Server{cookies: %{"existing" => %Cookie{value: "old"}}}
+      server = %Server{cookies: %{"existing" => "old"}}
 
       result =
         server
         |> put_cookie("first", "value_1")
         |> put_cookie("second", "value_2")
 
-      assert Map.has_key?(result.cookies, "existing")
-      assert Map.has_key?(result.cookies, "first")
-      assert Map.has_key?(result.cookies, "second")
-
-      assert result.cookies["first"].value == "value_1"
-      assert result.cookies["second"].value == "value_2"
+      assert result == %Server{
+               cookies: %{
+                 "existing" => "old",
+                 "first" => "value_1",
+                 "second" => "value_2"
+               },
+               __meta__: %Metadata{
+                 cookie_ops: %{
+                   "first" => {:put, @timestamp, %Cookie{value: "value_1"}},
+                   "second" => {:put, @timestamp, %Cookie{value: "value_2"}}
+                 }
+               }
+             }
     end
 
     test "overwrites existing cookie with same key" do
-      server = %Server{cookies: %{"theme" => %Cookie{value: "light"}}}
+      server = %Server{
+        cookies: %{"theme" => "light"},
+        __meta__: %Metadata{
+          cookie_ops: %{
+            "theme" => {:put, @timestamp, %Cookie{value: "light"}}
+          }
+        }
+      }
 
       result = put_cookie(server, "theme", "dark")
 
-      assert result.cookies["theme"].value == "dark"
-      assert map_size(result.cookies) == 1
+      assert result == %Server{
+               cookies: %{"theme" => "dark"},
+               __meta__: %Metadata{
+                 cookie_ops: %{
+                   "theme" => {:put, @timestamp, %Cookie{value: "dark"}}
+                 }
+               }
+             }
     end
 
     test "supports different value types" do
@@ -93,10 +117,17 @@ defmodule Hologram.ServerTest do
         |> put_cookie("boolean", true)
         |> put_cookie("list", [1, 2, 3])
 
-      assert result.cookies["string"].value == "text"
-      assert result.cookies["integer"].value == 42
-      assert result.cookies["boolean"].value == true
-      assert result.cookies["list"].value == [1, 2, 3]
+      cookies = result.cookies
+      assert cookies["string"] == "text"
+      assert cookies["integer"] == 42
+      assert cookies["boolean"] == true
+      assert cookies["list"] == [1, 2, 3]
+
+      cookie_ops = result.__meta__.cookie_ops
+      assert cookie_ops["string"] == {:put, @timestamp, %Cookie{value: "text"}}
+      assert cookie_ops["integer"] == {:put, @timestamp, %Cookie{value: 42}}
+      assert cookie_ops["boolean"] == {:put, @timestamp, %Cookie{value: true}}
+      assert cookie_ops["list"] == {:put, @timestamp, %Cookie{value: [1, 2, 3]}}
     end
 
     test "raises ArgumentError when key is not a string" do
@@ -128,11 +159,11 @@ defmodule Hologram.ServerTest do
         max_age: nil,
         path: "/app",
         same_site: :lax,
-        secure: false,
-        __meta__: %{node: :nonode@nohost, source: :server, timestamp: ServerStub.timestamp()}
+        secure: false
       }
 
-      assert result.cookies == %{"my_cookie" => expected_cookie}
+      assert result.cookies == %{"my_cookie" => "abc123"}
+      assert result.__meta__.cookie_ops["my_cookie"] == {:put, @timestamp, expected_cookie}
     end
   end
 end
