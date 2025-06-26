@@ -16,8 +16,8 @@ defmodule Hologram.Compiler.DigraphTest do
       refute :ets.member(vertices_table, :b)
 
       # Also verify the stored format
-      assert [{:a}] = :ets.lookup(vertices_table, :a)
-      assert [] = :ets.lookup(vertices_table, :b)
+      assert :ets.lookup(vertices_table, :a) == [{:a}]
+      assert :ets.lookup(vertices_table, :b) == []
     end
   end
 
