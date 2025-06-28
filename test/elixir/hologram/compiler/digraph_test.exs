@@ -63,19 +63,23 @@ defmodule Hologram.Compiler.DigraphTest do
 
       assert :ets.member(edges_table, :a)
       refute :ets.member(edges_table, :b)
+      refute :ets.member(edges_table, :c)
 
       # Also verify the stored format
       assert :ets.lookup(edges_table, :a) == [{:a, :b}]
       assert :ets.lookup(edges_table, :b) == []
+      assert :ets.lookup(edges_table, :c) == []
 
       reverse_edges_table = graph.reverse_edges_table
 
-      assert :ets.member(reverse_edges_table, :b)
       refute :ets.member(reverse_edges_table, :a)
+      assert :ets.member(reverse_edges_table, :b)
+      refute :ets.member(reverse_edges_table, :c)
 
       # Also verify the stored format
+      assert :ets.lookup(reverse_edges_table, :a) == []
       assert :ets.lookup(reverse_edges_table, :b) == [{:b, :a}]
-      assert :ets.lookup(reverse_edges_table, :auth) == []
+      assert :ets.lookup(reverse_edges_table, :c) == []
     end
 
     test "adds edge to a vertex that is already a source of another edge" do
@@ -104,23 +108,27 @@ defmodule Hologram.Compiler.DigraphTest do
       assert :ets.member(edges_table, :a)
       refute :ets.member(edges_table, :b)
       refute :ets.member(edges_table, :c)
+      refute :ets.member(edges_table, :d)
 
       # Verify both edges from :a are stored (bag allows multiple entries)
       edges_from_a = :ets.lookup(edges_table, :a)
       assert Enum.sort(edges_from_a) == [{:a, :b}, {:a, :c}]
       assert :ets.lookup(edges_table, :b) == []
       assert :ets.lookup(edges_table, :c) == []
+      assert :ets.lookup(edges_table, :d) == []
 
       reverse_edges_table = graph.reverse_edges_table
 
+      refute :ets.member(reverse_edges_table, :a)
       assert :ets.member(reverse_edges_table, :b)
       assert :ets.member(reverse_edges_table, :c)
-      refute :ets.member(reverse_edges_table, :a)
+      refute :ets.member(reverse_edges_table, :d)
 
       # Also verify the stored format
+      assert :ets.lookup(reverse_edges_table, :a) == []
       assert :ets.lookup(reverse_edges_table, :b) == [{:b, :a}]
       assert :ets.lookup(reverse_edges_table, :c) == [{:c, :a}]
-      assert :ets.lookup(reverse_edges_table, :a) == []
+      assert :ets.lookup(reverse_edges_table, :d) == []
     end
   end
 
