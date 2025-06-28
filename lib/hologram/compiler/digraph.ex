@@ -62,6 +62,29 @@ defmodule Hologram.Compiler.Digraph do
   end
 
   @doc """
+  Adds multiple edges to the graph.
+  """
+  @spec add_edges(t, [edge]) :: t
+  def add_edges(
+        %__MODULE__{
+          edges_table: edges_table,
+          reverse_edges_table: reverse_edges_table
+        } = graph,
+        edges
+      ) do
+    vertices = Enum.reduce(edges, [], fn {source, target}, acc -> [source | [target | acc]] end)
+    add_vertices(graph, vertices)
+
+    :ets.insert(edges_table, edges)
+
+    reverse_edges = Enum.map(edges, fn {source, target} -> {target, source} end)
+
+    :ets.insert(reverse_edges_table, reverse_edges)
+
+    graph
+  end
+
+  @doc """
   Creates a new directed graph.
   """
   @spec new :: t
