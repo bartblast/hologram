@@ -64,7 +64,7 @@ defmodule Hologram.Compiler.DigraphTest do
       assert :ets.member(edges_table, :a)
       refute :ets.member(edges_table, :b)
 
-      # Also verify the stored format            
+      # Also verify the stored format
       assert :ets.lookup(edges_table, :a) == [{:a, :b}]
       assert :ets.lookup(edges_table, :b) == []
 
@@ -73,7 +73,7 @@ defmodule Hologram.Compiler.DigraphTest do
       assert :ets.member(reverse_edges_table, :b)
       refute :ets.member(reverse_edges_table, :a)
 
-      # Also verify the stored format            
+      # Also verify the stored format
       assert :ets.lookup(reverse_edges_table, :b) == [{:b, :a}]
       assert :ets.lookup(reverse_edges_table, :auth) == []
     end
