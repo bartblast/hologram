@@ -240,4 +240,15 @@ defmodule Hologram.Compiler.DigraphTest do
       assert result == [{:a, :b}, {:b, :c}, {:d, :e}, {:d, :f}]
     end
   end
+
+  describe "vertices/1" do
+    test "lists vertices" do
+      result =
+        new()
+        |> add_vertices([:c, :a, :b])
+        |> vertices()
+
+      assert Enum.sort(result) == [:a, :b, :c]
+    end
+  end
 end

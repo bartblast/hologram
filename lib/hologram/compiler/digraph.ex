@@ -119,4 +119,12 @@ defmodule Hologram.Compiler.Digraph do
     |> edges()
     |> Enum.sort()
   end
+
+  @doc """
+  Returns all vertices in the graph.
+  """
+  @spec vertices(t) :: [vertex]
+  def vertices(%Digraph{vertices_table: vertices_table}) do
+    :ets.select(vertices_table, [{{:"$1"}, [], [:"$1"]}])
+  end
 end
