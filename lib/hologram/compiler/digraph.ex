@@ -12,7 +12,7 @@ defmodule Hologram.Compiler.Digraph do
 
   defstruct [:vertices_table, :edges_table, :reverse_edges_table]
 
-  @type t :: %Digraph{
+  @type t :: %__MODULE__{
           vertices_table: :ets.tid(),
           edges_table: :ets.tid(),
           reverse_edges_table: :ets.tid()
