@@ -39,6 +39,29 @@ defmodule Hologram.Compiler.Digraph do
   end
 
   @doc """
+  Adds an edge from source to target vertex.
+  Automatically adds vertices if they don't exist.
+  """
+  @spec add_edge(t, vertex, vertex) :: t
+  def add_edge(
+        %__MODULE__{
+          vertices_table: vertices_table,
+          edges_table: edges_table,
+          reverse_edges_table: reverse_edges_table
+        } = graph,
+        source,
+        target
+      ) do
+    :ets.insert(vertices_table, [{source}, {target}])
+
+    :ets.insert(edges_table, {source, target})
+
+    :ets.insert(reverse_edges_table, {target, source})
+
+    graph
+  end
+
+  @doc """
   Creates a new directed graph.
   """
   @spec new :: t
