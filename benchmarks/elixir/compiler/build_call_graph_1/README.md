@@ -21,10 +21,10 @@ Benchmark suite executing on the following system:
     <td style="white-space: nowrap">16 GB</td>
   </tr><tr>
     <th style="white-space: nowrap">Elixir Version</th>
-    <td style="white-space: nowrap">1.16.1</td>
+    <td style="white-space: nowrap">1.18.2</td>
   </tr><tr>
     <th style="white-space: nowrap">Erlang Version</th>
-    <td style="white-space: nowrap">26.2.2</td>
+    <td style="white-space: nowrap">27.2.4</td>
   </tr>
 </table>
 
@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">build_call_graph/1</td>
-    <td style="white-space: nowrap; text-align: right">1.45</td>
-    <td style="white-space: nowrap; text-align: right">690.71 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;5.50%</td>
-    <td style="white-space: nowrap; text-align: right">676.85 ms</td>
-    <td style="white-space: nowrap; text-align: right">841.60 ms</td>
+    <td style="white-space: nowrap; text-align: right">0.76</td>
+    <td style="white-space: nowrap; text-align: right">1.32 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;0.96%</td>
+    <td style="white-space: nowrap; text-align: right">1.32 s</td>
+    <td style="white-space: nowrap; text-align: right">1.36 s</td>
   </tr>
 
 </table>
