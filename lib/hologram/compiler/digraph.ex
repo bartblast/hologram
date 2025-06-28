@@ -104,7 +104,7 @@ defmodule Hologram.Compiler.Digraph do
         false
 
       edges_from_source ->
-        Enum.any?(edges_from_source, fn {_, t} -> t == target end)
+        Enum.any?(edges_from_source, fn {_source, t} -> t == target end)
     end
   end
 
