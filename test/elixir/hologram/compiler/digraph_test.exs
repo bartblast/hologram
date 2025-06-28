@@ -241,6 +241,17 @@ defmodule Hologram.Compiler.DigraphTest do
     end
   end
 
+  describe "sorted_vertices/1" do
+    test "lists vertices in sorted order" do
+      result =
+        new()
+        |> add_vertices([:c, :a, :b])
+        |> sorted_vertices()
+
+      assert result == [:a, :b, :c]
+    end
+  end
+
   describe "vertices/1" do
     test "lists vertices" do
       result =
