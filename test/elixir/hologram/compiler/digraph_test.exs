@@ -172,7 +172,7 @@ defmodule Hologram.Compiler.DigraphTest do
       assert :ets.lookup(edges_table, :a) == [{:a, :b}]
       assert :ets.lookup(edges_table, :b) == [{:b, :c}]
       assert :ets.lookup(edges_table, :c) == []
-      assert :ets.lookup(edges_table, :d) == [{:d, :e}, {:d, :f}]
+      assert Enum.sort(:ets.lookup(edges_table, :d)) == [{:d, :e}, {:d, :f}]
       assert :ets.lookup(edges_table, :e) == []
       assert :ets.lookup(edges_table, :f) == []
       assert :ets.lookup(edges_table, :g) == []
