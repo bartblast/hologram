@@ -85,6 +85,14 @@ defmodule Hologram.Compiler.Digraph do
   end
 
   @doc """
+  Returns all edges in the graph.
+  """
+  @spec edges(t) :: [edge]
+  def edges(%__MODULE__{edges_table: edges_table}) do
+    :ets.tab2list(edges_table)
+  end
+
+  @doc """
   Creates a new directed graph.
   """
   @spec new :: t

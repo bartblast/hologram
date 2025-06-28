@@ -198,6 +198,17 @@ defmodule Hologram.Compiler.DigraphTest do
     end
   end
 
+  describe "edges/1" do
+    test "lists edges" do
+      result =
+        new()
+        |> add_edges([{:b, :c}, {:a, :b}, {:d, :e}, {:d, :f}])
+        |> edges()
+
+      assert Enum.sort(result) == [{:a, :b}, {:b, :c}, {:d, :e}, {:d, :f}]
+    end
+  end
+
   describe "new/0" do
     test "creates a new digraph" do
       graph = new()
