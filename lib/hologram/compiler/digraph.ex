@@ -12,7 +12,7 @@ defmodule Hologram.Compiler.Digraph do
 
   defstruct [:vertices_table, :edges_table, :reverse_edges_table]
 
-  @type t :: %__MODULE__{
+  @type t :: %Digraph{
           vertices_table: :ets.tid(),
           edges_table: :ets.tid(),
           reverse_edges_table: :ets.tid()
@@ -25,7 +25,7 @@ defmodule Hologram.Compiler.Digraph do
   Adds a vertex to the graph.
   """
   @spec add_vertex(t, vertex) :: t
-  def add_vertex(%__MODULE__{vertices_table: vertices_table} = graph, vertex) do
+  def add_vertex(%Digraph{vertices_table: vertices_table} = graph, vertex) do
     :ets.insert(vertices_table, {vertex})
     graph
   end
@@ -34,7 +34,7 @@ defmodule Hologram.Compiler.Digraph do
   Adds multiple vertices to the graph.
   """
   @spec add_vertices(t, [vertex]) :: t
-  def add_vertices(%__MODULE__{vertices_table: vertices_table} = graph, vertices) do
+  def add_vertices(%Digraph{vertices_table: vertices_table} = graph, vertices) do
     objects = Enum.map(vertices, &{&1})
     :ets.insert(vertices_table, objects)
     graph
@@ -46,7 +46,7 @@ defmodule Hologram.Compiler.Digraph do
   """
   @spec add_edge(t, vertex, vertex) :: t
   def add_edge(
-        %__MODULE__{
+        %Digraph{
           vertices_table: vertices_table,
           edges_table: edges_table,
           reverse_edges_table: reverse_edges_table
@@ -68,7 +68,7 @@ defmodule Hologram.Compiler.Digraph do
   """
   @spec add_edges(t, [edge]) :: t
   def add_edges(
-        %__MODULE__{
+        %Digraph{
           edges_table: edges_table,
           reverse_edges_table: reverse_edges_table
         } = graph,
@@ -90,7 +90,7 @@ defmodule Hologram.Compiler.Digraph do
   Returns all edges in the graph.
   """
   @spec edges(t) :: [edge]
-  def edges(%__MODULE__{edges_table: edges_table}) do
+  def edges(%Digraph{edges_table: edges_table}) do
     :ets.tab2list(edges_table)
   end
 
@@ -103,7 +103,7 @@ defmodule Hologram.Compiler.Digraph do
     edges_table = :ets.new(:edges, [:bag, :public, {:read_concurrency, true}])
     reverse_edges_table = :ets.new(:reverse_edges, [:bag, :public, {:read_concurrency, true}])
 
-    %__MODULE__{
+    %Digraph{
       vertices_table: vertices_table,
       edges_table: edges_table,
       reverse_edges_table: reverse_edges_table
