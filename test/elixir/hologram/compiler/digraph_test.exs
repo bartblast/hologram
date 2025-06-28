@@ -3,11 +3,13 @@ defmodule Hologram.Compiler.DigraphTest do
   import Hologram.Compiler.Digraph
   alias Hologram.Compiler.Digraph
 
-  describe "add_vertex/2" do
-    test "adds a single vertex" do
-      graph = new()
-      result = add_vertex(graph, :a)
+  setup do
+    [empty_graph: new()]
+  end
 
+  describe "add_vertex/2" do
+    test "adds a single vertex", %{empty_graph: graph} do
+      result = add_vertex(graph, :a)
       assert result == graph
 
       vertices_table = graph.vertices_table
@@ -22,10 +24,8 @@ defmodule Hologram.Compiler.DigraphTest do
   end
 
   describe "add_vertices/2" do
-    test "adds multiple vertices" do
-      graph = new()
+    test "adds multiple vertices", %{empty_graph: graph} do
       result = add_vertices(graph, [:a, :b])
-
       assert result == graph
 
       vertices_table = graph.vertices_table
@@ -42,10 +42,8 @@ defmodule Hologram.Compiler.DigraphTest do
   end
 
   describe "add_edge/3" do
-    test "adds a single edge" do
-      graph = new()
+    test "adds a single edge", %{empty_graph: graph} do
       result = add_edge(graph, :a, :b)
-
       assert result == graph
 
       vertices_table = graph.vertices_table
@@ -82,8 +80,7 @@ defmodule Hologram.Compiler.DigraphTest do
       assert :ets.lookup(reverse_edges_table, :c) == []
     end
 
-    test "adds edge to a vertex that is already a source of another edge" do
-      graph = new()
+    test "adds edge to a vertex that is already a source of another edge", %{empty_graph: graph} do
       result_1 = add_edge(graph, :a, :b)
       result_2 = add_edge(graph, :a, :c)
 
@@ -135,10 +132,8 @@ defmodule Hologram.Compiler.DigraphTest do
   end
 
   describe "add_edges/2" do
-    test "adds multiple edges" do
-      graph = new()
+    test "adds multiple edges", %{empty_graph: graph} do
       result = add_edges(graph, [{:a, :b}, {:b, :c}, {:d, :e}, {:d, :f}])
-
       assert result == graph
 
       vertices_table = graph.vertices_table
@@ -209,9 +204,9 @@ defmodule Hologram.Compiler.DigraphTest do
   end
 
   describe "edges/1" do
-    test "lists edges" do
+    test "lists edges", %{empty_graph: graph} do
       result =
-        new()
+        graph
         |> add_edges([{:b, :c}, {:a, :b}, {:d, :e}, {:d, :f}])
         |> edges()
 
@@ -220,44 +215,37 @@ defmodule Hologram.Compiler.DigraphTest do
   end
 
   describe "has_edge?/3" do
-    test "returns false when there is no edge between two vertices" do
-      graph = new()
+    test "returns false when there is no edge between two vertices", %{empty_graph: graph} do
       add_vertices(graph, [:a, :b])
 
       refute has_edge?(graph, :a, :b)
       refute has_edge?(graph, :b, :a)
     end
 
-    test "returns true when there is an edge between two vertices" do
-      graph = new()
+    test "returns true when there is an edge between two vertices", %{empty_graph: graph} do
       add_edge(graph, :a, :b)
 
       assert has_edge?(graph, :a, :b)
       refute has_edge?(graph, :b, :a)
     end
 
-    test "returns false when source vertex doesn't exist" do
-      graph = new()
+    test "returns false when source vertex doesn't exist", %{empty_graph: graph} do
       add_vertex(graph, :b)
 
       refute has_edge?(graph, :a, :b)
     end
 
-    test "returns false when target vertex doesn't exist" do
-      graph = new()
+    test "returns false when target vertex doesn't exist", %{empty_graph: graph} do
       add_vertex(graph, :a)
 
       refute has_edge?(graph, :a, :b)
     end
 
-    test "returns false when neither vertex exists" do
-      graph = new()
-
+    test "returns false when neither vertex exists", %{empty_graph: graph} do
       refute has_edge?(graph, :a, :b)
     end
 
-    test "returns false when source has edges but not to the target" do
-      graph = new()
+    test "returns false when source has edges but not to the target", %{empty_graph: graph} do
       add_edges(graph, [{:a, :b}, {:a, :c}])
 
       assert has_edge?(graph, :a, :b)
@@ -265,8 +253,9 @@ defmodule Hologram.Compiler.DigraphTest do
       refute has_edge?(graph, :a, :d)
     end
 
-    test "returns true when source has multiple edges including one to target" do
-      graph = new()
+    test "returns true when source has multiple edges including one to target", %{
+      empty_graph: graph
+    } do
       add_edges(graph, [{:a, :b}, {:a, :c}, {:a, :d}])
 
       assert has_edge?(graph, :a, :b)
@@ -288,9 +277,9 @@ defmodule Hologram.Compiler.DigraphTest do
   end
 
   describe "sorted_edges/1" do
-    test "lists edges in sorted order" do
+    test "lists edges in sorted order", %{empty_graph: graph} do
       result =
-        new()
+        graph
         |> add_edges([{:b, :c}, {:a, :b}, {:d, :e}, {:d, :f}])
         |> sorted_edges()
 
@@ -299,9 +288,9 @@ defmodule Hologram.Compiler.DigraphTest do
   end
 
   describe "sorted_vertices/1" do
-    test "lists vertices in sorted order" do
+    test "lists vertices in sorted order", %{empty_graph: graph} do
       result =
-        new()
+        graph
         |> add_vertices([:c, :a, :b])
         |> sorted_vertices()
 
@@ -310,9 +299,9 @@ defmodule Hologram.Compiler.DigraphTest do
   end
 
   describe "vertices/1" do
-    test "lists vertices" do
+    test "lists vertices", %{empty_graph: graph} do
       result =
-        new()
+        graph
         |> add_vertices([:c, :a, :b])
         |> vertices()
 
