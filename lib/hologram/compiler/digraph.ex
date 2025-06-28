@@ -113,9 +113,9 @@ defmodule Hologram.Compiler.Digraph do
   """
   @spec new :: t
   def new do
-    vertices_table = :ets.new(:vertices, [:set, :public, {:read_concurrency, true}])
-    edges_table = :ets.new(:edges, [:bag, :public, {:read_concurrency, true}])
-    reverse_edges_table = :ets.new(:reverse_edges, [:bag, :public, {:read_concurrency, true}])
+    vertices_table = :ets.new(:vertices, [:set, :public, {:write_concurrency, true}])
+    edges_table = :ets.new(:edges, [:bag, :public, {:write_concurrency, true}])
+    reverse_edges_table = :ets.new(:reverse_edges, [:bag, :public, {:write_concurrency, true}])
 
     %Digraph{
       vertices_table: vertices_table,
