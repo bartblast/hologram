@@ -95,6 +95,20 @@ defmodule Hologram.Compiler.Digraph do
   end
 
   @doc """
+  Checks if an edge exists between source and target.
+  """
+  @spec has_edge?(t, vertex, vertex) :: boolean
+  def has_edge?(%Digraph{edges_table: edges_table}, source, target) do
+    case :ets.lookup(edges_table, source) do
+      [] ->
+        false
+
+      edges_from_source ->
+        Enum.any?(edges_from_source, fn {_, t} -> t == target end)
+    end
+  end
+
+  @doc """
   Creates a new directed graph.
   """
   @spec new :: t

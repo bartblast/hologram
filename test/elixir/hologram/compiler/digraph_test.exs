@@ -219,6 +219,63 @@ defmodule Hologram.Compiler.DigraphTest do
     end
   end
 
+  describe "has_edge?/3" do
+    test "returns false when there is no edge between two vertices" do
+      graph = new()
+      add_vertices(graph, [:a, :b])
+
+      refute has_edge?(graph, :a, :b)
+      refute has_edge?(graph, :b, :a)
+    end
+
+    test "returns true when there is an edge between two vertices" do
+      graph = new()
+      add_edge(graph, :a, :b)
+
+      assert has_edge?(graph, :a, :b)
+      refute has_edge?(graph, :b, :a)
+    end
+
+    test "returns false when source vertex doesn't exist" do
+      graph = new()
+      add_vertex(graph, :b)
+
+      refute has_edge?(graph, :a, :b)
+    end
+
+    test "returns false when target vertex doesn't exist" do
+      graph = new()
+      add_vertex(graph, :a)
+
+      refute has_edge?(graph, :a, :b)
+    end
+
+    test "returns false when neither vertex exists" do
+      graph = new()
+
+      refute has_edge?(graph, :a, :b)
+    end
+
+    test "returns false when source has edges but not to the target" do
+      graph = new()
+      add_edges(graph, [{:a, :b}, {:a, :c}])
+
+      assert has_edge?(graph, :a, :b)
+      assert has_edge?(graph, :a, :c)
+      refute has_edge?(graph, :a, :d)
+    end
+
+    test "returns true when source has multiple edges including one to target" do
+      graph = new()
+      add_edges(graph, [{:a, :b}, {:a, :c}, {:a, :d}])
+
+      assert has_edge?(graph, :a, :b)
+      assert has_edge?(graph, :a, :c)
+      assert has_edge?(graph, :a, :d)
+      refute has_edge?(graph, :a, :e)
+    end
+  end
+
   describe "new/0" do
     test "creates a new digraph" do
       graph = new()
