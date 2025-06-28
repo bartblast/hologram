@@ -170,7 +170,7 @@ defmodule Hologram.Compiler.DigraphTest do
       refute :ets.member(edges_table, :f)
       refute :ets.member(edges_table, :g)
 
-      # # Also verify the stored format
+      # Also verify the stored format
 
       assert :ets.lookup(edges_table, :a) == [{:a, :b}]
       assert :ets.lookup(edges_table, :b) == [{:b, :c}]
@@ -227,6 +227,17 @@ defmodule Hologram.Compiler.DigraphTest do
       assert is_reference(graph.vertices_table)
       assert is_reference(graph.edges_table)
       assert is_reference(graph.reverse_edges_table)
+    end
+  end
+
+  describe "sorted_edges/1" do
+    test "lists edges in sorted order" do
+      result =
+        new()
+        |> add_edges([{:b, :c}, {:a, :b}, {:d, :e}, {:d, :f}])
+        |> sorted_edges()
+
+      assert result == [{:a, :b}, {:b, :c}, {:d, :e}, {:d, :f}]
     end
   end
 end

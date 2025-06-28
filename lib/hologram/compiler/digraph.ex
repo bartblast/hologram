@@ -8,6 +8,8 @@ defmodule Hologram.Compiler.Digraph do
   # - Edges in an ETS bag (allows duplicate edges with same source)
   # - Reverse edges in another ETS bag for efficient inbound edges queries
 
+  alias Hologram.Compiler.Digraph
+
   defstruct [:vertices_table, :edges_table, :reverse_edges_table]
 
   @type t :: %__MODULE__{
@@ -106,5 +108,15 @@ defmodule Hologram.Compiler.Digraph do
       edges_table: edges_table,
       reverse_edges_table: reverse_edges_table
     }
+  end
+
+  @doc """
+  Returns all edges in the graph sorted in ascending order.
+  """
+  @spec sorted_edges(t) :: [edge]
+  def sorted_edges(%Digraph{} = graph) do
+    graph
+    |> edges()
+    |> Enum.sort()
   end
 end
