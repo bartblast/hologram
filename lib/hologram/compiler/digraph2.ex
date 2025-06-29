@@ -23,6 +23,19 @@ defmodule Hologram.Compiler.Digraph2 do
   end
 
   @doc """
+  Adds multiple vertices to the graph.
+  """
+  @spec add_vertices(t, [vertex]) :: t
+  def add_vertices(%Digraph2{vertices: old_vertices} = graph, added_vertices) do
+    new_vertices =
+      Enum.reduce(added_vertices, old_vertices, fn vertex, acc ->
+        Map.put(acc, vertex, true)
+      end)
+
+    %{graph | vertices: new_vertices}
+  end
+
+  @doc """
   Creates a new directed graph.
   """
   @spec new :: t

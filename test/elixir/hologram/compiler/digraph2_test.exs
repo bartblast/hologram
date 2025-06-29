@@ -27,6 +27,16 @@ defmodule Hologram.Compiler.Digraph2Test do
     end
   end
 
+  describe "add_vertices/2" do
+    test "adds multiple vertices", %{empty_graph: graph} do
+      assert add_vertices(graph, [:a, :b]) == %Digraph2{
+               vertices: %{a: true, b: true},
+               edges: %{},
+               reverse_edges: %{}
+             }
+    end
+  end
+
   describe "new/0" do
     test "creates a new digraph" do
       assert new() == %Digraph2{vertices: %{}, edges: %{}, reverse_edges: %{}}
