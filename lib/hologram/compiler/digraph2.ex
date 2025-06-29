@@ -15,27 +15,6 @@ defmodule Hologram.Compiler.Digraph2 do
   @type vertex :: any
 
   @doc """
-  Adds a vertex to the graph.
-  """
-  @spec add_vertex(t, vertex) :: t
-  def add_vertex(%Digraph2{vertices: vertices} = graph, vertex) do
-    %{graph | vertices: Map.put(vertices, vertex, true)}
-  end
-
-  @doc """
-  Adds multiple vertices to the graph.
-  """
-  @spec add_vertices(t, [vertex]) :: t
-  def add_vertices(%Digraph2{vertices: old_vertices} = graph, added_vertices) do
-    new_vertices =
-      Enum.reduce(added_vertices, old_vertices, fn vertex, acc ->
-        Map.put(acc, vertex, true)
-      end)
-
-    %{graph | vertices: new_vertices}
-  end
-
-  @doc """
   Adds an edge from source to target vertex.
   Automatically adds vertices if they don't exist.
   """
@@ -65,6 +44,27 @@ defmodule Hologram.Compiler.Digraph2 do
     new_reverse_edges = Map.put(reverse_edges, target, sources)
 
     %Digraph2{vertices: new_vertices, edges: new_edges, reverse_edges: new_reverse_edges}
+  end
+
+  @doc """
+  Adds a vertex to the graph.
+  """
+  @spec add_vertex(t, vertex) :: t
+  def add_vertex(%Digraph2{vertices: vertices} = graph, vertex) do
+    %{graph | vertices: Map.put(vertices, vertex, true)}
+  end
+
+  @doc """
+  Adds multiple vertices to the graph.
+  """
+  @spec add_vertices(t, [vertex]) :: t
+  def add_vertices(%Digraph2{vertices: old_vertices} = graph, added_vertices) do
+    new_vertices =
+      Enum.reduce(added_vertices, old_vertices, fn vertex, acc ->
+        Map.put(acc, vertex, true)
+      end)
+
+    %{graph | vertices: new_vertices}
   end
 
   @doc """
