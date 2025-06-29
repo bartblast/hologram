@@ -22,6 +22,10 @@ defmodule Hologram.Compiler.Digraph2 do
     %{graph | vertices: Map.put(vertices, vertex, true)}
   end
 
+  @doc """
+  Creates a new directed graph.
+  """
+  @spec new :: t
   def new do
     %Digraph2{vertices: %{}, edges: %{}, reverse_edges: %{}}
   end
