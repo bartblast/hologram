@@ -26,14 +26,21 @@ defimpl Inspect, for: Graph do
       ])
 
     doc =
-      Stream.flat_map(es, fn {v_id, out_neighbors} ->
+      es
+      |> Enum.sort_by(fn {v_id, _} -> v_id end)
+      |> Stream.flat_map(fn {v_id, out_neighbors} ->
         v = Inspect.Algebra.to_doc(Map.get(vs, v_id), opts)
 
-        Enum.flat_map(out_neighbors, fn out_id ->
+        out_neighbors
+        |> Enum.sort()
+        |> Enum.flat_map(fn out_id ->
           out_v = Map.get(vs, out_id)
           out_v_doc = Inspect.Algebra.to_doc(out_v, opts)
 
-          Enum.map(Map.fetch!(meta, {v_id, out_id}), fn
+          {v_id, out_id}
+          |> then(&Map.fetch!(meta, &1))
+          |> Enum.sort_by(fn {label, weight} -> {label_sort_key(label), weight} end)
+          |> Enum.map(fn
             {nil, _} when type == :directed ->
               [v, " -> ", out_v_doc]
 
@@ -73,4 +80,10 @@ defimpl Inspect, for: Graph do
     num_edges = Graph.num_edges(g)
     "#Graph<type: #{type}, num_vertices: #{num_vertices}, num_edges: #{num_edges}>"
   end
+
+  # Helper function to sort labels in a consistent order
+  # Based on the test expectations: atoms first, then nil, then tuples/other types
+  defp label_sort_key(nil), do: {1, ""}
+  defp label_sort_key(label) when is_atom(label), do: {0, Atom.to_string(label)}
+  defp label_sort_key(label), do: {2, inspect(label)}
 end
