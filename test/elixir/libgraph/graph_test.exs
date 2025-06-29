@@ -1,9 +1,11 @@
 defmodule GraphTest do
-  use ExUnit.Case, async: true
-  doctest Graph
-  doctest Graph.Edge
+  use Hologram.Test.BasicCase, async: true
+
   alias Graph.Edge
   alias Graph.Test.Generators
+
+  doctest Graph
+  doctest Graph.Edge
 
   test "injectable vertex_identifier" do
     g = Graph.new()
@@ -520,7 +522,7 @@ defmodule GraphTest do
   end
 
   @tag timeout: 120_000
-  @enron_emails Path.join([__DIR__, "fixtures", "email-Enron.txt"])
+  @enron_emails Path.join([@fixtures_dir, "libgraph", "email-Enron.txt"])
   test "degeneracy/1 - Enron emails" do
     g = Graph.Test.Fixtures.Parser.parse(@enron_emails)
     assert 36_692 = Graph.num_vertices(g)
@@ -529,7 +531,7 @@ defmodule GraphTest do
   end
 
   @tag timeout: 120_000
-  @hamster_friends Path.join([__DIR__, "fixtures", "petster", "edges.txt"])
+  @hamster_friends Path.join([@fixtures_dir, "libgraph", "petster", "edges.txt"])
   test "degeneracy/1 - Petster hamster friendships" do
     g = Graph.Test.Fixtures.Parser.parse(@hamster_friends)
     assert 1_858 = Graph.num_vertices(g)
