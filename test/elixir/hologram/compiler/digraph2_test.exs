@@ -44,7 +44,7 @@ defmodule Hologram.Compiler.Digraph2Test do
   end
 
   describe "add_vertex/2" do
-    test "adds a single vertex when it doesn't exist yet", %{empty_graph: graph} do
+    test "adds a vertex when it doesn't exist yet", %{empty_graph: graph} do
       assert add_vertex(graph, :a) == %Digraph2{
                vertices: %{a: true},
                edges: %{},
@@ -52,7 +52,7 @@ defmodule Hologram.Compiler.Digraph2Test do
              }
     end
 
-    test "adds a single vertex when it already exists", %{empty_graph: graph} do
+    test "adds a vertex when it already exists", %{empty_graph: graph} do
       graph_with_vetex_a = add_vertex(graph, :a)
 
       assert add_vertex(graph_with_vetex_a, :a) == %Digraph2{
