@@ -19,7 +19,7 @@ defmodule Graph.UtilsTest do
         440
       end
 
-    result = String.duplicate("bar", 128)
-    assert sizeof(result) == expected
+    result = sizeof(String.duplicate("bar", 128))
+    assert result == expected
   end
 end
