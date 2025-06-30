@@ -3,6 +3,7 @@
 import {
   assert,
   defineGlobalErlangAndElixirModules,
+  sinon,
 } from "./support/helpers.mjs";
 
 import PerformanceTimer from "../../assets/js/performance_timer.mjs";
@@ -10,24 +11,34 @@ import PerformanceTimer from "../../assets/js/performance_timer.mjs";
 defineGlobalErlangAndElixirModules();
 
 describe("PerformanceTimer", () => {
+  let performanceNowStub;
+
+  beforeEach(() => {
+    performanceNowStub = sinon.stub(performance, "now");
+    performanceNowStub.onCall(0).returns(1000); // start time
+  });
+
+  afterEach(() => {
+    sinon.restore();
+  });
+
   describe("diff()", () => {
     it("returns time in microseconds when difference is less than 1 ms", () => {
-      // Create a mock timestamp very close to now to ensure sub-millisecond difference
-      const startTime = performance.now() - 0.9;
+      performanceNowStub.onCall(1).returns(1000.5); // end time
 
+      const startTime = PerformanceTimer.start();
       const result = PerformanceTimer.diff(startTime);
-      assert.match(result, /^\d+ μs$/);
 
-      const value = parseInt(result);
-      assert.isAtLeast(value, 100); // Allow for some overhead
-      assert.isBelow(value, 1000); // Should still be less than 1ms
+      assert.equal(result, "500 μs");
     });
 
     it("returns time in milliseconds when difference is 1 ms or greater", () => {
-      const startTime = performance.now() - 1;
+      performanceNowStub.onCall(1).returns(1002.7); // end time
+
+      const startTime = PerformanceTimer.start();
       const result = PerformanceTimer.diff(startTime);
 
-      assert.equal(result, "1 ms");
+      assert.equal(result, "3 ms");
     });
   });
 
@@ -36,7 +47,7 @@ describe("PerformanceTimer", () => {
       const result = PerformanceTimer.start();
 
       assert.isNumber(result);
-      assert.isAtMost(performance.now() - result, 1);
+      assert.equal(result, 1000);
     });
   });
 });
