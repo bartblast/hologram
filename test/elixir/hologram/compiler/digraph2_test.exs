@@ -197,4 +197,147 @@ defmodule Hologram.Compiler.Digraph2Test do
              }
     end
   end
+
+  describe "remove_vertices/2" do
+    test "handles empty list of vertices", %{empty_graph: graph} do
+      result =
+        graph
+        |> add_edge(:a, :b)
+        |> remove_vertices([])
+
+      assert result == %Digraph2{
+               vertices: %{a: true, b: true},
+               outgoing_edges: %{a: %{b: true}},
+               incoming_edges: %{b: %{a: true}}
+             }
+    end
+
+    test "handles vertices that don't exist", %{empty_graph: graph} do
+      result = remove_vertices(graph, [:a, :b])
+
+      assert result == %Digraph2{
+               vertices: %{},
+               outgoing_edges: %{},
+               incoming_edges: %{}
+             }
+    end
+
+    test "removes vertices with no edges", %{empty_graph: graph} do
+      result =
+        graph
+        |> add_vertices([:a, :b])
+        |> remove_vertices([:a, :b])
+
+      assert result == %Digraph2{
+               vertices: %{},
+               outgoing_edges: %{},
+               incoming_edges: %{}
+             }
+    end
+
+    test "removes vertices that have outgoing edges only", %{empty_graph: graph} do
+      result =
+        graph
+        |> add_edge(:a1, :b1)
+        |> add_edge(:a1, :c1)
+        |> add_edge(:a2, :b2)
+        |> add_edge(:a2, :c2)
+        |> remove_vertices([:a1, :a2])
+
+      assert result == %Digraph2{
+               vertices: %{b1: true, b2: true, c1: true, c2: true},
+               outgoing_edges: %{},
+               incoming_edges: %{}
+             }
+    end
+
+    test "removes vertices that have incoming edges only", %{empty_graph: graph} do
+      result =
+        graph
+        |> add_edge(:a1, :c1)
+        |> add_edge(:b1, :c1)
+        |> add_edge(:a2, :c2)
+        |> add_edge(:b2, :c2)
+        |> remove_vertices([:c1, :c2])
+
+      assert result == %Digraph2{
+               vertices: %{a1: true, a2: true, b1: true, b2: true},
+               outgoing_edges: %{},
+               incoming_edges: %{}
+             }
+    end
+
+    test "removes vertices that have both incoming and outgoing edges", %{empty_graph: graph} do
+      result =
+        graph
+        |> add_edge(:a1, :b1)
+        |> add_edge(:b1, :c1)
+        |> add_edge(:a2, :b2)
+        |> add_edge(:b2, :c2)
+        |> remove_vertices([:b1, :b2])
+
+      assert result == %Digraph2{
+               vertices: %{a1: true, a2: true, c1: true, c2: true},
+               outgoing_edges: %{},
+               incoming_edges: %{}
+             }
+    end
+
+    test "removes vertices from a complex graph", %{empty_graph: graph} do
+      result =
+        graph
+        |> add_edge(:a1, :b1)
+        |> add_edge(:a1, :h1)
+        |> add_edge(:b1, :c1)
+        |> add_edge(:b1, :i1)
+        |> add_edge(:c1, :d1)
+        |> add_edge(:e1, :b1)
+        |> add_edge(:f1, :g1)
+        |> add_edge(:a2, :b2)
+        |> add_edge(:a2, :h2)
+        |> add_edge(:b2, :c2)
+        |> add_edge(:b2, :i2)
+        |> add_edge(:c2, :d2)
+        |> add_edge(:e2, :b2)
+        |> add_edge(:f2, :g2)
+        |> remove_vertices([:b1, :b2])
+
+      assert result == %Digraph2{
+               vertices: %{
+                 a1: true,
+                 c1: true,
+                 d1: true,
+                 e1: true,
+                 f1: true,
+                 g1: true,
+                 h1: true,
+                 i1: true,
+                 a2: true,
+                 c2: true,
+                 d2: true,
+                 e2: true,
+                 f2: true,
+                 g2: true,
+                 h2: true,
+                 i2: true
+               },
+               outgoing_edges: %{
+                 a1: %{h1: true},
+                 a2: %{h2: true},
+                 c1: %{d1: true},
+                 c2: %{d2: true},
+                 f1: %{g1: true},
+                 f2: %{g2: true}
+               },
+               incoming_edges: %{
+                 d1: %{c1: true},
+                 d2: %{c2: true},
+                 g1: %{f1: true},
+                 g2: %{f2: true},
+                 h1: %{a1: true},
+                 h2: %{a2: true}
+               }
+             }
+    end
+  end
 end

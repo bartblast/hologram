@@ -202,4 +202,96 @@ defmodule Hologram.Compiler.Digraph2 do
         incoming_edges: cleaned_incoming_edges
     }
   end
+
+  @doc """
+  Removes multiple vertices from the graph along with all edges connected to them.
+  This includes both outgoing edges from the vertices and incoming edges to the vertices.
+  """
+  @spec remove_vertices(t, [vertex]) :: t
+  # credo:disable-for-lines:85 /Credo.Check.Refactor.ABCSize|Credo.Check.Refactor.Nesting/
+  # The above Credo checks are disabled because the function is optimised this way
+  def remove_vertices(graph, vertices_to_remove) do
+    %Digraph2{
+      vertices: vertices,
+      outgoing_edges: outgoing_edges,
+      incoming_edges: incoming_edges
+    } = graph
+
+    {vertices_needing_outgoing_cleanup, vertices_needing_incoming_cleanup} =
+      Enum.reduce(vertices_to_remove, {MapSet.new(), MapSet.new()}, fn vertex,
+                                                                       {acc_incoming_sources,
+                                                                        acc_outgoing_targets} ->
+        incoming_sources =
+          incoming_edges
+          |> Map.get(vertex, %{})
+          |> Map.keys()
+          |> MapSet.new()
+
+        outgoing_targets =
+          outgoing_edges
+          |> Map.get(vertex, %{})
+          |> Map.keys()
+          |> MapSet.new()
+
+        {MapSet.union(acc_incoming_sources, incoming_sources),
+         MapSet.union(acc_outgoing_targets, outgoing_targets)}
+      end)
+
+    new_vertices = Map.drop(vertices, vertices_to_remove)
+    outgoing_edges_without_removed_vertices = Map.drop(outgoing_edges, vertices_to_remove)
+    incoming_edges_without_removed_vertices = Map.drop(incoming_edges, vertices_to_remove)
+
+    # Clean up outgoing edges: remove references to removed vertices
+    # from all vertices that pointed to them
+    cleaned_outgoing_edges =
+      Enum.reduce(
+        vertices_needing_outgoing_cleanup,
+        outgoing_edges_without_removed_vertices,
+        fn source, acc_outgoing_edges ->
+          case Map.get(acc_outgoing_edges, source) do
+            nil ->
+              acc_outgoing_edges
+
+            targets ->
+              cleaned_targets = Map.drop(targets, vertices_to_remove)
+
+              if map_size(cleaned_targets) == 0 do
+                Map.delete(acc_outgoing_edges, source)
+              else
+                Map.put(acc_outgoing_edges, source, cleaned_targets)
+              end
+          end
+        end
+      )
+
+    # Clean up incoming edges: remove references to removed vertices
+    # from all vertices they pointed to
+    cleaned_incoming_edges =
+      Enum.reduce(
+        vertices_needing_incoming_cleanup,
+        incoming_edges_without_removed_vertices,
+        fn target, acc_incoming_edges ->
+          case Map.get(acc_incoming_edges, target) do
+            nil ->
+              acc_incoming_edges
+
+            sources ->
+              cleaned_sources = Map.drop(sources, vertices_to_remove)
+
+              if map_size(cleaned_sources) == 0 do
+                Map.delete(acc_incoming_edges, target)
+              else
+                Map.put(acc_incoming_edges, target, cleaned_sources)
+              end
+          end
+        end
+      )
+
+    %{
+      graph
+      | vertices: new_vertices,
+        outgoing_edges: cleaned_outgoing_edges,
+        incoming_edges: cleaned_incoming_edges
+    }
+  end
 end
