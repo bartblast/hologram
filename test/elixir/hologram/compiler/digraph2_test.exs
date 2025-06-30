@@ -11,8 +11,8 @@ defmodule Hologram.Compiler.Digraph2Test do
     test "adds an edge when there are no source or target vertices yet", %{empty_graph: graph} do
       assert add_edge(graph, :a, :b) == %Digraph2{
                vertices: %{a: true, b: true},
-               edges: %{a: %{b: true}},
-               reverse_edges: %{b: %{a: true}}
+               outgoing_edges: %{a: %{b: true}},
+               incoming_edges: %{b: %{a: true}}
              }
     end
 
@@ -24,8 +24,8 @@ defmodule Hologram.Compiler.Digraph2Test do
 
       assert result == %Digraph2{
                vertices: %{a: true, b: true, c: true},
-               edges: %{a: %{b: true, c: true}},
-               reverse_edges: %{b: %{a: true}, c: %{a: true}}
+               outgoing_edges: %{a: %{b: true, c: true}},
+               incoming_edges: %{b: %{a: true}, c: %{a: true}}
              }
     end
 
@@ -37,8 +37,8 @@ defmodule Hologram.Compiler.Digraph2Test do
 
       assert result == %Digraph2{
                vertices: %{a: true, b: true, c: true},
-               edges: %{a: %{b: true}, c: %{b: true}},
-               reverse_edges: %{b: %{a: true, c: true}}
+               outgoing_edges: %{a: %{b: true}, c: %{b: true}},
+               incoming_edges: %{b: %{a: true, c: true}}
              }
     end
   end
@@ -47,8 +47,13 @@ defmodule Hologram.Compiler.Digraph2Test do
     test "adds multiple edges", %{empty_graph: graph} do
       assert add_edges(graph, [{:a, :b}, {:b, :c}, {:d, :e}, {:d, :f}, {:g, :e}]) == %Digraph2{
                vertices: %{a: true, b: true, c: true, d: true, e: true, f: true, g: true},
-               edges: %{a: %{b: true}, b: %{c: true}, d: %{e: true, f: true}, g: %{e: true}},
-               reverse_edges: %{
+               outgoing_edges: %{
+                 a: %{b: true},
+                 b: %{c: true},
+                 d: %{e: true, f: true},
+                 g: %{e: true}
+               },
+               incoming_edges: %{
                  b: %{a: true},
                  c: %{b: true},
                  e: %{d: true, g: true},
@@ -62,8 +67,8 @@ defmodule Hologram.Compiler.Digraph2Test do
     test "adds a vertex when it doesn't exist yet", %{empty_graph: graph} do
       assert add_vertex(graph, :a) == %Digraph2{
                vertices: %{a: true},
-               edges: %{},
-               reverse_edges: %{}
+               outgoing_edges: %{},
+               incoming_edges: %{}
              }
     end
 
@@ -72,8 +77,8 @@ defmodule Hologram.Compiler.Digraph2Test do
 
       assert add_vertex(graph_with_vertex_a, :a) == %Digraph2{
                vertices: %{a: true},
-               edges: %{},
-               reverse_edges: %{}
+               outgoing_edges: %{},
+               incoming_edges: %{}
              }
     end
   end
@@ -82,15 +87,15 @@ defmodule Hologram.Compiler.Digraph2Test do
     test "adds multiple vertices", %{empty_graph: graph} do
       assert add_vertices(graph, [:a, :b]) == %Digraph2{
                vertices: %{a: true, b: true},
-               edges: %{},
-               reverse_edges: %{}
+               outgoing_edges: %{},
+               incoming_edges: %{}
              }
     end
   end
 
   describe "new/0" do
     test "creates a new digraph" do
-      assert new() == %Digraph2{vertices: %{}, edges: %{}, reverse_edges: %{}}
+      assert new() == %Digraph2{vertices: %{}, outgoing_edges: %{}, incoming_edges: %{}}
     end
   end
 
@@ -100,8 +105,8 @@ defmodule Hologram.Compiler.Digraph2Test do
 
       assert result == %Digraph2{
                vertices: %{},
-               edges: %{},
-               reverse_edges: %{}
+               outgoing_edges: %{},
+               incoming_edges: %{}
              }
     end
 
@@ -113,8 +118,8 @@ defmodule Hologram.Compiler.Digraph2Test do
 
       assert result == %Digraph2{
                vertices: %{},
-               edges: %{},
-               reverse_edges: %{}
+               outgoing_edges: %{},
+               incoming_edges: %{}
              }
     end
 
@@ -127,8 +132,8 @@ defmodule Hologram.Compiler.Digraph2Test do
 
       assert result == %Digraph2{
                vertices: %{b: true, c: true},
-               edges: %{},
-               reverse_edges: %{}
+               outgoing_edges: %{},
+               incoming_edges: %{}
              }
     end
 
@@ -141,8 +146,8 @@ defmodule Hologram.Compiler.Digraph2Test do
 
       assert result == %Digraph2{
                vertices: %{a: true, b: true},
-               edges: %{},
-               reverse_edges: %{}
+               outgoing_edges: %{},
+               incoming_edges: %{}
              }
     end
 
@@ -155,8 +160,8 @@ defmodule Hologram.Compiler.Digraph2Test do
 
       assert result == %Digraph2{
                vertices: %{a: true, c: true},
-               edges: %{},
-               reverse_edges: %{}
+               outgoing_edges: %{},
+               incoming_edges: %{}
              }
     end
 
@@ -174,8 +179,8 @@ defmodule Hologram.Compiler.Digraph2Test do
 
       assert result == %Digraph2{
                vertices: %{a: true, c: true, d: true, e: true, f: true, g: true, h: true, i: true},
-               edges: %{a: %{h: true}, c: %{d: true}, f: %{g: true}},
-               reverse_edges: %{d: %{c: true}, g: %{f: true}, h: %{a: true}}
+               outgoing_edges: %{a: %{h: true}, c: %{d: true}, f: %{g: true}},
+               incoming_edges: %{d: %{c: true}, g: %{f: true}, h: %{a: true}}
              }
     end
   end
