@@ -43,6 +43,21 @@ defmodule Hologram.Compiler.Digraph2Test do
     end
   end
 
+  describe "add_edges/2" do
+    test "adds multiple edges", %{empty_graph: graph} do
+      assert add_edges(graph, [{:a, :b}, {:b, :c}, {:d, :e}, {:d, :f}, {:g, :e}]) == %Digraph2{
+               vertices: %{a: true, b: true, c: true, d: true, e: true, f: true, g: true},
+               edges: %{a: %{b: true}, b: %{c: true}, d: %{e: true, f: true}, g: %{e: true}},
+               reverse_edges: %{
+                 b: %{a: true},
+                 c: %{b: true},
+                 e: %{d: true, g: true},
+                 f: %{d: true}
+               }
+             }
+    end
+  end
+
   describe "add_vertex/2" do
     test "adds a vertex when it doesn't exist yet", %{empty_graph: graph} do
       assert add_vertex(graph, :a) == %Digraph2{

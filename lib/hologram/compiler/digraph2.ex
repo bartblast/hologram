@@ -47,6 +47,44 @@ defmodule Hologram.Compiler.Digraph2 do
   end
 
   @doc """
+  Adds multiple edges to the graph.
+  """
+  @spec add_edges(t, [edge]) :: t
+  def add_edges(
+        %Digraph2{vertices: vertices, edges: edges, reverse_edges: reverse_edges},
+        added_edges
+      ) do
+    acc = {vertices, edges, reverse_edges}
+
+    {new_vertices, new_edges, new_reverse_edges} =
+      Enum.reduce(added_edges, acc, fn {source, target},
+                                       {acc_vertices, acc_edges, acc_reverse_edges} ->
+        new_acc_vertices =
+          acc_vertices
+          |> Map.put(source, true)
+          |> Map.put(target, true)
+
+        targets =
+          acc_edges
+          |> Map.get(source, %{})
+          |> Map.put(target, true)
+
+        new_acc_edges = Map.put(acc_edges, source, targets)
+
+        sources =
+          acc_reverse_edges
+          |> Map.get(target, %{})
+          |> Map.put(source, true)
+
+        new_acc_reverse_edges = Map.put(acc_reverse_edges, target, sources)
+
+        {new_acc_vertices, new_acc_edges, new_acc_reverse_edges}
+      end)
+
+    %Digraph2{vertices: new_vertices, edges: new_edges, reverse_edges: new_reverse_edges}
+  end
+
+  @doc """
   Adds a vertex to the graph.
   """
   @spec add_vertex(t, vertex) :: t
