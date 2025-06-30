@@ -68,9 +68,9 @@ defmodule Hologram.Compiler.Digraph2Test do
     end
 
     test "adds a vertex when it already exists", %{empty_graph: graph} do
-      graph_with_vetex_a = add_vertex(graph, :a)
+      graph_with_vertex_a = add_vertex(graph, :a)
 
-      assert add_vertex(graph_with_vetex_a, :a) == %Digraph2{
+      assert add_vertex(graph_with_vertex_a, :a) == %Digraph2{
                vertices: %{a: true},
                edges: %{},
                reverse_edges: %{}
@@ -91,6 +91,92 @@ defmodule Hologram.Compiler.Digraph2Test do
   describe "new/0" do
     test "creates a new digraph" do
       assert new() == %Digraph2{vertices: %{}, edges: %{}, reverse_edges: %{}}
+    end
+  end
+
+  describe "remove_vertex/2" do
+    test "removes a vertex that doesn't exist", %{empty_graph: graph} do
+      result = remove_vertex(graph, :a)
+
+      assert result == %Digraph2{
+               vertices: %{},
+               edges: %{},
+               reverse_edges: %{}
+             }
+    end
+
+    test "removes a vertex with no edges", %{empty_graph: graph} do
+      result =
+        graph
+        |> add_vertex(:a)
+        |> remove_vertex(:a)
+
+      assert result == %Digraph2{
+               vertices: %{},
+               edges: %{},
+               reverse_edges: %{}
+             }
+    end
+
+    test "removes a vertex that has outgoing edges only", %{empty_graph: graph} do
+      result =
+        graph
+        |> add_edge(:a, :b)
+        |> add_edge(:a, :c)
+        |> remove_vertex(:a)
+
+      assert result == %Digraph2{
+               vertices: %{b: true, c: true},
+               edges: %{},
+               reverse_edges: %{}
+             }
+    end
+
+    test "removes a vertex that has incoming edges only", %{empty_graph: graph} do
+      result =
+        graph
+        |> add_edge(:a, :c)
+        |> add_edge(:b, :c)
+        |> remove_vertex(:c)
+
+      assert result == %Digraph2{
+               vertices: %{a: true, b: true},
+               edges: %{},
+               reverse_edges: %{}
+             }
+    end
+
+    test "removes a vertex that has both incoming and outgoing edges", %{empty_graph: graph} do
+      result =
+        graph
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> remove_vertex(:b)
+
+      assert result == %Digraph2{
+               vertices: %{a: true, c: true},
+               edges: %{},
+               reverse_edges: %{}
+             }
+    end
+
+    test "removes a vertex from a complex graph", %{empty_graph: graph} do
+      result =
+        graph
+        |> add_edge(:a, :b)
+        |> add_edge(:a, :h)
+        |> add_edge(:b, :c)
+        |> add_edge(:b, :i)
+        |> add_edge(:c, :d)
+        |> add_edge(:e, :b)
+        |> add_edge(:f, :g)
+        |> remove_vertex(:b)
+
+      assert result == %Digraph2{
+               vertices: %{a: true, c: true, d: true, e: true, f: true, g: true, h: true, i: true},
+               edges: %{a: %{h: true}, c: %{d: true}, f: %{g: true}},
+               reverse_edges: %{d: %{c: true}, g: %{f: true}, h: %{a: true}}
+             }
     end
   end
 end

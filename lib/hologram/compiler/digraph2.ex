@@ -112,4 +112,70 @@ defmodule Hologram.Compiler.Digraph2 do
   def new do
     %Digraph2{vertices: %{}, edges: %{}, reverse_edges: %{}}
   end
+
+  @doc """
+  Removes a vertex from the graph along with all edges connected to it.
+  This includes both outgoing edges from the vertex and incoming edges to the vertex.
+  """
+  @spec remove_vertex(t, vertex) :: t
+  def remove_vertex(
+        %Digraph2{vertices: vertices, edges: outgoing_edges, reverse_edges: incoming_edges} =
+          graph,
+        vertex
+      ) do
+    # Capture the outgoing and incoming edges before removing them
+    old_outgoing_targets = Map.get(outgoing_edges, vertex, %{})
+    old_incoming_sources = Map.get(incoming_edges, vertex, %{})
+
+    new_vertices = Map.delete(vertices, vertex)
+    outgoing_edges_without_vertex = Map.delete(outgoing_edges, vertex)
+    incoming_edges_without_vertex = Map.delete(incoming_edges, vertex)
+
+    # Clean up edges: remove references to the removed vertex
+    # from all vertices that pointed to it
+    cleaned_outgoing_edges =
+      Enum.reduce(old_incoming_sources, outgoing_edges_without_vertex, fn {source, _},
+                                                                          acc_outgoing_edges ->
+        case Map.get(acc_outgoing_edges, source) do
+          nil ->
+            acc_outgoing_edges
+
+          targets ->
+            cleaned_targets = Map.delete(targets, vertex)
+
+            if map_size(cleaned_targets) == 0 do
+              Map.delete(acc_outgoing_edges, source)
+            else
+              Map.put(acc_outgoing_edges, source, cleaned_targets)
+            end
+        end
+      end)
+
+    # Clean up reverse edges: remove references to the removed vertex
+    # from all vertices it pointed to
+    cleaned_incoming_edges =
+      Enum.reduce(old_outgoing_targets, incoming_edges_without_vertex, fn {target, _},
+                                                                          acc_incomming_edges ->
+        case Map.get(acc_incomming_edges, target) do
+          nil ->
+            acc_incomming_edges
+
+          sources ->
+            cleaned_sources = Map.delete(sources, vertex)
+
+            if map_size(cleaned_sources) == 0 do
+              Map.delete(acc_incomming_edges, target)
+            else
+              Map.put(acc_incomming_edges, target, cleaned_sources)
+            end
+        end
+      end)
+
+    %{
+      graph
+      | vertices: new_vertices,
+        edges: cleaned_outgoing_edges,
+        reverse_edges: cleaned_incoming_edges
+    }
+  end
 end
