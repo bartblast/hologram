@@ -3,13 +3,9 @@ defmodule Hologram.Compiler.Digraph2Test do
   import Hologram.Compiler.Digraph2
   alias Hologram.Compiler.Digraph2
 
-  setup do
-    [empty_graph: new()]
-  end
-
   describe "add_edge/3" do
-    test "adds an edge when there are no source or target vertices yet", %{empty_graph: graph} do
-      result = add_edge(graph, :a, :b)
+    test "adds an edge when there are no source or target vertices yet" do
+      result = add_edge(new(), :a, :b)
 
       assert result == %Digraph2{
                vertices: %{a: true, b: true},
@@ -18,9 +14,9 @@ defmodule Hologram.Compiler.Digraph2Test do
              }
     end
 
-    test "adds edge from a vertex that is already a source of another edge", %{empty_graph: graph} do
+    test "adds edge from a vertex that is already a source of another edge" do
       result =
-        graph
+        new()
         |> add_edge(:a, :b)
         |> add_edge(:a, :c)
 
@@ -31,9 +27,9 @@ defmodule Hologram.Compiler.Digraph2Test do
              }
     end
 
-    test "adds edge to a vertex that is already a target of another edge", %{empty_graph: graph} do
+    test "adds edge to a vertex that is already a target of another edge" do
       result =
-        graph
+        new()
         |> add_edge(:a, :b)
         |> add_edge(:c, :b)
 
@@ -46,8 +42,8 @@ defmodule Hologram.Compiler.Digraph2Test do
   end
 
   describe "add_edges/2" do
-    test "adds multiple edges", %{empty_graph: graph} do
-      result = add_edges(graph, [{:a, :b}, {:b, :c}, {:d, :e}, {:d, :f}, {:g, :e}])
+    test "adds multiple edges" do
+      result = add_edges(new(), [{:a, :b}, {:b, :c}, {:d, :e}, {:d, :f}, {:g, :e}])
 
       assert result == %Digraph2{
                vertices: %{a: true, b: true, c: true, d: true, e: true, f: true, g: true},
@@ -68,8 +64,8 @@ defmodule Hologram.Compiler.Digraph2Test do
   end
 
   describe "add_vertex/2" do
-    test "adds a vertex when it doesn't exist yet", %{empty_graph: graph} do
-      result = add_vertex(graph, :a)
+    test "adds a vertex when it doesn't exist yet" do
+      result = add_vertex(new(), :a)
 
       assert result == %Digraph2{
                vertices: %{a: true},
@@ -78,9 +74,9 @@ defmodule Hologram.Compiler.Digraph2Test do
              }
     end
 
-    test "adds a vertex when it already exists", %{empty_graph: graph} do
+    test "adds a vertex when it already exists" do
       result =
-        graph
+        new()
         |> add_vertex(:a)
         |> add_vertex(:a)
 
@@ -93,8 +89,8 @@ defmodule Hologram.Compiler.Digraph2Test do
   end
 
   describe "add_vertices/2" do
-    test "adds multiple vertices", %{empty_graph: graph} do
-      result = add_vertices(graph, [:a, :b])
+    test "adds multiple vertices" do
+      result = add_vertices(new(), [:a, :b])
 
       assert result == %Digraph2{
                vertices: %{a: true, b: true},
@@ -105,24 +101,24 @@ defmodule Hologram.Compiler.Digraph2Test do
   end
 
   describe "incoming_edges/2" do
-    test "returns empty list when vertex doesn't exist", %{empty_graph: graph} do
-      result = incoming_edges(graph, :a)
+    test "returns empty list when vertex doesn't exist" do
+      result = incoming_edges(new(), :a)
 
       assert result == []
     end
 
-    test "returns empty list when vertex exists but has no edges", %{empty_graph: graph} do
+    test "returns empty list when vertex exists but has no edges" do
       result =
-        graph
+        new()
         |> add_vertex(:a)
         |> incoming_edges(:a)
 
       assert result == []
     end
 
-    test "returns empty list when vertex has only outgoing edges", %{empty_graph: graph} do
+    test "returns empty list when vertex has only outgoing edges" do
       result =
-        graph
+        new()
         |> add_edge(:a, :b)
         |> add_edge(:a, :c)
         |> incoming_edges(:a)
@@ -130,20 +126,18 @@ defmodule Hologram.Compiler.Digraph2Test do
       assert result == []
     end
 
-    test "returns incoming edge when vertex has one incoming edge", %{empty_graph: graph} do
+    test "returns incoming edge when vertex has one incoming edge" do
       result =
-        graph
+        new()
         |> add_edge(:a, :b)
         |> incoming_edges(:b)
 
       assert result == [{:a, :b}]
     end
 
-    test "returns multiple incoming edges when vertex has multiple incoming edges", %{
-      empty_graph: graph
-    } do
+    test "returns multiple incoming edges when vertex has multiple incoming edges" do
       result =
-        graph
+        new()
         |> add_edge(:a, :c)
         |> add_edge(:b, :c)
         |> add_edge(:d, :c)
@@ -194,8 +188,8 @@ defmodule Hologram.Compiler.Digraph2Test do
   end
 
   describe "remove_vertex/2" do
-    test "handles a vertex that doesn't exist", %{empty_graph: graph} do
-      result = remove_vertex(graph, :a)
+    test "handles a vertex that doesn't exist" do
+      result = remove_vertex(new(), :a)
 
       assert result == %Digraph2{
                vertices: %{},
@@ -204,9 +198,9 @@ defmodule Hologram.Compiler.Digraph2Test do
              }
     end
 
-    test "removes a vertex with no edges", %{empty_graph: graph} do
+    test "removes a vertex with no edges" do
       result =
-        graph
+        new()
         |> add_vertex(:a)
         |> remove_vertex(:a)
 
@@ -217,9 +211,9 @@ defmodule Hologram.Compiler.Digraph2Test do
              }
     end
 
-    test "removes a vertex that has outgoing edges only", %{empty_graph: graph} do
+    test "removes a vertex that has outgoing edges only" do
       result =
-        graph
+        new()
         |> add_edge(:a, :b)
         |> add_edge(:a, :c)
         |> remove_vertex(:a)
@@ -231,9 +225,9 @@ defmodule Hologram.Compiler.Digraph2Test do
              }
     end
 
-    test "removes a vertex that has incoming edges only", %{empty_graph: graph} do
+    test "removes a vertex that has incoming edges only" do
       result =
-        graph
+        new()
         |> add_edge(:a, :c)
         |> add_edge(:b, :c)
         |> remove_vertex(:c)
@@ -245,9 +239,9 @@ defmodule Hologram.Compiler.Digraph2Test do
              }
     end
 
-    test "removes a vertex that has both incoming and outgoing edges", %{empty_graph: graph} do
+    test "removes a vertex that has both incoming and outgoing edges" do
       result =
-        graph
+        new()
         |> add_edge(:a, :b)
         |> add_edge(:b, :c)
         |> remove_vertex(:b)
@@ -259,9 +253,9 @@ defmodule Hologram.Compiler.Digraph2Test do
              }
     end
 
-    test "removes a vertex from a complex graph", %{empty_graph: graph} do
+    test "removes a vertex from a complex graph" do
       result =
-        graph
+        new()
         |> add_edge(:a, :b)
         |> add_edge(:a, :h)
         |> add_edge(:b, :c)
@@ -280,9 +274,9 @@ defmodule Hologram.Compiler.Digraph2Test do
   end
 
   describe "remove_vertices/2" do
-    test "handles empty list of vertices", %{empty_graph: graph} do
+    test "handles empty list of vertices" do
       result =
-        graph
+        new()
         |> add_edge(:a, :b)
         |> remove_vertices([])
 
@@ -293,8 +287,8 @@ defmodule Hologram.Compiler.Digraph2Test do
              }
     end
 
-    test "handles vertices that don't exist", %{empty_graph: graph} do
-      result = remove_vertices(graph, [:a, :b])
+    test "handles vertices that don't exist" do
+      result = remove_vertices(new(), [:a, :b])
 
       assert result == %Digraph2{
                vertices: %{},
@@ -303,9 +297,9 @@ defmodule Hologram.Compiler.Digraph2Test do
              }
     end
 
-    test "removes vertices with no edges", %{empty_graph: graph} do
+    test "removes vertices with no edges" do
       result =
-        graph
+        new()
         |> add_vertices([:a, :b])
         |> remove_vertices([:a, :b])
 
@@ -316,9 +310,9 @@ defmodule Hologram.Compiler.Digraph2Test do
              }
     end
 
-    test "removes vertices that have outgoing edges only", %{empty_graph: graph} do
+    test "removes vertices that have outgoing edges only" do
       result =
-        graph
+        new()
         |> add_edge(:a1, :b1)
         |> add_edge(:a1, :c1)
         |> add_edge(:a2, :b2)
@@ -332,9 +326,9 @@ defmodule Hologram.Compiler.Digraph2Test do
              }
     end
 
-    test "removes vertices that have incoming edges only", %{empty_graph: graph} do
+    test "removes vertices that have incoming edges only" do
       result =
-        graph
+        new()
         |> add_edge(:a1, :c1)
         |> add_edge(:b1, :c1)
         |> add_edge(:a2, :c2)
@@ -348,9 +342,9 @@ defmodule Hologram.Compiler.Digraph2Test do
              }
     end
 
-    test "removes vertices that have both incoming and outgoing edges", %{empty_graph: graph} do
+    test "removes vertices that have both incoming and outgoing edges" do
       result =
-        graph
+        new()
         |> add_edge(:a1, :b1)
         |> add_edge(:b1, :c1)
         |> add_edge(:a2, :b2)
@@ -364,9 +358,9 @@ defmodule Hologram.Compiler.Digraph2Test do
              }
     end
 
-    test "removes vertices from a complex graph", %{empty_graph: graph} do
+    test "removes vertices from a complex graph" do
       result =
-        graph
+        new()
         |> add_edge(:a1, :b1)
         |> add_edge(:a1, :h1)
         |> add_edge(:b1, :c1)
@@ -423,24 +417,24 @@ defmodule Hologram.Compiler.Digraph2Test do
   end
 
   describe "vertices/1" do
-    test "returns empty list for empty graph", %{empty_graph: graph} do
-      result = vertices(graph)
+    test "returns empty list for empty graph" do
+      result = vertices(new())
 
       assert result == []
     end
 
-    test "returns vertices when graph has only vertices (no edges)", %{empty_graph: graph} do
+    test "returns vertices when graph has only vertices (no edges)" do
       result =
-        graph
+        new()
         |> add_vertices([:a, :b, :c])
         |> vertices()
 
       assert Enum.sort(result) == [:a, :b, :c]
     end
 
-    test "returns vertices when graph has vertices and edges", %{empty_graph: graph} do
+    test "returns vertices when graph has vertices and edges" do
       result =
-        graph
+        new()
         |> add_edge(:a, :b)
         |> add_edge(:b, :c)
         |> add_vertex(:d)
