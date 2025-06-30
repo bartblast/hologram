@@ -58,6 +58,8 @@ defmodule Hologram.Compiler.Digraph2 do
   Adds multiple edges to the graph.
   """
   @spec add_edges(t, [edge]) :: t
+  # credo:disable-for-lines:42 Credo.Check.Refactor.ABCSize
+  # The above Credo check is disabled because the function is optimised this way
   def add_edges(
         %Digraph2{
           vertices: vertices,
@@ -134,6 +136,8 @@ defmodule Hologram.Compiler.Digraph2 do
   This includes both outgoing edges from the vertex and incoming edges to the vertex.
   """
   @spec remove_vertex(t, vertex) :: t
+  # credo:disable-for-lines:65 /Credo.Check.Refactor.ABCSize|Credo.Check.Refactor.Nesting/
+  # The above Credo checks are disabled because the function is optimised this way
   def remove_vertex(
         %Digraph2{
           vertices: vertices,
@@ -154,7 +158,7 @@ defmodule Hologram.Compiler.Digraph2 do
     # Clean up edges: remove references to the removed vertex
     # from all vertices that pointed to it
     cleaned_outgoing_edges =
-      Enum.reduce(old_incoming_sources, outgoing_edges_without_vertex, fn {source, _},
+      Enum.reduce(old_incoming_sources, outgoing_edges_without_vertex, fn {source, _target},
                                                                           acc_outgoing_edges ->
         case Map.get(acc_outgoing_edges, source) do
           nil ->
@@ -174,7 +178,7 @@ defmodule Hologram.Compiler.Digraph2 do
     # Clean up reverse edges: remove references to the removed vertex
     # from all vertices it pointed to
     cleaned_incoming_edges =
-      Enum.reduce(old_outgoing_targets, incoming_edges_without_vertex, fn {target, _},
+      Enum.reduce(old_outgoing_targets, incoming_edges_without_vertex, fn {target, _source},
                                                                           acc_incomming_edges ->
         case Map.get(acc_incomming_edges, target) do
           nil ->
