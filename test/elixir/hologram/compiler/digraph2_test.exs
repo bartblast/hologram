@@ -113,7 +113,7 @@ defmodule Hologram.Compiler.Digraph2Test do
   end
 
   describe "remove_vertex/2" do
-    test "removes a vertex that doesn't exist", %{empty_graph: graph} do
+    test "handles a vertex that doesn't exist", %{empty_graph: graph} do
       result = remove_vertex(graph, :a)
 
       assert result == %Digraph2{
