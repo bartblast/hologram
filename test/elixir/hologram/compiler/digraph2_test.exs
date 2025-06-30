@@ -104,6 +104,87 @@ defmodule Hologram.Compiler.Digraph2Test do
     end
   end
 
+  describe "incoming_edges/2" do
+    test "returns empty list when vertex doesn't exist", %{empty_graph: graph} do
+      result = incoming_edges(graph, :a)
+
+      assert result == []
+    end
+
+    test "returns empty list when vertex exists but has no edges", %{empty_graph: graph} do
+      result =
+        graph
+        |> add_vertex(:a)
+        |> incoming_edges(:a)
+
+      assert result == []
+    end
+
+    test "returns empty list when vertex has only outgoing edges", %{empty_graph: graph} do
+      result =
+        graph
+        |> add_edge(:a, :b)
+        |> add_edge(:a, :c)
+        |> incoming_edges(:a)
+
+      assert result == []
+    end
+
+    test "returns incoming edge when vertex has one incoming edge", %{empty_graph: graph} do
+      result =
+        graph
+        |> add_edge(:a, :b)
+        |> incoming_edges(:b)
+
+      assert result == [{:a, :b}]
+    end
+
+    test "returns multiple incoming edges when vertex has multiple incoming edges", %{
+      empty_graph: graph
+    } do
+      result =
+        graph
+        |> add_edge(:a, :c)
+        |> add_edge(:b, :c)
+        |> add_edge(:d, :c)
+        |> incoming_edges(:c)
+
+      assert Enum.sort(result) == [{:a, :c}, {:b, :c}, {:d, :c}]
+    end
+
+    test "returns correct incoming edges in a complex graph" do
+      graph =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:a, :c)
+        |> add_edge(:b, :d)
+        |> add_edge(:c, :d)
+        |> add_edge(:e, :b)
+        |> add_edge(:f, :g)
+
+      result_a = incoming_edges(graph, :a)
+      assert result_a == []
+
+      result_b = incoming_edges(graph, :b)
+      assert Enum.sort(result_b) == [{:a, :b}, {:e, :b}]
+
+      result_c = incoming_edges(graph, :c)
+      assert result_c == [{:a, :c}]
+
+      result_d = incoming_edges(graph, :d)
+      assert Enum.sort(result_d) == [{:b, :d}, {:c, :d}]
+
+      result_e = incoming_edges(graph, :e)
+      assert result_e == []
+
+      result_f = incoming_edges(graph, :f)
+      assert result_f == []
+
+      result_g = incoming_edges(graph, :g)
+      assert result_g == [{:f, :g}]
+    end
+  end
+
   describe "new/0" do
     test "creates a new digraph" do
       result = new()

@@ -121,6 +121,17 @@ defmodule Hologram.Compiler.Digraph2 do
   end
 
   @doc """
+  Returns a list of all incoming edges to the given vertex.
+  Each edge is represented as a tuple {source_vertex, target_vertex}.
+  """
+  @spec incoming_edges(t, vertex) :: [edge]
+  def incoming_edges(%Digraph2{incoming_edges: incoming_edges_map}, vertex) do
+    incoming_edges_map
+    |> Map.get(vertex, %{})
+    |> Enum.map(fn {source, true} -> {source, vertex} end)
+  end
+
+  @doc """
   Creates a new directed graph.
   """
   @spec new :: t
