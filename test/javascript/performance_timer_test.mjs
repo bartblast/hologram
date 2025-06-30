@@ -15,7 +15,7 @@ describe("PerformanceTimer", () => {
 
   beforeEach(() => {
     performanceNowStub = sinon.stub(performance, "now");
-    performanceNowStub.onCall(0).returns(1000); // start time
+    performanceNowStub.onCall(0).returns(1_000); // start time
   });
 
   afterEach(() => {
@@ -24,7 +24,7 @@ describe("PerformanceTimer", () => {
 
   describe("diff()", () => {
     it("returns time in microseconds when difference is less than 1 ms", () => {
-      performanceNowStub.onCall(1).returns(1000.5); // end time
+      performanceNowStub.onCall(1).returns(1_000.5); // end time
 
       const startTime = PerformanceTimer.start();
       const result = PerformanceTimer.diff(startTime);
@@ -33,7 +33,7 @@ describe("PerformanceTimer", () => {
     });
 
     it("returns time in milliseconds when difference is 1 ms or greater", () => {
-      performanceNowStub.onCall(1).returns(1002.7); // end time
+      performanceNowStub.onCall(1).returns(1_002.7); // end time
 
       const startTime = PerformanceTimer.start();
       const result = PerformanceTimer.diff(startTime);
@@ -47,7 +47,7 @@ describe("PerformanceTimer", () => {
       const result = PerformanceTimer.start();
 
       assert.isNumber(result);
-      assert.equal(result, 1000);
+      assert.equal(result, 1_000);
     });
   });
 });
