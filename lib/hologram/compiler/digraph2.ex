@@ -19,15 +19,13 @@ defmodule Hologram.Compiler.Digraph2 do
   Automatically adds vertices if they don't exist.
   """
   @spec add_edge(t, vertex, vertex) :: t
-  def add_edge(
-        %Digraph2{
-          vertices: vertices,
-          outgoing_edges: outgoing_edges,
-          incoming_edges: incoming_edges
-        },
-        source,
-        target
-      ) do
+  def add_edge(graph, source, target) do
+    %Digraph2{
+      vertices: vertices,
+      outgoing_edges: outgoing_edges,
+      incoming_edges: incoming_edges
+    } = graph
+
     new_vertices =
       vertices
       |> Map.put(source, true)
@@ -58,16 +56,15 @@ defmodule Hologram.Compiler.Digraph2 do
   Adds multiple edges to the graph.
   """
   @spec add_edges(t, [edge]) :: t
-  # credo:disable-for-lines:42 Credo.Check.Refactor.ABCSize
+  # credo:disable-for-lines:41 Credo.Check.Refactor.ABCSize
   # The above Credo check is disabled because the function is optimised this way
-  def add_edges(
-        %Digraph2{
-          vertices: vertices,
-          outgoing_edges: outgoing_edges,
-          incoming_edges: incoming_edges
-        },
-        added_edges
-      ) do
+  def add_edges(graph, added_edges) do
+    %Digraph2{
+      vertices: vertices,
+      outgoing_edges: outgoing_edges,
+      incoming_edges: incoming_edges
+    } = graph
+
     acc = {vertices, outgoing_edges, incoming_edges}
 
     {new_vertices, new_outgoing_edges, new_incoming_edges} =
@@ -136,17 +133,15 @@ defmodule Hologram.Compiler.Digraph2 do
   This includes both outgoing edges from the vertex and incoming edges to the vertex.
   """
   @spec remove_vertex(t, vertex) :: t
-  # credo:disable-for-lines:65 /Credo.Check.Refactor.ABCSize|Credo.Check.Refactor.Nesting/
+  # credo:disable-for-lines:63 /Credo.Check.Refactor.ABCSize|Credo.Check.Refactor.Nesting/
   # The above Credo checks are disabled because the function is optimised this way
-  def remove_vertex(
-        %Digraph2{
-          vertices: vertices,
-          outgoing_edges: outgoing_edges,
-          incoming_edges: incoming_edges
-        } =
-          graph,
-        vertex
-      ) do
+  def remove_vertex(graph, vertex) do
+    %Digraph2{
+      vertices: vertices,
+      outgoing_edges: outgoing_edges,
+      incoming_edges: incoming_edges
+    } = graph
+
     # Capture the outgoing and incoming edges before removing them
     old_outgoing_targets = Map.get(outgoing_edges, vertex, %{})
     old_incoming_sources = Map.get(incoming_edges, vertex, %{})
