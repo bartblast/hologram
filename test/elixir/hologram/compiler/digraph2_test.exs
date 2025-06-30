@@ -340,4 +340,32 @@ defmodule Hologram.Compiler.Digraph2Test do
              }
     end
   end
+
+  describe "vertices/1" do
+    test "returns empty list for empty graph", %{empty_graph: graph} do
+      result = vertices(graph)
+
+      assert result == []
+    end
+
+    test "returns vertices when graph has only vertices (no edges)", %{empty_graph: graph} do
+      result =
+        graph
+        |> add_vertices([:a, :b, :c])
+        |> vertices()
+
+      assert Enum.sort(result) == [:a, :b, :c]
+    end
+
+    test "returns vertices when graph has vertices and edges", %{empty_graph: graph} do
+      result =
+        graph
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> add_vertex(:d)
+        |> vertices()
+
+      assert Enum.sort(result) == [:a, :b, :c, :d]
+    end
+  end
 end

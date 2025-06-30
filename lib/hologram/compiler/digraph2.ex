@@ -289,4 +289,12 @@ defmodule Hologram.Compiler.Digraph2 do
         incoming_edges: cleaned_incoming_edges
     }
   end
+
+  @doc """
+  Returns a list of all vertices in the graph.
+  """
+  @spec vertices(t) :: [vertex]
+  def vertices(%Digraph2{vertices: vertices}) do
+    Map.keys(vertices)
+  end
 end
