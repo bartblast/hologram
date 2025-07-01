@@ -1,111 +1,160 @@
-defmodule Hologram.Compiler.Digraph do
+defmodule Hologram.Compiler.Digraph2 do
   @moduledoc false
-  # A high-performance directed graph implementation optimized for large datasets
-  # and concurrent access. Uses ETS tables for storage.
 
-  # This implementation stores:
-  # - Vertices in an ETS set
-  # - Edges in an ETS bag (allows duplicate edges with same source)
-  # - Reverse edges in another ETS bag for efficient inbound edges queries
+  alias Hologram.Compiler.Digraph2
 
-  alias Hologram.Compiler.Digraph
-
-  defstruct [:vertices_table, :edges_table, :reverse_edges_table]
+  defstruct [:vertices, :outgoing_edges, :incoming_edges]
 
   @type t :: %__MODULE__{
-          vertices_table: :ets.tid(),
-          edges_table: :ets.tid(),
-          reverse_edges_table: :ets.tid()
+          vertices: %{any => boolean},
+          outgoing_edges: %{any => %{any => boolean}},
+          incoming_edges: %{any => %{any => boolean}}
         }
 
   @type edge :: {vertex, vertex}
   @type vertex :: any
 
   @doc """
-  Adds a vertex to the graph.
-  """
-  @spec add_vertex(t, vertex) :: t
-  def add_vertex(%Digraph{vertices_table: vertices_table} = graph, vertex) do
-    :ets.insert(vertices_table, {vertex})
-    graph
-  end
-
-  @doc """
-  Adds multiple vertices to the graph.
-  """
-  @spec add_vertices(t, [vertex]) :: t
-  def add_vertices(%Digraph{vertices_table: vertices_table} = graph, vertices) do
-    objects = Enum.map(vertices, &{&1})
-    :ets.insert(vertices_table, objects)
-    graph
-  end
-
-  @doc """
   Adds an edge from source to target vertex.
   Automatically adds vertices if they don't exist.
   """
   @spec add_edge(t, vertex, vertex) :: t
-  def add_edge(
-        %Digraph{
-          vertices_table: vertices_table,
-          edges_table: edges_table,
-          reverse_edges_table: reverse_edges_table
-        } = graph,
-        source,
-        target
-      ) do
-    :ets.insert(vertices_table, [{source}, {target}])
+  def add_edge(graph, source, target) do
+    %Digraph2{
+      vertices: vertices,
+      outgoing_edges: outgoing_edges,
+      incoming_edges: incoming_edges
+    } = graph
 
-    :ets.insert(edges_table, {source, target})
+    new_vertices =
+      vertices
+      |> Map.put(source, true)
+      |> Map.put(target, true)
 
-    :ets.insert(reverse_edges_table, {target, source})
+    targets =
+      outgoing_edges
+      |> Map.get(source, %{})
+      |> Map.put(target, true)
 
-    graph
+    new_outgoing_edges = Map.put(outgoing_edges, source, targets)
+
+    sources =
+      incoming_edges
+      |> Map.get(target, %{})
+      |> Map.put(source, true)
+
+    new_incoming_edges = Map.put(incoming_edges, target, sources)
+
+    %Digraph2{
+      vertices: new_vertices,
+      outgoing_edges: new_outgoing_edges,
+      incoming_edges: new_incoming_edges
+    }
   end
 
   @doc """
   Adds multiple edges to the graph.
   """
   @spec add_edges(t, [edge]) :: t
-  def add_edges(
-        %Digraph{
-          edges_table: edges_table,
-          reverse_edges_table: reverse_edges_table
-        } = graph,
-        edges
-      ) do
-    vertices = Enum.reduce(edges, [], fn {source, target}, acc -> [source | [target | acc]] end)
-    add_vertices(graph, vertices)
+  # credo:disable-for-lines:41 Credo.Check.Refactor.ABCSize
+  # The above Credo check is disabled because the function is optimised this way
+  def add_edges(graph, added_edges) do
+    %Digraph2{
+      vertices: vertices,
+      outgoing_edges: outgoing_edges,
+      incoming_edges: incoming_edges
+    } = graph
 
-    :ets.insert(edges_table, edges)
+    acc = {vertices, outgoing_edges, incoming_edges}
 
-    reverse_edges = Enum.map(edges, fn {source, target} -> {target, source} end)
+    {new_vertices, new_outgoing_edges, new_incoming_edges} =
+      Enum.reduce(added_edges, acc, fn {source, target},
+                                       {acc_vertices, acc_outgoing_edges, acc_incoming_edges} ->
+        new_acc_vertices =
+          acc_vertices
+          |> Map.put(source, true)
+          |> Map.put(target, true)
 
-    :ets.insert(reverse_edges_table, reverse_edges)
+        targets =
+          acc_outgoing_edges
+          |> Map.get(source, %{})
+          |> Map.put(target, true)
 
-    graph
+        new_acc_outgoing_edges = Map.put(acc_outgoing_edges, source, targets)
+
+        sources =
+          acc_incoming_edges
+          |> Map.get(target, %{})
+          |> Map.put(source, true)
+
+        new_acc_incoming_edges = Map.put(acc_incoming_edges, target, sources)
+
+        {new_acc_vertices, new_acc_outgoing_edges, new_acc_incoming_edges}
+      end)
+
+    %Digraph2{
+      vertices: new_vertices,
+      outgoing_edges: new_outgoing_edges,
+      incoming_edges: new_incoming_edges
+    }
   end
 
   @doc """
-  Returns all edges in the graph.
+  Adds a vertex to the graph.
+  """
+  @spec add_vertex(t, vertex) :: t
+  def add_vertex(%Digraph2{vertices: vertices} = graph, vertex) do
+    %{graph | vertices: Map.put(vertices, vertex, true)}
+  end
+
+  @doc """
+  Adds multiple vertices to the graph.
+  """
+  @spec add_vertices(t, [vertex]) :: t
+  def add_vertices(%Digraph2{vertices: old_vertices} = graph, added_vertices) do
+    new_vertices =
+      Enum.reduce(added_vertices, old_vertices, fn vertex, acc ->
+        Map.put(acc, vertex, true)
+      end)
+
+    %{graph | vertices: new_vertices}
+  end
+
+  @doc """
+  Returns a list of all edges in the graph.
+  Each edge is represented as a tuple {source_vertex, target_vertex}.
   """
   @spec edges(t) :: [edge]
-  def edges(%Digraph{edges_table: edges_table}) do
-    :ets.tab2list(edges_table)
+  def edges(graph) do
+    %Digraph2{outgoing_edges: outgoing_edges} = graph
+
+    for {source, targets} <- outgoing_edges, {target, _flag} <- targets do
+      {source, target}
+    end
   end
 
   @doc """
   Checks if an edge exists between source and target.
   """
   @spec has_edge?(t, vertex, vertex) :: boolean
-  def has_edge?(%Digraph{edges_table: edges_table}, source, target) do
-    case :ets.lookup(edges_table, source) do
-      [] ->
-        false
+  def has_edge?(graph, source, target) do
+    %Digraph2{outgoing_edges: outgoing_edges} = graph
 
-      edges_from_source ->
-        Enum.any?(edges_from_source, fn {_source, t} -> t == target end)
+    case Map.get(outgoing_edges, source) do
+      nil -> false
+      targets -> Map.has_key?(targets, target)
     end
+  end
+
+  @doc """
+  Returns a list of all incoming edges to the given vertex.
+  Each edge is represented as a tuple {source_vertex, target_vertex}.
+  """
+  @spec incoming_edges(t, vertex) :: [edge]
+  def incoming_edges(%Digraph2{incoming_edges: incoming_edges_map}, vertex) do
+    incoming_edges_map
+    |> Map.get(vertex, %{})
+    |> Enum.map(fn {source, _flag} -> {source, vertex} end)
   end
 
   @doc """
@@ -113,14 +162,193 @@ defmodule Hologram.Compiler.Digraph do
   """
   @spec new :: t
   def new do
-    vertices_table = :ets.new(:vertices, [:set, :public, {:write_concurrency, true}])
-    edges_table = :ets.new(:edges, [:bag, :public, {:write_concurrency, true}])
-    reverse_edges_table = :ets.new(:reverse_edges, [:bag, :public, {:write_concurrency, true}])
+    %Digraph2{vertices: %{}, outgoing_edges: %{}, incoming_edges: %{}}
+  end
 
-    %Digraph{
-      vertices_table: vertices_table,
-      edges_table: edges_table,
-      reverse_edges_table: reverse_edges_table
+  @doc """
+  Returns a list of all vertices reachable from the given list of starting vertices.
+  Uses breadth-first search to efficiently traverse the graph.
+  If none of the starting vertices exist in the graph, returns an empty list.
+  Non-existent starting vertices are ignored.
+  """
+  @spec reachable(t, [vertex]) :: [vertex]
+  def reachable(graph, starting_vertices) do
+    %Digraph2{vertices: vertices, outgoing_edges: outgoing_edges} = graph
+
+    existing_vertices = Enum.filter(starting_vertices, &Map.has_key?(vertices, &1))
+
+    if existing_vertices == [] do
+      []
+    else
+      # BFS to find all reachable vertices
+      queue = :queue.from_list(existing_vertices)
+      visited = MapSet.new(existing_vertices)
+
+      queue
+      |> bfs_reachable(visited, outgoing_edges)
+      |> MapSet.to_list()
+    end
+  end
+
+  @doc """
+  Removes a vertex from the graph along with all edges connected to it.
+  This includes both outgoing edges from the vertex and incoming edges to the vertex.
+  """
+  @spec remove_vertex(t, vertex) :: t
+  # credo:disable-for-lines:63 /Credo.Check.Refactor.ABCSize|Credo.Check.Refactor.Nesting/
+  # The above Credo checks are disabled because the function is optimised this way
+  def remove_vertex(graph, vertex) do
+    %Digraph2{
+      vertices: vertices,
+      outgoing_edges: outgoing_edges,
+      incoming_edges: incoming_edges
+    } = graph
+
+    # Capture the outgoing and incoming edges before removing them
+    old_outgoing_targets = Map.get(outgoing_edges, vertex, %{})
+    old_incoming_sources = Map.get(incoming_edges, vertex, %{})
+
+    new_vertices = Map.delete(vertices, vertex)
+    outgoing_edges_without_vertex = Map.delete(outgoing_edges, vertex)
+    incoming_edges_without_vertex = Map.delete(incoming_edges, vertex)
+
+    # Clean up edges: remove references to the removed vertex
+    # from all vertices that pointed to it
+    cleaned_outgoing_edges =
+      Enum.reduce(old_incoming_sources, outgoing_edges_without_vertex, fn {source, _target},
+                                                                          acc_outgoing_edges ->
+        case Map.get(acc_outgoing_edges, source) do
+          nil ->
+            acc_outgoing_edges
+
+          targets ->
+            cleaned_targets = Map.delete(targets, vertex)
+
+            if map_size(cleaned_targets) == 0 do
+              Map.delete(acc_outgoing_edges, source)
+            else
+              Map.put(acc_outgoing_edges, source, cleaned_targets)
+            end
+        end
+      end)
+
+    # Clean up reverse edges: remove references to the removed vertex
+    # from all vertices it pointed to
+    cleaned_incoming_edges =
+      Enum.reduce(old_outgoing_targets, incoming_edges_without_vertex, fn {target, _source},
+                                                                          acc_incomming_edges ->
+        case Map.get(acc_incomming_edges, target) do
+          nil ->
+            acc_incomming_edges
+
+          sources ->
+            cleaned_sources = Map.delete(sources, vertex)
+
+            if map_size(cleaned_sources) == 0 do
+              Map.delete(acc_incomming_edges, target)
+            else
+              Map.put(acc_incomming_edges, target, cleaned_sources)
+            end
+        end
+      end)
+
+    %{
+      graph
+      | vertices: new_vertices,
+        outgoing_edges: cleaned_outgoing_edges,
+        incoming_edges: cleaned_incoming_edges
+    }
+  end
+
+  @doc """
+  Removes multiple vertices from the graph along with all edges connected to them.
+  This includes both outgoing edges from the vertices and incoming edges to the vertices.
+  """
+  @spec remove_vertices(t, [vertex]) :: t
+  # credo:disable-for-lines:85 /Credo.Check.Refactor.ABCSize|Credo.Check.Refactor.Nesting/
+  # The above Credo checks are disabled because the function is optimised this way
+  def remove_vertices(graph, vertices_to_remove) do
+    %Digraph2{
+      vertices: vertices,
+      outgoing_edges: outgoing_edges,
+      incoming_edges: incoming_edges
+    } = graph
+
+    {vertices_needing_outgoing_cleanup, vertices_needing_incoming_cleanup} =
+      Enum.reduce(vertices_to_remove, {MapSet.new(), MapSet.new()}, fn vertex,
+                                                                       {acc_incoming_sources,
+                                                                        acc_outgoing_targets} ->
+        incoming_sources =
+          incoming_edges
+          |> Map.get(vertex, %{})
+          |> Map.keys()
+          |> MapSet.new()
+
+        outgoing_targets =
+          outgoing_edges
+          |> Map.get(vertex, %{})
+          |> Map.keys()
+          |> MapSet.new()
+
+        {MapSet.union(acc_incoming_sources, incoming_sources),
+         MapSet.union(acc_outgoing_targets, outgoing_targets)}
+      end)
+
+    new_vertices = Map.drop(vertices, vertices_to_remove)
+    outgoing_edges_without_removed_vertices = Map.drop(outgoing_edges, vertices_to_remove)
+    incoming_edges_without_removed_vertices = Map.drop(incoming_edges, vertices_to_remove)
+
+    # Clean up outgoing edges: remove references to removed vertices
+    # from all vertices that pointed to them
+    cleaned_outgoing_edges =
+      Enum.reduce(
+        vertices_needing_outgoing_cleanup,
+        outgoing_edges_without_removed_vertices,
+        fn source, acc_outgoing_edges ->
+          case Map.get(acc_outgoing_edges, source) do
+            nil ->
+              acc_outgoing_edges
+
+            targets ->
+              cleaned_targets = Map.drop(targets, vertices_to_remove)
+
+              if map_size(cleaned_targets) == 0 do
+                Map.delete(acc_outgoing_edges, source)
+              else
+                Map.put(acc_outgoing_edges, source, cleaned_targets)
+              end
+          end
+        end
+      )
+
+    # Clean up incoming edges: remove references to removed vertices
+    # from all vertices they pointed to
+    cleaned_incoming_edges =
+      Enum.reduce(
+        vertices_needing_incoming_cleanup,
+        incoming_edges_without_removed_vertices,
+        fn target, acc_incoming_edges ->
+          case Map.get(acc_incoming_edges, target) do
+            nil ->
+              acc_incoming_edges
+
+            sources ->
+              cleaned_sources = Map.drop(sources, vertices_to_remove)
+
+              if map_size(cleaned_sources) == 0 do
+                Map.delete(acc_incoming_edges, target)
+              else
+                Map.put(acc_incoming_edges, target, cleaned_sources)
+              end
+          end
+        end
+      )
+
+    %{
+      graph
+      | vertices: new_vertices,
+        outgoing_edges: cleaned_outgoing_edges,
+        incoming_edges: cleaned_incoming_edges
     }
   end
 
@@ -128,7 +356,7 @@ defmodule Hologram.Compiler.Digraph do
   Returns all edges in the graph sorted in ascending order.
   """
   @spec sorted_edges(t) :: [edge]
-  def sorted_edges(%Digraph{} = graph) do
+  def sorted_edges(graph) do
     graph
     |> edges()
     |> Enum.sort()
@@ -138,17 +366,47 @@ defmodule Hologram.Compiler.Digraph do
   Returns all vertices in the graph sorted in ascending order.
   """
   @spec sorted_vertices(t) :: [vertex]
-  def sorted_vertices(%Digraph{} = graph) do
+  def sorted_vertices(graph) do
     graph
     |> vertices()
     |> Enum.sort()
   end
 
   @doc """
-  Returns all vertices in the graph.
+  Returns a list of all vertices in the graph.
   """
   @spec vertices(t) :: [vertex]
-  def vertices(%Digraph{vertices_table: vertices_table}) do
-    :ets.select(vertices_table, [{{:"$1"}, [], [:"$1"]}])
+  def vertices(%Digraph2{vertices: vertices}) do
+    Map.keys(vertices)
+  end
+
+  # BFS traversal
+  # credo:disable-for-lines:27 Credo.Check.Refactor.Nesting
+  # The above Credo check is disabled because the function is optimised this way
+  defp bfs_reachable(queue, visited, outgoing_edges) do
+    case :queue.out(queue) do
+      {{:value, current}, rest_queue} ->
+        # Get neighbors of current vertex
+        neighbors = Map.get(outgoing_edges, current, %{})
+
+        # Add unvisited neighbors to queue and visited set
+        {new_queue, new_visited} =
+          Enum.reduce(neighbors, {rest_queue, visited}, fn {neighbor, _flag},
+                                                           {acc_queue, acc_visited} ->
+            if MapSet.member?(acc_visited, neighbor) do
+              {acc_queue, acc_visited}
+            else
+              {
+                :queue.in(neighbor, acc_queue),
+                MapSet.put(acc_visited, neighbor)
+              }
+            end
+          end)
+
+        bfs_reachable(new_queue, new_visited, outgoing_edges)
+
+      {:empty, _queue} ->
+        visited
+    end
   end
 end
