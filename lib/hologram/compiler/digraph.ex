@@ -54,6 +54,7 @@ defmodule Hologram.Compiler.Digraph do
 
   @doc """
   Adds multiple edges to the graph.
+  Automatically adds vertices if they don't exist.
   """
   @spec add_edges(t, [edge]) :: t
   # credo:disable-for-lines:41 Credo.Check.Refactor.ABCSize

@@ -6,6 +6,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
 
@@ -61,36 +62,37 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   test "add_edge/3", %{empty_call_graph: call_graph} do
-    assert add_edge(call_graph, :vertex_1, :vertex_2) == call_graph
+    result = add_edge(call_graph, :vertex_1, :vertex_2)
+    assert result == call_graph
 
     graph = get_graph(call_graph)
-
-    assert Graph.edge(graph, :vertex_1, :vertex_2) == %Graph.Edge{
-             v1: :vertex_1,
-             v2: :vertex_2,
-             weight: 1,
-             label: nil
-           }
+    assert Digraph.edges(graph) == [{:vertex_1, :vertex_2}]
   end
 
   test "add_edges/2", %{empty_call_graph: call_graph} do
-    edges = [Graph.Edge.new(:a, :b), Graph.Edge.new(:c, :d)]
+    edges = [{:a, :b}, {:c, :d}]
+    result = add_edges(call_graph, edges)
 
-    assert add_edges(call_graph, edges) == call_graph
-    assert edges(call_graph) == edges
+    assert result == call_graph
+
+    graph = get_graph(call_graph)
+    assert Digraph.sorted_edges(graph) == edges
   end
 
   test "add_vertex/2", %{empty_call_graph: call_graph} do
-    assert add_vertex(call_graph, :vertex_3) == call_graph
+    result = add_vertex(call_graph, :vertex_3)
+    assert result == call_graph
 
     graph = get_graph(call_graph)
-    assert Graph.has_vertex?(graph, :vertex_3)
+    assert Digraph.vertices(graph) == [:vertex_3]
   end
 
   describe "build/3" do
     test "atom type ir, which is not an alias", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: :abc}
-      assert build(call_graph, ir, :vertex_1) == call_graph
+      result = build(call_graph, ir, :vertex_1)
+
+      assert result == call_graph
 
       assert vertices(call_graph) == []
       assert edges(call_graph) == []
@@ -100,7 +102,9 @@ defmodule Hologram.Compiler.CallGraphTest do
       empty_call_graph: call_graph
     } do
       ir = %IR.AtomType{value: Aaa.Bbb}
-      assert build(call_graph, ir, :vertex_1) == call_graph
+      result = build(call_graph, ir, :vertex_1)
+
+      assert result == call_graph
 
       assert vertices(call_graph) == []
       assert edges(call_graph) == []
@@ -110,23 +114,20 @@ defmodule Hologram.Compiler.CallGraphTest do
       empty_call_graph: call_graph
     } do
       ir = %IR.AtomType{value: Module1}
-      assert build(call_graph, ir, :vertex_1) == call_graph
+      result = build(call_graph, ir, :vertex_1)
+
+      assert result == call_graph
 
       assert sorted_vertices(call_graph) == [Module1, :vertex_1]
 
-      assert edges(call_graph) == [
-               %Graph.Edge{
-                 v1: :vertex_1,
-                 v2: Module1,
-                 weight: 1,
-                 label: nil
-               }
-             ]
+      assert edges(call_graph) == [{:vertex_1, Module1}]
     end
 
     test "atom type ir, which is an alias of a page module", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: Module2}
-      assert build(call_graph, ir, :vertex_1) == call_graph
+      result = build(call_graph, ir, :vertex_1)
+
+      assert result == call_graph
 
       assert sorted_vertices(call_graph) == [
                Module2,
@@ -136,30 +137,17 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
 
       assert sorted_edges(call_graph) == [
-               %Graph.Edge{
-                 v1: Module2,
-                 v2: {Module2, :__params__, 0},
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: Module2,
-                 v2: {Module2, :__route__, 0},
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: :vertex_1,
-                 v2: Module2,
-                 weight: 1,
-                 label: nil
-               }
+               {Module2, {Module2, :__params__, 0}},
+               {Module2, {Module2, :__route__, 0}},
+               {:vertex_1, Module2}
              ]
     end
 
     test "atom type ir, which is an alias of a layout module", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: Module3}
-      assert build(call_graph, ir, :vertex_1) == call_graph
+      result = build(call_graph, ir, :vertex_1)
+
+      assert result == call_graph
 
       assert sorted_vertices(call_graph) == [
                Module3,
@@ -171,17 +159,19 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
 
       assert sorted_edges(call_graph) == [
-               %Graph.Edge{v1: Module3, v2: {Module3, :__props__, 0}, weight: 1, label: nil},
-               %Graph.Edge{v1: Module3, v2: {Module3, :action, 3}, weight: 1, label: nil},
-               %Graph.Edge{v1: Module3, v2: {Module3, :init, 2}, weight: 1, label: nil},
-               %Graph.Edge{v1: Module3, v2: {Module3, :template, 0}, weight: 1, label: nil},
-               %Graph.Edge{v1: :vertex_1, v2: Module3, weight: 1, label: nil}
+               {Module3, {Module3, :__props__, 0}},
+               {Module3, {Module3, :action, 3}},
+               {Module3, {Module3, :init, 2}},
+               {Module3, {Module3, :template, 0}},
+               {:vertex_1, Module3}
              ]
     end
 
     test "atom type ir, which is an alias of a component module", %{empty_call_graph: call_graph} do
       ir = %IR.AtomType{value: Module4}
-      assert build(call_graph, ir, :vertex_1) == call_graph
+      result = build(call_graph, ir, :vertex_1)
+
+      assert result == call_graph
 
       assert sorted_vertices(call_graph) == [
                Module4,
@@ -193,36 +183,11 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
 
       assert sorted_edges(call_graph) == [
-               %Graph.Edge{
-                 v1: Module4,
-                 v2: {Module4, :__props__, 0},
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: Module4,
-                 v2: {Module4, :action, 3},
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: Module4,
-                 v2: {Module4, :init, 2},
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: Module4,
-                 v2: {Module4, :template, 0},
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: :vertex_1,
-                 v2: Module4,
-                 weight: 1,
-                 label: nil
-               }
+               {Module4, {Module4, :__props__, 0}},
+               {Module4, {Module4, :action, 3}},
+               {Module4, {Module4, :init, 2}},
+               {Module4, {Module4, :template, 0}},
+               {:vertex_1, Module4}
              ]
     end
 
@@ -243,7 +208,9 @@ defmodule Hologram.Compiler.CallGraphTest do
         }
       }
 
-      assert build(call_graph, ir, Module1) == call_graph
+      result = build(call_graph, ir, Module1)
+
+      assert result == call_graph
 
       assert sorted_vertices(call_graph) == [
                Module5,
@@ -253,24 +220,9 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
 
       assert sorted_edges(call_graph) == [
-               %Graph.Edge{
-                 v1: {Module1, :my_fun, 2},
-                 v2: Module5,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: {Module1, :my_fun, 2},
-                 v2: Module6,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: {Module1, :my_fun, 2},
-                 v2: Module7,
-                 weight: 1,
-                 label: nil
-               }
+               {{Module1, :my_fun, 2}, Module5},
+               {{Module1, :my_fun, 2}, Module6},
+               {{Module1, :my_fun, 2}, Module7}
              ]
     end
 
@@ -290,7 +242,9 @@ defmodule Hologram.Compiler.CallGraphTest do
         }
       }
 
-      assert build(call_graph, ir, Module1) == call_graph
+      result = build(call_graph, ir, Module1)
+
+      assert result == call_graph
 
       assert sorted_vertices(call_graph) == [{Module1, :my_fun, 2}]
 
@@ -299,23 +253,15 @@ defmodule Hologram.Compiler.CallGraphTest do
 
     test "list", %{empty_call_graph: call_graph} do
       list = [%IR.AtomType{value: Module1}, %IR.AtomType{value: Module5}]
-      assert build(call_graph, list, :vertex_1) == call_graph
+      result = build(call_graph, list, :vertex_1)
+
+      assert result == call_graph
 
       assert sorted_vertices(call_graph) == [Module1, Module5, :vertex_1]
 
       assert sorted_edges(call_graph) == [
-               %Graph.Edge{
-                 v1: :vertex_1,
-                 v2: Module1,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: :vertex_1,
-                 v2: Module5,
-                 weight: 1,
-                 label: nil
-               }
+               {:vertex_1, Module1},
+               {:vertex_1, Module5}
              ]
     end
 
@@ -329,7 +275,9 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      assert build(call_graph, ir, {Module1, :my_fun_1, 4}) == call_graph
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert result == call_graph
 
       assert sorted_vertices(call_graph) == [
                Module5,
@@ -340,30 +288,10 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
 
       assert sorted_edges(call_graph) == [
-               %Graph.Edge{
-                 v1: {Module1, :my_fun_1, 4},
-                 v2: Module5,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: {Module1, :my_fun_1, 4},
-                 v2: Module6,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: {Module1, :my_fun_1, 4},
-                 v2: Module7,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: {Module1, :my_fun_1, 4},
-                 v2: {Module1, :my_fun_2, 3},
-                 weight: 1,
-                 label: nil
-               }
+               {{Module1, :my_fun_1, 4}, Module5},
+               {{Module1, :my_fun_1, 4}, Module6},
+               {{Module1, :my_fun_1, 4}, Module7},
+               {{Module1, :my_fun_1, 4}, {Module1, :my_fun_2, 3}}
              ]
     end
 
@@ -373,35 +301,17 @@ defmodule Hologram.Compiler.CallGraphTest do
         %IR.AtomType{value: Module6} => %IR.AtomType{value: Module7}
       }
 
-      assert build(call_graph, map, :vertex_1) == call_graph
+      result = build(call_graph, map, :vertex_1)
+
+      assert result == call_graph
 
       assert sorted_vertices(call_graph) == [Module1, Module5, Module6, Module7, :vertex_1]
 
       assert sorted_edges(call_graph) == [
-               %Graph.Edge{
-                 v1: :vertex_1,
-                 v2: Module1,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: :vertex_1,
-                 v2: Module5,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: :vertex_1,
-                 v2: Module6,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: :vertex_1,
-                 v2: Module7,
-                 weight: 1,
-                 label: nil
-               }
+               {:vertex_1, Module1},
+               {:vertex_1, Module5},
+               {:vertex_1, Module6},
+               {:vertex_1, Module7}
              ]
     end
 
@@ -417,7 +327,9 @@ defmodule Hologram.Compiler.CallGraphTest do
         }
       }
 
-      assert build(call_graph, ir) == call_graph
+      result = build(call_graph, ir)
+
+      assert result == call_graph
 
       assert sorted_vertices(call_graph) == [
                Module11,
@@ -428,30 +340,10 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
 
       assert sorted_edges(call_graph) == [
-               %Graph.Edge{
-                 v1: Module11,
-                 v2: Module5,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: Module11,
-                 v2: Module6,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: Module11,
-                 v2: {Module11, :__params__, 0},
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: Module11,
-                 v2: {Module11, :__route__, 0},
-                 weight: 1,
-                 label: nil
-               }
+               {Module11, Module5},
+               {Module11, Module6},
+               {Module11, {Module11, :__params__, 0}},
+               {Module11, {Module11, :__route__, 0}}
              ]
     end
 
@@ -466,7 +358,9 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      assert build(call_graph, ir, {Module1, :my_fun_1, 4}) == call_graph
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert result == call_graph
 
       assert sorted_vertices(call_graph) == [
                Module6,
@@ -477,30 +371,10 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
 
       assert sorted_edges(call_graph) == [
-               %Graph.Edge{
-                 v1: {Module1, :my_fun_1, 4},
-                 v2: Module6,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: {Module1, :my_fun_1, 4},
-                 v2: Module7,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: {Module1, :my_fun_1, 4},
-                 v2: Module8,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: {Module1, :my_fun_1, 4},
-                 v2: {Module5, :my_fun_2, 3},
-                 weight: 1,
-                 label: nil
-               }
+               {{Module1, :my_fun_1, 4}, Module6},
+               {{Module1, :my_fun_1, 4}, Module7},
+               {{Module1, :my_fun_1, 4}, Module8},
+               {{Module1, :my_fun_1, 4}, {Module5, :my_fun_2, 3}}
              ]
     end
 
@@ -515,7 +389,9 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      assert build(call_graph, ir, {Module1, :my_fun_1, 4}) == call_graph
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert result == call_graph
 
       assert sorted_vertices(call_graph) == [
                Module6,
@@ -525,24 +401,9 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
 
       assert sorted_edges(call_graph) == [
-               %Graph.Edge{
-                 v1: {Module1, :my_fun_1, 4},
-                 v2: Module6,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: {Module1, :my_fun_1, 4},
-                 v2: Module7,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: {Module1, :my_fun_1, 4},
-                 v2: Module8,
-                 weight: 1,
-                 label: nil
-               }
+               {{Module1, :my_fun_1, 4}, Module6},
+               {{Module1, :my_fun_1, 4}, Module7},
+               {{Module1, :my_fun_1, 4}, Module8}
              ]
     end
 
@@ -562,7 +423,9 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      assert build(call_graph, ir, {Module1, :my_fun_1, 4}) == call_graph
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert result == call_graph
 
       assert sorted_vertices(call_graph) == [
                Calendar.ISO,
@@ -571,18 +434,8 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
 
       assert sorted_edges(call_graph) == [
-               %Graph.Edge{
-                 v1: {Module1, :my_fun_1, 4},
-                 v2: Calendar.ISO,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: {Module1, :my_fun_1, 4},
-                 v2: {DateTime, :utc_now, 1},
-                 weight: 1,
-                 label: nil
-               }
+               {{Module1, :my_fun_1, 4}, Calendar.ISO},
+               {{Module1, :my_fun_1, 4}, {DateTime, :utc_now, 1}}
              ]
     end
 
@@ -602,7 +455,9 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      assert build(call_graph, ir, {Module1, :my_fun_1, 4}) == call_graph
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert result == call_graph
 
       assert sorted_vertices(call_graph) == [
                Calendar.ISO,
@@ -614,36 +469,11 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
 
       assert sorted_edges(call_graph) == [
-               %Graph.Edge{
-                 v1: DateTime,
-                 v2: {DateTime, :__struct__, 0},
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: DateTime,
-                 v2: {DateTime, :__struct__, 1},
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: {Module1, :my_fun_1, 4},
-                 v2: Calendar.ISO,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: {Module1, :my_fun_1, 4},
-                 v2: DateTime,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: {Module1, :my_fun_1, 4},
-                 v2: {:erlang, :apply, 3},
-                 weight: 1,
-                 label: nil
-               }
+               {DateTime, {DateTime, :__struct__, 0}},
+               {DateTime, {DateTime, :__struct__, 1}},
+               {{Module1, :my_fun_1, 4}, Calendar.ISO},
+               {{Module1, :my_fun_1, 4}, DateTime},
+               {{Module1, :my_fun_1, 4}, {:erlang, :apply, 3}}
              ]
     end
 
@@ -663,7 +493,9 @@ defmodule Hologram.Compiler.CallGraphTest do
         ]
       }
 
-      assert build(call_graph, ir, {Module1, :my_fun_1, 4}) == call_graph
+      result = build(call_graph, ir, {Module1, :my_fun_1, 4})
+
+      assert result == call_graph
 
       assert sorted_vertices(call_graph) == [
                Calendar.ISO,
@@ -672,40 +504,22 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
 
       assert sorted_edges(call_graph) == [
-               %Graph.Edge{
-                 v1: {Module1, :my_fun_1, 4},
-                 v2: Calendar.ISO,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: {Module1, :my_fun_1, 4},
-                 v2: {:erlang, :apply, 3},
-                 weight: 1,
-                 label: nil
-               }
+               {{Module1, :my_fun_1, 4}, Calendar.ISO},
+               {{Module1, :my_fun_1, 4}, {:erlang, :apply, 3}}
              ]
     end
 
     test "tuple", %{empty_call_graph: call_graph} do
       tuple = {%IR.AtomType{value: Module1}, %IR.AtomType{value: Module5}}
-      assert build(call_graph, tuple, :vertex_1) == call_graph
+      result = build(call_graph, tuple, :vertex_1)
+
+      assert result == call_graph
 
       assert sorted_vertices(call_graph) == [Module1, Module5, :vertex_1]
 
       assert sorted_edges(call_graph) == [
-               %Graph.Edge{
-                 v1: :vertex_1,
-                 v2: Module1,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: :vertex_1,
-                 v2: Module5,
-                 weight: 1,
-                 label: nil
-               }
+               {:vertex_1, Module1},
+               {:vertex_1, Module5}
              ]
     end
 
@@ -767,30 +581,10 @@ defmodule Hologram.Compiler.CallGraphTest do
            ]
 
     assert sorted_edges(call_graph) == [
-             %Graph.Edge{
-               v1: Module11,
-               v2: Module5,
-               weight: 1,
-               label: nil
-             },
-             %Graph.Edge{
-               v1: Module11,
-               v2: Module6,
-               weight: 1,
-               label: nil
-             },
-             %Graph.Edge{
-               v1: Module11,
-               v2: {Module11, :__params__, 0},
-               weight: 1,
-               label: nil
-             },
-             %Graph.Edge{
-               v1: Module11,
-               v2: {Module11, :__route__, 0},
-               weight: 1,
-               label: nil
-             }
+             {Module11, Module5},
+             {Module11, Module6},
+             {Module11, {Module11, :__params__, 0}},
+             {Module11, {Module11, :__route__, 0}}
            ]
   end
 
@@ -841,12 +635,12 @@ defmodule Hologram.Compiler.CallGraphTest do
     result = edges(call_graph)
 
     assert Enum.count(result) == 2
-    assert %Graph.Edge{v1: :vertex_2, v2: :vertex_3, weight: 1, label: nil} in result
-    assert %Graph.Edge{v1: :vertex_4, v2: :vertex_5, weight: 1, label: nil} in result
+    assert {:vertex_2, :vertex_3} in result
+    assert {:vertex_4, :vertex_5} in result
   end
 
   test "get_graph/1", %{empty_call_graph: call_graph} do
-    assert %Graph{} = get_graph(call_graph)
+    assert %Digraph{} = get_graph(call_graph)
   end
 
   describe "has_edge?/3" do
@@ -869,48 +663,6 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "doesn't have the given vertex", %{empty_call_graph: call_graph} do
       refute has_vertex?(call_graph, :vertex)
     end
-  end
-
-  test "inbound_remote_edges/2", %{empty_call_graph: call_graph} do
-    call_graph
-    |> add_edge({:module_1, :fun_a, :arity_a}, {:module_2, :fun_b, :arity_b})
-    |> add_edge({:module_3, :fun_c, :arity_c}, {:module_2, :fun_d, :arity_d})
-    |> add_edge({:module_4, :fun_e, :arity_e}, :module_2)
-    |> add_edge({:module_5, :fun_f, :arity_f}, :module_2)
-    |> add_edge({:module_6, :fun_g, :arity_g}, {:module_7, :fun_h, :arity_h})
-    |> add_edge({:module_8, :fun_i, :arity_i}, :module_9)
-
-    result =
-      call_graph
-      |> inbound_remote_edges(:module_2)
-      |> Enum.sort()
-
-    assert result == [
-             %Graph.Edge{
-               v1: {:module_1, :fun_a, :arity_a},
-               v2: {:module_2, :fun_b, :arity_b},
-               weight: 1,
-               label: nil
-             },
-             %Graph.Edge{
-               v1: {:module_3, :fun_c, :arity_c},
-               v2: {:module_2, :fun_d, :arity_d},
-               weight: 1,
-               label: nil
-             },
-             %Graph.Edge{
-               v1: {:module_4, :fun_e, :arity_e},
-               v2: :module_2,
-               weight: 1,
-               label: nil
-             },
-             %Graph.Edge{
-               v1: {:module_5, :fun_f, :arity_f},
-               v2: :module_2,
-               weight: 1,
-               label: nil
-             }
-           ]
   end
 
   test "list_page_entry_mfas/1" do
@@ -1187,7 +939,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       call_graph = start()
 
       assert maybe_load(call_graph, dump_path) == call_graph
-      assert get_graph(call_graph) == Graph.new()
+      assert get_graph(call_graph) == Digraph.new()
     end
   end
 
@@ -1260,12 +1012,7 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
 
       assert edges(call_graph) == [
-               %Graph.Edge{
-                 v1: {:module_5, :fun_h, :arity_h},
-                 v2: :module_6,
-                 weight: 1,
-                 label: nil
-               }
+               {{:module_5, :fun_h, :arity_h}, :module_6}
              ]
     end
 
@@ -1309,42 +1056,12 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
 
       assert sorted_edges(call_graph) == [
-               %Graph.Edge{
-                 v1: {Module10, :my_fun_3, 0},
-                 v2: {Module10, :my_fun_4, 0},
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: {Module9, :my_fun_1, 0},
-                 v2: {Module9, :my_fun_2, 0},
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: {:module_1, :fun_a, :arity_a},
-                 v2: {Module9, :my_fun_1, 0},
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: {:module_1, :fun_d, :arity_d},
-                 v2: Module9,
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: {:module_2, :fun_b, :arity_b},
-                 v2: {Module9, :my_fun_2, 0},
-                 weight: 1,
-                 label: nil
-               },
-               %Graph.Edge{
-                 v1: {:module_3, :fun_c, :arity_c},
-                 v2: Module9,
-                 weight: 1,
-                 label: nil
-               }
+               {{Module10, :my_fun_3, 0}, {Module10, :my_fun_4, 0}},
+               {{Module9, :my_fun_1, 0}, {Module9, :my_fun_2, 0}},
+               {{:module_1, :fun_a, :arity_a}, {Module9, :my_fun_1, 0}},
+               {{:module_1, :fun_d, :arity_d}, Module9},
+               {{:module_2, :fun_b, :arity_b}, {Module9, :my_fun_2, 0}},
+               {{:module_3, :fun_c, :arity_c}, Module9}
              ]
     end
   end
@@ -1356,78 +1073,26 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert get_graph(call_graph) == graph
   end
 
-  describe "reachable/2" do
-    setup do
-      # 1
-      # ├─ 2
-      # │  ├─ 4
-      # │  │  ├─ 8
-      # │  │  ├─ 9
-      # │  ├─ 5
-      # │  │  ├─ 10
-      # │  │  ├─ 11
-      # ├─ 3
-      # │  ├─ 6
-      # │  │  ├─ 12
-      # │  │  ├─ 13
-      # │  ├─ 7
-      # │  │  ├─ 14
-      # │  │  ├─ 15
+  test "remote_incoming_edges/2", %{empty_call_graph: call_graph} do
+    call_graph
+    |> add_edge({:module_1, :fun_a, :arity_a}, {:module_2, :fun_b, :arity_b})
+    |> add_edge({:module_3, :fun_c, :arity_c}, {:module_2, :fun_d, :arity_d})
+    |> add_edge({:module_4, :fun_e, :arity_e}, :module_2)
+    |> add_edge({:module_5, :fun_f, :arity_f}, :module_2)
+    |> add_edge({:module_6, :fun_g, :arity_g}, {:module_7, :fun_h, :arity_h})
+    |> add_edge({:module_8, :fun_i, :arity_i}, :module_9)
 
-      graph =
-        Graph.new()
-        |> Graph.add_edge(:vertex_1, :vertex_2)
-        |> Graph.add_edge(:vertex_1, :vertex_3)
-        |> Graph.add_edge(:vertex_2, :vertex_4)
-        |> Graph.add_edge(:vertex_2, :vertex_5)
-        |> Graph.add_edge(:vertex_3, :vertex_6)
-        |> Graph.add_edge(:vertex_3, :vertex_7)
-        |> Graph.add_edge(:vertex_4, :vertex_8)
-        |> Graph.add_edge(:vertex_4, :vertex_9)
-        |> Graph.add_edge(:vertex_5, :vertex_10)
-        |> Graph.add_edge(:vertex_5, :vertex_11)
-        |> Graph.add_edge(:vertex_6, :vertex_12)
-        |> Graph.add_edge(:vertex_6, :vertex_13)
-        |> Graph.add_edge(:vertex_7, :vertex_14)
-        |> Graph.add_edge(:vertex_7, :vertex_15)
+    result =
+      call_graph
+      |> remote_incoming_edges(:module_2)
+      |> Enum.sort()
 
-      [graph: graph]
-    end
-
-    test "single vertex argument", %{graph: graph} do
-      assert reachable(graph, :vertex_3) == [
-               :vertex_15,
-               :vertex_14,
-               :vertex_7,
-               :vertex_13,
-               :vertex_12,
-               :vertex_6,
-               :vertex_3
-             ]
-    end
-
-    test "multiple vertices argument", %{graph: graph} do
-      assert reachable(graph, [:vertex_3, :vertex_5]) == [
-               :vertex_11,
-               :vertex_10,
-               :vertex_5,
-               :vertex_15,
-               :vertex_14,
-               :vertex_7,
-               :vertex_13,
-               :vertex_12,
-               :vertex_6,
-               :vertex_3
-             ]
-    end
-
-    test "vertex that is not in the call graph", %{graph: graph} do
-      assert reachable(graph, :not_in_call_graph) == []
-    end
-
-    test "vertices that are not in the call graph", %{graph: graph} do
-      assert reachable(graph, [:not_in_call_graph_1, :not_in_call_graph_2]) == []
-    end
+    assert result == [
+             {{:module_1, :fun_a, :arity_a}, {:module_2, :fun_b, :arity_b}},
+             {{:module_3, :fun_c, :arity_c}, {:module_2, :fun_d, :arity_d}},
+             {{:module_4, :fun_e, :arity_e}, :module_2},
+             {{:module_5, :fun_f, :arity_f}, :module_2}
+           ]
   end
 
   describe "remove_manually_ported_mfas/1" do
@@ -1513,8 +1178,8 @@ defmodule Hologram.Compiler.CallGraphTest do
     |> add_edge(:vertex_2, :vertex_3)
 
     assert sorted_edges(call_graph) == [
-             %Graph.Edge{v1: :vertex_2, v2: :vertex_3, weight: 1, label: nil},
-             %Graph.Edge{v1: :vertex_4, v2: :vertex_5, weight: 1, label: nil}
+             {:vertex_2, :vertex_3},
+             {:vertex_4, :vertex_5}
            ]
   end
 
@@ -1538,28 +1203,28 @@ defmodule Hologram.Compiler.CallGraphTest do
       # |  |  |- {Collectable.Atom, :fca, 123}
 
       graph =
-        Graph.new()
-        |> Graph.add_edge(:vertex_1, {Module2, :f2, 2})
-        |> Graph.add_edge(:vertex_1, {Module3, :f3, 3})
-        |> Graph.add_edge({Module2, :f2, 2}, :vertex_4)
-        |> Graph.add_edge({Module2, :f2, 2}, {Module5, :f5, 5})
-        |> Graph.add_edge({Module3, :f3, 3}, :vertex_6)
-        |> Graph.add_edge({Module3, :f3, 3}, {Module7, :f7, 7})
-        |> Graph.add_edge(:vertex_4, {Module8, :f8, 8})
-        |> Graph.add_edge(:vertex_4, :vertex_9)
-        |> Graph.add_edge({Module5, :f5, 5}, :vertex_10)
-        |> Graph.add_edge({Module5, :f5, 5}, :vertex_11)
-        |> Graph.add_edge(:vertex_6, {Module11, :f12, 12})
-        |> Graph.add_edge(:vertex_6, :vertex_13)
-        |> Graph.add_edge({Module7, :f7, 7}, :vertex_14)
-        |> Graph.add_edge({Module7, :f7, 7}, {Module15, :f15, 15})
-        |> Graph.add_edge({Module7, :f7, 7}, {Collectable.Atom, :fca, 123})
+        Digraph.new()
+        |> Digraph.add_edge(:vertex_1, {Module2, :f2, 2})
+        |> Digraph.add_edge(:vertex_1, {Module3, :f3, 3})
+        |> Digraph.add_edge({Module2, :f2, 2}, :vertex_4)
+        |> Digraph.add_edge({Module2, :f2, 2}, {Module5, :f5, 5})
+        |> Digraph.add_edge({Module3, :f3, 3}, :vertex_6)
+        |> Digraph.add_edge({Module3, :f3, 3}, {Module7, :f7, 7})
+        |> Digraph.add_edge(:vertex_4, {Module8, :f8, 8})
+        |> Digraph.add_edge(:vertex_4, :vertex_9)
+        |> Digraph.add_edge({Module5, :f5, 5}, :vertex_10)
+        |> Digraph.add_edge({Module5, :f5, 5}, :vertex_11)
+        |> Digraph.add_edge(:vertex_6, {Module11, :f12, 12})
+        |> Digraph.add_edge(:vertex_6, :vertex_13)
+        |> Digraph.add_edge({Module7, :f7, 7}, :vertex_14)
+        |> Digraph.add_edge({Module7, :f7, 7}, {Module15, :f15, 15})
+        |> Digraph.add_edge({Module7, :f7, 7}, {Collectable.Atom, :fca, 123})
 
       [graph: graph]
     end
 
     test "single MFA argument", %{graph: graph} do
-      assert sorted_reachable_mfas(graph, {Module3, :f3, 3}) == [
+      assert sorted_reachable_mfas(graph, [{Module3, :f3, 3}]) == [
                {Module11, :f12, 12},
                {Module15, :f15, 15},
                {Module3, :f3, 3},
@@ -1591,7 +1256,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     test "default graph param" do
       assert %CallGraph{pid: pid} = start()
       assert is_pid(pid)
-      assert Agent.get(pid, & &1) == Graph.new()
+      assert Agent.get(pid, & &1) == Digraph.new()
     end
 
     test "graph param specified" do

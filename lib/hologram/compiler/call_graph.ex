@@ -5,12 +5,15 @@ defmodule Hologram.Compiler.CallGraph do
   alias Hologram.Commons.SerializationUtils
   alias Hologram.Commons.TaskUtils
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
 
   defstruct pid: nil
+
   @type t :: %CallGraph{pid: pid}
 
+  @type edge :: {vertex, vertex}
   @type vertex :: module | mfa
 
   @erlang_mfa_edges [
@@ -123,35 +126,37 @@ defmodule Hologram.Compiler.CallGraph do
 
   @doc """
   Adds an edge between two vertices in the call graph.
+  Automatically adds vertices if they don't exist.
   """
-  @spec add_edge(CallGraph.t(), vertex, vertex) :: CallGraph.t()
+  @spec add_edge(t, vertex, vertex) :: t
   def add_edge(%{pid: pid} = call_graph, from_vertex, to_vertex) do
-    Agent.update(pid, &Graph.add_edge(&1, from_vertex, to_vertex), :infinity)
+    Agent.update(pid, &Digraph.add_edge(&1, from_vertex, to_vertex), :infinity)
     call_graph
   end
 
   @doc """
   Adds multiple edges to the call graph.
+  Automatically adds vertices if they don't exist.
   """
-  @spec add_edges(CallGraph.t(), list(Graph.Edge.t())) :: CallGraph.t()
+  @spec add_edges(t, [edge]) :: t
   def add_edges(%{pid: pid} = call_graph, edges) do
-    Agent.update(pid, &Graph.add_edges(&1, edges), :infinity)
+    Agent.update(pid, &Digraph.add_edges(&1, edges), :infinity)
     call_graph
   end
 
   @doc """
   Adds the vertex to the call graph.
   """
-  @spec add_vertex(CallGraph.t(), vertex) :: CallGraph.t()
+  @spec add_vertex(t, vertex) :: t
   def add_vertex(%{pid: pid} = call_graph, vertex) do
-    Agent.update(pid, &Graph.add_vertex(&1, vertex), :infinity)
+    Agent.update(pid, &Digraph.add_vertex(&1, vertex), :infinity)
     call_graph
   end
 
   @doc """
   Builds a call graph from IR.
   """
-  @spec build(CallGraph.t(), IR.t(), vertex | nil) :: CallGraph.t()
+  @spec build(t, IR.t(), vertex | nil) :: t
   def build(call_graph, ir, from_vertex \\ nil)
 
   def build(call_graph, %IR.AtomType{value: value}, from_vertex) do
@@ -265,7 +270,7 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Builds a call graph from a module definition IR located in the given IR PLT.
   """
-  @spec build_for_module(CallGraph.t(), PLT.t(), module) :: CallGraph.t()
+  @spec build_for_module(t, PLT.t(), module) :: t
   def build_for_module(call_graph, ir_plt, module) do
     module_def = PLT.get!(ir_plt, module)
     build(call_graph, module_def)
@@ -276,7 +281,7 @@ defmodule Hologram.Compiler.CallGraph do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/clone_1/README.md
   """
-  @spec clone(CallGraph.t()) :: CallGraph.t()
+  @spec clone(t) :: t
   def clone(call_graph) do
     graph = get_graph(call_graph)
     start(graph)
@@ -287,7 +292,7 @@ defmodule Hologram.Compiler.CallGraph do
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/dump_2/README.md
   """
-  @spec dump(CallGraph.t(), String.t()) :: CallGraph.t()
+  @spec dump(t, String.t()) :: t
   def dump(call_graph, path) do
     data =
       call_graph
@@ -306,15 +311,15 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Returns graph edges.
   """
-  @spec edges(CallGraph.t()) :: list(Graph.Edge.t())
+  @spec edges(t) :: [edge]
   def edges(%{pid: pid}) do
-    Agent.get(pid, &Graph.edges/1, :infinity)
+    Agent.get(pid, &Digraph.edges/1, :infinity)
   end
 
   @doc """
-  Returns the underlying libgraph %Graph{} struct containing vertices and edges data.
+  Returns the underlying %Digraph{} struct containing vertices and edges data.
   """
-  @spec get_graph(CallGraph.t()) :: Graph.t()
+  @spec get_graph(t) :: Digraph.t()
   def get_graph(%{pid: pid}) do
     Agent.get(pid, & &1, :infinity)
   end
@@ -322,39 +327,17 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Checks if an edge exists between two given vertices in the call graph.
   """
-  @spec has_edge?(CallGraph.t(), vertex, vertex) :: boolean
-  def has_edge?(call_graph, from_vertex, to_vertex) do
-    call_graph
-    |> get_graph()
-    |> Graph.edge(from_vertex, to_vertex)
-    |> is_struct(Graph.Edge)
+  @spec has_edge?(t, vertex, vertex) :: boolean
+  def has_edge?(%{pid: pid}, from_vertex, to_vertex) do
+    Agent.get(pid, &Digraph.has_edge?(&1, from_vertex, to_vertex), :infinity)
   end
 
   @doc """
   Checks if the given vertex exists in the call graph.
   """
-  @spec has_vertex?(CallGraph.t(), vertex) :: boolean
+  @spec has_vertex?(t, vertex) :: boolean
   def has_vertex?(%{pid: pid}, vertex) do
-    Agent.get(pid, &Graph.has_vertex?(&1, vertex), :infinity)
-  end
-
-  @doc """
-  Returns the edges in which the second vertex is either the given module or a function from the given module,
-  and the first vertex is a function from a different module.
-  """
-  @spec inbound_remote_edges(CallGraph.t(), module) :: list(Graph.Edge.t())
-  def inbound_remote_edges(call_graph, to_module) do
-    call_graph
-    |> module_vertices(to_module)
-    |> Enum.reduce([], fn vertex, acc ->
-      call_graph
-      |> inbound_edges(vertex)
-      |> Enum.filter(fn
-        %{v1: {from_module, _fun, _arity}} when from_module != to_module -> true
-        _fallback -> false
-      end)
-      |> Enum.concat(acc)
-    end)
+    Agent.get(pid, &Digraph.has_vertex?(&1, vertex), :infinity)
   end
 
   @doc """
@@ -372,7 +355,7 @@ defmodule Hologram.Compiler.CallGraph do
   A list of MFAs (tuples of {module, function, arity}) that serve as entry points
   for the given page module and its layout.
   """
-  @spec list_page_entry_mfas(module()) :: list(mfa)
+  @spec list_page_entry_mfas(module) :: [mfa]
   def list_page_entry_mfas(page_module) do
     layout_module = page_module.__layout_module__()
 
@@ -390,9 +373,9 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Returns the list of MFAs that are reachable by the given page.
+  Returns the sorted list of MFAs that are reachable by the given page.
   """
-  @spec list_page_mfas(CallGraph.t(), module) :: list(mfa)
+  @spec list_page_mfas(t, module) :: [mfa]
   def list_page_mfas(call_graph, page_module) do
     entry_mfas = list_page_entry_mfas(page_module)
     graph = get_graph(call_graph)
@@ -410,7 +393,7 @@ defmodule Hologram.Compiler.CallGraph do
   and client MFAs used by all pages and components.
   The returned MFAs are sorted.
   """
-  @spec list_runtime_entry_mfas :: list(mfa)
+  @spec list_runtime_entry_mfas :: [mfa]
   def list_runtime_entry_mfas do
     @mfas_used_by_client_runtime
     |> Enum.reduce(@mfas_used_by_all_pages_and_components, fn {_key, mfas}, acc ->
@@ -425,7 +408,7 @@ defmodule Hologram.Compiler.CallGraph do
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/list_runtime_mfas_1/README.md
   """
-  @spec list_runtime_mfas(CallGraph.t()) :: list(mfa)
+  @spec list_runtime_mfas(t) :: [mfa]
   def list_runtime_mfas(call_graph) do
     entry_mfas = list_runtime_entry_mfas()
 
@@ -439,7 +422,7 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Loads the graph from the given dump file.
   """
-  @spec load(CallGraph.t(), String.t()) :: CallGraph.t()
+  @spec load(t, String.t()) :: t
   def load(call_graph, dump_path) do
     graph =
       dump_path
@@ -452,7 +435,7 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Loads the graph from the given dump file if the file exists.
   """
-  @spec maybe_load(CallGraph.t(), String.t()) :: CallGraph.t()
+  @spec maybe_load(t, String.t()) :: t
   def maybe_load(call_graph, dump_path) do
     if File.exists?(dump_path) do
       load(call_graph, dump_path)
@@ -464,7 +447,7 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Returns the list of vertices that are MFAs belonging to the given module.
   """
-  @spec module_vertices(CallGraph.t(), module) :: list(vertex)
+  @spec module_vertices(t, module) :: [vertex]
   def module_vertices(call_graph, module) do
     call_graph
     |> vertices()
@@ -483,19 +466,19 @@ defmodule Hologram.Compiler.CallGraph do
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/patch_3/README.md
   """
-  @spec patch(CallGraph.t(), PLT.t(), map) :: CallGraph.t()
+  @spec patch(t, PLT.t(), map) :: t
   def patch(call_graph, ir_plt, diff) do
     remove_tasks =
       TaskUtils.async_many(diff.removed_modules, &remove_module_vertices(call_graph, &1))
 
     update_tasks =
       TaskUtils.async_many(diff.updated_modules, fn module ->
-        inbound_remote_edges = inbound_remote_edges(call_graph, module)
+        remote_incoming_edges = remote_incoming_edges(call_graph, module)
 
         call_graph
         |> remove_module_vertices(module)
         |> build_for_module(ir_plt, module)
-        |> add_edges(inbound_remote_edges)
+        |> add_edges(remote_incoming_edges)
       end)
 
     add_tasks =
@@ -511,26 +494,10 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Replace the state of underlying Agent process with the given graph.
   """
-  @spec put_graph(CallGraph.t(), Graph.t()) :: CallGraph.t()
+  @spec put_graph(t, Digraph.t()) :: t
   def put_graph(%{pid: pid} = call_graph, graph) do
     Agent.update(pid, fn _state -> graph end, :infinity)
     call_graph
-  end
-
-  @doc """
-  Lists vertices that are reachable from the given graph vertex or vertices.
-  """
-  @spec reachable(Graph.t(), vertex | list(vertex)) :: list(vertex)
-  def reachable(graph, vertex_or_vertices)
-
-  def reachable(graph, vertices) when is_list(vertices) do
-    graph
-    |> Graph.reachable(vertices)
-    |> Enum.reject(&(&1 == nil))
-  end
-
-  def reachable(graph, vertex) do
-    reachable(graph, [vertex])
   end
 
   defp reject_hex_solver_mfas(mfas) do
@@ -544,39 +511,62 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns the edges in which the second vertex is either the given module
+  or a function from the given module, and the first vertex is a function
+  from a different module.
+  """
+  @spec remote_incoming_edges(t, module) :: [edge]
+  def remote_incoming_edges(call_graph, to_module) do
+    call_graph
+    |> module_vertices(to_module)
+    |> Enum.reduce([], fn vertex, acc ->
+      call_graph
+      |> incoming_edges(vertex)
+      |> Enum.filter(fn
+        {{from_module, _fun, _arity}, _target} when from_module != to_module -> true
+        _fallback -> false
+      end)
+      |> Enum.concat(acc)
+    end)
+  end
+
+  @doc """
   Removes call graph vertices for Elixir functions ported manually.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/remove_manually_ported_mfas_1/README.md
   """
-  @spec remove_manually_ported_mfas(CallGraph.t()) :: CallGraph.t()
+  @spec remove_manually_ported_mfas(t) :: t
   def remove_manually_ported_mfas(call_graph) do
-    CallGraph.remove_vertices(call_graph, @manually_ported_mfas)
+    remove_vertices(call_graph, @manually_ported_mfas)
   end
 
   @doc """
   Removes call graph vertices and edges related to MFAs used by the runtime.
 
-  remove_vertices/2 is very slow on large graphs -
-  for a base case it would take over 7 seconds to remove runtime MFAs that way.
+  remove_vertices/2 is slow on very large graphs, and in such cases
+  it's faster to rebuild the call graph this way.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/remove_runtime_mfas!_2/README.md
   """
-  @spec remove_runtime_mfas!(CallGraph.t(), list(mfa)) :: CallGraph.t()
+  @spec remove_runtime_mfas!(t, [mfa]) :: t
   def remove_runtime_mfas!(call_graph, runtime_mfas) do
-    vertices = vertices(call_graph)
-    edges = edges(call_graph)
+    graph = get_graph(call_graph)
 
+    vertices = Digraph.vertices(graph)
     new_vertices = vertices -- runtime_mfas
 
-    new_edges =
-      Enum.reject(edges, fn %Graph.Edge{v1: from_vertex, v2: to_vertex} ->
-        to_vertex in runtime_mfas or from_vertex in runtime_mfas
+    outgoing_edges = Digraph.edges(graph)
+
+    new_outgoing_edges =
+      Enum.reject(outgoing_edges, fn {source, target} ->
+        # It's more probable for target vertex (than source vertex) to be in runtime MFAs 
+        target in runtime_mfas or source in runtime_mfas
       end)
 
     new_graph =
-      Graph.new()
-      |> Graph.add_vertices(new_vertices)
-      |> Graph.add_edges(new_edges)
+      Digraph.new()
+      |> Digraph.add_vertices(new_vertices)
+      |> Digraph.add_edges(new_outgoing_edges)
 
     put_graph(call_graph, new_graph)
   end
@@ -584,9 +574,9 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Removes the vertex from the call graph.
   """
-  @spec remove_vertex(CallGraph.t(), vertex) :: CallGraph.t()
+  @spec remove_vertex(t, vertex) :: t
   def remove_vertex(%{pid: pid} = call_graph, vertex) do
-    Agent.update(pid, &Graph.delete_vertex(&1, vertex), :infinity)
+    Agent.update(pid, &Digraph.remove_vertex(&1, vertex), :infinity)
     call_graph
   end
 
@@ -595,31 +585,29 @@ defmodule Hologram.Compiler.CallGraph do
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/remove_vertices_2/README.md
   """
-  @spec remove_vertices(CallGraph.t(), list(vertex)) :: CallGraph.t()
+  @spec remove_vertices(t, [vertex]) :: t
   def remove_vertices(%{pid: pid} = call_graph, vertices) do
-    Agent.update(pid, &Graph.delete_vertices(&1, vertices), :infinity)
+    Agent.update(pid, &Digraph.remove_vertices(&1, vertices), :infinity)
     call_graph
   end
 
   @doc """
-  Returns sorted graph edges.
+  Returns sorted call graph edges.
   """
-  @spec sorted_edges(CallGraph.t()) :: list(Graph.Edge.t())
-  def sorted_edges(call_graph) do
-    call_graph
-    |> edges()
-    |> Enum.sort()
+  @spec sorted_edges(t) :: [edge]
+  def sorted_edges(%{pid: pid}) do
+    Agent.get(pid, &Digraph.sorted_edges/1, :infinity)
   end
 
   @doc """
-  Lists MFAs that are reachable from the given call graph vertex or vertices.
+  Lists MFAs that are reachable from the given call graph vertices.
   Unimplemented protocol implentations are excluded.
   The MFAs returned are sorted.
   """
-  @spec sorted_reachable_mfas(Graph.t(), vertex | list(vertex)) :: list(mfa)
-  def sorted_reachable_mfas(graph, vertex_or_vertices) do
+  @spec sorted_reachable_mfas(Digraph.t(), [vertex]) :: [mfa]
+  def sorted_reachable_mfas(graph, vertices) do
     graph
-    |> reachable(vertex_or_vertices)
+    |> Digraph.reachable(vertices)
     |> Enum.filter(fn
       # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
       {module, _function, _arity} -> Reflection.module?(module)
@@ -629,46 +617,45 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
-  Returns sorted graph vertices.
+  Returns sorted call graph vertices.
   """
-  @spec sorted_vertices(CallGraph.t()) :: list(vertex)
-  def sorted_vertices(call_graph) do
-    call_graph
-    |> vertices()
-    |> Enum.sort()
+  @spec sorted_vertices(t) :: [vertex]
+  def sorted_vertices(%{pid: pid}) do
+    Agent.get(pid, &Digraph.sorted_vertices/1, :infinity)
   end
 
   @doc """
-  Starts a new CallGraph agent with (optional) initial graph.
+  Starts a new call graph agent with (optional) initial graph.
   """
-  @spec start(Graph.t()) :: CallGraph.t()
-  def start(graph \\ Graph.new()) do
+  @spec start(Digraph.t()) :: t
+  def start(graph \\ Digraph.new()) do
     {:ok, pid} = Agent.start_link(fn -> graph end)
     %CallGraph{pid: pid}
   end
 
   @doc """
-  Stops the CallGraph agent.
+  Stops the call graph agent.
   """
-  @spec stop(CallGraph.t()) :: :ok
+  @spec stop(t) :: :ok
   def stop(%CallGraph{pid: pid}) do
     Agent.stop(pid)
   end
 
   @doc """
-  Returns graph vertices.
+  Returns call graph vertices.
   """
-  @spec vertices(CallGraph.t()) :: list(vertex)
+  @spec vertices(t) :: [vertex]
   def vertices(%{pid: pid}) do
-    Agent.get(pid, &Graph.vertices/1, :infinity)
+    Agent.get(pid, &Digraph.vertices/1, :infinity)
   end
 
   # Add call graph edges for Erlang functions depending on other Erlang functions.
   # credo:disable-for-next-line Credo.Check.Refactor.ABCSize
   defp add_edges_for_erlang_functions(graph) do
-    Graph.add_edges(graph, @erlang_mfa_edges)
+    Digraph.add_edges(graph, @erlang_mfa_edges)
   end
 
+  # TODO: think how to avoid this
   # A component module can be passed as a prop to another component, allowing dynamic usage.
   # In such cases, when this scenario is identified, it becomes necessary
   # to include the entire component on the client side.
@@ -726,13 +713,13 @@ defmodule Hologram.Compiler.CallGraph do
     |> Enum.filter(&Reflection.component?/1)
   end
 
-  defp inbound_edges(%CallGraph{pid: pid}, vertex) do
-    Agent.get(pid, &Graph.in_edges(&1, vertex), :infinity)
+  defp incoming_edges(%CallGraph{pid: pid}, vertex) do
+    Agent.get(pid, &Digraph.incoming_edges(&1, vertex), :infinity)
   end
 
   defp list_reflection_mfas_reachable_from_server_init(templetable, graph) do
     graph
-    |> reachable({templetable, :init, 3})
+    |> Digraph.reachable([{templetable, :init, 3}])
     |> Enum.filter(fn mfa ->
       case mfa do
         {_module, :__changeset__, 0} -> true
@@ -748,9 +735,9 @@ defmodule Hologram.Compiler.CallGraph do
   defp maybe_add_ecto_schema_call_graph_edges(call_graph, module) do
     if Reflection.ecto_schema?(module) do
       add_edges(call_graph, [
-        Graph.Edge.new(module, {module, :__changeset__, 0}),
-        Graph.Edge.new(module, {module, :__schema__, 1}),
-        Graph.Edge.new(module, {module, :__schema__, 2})
+        {module, {module, :__changeset__, 0}},
+        {module, {module, :__schema__, 1}},
+        {module, {module, :__schema__, 2}}
       ])
     end
 
@@ -768,8 +755,8 @@ defmodule Hologram.Compiler.CallGraph do
   defp maybe_add_struct_call_graph_edges(call_graph, module) do
     if Reflection.has_struct?(module) do
       add_edges(call_graph, [
-        Graph.Edge.new(module, {module, :__struct__, 0}),
-        Graph.Edge.new(module, {module, :__struct__, 1})
+        {module, {module, :__struct__, 0}},
+        {module, {module, :__struct__, 1}}
       ])
     end
 

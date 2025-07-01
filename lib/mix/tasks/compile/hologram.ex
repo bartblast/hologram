@@ -61,8 +61,8 @@ defmodule Mix.Tasks.Compile.Hologram do
       ir_plt
       |> Compiler.build_call_graph()
       # DEFER: In case the list of manually ported MFAs grows to ~32 vertices,
-      # consider using similar strategy to CallGraph.remove_runtime_mfas!/2,
-      # e.g. implement opts param for CallGraph.remove_vertices/2 to allow rebuilding the graph.
+      # consider using similar strategy to CallGraph.remove_runtime_mfas!/2
+      # or implement opts param for Digraph.remove_vertices/2 to allow rebuilding the graph.
       |> CallGraph.remove_manually_ported_mfas()
 
     runtime_mfas = CallGraph.list_runtime_mfas(call_graph_for_runtime)
@@ -73,7 +73,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     Compiler.validate_page_modules(page_modules)
 
-    call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
+    call_graph_for_pages = CallGraph.remove_vertices(call_graph_for_runtime, runtime_mfas)
 
     page_entry_files_info =
       page_modules
