@@ -1,7 +1,7 @@
-defmodule Hologram.Compiler.Digraph2 do
+defmodule Hologram.Compiler.Digraph do
   @moduledoc false
 
-  alias Hologram.Compiler.Digraph2
+  alias Hologram.Compiler.Digraph
 
   defstruct [:vertices, :outgoing_edges, :incoming_edges]
 
@@ -20,7 +20,7 @@ defmodule Hologram.Compiler.Digraph2 do
   """
   @spec add_edge(t, vertex, vertex) :: t
   def add_edge(graph, source, target) do
-    %Digraph2{
+    %Digraph{
       vertices: vertices,
       outgoing_edges: outgoing_edges,
       incoming_edges: incoming_edges
@@ -45,7 +45,7 @@ defmodule Hologram.Compiler.Digraph2 do
 
     new_incoming_edges = Map.put(incoming_edges, target, sources)
 
-    %Digraph2{
+    %Digraph{
       vertices: new_vertices,
       outgoing_edges: new_outgoing_edges,
       incoming_edges: new_incoming_edges
@@ -59,7 +59,7 @@ defmodule Hologram.Compiler.Digraph2 do
   # credo:disable-for-lines:41 Credo.Check.Refactor.ABCSize
   # The above Credo check is disabled because the function is optimised this way
   def add_edges(graph, added_edges) do
-    %Digraph2{
+    %Digraph{
       vertices: vertices,
       outgoing_edges: outgoing_edges,
       incoming_edges: incoming_edges
@@ -92,7 +92,7 @@ defmodule Hologram.Compiler.Digraph2 do
         {new_acc_vertices, new_acc_outgoing_edges, new_acc_incoming_edges}
       end)
 
-    %Digraph2{
+    %Digraph{
       vertices: new_vertices,
       outgoing_edges: new_outgoing_edges,
       incoming_edges: new_incoming_edges
@@ -103,7 +103,7 @@ defmodule Hologram.Compiler.Digraph2 do
   Adds a vertex to the graph.
   """
   @spec add_vertex(t, vertex) :: t
-  def add_vertex(%Digraph2{vertices: vertices} = graph, vertex) do
+  def add_vertex(%Digraph{vertices: vertices} = graph, vertex) do
     %{graph | vertices: Map.put(vertices, vertex, true)}
   end
 
@@ -111,7 +111,7 @@ defmodule Hologram.Compiler.Digraph2 do
   Adds multiple vertices to the graph.
   """
   @spec add_vertices(t, [vertex]) :: t
-  def add_vertices(%Digraph2{vertices: old_vertices} = graph, added_vertices) do
+  def add_vertices(%Digraph{vertices: old_vertices} = graph, added_vertices) do
     new_vertices =
       Enum.reduce(added_vertices, old_vertices, fn vertex, acc ->
         Map.put(acc, vertex, true)
@@ -126,7 +126,7 @@ defmodule Hologram.Compiler.Digraph2 do
   """
   @spec edges(t) :: [edge]
   def edges(graph) do
-    %Digraph2{outgoing_edges: outgoing_edges} = graph
+    %Digraph{outgoing_edges: outgoing_edges} = graph
 
     for {source, targets} <- outgoing_edges, {target, _flag} <- targets do
       {source, target}
@@ -138,7 +138,7 @@ defmodule Hologram.Compiler.Digraph2 do
   """
   @spec has_edge?(t, vertex, vertex) :: boolean
   def has_edge?(graph, source, target) do
-    %Digraph2{outgoing_edges: outgoing_edges} = graph
+    %Digraph{outgoing_edges: outgoing_edges} = graph
 
     case Map.get(outgoing_edges, source) do
       nil -> false
@@ -151,7 +151,7 @@ defmodule Hologram.Compiler.Digraph2 do
   Each edge is represented as a tuple {source_vertex, target_vertex}.
   """
   @spec incoming_edges(t, vertex) :: [edge]
-  def incoming_edges(%Digraph2{incoming_edges: incoming_edges_map}, vertex) do
+  def incoming_edges(%Digraph{incoming_edges: incoming_edges_map}, vertex) do
     incoming_edges_map
     |> Map.get(vertex, %{})
     |> Enum.map(fn {source, _flag} -> {source, vertex} end)
@@ -162,7 +162,7 @@ defmodule Hologram.Compiler.Digraph2 do
   """
   @spec new :: t
   def new do
-    %Digraph2{vertices: %{}, outgoing_edges: %{}, incoming_edges: %{}}
+    %Digraph{vertices: %{}, outgoing_edges: %{}, incoming_edges: %{}}
   end
 
   @doc """
@@ -173,7 +173,7 @@ defmodule Hologram.Compiler.Digraph2 do
   """
   @spec reachable(t, [vertex]) :: [vertex]
   def reachable(graph, starting_vertices) do
-    %Digraph2{vertices: vertices, outgoing_edges: outgoing_edges} = graph
+    %Digraph{vertices: vertices, outgoing_edges: outgoing_edges} = graph
 
     existing_vertices = Enum.filter(starting_vertices, &Map.has_key?(vertices, &1))
 
@@ -198,7 +198,7 @@ defmodule Hologram.Compiler.Digraph2 do
   # credo:disable-for-lines:63 /Credo.Check.Refactor.ABCSize|Credo.Check.Refactor.Nesting/
   # The above Credo checks are disabled because the function is optimised this way
   def remove_vertex(graph, vertex) do
-    %Digraph2{
+    %Digraph{
       vertices: vertices,
       outgoing_edges: outgoing_edges,
       incoming_edges: incoming_edges
@@ -268,7 +268,7 @@ defmodule Hologram.Compiler.Digraph2 do
   # credo:disable-for-lines:85 /Credo.Check.Refactor.ABCSize|Credo.Check.Refactor.Nesting/
   # The above Credo checks are disabled because the function is optimised this way
   def remove_vertices(graph, vertices_to_remove) do
-    %Digraph2{
+    %Digraph{
       vertices: vertices,
       outgoing_edges: outgoing_edges,
       incoming_edges: incoming_edges
@@ -376,7 +376,7 @@ defmodule Hologram.Compiler.Digraph2 do
   Returns a list of all vertices in the graph.
   """
   @spec vertices(t) :: [vertex]
-  def vertices(%Digraph2{vertices: vertices}) do
+  def vertices(%Digraph{vertices: vertices}) do
     Map.keys(vertices)
   end
 
