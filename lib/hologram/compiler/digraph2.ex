@@ -353,6 +353,16 @@ defmodule Hologram.Compiler.Digraph2 do
   end
 
   @doc """
+  Returns all edges in the graph sorted in ascending order.
+  """
+  @spec sorted_edges(t) :: [edge]
+  def sorted_edges(graph) do
+    graph
+    |> edges()
+    |> Enum.sort()
+  end
+
+  @doc """
   Returns a list of all vertices in the graph.
   """
   @spec vertices(t) :: [vertex]

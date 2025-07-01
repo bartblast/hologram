@@ -851,6 +851,17 @@ defmodule Hologram.Compiler.Digraph2Test do
     end
   end
 
+  describe "sorted_edges/1" do
+    test "lists edges in sorted order" do
+      result =
+        new()
+        |> add_edges([{:b, :c}, {:a, :b}, {:d, :e}, {:d, :f}])
+        |> sorted_edges()
+
+      assert result == [{:a, :b}, {:b, :c}, {:d, :e}, {:d, :f}]
+    end
+  end
+
   describe "vertices/1" do
     test "returns empty list for empty graph" do
       result = vertices(new())
