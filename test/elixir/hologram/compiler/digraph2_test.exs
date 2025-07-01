@@ -335,11 +335,12 @@ defmodule Hologram.Compiler.Digraph2Test do
         |> add_edge(:b, :c)
         |> add_edge(:c, :a)
 
+      # Existing edges in the cycle
       assert has_edge?(graph, :a, :b) == true
       assert has_edge?(graph, :b, :c) == true
       assert has_edge?(graph, :c, :a) == true
 
-      # Test non-existing edges in the cycle
+      # Non-existing edges in the cycle
       assert has_edge?(graph, :a, :c) == false
       assert has_edge?(graph, :b, :a) == false
       assert has_edge?(graph, :c, :b) == false
