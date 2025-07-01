@@ -128,8 +128,7 @@ defmodule Hologram.Compiler.Digraph2 do
   def edges(graph) do
     %Digraph2{outgoing_edges: outgoing_edges} = graph
 
-    for {source, targets} <- outgoing_edges,
-        {target, _flag} <- targets do
+    for {source, targets} <- outgoing_edges, {target, _flag} <- targets do
       {source, target}
     end
   end
