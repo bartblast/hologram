@@ -164,36 +164,6 @@ defmodule Hologram.Compiler.Digraph2 do
     end
   end
 
-  # BFS traversal
-  # credo:disable-for-lines:27 Credo.Check.Refactor.Nesting
-  # The above Credo check is disabled because the function is optimised this way
-  defp bfs_reachable(queue, visited, outgoing_edges) do
-    case :queue.out(queue) do
-      {{:value, current}, rest_queue} ->
-        # Get neighbors of current vertex
-        neighbors = Map.get(outgoing_edges, current, %{})
-
-        # Add unvisited neighbors to queue and visited set
-        {new_queue, new_visited} =
-          Enum.reduce(neighbors, {rest_queue, visited}, fn {neighbor, _flag},
-                                                           {acc_queue, acc_visited} ->
-            if MapSet.member?(acc_visited, neighbor) do
-              {acc_queue, acc_visited}
-            else
-              {
-                :queue.in(neighbor, acc_queue),
-                MapSet.put(acc_visited, neighbor)
-              }
-            end
-          end)
-
-        bfs_reachable(new_queue, new_visited, outgoing_edges)
-
-      {:empty, _queue} ->
-        visited
-    end
-  end
-
   @doc """
   Removes a vertex from the graph along with all edges connected to it.
   This includes both outgoing edges from the vertex and incoming edges to the vertex.
@@ -362,5 +332,35 @@ defmodule Hologram.Compiler.Digraph2 do
   @spec vertices(t) :: [vertex]
   def vertices(%Digraph2{vertices: vertices}) do
     Map.keys(vertices)
+  end
+
+  # BFS traversal
+  # credo:disable-for-lines:27 Credo.Check.Refactor.Nesting
+  # The above Credo check is disabled because the function is optimised this way
+  defp bfs_reachable(queue, visited, outgoing_edges) do
+    case :queue.out(queue) do
+      {{:value, current}, rest_queue} ->
+        # Get neighbors of current vertex
+        neighbors = Map.get(outgoing_edges, current, %{})
+
+        # Add unvisited neighbors to queue and visited set
+        {new_queue, new_visited} =
+          Enum.reduce(neighbors, {rest_queue, visited}, fn {neighbor, _flag},
+                                                           {acc_queue, acc_visited} ->
+            if MapSet.member?(acc_visited, neighbor) do
+              {acc_queue, acc_visited}
+            else
+              {
+                :queue.in(neighbor, acc_queue),
+                MapSet.put(acc_visited, neighbor)
+              }
+            end
+          end)
+
+        bfs_reachable(new_queue, new_visited, outgoing_edges)
+
+      {:empty, _queue} ->
+        visited
+    end
   end
 end
