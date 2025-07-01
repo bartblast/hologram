@@ -149,8 +149,8 @@ defmodule Hologram.Compiler.Digraph do
   @doc """
   Checks if a vertex exists in the graph.
   """
-  @spec hax_vertex?(t, vertex) :: boolean
-  def hax_vertex?(graph, vertex) do
+  @spec has_vertex?(t, vertex) :: boolean
+  def has_vertex?(graph, vertex) do
     %Digraph{vertices: vertices} = graph
     Map.has_key?(vertices, vertex)
   end

@@ -347,9 +347,9 @@ defmodule Hologram.Compiler.DigraphTest do
     end
   end
 
-  describe "hax_vertex?/2" do
+  describe "has_vertex?/2" do
     test "returns false when graph is empty" do
-      result = hax_vertex?(new(), :a)
+      result = has_vertex?(new(), :a)
 
       assert result == false
     end
@@ -359,7 +359,7 @@ defmodule Hologram.Compiler.DigraphTest do
         new()
         |> add_vertex(:b)
         |> add_vertex(:c)
-        |> hax_vertex?(:a)
+        |> has_vertex?(:a)
 
       assert result == false
     end
@@ -368,7 +368,7 @@ defmodule Hologram.Compiler.DigraphTest do
       result =
         new()
         |> add_vertex(:a)
-        |> hax_vertex?(:a)
+        |> has_vertex?(:a)
 
       assert result == true
     end
