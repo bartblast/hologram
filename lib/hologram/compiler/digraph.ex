@@ -147,6 +147,15 @@ defmodule Hologram.Compiler.Digraph do
   end
 
   @doc """
+  Checks if a vertex exists in the graph.
+  """
+  @spec hax_vertex?(t, vertex) :: boolean
+  def hax_vertex?(graph, vertex) do
+    %Digraph{vertices: vertices} = graph
+    Map.has_key?(vertices, vertex)
+  end
+
+  @doc """
   Returns a list of all incoming edges to the given vertex.
   Each edge is represented as a tuple {source_vertex, target_vertex}.
   """

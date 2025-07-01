@@ -347,6 +347,33 @@ defmodule Hologram.Compiler.DigraphTest do
     end
   end
 
+  describe "hax_vertex?/2" do
+    test "returns false when graph is empty" do
+      result = hax_vertex?(new(), :a)
+
+      assert result == false
+    end
+
+    test "returns false when vertex doesn't exist in non-empty graph" do
+      result =
+        new()
+        |> add_vertex(:b)
+        |> add_vertex(:c)
+        |> hax_vertex?(:a)
+
+      assert result == false
+    end
+
+    test "returns true when vertex exists" do
+      result =
+        new()
+        |> add_vertex(:a)
+        |> hax_vertex?(:a)
+
+      assert result == true
+    end
+  end
+
   describe "incoming_edges/2" do
     test "returns empty list when vertex doesn't exist" do
       result = incoming_edges(new(), :a)
