@@ -187,6 +187,194 @@ defmodule Hologram.Compiler.Digraph2Test do
     end
   end
 
+  describe "reachable/2" do
+    test "handles empty starting vertices list" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> reachable([])
+
+      assert result == []
+    end
+
+    test "returns empty list when graph is empty" do
+      result = reachable(new(), [:a])
+
+      assert result == []
+    end
+
+    test "returns empty list when starting vertices don't exist in non-empty graph" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> reachable([:x])
+
+      assert result == []
+    end
+
+    test "returns only the starting vertex itself when it has no outgoing edges" do
+      result =
+        new()
+        |> add_vertex(:a)
+        |> reachable([:a])
+
+      assert result == [:a]
+    end
+
+    test "returns starting vertex and its direct neighbors" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:a, :c)
+        |> reachable([:a])
+
+      assert Enum.sort(result) == [:a, :b, :c]
+    end
+
+    test "returns all vertices in a linear chain" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> add_edge(:c, :d)
+        |> reachable([:a])
+
+      assert Enum.sort(result) == [:a, :b, :c, :d]
+    end
+
+    test "returns only reachable part of linear chain when starting from middle" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> add_edge(:c, :d)
+        |> reachable([:b])
+
+      assert Enum.sort(result) == [:b, :c, :d]
+    end
+
+    test "handles cycles correctly" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> add_edge(:c, :a)
+        |> reachable([:a])
+
+      assert Enum.sort(result) == [:a, :b, :c]
+    end
+
+    test "handles self-loops" do
+      result =
+        new()
+        |> add_edge(:a, :a)
+        |> add_edge(:a, :b)
+        |> reachable([:a])
+
+      assert Enum.sort(result) == [:a, :b]
+    end
+
+    test "returns only connected component in disconnected graph" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        # disconnected component
+        |> add_edge(:x, :y)
+        |> add_edge(:y, :z)
+        |> reachable([:a])
+
+      assert Enum.sort(result) == [:a, :b, :c]
+    end
+
+    test "handles complex graph with multiple paths" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:a, :c)
+        |> add_edge(:b, :d)
+        |> add_edge(:c, :d)
+        |> add_edge(:d, :e)
+        |> add_edge(:b, :f)
+        |> reachable([:a])
+
+      assert Enum.sort(result) == [:a, :b, :c, :d, :e, :f]
+    end
+
+    test "handles graph with cycles and multiple entry points" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        # cycle b -> c -> b
+        |> add_edge(:c, :b)
+        |> add_edge(:a, :d)
+        |> add_edge(:d, :e)
+        # another path to the cycle
+        |> add_edge(:e, :c)
+        |> reachable([:a])
+
+      assert Enum.sort(result) == [:a, :b, :c, :d, :e]
+    end
+
+    test "returns only isolated vertex when it has no connections" do
+      result =
+        new()
+        |> add_vertex(:a)
+        # other vertices with connections
+        |> add_edge(:b, :c)
+        |> add_edge(:c, :d)
+        |> reachable([:a])
+
+      assert result == [:a]
+    end
+
+    test "handles multiple starting vertices" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> add_edge(:x, :y)
+        |> add_edge(:y, :z)
+        |> reachable([:a, :x])
+
+      assert Enum.sort(result) == [:a, :b, :c, :x, :y, :z]
+    end
+
+    test "handles multiple starting vertices with overlapping reachable sets" do
+      result =
+        new()
+        |> add_edge(:a, :shared)
+        |> add_edge(:b, :shared)
+        |> add_edge(:shared, :target)
+        |> reachable([:a, :b])
+
+      assert Enum.sort(result) == [:a, :b, :shared, :target]
+    end
+
+    test "ignores non-existent vertices in starting list" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> reachable([:a, :nonexistent, :also_nonexistent])
+
+      assert Enum.sort(result) == [:a, :b, :c]
+    end
+
+    test "returns empty list when all starting vertices are non-existent" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> reachable([:nonexistent, :also_nonexistent])
+
+      assert result == []
+    end
+  end
+
   describe "remove_vertex/2" do
     test "handles a vertex that doesn't exist" do
       result = remove_vertex(new(), :a)
