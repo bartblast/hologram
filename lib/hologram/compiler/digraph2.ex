@@ -134,6 +134,19 @@ defmodule Hologram.Compiler.Digraph2 do
   end
 
   @doc """
+  Checks if an edge exists between source and target.
+  """
+  @spec has_edge?(t, vertex, vertex) :: boolean
+  def has_edge?(graph, source, target) do
+    %Digraph2{outgoing_edges: outgoing_edges} = graph
+
+    case Map.get(outgoing_edges, source) do
+      nil -> false
+      targets -> Map.has_key?(targets, target)
+    end
+  end
+
+  @doc """
   Returns a list of all incoming edges to the given vertex.
   Each edge is represented as a tuple {source_vertex, target_vertex}.
   """

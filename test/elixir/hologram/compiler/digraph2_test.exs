@@ -195,6 +195,157 @@ defmodule Hologram.Compiler.Digraph2Test do
     end
   end
 
+  describe "has_edge?/3" do
+    test "returns false when graph is empty" do
+      result = has_edge?(new(), :a, :b)
+
+      assert result == false
+    end
+
+    test "returns false when source vertex doesn't exist" do
+      result =
+        new()
+        |> add_vertex(:b)
+        |> has_edge?(:a, :b)
+
+      assert result == false
+    end
+
+    test "returns false when target vertex doesn't exist" do
+      result =
+        new()
+        |> add_vertex(:a)
+        |> has_edge?(:a, :b)
+
+      assert result == false
+    end
+
+    test "returns false when neither vertex exists" do
+      result =
+        new()
+        |> add_vertex(:c)
+        |> has_edge?(:a, :b)
+
+      assert result == false
+    end
+
+    test "returns false when both vertices exist but no edge exists" do
+      result =
+        new()
+        |> add_vertex(:a)
+        |> add_vertex(:b)
+        |> has_edge?(:a, :b)
+
+      assert result == false
+    end
+
+    test "returns true when edge exists" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> has_edge?(:a, :b)
+
+      assert result == true
+    end
+
+    test "returns false for reverse direction of existing edge" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> has_edge?(:b, :a)
+
+      assert result == false
+    end
+
+    test "returns true for self-loop edge" do
+      result =
+        new()
+        |> add_edge(:a, :a)
+        |> has_edge?(:a, :a)
+
+      assert result == true
+    end
+
+    test "returns true for one of multiple edges from same source" do
+      graph =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:a, :c)
+        |> add_edge(:a, :d)
+
+      assert has_edge?(graph, :a, :b) == true
+      assert has_edge?(graph, :a, :c) == true
+      assert has_edge?(graph, :a, :d) == true
+      assert has_edge?(graph, :a, :e) == false
+    end
+
+    test "returns true for edges to same target from different sources" do
+      graph =
+        new()
+        |> add_edge(:a, :d)
+        |> add_edge(:b, :d)
+        |> add_edge(:c, :d)
+
+      assert has_edge?(graph, :a, :d) == true
+      assert has_edge?(graph, :b, :d) == true
+      assert has_edge?(graph, :c, :d) == true
+      assert has_edge?(graph, :e, :d) == false
+    end
+
+    test "returns correct results in a complex graph" do
+      graph =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:a, :c)
+        |> add_edge(:b, :d)
+        |> add_edge(:c, :d)
+        |> add_edge(:d, :e)
+        |> add_edge(:f, :g)
+
+      # Existing edges
+      assert has_edge?(graph, :a, :b) == true
+      assert has_edge?(graph, :a, :c) == true
+      assert has_edge?(graph, :b, :d) == true
+      assert has_edge?(graph, :c, :d) == true
+      assert has_edge?(graph, :d, :e) == true
+      assert has_edge?(graph, :f, :g) == true
+
+      # Non-existing edges between existing vertices
+      assert has_edge?(graph, :b, :a) == false
+      assert has_edge?(graph, :c, :a) == false
+      assert has_edge?(graph, :d, :b) == false
+      assert has_edge?(graph, :d, :c) == false
+      assert has_edge?(graph, :e, :d) == false
+      assert has_edge?(graph, :g, :f) == false
+
+      # Non-existing edges across components
+      assert has_edge?(graph, :a, :f) == false
+      assert has_edge?(graph, :b, :g) == false
+
+      # Non-existing edges with non-existent vertices
+      assert has_edge?(graph, :a, :x) == false
+      assert has_edge?(graph, :x, :a) == false
+      assert has_edge?(graph, :x, :y) == false
+    end
+
+    test "returns correct results in graph with cycles" do
+      graph =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> add_edge(:c, :a)
+
+      assert has_edge?(graph, :a, :b) == true
+      assert has_edge?(graph, :b, :c) == true
+      assert has_edge?(graph, :c, :a) == true
+
+      # Test non-existing edges in the cycle
+      assert has_edge?(graph, :a, :c) == false
+      assert has_edge?(graph, :b, :a) == false
+      assert has_edge?(graph, :c, :b) == false
+    end
+  end
+
   describe "incoming_edges/2" do
     test "returns empty list when vertex doesn't exist" do
       result = incoming_edges(new(), :a)
