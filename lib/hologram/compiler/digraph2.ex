@@ -363,6 +363,16 @@ defmodule Hologram.Compiler.Digraph2 do
   end
 
   @doc """
+  Returns all vertices in the graph sorted in ascending order.
+  """
+  @spec sorted_vertices(t) :: [vertex]
+  def sorted_vertices(graph) do
+    graph
+    |> vertices()
+    |> Enum.sort()
+  end
+
+  @doc """
   Returns a list of all vertices in the graph.
   """
   @spec vertices(t) :: [vertex]
