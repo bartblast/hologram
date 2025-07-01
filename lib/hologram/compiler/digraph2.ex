@@ -121,6 +121,20 @@ defmodule Hologram.Compiler.Digraph2 do
   end
 
   @doc """
+  Returns a list of all edges in the graph.
+  Each edge is represented as a tuple {source_vertex, target_vertex}.
+  """
+  @spec edges(t) :: [edge]
+  def edges(graph) do
+    %Digraph2{outgoing_edges: outgoing_edges} = graph
+
+    for {source, targets} <- outgoing_edges,
+        {target, _flag} <- targets do
+      {source, target}
+    end
+  end
+
+  @doc """
   Returns a list of all incoming edges to the given vertex.
   Each edge is represented as a tuple {source_vertex, target_vertex}.
   """

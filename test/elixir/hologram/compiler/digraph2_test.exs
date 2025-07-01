@@ -100,6 +100,101 @@ defmodule Hologram.Compiler.Digraph2Test do
     end
   end
 
+  describe "edges/1" do
+    test "returns empty list when graph is empty" do
+      result = edges(new())
+
+      assert result == []
+    end
+
+    test "returns empty list when graph has only vertices but no edges" do
+      result =
+        new()
+        |> add_vertices([:a, :b, :c])
+        |> edges()
+
+      assert result == []
+    end
+
+    test "returns single edge when graph has one edge" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> edges()
+
+      assert result == [{:a, :b}]
+    end
+
+    test "returns multiple edges from single source vertex" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:a, :c)
+        |> add_edge(:a, :d)
+        |> edges()
+
+      assert Enum.sort(result) == [{:a, :b}, {:a, :c}, {:a, :d}]
+    end
+
+    test "returns multiple edges to single target vertex" do
+      result =
+        new()
+        |> add_edge(:a, :d)
+        |> add_edge(:b, :d)
+        |> add_edge(:c, :d)
+        |> edges()
+
+      assert Enum.sort(result) == [{:a, :d}, {:b, :d}, {:c, :d}]
+    end
+
+    test "returns all edges in linear chain" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> add_edge(:c, :d)
+        |> edges()
+
+      assert Enum.sort(result) == [{:a, :b}, {:b, :c}, {:c, :d}]
+    end
+
+    test "includes self-loop edge" do
+      result =
+        new()
+        |> add_edge(:a, :a)
+        |> edges()
+
+      assert result == [{:a, :a}]
+    end
+
+    test "returns all edges in graph with cycles" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> add_edge(:c, :a)
+        |> add_edge(:a, :d)
+        |> edges()
+
+      assert Enum.sort(result) == [{:a, :b}, {:a, :d}, {:b, :c}, {:c, :a}]
+    end
+
+    test "returns all edges in disconnected graph" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        # disconnected component
+        |> add_edge(:x, :y)
+        |> add_edge(:y, :z)
+        # isolated vertex
+        |> add_vertex(:isolated)
+        |> edges()
+
+      assert Enum.sort(result) == [{:a, :b}, {:b, :c}, {:x, :y}, {:y, :z}]
+    end
+  end
+
   describe "incoming_edges/2" do
     test "returns empty list when vertex doesn't exist" do
       result = incoming_edges(new(), :a)
