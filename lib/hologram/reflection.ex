@@ -198,10 +198,8 @@ defmodule Hologram.Reflection do
   """
   @spec has_function?(module, atom, integer) :: boolean
   def has_function?(module, function, arity) do
-    :exports
-    |> module.module_info()
-    |> Keyword.get_values(function)
-    |> Enum.member?(arity)
+    Code.ensure_loaded(module)
+    function_exported?(module, function, arity)
   end
 
   @doc """
