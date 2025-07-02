@@ -101,7 +101,7 @@ defmodule Hologram.Reflection do
   """
   @spec component?(term) :: boolean
   def component?(term) do
-    elixir_module?(term) && {:__is_hologram_component__, 0} in term.__info__(:functions)
+    elixir_module?(term) && has_function?(term, :__is_hologram_component__, 0)
   end
 
   @doc """
@@ -417,7 +417,7 @@ defmodule Hologram.Reflection do
   """
   @spec page?(term) :: boolean
   def page?(term) do
-    elixir_module?(term) && {:__is_hologram_page__, 0} in term.__info__(:functions)
+    elixir_module?(term) && has_function?(term, :__is_hologram_page__, 0)
   end
 
   @doc """
