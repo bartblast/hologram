@@ -549,26 +549,37 @@ defmodule Hologram.Compiler.CallGraph do
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/remove_runtime_mfas!_2/README.md
   """
   @spec remove_runtime_mfas!(t, [mfa]) :: t
-  def remove_runtime_mfas!(call_graph, runtime_mfas) do
-    graph = get_graph(call_graph)
+  def remove_runtime_mfas!(%{pid: pid} = call_graph, runtime_mfas) do
+    Agent.update(
+      pid,
+      fn graph ->
+        vertices = Digraph.vertices(graph)
+        vertices_map_set = MapSet.new(vertices)
 
-    vertices = Digraph.vertices(graph)
-    new_vertices = vertices -- runtime_mfas
+        runtime_mfas_map_set = MapSet.new(runtime_mfas)
 
-    outgoing_edges = Digraph.edges(graph)
+        new_vertices =
+          vertices_map_set
+          |> MapSet.difference(runtime_mfas_map_set)
+          |> MapSet.to_list()
 
-    new_outgoing_edges =
-      Enum.reject(outgoing_edges, fn {source, target} ->
-        # It's more probable for target vertex (than source vertex) to be in runtime MFAs
-        target in runtime_mfas or source in runtime_mfas
-      end)
+        new_outgoing_edges =
+          graph
+          |> Digraph.edges()
+          |> Enum.reject(fn {source, target} ->
+            # It's more probable for target vertex (than source vertex) to be in runtime MFAs
+            MapSet.member?(runtime_mfas_map_set, target) or
+              MapSet.member?(runtime_mfas_map_set, source)
+          end)
 
-    new_graph =
-      Digraph.new()
-      |> Digraph.add_vertices(new_vertices)
-      |> Digraph.add_edges(new_outgoing_edges)
+        Digraph.new()
+        |> Digraph.add_vertices(new_vertices)
+        |> Digraph.add_edges(new_outgoing_edges)
+      end,
+      :infinity
+    )
 
-    put_graph(call_graph, new_graph)
+    call_graph
   end
 
   @doc """
