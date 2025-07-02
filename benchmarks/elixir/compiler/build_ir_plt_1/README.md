@@ -21,10 +21,10 @@ Benchmark suite executing on the following system:
     <td style="white-space: nowrap">16 GB</td>
   </tr><tr>
     <th style="white-space: nowrap">Elixir Version</th>
-    <td style="white-space: nowrap">1.16.1</td>
+    <td style="white-space: nowrap">1.18.2</td>
   </tr><tr>
     <th style="white-space: nowrap">Erlang Version</th>
-    <td style="white-space: nowrap">26.2.2</td>
+    <td style="white-space: nowrap">27.2.4</td>
   </tr>
 </table>
 
@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">build_ir_plt/1</td>
-    <td style="white-space: nowrap; text-align: right">5.36</td>
-    <td style="white-space: nowrap; text-align: right">186.52 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;13.33%</td>
-    <td style="white-space: nowrap; text-align: right">181.58 ms</td>
-    <td style="white-space: nowrap; text-align: right">227.78 ms</td>
+    <td style="white-space: nowrap; text-align: right">3.99</td>
+    <td style="white-space: nowrap; text-align: right">250.33 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;4.62%</td>
+    <td style="white-space: nowrap; text-align: right">248.04 ms</td>
+    <td style="white-space: nowrap; text-align: right">310.45 ms</td>
   </tr>
 
 </table>

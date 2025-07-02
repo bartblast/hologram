@@ -53,14 +53,23 @@ defmodule Hologram.Compiler do
   def build_ir_plt(module_beam_path_plt) do
     ir_plt = PLT.start()
 
-    Reflection.list_elixir_modules()
-    |> TaskUtils.async_many(fn module ->
-      beam_path = get_module_beam_path(module_beam_path_plt, module)
+    modules = Reflection.list_elixir_modules()
 
-      if beam_path != :non_existing do
-        ir = IR.for_module(module, beam_path)
-        PLT.put(ir_plt, module, ir)
-      end
+    # Processing modules in chunks of 2 improves performance by ~7%
+    # (determined experimentally)
+    chunk_size = 2
+
+    modules
+    |> Enum.chunk_every(chunk_size)
+    |> TaskUtils.async_many(fn module_chunk ->
+      Enum.each(module_chunk, fn module ->
+        beam_path = get_module_beam_path(module_beam_path_plt, module)
+
+        if beam_path != :non_existing do
+          ir = IR.for_module(module, beam_path)
+          PLT.put(ir_plt, module, ir)
+        end
+      end)
     end)
     |> Task.await_many(:infinity)
 
