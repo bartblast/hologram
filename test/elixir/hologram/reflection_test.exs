@@ -234,7 +234,7 @@ defmodule Hologram.ReflectionTest do
     refute :elixir in result
     refute :kernel in result
 
-    refute Graph in result
+    refute BeamFile in result
     refute Hologram.Page in result
 
     refute Enumerable.Atom in result

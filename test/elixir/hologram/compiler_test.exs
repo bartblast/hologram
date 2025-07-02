@@ -5,6 +5,7 @@ defmodule Hologram.CompilerTest do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.Digraph
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
 
@@ -442,11 +443,13 @@ defmodule Hologram.CompilerTest do
       |> PLT.put(:module_4, :digest_4)
       |> PLT.put(:module_6, :digest_6b)
 
-    assert diff_module_digest_plts(old_plt, new_plt) == %{
-             added_modules: [:module_2, :module_4],
-             removed_modules: [:module_5, :module_7],
-             updated_modules: [:module_3, :module_6]
-           }
+    result = diff_module_digest_plts(old_plt, new_plt)
+
+    assert Map.keys(result) == [:added_modules, :removed_modules, :updated_modules]
+
+    assert Enum.sort(result.added_modules) == [:module_2, :module_4]
+    assert Enum.sort(result.removed_modules) == [:module_5, :module_7]
+    assert Enum.sort(result.updated_modules) == [:module_3, :module_6]
   end
 
   describe "format_files/2" do
@@ -639,7 +642,7 @@ defmodule Hologram.CompilerTest do
 
     test "dump file doesn't exist", %{build_dir: build_dir, dump_path: dump_path} do
       assert {call_graph = %CallGraph{}, ^dump_path} = maybe_load_call_graph(build_dir)
-      assert CallGraph.get_graph(call_graph) == Graph.new()
+      assert CallGraph.get_graph(call_graph) == Digraph.new()
     end
 
     test "dump file exists", %{build_dir: build_dir, call_graph: call_graph, dump_path: dump_path} do
