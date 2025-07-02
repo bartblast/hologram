@@ -50,6 +50,8 @@ defmodule Hologram.Compiler do
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_ir_plt_1/README.md
   """
   @spec build_ir_plt(PLT.t()) :: PLT.t()
+  # credo:disable-for-lines:26 Credo.Check.Refactor.Nesting
+  # The above Credo check is disabled because the function is optimised this way
   def build_ir_plt(module_beam_path_plt) do
     ir_plt = PLT.start()
 
