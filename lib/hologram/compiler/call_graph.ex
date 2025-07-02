@@ -559,7 +559,7 @@ defmodule Hologram.Compiler.CallGraph do
 
     new_outgoing_edges =
       Enum.reject(outgoing_edges, fn {source, target} ->
-        # It's more probable for target vertex (than source vertex) to be in runtime MFAs 
+        # It's more probable for target vertex (than source vertex) to be in runtime MFAs
         target in runtime_mfas or source in runtime_mfas
       end)
 
