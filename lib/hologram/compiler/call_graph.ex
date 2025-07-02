@@ -690,13 +690,17 @@ defmodule Hologram.Compiler.CallGraph do
     funs = module.__protocol__(:functions)
     impls = Reflection.list_protocol_implementations(module)
 
-    Enum.each(impls, fn impl ->
-      Enum.each(funs, fn {name, arity} ->
-        call_graph
-        |> add_edge({module, name, arity}, {impl, :__impl__, 1})
-        |> add_edge({module, name, arity}, {impl, name, arity})
-      end)
-    end)
+    edges =
+      for impl <- impls,
+          {name, arity} <- funs,
+          edge <- [
+            {{module, name, arity}, {impl, :__impl__, 1}},
+            {{module, name, arity}, {impl, name, arity}}
+          ] do
+        edge
+      end
+
+    add_edges(call_graph, edges)
   end
 
   # Adds reflection MFAs, i.e.:
