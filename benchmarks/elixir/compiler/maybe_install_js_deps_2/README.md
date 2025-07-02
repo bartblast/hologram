@@ -21,10 +21,10 @@ Benchmark suite executing on the following system:
     <td style="white-space: nowrap">16 GB</td>
   </tr><tr>
     <th style="white-space: nowrap">Elixir Version</th>
-    <td style="white-space: nowrap">1.16.1</td>
+    <td style="white-space: nowrap">1.18.2</td>
   </tr><tr>
     <th style="white-space: nowrap">Erlang Version</th>
-    <td style="white-space: nowrap">26.2.2</td>
+    <td style="white-space: nowrap">27.2.4</td>
   </tr>
 </table>
 
@@ -63,20 +63,20 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">no install</td>
-    <td style="white-space: nowrap; text-align: right">11.38 K</td>
+    <td style="white-space: nowrap; text-align: right">11.76 K</td>
     <td style="white-space: nowrap; text-align: right">0.00009 s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;66.96%</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;40.93%</td>
     <td style="white-space: nowrap; text-align: right">0.00009 s</td>
-    <td style="white-space: nowrap; text-align: right">0.00018 s</td>
+    <td style="white-space: nowrap; text-align: right">0.00015 s</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">do install</td>
-    <td style="white-space: nowrap; text-align: right">0.00008 K</td>
-    <td style="white-space: nowrap; text-align: right">13.26 s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;73.88%</td>
-    <td style="white-space: nowrap; text-align: right">9.83 s</td>
-    <td style="white-space: nowrap; text-align: right">33.10 s</td>
+    <td style="white-space: nowrap; text-align: right">0.00013 K</td>
+    <td style="white-space: nowrap; text-align: right">7.70 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;5.07%</td>
+    <td style="white-space: nowrap; text-align: right">7.64 s</td>
+    <td style="white-space: nowrap; text-align: right">8.53 s</td>
   </tr>
 
 </table>
@@ -91,14 +91,14 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">no install</td>
-    <td style="white-space: nowrap;text-align: right">11.38 K</td>
+    <td style="white-space: nowrap;text-align: right">11.76 K</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">do install</td>
-    <td style="white-space: nowrap; text-align: right">0.00008 K</td>
-    <td style="white-space: nowrap; text-align: right">150895.75x</td>
+    <td style="white-space: nowrap; text-align: right">0.00013 K</td>
+    <td style="white-space: nowrap; text-align: right">90576.48x</td>
   </tr>
 
 </table>
