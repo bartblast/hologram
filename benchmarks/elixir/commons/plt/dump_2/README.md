@@ -21,10 +21,10 @@ Benchmark suite executing on the following system:
     <td style="white-space: nowrap">16 GB</td>
   </tr><tr>
     <th style="white-space: nowrap">Elixir Version</th>
-    <td style="white-space: nowrap">1.16.1</td>
+    <td style="white-space: nowrap">1.18.2</td>
   </tr><tr>
     <th style="white-space: nowrap">Erlang Version</th>
-    <td style="white-space: nowrap">26.2.2</td>
+    <td style="white-space: nowrap">27.2.4</td>
   </tr>
 </table>
 
@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">module BEAM path PLT</td>
-    <td style="white-space: nowrap; text-align: right">400.55</td>
-    <td style="white-space: nowrap; text-align: right">2.50 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;40.08%</td>
-    <td style="white-space: nowrap; text-align: right">2.72 ms</td>
-    <td style="white-space: nowrap; text-align: right">4.41 ms</td>
+    <td style="white-space: nowrap; text-align: right">380.48</td>
+    <td style="white-space: nowrap; text-align: right">2.63 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;24.26%</td>
+    <td style="white-space: nowrap; text-align: right">2.74 ms</td>
+    <td style="white-space: nowrap; text-align: right">3.70 ms</td>
   </tr>
 
 </table>
