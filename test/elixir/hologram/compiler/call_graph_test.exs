@@ -924,7 +924,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
 
     test "dump file exists", %{dump_path: dump_path} do
-      graph = Graph.add_edge(Graph.new(), :vertex_1, :vertex_2)
+      graph = Digraph.add_edge(Digraph.new(), :vertex_1, :vertex_2)
 
       data = SerializationUtils.serialize(graph)
       File.write!(dump_path, data)
@@ -1067,7 +1067,7 @@ defmodule Hologram.Compiler.CallGraphTest do
   end
 
   test "put_graph", %{empty_call_graph: call_graph} do
-    graph = Graph.add_edge(Graph.new(), :vertex_3, :vertex_4)
+    graph = Digraph.add_edge(Digraph.new(), :vertex_3, :vertex_4)
 
     assert put_graph(call_graph, graph) == call_graph
     assert get_graph(call_graph) == graph
@@ -1260,7 +1260,7 @@ defmodule Hologram.Compiler.CallGraphTest do
     end
 
     test "graph param specified" do
-      graph = Graph.add_vertex(Graph.new(), :my_vertex)
+      graph = Digraph.add_vertex(Digraph.new(), :my_vertex)
 
       assert %CallGraph{pid: pid} = start(graph)
       assert is_pid(pid)

@@ -637,7 +637,7 @@ defmodule Hologram.Compiler.CallGraph do
   Stops the call graph agent.
   """
   @spec stop(t) :: :ok
-  def stop(%CallGraph{pid: pid}) do
+  def stop(%{pid: pid}) do
     Agent.stop(pid)
   end
 
@@ -713,7 +713,7 @@ defmodule Hologram.Compiler.CallGraph do
     |> Enum.filter(&Reflection.component?/1)
   end
 
-  defp incoming_edges(%CallGraph{pid: pid}, vertex) do
+  defp incoming_edges(%{pid: pid}, vertex) do
     Agent.get(pid, &Digraph.incoming_edges(&1, vertex), :infinity)
   end
 
