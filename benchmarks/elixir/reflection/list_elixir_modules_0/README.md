@@ -21,10 +21,10 @@ Benchmark suite executing on the following system:
     <td style="white-space: nowrap">16 GB</td>
   </tr><tr>
     <th style="white-space: nowrap">Elixir Version</th>
-    <td style="white-space: nowrap">1.16.1</td>
+    <td style="white-space: nowrap">1.18.2</td>
   </tr><tr>
     <th style="white-space: nowrap">Erlang Version</th>
-    <td style="white-space: nowrap">26.2.2</td>
+    <td style="white-space: nowrap">27.2.4</td>
   </tr>
 </table>
 
@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">list_elixir_modules/0</td>
-    <td style="white-space: nowrap; text-align: right">2.90 K</td>
-    <td style="white-space: nowrap; text-align: right">344.37 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;24.93%</td>
-    <td style="white-space: nowrap; text-align: right">335.96 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">449.46 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">2.14 K</td>
+    <td style="white-space: nowrap; text-align: right">466.49 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;7.81%</td>
+    <td style="white-space: nowrap; text-align: right">457.92 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">580.03 &micro;s</td>
   </tr>
 
 </table>
