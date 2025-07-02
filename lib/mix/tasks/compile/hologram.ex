@@ -73,7 +73,7 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     Compiler.validate_page_modules(page_modules)
 
-    call_graph_for_pages = CallGraph.remove_vertices(call_graph_for_runtime, runtime_mfas)
+    call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph_for_runtime, runtime_mfas)
 
     page_entry_files_info =
       page_modules
