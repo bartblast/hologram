@@ -9,7 +9,13 @@ defmodule Hologram.Commons.ETS do
   """
   @spec create_named_table(atom) :: tid
   def create_named_table(table_name) do
-    :ets.new(table_name, [:named_table, :public])
+    :ets.new(table_name, [
+      :named_table,
+      :public,
+      {:read_concurrency, true},
+      {:write_concurrency, true}
+    ])
+
     :ets.whereis(table_name)
   end
 
@@ -18,7 +24,7 @@ defmodule Hologram.Commons.ETS do
   """
   @spec create_unnamed_table() :: tid
   def create_unnamed_table do
-    :ets.new(__MODULE__, [:public])
+    :ets.new(__MODULE__, [:public, {:read_concurrency, true}, {:write_concurrency, true}])
   end
 
   @doc """

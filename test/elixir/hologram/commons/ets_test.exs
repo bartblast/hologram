@@ -22,6 +22,8 @@ defmodule Hologram.Commons.ETSTest do
     ets_info = :ets.info(table_ref)
     assert ets_info[:named_table]
     assert ets_info[:protection] == :public
+    assert ets_info[:read_concurrency] == true
+    assert ets_info[:write_concurrency] == true
   end
 
   test "create_unnamed_table/1", %{table_ref: table_ref} do
@@ -31,6 +33,8 @@ defmodule Hologram.Commons.ETSTest do
     ets_info = :ets.info(table_ref)
     refute ets_info[:named_table]
     assert ets_info[:protection] == :public
+    assert ets_info[:read_concurrency] == true
+    assert ets_info[:write_concurrency] == true
   end
 
   describe "delete/1" do
