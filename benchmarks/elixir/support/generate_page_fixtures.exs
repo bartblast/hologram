@@ -1,5 +1,5 @@
 # Run in the project root dir:
-# $ mix run benchmarks/support/generate_page_fixtures.exs
+# $ mix run benchmarks/elixir/support/generate_page_fixtures.exs
 
 alias Hologram.Reflection
 
