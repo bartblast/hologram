@@ -1,20 +1,15 @@
+# credo:disable-for-this-file Credo.Check.Refactor.IoPuts
+
 # Run in the project root dir:
 # $ mix run benchmarks/elixir/run_all.exs
 
 benchmarks_dir = "benchmarks/elixir"
 
-IO.puts("")
-IO.puts("🚀 Starting benchmark execution...")
-IO.puts("📁 Scanning #{benchmarks_dir} for benchmark scripts...")
-
-benchmark_files =
-  benchmarks_dir
-  |> Path.join("**/run.exs")
-  |> Path.wildcard()
-  |> Enum.sort()
-
-IO.puts("📊 Found #{length(benchmark_files)} benchmark scripts")
-IO.puts(String.duplicate("-", 80))
+print_divider = fn ->
+  "-"
+  |> String.duplicate(80)
+  |> IO.puts()
+end
 
 run_single_benchmark = fn file_path, index, count ->
   benchmark_name =
@@ -63,8 +58,23 @@ run_single_benchmark = fn file_path, index, count ->
   end
 
   IO.puts("")
-  IO.puts(String.duplicate("-", 80))
+
+  print_divider.()
 end
+
+IO.puts("")
+IO.puts("🚀 Starting benchmark execution...")
+IO.puts("📁 Scanning #{benchmarks_dir} for benchmark scripts...")
+
+benchmark_files =
+  benchmarks_dir
+  |> Path.join("**/run.exs")
+  |> Path.wildcard()
+  |> Enum.sort()
+
+IO.puts("📊 Found #{length(benchmark_files)} benchmark scripts")
+
+print_divider.()
 
 benchmark_count = length(benchmark_files)
 
