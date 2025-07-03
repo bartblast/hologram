@@ -21,10 +21,10 @@ Benchmark suite executing on the following system:
     <td style="white-space: nowrap">16 GB</td>
   </tr><tr>
     <th style="white-space: nowrap">Elixir Version</th>
-    <td style="white-space: nowrap">1.16.1</td>
+    <td style="white-space: nowrap">1.18.2</td>
   </tr><tr>
     <th style="white-space: nowrap">Erlang Version</th>
-    <td style="white-space: nowrap">26.2.2</td>
+    <td style="white-space: nowrap">27.2.4</td>
   </tr>
 </table>
 
@@ -35,7 +35,7 @@ Benchmark suite executing with the following configuration:
 <table style="width: 1%">
   <tr>
     <th style="width: 1%">:time</th>
-    <td style="white-space: nowrap">1 min</td>
+    <td style="white-space: nowrap">10 s</td>
   </tr><tr>
     <th>:parallel</th>
     <td style="white-space: nowrap">1</td>
@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">build_page_js/4</td>
-    <td style="white-space: nowrap; text-align: right">122.17</td>
-    <td style="white-space: nowrap; text-align: right">8.19 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;20.89%</td>
+    <td style="white-space: nowrap; text-align: right">115.71</td>
+    <td style="white-space: nowrap; text-align: right">8.64 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;22.04%</td>
     <td style="white-space: nowrap; text-align: right">9.17 ms</td>
-    <td style="white-space: nowrap; text-align: right">10.28 ms</td>
+    <td style="white-space: nowrap; text-align: right">12.61 ms</td>
   </tr>
 
 </table>

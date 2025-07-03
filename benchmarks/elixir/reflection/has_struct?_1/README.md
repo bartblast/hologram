@@ -35,7 +35,7 @@ Benchmark suite executing with the following configuration:
 <table style="width: 1%">
   <tr>
     <th style="width: 1%">:time</th>
-    <td style="white-space: nowrap">1 min</td>
+    <td style="white-space: nowrap">10 s</td>
   </tr><tr>
     <th>:parallel</th>
     <td style="white-space: nowrap">1</td>
@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">has_struct?/1</td>
-    <td style="white-space: nowrap; text-align: right">28.76 K</td>
-    <td style="white-space: nowrap; text-align: right">34.77 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;38.60%</td>
-    <td style="white-space: nowrap; text-align: right">34.08 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">46.54 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">11.69 M</td>
+    <td style="white-space: nowrap; text-align: right">85.53 ns</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;43202.46%</td>
+    <td style="white-space: nowrap; text-align: right">83 ns</td>
+    <td style="white-space: nowrap; text-align: right">125 ns</td>
   </tr>
 
 </table>

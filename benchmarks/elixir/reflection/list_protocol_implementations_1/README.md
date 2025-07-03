@@ -35,7 +35,7 @@ Benchmark suite executing with the following configuration:
 <table style="width: 1%">
   <tr>
     <th style="width: 1%">:time</th>
-    <td style="white-space: nowrap">1 min</td>
+    <td style="white-space: nowrap">10 s</td>
   </tr><tr>
     <th>:parallel</th>
     <td style="white-space: nowrap">1</td>
@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">list_protocol_implementations/1</td>
-    <td style="white-space: nowrap; text-align: right">292.05</td>
-    <td style="white-space: nowrap; text-align: right">3.42 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;22.47%</td>
-    <td style="white-space: nowrap; text-align: right">3.29 ms</td>
-    <td style="white-space: nowrap; text-align: right">5.05 ms</td>
+    <td style="white-space: nowrap; text-align: right">313.53</td>
+    <td style="white-space: nowrap; text-align: right">3.19 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;3.76%</td>
+    <td style="white-space: nowrap; text-align: right">3.16 ms</td>
+    <td style="white-space: nowrap; text-align: right">3.67 ms</td>
   </tr>
 
 </table>

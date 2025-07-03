@@ -35,7 +35,7 @@ Benchmark suite executing with the following configuration:
 <table style="width: 1%">
   <tr>
     <th style="width: 1%">:time</th>
-    <td style="white-space: nowrap">1 min</td>
+    <td style="white-space: nowrap">10 s</td>
   </tr><tr>
     <th>:parallel</th>
     <td style="white-space: nowrap">1</td>
@@ -63,20 +63,20 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">has cache</td>
-    <td style="white-space: nowrap; text-align: right">0.70</td>
-    <td style="white-space: nowrap; text-align: right">1.42 s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;6.22%</td>
-    <td style="white-space: nowrap; text-align: right">1.40 s</td>
-    <td style="white-space: nowrap; text-align: right">1.86 s</td>
+    <td style="white-space: nowrap; text-align: right">0.40</td>
+    <td style="white-space: nowrap; text-align: right">2.51 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;2.10%</td>
+    <td style="white-space: nowrap; text-align: right">2.50 s</td>
+    <td style="white-space: nowrap; text-align: right">2.57 s</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">no cache</td>
-    <td style="white-space: nowrap; text-align: right">0.26</td>
-    <td style="white-space: nowrap; text-align: right">3.85 s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;1.96%</td>
-    <td style="white-space: nowrap; text-align: right">3.84 s</td>
-    <td style="white-space: nowrap; text-align: right">3.99 s</td>
+    <td style="white-space: nowrap; text-align: right">0.20</td>
+    <td style="white-space: nowrap; text-align: right">4.91 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;2.03%</td>
+    <td style="white-space: nowrap; text-align: right">4.91 s</td>
+    <td style="white-space: nowrap; text-align: right">4.98 s</td>
   </tr>
 
 </table>
@@ -91,14 +91,14 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">has cache</td>
-    <td style="white-space: nowrap;text-align: right">0.70</td>
+    <td style="white-space: nowrap;text-align: right">0.40</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">no cache</td>
-    <td style="white-space: nowrap; text-align: right">0.26</td>
-    <td style="white-space: nowrap; text-align: right">2.7x</td>
+    <td style="white-space: nowrap; text-align: right">0.20</td>
+    <td style="white-space: nowrap; text-align: right">1.96x</td>
   </tr>
 
 </table>

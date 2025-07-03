@@ -35,7 +35,7 @@ Benchmark suite executing with the following configuration:
 <table style="width: 1%">
   <tr>
     <th style="width: 1%">:time</th>
-    <td style="white-space: nowrap">1 min</td>
+    <td style="white-space: nowrap">10 s</td>
   </tr><tr>
     <th>:parallel</th>
     <td style="white-space: nowrap">1</td>
@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">list_elixir_modules/0</td>
-    <td style="white-space: nowrap; text-align: right">2.14 K</td>
-    <td style="white-space: nowrap; text-align: right">466.49 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;7.81%</td>
-    <td style="white-space: nowrap; text-align: right">457.92 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">580.03 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">2.08 K</td>
+    <td style="white-space: nowrap; text-align: right">481.78 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;4.81%</td>
+    <td style="white-space: nowrap; text-align: right">480.50 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">578.90 &micro;s</td>
   </tr>
 
 </table>

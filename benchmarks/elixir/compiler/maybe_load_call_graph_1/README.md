@@ -21,10 +21,10 @@ Benchmark suite executing on the following system:
     <td style="white-space: nowrap">16 GB</td>
   </tr><tr>
     <th style="white-space: nowrap">Elixir Version</th>
-    <td style="white-space: nowrap">1.16.1</td>
+    <td style="white-space: nowrap">1.18.2</td>
   </tr><tr>
     <th style="white-space: nowrap">Erlang Version</th>
-    <td style="white-space: nowrap">26.2.2</td>
+    <td style="white-space: nowrap">27.2.4</td>
   </tr>
 </table>
 
@@ -35,7 +35,7 @@ Benchmark suite executing with the following configuration:
 <table style="width: 1%">
   <tr>
     <th style="width: 1%">:time</th>
-    <td style="white-space: nowrap">1 min</td>
+    <td style="white-space: nowrap">10 s</td>
   </tr><tr>
     <th>:parallel</th>
     <td style="white-space: nowrap">1</td>
@@ -63,20 +63,20 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">no load</td>
-    <td style="white-space: nowrap; text-align: right">176.59 K</td>
-    <td style="white-space: nowrap; text-align: right">0.00566 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;548.34%</td>
+    <td style="white-space: nowrap; text-align: right">151.52 K</td>
+    <td style="white-space: nowrap; text-align: right">0.00660 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;105.72%</td>
     <td style="white-space: nowrap; text-align: right">0.00479 ms</td>
-    <td style="white-space: nowrap; text-align: right">0.0148 ms</td>
+    <td style="white-space: nowrap; text-align: right">0.0128 ms</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">do load</td>
-    <td style="white-space: nowrap; text-align: right">0.0234 K</td>
-    <td style="white-space: nowrap; text-align: right">42.79 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;3.31%</td>
-    <td style="white-space: nowrap; text-align: right">42.46 ms</td>
-    <td style="white-space: nowrap; text-align: right">47.56 ms</td>
+    <td style="white-space: nowrap; text-align: right">0.0147 K</td>
+    <td style="white-space: nowrap; text-align: right">68.18 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;1.47%</td>
+    <td style="white-space: nowrap; text-align: right">68.05 ms</td>
+    <td style="white-space: nowrap; text-align: right">73.81 ms</td>
   </tr>
 
 </table>
@@ -91,14 +91,14 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">no load</td>
-    <td style="white-space: nowrap;text-align: right">176.59 K</td>
+    <td style="white-space: nowrap;text-align: right">151.52 K</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">do load</td>
-    <td style="white-space: nowrap; text-align: right">0.0234 K</td>
-    <td style="white-space: nowrap; text-align: right">7555.93x</td>
+    <td style="white-space: nowrap; text-align: right">0.0147 K</td>
+    <td style="white-space: nowrap; text-align: right">10330.66x</td>
   </tr>
 
 </table>

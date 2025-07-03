@@ -35,7 +35,7 @@ Benchmark suite executing with the following configuration:
 <table style="width: 1%">
   <tr>
     <th style="width: 1%">:time</th>
-    <td style="white-space: nowrap">1 min</td>
+    <td style="white-space: nowrap">10 s</td>
   </tr><tr>
     <th>:parallel</th>
     <td style="white-space: nowrap">1</td>
@@ -63,20 +63,20 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">no install</td>
-    <td style="white-space: nowrap; text-align: right">11.76 K</td>
+    <td style="white-space: nowrap; text-align: right">15.31 K</td>
+    <td style="white-space: nowrap; text-align: right">0.00007 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;11.15%</td>
+    <td style="white-space: nowrap; text-align: right">0.00006 s</td>
     <td style="white-space: nowrap; text-align: right">0.00009 s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;40.93%</td>
-    <td style="white-space: nowrap; text-align: right">0.00009 s</td>
-    <td style="white-space: nowrap; text-align: right">0.00015 s</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">do install</td>
     <td style="white-space: nowrap; text-align: right">0.00013 K</td>
-    <td style="white-space: nowrap; text-align: right">7.70 s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;5.07%</td>
-    <td style="white-space: nowrap; text-align: right">7.64 s</td>
-    <td style="white-space: nowrap; text-align: right">8.53 s</td>
+    <td style="white-space: nowrap; text-align: right">7.57 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;4.97%</td>
+    <td style="white-space: nowrap; text-align: right">7.57 s</td>
+    <td style="white-space: nowrap; text-align: right">7.83 s</td>
   </tr>
 
 </table>
@@ -91,14 +91,14 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">no install</td>
-    <td style="white-space: nowrap;text-align: right">11.76 K</td>
+    <td style="white-space: nowrap;text-align: right">15.31 K</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">do install</td>
     <td style="white-space: nowrap; text-align: right">0.00013 K</td>
-    <td style="white-space: nowrap; text-align: right">90576.48x</td>
+    <td style="white-space: nowrap; text-align: right">115796.71x</td>
   </tr>
 
 </table>
