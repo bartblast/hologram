@@ -1,6 +1,6 @@
 Benchmark
 
-Hologram.Compiler.build_ir_plt/1
+Hologram.Compiler.build_ir_plt/0
 
 ## System
 
@@ -62,12 +62,12 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">build_ir_plt/1</td>
-    <td style="white-space: nowrap; text-align: right">3.99</td>
-    <td style="white-space: nowrap; text-align: right">250.33 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;4.62%</td>
-    <td style="white-space: nowrap; text-align: right">248.04 ms</td>
-    <td style="white-space: nowrap; text-align: right">310.45 ms</td>
+    <td style="white-space: nowrap">build_ir_plt/0</td>
+    <td style="white-space: nowrap; text-align: right">3.76</td>
+    <td style="white-space: nowrap; text-align: right">265.62 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;12.49%</td>
+    <td style="white-space: nowrap; text-align: right">255.28 ms</td>
+    <td style="white-space: nowrap; text-align: right">399.82 ms</td>
   </tr>
 
 </table>
