@@ -62,12 +62,12 @@ Run Time
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">module BEAM path PLT</td>
-    <td style="white-space: nowrap; text-align: right">380.48</td>
-    <td style="white-space: nowrap; text-align: right">2.63 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;24.26%</td>
-    <td style="white-space: nowrap; text-align: right">2.74 ms</td>
-    <td style="white-space: nowrap; text-align: right">3.70 ms</td>
+    <td style="white-space: nowrap">IR PLT</td>
+    <td style="white-space: nowrap; text-align: right">2.96</td>
+    <td style="white-space: nowrap; text-align: right">337.49 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;3.74%</td>
+    <td style="white-space: nowrap; text-align: right">334.91 ms</td>
+    <td style="white-space: nowrap; text-align: right">386.80 ms</td>
   </tr>
 
 </table>

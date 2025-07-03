@@ -4,12 +4,12 @@ alias Hologram.Reflection
 
 Benchee.run(
   %{
-    "module BEAM path PLT" =>
-      {fn {module_beam_path_plt, dump_path} ->
-         PLT.dump(module_beam_path_plt, dump_path)
+    "IR PLT" =>
+      {fn {ir_plt, dump_path} ->
+         PLT.dump(ir_plt, dump_path)
        end,
        before_scenario: fn _input ->
-         module_beam_path_plt = Compiler.build_module_beam_path_plt()
+         ir_plt = Compiler.build_ir_plt()
 
          dump_path =
            Path.join([
@@ -18,12 +18,12 @@ Benchee.run(
              "commons",
              "plt",
              "dump_2",
-             Reflection.module_beam_path_plt_dump_file_name()
+             Reflection.ir_plt_dump_file_name()
            ])
 
-         PLT.dump(module_beam_path_plt, dump_path)
+         PLT.dump(ir_plt, dump_path)
 
-         {module_beam_path_plt, dump_path}
+         {ir_plt, dump_path}
        end}
   },
   formatters: [
