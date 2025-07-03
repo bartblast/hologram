@@ -119,8 +119,13 @@ defmodule Hologram.CompilerTest do
     test "adds module digest entries for modules that have a BEAM path" do
       assert %PLT{} = plt = build_module_digest_plt!()
 
-      assert <<_digest::256>> = PLT.get!(plt, Hologram.Reflection)
-      assert <<_digest::256>> = PLT.get!(plt, Hologram.Compiler)
+      assert plt
+             |> PLT.get!(Hologram.Reflection)
+             |> is_integer()
+
+      assert plt
+             |> PLT.get!(Hologram.Compiler)
+             |> is_integer()
     end
 
     test "doesn't add module digest entries for modules that don't have a BEAM path" do
