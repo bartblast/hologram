@@ -26,7 +26,12 @@ Benchee.run(
     File.mkdir!(opts[:static_dir])
 
     ir_plt = Compiler.build_ir_plt()
-    call_graph = Compiler.build_call_graph(ir_plt)
+
+    call_graph =
+      ir_plt
+      |> Compiler.build_call_graph()
+      |> CallGraph.remove_manually_ported_mfas()
+
     runtime_mfas = CallGraph.list_runtime_mfas(call_graph)
     call_graph_for_pages = CallGraph.remove_runtime_mfas!(call_graph, runtime_mfas)
 
