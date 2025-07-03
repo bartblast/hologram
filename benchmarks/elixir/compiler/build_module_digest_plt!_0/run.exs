@@ -17,5 +17,5 @@ Benchee.run(
      description: "Hologram.Compiler.build_module_digest_plt!/0",
      file: Path.join(__DIR__, "README.md")}
   ],
-  time: 5
+  time: 60
 )

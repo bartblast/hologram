@@ -35,7 +35,7 @@ Benchmark suite executing with the following configuration:
 <table style="width: 1%">
   <tr>
     <th style="width: 1%">:time</th>
-    <td style="white-space: nowrap">5 s</td>
+    <td style="white-space: nowrap">1 min</td>
   </tr><tr>
     <th>:parallel</th>
     <td style="white-space: nowrap">1</td>
@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">build_module_digest_plt!/0</td>
-    <td style="white-space: nowrap; text-align: right">6.10</td>
-    <td style="white-space: nowrap; text-align: right">163.83 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;7.96%</td>
-    <td style="white-space: nowrap; text-align: right">162.22 ms</td>
-    <td style="white-space: nowrap; text-align: right">195.80 ms</td>
+    <td style="white-space: nowrap; text-align: right">6.37</td>
+    <td style="white-space: nowrap; text-align: right">156.88 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;5.41%</td>
+    <td style="white-space: nowrap; text-align: right">156.09 ms</td>
+    <td style="white-space: nowrap; text-align: right">183.80 ms</td>
   </tr>
 
 </table>

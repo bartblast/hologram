@@ -568,12 +568,12 @@ defmodule Hologram.Compiler do
     beam_path = :code.which(module)
 
     if beam_path != :non_existing do
-      data =
+      digest =
         beam_path
         |> Reflection.beam_defs()
-        |> :erlang.term_to_binary(compressed: 0)
+        # Fast and deterministic for change detection
+        |> :erlang.phash2()
 
-      digest = CryptographicUtils.digest(data, :sha256, :binary)
       PLT.put(module_digest_plt, module, digest)
     end
   end
