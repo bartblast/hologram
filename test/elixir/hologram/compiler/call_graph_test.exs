@@ -892,6 +892,36 @@ defmodule Hologram.Compiler.CallGraphTest do
       refute {:non_existing_module_fixture, :dummy_function_4, 4} in result
     end
 
+    test "excludes Hex MFAs", %{full_call_graph: call_graph} do
+      call_graph_clone = CallGraph.clone(call_graph)
+
+      call_graph_clone
+      |> add_edge({Enum, :into, 2}, {Hex, :start, 2})
+      |> add_edge({Enum, :into, 2}, {Hex, :version, 0})
+
+      result = list_runtime_mfas(call_graph_clone)
+
+      assert {Enum, :into, 2} in result
+
+      refute {Hex, :start, 2} in result
+      refute {Hex, :version, 0} in result
+    end
+
+    test "excludes Hex.* MFAs", %{full_call_graph: call_graph} do
+      call_graph_clone = CallGraph.clone(call_graph)
+
+      call_graph_clone
+      |> add_edge({Enum, :into, 2}, {Hex.API, :request, 4})
+      |> add_edge({Enum, :into, 2}, {Hex.Registry.Server, :versions, 2})
+
+      result = list_runtime_mfas(call_graph_clone)
+
+      assert {Enum, :into, 2} in result
+
+      refute {Hex.API, :request, 4} in result
+      refute {Hex.Registry.Server, :versions, 2} in result
+    end
+
     test "excludes Hex implementations for Inspect and String.Chars protocols", %{
       runtime_mfas: result
     } do
@@ -906,34 +936,6 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       refute {String.Chars.Hex.Solver.PackageRange, :__impl__, 1} in result
       refute {String.Chars.Hex.Solver.PackageRange, :to_string, 1} in result
-    end
-
-    test "excludes Hex.* MFAs", %{full_call_graph: call_graph} do
-      call_graph_clone = CallGraph.clone(call_graph)
-
-      call_graph_clone
-      |> add_edge({Enum, :into, 2}, {Hex.Solver.Assignment, :__struct__, 0})
-      |> add_edge({Enum, :into, 2}, {Hex.Registry, :some_registry_fun, 2})
-      |> add_edge({Enum, :into, 2}, {Hex.API, :some_api_fun, 0})
-
-      result = list_runtime_mfas(call_graph_clone)
-
-      refute {Hex.Solver.Assignment, :__struct__, 0} in result
-      refute {Hex.Registry, :some_registry_fun, 2} in result
-      refute {Hex.API, :some_api_fun, 0} in result
-    end
-
-    test "excludes Hex MFAs", %{full_call_graph: call_graph} do
-      call_graph_clone = CallGraph.clone(call_graph)
-
-      call_graph_clone
-      |> add_edge({Enum, :into, 2}, {Hex, :some_hex_fun, 1})
-      |> add_edge({Enum, :into, 2}, {Calendar.ISO, :some_other_fun, 0})
-
-      result = list_runtime_mfas(call_graph_clone)
-
-      refute {Hex, :some_hex_fun, 1} in result
-      assert {Calendar.ISO, :some_other_fun, 0} in result
     end
 
     test "results are deduped", %{runtime_mfas: result} do
