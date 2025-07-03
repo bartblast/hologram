@@ -17,8 +17,7 @@ defmodule Hologram.Benchmarks do
     validate_args(added_modules_spec, removed_modules_spec, updated_modules_spec)
 
     module_digests =
-      Compiler.build_module_beam_path_plt()
-      |> Compiler.build_module_digest_plt!()
+      Compiler.build_module_digest_plt!()
       |> PLT.get_all()
       |> Map.to_list()
 

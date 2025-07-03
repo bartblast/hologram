@@ -38,21 +38,13 @@ defmodule Hologram.Compiler do
 
   @doc """
   Builds IR persistent lookup table (PLT) of all modules in the project.
-  """
-  @spec build_ir_plt :: PLT.t()
-  def build_ir_plt do
-    build_ir_plt(build_module_beam_path_plt())
-  end
-
-  @doc """
-  Builds IR persistent lookup table (PLT) of all modules in the project using the given module BEAM path PLT.
 
   Benchmark: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_ir_plt_1/README.md
   """
-  @spec build_ir_plt(PLT.t()) :: PLT.t()
+  @spec build_ir_plt :: PLT.t()
   # credo:disable-for-lines:26 Credo.Check.Refactor.Nesting
   # The above Credo check is disabled because the function is optimised this way
-  def build_ir_plt(module_beam_path_plt) do
+  def build_ir_plt do
     ir_plt = PLT.start()
 
     modules = Reflection.list_elixir_modules()
@@ -65,7 +57,7 @@ defmodule Hologram.Compiler do
     |> Enum.chunk_every(chunk_size)
     |> TaskUtils.async_many(fn module_chunk ->
       Enum.each(module_chunk, fn module ->
-        beam_path = get_module_beam_path(module_beam_path_plt, module)
+        beam_path = :code.which(module)
 
         if beam_path != :non_existing do
           ir = IR.for_module(module, beam_path)
@@ -79,36 +71,16 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Builds module BEAM path persistent lookup table (PLT) of all modules in the project.
-  """
-  @spec build_module_beam_path_plt :: PLT.t()
-  def build_module_beam_path_plt do
-    module_beam_path_plt = PLT.start()
-
-    Reflection.list_elixir_modules()
-    |> TaskUtils.async_many(fn module ->
-      beam_path = :code.which(module)
-      PLT.put(module_beam_path_plt, module, beam_path)
-    end)
-    |> Task.await_many(:infinity)
-
-    module_beam_path_plt
-  end
-
-  @doc """
   Builds a persistent lookup table (PLT) containing the BEAM defs digests for all the modules in the project.
-  Mutates module BEAM path PLT.
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/build_module_digest_plt!_1/README.md
   """
-  @spec build_module_digest_plt!(PLT.t()) :: PLT.t()
-  def build_module_digest_plt!(module_beam_path_plt) do
+  @spec build_module_digest_plt! :: PLT.t()
+  def build_module_digest_plt! do
     module_digest_plt = PLT.start()
 
     Reflection.list_elixir_modules()
-    |> TaskUtils.async_many(
-      &rebuild_module_digest_plt_entry!(&1, module_digest_plt, module_beam_path_plt)
-    )
+    |> TaskUtils.async_many(&rebuild_module_digest_plt_entry!(&1, module_digest_plt))
     |> Task.await_many(:infinity)
 
     module_digest_plt
@@ -466,23 +438,6 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Loads module BEAM path PLT from a dump file if the file exists or creates an empty PLT.
-
-  Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_module_beam_path_plt_1/README.md
-  """
-  @spec maybe_load_module_beam_path_plt(T.file_path()) :: {PLT.t(), String.t()}
-  def maybe_load_module_beam_path_plt(build_dir) do
-    module_beam_path_plt = PLT.start()
-
-    module_beam_path_plt_dump_path =
-      Path.join(build_dir, Reflection.module_beam_path_plt_dump_file_name())
-
-    PLT.maybe_load(module_beam_path_plt, module_beam_path_plt_dump_path)
-
-    {module_beam_path_plt, module_beam_path_plt_dump_path}
-  end
-
-  @doc """
   Loads module digest PLT from a dump file if the file exists or creates an empty PLT.
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/maybe_load_module_digest_plt_1/README.md
@@ -505,15 +460,15 @@ defmodule Hologram.Compiler do
   rebuilding the IR of modules that have been updated,
   and adding the IR of new modules.
   """
-  @spec patch_ir_plt!(PLT.t(), map, PLT.t()) :: PLT.t()
-  def patch_ir_plt!(ir_plt, module_digests_diff, module_beam_path_plt) do
+  @spec patch_ir_plt!(PLT.t(), map) :: PLT.t()
+  def patch_ir_plt!(ir_plt, module_digests_diff) do
     delete_tasks =
       TaskUtils.async_many(module_digests_diff.removed_modules, &PLT.delete(ir_plt, &1))
 
     rebuild_tasks =
       TaskUtils.async_many(
         module_digests_diff.updated_modules ++ module_digests_diff.added_modules,
-        &rebuild_ir_plt_entry!(ir_plt, &1, module_beam_path_plt)
+        &rebuild_ir_plt_entry!(ir_plt, &1)
       )
 
     Task.await_many(delete_tasks, :infinity)
@@ -590,18 +545,6 @@ defmodule Hologram.Compiler do
     Enum.filter(mfas, fn {module, _function, _arity} -> Reflection.erlang_module?(module) end)
   end
 
-  defp get_module_beam_path(module_beam_path_plt, module) do
-    case PLT.get(module_beam_path_plt, module) do
-      {:ok, path} ->
-        path
-
-      :error ->
-        path = :code.which(module)
-        PLT.put(module_beam_path_plt, module, path)
-        path
-    end
-  end
-
   defp get_package_json_digest(assets_dir) do
     assets_dir
     |> Path.join("package.json")
@@ -616,13 +559,13 @@ defmodule Hologram.Compiler do
     |> MapSet.new()
   end
 
-  defp rebuild_ir_plt_entry!(ir_plt, module, module_beam_path_plt) do
-    beam_path = PLT.get!(module_beam_path_plt, module)
+  defp rebuild_ir_plt_entry!(ir_plt, module) do
+    beam_path = :code.which(module)
     PLT.put(ir_plt, module, IR.for_module(module, beam_path))
   end
 
-  defp rebuild_module_digest_plt_entry!(module, module_digest_plt, module_beam_path_plt) do
-    beam_path = get_module_beam_path(module_beam_path_plt, module)
+  defp rebuild_module_digest_plt_entry!(module, module_digest_plt) do
+    beam_path = :code.which(module)
 
     if beam_path != :non_existing do
       data =

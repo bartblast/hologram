@@ -9,8 +9,6 @@ defmodule Hologram.Reflection do
 
   @ir_plt_dump_file_name "ir.plt"
 
-  @module_beam_path_plt_dump_file_name "module_beam_path.plt"
-
   @module_digest_plt_dump_file_name "module_digest.plt"
 
   @page_digest_plt_dump_file_name "page_digest.plt"
@@ -351,14 +349,6 @@ defmodule Hologram.Reflection do
   @spec module?(term) :: boolean
   def module?(term) do
     elixir_module?(term) || erlang_module?(term)
-  end
-
-  @doc """
-  Returns the module BEAM path PLT dump file name.
-  """
-  @spec module_beam_path_plt_dump_file_name() :: String.t()
-  def module_beam_path_plt_dump_file_name do
-    @module_beam_path_plt_dump_file_name
   end
 
   @doc """

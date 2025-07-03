@@ -47,12 +47,9 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     Compiler.maybe_install_js_deps(assets_dir, build_dir)
 
-    {module_beam_path_plt, module_beam_path_plt_dump_path} =
-      Compiler.maybe_load_module_beam_path_plt(build_dir)
-
     # Building IR PLT from scratch is almost x2 faster than loading IR PLT from a dump file,
     # so Compiler.build_ir_plt/1 is used instead of Compiler.maybe_load_ir_plt/1 + Compiler.patch_ir_plt!/3.
-    ir_plt = Compiler.build_ir_plt(module_beam_path_plt)
+    ir_plt = Compiler.build_ir_plt()
 
     # Patching call graph for 1 updated module takes ~100-400 ms, so it's too long if there are multiple updates
     # (and one needs to take into account that the graph has to be loaded first and dumped at the end).
@@ -107,7 +104,6 @@ defmodule Mix.Tasks.Compile.Hologram do
       Compiler.build_page_digest_plt(bundles_info, opts)
 
     PLT.dump(page_digest_plt, page_digest_plt_dump_path)
-    PLT.dump(module_beam_path_plt, module_beam_path_plt_dump_path)
 
     Enum.each(old_build_static_artifacts -- new_build_static_artifacts, &File.rm!/1)
 

@@ -5,7 +5,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Commons.PLT
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
-  alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
 
   @test_dir Path.join([
               Reflection.tmp_dir(),
@@ -31,7 +30,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
   defp test_build_artifacts do
     test_dirs()
     test_js_deps()
-    test_module_beam_path_plt()
     test_page_bundles()
     test_page_digest_plt()
     test_runtime_bundle()
@@ -47,17 +45,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert @assets_dir
            |> Path.join("node_modules")
            |> File.exists?()
-  end
-
-  defp test_module_beam_path_plt do
-    module_beam_path_plt_dump_path =
-      Path.join(@build_dir, Reflection.module_beam_path_plt_dump_file_name())
-
-    assert File.exists?(module_beam_path_plt_dump_path)
-
-    module_beam_path_plt = PLT.start()
-    PLT.load(module_beam_path_plt, module_beam_path_plt_dump_path)
-    assert PLT.get!(module_beam_path_plt, Module2) == :code.which(Module2)
   end
 
   defp test_old_build_static_artifacts_cleanup do

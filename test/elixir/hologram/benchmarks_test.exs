@@ -46,10 +46,9 @@ defmodule Hologram.BenchmarksTest do
 
   setup_all do
     modules = Reflection.list_elixir_modules()
-    module_beam_path_plt = Compiler.build_module_beam_path_plt()
 
     [
-      module_digest_plt: Compiler.build_module_digest_plt!(module_beam_path_plt),
+      module_digest_plt: Compiler.build_module_digest_plt!(),
       modules: modules,
       num_modules: Enum.count(modules)
     ]

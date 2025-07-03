@@ -39,14 +39,12 @@ defmodule Hologram.CompilerTest do
   end
 
   setup_all do
-    module_beam_path_plt = build_module_beam_path_plt()
-    ir_plt = build_ir_plt(module_beam_path_plt)
+    ir_plt = build_ir_plt()
     call_graph = build_call_graph(ir_plt)
 
     [
       call_graph: call_graph,
       ir_plt: ir_plt,
-      module_beam_path_plt: module_beam_path_plt,
       runtime_mfas: CallGraph.list_runtime_mfas(call_graph)
     ]
   end
@@ -104,59 +102,30 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "build_ir_plt/1" do
-    test "module has BEAM path", %{module_beam_path_plt: module_beam_path_plt} do
-      assert %PLT{} = ir_plt = build_ir_plt(module_beam_path_plt)
+    test "module has BEAM path" do
+      assert %PLT{} = ir_plt = build_ir_plt()
 
       assert %IR.ModuleDefinition{module: %IR.AtomType{value: Hologram.Compiler}} =
                PLT.get!(ir_plt, Hologram.Compiler)
     end
 
-    test "module doesn't have BEAM path", %{module_beam_path_plt: module_beam_path_plt} do
-      module_beam_path_plt_clone = PLT.clone(module_beam_path_plt)
-      PLT.put(module_beam_path_plt_clone, MyModule, :non_existing)
-
-      assert %PLT{} = ir_plt = build_ir_plt(module_beam_path_plt)
+    test "module doesn't have BEAM path" do
+      assert %PLT{} = ir_plt = build_ir_plt()
       assert PLT.get(ir_plt, MyModule) == :error
     end
   end
 
-  test "build_module_beam_path_plt/0" do
-    assert %PLT{} = module_beam_path_plt = build_module_beam_path_plt()
-    assert PLT.get!(module_beam_path_plt, Hologram.Compiler) == :code.which(Hologram.Compiler)
-  end
-
   describe "build_module_digest_plt!/0" do
-    setup %{module_beam_path_plt: module_beam_path_plt} do
-      [module_beam_path_plt: PLT.clone(module_beam_path_plt)]
-    end
-
-    test "adds module digest entries for modules that have a BEAM path", %{
-      module_beam_path_plt: module_beam_path_plt
-    } do
-      assert %PLT{} = plt = build_module_digest_plt!(module_beam_path_plt)
+    test "adds module digest entries for modules that have a BEAM path" do
+      assert %PLT{} = plt = build_module_digest_plt!()
 
       assert <<_digest::256>> = PLT.get!(plt, Hologram.Reflection)
       assert <<_digest::256>> = PLT.get!(plt, Hologram.Compiler)
     end
 
-    test "doesn't add module digest entries for modules that don't have a BEAM path", %{
-      module_beam_path_plt: module_beam_path_plt
-    } do
-      module_beam_path_plt_clone = PLT.clone(module_beam_path_plt)
-      PLT.put(module_beam_path_plt_clone, MyModule, :non_existing)
-
-      assert %PLT{} = plt = build_module_digest_plt!(module_beam_path_plt)
+    test "doesn't add module digest entries for modules that don't have a BEAM path" do
+      assert %PLT{} = plt = build_module_digest_plt!()
       assert PLT.get(plt, MyModule) == :error
-    end
-
-    test "adds missing module BEAM path PLT entries", %{
-      module_beam_path_plt: module_beam_path_plt
-    } do
-      PLT.delete(module_beam_path_plt, Hologram.Compiler)
-      build_module_digest_plt!(module_beam_path_plt)
-
-      assert PLT.get!(module_beam_path_plt, Hologram.Compiler) ==
-               :code.which(Hologram.Compiler)
     end
   end
 
@@ -678,36 +647,6 @@ defmodule Hologram.CompilerTest do
     end
   end
 
-  describe "maybe_load_module_beam_path_plt/1" do
-    setup do
-      test_tmp_dir =
-        Path.join([@tmp_dir, "tests", "compiler", "maybe_load_module_beam_path_plt_1"])
-
-      build_dir = Path.join(test_tmp_dir, "build")
-      clean_dir(build_dir)
-
-      dump_path = Path.join(build_dir, Reflection.module_beam_path_plt_dump_file_name())
-
-      [build_dir: build_dir, dump_path: dump_path]
-    end
-
-    test "dump file doesn't exist", %{build_dir: build_dir, dump_path: dump_path} do
-      assert {plt = %PLT{}, ^dump_path} = maybe_load_module_beam_path_plt(build_dir)
-      assert PLT.get_all(plt) == %{}
-    end
-
-    test "dump file exists", %{
-      build_dir: build_dir,
-      dump_path: dump_path,
-      module_beam_path_plt: module_beam_path_plt
-    } do
-      PLT.dump(module_beam_path_plt, dump_path)
-
-      assert {plt = %PLT{}, ^dump_path} = maybe_load_module_beam_path_plt(build_dir)
-      assert PLT.get_all(plt) == PLT.get_all(module_beam_path_plt)
-    end
-  end
-
   describe "maybe_load_module_digest_plt/1" do
     setup do
       test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", "maybe_load_module_digest_plt_1"])
@@ -737,9 +676,7 @@ defmodule Hologram.CompilerTest do
   end
 
   describe "patch_ir_plt!/3" do
-    setup %{module_beam_path_plt: module_beam_path_plt} do
-      module_beam_path_plt_clone = PLT.clone(module_beam_path_plt)
-
+    setup do
       ir_plt =
         PLT.start()
         |> PLT.put(:module_5, :ir_5)
@@ -755,7 +692,7 @@ defmodule Hologram.CompilerTest do
         updated_modules: [Module3, Module4]
       }
 
-      patch_ir_plt!(ir_plt, module_digests_diff, module_beam_path_plt_clone)
+      patch_ir_plt!(ir_plt, module_digests_diff)
 
       [ir_plt: ir_plt]
     end
