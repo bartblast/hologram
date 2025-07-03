@@ -51,5 +51,5 @@ Benchee.run(
      description: "Hologram.Compiler.maybe_load_call_graph/1",
      file: Path.join(__DIR__, "README.md")}
   ],
-  time: 60
+  time: 10
 )

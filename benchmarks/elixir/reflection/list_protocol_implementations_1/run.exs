@@ -12,5 +12,5 @@ Benchee.run(
      description: "Hologram.Reflection.list_protocol_implementations/1",
      file: Path.join(__DIR__, "README.md")}
   ],
-  time: 60
+  time: 10
 )

@@ -68,5 +68,5 @@ Benchee.run(
      description: "Hologram.Compiler.maybe_install_js_deps/2",
      file: Path.join(__DIR__, "README.md")}
   ],
-  time: 60
+  time: 10
 )

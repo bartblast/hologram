@@ -35,5 +35,5 @@ Benchee.run(
      description: "Hologram.Compiler.create_page_entry_files/4",
      file: Path.join(__DIR__, "README.md")}
   ],
-  time: 60
+  time: 10
 )

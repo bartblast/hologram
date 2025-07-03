@@ -46,5 +46,5 @@ Benchee.run(
     {Benchee.Formatters.Markdown,
      description: "Hologram.Compiler.format_files/2", file: Path.join(__DIR__, "README.md")}
   ],
-  time: 60
+  time: 10
 )

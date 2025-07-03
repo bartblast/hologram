@@ -75,5 +75,5 @@ Benchee.run(
      description: "Hologram.Compiler.CallGraph.remove_vertices/2",
      file: Path.join(__DIR__, "README.md")}
   ],
-  time: 60
+  time: 10
 )

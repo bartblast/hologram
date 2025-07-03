@@ -12,5 +12,5 @@ Benchee.run(
      description: "Hologram.Reflection.list_elixir_modules/0",
      file: Path.join(__DIR__, "README.md")}
   ],
-  time: 60
+  time: 10
 )

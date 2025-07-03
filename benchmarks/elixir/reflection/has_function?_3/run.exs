@@ -11,5 +11,5 @@ Benchee.run(
     {Benchee.Formatters.Markdown,
      description: "Hologram.Reflection.has_function?/3", file: Path.join(__DIR__, "README.md")}
   ],
-  time: 3
+  time: 10
 )

@@ -23,5 +23,5 @@ Benchee.run(
      description: "Hologram.Compiler.CallGraph.remove_manually_ported_mfas/1",
      file: Path.join(__DIR__, "README.md")}
   ],
-  time: 60
+  time: 10
 )
