@@ -1,7 +1,6 @@
 defmodule Hologram.Benchmarks do
   @moduledoc false
 
-  alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.PLT
   alias Hologram.Compiler
 
@@ -57,7 +56,7 @@ defmodule Hologram.Benchmarks do
 
     new_updated_modules_chunk =
       Enum.map(old_updated_modules_chunk, fn {module, digest} ->
-        {module, CryptographicUtils.digest(digest, :sha256, :binary)}
+        {module, digest + 1}
       end)
 
     new_module_digest_plt =
