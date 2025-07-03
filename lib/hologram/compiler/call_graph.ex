@@ -382,7 +382,7 @@ defmodule Hologram.Compiler.CallGraph do
 
     graph
     |> sorted_reachable_mfas(entry_mfas)
-    |> reject_hex_solver_mfas()
+    |> reject_hex_mfas()
     |> add_reflection_mfas_reachable_from_server_inits(page_module, graph)
     |> Enum.uniq()
     |> Enum.sort()
@@ -416,7 +416,7 @@ defmodule Hologram.Compiler.CallGraph do
     |> get_graph()
     |> add_edges_for_erlang_functions()
     |> sorted_reachable_mfas(entry_mfas)
-    |> reject_hex_solver_mfas()
+    |> reject_hex_mfas()
   end
 
   @doc """
@@ -500,13 +500,14 @@ defmodule Hologram.Compiler.CallGraph do
     call_graph
   end
 
-  defp reject_hex_solver_mfas(mfas) do
+  defp reject_hex_mfas(mfas) do
     Enum.reject(mfas, fn {module, _function, _arity} ->
       module_str = to_string(module)
 
-      String.starts_with?(module_str, "Elixir.Hex.Solver.") ||
-        String.starts_with?(module_str, "Elixir.Inspect.Hex.Solver.") ||
-        String.starts_with?(module_str, "Elixir.String.Chars.Hex.Solver.")
+      module_str == "Elixir.Hex" ||
+        String.starts_with?(module_str, "Elixir.Hex.") ||
+        String.starts_with?(module_str, "Elixir.Inspect.Hex.") ||
+        String.starts_with?(module_str, "Elixir.String.Chars.Hex.")
     end)
   end
 
