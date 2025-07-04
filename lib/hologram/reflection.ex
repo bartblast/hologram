@@ -347,9 +347,19 @@ defmodule Hologram.Reflection do
       false
   """
   @spec module?(term) :: boolean
-  def module?(term) do
-    elixir_module?(term) || erlang_module?(term)
+  def module?(term)
+
+  def module?(term) when is_atom(term) do
+    case Code.ensure_loaded(term) do
+      {:module, ^term} ->
+        true
+
+      _fallback ->
+        false
+    end
   end
+
+  def module?(_term), do: false
 
   @doc """
   Returns the module digest PLT dump file name.
