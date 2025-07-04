@@ -3,8 +3,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
   import Mix.Tasks.Compile.Hologram
 
   alias Hologram.Commons.PLT
+  alias Hologram.Compiler.CallGraph
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
+  alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
 
   @test_dir Path.join([
               Reflection.tmp_dir(),
@@ -28,11 +30,23 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   defp test_build_artifacts do
+    test_call_graph()
     test_dirs()
     test_js_deps()
+    test_module_digest_plt()
     test_page_bundles()
     test_page_digest_plt()
     test_runtime_bundle()
+  end
+
+  defp test_call_graph do
+    call_graph_dump_path = Path.join(@build_dir, Reflection.call_graph_dump_file_name())
+    assert File.exists?(call_graph_dump_path)
+
+    call_graph = CallGraph.start()
+    CallGraph.load(call_graph, call_graph_dump_path)
+
+    assert CallGraph.has_vertex?(call_graph, Module2)
   end
 
   defp test_dirs do
@@ -45,6 +59,21 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert @assets_dir
            |> Path.join("node_modules")
            |> File.exists?()
+  end
+
+  defp test_module_digest_plt do
+    module_digest_plt_dump_path =
+      Path.join(@build_dir, Reflection.module_digest_plt_dump_file_name())
+
+    assert File.exists?(module_digest_plt_dump_path)
+
+    module_digest_plt = PLT.start()
+    PLT.load(module_digest_plt, module_digest_plt_dump_path)
+    module_digest_items = PLT.get_all(module_digest_plt)
+
+    assert map_size(module_digest_items) > 1_000
+
+    assert is_integer(module_digest_items[Module1])
   end
 
   defp test_old_build_static_artifacts_cleanup do
@@ -76,19 +105,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   defp test_page_digest_plt do
-    page_digest_dump_path = Path.join(@build_dir, Reflection.page_digest_plt_dump_file_name())
-    assert File.exists?(page_digest_dump_path)
+    page_digest_plt_dump_path = Path.join(@build_dir, Reflection.page_digest_plt_dump_file_name())
+    assert File.exists?(page_digest_plt_dump_path)
 
     page_digest_plt = PLT.start()
-    PLT.load(page_digest_plt, page_digest_dump_path)
+    PLT.load(page_digest_plt, page_digest_plt_dump_path)
     page_digest_items = PLT.get_all(page_digest_plt)
 
-    num_page_bundles =
-      page_digest_items
-      |> Map.keys()
-      |> Enum.count()
-
-    assert num_page_bundles == @num_pages
+    assert map_size(page_digest_items) == @num_pages
 
     assert page_digest_items[Module1] =~ ~r/^[0-9a-f]{32}$/
   end

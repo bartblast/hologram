@@ -47,20 +47,28 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     Compiler.maybe_install_js_deps(assets_dir, build_dir)
 
+    {old_module_digest_plt, module_digest_plt_dump_path} =
+      Compiler.maybe_load_module_digest_plt(build_dir)
+
+    new_module_digest_plt = Compiler.build_module_digest_plt!()
+
+    module_digests_diff =
+      Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
+
     # Building IR PLT from scratch is faster that dumping it to a file,
-    # and then loading and patching it:
+    # and then loading and patching it (benchmarked on an app with 1628 modules):
     # build: ~310 ms
     # dump: ~350 ms
     # load: ~465 ms
     # patch: not benchmarked
     ir_plt = Compiler.build_ir_plt()
 
-    # Patching call graph for 1 updated module takes ~100-400 ms, so it's too long if there are multiple updates
-    # (and one needs to take into account that the graph has to be loaded first and dumped at the end).
-    # Building call graph from scratch is more predictable as it takes ~563 ms for ~1300 modules.
+    {call_graph, call_graph_dump_path} = Compiler.maybe_load_call_graph(build_dir)
+    CallGraph.patch(call_graph, ir_plt, module_digests_diff)
+
     call_graph_for_runtime =
-      ir_plt
-      |> Compiler.build_call_graph()
+      call_graph
+      |> CallGraph.clone()
       # DEFER: In case the list of manually ported MFAs grows to ~32 vertices,
       # consider using similar strategy to CallGraph.remove_runtime_mfas!/2
       # or implement opts param for Digraph.remove_vertices/2 to allow rebuilding the graph.
@@ -108,6 +116,8 @@ defmodule Mix.Tasks.Compile.Hologram do
       Compiler.build_page_digest_plt(bundles_info, opts)
 
     PLT.dump(page_digest_plt, page_digest_plt_dump_path)
+    CallGraph.dump(call_graph, call_graph_dump_path)
+    PLT.dump(new_module_digest_plt, module_digest_plt_dump_path)
 
     Enum.each(old_build_static_artifacts -- new_build_static_artifacts, &File.rm!/1)
 
