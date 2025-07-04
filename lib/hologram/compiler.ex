@@ -305,14 +305,14 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
-  Compares two module digest PLTs and returns the added, removed, and updated modules lists.
+  Compares two module digest PLTs and returns the added, removed, and edited modules lists.
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/diff_module_digest_plts_2/README.md
   """
   @spec diff_module_digest_plts(PLT.t(), PLT.t()) :: %{
           added_modules: list(module),
           removed_modules: list(module),
-          updated_modules: list(module)
+          edited_modules: list(module)
         }
   def diff_module_digest_plts(old_plt, new_plt) do
     old_digests = PLT.get_all(old_plt)
@@ -323,7 +323,7 @@ defmodule Hologram.Compiler do
     %{
       added_modules: Enum.map(diff.added, fn {module, _digest} -> module end),
       removed_modules: diff.removed,
-      updated_modules: Enum.map(diff.edited, fn {module, _digest} -> module end)
+      edited_modules: Enum.map(diff.edited, fn {module, _digest} -> module end)
     }
   end
 
@@ -444,7 +444,7 @@ defmodule Hologram.Compiler do
   @doc """
   Given a module digests diff, updates the IR persistent lookup table (PLT)
   by deleting entries for modules that have been removed,
-  rebuilding the IR of modules that have been updated,
+  rebuilding the IR of modules that have been edited,
   and adding the IR of new modules.
   """
   @spec patch_ir_plt!(PLT.t(), map) :: PLT.t()
@@ -454,7 +454,7 @@ defmodule Hologram.Compiler do
 
     rebuild_tasks =
       TaskUtils.async_many(
-        module_digests_diff.updated_modules ++ module_digests_diff.added_modules,
+        module_digests_diff.edited_modules ++ module_digests_diff.added_modules,
         &rebuild_ir_plt_entry!(ir_plt, &1)
       )
 

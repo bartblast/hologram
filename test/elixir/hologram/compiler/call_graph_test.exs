@@ -1024,7 +1024,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       diff = %{
         added_modules: [Module10, Module9],
         removed_modules: [],
-        updated_modules: []
+        edited_modules: []
       }
 
       patch(call_graph_1, ir_plt, diff)
@@ -1045,7 +1045,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       diff = %{
         added_modules: [],
         removed_modules: [:module_2, :module_3],
-        updated_modules: []
+        edited_modules: []
       }
 
       patch(call_graph, ir_plt, diff)
@@ -1083,7 +1083,7 @@ defmodule Hologram.Compiler.CallGraphTest do
       diff = %{
         added_modules: [],
         removed_modules: [],
-        updated_modules: [Module9, Module10]
+        edited_modules: [Module9, Module10]
       }
 
       patch(call_graph, ir_plt, diff)

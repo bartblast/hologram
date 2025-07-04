@@ -26,7 +26,7 @@ Benchee.run(
         diff = %{
           added_modules: Enum.take(modules, 1),
           removed_modules: [],
-          updated_modules: []
+          edited_modules: []
         }
 
         {modules, ir_plt, diff}
@@ -40,13 +40,13 @@ Benchee.run(
         diff = %{
           added_modules: [],
           removed_modules: Enum.take(modules, 1),
-          updated_modules: []
+          edited_modules: []
         }
 
         {modules, ir_plt, diff}
       end
     },
-    "1 module updated " => {
+    "1 module edited " => {
       fn {call_graph, ir_plt, diff} ->
         CallGraph.patch(call_graph, ir_plt, diff)
       end,
@@ -54,7 +54,7 @@ Benchee.run(
         diff = %{
           added_modules: [],
           removed_modules: [],
-          updated_modules: Enum.take(modules, 1)
+          edited_modules: Enum.take(modules, 1)
         }
 
         {modules, ir_plt, diff}
@@ -86,7 +86,7 @@ Benchee.run(
         {modules, ir_plt, diff}
       end
     },
-    "100% modules updated" => {
+    "100% modules edited" => {
       fn {call_graph, ir_plt, diff} ->
         CallGraph.patch(call_graph, ir_plt, diff)
       end,
@@ -99,7 +99,7 @@ Benchee.run(
         {modules, ir_plt, diff}
       end
     },
-    "33% added, 33% removed, 34% updated" => {
+    "33% added, 33% removed, 34% edited" => {
       fn {call_graph, ir_plt, diff} ->
         CallGraph.patch(call_graph, ir_plt, diff)
       end,
@@ -112,7 +112,7 @@ Benchee.run(
         {modules, ir_plt, diff}
       end
     },
-    "1% added, 1% removed, 1% updated" => {
+    "1% added, 1% removed, 1% edited" => {
       fn {call_graph, ir_plt, diff} ->
         CallGraph.patch(call_graph, ir_plt, diff)
       end,
@@ -125,7 +125,7 @@ Benchee.run(
         {modules, ir_plt, diff}
       end
     },
-    "10 added, 10 removed, 10 updated" => {
+    "10 added, 10 removed, 10 edited" => {
       fn {call_graph, ir_plt, diff} ->
         CallGraph.patch(call_graph, ir_plt, diff)
       end,
@@ -133,13 +133,13 @@ Benchee.run(
         diff = %{
           added_modules: Enum.take(modules, 10),
           removed_modules: Enum.drop(Enum.take(modules, 20), 10),
-          updated_modules: Enum.take(modules, -10)
+          edited_modules: Enum.take(modules, -10)
         }
 
         {modules, ir_plt, diff}
       end
     },
-    "3 added, 3 removed, 3 updated" => {
+    "3 added, 3 removed, 3 edited" => {
       fn {call_graph, ir_plt, diff} ->
         CallGraph.patch(call_graph, ir_plt, diff)
       end,
@@ -147,13 +147,13 @@ Benchee.run(
         diff = %{
           added_modules: Enum.take(modules, 3),
           removed_modules: Enum.drop(Enum.take(modules, 6), 3),
-          updated_modules: Enum.take(modules, -3)
+          edited_modules: Enum.take(modules, -3)
         }
 
         {modules, ir_plt, diff}
       end
     },
-    "1 added, 1 removed, 1 updated" => {
+    "1 added, 1 removed, 1 edited" => {
       fn {call_graph, ir_plt, diff} ->
         CallGraph.patch(call_graph, ir_plt, diff)
       end,
@@ -161,7 +161,7 @@ Benchee.run(
         diff = %{
           added_modules: Enum.take(modules, 1),
           removed_modules: Enum.drop(Enum.take(modules, 2), 1),
-          updated_modules: Enum.take(modules, -1)
+          edited_modules: Enum.take(modules, -1)
         }
 
         {modules, ir_plt, diff}

@@ -419,11 +419,11 @@ defmodule Hologram.CompilerTest do
 
     result = diff_module_digest_plts(old_plt, new_plt)
 
-    assert Map.keys(result) == [:added_modules, :removed_modules, :updated_modules]
+    assert Map.keys(result) == [:added_modules, :removed_modules, :edited_modules]
 
     assert Enum.sort(result.added_modules) == [:module_2, :module_4]
     assert Enum.sort(result.removed_modules) == [:module_5, :module_7]
-    assert Enum.sort(result.updated_modules) == [:module_3, :module_6]
+    assert Enum.sort(result.edited_modules) == [:module_3, :module_6]
   end
 
   describe "format_files/2" do
@@ -694,7 +694,7 @@ defmodule Hologram.CompilerTest do
       module_digests_diff = %{
         added_modules: [Module1, Module2],
         removed_modules: [:module_5, :module_7],
-        updated_modules: [Module3, Module4]
+        edited_modules: [Module3, Module4]
       }
 
       patch_ir_plt!(ir_plt, module_digests_diff)
@@ -727,7 +727,7 @@ defmodule Hologram.CompilerTest do
       assert PLT.get(ir_plt, :module_7) == :error
     end
 
-    test "updates entries of updated modules", %{ir_plt: ir_plt} do
+    test "updates entries of edited modules", %{ir_plt: ir_plt} do
       assert PLT.get(ir_plt, Module3) ==
                {:ok,
                 %IR.ModuleDefinition{

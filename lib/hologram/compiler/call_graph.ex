@@ -461,7 +461,7 @@ defmodule Hologram.Compiler.CallGraph do
   @doc """
   Given a diff of changes, updates the call graph
   by deleting the graph paths of modules that have been removed,
-  rebuilding the graph paths of modules that have been updated,
+  rebuilding the graph paths of modules that have been edited,
   and adding the graph paths of modules that have been added.
 
   Benchmarks: https://github.com/bartblast/hologram/blob/master/benchmarks/compiler/call_graph/patch_3/README.md
@@ -472,7 +472,7 @@ defmodule Hologram.Compiler.CallGraph do
       TaskUtils.async_many(diff.removed_modules, &remove_module_vertices(call_graph, &1))
 
     update_tasks =
-      TaskUtils.async_many(diff.updated_modules, fn module ->
+      TaskUtils.async_many(diff.edited_modules, fn module ->
         remote_incoming_edges = remote_incoming_edges(call_graph, module)
 
         call_graph

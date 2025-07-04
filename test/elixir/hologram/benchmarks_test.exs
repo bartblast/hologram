@@ -34,7 +34,7 @@ defmodule Hologram.BenchmarksTest do
     end)
   end
 
-  defp count_updated_modules(modules, old_module_digest_plt, new_module_digest_plt) do
+  defp count_edited_modules(modules, old_module_digest_plt, new_module_digest_plt) do
     Enum.reduce(modules, 0, fn module, acc ->
       case {PLT.get(old_module_digest_plt, module), PLT.get(new_module_digest_plt, module)} do
         {{:ok, digest}, {:ok, digest}} -> acc
@@ -55,7 +55,7 @@ defmodule Hologram.BenchmarksTest do
   end
 
   describe "generate_module_digest_plts/2" do
-    test "100% added modules, 0% removed modules, 0% updated modules, 0% untouched modules", %{
+    test "100% added modules, 0% removed modules, 0% edited modules, 0% untouched modules", %{
       module_digest_plt: module_digest_plt,
       num_modules: num_modules
     } do
@@ -67,7 +67,7 @@ defmodule Hologram.BenchmarksTest do
       assert PLT.get_all(new_module_digest_plt) == PLT.get_all(module_digest_plt)
     end
 
-    test "0% added modules, 100% removed modules, 0% updated modules, 0% untouched modules", %{
+    test "0% added modules, 100% removed modules, 0% edited modules, 0% untouched modules", %{
       module_digest_plt: module_digest_plt,
       num_modules: num_modules
     } do
@@ -79,7 +79,7 @@ defmodule Hologram.BenchmarksTest do
       assert PLT.get_all(old_module_digest_plt) == PLT.get_all(module_digest_plt)
     end
 
-    test "0% added modules, 0% removed modules, 100% updated modules, 0% untouched modules", %{
+    test "0% added modules, 0% removed modules, 100% edited modules, 0% untouched modules", %{
       module_digest_plt: module_digest_plt,
       modules: modules,
       num_modules: num_modules
@@ -96,7 +96,7 @@ defmodule Hologram.BenchmarksTest do
       end)
     end
 
-    test "0% added modules, 0% removed modules, 0% updated modules, 100% untouched modules", %{
+    test "0% added modules, 0% removed modules, 0% edited modules, 100% untouched modules", %{
       module_digest_plt: module_digest_plt,
       modules: modules,
       num_modules: num_modules
@@ -113,7 +113,7 @@ defmodule Hologram.BenchmarksTest do
       end)
     end
 
-    test "10% added modules, 20% removed modules, 30% updated modules, 40% untouched modules", %{
+    test "10% added modules, 20% removed modules, 30% edited modules, 40% untouched modules", %{
       modules: modules,
       num_modules: num_modules
     } do
@@ -121,11 +121,11 @@ defmodule Hologram.BenchmarksTest do
 
       expected_num_added_modules = trunc(0.1 * num_modules)
       expected_num_removed_modules = trunc(0.2 * num_modules)
-      expected_num_updated_modules = trunc(0.3 * num_modules)
+      expected_num_edited_modules = trunc(0.3 * num_modules)
 
       expected_num_untouched_modules =
         num_modules - expected_num_added_modules - expected_num_removed_modules -
-          expected_num_updated_modules
+          expected_num_edited_modules
 
       assert PLT.size(old_module_digest_plt) == num_modules - expected_num_added_modules
       assert PLT.size(new_module_digest_plt) == num_modules - expected_num_removed_modules
@@ -140,10 +140,10 @@ defmodule Hologram.BenchmarksTest do
 
       assert num_removed_modules == expected_num_removed_modules
 
-      num_updated_modules =
-        count_updated_modules(modules, old_module_digest_plt, new_module_digest_plt)
+      num_edited_modules =
+        count_edited_modules(modules, old_module_digest_plt, new_module_digest_plt)
 
-      assert num_updated_modules == expected_num_updated_modules
+      assert num_edited_modules == expected_num_edited_modules
 
       num_untouched_modules =
         count_untouched_modules(modules, old_module_digest_plt, new_module_digest_plt)
@@ -159,7 +159,7 @@ defmodule Hologram.BenchmarksTest do
 
       expected_num_added_modules = 1
       expected_num_removed_modules = 2
-      expected_num_updated_modules = 3
+      expected_num_edited_modules = 3
 
       expected_num_untouched_modules = num_modules - 1 - 2 - 3
 
@@ -176,10 +176,10 @@ defmodule Hologram.BenchmarksTest do
 
       assert num_removed_modules == expected_num_removed_modules
 
-      num_updated_modules =
-        count_updated_modules(modules, old_module_digest_plt, new_module_digest_plt)
+      num_edited_modules =
+        count_edited_modules(modules, old_module_digest_plt, new_module_digest_plt)
 
-      assert num_updated_modules == expected_num_updated_modules
+      assert num_edited_modules == expected_num_edited_modules
 
       num_untouched_modules =
         count_untouched_modules(modules, old_module_digest_plt, new_module_digest_plt)
@@ -199,7 +199,7 @@ defmodule Hologram.BenchmarksTest do
 
     test "first float arg less than 0.0" do
       expected_msg =
-        "invalid arguments: added_modules_spec = -0.1, removed_modules_spec = 0.2, updated_modules_spec = 0.3"
+        "invalid arguments: added_modules_spec = -0.1, removed_modules_spec = 0.2, edited_modules_spec = 0.3"
 
       assert_raise ArgumentError, expected_msg, fn ->
         generate_module_digest_plts(-0.1, 0.2, 0.3)
@@ -208,7 +208,7 @@ defmodule Hologram.BenchmarksTest do
 
     test "second float arg less than 0.0" do
       expected_msg =
-        "invalid arguments: added_modules_spec = 0.1, removed_modules_spec = -0.2, updated_modules_spec = 0.3"
+        "invalid arguments: added_modules_spec = 0.1, removed_modules_spec = -0.2, edited_modules_spec = 0.3"
 
       assert_raise ArgumentError, expected_msg, fn ->
         generate_module_digest_plts(0.1, -0.2, 0.3)
@@ -217,7 +217,7 @@ defmodule Hologram.BenchmarksTest do
 
     test "third float arg less than 0.0" do
       expected_msg =
-        "invalid arguments: added_modules_spec = 0.1, removed_modules_spec = 0.2, updated_modules_spec = -0.3"
+        "invalid arguments: added_modules_spec = 0.1, removed_modules_spec = 0.2, edited_modules_spec = -0.3"
 
       assert_raise ArgumentError, expected_msg, fn ->
         generate_module_digest_plts(0.1, 0.2, -0.3)
@@ -226,7 +226,7 @@ defmodule Hologram.BenchmarksTest do
 
     test "first integer arg less than 0" do
       expected_msg =
-        "invalid arguments: added_modules_spec = -1, removed_modules_spec = 2, updated_modules_spec = 3"
+        "invalid arguments: added_modules_spec = -1, removed_modules_spec = 2, edited_modules_spec = 3"
 
       assert_raise ArgumentError, expected_msg, fn ->
         generate_module_digest_plts(-1, 2, 3)
@@ -235,7 +235,7 @@ defmodule Hologram.BenchmarksTest do
 
     test "second integer arg less than 0" do
       expected_msg =
-        "invalid arguments: added_modules_spec = 1, removed_modules_spec = -2, updated_modules_spec = 3"
+        "invalid arguments: added_modules_spec = 1, removed_modules_spec = -2, edited_modules_spec = 3"
 
       assert_raise ArgumentError, expected_msg, fn ->
         generate_module_digest_plts(1, -2, 3)
@@ -244,7 +244,7 @@ defmodule Hologram.BenchmarksTest do
 
     test "third integer arg less than 0" do
       expected_msg =
-        "invalid arguments: added_modules_spec = 1, removed_modules_spec = 2, updated_modules_spec = -3"
+        "invalid arguments: added_modules_spec = 1, removed_modules_spec = 2, edited_modules_spec = -3"
 
       assert_raise ArgumentError, expected_msg, fn ->
         generate_module_digest_plts(1, 2, -3)
@@ -253,7 +253,7 @@ defmodule Hologram.BenchmarksTest do
 
     test "mixed type of arguments" do
       expected_msg =
-        "invalid arguments: added_modules_spec = 1, removed_modules_spec = 2.0, updated_modules_spec = 3"
+        "invalid arguments: added_modules_spec = 1, removed_modules_spec = 2.0, edited_modules_spec = 3"
 
       assert_raise ArgumentError, expected_msg, fn ->
         generate_module_digest_plts(1, 2.0, 3)

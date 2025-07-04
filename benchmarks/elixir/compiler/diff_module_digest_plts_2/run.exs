@@ -24,7 +24,7 @@ Benchee.run(
        before_scenario: fn _input ->
          Benchmarks.generate_module_digest_plts(0, 1, 0)
        end},
-    "1 module updated" =>
+    "1 module edited" =>
       {fn {old_module_digest_plt, new_module_digest_plt} ->
          Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
        end,
@@ -45,14 +45,14 @@ Benchee.run(
        before_scenario: fn _input ->
          Benchmarks.generate_module_digest_plts(0.0, 1.0, 0.0)
        end},
-    "100% modules updated" =>
+    "100% modules edited" =>
       {fn {old_module_digest_plt, new_module_digest_plt} ->
          Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
        end,
        before_scenario: fn _input ->
          Benchmarks.generate_module_digest_plts(0.0, 0.0, 1.0)
        end},
-    "33% added, 33% removed, 34% updated" => {
+    "33% added, 33% removed, 34% edited" => {
       fn {old_module_digest_plt, new_module_digest_plt} ->
         Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
       end,
@@ -60,7 +60,7 @@ Benchee.run(
         Benchmarks.generate_module_digest_plts(0.33, 0.33, 0.34)
       end
     },
-    "1% added, 1% removed, 1% updated" => {
+    "1% added, 1% removed, 1% edited" => {
       fn {old_module_digest_plt, new_module_digest_plt} ->
         Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
       end,
@@ -68,7 +68,7 @@ Benchee.run(
         Benchmarks.generate_module_digest_plts(0.01, 0.01, 0.01)
       end
     },
-    "10 added, 10 removed, 10 updated" => {
+    "10 added, 10 removed, 10 edited" => {
       fn {old_module_digest_plt, new_module_digest_plt} ->
         Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
       end,
@@ -76,7 +76,7 @@ Benchee.run(
         Benchmarks.generate_module_digest_plts(10, 10, 10)
       end
     },
-    "3 added, 3 removed, 3 updated" => {
+    "3 added, 3 removed, 3 edited" => {
       fn {old_module_digest_plt, new_module_digest_plt} ->
         Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
       end,
@@ -84,7 +84,7 @@ Benchee.run(
         Benchmarks.generate_module_digest_plts(3, 3, 3)
       end
     },
-    "1 added, 1 removed, 1 updated" => {
+    "1 added, 1 removed, 1 edited" => {
       fn {old_module_digest_plt, new_module_digest_plt} ->
         Compiler.diff_module_digest_plts(old_module_digest_plt, new_module_digest_plt)
       end,
