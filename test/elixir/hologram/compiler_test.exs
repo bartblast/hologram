@@ -419,7 +419,12 @@ defmodule Hologram.CompilerTest do
 
     result = diff_module_digest_plts(old_plt, new_plt)
 
-    assert Map.keys(result) == [:added_modules, :removed_modules, :edited_modules]
+    keys =
+      result
+      |> Map.keys()
+      |> Enum.sort()
+
+    assert keys == [:added_modules, :edited_modules, :removed_modules]
 
     assert Enum.sort(result.added_modules) == [:module_2, :module_4]
     assert Enum.sort(result.removed_modules) == [:module_5, :module_7]
