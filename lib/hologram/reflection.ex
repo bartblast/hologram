@@ -343,7 +343,7 @@ defmodule Hologram.Reflection do
 
   def module?(term) when is_atom(term) do
     case Code.ensure_loaded(term) do
-      {:module, ^term} ->
+      {:module, _module} ->
         true
 
       _fallback ->
