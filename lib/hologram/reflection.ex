@@ -130,17 +130,14 @@ defmodule Hologram.Reflection do
   def elixir_module?(term)
 
   def elixir_module?(term) when is_atom(term) do
-    if alias?(term) do
+    alias?(term) &&
       case Code.ensure_loaded(term) do
-        {:module, ^term} ->
+        {:module, _module} ->
           true
 
         _fallback ->
           false
       end
-    else
-      false
-    end
   end
 
   def elixir_module?(_term), do: false
