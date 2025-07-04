@@ -10,20 +10,6 @@ defmodule Hologram.ReflectionTest do
   alias Hologram.Test.Fixtures.Reflection.Module8
   alias Hologram.Test.Fixtures.Reflection.Module9
 
-  describe "alias?/1" do
-    test "atom which is an alias" do
-      assert alias?(Calendar.ISO)
-    end
-
-    test "atom which is not an alias" do
-      refute alias?(:abc)
-    end
-
-    test "non-atom" do
-      refute alias?(123)
-    end
-  end
-
   test "beam_defs/1" do
     beam_path = :code.which(Module1)
 
