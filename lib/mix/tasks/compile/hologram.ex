@@ -47,8 +47,12 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     Compiler.maybe_install_js_deps(assets_dir, build_dir)
 
-    # Building IR PLT from scratch is almost x2 faster than loading IR PLT from a dump file,
-    # so Compiler.build_ir_plt/1 is used instead of Compiler.maybe_load_ir_plt/1 + Compiler.patch_ir_plt!/3.
+    # Building IR PLT from scratch is faster that dumping it to a file,
+    # and then loading and patching it:
+    # build: ~310 ms
+    # dump: ~350 ms
+    # load: ~465 ms
+    # patch: not benchmarked
     ir_plt = Compiler.build_ir_plt()
 
     # Patching call graph for 1 updated module takes ~100-400 ms, so it's too long if there are multiple updates
