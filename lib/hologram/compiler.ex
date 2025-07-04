@@ -2,6 +2,7 @@ defmodule Hologram.Compiler do
   @moduledoc false
 
   alias Hologram.Commons.CryptographicUtils
+  alias Hologram.Commons.MapUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.TaskUtils
   alias Hologram.Commons.Types, as: T
@@ -314,29 +315,15 @@ defmodule Hologram.Compiler do
           updated_modules: list(module)
         }
   def diff_module_digest_plts(old_plt, new_plt) do
-    old_modules = mapset_from_plt_keys(old_plt)
-    new_modules = mapset_from_plt_keys(new_plt)
+    old_digests = PLT.get_all(old_plt)
+    new_digests = PLT.get_all(new_plt)
 
-    removed_modules =
-      old_modules
-      |> MapSet.difference(new_modules)
-      |> MapSet.to_list()
-
-    added_modules =
-      new_modules
-      |> MapSet.difference(old_modules)
-      |> MapSet.to_list()
-
-    updated_modules =
-      old_modules
-      |> MapSet.intersection(new_modules)
-      |> MapSet.to_list()
-      |> Enum.filter(&(PLT.get!(old_plt, &1) != PLT.get!(new_plt, &1)))
+    diff = MapUtils.diff(old_digests, new_digests)
 
     %{
-      added_modules: added_modules,
-      removed_modules: removed_modules,
-      updated_modules: updated_modules
+      added_modules: Enum.map(diff.added, fn {module, _digest} -> module end),
+      removed_modules: diff.removed,
+      updated_modules: Enum.map(diff.edited, fn {module, _digest} -> module end)
     }
   end
 
@@ -550,13 +537,6 @@ defmodule Hologram.Compiler do
     |> Path.join("package.json")
     |> File.read!()
     |> CryptographicUtils.digest(:sha256, :binary)
-  end
-
-  defp mapset_from_plt_keys(plt) do
-    plt
-    |> PLT.get_all()
-    |> Map.keys()
-    |> MapSet.new()
   end
 
   defp rebuild_ir_plt_entry!(ir_plt, module) do
