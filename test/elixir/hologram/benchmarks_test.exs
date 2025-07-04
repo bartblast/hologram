@@ -15,6 +15,16 @@ defmodule Hologram.BenchmarksTest do
     end)
   end
 
+  defp count_edited_modules(modules, old_module_digest_plt, new_module_digest_plt) do
+    Enum.reduce(modules, 0, fn module, acc ->
+      case {PLT.get(old_module_digest_plt, module), PLT.get(new_module_digest_plt, module)} do
+        {{:ok, digest}, {:ok, digest}} -> acc
+        {{:ok, _digest_1}, {:ok, _digest_2}} -> acc + 1
+        _fallback -> acc
+      end
+    end)
+  end
+
   defp count_removed_modules(modules, old_module_digest_plt, new_module_digest_plt) do
     Enum.reduce(modules, 0, fn module, acc ->
       case {PLT.get(old_module_digest_plt, module), PLT.get(new_module_digest_plt, module)} do
@@ -29,16 +39,6 @@ defmodule Hologram.BenchmarksTest do
       case {PLT.get(old_module_digest_plt, module), PLT.get(new_module_digest_plt, module)} do
         {{:ok, digest}, {:ok, digest}} -> acc + 1
         {{:ok, _digest_1}, {:ok, _digest_2}} -> acc
-        _fallback -> acc
-      end
-    end)
-  end
-
-  defp count_edited_modules(modules, old_module_digest_plt, new_module_digest_plt) do
-    Enum.reduce(modules, 0, fn module, acc ->
-      case {PLT.get(old_module_digest_plt, module), PLT.get(new_module_digest_plt, module)} do
-        {{:ok, digest}, {:ok, digest}} -> acc
-        {{:ok, _digest_1}, {:ok, _digest_2}} -> acc + 1
         _fallback -> acc
       end
     end)
