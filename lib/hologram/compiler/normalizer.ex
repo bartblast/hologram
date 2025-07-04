@@ -67,7 +67,7 @@ defmodule Hologram.Compiler.Normalizer do
   def normalize(ast), do: ast
 
   defp maybe_normalize_alias(module, meta, ast) do
-    if Reflection.elixir_module?(module) do
+    if Reflection.alias?(module) do
       segments = Helpers.alias_segments(module)
       {:__aliases__, meta, segments}
     else
