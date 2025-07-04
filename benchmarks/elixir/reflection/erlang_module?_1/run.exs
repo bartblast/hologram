@@ -2,17 +2,17 @@ alias Hologram.Reflection
 
 Benchee.run(
   %{
+    "is Elixir module" => fn ->
+      Reflection.erlang_module?(Bitwise)
+    end,
     "is Erlang module" => fn ->
       Reflection.erlang_module?(:elixir_aliases)
     end,
-    "is Elixir module" => fn ->
-      Reflection.erlang_module?(Hologram.Reflection)
-    end,
     "is atom" => fn ->
-      Reflection.erlang_module?(:abc)
+      Reflection.erlang_module?(:abcabcabcabcab)
     end,
     "is not atom" => fn ->
-      Reflection.erlang_module?("abc")
+      Reflection.erlang_module?("abcabcabcabcab")
     end
   },
   formatters: [

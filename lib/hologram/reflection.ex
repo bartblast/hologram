@@ -1,7 +1,7 @@
 defmodule Hologram.Reflection do
   @moduledoc false
 
-  alias Hologram.Commons.StringUtils
+  # alias Hologram.Commons.StringUtils
 
   @call_graph_dump_file_name "call_graph.bin"
 
@@ -168,22 +168,19 @@ defmodule Hologram.Reflection do
   def erlang_module?(term)
 
   def erlang_module?(term) when is_atom(term) do
-    starts_with_lowercase? =
+    first =
       term
-      |> to_string()
-      |> StringUtils.starts_with_lowercase?()
+      |> Atom.to_string()
+      |> String.first()
 
-    if starts_with_lowercase? do
+    first >= "a" && first <= "z" &&
       case Code.ensure_loaded(term) do
-        {:module, ^term} ->
+        {:module, _module} ->
           true
 
         _fallback ->
           false
       end
-    else
-      false
-    end
   end
 
   def erlang_module?(_term), do: false
