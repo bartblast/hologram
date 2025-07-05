@@ -13,6 +13,7 @@ Benchee.run(
     assets_dir = Path.join(Reflection.root_dir(), "assets")
 
     opts = [
+      assets_dir: assets_dir,
       formatter_bin_path: Path.join([assets_dir, "node_modules", ".bin", "biome"]),
       js_dir: Path.join(assets_dir, "js"),
       tmp_dir: Path.join([Reflection.tmp_dir(), "benchmarks", "compiler", "format_files_2"])

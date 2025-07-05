@@ -336,8 +336,9 @@ defmodule Hologram.Compiler do
           {Collectable.t(), exit_status :: non_neg_integer()}
   # sobelow_skip ["CI.System"]
   def format_files(file_paths, opts) do
-    cmd = ["format", "--write" | file_paths]
-    {exit_msg, exit_status} = System.cmd(opts[:formatter_bin_path], cmd, parallelism: true)
+    cmd_args = ["format", "--write" | file_paths]
+    cmd_opts = [cd: opts[:assets_dir], parallelism: true]
+    {exit_msg, exit_status} = System.cmd(opts[:formatter_bin_path], cmd_args, cmd_opts)
 
     if exit_status != 0 do
       raise RuntimeError,

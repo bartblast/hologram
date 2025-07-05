@@ -15,6 +15,7 @@ Benchee.run(
     tmp_dir = Path.join([Reflection.tmp_dir(), "benchmarks", "compiler", "bundle_2"])
 
     opts = [
+      assets_dir: assets_dir,
       esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
       formatter_bin_path: Path.join([node_modules_path, ".bin", "biome"]),
       js_dir: Path.join([assets_dir, "js"]),

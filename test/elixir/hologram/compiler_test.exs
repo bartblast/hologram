@@ -447,7 +447,10 @@ defmodule Hologram.CompilerTest do
       file_path_2 = Path.join(test_tmp_dir, "file_2.js")
       File.write!(file_path_2, @unformatted_valid_js_code)
 
-      opts = [formatter_bin_path: Path.join([@assets_dir, "node_modules", ".bin", "biome"])]
+      opts = [
+        assets_dir: @assets_dir,
+        formatter_bin_path: Path.join([@assets_dir, "node_modules", ".bin", "biome"])
+      ]
 
       assert Compiler.format_files([file_path_1, file_path_2], opts) =~
                ~r"Formatted 2 files in [0-9]+[mµ]?s\. Fixed 2 files\.\n"u
@@ -469,7 +472,10 @@ defmodule Hologram.CompilerTest do
       file_path_2 = Path.join(test_tmp_dir, "file_2.js")
       File.write!(file_path_2, @unformatted_valid_js_code)
 
-      opts = [formatter_bin_path: Path.join([@assets_dir, "node_modules", ".bin", "biome"])]
+      opts = [
+        assets_dir: @assets_dir,
+        formatter_bin_path: Path.join([@assets_dir, "node_modules", ".bin", "biome"])
+      ]
 
       assert_raise RuntimeError,
                    "Biome formatter failed (probably there were JavaScript syntax errors)",
