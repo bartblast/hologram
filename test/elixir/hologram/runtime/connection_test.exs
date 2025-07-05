@@ -1,5 +1,5 @@
 defmodule Hologram.Runtime.ConnectionTest do
-  use Hologram.Test.BasicCase, async: true
+  use Hologram.Test.BasicCase, async: false
   import Hologram.Runtime.Connection
   alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module1
 
@@ -16,6 +16,44 @@ defmodule Hologram.Runtime.ConnectionTest do
   describe "init/1" do
     test "returns {:ok, http_conn} tuple" do
       assert init(@http_conn) == {:ok, @http_conn}
+    end
+  end
+
+  describe "init/1 environment-dependent behavior" do
+    setup do
+      original_env = System.get_env("HOLOGRAM_ENV")
+
+      on_exit(fn ->
+        if original_env do
+          System.put_env("HOLOGRAM_ENV", original_env)
+        else
+          System.delete_env("HOLOGRAM_ENV")
+        end
+      end)
+
+      start_supervised!({Phoenix.PubSub, name: Hologram.Runtime.PubSub})
+
+      :ok
+    end
+
+    test "subscribes to hologram_live_reload topic when env is dev" do
+      System.put_env("HOLOGRAM_ENV", "dev")
+
+      init(@http_conn)
+
+      Phoenix.PubSub.broadcast(Hologram.Runtime.PubSub, "hologram_live_reload", :test_message)
+
+      assert_receive :test_message
+    end
+
+    test "does not subscribe to hologram_live_reload topic when env is not dev" do
+      System.put_env("HOLOGRAM_ENV", "test")
+
+      init(@http_conn)
+
+      Phoenix.PubSub.broadcast(Hologram.Runtime.PubSub, "hologram_live_reload", :test_message)
+
+      refute_receive :test_message, 100
     end
   end
 

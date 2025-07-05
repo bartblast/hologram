@@ -7,6 +7,10 @@ defmodule Hologram.Runtime.Connection do
 
   @impl WebSock
   def init(http_conn) do
+    if Hologram.env() == :dev do
+      Phoenix.PubSub.subscribe(Hologram.Runtime.PubSub, "hologram_live_reload")
+    end
+
     {:ok, http_conn}
   end
 
