@@ -97,7 +97,7 @@ defmodule Hologram.LiveReload do
     # TODO: this will be used in Hologram standalone version
     # Code.put_compiler_option(:ignore_module_conflict, true)
     # Kernel.ParallelCompiler.compile_to_path([file_path], Mix.Project.compile_path())
-    # Code.put_compiler_option(:ignore_module_conflict, false)    
+    # Code.put_compiler_option(:ignore_module_conflict, false)
   end
 
   defp reload_page(endpoint) do
