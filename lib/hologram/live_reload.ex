@@ -74,10 +74,13 @@ defmodule Hologram.LiveReload do
     {:noreply, %{state | timer_ref: nil}}
   end
 
-  defp reload(file_path, endpoint) do
-    Code.put_compiler_option(:ignore_module_conflict, true)
-    Kernel.ParallelCompiler.compile_to_path([file_path], Mix.Project.compile_path())
-    Code.put_compiler_option(:ignore_module_conflict, false)
+  defp reload(_file_path, endpoint) do
+    Phoenix.CodeReloader.reload(endpoint)
+
+    # TODO: this will be used in Hologram standalone version
+    # Code.put_compiler_option(:ignore_module_conflict, true)
+    # Kernel.ParallelCompiler.compile_to_path([file_path], Mix.Project.compile_path())
+    # Code.put_compiler_option(:ignore_module_conflict, false)
 
     # credo:disable-for-next-line Credo.Check.Design.AliasUsage
     Mix.Tasks.Compile.Hologram.run([])
