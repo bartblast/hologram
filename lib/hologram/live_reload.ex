@@ -74,23 +74,41 @@ defmodule Hologram.LiveReload do
     {:noreply, %{state | timer_ref: nil}}
   end
 
+  defp recompile_hologram do
+    # credo:disable-for-next-line Credo.Check.Design.AliasUsage
+    Mix.Tasks.Compile.Hologram.run([])
+  end
+
   defp reload(_file_path, endpoint) do
+    case reload_code(endpoint) do
+      :ok ->
+        recompile_hologram()
+        reload_runtime()
+        reload_page(endpoint)
+
+      {:error, _output} ->
+        :todo
+    end
+  end
+
+  defp reload_code(endpoint) do
     Phoenix.CodeReloader.reload(endpoint)
 
     # TODO: this will be used in Hologram standalone version
     # Code.put_compiler_option(:ignore_module_conflict, true)
     # Kernel.ParallelCompiler.compile_to_path([file_path], Mix.Project.compile_path())
-    # Code.put_compiler_option(:ignore_module_conflict, false)
+    # Code.put_compiler_option(:ignore_module_conflict, false)    
+  end
 
-    # credo:disable-for-next-line Credo.Check.Design.AliasUsage
-    Mix.Tasks.Compile.Hologram.run([])
+  defp reload_page(endpoint) do
+    endpoint.broadcast!("hologram", "reload", %{})
+  end
 
+  defp reload_runtime do
     PageModuleResolver.reload()
     PathRegistry.reload()
     ManifestCache.reload()
     PageDigestRegistry.reload()
-
-    endpoint.broadcast!("hologram", "reload", %{})
   end
 
   defp watched_dirs do
