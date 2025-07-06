@@ -381,6 +381,21 @@ describe("Connection", () => {
       assert.isNull(Connection.pongTimer);
     });
 
+    it("handles reload message", () => {
+      const reloadSpy = sinon.spy();
+
+      globalThis.document = {
+        location: {
+          reload: reloadSpy,
+        },
+      };
+
+      const event = {data: '"reload"'};
+      Connection.handleMessage(event);
+
+      sinon.assert.calledOnce(reloadSpy);
+    });
+
     it("handles reply message with correlation ID", () => {
       const correlationId = "123";
       const onSuccess = sinon.spy();

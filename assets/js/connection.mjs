@@ -151,6 +151,11 @@ export default class Connection {
       return;
     }
 
+    if (message === '"reload"') {
+      document.location.reload();
+      return;
+    }
+
     // Currently, the only supported message type except "pong" is "reply" (with correlation ID)
     const [_type, payload, correlationId] = JSON.parse(message);
 
