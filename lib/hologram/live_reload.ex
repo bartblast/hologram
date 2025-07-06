@@ -74,6 +74,18 @@ defmodule Hologram.LiveReload do
     {:noreply, %{state | timer_ref: nil}}
   end
 
+  defp broadcast_compilation_error(output) do
+    Phoenix.PubSub.broadcast(
+      Hologram.PubSub,
+      "hologram_live_reload",
+      {:compilation_error, output}
+    )
+  end
+
+  defp broadcast_reload do
+    Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", :reload)
+  end
+
   defp recompile_hologram do
     # credo:disable-for-next-line Credo.Check.Design.AliasUsage
     Mix.Tasks.Compile.Hologram.run([])
@@ -84,10 +96,10 @@ defmodule Hologram.LiveReload do
       :ok ->
         recompile_hologram()
         reload_runtime()
-        reload_page()
+        broadcast_reload()
 
-      {:error, _output} ->
-        :todo
+      {:error, output} ->
+        broadcast_compilation_error(output)
     end
   end
 
@@ -98,10 +110,6 @@ defmodule Hologram.LiveReload do
     # Code.put_compiler_option(:ignore_module_conflict, true)
     # Kernel.ParallelCompiler.compile_to_path([file_path], Mix.Project.compile_path())
     # Code.put_compiler_option(:ignore_module_conflict, false)
-  end
-
-  defp reload_page do
-    Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", :reload)
   end
 
   defp reload_runtime do
