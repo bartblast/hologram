@@ -84,7 +84,7 @@ defmodule Hologram.LiveReload do
       :ok ->
         recompile_hologram()
         reload_runtime()
-        reload_page(endpoint)
+        reload_page()
 
       {:error, _output} ->
         :todo
@@ -100,8 +100,8 @@ defmodule Hologram.LiveReload do
     # Code.put_compiler_option(:ignore_module_conflict, false)
   end
 
-  defp reload_page(endpoint) do
-    endpoint.broadcast!("hologram", "reload", %{})
+  defp reload_page do
+    Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", :reload)
   end
 
   defp reload_runtime do
