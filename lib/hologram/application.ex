@@ -14,7 +14,7 @@ defmodule Hologram.Application do
 
   defp all_envs_children do
     [
-      {Phoenix.PubSub, name: Hologram.Runtime.PubSub},
+      {Phoenix.PubSub, name: Hologram.PubSub},
       Hologram.Router.PageModuleResolver,
       Hologram.Assets.PathRegistry,
       Hologram.Assets.ManifestCache,

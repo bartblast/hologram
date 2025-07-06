@@ -31,7 +31,7 @@ defmodule Hologram.Runtime.ConnectionTest do
         end
       end)
 
-      start_supervised!({Phoenix.PubSub, name: Hologram.Runtime.PubSub})
+      start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
 
       :ok
     end
@@ -41,7 +41,7 @@ defmodule Hologram.Runtime.ConnectionTest do
 
       init(@http_conn)
 
-      Phoenix.PubSub.broadcast(Hologram.Runtime.PubSub, "hologram_live_reload", :test_message)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", :test_message)
 
       assert_receive :test_message
     end
@@ -51,7 +51,7 @@ defmodule Hologram.Runtime.ConnectionTest do
 
       init(@http_conn)
 
-      Phoenix.PubSub.broadcast(Hologram.Runtime.PubSub, "hologram_live_reload", :test_message)
+      Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", :test_message)
 
       refute_receive :test_message, 100
     end
@@ -79,7 +79,14 @@ defmodule Hologram.Runtime.ConnectionTest do
   end
 
   describe "handle_info/2" do
-    test "returns {:ok, http_conn} tuple" do
+    test "handles :reload message" do
+      message = :reload
+
+      assert handle_info(message, @http_conn) ==
+               {:push, {:text, ~s'"reload"'}, @http_conn}
+    end
+
+    test "returns {:ok, http_conn} tuple for other messages" do
       message = :dummy
 
       assert handle_info(message, @http_conn) == {:ok, @http_conn}

@@ -8,7 +8,7 @@ defmodule Hologram.Runtime.Connection do
   @impl WebSock
   def init(http_conn) do
     if Hologram.env() == :dev do
-      Phoenix.PubSub.subscribe(Hologram.Runtime.PubSub, "hologram_live_reload")
+      Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram_live_reload")
     end
 
     {:ok, http_conn}
@@ -21,6 +21,12 @@ defmodule Hologram.Runtime.Connection do
     reply = encode(reply_type, reply_payload, correlation_id)
 
     {:reply, :ok, {:text, reply}, state}
+  end
+
+  @impl WebSock
+  def handle_info(:reload, state) do
+    message = encode("reload", :__no_payload__, nil)
+    {:push, {:text, message}, state}
   end
 
   @impl WebSock
