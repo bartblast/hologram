@@ -1,4 +1,3 @@
-# TODO: test
 defmodule Hologram.LiveReload do
   @moduledoc false
 
@@ -47,6 +46,8 @@ defmodule Hologram.LiveReload do
   def handle_info({:file_event, _pid, {file_path, _events}}, state) do
     if state.timer_ref, do: Process.cancel_timer(state.timer_ref)
 
+    # File change events are debounced to avoid multiple recompilations
+    # when the same file is modified multiple times in quick succession.    
     timer_ref = Process.send_after(self(), {:debounced_reload, file_path}, @debounce_delay)
 
     {:noreply, %{state | timer_ref: timer_ref}}
@@ -73,6 +74,12 @@ defmodule Hologram.LiveReload do
 
     {:noreply, %{state | timer_ref: nil}}
   end
+
+  @doc """
+  Returns the debounce delay in milliseconds.
+  """
+  @spec debounce_delay :: pos_integer
+  def debounce_delay, do: @debounce_delay
 
   defp broadcast_compilation_error(output) do
     Phoenix.PubSub.broadcast(
