@@ -2,14 +2,16 @@
 
 export default class LiveReload {
   static showErrorOverlay(content) {
-    const existingOverlay = document.getElementById("hologram-error-overlay");
+    const existingOverlay = document.getElementById(
+      "hologram-live-reload-error-overlay",
+    );
 
     if (existingOverlay) {
       existingOverlay.remove();
     }
 
     const overlay = document.createElement("div");
-    overlay.id = "hologram-error-overlay";
+    overlay.id = "hologram-live-reload-error-overlay";
 
     overlay.style.cssText = `
       position: fixed;
