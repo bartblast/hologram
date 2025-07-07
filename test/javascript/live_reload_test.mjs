@@ -46,6 +46,7 @@ describe("LiveReload", () => {
       const overlay = document.getElementById(
         "hologram-live-reload-error-overlay",
       );
+
       const style = overlay.style;
 
       // Critical positioning and overlay behavior
@@ -67,6 +68,7 @@ describe("LiveReload", () => {
       const secondContent = "Second error message";
 
       LiveReload.showErrorOverlay(firstContent);
+
       const firstOverlay = document.getElementById(
         "hologram-live-reload-error-overlay",
       );
@@ -75,6 +77,7 @@ describe("LiveReload", () => {
       assert.equal(firstOverlay.textContent, firstContent);
 
       LiveReload.showErrorOverlay(secondContent);
+
       const secondOverlay = document.getElementById(
         "hologram-live-reload-error-overlay",
       );
