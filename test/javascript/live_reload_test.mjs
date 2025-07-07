@@ -62,6 +62,7 @@ describe("LiveReload", () => {
       assert.equal(style.marginBottom, "50px");
       assert.equal(style.fontSize, "36px");
       assert.equal(style.fontWeight, "700");
+      assert.equal(style.color, "rgb(167, 139, 250)");
     });
 
     it("creates content container with correct content", () => {
@@ -99,8 +100,8 @@ describe("LiveReload", () => {
       assert.equal(style.zIndex, "2147483647");
 
       // Key visibility styles
-      assert.equal(style.backgroundColor, "black");
-      assert.equal(style.color, "white");
+      assert.equal(style.backgroundColor, "rgb(15, 16, 20)");
+      assert.equal(style.color, "rgb(194, 187, 211)");
       assert.equal(style.whiteSpace, "pre-wrap");
     });
 

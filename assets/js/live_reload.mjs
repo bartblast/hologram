@@ -22,12 +22,12 @@ export default class LiveReload {
       left: 0;
       width: 100vw;
       height: 100vh;
-      background-color: black;
-      color: white;
+      background-color: #0F1014;
+      color: #C2BBD3;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
       font-size: 14px;
       z-index: 2147483647;
-      padding: 20px;
+      padding: 50px;
       box-sizing: border-box;
       overflow: auto;
       white-space: pre-wrap;
@@ -42,6 +42,7 @@ export default class LiveReload {
       margin-bottom: 50px;
       font-size: 36px;
       font-weight: 700;
+      color: #A78BFA;
     `;
 
     // Create content container
