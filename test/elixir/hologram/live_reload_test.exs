@@ -98,6 +98,51 @@ defmodule Hologram.LiveReloadTest do
     end
   end
 
+  test "watched_dirs/0" do
+    result = LiveReload.watched_dirs()
+
+    # Should return a list of string paths
+    assert is_list(result)
+    assert Enum.all?(result, &is_binary/1)
+
+    # All paths should be absolute
+    assert Enum.all?(result, fn path -> String.starts_with?(path, "/") end)
+
+    # Should contain the lib directory (standard in elixirc_paths)
+    lib_path = Path.join([File.cwd!(), "lib"])
+    assert lib_path in result
+  end
+
+  describe "watcher_opts/1" do
+    test "with macOS" do
+      result = LiveReload.watcher_opts({:unix, :darwin})
+
+      assert is_list(result)
+
+      assert Keyword.has_key?(result, :dirs)
+      assert is_list(Keyword.get(result, :dirs))
+
+      assert Keyword.has_key?(result, :latency)
+      assert Keyword.get(result, :latency) == 0
+
+      assert Keyword.has_key?(result, :no_defer)
+      assert Keyword.get(result, :no_defer) == true
+    end
+
+    test "with other OS" do
+      result = LiveReload.watcher_opts({:unix, :linux})
+
+      assert is_list(result)
+
+      assert Keyword.has_key?(result, :dirs)
+      assert is_list(Keyword.get(result, :dirs))
+
+      # Should not have macOS-specific options
+      refute Keyword.has_key?(result, :latency)
+      refute Keyword.has_key?(result, :no_defer)
+    end
+  end
+
   # This tests the private logic indirectly by checking what file types trigger reload attempts
   describe "file path processing" do
     setup do

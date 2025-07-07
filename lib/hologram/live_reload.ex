@@ -81,6 +81,37 @@ defmodule Hologram.LiveReload do
   @spec debounce_delay :: pos_integer
   def debounce_delay, do: @debounce_delay
 
+  @doc """
+  Returns the list of directories that are watched for file changes.
+
+  The directories are determined by the project's `:elixirc_paths` configuration
+  and are converted to absolute paths based on the project root directory.
+  """
+  @spec watched_dirs :: [String.t()]
+  def watched_dirs do
+    root_dir = Reflection.root_dir()
+    compiled_paths = Mix.Project.get().project()[:elixirc_paths]
+    Enum.map(compiled_paths, &Path.join(root_dir, &1))
+  end
+
+  @doc """
+  Returns file watcher options based on the operating system type.
+
+  For macOS (Darwin), additional options are added for optimal performance:
+  - `latency: 0` for immediate file change detection
+  - `no_defer: true` to avoid deferring events
+
+  For other operating systems, only the directories to watch are specified.
+  """
+  @spec watcher_opts({atom, atom}) :: keyword
+  def watcher_opts({:unix, :darwin}) do
+    [dirs: watched_dirs(), latency: 0, no_defer: true]
+  end
+
+  def watcher_opts(_os_type) do
+    [dirs: watched_dirs()]
+  end
+
   defp broadcast_compilation_error(output) do
     Phoenix.PubSub.broadcast(
       Hologram.PubSub,
@@ -124,20 +155,5 @@ defmodule Hologram.LiveReload do
     PathRegistry.reload()
     ManifestCache.reload()
     PageDigestRegistry.reload()
-  end
-
-  defp watched_dirs do
-    root_dir = Reflection.root_dir()
-    compiled_paths = Mix.Project.get().project()[:elixirc_paths]
-    Enum.map(compiled_paths, &Path.join(root_dir, &1))
-  end
-
-  # This is macOS.
-  defp watcher_opts({:unix, :darwin}) do
-    [dirs: watched_dirs(), latency: 0, no_defer: true]
-  end
-
-  defp watcher_opts(_os_type) do
-    [dirs: watched_dirs()]
   end
 end
