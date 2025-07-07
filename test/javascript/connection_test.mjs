@@ -373,76 +373,84 @@ describe("Connection", () => {
   });
 
   describe("handleMessage()", () => {
-    it("handles pong message", () => {
-      Connection.pongTimer = setTimeout(() => {}, 10_000);
+    describe("compilation_error message", () => {
+      it("handles compilation_error message", () => {
+        const showErrorOverlaySpy = sinon.stub(LiveReload, "showErrorOverlay");
+        const errorOutput = "Compilation error details";
 
-      const event = {data: '"pong"'};
-      Connection.handleMessage(event);
+        const message = `["compilation_error","${errorOutput}"]`;
+        const event = {data: message};
 
-      assert.isNull(Connection.pongTimer);
+        Connection.handleMessage(event);
+
+        sinon.assert.calledOnceWithExactly(showErrorOverlaySpy, errorOutput);
+
+        showErrorOverlaySpy.restore();
+      });
     });
 
-    it("handles reload message", () => {
-      const reloadSpy = sinon.spy();
+    describe("pong message", () => {
+      it("handles pong message", () => {
+        Connection.pongTimer = setTimeout(() => {}, 10_000);
 
-      globalThis.document = {
-        location: {
-          reload: reloadSpy,
-        },
-      };
+        const event = {data: '"pong"'};
+        Connection.handleMessage(event);
 
-      const event = {data: '"reload"'};
-      Connection.handleMessage(event);
-
-      sinon.assert.calledOnce(reloadSpy);
+        assert.isNull(Connection.pongTimer);
+      });
     });
 
-    it("handles reply message with correlation ID", () => {
-      const correlationId = "123";
-      const onSuccess = sinon.spy();
-      const onError = sinon.spy();
-      const timerId = setTimeout(() => {}, 10_000);
-      const clearTimeoutSpy = sinon.spy(globalThis, "clearTimeout");
+    describe("reload message", () => {
+      it("handles reload message", () => {
+        const reloadSpy = sinon.spy();
 
-      Connection.pendingRequests.set(correlationId, {
-        timerId,
-        onSuccess,
-        onError,
+        globalThis.document = {
+          location: {
+            reload: reloadSpy,
+          },
+        };
+
+        const event = {data: '"reload"'};
+        Connection.handleMessage(event);
+
+        sinon.assert.calledOnce(reloadSpy);
+      });
+    });
+
+    describe("reply message", () => {
+      it("handles reply message with correlation ID", () => {
+        const correlationId = "123";
+        const onSuccess = sinon.spy();
+        const onError = sinon.spy();
+        const timerId = setTimeout(() => {}, 10_000);
+        const clearTimeoutSpy = sinon.spy(globalThis, "clearTimeout");
+
+        Connection.pendingRequests.set(correlationId, {
+          timerId,
+          onSuccess,
+          onError,
+        });
+
+        const message = `["reply","payload","${correlationId}"]`;
+        const event = {data: message};
+
+        Connection.handleMessage(event);
+
+        sinon.assert.calledOnce(onSuccess);
+        sinon.assert.notCalled(onError);
+        sinon.assert.calledOnceWithExactly(clearTimeoutSpy, timerId);
+        assert.isFalse(Connection.pendingRequests.has(correlationId));
+
+        clearTimeoutSpy.restore();
       });
 
-      const message = `["reply","payload","${correlationId}"]`;
-      const event = {data: message};
+      it("ignores reply message with unknown correlation ID", () => {
+        const message = '["reply","payload","234"]';
+        const event = {data: message};
 
-      Connection.handleMessage(event);
-
-      sinon.assert.calledOnce(onSuccess);
-      sinon.assert.notCalled(onError);
-      sinon.assert.calledOnceWithExactly(clearTimeoutSpy, timerId);
-      assert.isFalse(Connection.pendingRequests.has(correlationId));
-
-      clearTimeoutSpy.restore();
-    });
-
-    it("ignores reply message with unknown correlation ID", () => {
-      const message = '["reply","payload","234"]';
-      const event = {data: message};
-
-      // Should not throw
-      Connection.handleMessage(event);
-    });
-
-    it("handles compilation_error message", () => {
-      const showErrorOverlaySpy = sinon.stub(LiveReload, "showErrorOverlay");
-      const errorOutput = "Compilation error details";
-
-      const message = `["compilation_error","${errorOutput}"]`;
-      const event = {data: message};
-
-      Connection.handleMessage(event);
-
-      sinon.assert.calledOnceWithExactly(showErrorOverlaySpy, errorOutput);
-
-      showErrorOverlaySpy.restore();
+        // Should not throw
+        Connection.handleMessage(event);
+      });
     });
   });
 
