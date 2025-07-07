@@ -9,6 +9,7 @@ import {
 
 import Connection from "../../assets/js/connection.mjs";
 import GlobalRegistry from "../../assets/js/global_registry.mjs";
+import LiveReload from "../../assets/js/live_reload.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -428,6 +429,20 @@ describe("Connection", () => {
 
       // Should not throw
       Connection.handleMessage(event);
+    });
+
+    it("handles compilation_error message", () => {
+      const showErrorOverlaySpy = sinon.stub(LiveReload, "showErrorOverlay");
+      const errorOutput = "Compilation error details";
+
+      const message = `["compilation_error","${errorOutput}"]`;
+      const event = {data: message};
+
+      Connection.handleMessage(event);
+
+      sinon.assert.calledOnceWithExactly(showErrorOverlaySpy, errorOutput);
+
+      showErrorOverlaySpy.restore();
     });
   });
 
