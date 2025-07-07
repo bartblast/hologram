@@ -31,6 +31,7 @@ defmodule Hologram.Runtime.ConnectionTest do
         end
       end)
 
+      wait_for_process_cleanup(Hologram.PubSub)
       start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
 
       :ok

@@ -24,6 +24,7 @@ defmodule Hologram.LiveReloadTest do
   end
 
   setup do
+    wait_for_process_cleanup(Hologram.PubSub)
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
 
     :ok
