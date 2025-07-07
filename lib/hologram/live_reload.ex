@@ -47,7 +47,7 @@ defmodule Hologram.LiveReload do
     if state.timer_ref, do: Process.cancel_timer(state.timer_ref)
 
     # File change events are debounced to avoid multiple recompilations
-    # when the same file is modified multiple times in quick succession.    
+    # when the same file is modified multiple times in quick succession.
     timer_ref = Process.send_after(self(), {:debounced_reload, file_path}, @debounce_delay)
 
     {:noreply, %{state | timer_ref: timer_ref}}
