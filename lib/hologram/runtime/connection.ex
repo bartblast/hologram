@@ -24,6 +24,12 @@ defmodule Hologram.Runtime.Connection do
   end
 
   @impl WebSock
+  def handle_info({:compilation_error, output}, state) do
+    message = encode("compilation_error", output, nil)
+    {:push, {:text, message}, state}
+  end
+
+  @impl WebSock
   def handle_info(:reload, state) do
     message = encode("reload", :__no_payload__, nil)
     {:push, {:text, message}, state}
@@ -52,10 +58,9 @@ defmodule Hologram.Runtime.Connection do
     Jason.encode!(type)
   end
 
-  # Not needed (yet)
-  # defp encode(type, payload, nil) do
-  #   Jason.encode!([type, payload])
-  # end
+  defp encode(type, payload, nil) do
+    Jason.encode!([type, payload])
+  end
 
   defp encode(type, payload, correlation_id) do
     Jason.encode!([type, payload, correlation_id])

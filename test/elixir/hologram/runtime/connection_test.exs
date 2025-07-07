@@ -87,6 +87,15 @@ defmodule Hologram.Runtime.ConnectionTest do
                {:push, {:text, ~s'"reload"'}, @http_conn}
     end
 
+    test "handles {:compilation_error, output} message" do
+      output = "Compile error in module MyModule"
+      message = {:compilation_error, output}
+
+      assert handle_info(message, @http_conn) ==
+               {:push, {:text, ~s'["compilation_error","Compile error in module MyModule"]'},
+                @http_conn}
+    end
+
     test "returns {:ok, http_conn} tuple for other messages" do
       message = :dummy
 
