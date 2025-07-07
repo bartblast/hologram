@@ -23,7 +23,7 @@ describe("LiveReload", () => {
   });
 
   describe("showErrorOverlay()", () => {
-    it("creates and displays error overlay with content", () => {
+    it("creates and displays error overlay", () => {
       const content = "Test error message";
 
       LiveReload.showErrorOverlay(content);
@@ -33,9 +33,50 @@ describe("LiveReload", () => {
       );
 
       assert.isNotNull(overlay);
-      assert.equal(overlay.textContent, content);
       assert.equal(overlay.tagName, "DIV");
       assert.isTrue(document.body.contains(overlay));
+
+      // Check DOM structure
+      assert.equal(overlay.children.length, 2);
+      assert.equal(overlay.children[0].tagName, "H1");
+      assert.equal(overlay.children[1].tagName, "DIV");
+    });
+
+    it("creates h1 heading with correct text and styles", () => {
+      const content = "Test error message";
+
+      LiveReload.showErrorOverlay(content);
+
+      const overlay = document.getElementById(
+        "hologram-live-reload-error-overlay",
+      );
+
+      // Check h1 heading exists and has correct content
+      const heading = overlay.children[0];
+      assert.equal(heading.tagName, "H1");
+      assert.equal(heading.textContent, "Compilation Error");
+
+      // Check heading styles
+      const style = heading.style;
+      assert.equal(style.marginTop, "0px");
+      assert.equal(style.marginBottom, "50px");
+      assert.equal(style.fontSize, "36px");
+      assert.equal(style.fontWeight, "700");
+    });
+
+    it("creates content container with correct content", () => {
+      const content = "Test error message";
+
+      LiveReload.showErrorOverlay(content);
+
+      const overlay = document.getElementById(
+        "hologram-live-reload-error-overlay",
+      );
+
+      // Check that content is in the content container
+      const contentContainer = overlay.children[1];
+      assert.equal(contentContainer.tagName, "DIV");
+      assert.equal(contentContainer.textContent, content);
     });
 
     it("applies correct styling to the overlay", () => {
@@ -74,7 +115,7 @@ describe("LiveReload", () => {
       );
 
       assert.isNotNull(firstOverlay);
-      assert.equal(firstOverlay.textContent, firstContent);
+      assert.equal(firstOverlay.children[1].textContent, firstContent);
 
       LiveReload.showErrorOverlay(secondContent);
 
@@ -83,10 +124,13 @@ describe("LiveReload", () => {
       );
 
       assert.isNotNull(secondOverlay);
-      assert.equal(secondOverlay.textContent, secondContent);
+      assert.equal(secondOverlay.children[1].textContent, secondContent);
 
       assert.isFalse(document.body.contains(firstOverlay));
       assert.notEqual(secondOverlay, firstOverlay);
+
+      // Body scrolling should still be disabled
+      assert.equal(document.body.style.overflow, "hidden");
     });
 
     it("handles empty content", () => {
@@ -99,8 +143,11 @@ describe("LiveReload", () => {
       );
 
       assert.isNotNull(overlay);
-      assert.equal(overlay.textContent, "");
       assert.isTrue(document.body.contains(overlay));
+
+      // Should have proper structure and content
+      assert.equal(overlay.children[0].textContent, "Compilation Error");
+      assert.equal(overlay.children[1].textContent, "");
     });
 
     it("handles multiline content", () => {
@@ -113,9 +160,22 @@ describe("LiveReload", () => {
       );
 
       assert.isNotNull(overlay);
-      assert.equal(overlay.textContent, content);
       assert.isTrue(document.body.contains(overlay));
       assert.equal(overlay.style.whiteSpace, "pre-wrap");
+
+      // Should have proper structure and content
+      assert.equal(overlay.children[0].textContent, "Compilation Error");
+      assert.equal(overlay.children[1].textContent, content);
+    });
+
+    it("disables body scrolling when overlay is shown", () => {
+      const content = "Test error message";
+
+      document.body.style.overflow = "visible";
+
+      LiveReload.showErrorOverlay(content);
+
+      assert.equal(document.body.style.overflow, "hidden");
     });
   });
 });

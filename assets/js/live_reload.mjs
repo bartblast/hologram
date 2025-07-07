@@ -10,6 +10,9 @@ export default class LiveReload {
       existingOverlay.remove();
     }
 
+    // Disable body scrolling
+    document.body.style.overflow = "hidden";
+
     const overlay = document.createElement("div");
     overlay.id = "hologram-live-reload-error-overlay";
 
@@ -31,7 +34,22 @@ export default class LiveReload {
       word-wrap: break-word;
     `;
 
-    overlay.textContent = content;
+    // Create and style the h1 heading
+    const heading = document.createElement("h1");
+    heading.textContent = "Compilation Error";
+    heading.style.cssText = `
+      margin-top: 0;
+      margin-bottom: 50px;
+      font-size: 36px;
+      font-weight: 700;
+    `;
+
+    // Create content container
+    const contentContainer = document.createElement("div");
+    contentContainer.textContent = content;
+
+    overlay.appendChild(heading);
+    overlay.appendChild(contentContainer);
 
     document.body.appendChild(overlay);
   }
