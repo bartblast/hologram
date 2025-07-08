@@ -22,6 +22,41 @@ defmodule Hologram.Server.Cookie do
         }
 
   @doc """
+  Decodes a potentially encoded cookie value.
+
+  If the input string starts with the Hologram-specific "%H" prefix, it removes
+  the prefix, Base64-decodes the remaining string, and safely converts it back to the
+  original Elixir term using binary_to_term/2 with the :safe option.
+
+  If the input string does not have the "%H" prefix, it returns the string unchanged,
+  treating it as a plain cookie value.
+
+  ## Examples
+
+      iex> Cookie.decode("%Hg3cFaGVsbG8")
+      :hello
+
+      iex> Cookie.decode("%Hg3QAAAABdwNrZXltAAAABXZhbHVl")
+      %{key: "value"}
+
+      iex> Cookie.decode("plain_cookie_value")
+      "plain_cookie_value"
+  """
+  @spec decode(String.t()) :: any()
+  def decode(encoded) do
+    case String.starts_with?(encoded, "%H") do
+      true ->
+        encoded
+        |> String.slice(2..-1//1)
+        |> Base.decode64!(padding: false)
+        |> :erlang.binary_to_term([:safe])
+
+      false ->
+        encoded
+    end
+  end
+
+  @doc """
   Encodes a term into a Base64-encoded string with a Hologram-specific prefix.
 
   The term is first converted to binary using Erlang's term_to_binary/1, then
