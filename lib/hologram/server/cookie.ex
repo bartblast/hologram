@@ -45,6 +45,7 @@ defmodule Hologram.Server.Cookie do
   @spec decode(String.t()) :: any()
   def decode(encoded)
 
+  # sobelow_skip ["Misc.BinToTerm"]
   def decode("%H" <> encoded) do
     encoded
     |> Base.decode64!(padding: false)
