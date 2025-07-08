@@ -32,12 +32,14 @@ defmodule Hologram.Controller do
   @spec handle_request(Plug.Conn.t(), module) :: Plug.Conn.t()
   # sobelow_skip ["XSS.HTML"]
   def handle_request(conn, page_module) do
-    params = extract_params(conn.request_path, page_module)
+    {conn_with_session, _session_id} = Session.init(conn)
+
+    params = extract_params(conn_with_session.request_path, page_module)
+    server_struct = Server.from(conn_with_session)
+    opts = [initial_page?: true]
 
     {html, _component_registry, _server_struct} =
-      Renderer.render_page(page_module, params, %Server{}, initial_page?: true)
-
-    {conn_with_session, _session_id} = Session.init(conn)
+      Renderer.render_page(page_module, params, server_struct, opts)
 
     conn_with_session
     |> Controller.html(html)

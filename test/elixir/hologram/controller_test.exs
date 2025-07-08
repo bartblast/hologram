@@ -7,8 +7,10 @@ defmodule Hologram.ControllerTest do
 
   alias Hologram.Commons.ETS
   alias Hologram.Test.Fixtures.Controller.Module1
+  alias Hologram.Test.Fixtures.Controller.Module2
 
   use_module_stub :page_digest_registry
+  use_module_stub :server
 
   setup :set_mox_global
 
@@ -21,6 +23,7 @@ defmodule Hologram.ControllerTest do
   describe "handle_request/2" do
     setup do
       setup_page_digest_registry(PageDigestRegistryStub)
+      setup_server(ServerStub)
     end
 
     test "conn updates" do
@@ -38,6 +41,19 @@ defmodule Hologram.ControllerTest do
       assert conn.status == 200
 
       assert Map.has_key?(conn.resp_cookies, "hologram_session")
+    end
+
+    test "server struct from Server.from/1 is used for rendering" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module2, :dummy_module_2_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module2")
+        |> Map.put(:req_headers, [{"cookie", "my_cookie=cookie_value"}])
+        |> Plug.Conn.fetch_cookies()
+        |> handle_request(Module2)
+
+      assert conn.resp_body == "cookie = cookie_value"
     end
   end
 end
