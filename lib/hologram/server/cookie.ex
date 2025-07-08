@@ -43,18 +43,15 @@ defmodule Hologram.Server.Cookie do
       "plain_cookie_value"
   """
   @spec decode(String.t()) :: any()
-  def decode(encoded) do
-    case String.starts_with?(encoded, "%H") do
-      true ->
-        encoded
-        |> String.slice(2..-1//1)
-        |> Base.decode64!(padding: false)
-        |> :erlang.binary_to_term([:safe])
+  def decode(encoded)
 
-      false ->
-        encoded
-    end
+  def decode("%H" <> encoded) do
+    encoded
+    |> Base.decode64!(padding: false)
+    |> :erlang.binary_to_term([:safe])
   end
+
+  def decode(plain_string), do: plain_string
 
   @doc """
   Encodes a term into a Base64-encoded string with a Hologram-specific prefix.
