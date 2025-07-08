@@ -57,6 +57,56 @@ defmodule Hologram.ServerTest do
     end
   end
 
+  describe "get_cookie/2" do
+    test "returns the value of an existing cookie" do
+      server = %Server{cookies: %{"user_id" => "abc123", "theme" => "dark"}}
+
+      result = get_cookie(server, "user_id")
+
+      assert result == "abc123"
+    end
+
+    test "returns nil for a nonexistent cookie" do
+      server = %Server{cookies: %{"user_id" => "abc123"}}
+
+      result = get_cookie(server, "nonexistent")
+
+      assert result == nil
+    end
+
+    test "returns nil when cookies map is empty" do
+      server = %Server{cookies: %{}}
+
+      result = get_cookie(server, "any_key")
+
+      assert result == nil
+    end
+
+    test "returns custom default for a nonexistent cookie" do
+      server = %Server{cookies: %{"user_id" => "abc123"}}
+
+      result = get_cookie(server, "nonexistent", "default_value")
+
+      assert result == "default_value"
+    end
+
+    test "returns custom default when cookies map is empty" do
+      server = %Server{cookies: %{}}
+
+      result = get_cookie(server, "any_key", "fallback")
+
+      assert result == "fallback"
+    end
+
+    test "returns actual value over default when cookie exists" do
+      server = %Server{cookies: %{"theme" => "dark"}}
+
+      result = get_cookie(server, "theme", "light")
+
+      assert result == "dark"
+    end
+  end
+
   describe "put_cookie/4" do
     test "adds a cookie with default options" do
       result = put_cookie(%Server{}, "my_cookie", "abc123")

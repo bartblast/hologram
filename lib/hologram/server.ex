@@ -44,6 +44,37 @@ defmodule Hologram.Server do
   end
 
   @doc """
+  Retrieves a cookie value by key from the server struct.
+
+  Returns the value associated with the given key, or the default value if the key
+  does not exist in the cookies.
+
+  ## Parameters
+
+    * `server` - The server struct
+    * `key` - The cookie name (string)
+    * `default` - The value to return if the key is not found (default: `nil`)
+
+  ## Examples
+
+      iex> server = %Hologram.Server{cookies: %{"user_id" => "abc123"}}
+      iex> get_cookie(server, "user_id")
+      "abc123"
+
+      iex> server = %Hologram.Server{cookies: %{"user_id" => "abc123"}}
+      iex> get_cookie(server, "nonexistent")
+      nil
+
+      iex> server = %Hologram.Server{cookies: %{"user_id" => "abc123"}}
+      iex> get_cookie(server, "nonexistent", "default_value")
+      "default_value"
+  """
+  @spec get_cookie(t(), String.t(), any()) :: any()
+  def get_cookie(server, key, default \\ nil) do
+    Map.get(server.cookies, key, default)
+  end
+
+  @doc """
   Adds a cookie to be set in the client's browser.
 
   ## Parameters
