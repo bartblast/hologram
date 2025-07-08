@@ -1,4 +1,5 @@
 defmodule Hologram.Server do
+  alias Hologram.Commons.MapUtils
   alias Hologram.Component.Action
   alias Hologram.Server.Cookie
   alias Hologram.Server.Metadata
@@ -41,6 +42,49 @@ defmodule Hologram.Server do
     %__MODULE__{
       cookies: conn_with_cookies.cookies
     }
+  end
+
+  @doc """
+  Computes the difference between cookies in two server structs.
+
+  Returns a map with three keys describing the changes needed to transform 
+  the cookies of `server_1` into the cookies of `server_2`:
+
+  - `:added` - New cookies (exist in server_2 but not in server_1) as `{key, value}` tuples
+  - `:edited` - Modified cookies (exist in both but with different values) as `{key, new_value}` tuples  
+  - `:removed` - Deleted cookies (exist in server_1 but not in server_2) as a list of keys
+
+  This function is useful for tracking cookie changes between different server states,
+  such as before and after processing a request or command.
+
+  ## Parameters
+
+    * `server_1` - The previous server state
+    * `server_2` - The new server state
+
+  ## Examples
+
+      iex> server_1 = %Hologram.Server{cookies: %{"user_id" => "123", "theme" => "light"}}
+      iex> server_2 = %Hologram.Server{cookies: %{"user_id" => "456", "lang" => "en"}}
+      iex> diff_cookies(server_1, server_2)
+      %{
+        added: [{"lang", "en"}],
+        removed: ["theme"],
+        edited: [{"user_id", "456"}]
+      }
+
+      iex> server_1 = %Hologram.Server{cookies: %{"user_id" => "123"}}
+      iex> server_2 = %Hologram.Server{cookies: %{"user_id" => "123"}}
+      iex> diff_cookies(server_1, server_2)
+      %{added: [], removed: [], edited: []}
+  """
+  @spec diff_cookies(t(), t()) :: %{
+          added: [{String.t(), any()}],
+          removed: [String.t()],
+          edited: [{String.t(), any()}]
+        }
+  def diff_cookies(server_1, server_2) do
+    MapUtils.diff(server_1.cookies, server_2.cookies)
   end
 
   @doc """

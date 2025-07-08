@@ -20,6 +20,21 @@ defmodule Hologram.ServerTest do
     setup_server(ServerStub)
   end
 
+  describe "diff_cookies/2" do
+    test "extracts cookies from both servers and delegates to MapUtils.diff/2" do
+      server_1 = %Server{cookies: %{"user_id" => 123, "theme" => "light"}}
+      server_2 = %Server{cookies: %{"user_id" => 456, "lang" => "en"}}
+
+      result = diff_cookies(server_1, server_2)
+
+      assert result == %{
+               added: [{"lang", "en"}],
+               removed: ["theme"],
+               edited: [{"user_id", 456}]
+             }
+    end
+  end
+
   describe "from/1" do
     test "creates server struct from connection with cookies" do
       conn = %Plug.Conn{
