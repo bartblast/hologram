@@ -116,7 +116,7 @@ jobs:
       - name: Download lib JavaScript deps
         uses: nick-fields/retry@v3
         with:
-          command: cd assets && npm install
+          command: cd assets && npm clean-install
           retry_on: any
           timeout_minutes: 3
           max_attempts: 10
