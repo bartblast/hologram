@@ -89,6 +89,26 @@ defmodule Hologram.ServerTest do
 
       refute Map.has_key?(result.cookies, "hologram_session")
     end
+
+    test "decodes cookie values using Cookie.decode/1" do
+      encoded_map = Cookie.encode(%{key: "value"})
+
+      conn = %Plug.Conn{
+        cookies: %{
+          "plain_cookie" => "plain_value",
+          "encoded_cookie" => encoded_map
+        },
+        req_cookies: %{
+          "plain_cookie" => "plain_value",
+          "encoded_cookie" => encoded_map
+        }
+      }
+
+      result = Server.from(conn)
+
+      assert result.cookies["plain_cookie"] == "plain_value"
+      assert result.cookies["encoded_cookie"] == %{key: "value"}
+    end
   end
 
   describe "get_cookie/2" do
