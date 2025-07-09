@@ -22,7 +22,8 @@ defmodule Hologram.Server do
   Creates a new Hologram.Server struct from a Plug connection.
 
   Extracts cookies from the connection and initializes a server struct
-  with those cookies. Other fields are set to their default values.
+  with those cookies. The "hologram_session" cookie is automatically excluded
+  from the server's cookies map. Other fields are set to their default values.
 
   ## Parameters
 
@@ -30,7 +31,12 @@ defmodule Hologram.Server do
 
   ## Examples
 
-      iex> conn = %Plug.Conn{cookies: %{"use_id" => "abc123"}}
+      iex> conn = %Plug.Conn{cookies: %{"user_id" => "abc123"}}
+      iex> server = Hologram.Server.from(conn)
+      iex> server.cookies
+      %{"user_id" => "abc123"}
+
+      iex> conn = %Plug.Conn{cookies: %{"user_id" => "abc123", "hologram_session" => "xyz789"}}
       iex> server = Hologram.Server.from(conn)
       iex> server.cookies
       %{"user_id" => "abc123"}
@@ -40,7 +46,7 @@ defmodule Hologram.Server do
     conn_with_cookies = Plug.Conn.fetch_cookies(conn)
 
     %__MODULE__{
-      cookies: conn_with_cookies.cookies
+      cookies: Map.delete(conn_with_cookies.cookies, "hologram_session")
     }
   end
 

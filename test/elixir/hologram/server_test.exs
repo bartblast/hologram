@@ -70,6 +70,25 @@ defmodule Hologram.ServerTest do
 
       assert result == %Server{cookies: %{"user_id" => "abc123", "theme" => "dark"}}
     end
+
+    test "excludes hologram_session cookie from server cookies" do
+      conn = %Plug.Conn{
+        cookies: %{
+          "user_id" => "abc123",
+          "theme" => "dark",
+          "hologram_session" => "session_data_xyz789"
+        },
+        req_cookies: %{
+          "user_id" => "abc123",
+          "theme" => "dark",
+          "hologram_session" => "session_data_xyz789"
+        }
+      }
+
+      result = Server.from(conn)
+
+      refute Map.has_key?(result.cookies, "hologram_session")
+    end
   end
 
   describe "get_cookie/2" do
