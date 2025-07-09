@@ -13,7 +13,7 @@ defmodule Hologram.Controller do
 
   Takes a map of cookie operations where each key is a cookie name (string) and each value
   is either a put operation `{:put, timestamp, cookie_struct}` or a delete operation 
-  `{:delete, timestamp}`..
+  `{:delete, timestamp}`.
 
   For put operations, the cookie value is encoded and set with the provided options.
   For delete operations, the cookie is removed from the response.
@@ -34,7 +34,6 @@ defmodule Hologram.Controller do
       iex> updated_conn = apply_cookie_ops(conn, ops)
       iex> updated_conn.resp_cookies["user_id"]
       # Returns the cookie data
-
   """
   @spec apply_cookie_ops(Plug.Conn.t(), %{String.t() => Metadata.cookie_op()}) :: Plug.Conn.t()
   def apply_cookie_ops(conn, cookie_ops) do
@@ -77,7 +76,16 @@ defmodule Hologram.Controller do
   end
 
   @doc """
-  Handles the page request by building HTML response body and halting the Plug pipeline.
+  Handles the page request by building HTTP response.
+
+  ## Parameters
+
+    * `conn` - The Plug.Conn struct representing the HTTP request
+    * `page_module` - The page module to render
+
+  ## Returns
+
+  The updated and halted Plug.Conn struct with the rendered HTML and applied cookies.
   """
   @spec handle_request(Plug.Conn.t(), module) :: Plug.Conn.t()
   # sobelow_skip ["XSS.HTML"]
@@ -88,10 +96,11 @@ defmodule Hologram.Controller do
     server_struct = Server.from(conn_with_session)
     opts = [initial_page?: true]
 
-    {html, _component_registry, _server_struct} =
+    {html, _component_registry, server_struct} =
       Renderer.render_page(page_module, params, server_struct, opts)
 
     conn_with_session
+    |> apply_cookie_ops(server_struct.__meta__.cookie_ops)
     |> Controller.html(html)
     |> Plug.Conn.halt()
   end

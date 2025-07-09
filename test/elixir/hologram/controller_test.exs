@@ -5,10 +5,12 @@ defmodule Hologram.ControllerTest do
   import Hologram.Test.Stubs
   import Mox
 
+  alias Hologram.Test.Fixtures.Template.Renderer.Module3
   alias Hologram.Commons.ETS
   alias Hologram.Server.Cookie
   alias Hologram.Test.Fixtures.Controller.Module1
   alias Hologram.Test.Fixtures.Controller.Module2
+  alias Hologram.Test.Fixtures.Controller.Module3
 
   use_module_stub :page_digest_registry
   use_module_stub :server
@@ -176,6 +178,18 @@ defmodule Hologram.ControllerTest do
         |> handle_request(Module2)
 
       assert conn.resp_body == "cookie = cookie_value"
+    end
+
+    test "applies cookie operations recorded when rendering the page" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module3, :dummy_module_3_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module3")
+        |> Plug.Conn.fetch_cookies()
+        |> handle_request(Module3)
+
+      assert Map.has_key?(conn.resp_cookies, "my_cookie")
     end
   end
 end
