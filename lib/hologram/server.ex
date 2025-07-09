@@ -19,6 +19,49 @@ defmodule Hologram.Server do
   @callback timestamp() :: non_neg_integer
 
   @doc """
+  Removes a cookie from the server struct and marks it for deletion in the client's browser.
+
+  If the cookie exists, it is removed from the server struct's cookies map and a delete 
+  operation is recorded in the metadata. If the cookie does not exist, this function 
+  is a no-op and returns the server struct unchanged.
+
+  ## Parameters
+
+    * `server` - The server struct
+    * `key` - The cookie name to delete (must be a string)
+
+  ## Examples
+
+      iex> server = %Hologram.Server{cookies: %{"user_id" => "123", "theme" => "dark"}}
+      iex> delete_cookie(server, "user_id")
+      %Hologram.Server{cookies: %{"theme" => "dark"}}
+
+      iex> # Deleting a nonexistent cookie is a no-op
+      iex> server = %Hologram.Server{cookies: %{"theme" => "dark"}}
+      iex> delete_cookie(server, "nonexistent")
+      %Hologram.Server{cookies: %{"theme" => "dark"}}
+
+      iex> server = %Hologram.Server{}
+      iex> delete_cookie(server, "any_key")
+      %Hologram.Server{cookies: %{}}
+  """
+  @spec delete_cookie(t, String.t()) :: t
+  def delete_cookie(server, key)
+
+  def delete_cookie(server, key) when is_map_key(server.cookies, key) do
+    new_cookies = Map.delete(server.cookies, key)
+
+    new_cookie_ops =
+      Map.put(server.__meta__.cookie_ops, key, {:delete, impl().timestamp()})
+
+    new_meta = %{server.__meta__ | cookie_ops: new_cookie_ops}
+
+    %{server | cookies: new_cookies, __meta__: new_meta}
+  end
+
+  def delete_cookie(server, _key), do: server
+
+  @doc """
   Creates a new Hologram.Server struct from a Plug connection.
 
   Extracts cookies from the connection and initializes a server struct

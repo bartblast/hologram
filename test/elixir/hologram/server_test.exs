@@ -5,6 +5,7 @@ defmodule Hologram.ServerTest do
   import Hologram.Test.Stubs
   import Mox
 
+  alias Hologram.Component.Action
   alias Hologram.Server
   alias Hologram.Server.Cookie
   alias Hologram.Server.Metadata
@@ -18,6 +19,94 @@ defmodule Hologram.ServerTest do
 
   setup do
     setup_server(ServerStub)
+  end
+
+  describe "delete_cookie/2" do
+    test "removes an existing cookie from the server struct" do
+      server = %Server{cookies: %{"user_id" => "123", "theme" => "dark"}}
+
+      result = delete_cookie(server, "user_id")
+
+      assert result.cookies == %{"theme" => "dark"}
+      assert result.__meta__.cookie_ops["user_id"] == {:delete, @timestamp}
+    end
+
+    test "handles deleting a nonexistent cookie as no-op" do
+      server = %Server{cookies: %{"theme" => "dark"}}
+
+      result = delete_cookie(server, "nonexistent")
+
+      assert result == server
+    end
+
+    test "handles deleting from empty cookies map as no-op" do
+      server = %Server{cookies: %{}}
+
+      result = delete_cookie(server, "any_key")
+
+      assert result == server
+    end
+
+    test "preserves existing metadata cookie_ops when deleting" do
+      server = %Server{
+        cookies: %{"user_id" => "123", "theme" => "dark"},
+        __meta__: %Metadata{
+          cookie_ops: %{
+            "existing_op" => {:put, @timestamp - 1, %Cookie{value: "some_value"}}
+          }
+        }
+      }
+
+      result = delete_cookie(server, "user_id")
+
+      assert result.cookies == %{"theme" => "dark"}
+      assert result.__meta__.cookie_ops["user_id"] == {:delete, @timestamp}
+
+      assert result.__meta__.cookie_ops["existing_op"] ==
+               {:put, @timestamp - 1, %Cookie{value: "some_value"}}
+    end
+
+    test "preserves existing metadata when deleting nonexistent cookie" do
+      server = %Server{
+        cookies: %{"theme" => "dark"},
+        __meta__: %Metadata{
+          cookie_ops: %{
+            "existing_op" => {:put, @timestamp - 1, %Cookie{value: "some_value"}}
+          }
+        }
+      }
+
+      result = delete_cookie(server, "nonexistent")
+
+      assert result == server
+    end
+
+    test "overwrites existing cookie operation when same key is deleted" do
+      server = %Server{
+        cookies: %{"user_id" => "123"},
+        __meta__: %Metadata{
+          cookie_ops: %{
+            "user_id" => {:put, @timestamp - 1, %Cookie{value: "123"}}
+          }
+        }
+      }
+
+      result = delete_cookie(server, "user_id")
+
+      assert result.cookies == %{}
+      assert result.__meta__.cookie_ops["user_id"] == {:delete, @timestamp}
+    end
+
+    test "preserves other server struct fields unchanged" do
+      server = %Server{
+        cookies: %{"user_id" => "123"},
+        next_action: %Action{name: :some_action}
+      }
+
+      result = delete_cookie(server, "user_id")
+
+      assert result.next_action == %Action{name: :some_action}
+    end
   end
 
   describe "diff_cookies/2" do
