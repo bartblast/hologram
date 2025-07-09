@@ -4,8 +4,8 @@ defmodule Hologram.Server.Metadata do
   defstruct cookie_ops: %{}
 
   @type t :: %__MODULE__{
-          cookie_ops: %{
-            String.t() => {:put, non_neg_integer, Cookie.t()} | {:delete, non_neg_integer}
-          }
+          cookie_ops: %{String.t() => cookie_op}
         }
+
+  @type cookie_op :: {:delete, pos_integer} | {:put, pos_integer, Cookie.t()}
 end
