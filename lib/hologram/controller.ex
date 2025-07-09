@@ -111,9 +111,14 @@ defmodule Hologram.Controller do
       http_only: cookie_struct.http_only,
       max_age: cookie_struct.max_age,
       path: cookie_struct.path,
-      same_site: cookie_struct.same_site,
+      same_site: same_site_to_string(cookie_struct.same_site),
       secure: cookie_struct.secure
     ]
     |> Enum.filter(fn {_key, value} -> value != nil end)
   end
+
+  defp same_site_to_string(:lax), do: "Lax"
+  defp same_site_to_string(:none), do: "None"
+  defp same_site_to_string(:strict), do: "Strict"
+  defp same_site_to_string(nil), do: nil
 end
