@@ -38,7 +38,7 @@ defmodule Hologram.ControllerTest do
                "test_cookie" => %{
                  value: "%Hg20AAAAKdGVzdF92YWx1ZQ",
                  http_only: true,
-                 same_site: :lax,
+                 same_site: "Lax",
                  secure: true
                }
              }
@@ -65,7 +65,7 @@ defmodule Hologram.ControllerTest do
                  domain: "example.com",
                  http_only: false,
                  path: "/admin",
-                 same_site: :strict,
+                 same_site: "Strict",
                  secure: false,
                  max_age: 3_600
                }
@@ -133,7 +133,7 @@ defmodule Hologram.ControllerTest do
       # Should include non-nil opts
       assert cookie_data.http_only == true
       assert cookie_data.path == "/test-path"
-      assert cookie_data.same_site == :strict
+      assert cookie_data.same_site == "Strict"
 
       # Should not include nil opts
       refute Map.has_key?(cookie_data, :domain)
