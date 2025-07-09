@@ -96,25 +96,27 @@ defmodule Hologram.Controller do
     server_struct = Server.from(conn_with_session)
     opts = [initial_page?: true]
 
-    {html, _component_registry, server_struct} =
+    {html, _component_registry, updated_server_struct} =
       Renderer.render_page(page_module, params, server_struct, opts)
 
     conn_with_session
-    |> apply_cookie_ops(server_struct.__meta__.cookie_ops)
+    |> apply_cookie_ops(updated_server_struct.__meta__.cookie_ops)
     |> Controller.html(html)
     |> Plug.Conn.halt()
   end
 
   defp build_cookie_opts(cookie_struct) do
-    [
-      domain: cookie_struct.domain,
-      http_only: cookie_struct.http_only,
-      max_age: cookie_struct.max_age,
-      path: cookie_struct.path,
-      same_site: same_site_to_string(cookie_struct.same_site),
-      secure: cookie_struct.secure
-    ]
-    |> Enum.filter(fn {_key, value} -> value != nil end)
+    opts =
+      [
+        domain: cookie_struct.domain,
+        http_only: cookie_struct.http_only,
+        max_age: cookie_struct.max_age,
+        path: cookie_struct.path,
+        same_site: same_site_to_string(cookie_struct.same_site),
+        secure: cookie_struct.secure
+      ]
+
+    Enum.filter(opts, fn {_key, value} -> value != nil end)
   end
 
   defp same_site_to_string(:lax), do: "Lax"
