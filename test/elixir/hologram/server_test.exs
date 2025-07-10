@@ -131,7 +131,7 @@ defmodule Hologram.ServerTest do
         req_cookies: %{"user_id" => "abc123", "theme" => "dark"}
       }
 
-      result = Server.from(conn)
+      result = from(conn)
 
       assert result == %Server{cookies: %{"user_id" => "abc123", "theme" => "dark"}}
     end
@@ -150,7 +150,7 @@ defmodule Hologram.ServerTest do
         }
       }
 
-      result = Server.from(conn)
+      result = from(conn)
 
       refute Map.has_key?(result.cookies, "hologram_session")
     end
