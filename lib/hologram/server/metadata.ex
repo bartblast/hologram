@@ -1,5 +1,5 @@
 defmodule Hologram.Server.Metadata do
-  alias Hologram.Server.Cookie
+  alias Hologram.Runtime.Cookie
 
   defstruct cookie_ops: %{}
 

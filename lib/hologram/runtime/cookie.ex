@@ -1,4 +1,4 @@
-defmodule Hologram.Server.Cookie do
+defmodule Hologram.Runtime.Cookie do
   @moduledoc false
 
   alias Hologram.Commons.StringUtils

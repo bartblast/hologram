@@ -6,8 +6,8 @@ defmodule Hologram.ServerTest do
   import Mox
 
   alias Hologram.Component.Action
+  alias Hologram.Runtime.Cookie
   alias Hologram.Server
-  alias Hologram.Server.Cookie
   alias Hologram.Server.Metadata
 
   use_module_stub :server

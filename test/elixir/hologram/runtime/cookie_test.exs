@@ -1,6 +1,6 @@
-defmodule Hologram.Server.CookieTest do
+defmodule Hologram.Runtime.CookieTest do
   use Hologram.Test.BasicCase, async: true
-  alias Hologram.Server.Cookie
+  alias Hologram.Runtime.Cookie
 
   describe "decode/1" do
     test "decodes a Hologram-encoded string" do

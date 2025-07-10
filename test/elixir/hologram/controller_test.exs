@@ -6,7 +6,7 @@ defmodule Hologram.ControllerTest do
   import Mox
 
   alias Hologram.Commons.ETS
-  alias Hologram.Server.Cookie
+  alias Hologram.Runtime.Cookie
   alias Hologram.Test.Fixtures.Controller.Module1
   alias Hologram.Test.Fixtures.Controller.Module2
   alias Hologram.Test.Fixtures.Controller.Module3

@@ -8,8 +8,8 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
   alias Hologram.Component
+  alias Hologram.Runtime.Cookie
   alias Hologram.Server
-  alias Hologram.Server.Cookie
   alias Hologram.Server.Metadata
   alias Hologram.Template.Renderer
   alias Hologram.Test.Fixtures.LayoutFixture

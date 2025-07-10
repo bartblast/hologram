@@ -1,5 +1,5 @@
 defmodule Hologram.Commons.PlugConnUtils do
-  alias Hologram.Server.Cookie
+  alias Hologram.Runtime.Cookie
 
   @doc """
   Extracts cookies from the Plug.Conn struct.

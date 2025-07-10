@@ -1,8 +1,8 @@
 defmodule Hologram.Controller do
   @moduledoc false
 
+  alias Hologram.Runtime.Cookie
   alias Hologram.Server
-  alias Hologram.Server.Cookie
   alias Hologram.Session
   alias Hologram.Template.Renderer
   alias Phoenix.Controller
