@@ -1,17 +1,23 @@
 defmodule Hologram.Runtime.Connection do
   @behaviour WebSock
 
+  alias Hologram.Runtime.CookieStore
   alias Hologram.Runtime.Deserializer
   alias Hologram.Runtime.MessageHandler
   alias Hologram.Server
 
   @impl WebSock
-  def init(http_conn) do
+  def init(plug_conn) do
     if Hologram.env() == :dev do
       Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram_live_reload")
     end
 
-    {:ok, http_conn}
+    state = %{
+      cookie_store: CookieStore.from(plug_conn),
+      plug_conn: plug_conn
+    }
+
+    {:ok, state}
   end
 
   @impl WebSock

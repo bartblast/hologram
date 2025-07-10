@@ -1,21 +1,29 @@
 defmodule Hologram.Runtime.ConnectionTest do
   use Hologram.Test.BasicCase, async: false
   import Hologram.Runtime.Connection
+
+  alias Hologram.Runtime.CookieStore
   alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module1
 
   @http_conn %Plug.Conn{
+    host: "localhost",
     method: "GET",
     path_info: ["hello", "world"],
-    query_string: "",
-    host: "localhost"
+    req_headers: [{"cookie", "user_id=abc123; hologram_session=xyz789"}],
+    query_string: ""
+  }
+
+  @state %{
+    cookie_store: CookieStore.from(@http_conn),
+    plug_conn: @http_conn
   }
 
   # Make sure String.to_existing_atom/1 recognizes atoms from the fixture component
   Code.ensure_loaded(Module1)
 
   describe "init/1" do
-    test "returns {:ok, http_conn} tuple" do
-      assert init(@http_conn) == {:ok, @http_conn}
+    test "returns {:ok, state} tuple with cookie_store and plug_conn" do
+      assert init(@http_conn) == {:ok, @state}
     end
   end
 
@@ -62,8 +70,8 @@ defmodule Hologram.Runtime.ConnectionTest do
     test "handles messages with type only" do
       message = {~s'"ping"', [opcode: :text]}
 
-      assert handle_in(message, @http_conn) ==
-               {:reply, :ok, {:text, ~s'"pong"'}, @http_conn}
+      assert handle_in(message, @state) ==
+               {:reply, :ok, {:text, ~s'"pong"'}, @state}
     end
 
     # Not needed (yet)
@@ -74,8 +82,8 @@ defmodule Hologram.Runtime.ConnectionTest do
         {~s'["command",[2,{"d":[["amodule","aElixir.Hologram.Test.Fixtures.Runtime.MessageHandler.Module1"],["aname","amy_command_a"],["aparams",{"d":[],"t":"m"}],["atarget","b06d795f7461726765745f31"]],"t":"m"}],123]',
          [opcode: :text]}
 
-      assert handle_in(message, @http_conn) ==
-               {:reply, :ok, {:text, ~s'["reply",[1,"Type.atom(\\"nil\\")"],123]'}, @http_conn}
+      assert handle_in(message, @state) ==
+               {:reply, :ok, {:text, ~s'["reply",[1,"Type.atom(\\"nil\\")"],123]'}, @state}
     end
   end
 
@@ -83,23 +91,23 @@ defmodule Hologram.Runtime.ConnectionTest do
     test "handles :reload message" do
       message = :reload
 
-      assert handle_info(message, @http_conn) ==
-               {:push, {:text, ~s'"reload"'}, @http_conn}
+      assert handle_info(message, @state) ==
+               {:push, {:text, ~s'"reload"'}, @state}
     end
 
     test "handles {:compilation_error, output} message" do
       output = "Compile error in module MyModule"
       message = {:compilation_error, output}
 
-      assert handle_info(message, @http_conn) ==
+      assert handle_info(message, @state) ==
                {:push, {:text, ~s'["compilation_error","Compile error in module MyModule"]'},
-                @http_conn}
+                @state}
     end
 
-    test "returns {:ok, http_conn} tuple for other messages" do
+    test "returns {:ok, state} tuple for other messages" do
       message = :dummy
 
-      assert handle_info(message, @http_conn) == {:ok, @http_conn}
+      assert handle_info(message, @state) == {:ok, @state}
     end
   end
 end
