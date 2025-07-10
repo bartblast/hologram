@@ -1,5 +1,6 @@
 defmodule Hologram.Server do
   alias Hologram.Commons.MapUtils
+  alias Hologram.Commons.PlugConnUtils
   alias Hologram.Component.Action
   alias Hologram.Server.Cookie
   alias Hologram.Server.Metadata
@@ -107,12 +108,6 @@ defmodule Hologram.Server do
   @doc """
   Creates a new Hologram.Server struct from a Plug connection.
 
-  Extracts cookies from the connection and initializes a server struct
-  with those cookies. Each cookie value is decoded using Cookie.decode/1,
-  which handles both Hologram-encoded cookies (with "%H" prefix) and plain
-  string cookies. The "hologram_session" cookie is automatically excluded
-  from the server's cookies map. Other fields are set to their default values.
-
   ## Parameters
 
     * `conn` - A Plug connection struct
@@ -120,33 +115,13 @@ defmodule Hologram.Server do
   ## Examples
 
       iex> conn = %Plug.Conn{cookies: %{"user_id" => "abc123"}}
-      iex> server = Hologram.Server.from(conn)
-      iex> server.cookies
-      %{"user_id" => "abc123"}
-
-      iex> conn = %Plug.Conn{cookies: %{"user_id" => "abc123", "hologram_session" => "xyz789"}}
-      iex> server = Hologram.Server.from(conn)
-      iex> server.cookies
-      %{"user_id" => "abc123"}
-
-      iex> # Hologram-encoded cookie is decoded to original term
-      iex> conn = %Plug.Conn{cookies: %{"settings" => "%Hg3QAAAABdwNrZXltAAAABXZhbHVl"}}
-      iex> server = Hologram.Server.from(conn)
-      iex> server.cookies
-      %{"settings" => %{key: "value"}}
+      iex> Hologram.Server.from(conn)
+      %Hologram.Server{cookies: %{"user_id" => "abc123"}}
   """
   @spec from(Plug.Conn.t()) :: t()
   def from(conn) do
-    cookies =
-      conn
-      |> Plug.Conn.fetch_cookies()
-      |> Map.fetch!(:cookies)
-      |> Map.delete("hologram_session")
-      |> Enum.map(fn {key, value} -> {key, Cookie.decode(value)} end)
-      |> Enum.into(%{})
-
     %__MODULE__{
-      cookies: cookies
+      cookies: PlugConnUtils.extract_cookies(conn)
     }
   end
 

@@ -125,34 +125,10 @@ defmodule Hologram.ServerTest do
   end
 
   describe "from/1" do
-    test "creates server struct from connection with cookies" do
+    test "creates Server struct from Plug.Conn struct" do
       conn = %Plug.Conn{
         cookies: %{"user_id" => "abc123", "theme" => "dark"},
         req_cookies: %{"user_id" => "abc123", "theme" => "dark"}
-      }
-
-      result = Server.from(conn)
-
-      assert result == %Server{cookies: %{"user_id" => "abc123", "theme" => "dark"}}
-    end
-
-    test "creates server struct from connection with no cookies" do
-      conn = %Plug.Conn{cookies: %{}, req_cookies: %{}}
-
-      result = Server.from(conn)
-
-      assert result == %Server{cookies: %{}}
-    end
-
-    test "fetches cookies from connection that hasn't been processed yet" do
-      # This simulates a connection that hasn't had fetch_cookies/1 called on it.
-      # The actual cookies must be fetched from headers.
-      conn = %Plug.Conn{
-        cookies: %Plug.Conn.Unfetched{aspect: :cookies},
-        req_cookies: %Plug.Conn.Unfetched{aspect: :cookies},
-        req_headers: [
-          {"cookie", "user_id=abc123; theme=dark"}
-        ]
       }
 
       result = Server.from(conn)
@@ -177,26 +153,6 @@ defmodule Hologram.ServerTest do
       result = Server.from(conn)
 
       refute Map.has_key?(result.cookies, "hologram_session")
-    end
-
-    test "decodes cookie values using Cookie.decode/1" do
-      encoded_map = Cookie.encode(%{key: "value"})
-
-      conn = %Plug.Conn{
-        cookies: %{
-          "plain_cookie" => "plain_value",
-          "encoded_cookie" => encoded_map
-        },
-        req_cookies: %{
-          "plain_cookie" => "plain_value",
-          "encoded_cookie" => encoded_map
-        }
-      }
-
-      result = Server.from(conn)
-
-      assert result.cookies["plain_cookie"] == "plain_value"
-      assert result.cookies["encoded_cookie"] == %{key: "value"}
     end
   end
 
