@@ -3,7 +3,6 @@ defmodule Hologram.Controller do
 
   alias Hologram.Server
   alias Hologram.Server.Cookie
-  alias Hologram.Server.Metadata
   alias Hologram.Session
   alias Hologram.Template.Renderer
   alias Phoenix.Controller
@@ -35,7 +34,7 @@ defmodule Hologram.Controller do
       iex> updated_conn.resp_cookies["user_id"]
       # Returns the cookie data
   """
-  @spec apply_cookie_ops(Plug.Conn.t(), %{String.t() => Metadata.cookie_op()}) :: Plug.Conn.t()
+  @spec apply_cookie_ops(Plug.Conn.t(), %{String.t() => Cookie.op()}) :: Plug.Conn.t()
   def apply_cookie_ops(conn, cookie_ops) do
     Enum.reduce(cookie_ops, conn, fn {cookie_name, operation}, acc_conn ->
       case operation do
