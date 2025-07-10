@@ -1,4 +1,4 @@
-defmodule Hologram.Server.CookieStore do
+defmodule Hologram.Runtime.CookieStore do
   alias Hologram.Server.Cookie
 
   defstruct persisted: %{}, pending: %{}
