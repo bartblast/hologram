@@ -1,8 +1,8 @@
 defmodule Hologram.Server do
   alias Hologram.Commons.MapUtils
-  alias Hologram.Commons.PlugConnUtils
   alias Hologram.Component.Action
   alias Hologram.Runtime.Cookie
+  alias Hologram.Runtime.PlugConnUtils
   alias Hologram.Server.Metadata
 
   defstruct cookies: %{}, next_action: nil, session: %{}, __meta__: %Metadata{}

@@ -1,6 +1,6 @@
 defmodule Hologram.Runtime.PlugConnUtilsTest do
   use Hologram.Test.BasicCase, async: true
-  import Hologram.Commons.PlugConnUtils
+  import Hologram.Runtime.PlugConnUtils
   alias Hologram.Runtime.Cookie
 
   describe "extract_cookies/1" do
