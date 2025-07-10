@@ -119,7 +119,7 @@ defmodule Hologram.Server do
       %Hologram.Server{cookies: %{"user_id" => "abc123"}}
   """
   @spec from(Plug.Conn.t()) :: t()
-  def from(conn) do
+  def from(%Plug.Conn{} = conn) do
     %__MODULE__{
       cookies: PlugConnUtils.extract_cookies(conn)
     }
