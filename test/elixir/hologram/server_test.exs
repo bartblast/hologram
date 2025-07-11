@@ -223,6 +223,24 @@ defmodule Hologram.ServerTest do
     end
   end
 
+  describe "get_cookie_ops/1" do
+    test "returns cookie operations recorded in the server struct's metadata" do
+      server = %Server{cookies: %{"existing_cookie" => "value"}}
+
+      new_server =
+        server
+        |> put_cookie("new_cookie", "new_value")
+        |> delete_cookie("existing_cookie")
+
+      result = get_cookie_ops(new_server)
+
+      assert result == %{
+               "new_cookie" => {:put, @timestamp, %Cookie{value: "new_value"}},
+               "existing_cookie" => {:delete, @timestamp}
+             }
+    end
+  end
+
   describe "has_cookie_ops?/1" do
     test "returns false when no cookie operations have been recorded" do
       server = %Server{cookies: %{"user_id" => "123"}}

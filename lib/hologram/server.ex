@@ -192,6 +192,14 @@ defmodule Hologram.Server do
   end
 
   @doc """
+  Retrieves the cookie operations recorded in the server struct's metadata.
+  """
+  @spec get_cookie_ops(t()) :: %{String.t() => Cookie.op()}
+  def get_cookie_ops(server) do
+    server.__meta__.cookie_ops
+  end
+
+  @doc """
   Checks if the server struct has any recorded cookie operations.
 
   Returns `true` if there are any cookie operations (put or delete) in the
