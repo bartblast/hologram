@@ -186,6 +186,26 @@ defmodule Hologram.Runtime.CookieStoreTest do
     end
   end
 
+  describe "has_pending_ops?/1" do
+    test "returns true when store has pending operations" do
+      store = %CookieStore{
+        persisted: %{},
+        pending: %{"key" => {:put, 100, %Cookie{value: "value"}}}
+      }
+
+      assert has_pending_ops?(store)
+    end
+
+    test "returns false when store has no pending operations" do
+      store = %CookieStore{
+        persisted: %{"key" => "value"},
+        pending: %{}
+      }
+
+      refute has_pending_ops?(store)
+    end
+  end
+
   describe "merge_pending_ops/2" do
     test "merges operations with higher timestamps" do
       store = %CookieStore{

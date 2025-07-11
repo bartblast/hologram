@@ -84,6 +84,14 @@ defmodule Hologram.Runtime.CookieStore do
   end
 
   @doc """
+  Returns true if the cookie store has any pending operations, false otherwise.
+  """
+  @spec has_pending_ops?(t) :: boolean
+  def has_pending_ops?(cookie_store) do
+    Enum.any?(cookie_store.pending)
+  end
+
+  @doc """
   Merges cookie operations into the pending field of the cookie store.
 
   Only operations with timestamps higher than existing operations are merged.
