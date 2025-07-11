@@ -192,6 +192,32 @@ defmodule Hologram.Server do
   end
 
   @doc """
+  Checks if the server struct has any recorded cookie operations.
+
+  Returns `true` if there are any cookie operations (put or delete) in the
+  server structs's metadata, `false` otherwise.
+
+  ## Parameters
+
+    * `server` - The server struct
+
+  ## Examples
+
+      iex> server = %Hologram.Server{}
+      iex> has_cookie_ops?(server)
+      false
+
+      iex> server = %Hologram.Server{cookies: %{"user_id" => "123"}}
+      iex> server = put_cookie(server, "theme", "dark")
+      iex> has_cookie_ops?(server)
+      true
+  """
+  @spec has_cookie_ops?(t) :: boolean
+  def has_cookie_ops?(server) do
+    not Enum.empty?(server.__meta__.cookie_ops)
+  end
+
+  @doc """
   Adds a cookie to be set in the client's browser.
 
   ## Parameters

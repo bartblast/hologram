@@ -223,6 +223,46 @@ defmodule Hologram.ServerTest do
     end
   end
 
+  describe "has_cookie_ops?/1" do
+    test "returns false when no cookie operations have been recorded" do
+      server = %Server{cookies: %{"user_id" => "123"}}
+
+      result = has_cookie_ops?(server)
+
+      assert result == false
+    end
+
+    test "returns true when put operation has been recorded" do
+      server = put_cookie(%Server{}, "theme", "dark")
+
+      result = has_cookie_ops?(server)
+
+      assert result == true
+    end
+
+    test "returns true when delete operation has been recorded" do
+      server = %Server{cookies: %{"theme" => "dark"}}
+      new_server = delete_cookie(server, "theme")
+
+      result = has_cookie_ops?(new_server)
+
+      assert result == true
+    end
+
+    test "returns true when multiple operations have been recorded" do
+      server = %Server{cookies: %{"user_id" => "123", "theme" => "dark"}}
+
+      new_server =
+        server
+        |> put_cookie("lang", "en")
+        |> delete_cookie("user_id")
+
+      result = has_cookie_ops?(new_server)
+
+      assert result == true
+    end
+  end
+
   describe "put_cookie/4" do
     test "adds a cookie with default options" do
       result = put_cookie(%Server{}, "my_cookie", "abc123")
