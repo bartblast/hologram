@@ -2,6 +2,7 @@ defmodule Hologram.Server do
   alias Hologram.Commons.MapUtils
   alias Hologram.Component.Action
   alias Hologram.Runtime.Cookie
+  alias Hologram.Runtime.CookieStore
   alias Hologram.Runtime.PlugConnUtils
   alias Hologram.Server.Metadata
 
@@ -106,19 +107,53 @@ defmodule Hologram.Server do
   end
 
   @doc """
-  Creates a new Hologram.Server struct from a Plug connection.
+  Creates a new Hologram.Server struct from either a cookie store or a Plug connection.
+
+  When given a `CookieStore`, extracts effective cookies using `CookieStore.effective_cookies/1`,
+  which resolves cookie operations based on timestamp precedence and excludes deleted cookies.
+  The resulting server struct will contain only the final effective cookie values.
+
+  When given a `Plug.Conn`, extracts cookies directly from the connection, excluding the
+  "hologram_session" cookie.
 
   ## Parameters
 
-    * `conn` - A Plug connection struct
+    * `cookie_store` - A CookieStore struct containing persisted and pending cookie operations
+    * `conn` - A Plug.Conn struct
 
   ## Examples
 
-      iex> conn = %Plug.Conn{cookies: %{"user_id" => "abc123"}}
+      iex> # From CookieStore
+      iex> alias Hologram.Runtime.{Cookie, CookieStore}
+      iex> store = %CookieStore{
+      ...>   persisted: %{"user_id" => "abc123", "theme" => "light"},
+      ...>   pending: %{"theme" => {:put, 100, %Cookie{value: "dark"}}}
+      ...> }
+      iex> Hologram.Server.from(store)
+      %Hologram.Server{cookies: %{"user_id" => "abc123", "theme" => "dark"}}
+
+      iex> # Deleted cookies are excluded from CookieStore results
+      iex> alias Hologram.Runtime.CookieStore
+      iex> store = %CookieStore{
+      ...>   persisted: %{"user_id" => "abc123", "expired" => "old_value"},
+      ...>   pending: %{"expired" => {:delete, 150}}
+      ...> }
+      iex> Hologram.Server.from(store)
+      %Hologram.Server{cookies: %{"user_id" => "abc123"}}
+
+      iex> # From Plug.Conn
+      iex> conn = %Plug.Conn{req_cookies: %{"user_id" => "abc123"}}
       iex> Hologram.Server.from(conn)
       %Hologram.Server{cookies: %{"user_id" => "abc123"}}
   """
-  @spec from(Plug.Conn.t()) :: t()
+  @spec from(CookieStore.t() | Plug.Conn.t()) :: t
+
+  def from(%CookieStore{} = cookie_store) do
+    %__MODULE__{
+      cookies: CookieStore.effective_cookies(cookie_store)
+    }
+  end
+
   def from(%Plug.Conn{} = conn) do
     %__MODULE__{
       cookies: PlugConnUtils.extract_cookies(conn)
