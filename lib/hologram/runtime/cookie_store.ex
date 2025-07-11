@@ -83,6 +83,56 @@ defmodule Hologram.Runtime.CookieStore do
     }
   end
 
+  @doc """
+  Merges cookie operations into the pending field of the cookie store.
+
+  Only operations with timestamps higher than existing operations are merged.
+  Plain string values in the persisted field are treated as having timestamp 0.
+
+  ## Parameters
+
+    * `cookie_store` - The current cookie store
+    * `ops` - A map of cookie operations to merge
+
+  ## Returns
+
+  The updated cookie store with new operations merged into the pending field.
+  """
+  @spec merge_pending_ops(t, %{String.t() => Cookie.op()}) :: t
+  def merge_pending_ops(%CookieStore{} = cookie_store, ops) do
+    new_pending =
+      for {key, op} <- ops, reduce: cookie_store.pending do
+        acc ->
+          if should_merge_op?(cookie_store, key, op) do
+            Map.put(acc, key, op)
+          else
+            acc
+          end
+      end
+
+    %{cookie_store | pending: new_pending}
+  end
+
+  # Fetch the latest timestamp for a key based on timestamp precedence
+  # Returns {:ok, timestamp} for existing cookies
+  # Returns :error for deleted or non-existent cookies
+  defp fetch_latest_timestamp(cookie_store, key) do
+    persisted_op = Map.get(cookie_store.persisted, key)
+    pending_op = Map.get(cookie_store.pending, key)
+
+    ops =
+      []
+      |> maybe_collect_op(persisted_op)
+      |> maybe_collect_op(pending_op)
+
+    # Sort by timestamp (highest first) and get the most recent op
+    case Enum.sort_by(ops, &elem(&1, 1), :desc) do
+      [] -> :error
+      [{:put, timestamp, _value} | _rest] -> {:ok, timestamp}
+      [{:delete, _timestamp} | _rest] -> :error
+    end
+  end
+
   # Fetch the latest value for a key based on timestamp precedence
   # Returns {:ok, value} for existing cookies (value may be nil)
   # Returns :error for deleted or non-existent cookies
@@ -103,6 +153,9 @@ defmodule Hologram.Runtime.CookieStore do
     end
   end
 
+  defp get_op_timestamp({:put, timestamp, _cookie}), do: timestamp
+  defp get_op_timestamp({:delete, timestamp}), do: timestamp
+
   defp maybe_collect_op(ops, op) do
     case op do
       nil ->
@@ -117,6 +170,17 @@ defmodule Hologram.Runtime.CookieStore do
 
       {:delete, _timestamp} = op ->
         [op | ops]
+    end
+  end
+
+  # Determines if a new operation should be merged based on timestamp comparison
+  defp should_merge_op?(cookie_store, key, op) do
+    case fetch_latest_timestamp(cookie_store, key) do
+      {:ok, timestamp} ->
+        get_op_timestamp(op) > timestamp
+
+      :error ->
+        true
     end
   end
 end

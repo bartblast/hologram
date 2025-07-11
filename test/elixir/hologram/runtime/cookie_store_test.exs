@@ -185,4 +185,77 @@ defmodule Hologram.Runtime.CookieStoreTest do
       refute Map.has_key?(result.persisted, "hologram_session")
     end
   end
+
+  describe "merge_pending_ops/2" do
+    test "merges operations with higher timestamps" do
+      store = %CookieStore{
+        persisted: %{"key_1" => {:put, 100, %Cookie{value: "old"}}},
+        pending: %{"key_2" => {:put, 50, %Cookie{value: "existing"}}}
+      }
+
+      ops = %{
+        "key_1" => {:put, 200, %Cookie{value: "new"}},
+        "key_2" => {:put, 100, %Cookie{value: "updated"}}
+      }
+
+      result = merge_pending_ops(store, ops)
+
+      assert result.pending == %{
+               "key_1" => {:put, 200, %Cookie{value: "new"}},
+               "key_2" => {:put, 100, %Cookie{value: "updated"}}
+             }
+    end
+
+    test "rejects operations with lower timestamps" do
+      store = %CookieStore{
+        persisted: %{"key_1" => {:put, 200, %Cookie{value: "newer"}}},
+        pending: %{"key_2" => {:put, 150, %Cookie{value: "existing"}}}
+      }
+
+      ops = %{
+        "key_1" => {:put, 100, %Cookie{value: "older"}},
+        "key_2" => {:put, 100, %Cookie{value: "also_older"}}
+      }
+
+      result = merge_pending_ops(store, ops)
+
+      assert result.pending == %{"key_2" => {:put, 150, %Cookie{value: "existing"}}}
+    end
+
+    test "merges operations for non-existent keys" do
+      store = %CookieStore{persisted: %{}, pending: %{}}
+
+      ops = %{"new_key" => {:put, 100, %Cookie{value: "value"}}}
+
+      result = merge_pending_ops(store, ops)
+
+      assert result.pending == %{"new_key" => {:put, 100, %Cookie{value: "value"}}}
+    end
+
+    test "treats plain string values as timestamp 0" do
+      store = %CookieStore{
+        persisted: %{"key" => "plain_string"},
+        pending: %{}
+      }
+
+      ops = %{"key" => {:put, 1, %Cookie{value: "newer"}}}
+
+      result = merge_pending_ops(store, ops)
+
+      assert result.pending == %{"key" => {:put, 1, %Cookie{value: "newer"}}}
+    end
+
+    test "handles delete operations" do
+      store = %CookieStore{
+        persisted: %{"key" => {:put, 100, %Cookie{value: "value"}}},
+        pending: %{}
+      }
+
+      ops = %{"key" => {:delete, 200}}
+
+      result = merge_pending_ops(store, ops)
+
+      assert result.pending == %{"key" => {:delete, 200}}
+    end
+  end
 end
