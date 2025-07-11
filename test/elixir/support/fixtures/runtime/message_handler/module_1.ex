@@ -27,6 +27,15 @@ defmodule Hologram.Test.Fixtures.Runtime.MessageHandler.Module1 do
     %{server | next_action: action}
   end
 
+  def command(:my_command_with_cookies, _params, server) do
+    server
+    |> put_cookie("test_cookie", "test_value")
+  end
+
+  def command(:my_command_without_cookies, _params, server) do
+    %{server | next_action: nil}
+  end
+
   @impl Component
   def template do
     ~HOLO""

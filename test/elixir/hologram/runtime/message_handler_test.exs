@@ -7,6 +7,7 @@ defmodule Hologram.Runtime.MessageHandlerTest do
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
   alias Hologram.Commons.SystemUtils
+  alias Hologram.Runtime.CookieStore
   alias Hologram.Runtime.MessageHandler
   alias Hologram.Server
   alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module1
@@ -17,15 +18,22 @@ defmodule Hologram.Runtime.MessageHandlerTest do
 
   use_module_stub :asset_path_registry
   use_module_stub :page_digest_registry
+  use_module_stub :server
 
   setup :set_mox_global
+
+  setup do
+    setup_server(ServerStub)
+
+    [connection_state: %{cookie_store: %CookieStore{}, plug_conn: %Plug.Conn{}}]
+  end
 
   # Make sure String.to_existing_atom/1 recognizes atoms from the fixture component
   Code.ensure_loaded(Module1)
   Code.ensure_loaded(Module6)
 
   describe "handle/3, command" do
-    test "next action is nil" do
+    test "next action is nil", %{connection_state: connection_state} do
       payload = %{
         module: Module1,
         name: :my_command_a,
@@ -33,11 +41,11 @@ defmodule Hologram.Runtime.MessageHandlerTest do
         target: "my_target_1"
       }
 
-      assert MessageHandler.handle("command", payload, %Server{}) ==
-               {"reply", [1, ~s'Type.atom("nil")']}
+      assert MessageHandler.handle("command", payload, connection_state) ==
+               {"reply", [1, ~s'Type.atom("nil")', 0], connection_state}
     end
 
-    test "next action with target not specified" do
+    test "next action with target not specified", %{connection_state: connection_state} do
       payload = %{
         module: Module1,
         name: :my_command_b,
@@ -45,15 +53,16 @@ defmodule Hologram.Runtime.MessageHandlerTest do
         target: "my_target_1"
       }
 
-      assert MessageHandler.handle("command", payload, %Server{}) ==
+      assert MessageHandler.handle("command", payload, connection_state) ==
                {"reply",
                 [
                   1,
-                  ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("my_action_b")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
-                ]}
+                  ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("my_action_b")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_1")]])',
+                  0
+                ], connection_state}
     end
 
-    test "next action with target specified" do
+    test "next action with target specified", %{connection_state: connection_state} do
       payload = %{
         module: Module1,
         name: :my_command_c,
@@ -61,15 +70,17 @@ defmodule Hologram.Runtime.MessageHandlerTest do
         target: "my_target_1"
       }
 
-      assert MessageHandler.handle("command", payload, %Server{}) ==
+      assert MessageHandler.handle("command", payload, connection_state) ==
                {"reply",
                 [
                   1,
-                  ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("my_action_c")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_2")]])'
-                ]}
+                  ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("my_action_c")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_2")]])',
+                  0
+                ], connection_state}
     end
 
-    test "next action params contain an anonymous function that is not a named function capture" do
+    test "next action params contain an anonymous function that is not a named function capture",
+         %{connection_state: connection_state} do
       payload = %{
         module: Module6,
         name: :my_command_6,
@@ -84,7 +95,36 @@ defmodule Hologram.Runtime.MessageHandlerTest do
           "term contains a function that is not a remote function capture"
         end
 
-      assert MessageHandler.handle("command", payload, %Server{}) == {"reply", [0, expected_msg]}
+      assert MessageHandler.handle("command", payload, connection_state) ==
+               {"reply", [0, expected_msg, 0], connection_state}
+    end
+
+    test "command changes cookies", %{connection_state: connection_state} do
+      payload = %{
+        module: Module1,
+        name: :my_command_with_cookies,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      {"reply", [1, ~s'Type.atom("nil")', 1], new_connection_state} =
+        MessageHandler.handle("command", payload, connection_state)
+
+      assert CookieStore.has_pending_ops?(new_connection_state.cookie_store)
+    end
+
+    test "command doesn't change cookies", %{connection_state: connection_state} do
+      payload = %{
+        module: Module1,
+        name: :my_command_without_cookies,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      {"reply", [1, ~s'Type.atom("nil")', 0], new_connection_state} =
+        MessageHandler.handle("command", payload, connection_state)
+
+      refute CookieStore.has_pending_ops?(new_connection_state.cookie_store)
     end
   end
 
