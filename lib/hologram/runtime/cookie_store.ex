@@ -34,14 +34,14 @@ defmodule Hologram.Runtime.CookieStore do
       %{"key_1" => "value_1", "key_2" => "new_value", "key_4" => nil}
   """
   @spec effective_cookies(t) :: %{String.t() => any}
-  def effective_cookies(%CookieStore{persisted: persisted, pending: pending}) do
+  def effective_cookies(%CookieStore{} = cookie_store) do
     persisted_keys =
-      persisted
+      cookie_store.persisted
       |> Map.keys()
       |> MapSet.new()
 
     pending_keys =
-      pending
+      cookie_store.pending
       |> Map.keys()
       |> MapSet.new()
 
@@ -49,7 +49,7 @@ defmodule Hologram.Runtime.CookieStore do
 
     for key <- all_keys, reduce: %{} do
       acc ->
-        case fetch_latest_value(key, persisted, pending) do
+        case fetch_latest_value(cookie_store, key) do
           {:ok, value} -> Map.put(acc, key, value)
           :error -> acc
         end
@@ -136,9 +136,9 @@ defmodule Hologram.Runtime.CookieStore do
   # Fetch the latest value for a key based on timestamp precedence
   # Returns {:ok, value} for existing cookies (value may be nil)
   # Returns :error for deleted or non-existent cookies
-  defp fetch_latest_value(key, persisted, pending) do
-    persisted_op = Map.get(persisted, key)
-    pending_op = Map.get(pending, key)
+  defp fetch_latest_value(cookie_store, key) do
+    persisted_op = Map.get(cookie_store.persisted, key)
+    pending_op = Map.get(cookie_store.pending, key)
 
     ops =
       []
