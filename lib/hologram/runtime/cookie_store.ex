@@ -56,6 +56,27 @@ defmodule Hologram.Runtime.CookieStore do
     end
   end
 
+  @doc """
+  Creates a new cookie store from a Plug.Conn struct.
+
+  Extracts cookies from the given connection and stores them as persisted cookies
+  in the returned cookie store. The pending cookies map will be empty.
+  The Hologram session cookie (hologram_session) is excluded.
+
+  ## Parameters
+
+    * `conn` - A Plug.Conn struct containing cookies to extract
+
+  ## Examples
+
+      iex> conn = %Plug.Conn{req_headers: [{"cookie", "user_id=abc123; theme=dark"}]}
+      iex> store = CookieStore.from(conn)
+      iex> store.persisted
+      %{"user_id" => "abc123", "theme" => "dark"}
+      iex> store.pending
+      %{}
+  """
+  @spec from(Plug.Conn.t()) :: t
   def from(%Plug.Conn{} = conn) do
     %__MODULE__{
       persisted: PlugConnUtils.extract_cookies(conn)
