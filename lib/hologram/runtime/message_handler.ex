@@ -53,18 +53,7 @@ defmodule Hologram.Runtime.MessageHandler do
           nil
       end
 
-    new_cookie_store =
-      case command_result do
-        %Server{} = new_server_struct ->
-          if Server.has_cookie_ops?(new_server_struct) do
-            CookieStore.merge_pending_ops(cookie_store, Server.get_cookie_ops(new_server_struct))
-          else
-            cookie_store
-          end
-
-        _fallback ->
-          nil
-      end
+    new_cookie_store = maybe_merge_cookie_ops(cookie_store, command_result)
 
     # TODO: handle session
 
@@ -81,10 +70,13 @@ defmodule Hologram.Runtime.MessageHandler do
     {"reply", [command_status, encoded_next_action, sync_cookies_flag], new_connection_state}
   end
 
-  def handle("page", payload, server_struct) do
+  def handle("page", payload, connection_state) do
+    %{cookie_store: cookie_store} = connection_state
+
+    server_struct = Server.from(cookie_store)
     opts = [initial_page?: false]
 
-    {html, _component_registry, _mutated_server_struct} =
+    {html, _component_registry, new_server_struct} =
       case payload do
         {page_module, params} ->
           Renderer.render_page(page_module, params, server_struct, opts)
@@ -93,10 +85,16 @@ defmodule Hologram.Runtime.MessageHandler do
           Renderer.render_page(page_module, %{}, server_struct, opts)
       end
 
-    {"reply", html}
+    new_cookie_store = maybe_merge_cookie_ops(cookie_store, new_server_struct)
+
+    # TODO: handle session      
+
+    new_connection_state = %{connection_state | cookie_store: new_cookie_store}
+
+    {"reply", html, new_connection_state}
   end
 
-  def handle("page_bundle_path", page_module, _server_struct) do
+  def handle("page_bundle_path", page_module, connection_state) do
     page_bundle_path =
       page_module
       |> PageDigestRegistry.lookup()
@@ -107,5 +105,19 @@ defmodule Hologram.Runtime.MessageHandler do
 
   def handle("ping", nil, _server_struct) do
     {"pong", :__no_payload__}
+  end
+
+  defp maybe_merge_cookie_ops(cookie_store, maybe_server_struct) do
+    case maybe_server_struct do
+      %Server{} = server_struct ->
+        if Server.has_cookie_ops?(server_struct) do
+          CookieStore.merge_pending_ops(cookie_store, Server.get_cookie_ops(server_struct))
+        else
+          cookie_store
+        end
+
+      _fallback ->
+        cookie_store
+    end
   end
 end

@@ -15,6 +15,9 @@ defmodule Hologram.Runtime.MessageHandlerTest do
   alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module3
   alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module5
   alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module6
+  alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module7
+  alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module8
+  alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module9
 
   use_module_stub :asset_path_registry
   use_module_stub :page_digest_registry
@@ -31,6 +34,9 @@ defmodule Hologram.Runtime.MessageHandlerTest do
   # Make sure String.to_existing_atom/1 recognizes atoms from the fixture component
   Code.ensure_loaded(Module1)
   Code.ensure_loaded(Module6)
+  Code.ensure_loaded(Module7)
+  Code.ensure_loaded(Module8)
+  Code.ensure_loaded(Module9)
 
   describe "handle/3, command" do
     test "next action is nil", %{connection_state: connection_state} do
@@ -136,28 +142,57 @@ defmodule Hologram.Runtime.MessageHandlerTest do
       setup_page_digest_registry(PageDigestRegistryStub)
     end
 
-    test "module payload" do
+    test "module payload", %{connection_state: connection_state} do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module2, :dummy_module_2_digest)
 
-      assert MessageHandler.handle("page", Module2, %Server{}) ==
-               {"reply", "page Module2 template"}
+      assert MessageHandler.handle("page", Module2, connection_state) ==
+               {"reply", "page Module2 template", connection_state}
     end
 
-    test "tuple payload" do
+    test "tuple payload", %{connection_state: connection_state} do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module3, :dummy_module_3_digest)
 
       payload = {Module3, %{a: 1, b: 2}}
 
-      assert MessageHandler.handle("page", payload, %Server{}) ==
-               {"reply", "page Module3 template, params: a = 1, b = 2"}
+      assert MessageHandler.handle("page", payload, connection_state) ==
+               {"reply", "page Module3 template, params: a = 1, b = 2", connection_state}
     end
 
-    test "rendered page is not treated as initial page" do
+    test "rendered page is not treated as initial page", %{connection_state: connection_state} do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
 
-      assert {"reply", html} = MessageHandler.handle("page", Module5, %Server{})
+      assert {"reply", html, _new_connection_state} =
+               MessageHandler.handle("page", Module5, connection_state)
 
       refute String.contains?(html, "__hologramAssetManifest__")
+    end
+
+    test "renderer has access to cookies from the connection state cookie store" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module7, :dummy_module_7_digest)
+
+      cookie_store = %CookieStore{persisted: %{"test_cookie" => "test_value"}}
+      connection_state = %{cookie_store: cookie_store, plug_conn: %Plug.Conn{}}
+
+      assert {"reply", "cookie = test_value", _new_connection_state} =
+               MessageHandler.handle("page", Module7, connection_state)
+    end
+
+    test "page changes cookies", %{connection_state: connection_state} do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module8, :dummy_module_8_digest)
+
+      {"reply", _html, new_connection_state} =
+        MessageHandler.handle("page", Module8, connection_state)
+
+      assert CookieStore.has_pending_ops?(new_connection_state.cookie_store)
+    end
+
+    test "page doesn't change cookies", %{connection_state: connection_state} do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module9, :dummy_module_9_digest)
+
+      {"reply", _html, new_connection_state} =
+        MessageHandler.handle("page", Module9, connection_state)
+
+      refute CookieStore.has_pending_ops?(new_connection_state.cookie_store)
     end
   end
 
