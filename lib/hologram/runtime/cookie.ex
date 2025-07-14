@@ -21,8 +21,6 @@ defmodule Hologram.Runtime.Cookie do
           secure: boolean()
         }
 
-  @type op :: {:delete, pos_integer} | {:put, pos_integer, __MODULE__.t()}
-
   @doc """
   Decodes a potentially encoded cookie value.
 
