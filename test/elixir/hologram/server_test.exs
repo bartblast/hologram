@@ -158,10 +158,13 @@ defmodule Hologram.ServerTest do
 
     test "creates Server struct from CookieStore struct" do
       cookie_store = %CookieStore{
-        persisted: %{"user_id" => "abc123", "theme" => "light"},
+        persisted: %{
+          "theme" => {:put, 50, %Cookie{value: "light"}},
+          "user_id" => {:nop, 0, "abc123"}
+        },
         pending: %{
-          "theme" => {:put, 100, %Cookie{value: "dark"}},
-          "lang" => {:put, 200, %Cookie{value: "en"}}
+          "lang" => {:put, 200, %Cookie{value: "en"}},
+          "theme" => {:put, 100, %Cookie{value: "dark"}}
         }
       }
 

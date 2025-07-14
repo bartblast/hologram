@@ -126,7 +126,7 @@ defmodule Hologram.Server do
       iex> # From CookieStore
       iex> alias Hologram.Runtime.{Cookie, CookieStore}
       iex> store = %CookieStore{
-      ...>   persisted: %{"user_id" => "abc123", "theme" => "light"},
+      ...>   persisted: %{"user_id" => {:nop, 0, "abc123"}, "theme" => {:put, 50, %Cookie{value: "light"}}},
       ...>   pending: %{"theme" => {:put, 100, %Cookie{value: "dark"}}}
       ...> }
       iex> Hologram.Server.from(store)
@@ -135,7 +135,7 @@ defmodule Hologram.Server do
       iex> # Deleted cookies are excluded from CookieStore results
       iex> alias Hologram.Runtime.CookieStore
       iex> store = %CookieStore{
-      ...>   persisted: %{"user_id" => "abc123", "expired" => "old_value"},
+      ...>   persisted: %{"user_id" => {:nop, 0, "abc123"}, "expired" => {:put, 100, "old_value"}},
       ...>   pending: %{"expired" => {:delete, 150}}
       ...> }
       iex> Hologram.Server.from(store)
@@ -194,7 +194,7 @@ defmodule Hologram.Server do
   @doc """
   Retrieves the cookie operations recorded in the server struct's metadata.
   """
-  @spec get_cookie_ops(t()) :: %{String.t() => Cookie.op()}
+  @spec get_cookie_ops(t()) :: %{String.t() => CookieStore.op()}
   def get_cookie_ops(server) do
     server.__meta__.cookie_ops
   end
