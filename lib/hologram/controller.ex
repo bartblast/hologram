@@ -2,6 +2,7 @@ defmodule Hologram.Controller do
   @moduledoc false
 
   alias Hologram.Runtime.Cookie
+  alias Hologram.Runtime.CookieStore
   alias Hologram.Server
   alias Hologram.Session
   alias Hologram.Template.Renderer
@@ -28,13 +29,12 @@ defmodule Hologram.Controller do
 
   ## Examples
 
-      iex> cookie_struct = %Cookie{value: 123, path: "/"}
-      iex> ops = %{"user_id" => {:put, 1752074624726958, cookie_struct}}
+      iex> ops = %{"user_id" => {:put, 1752074624726958, %Cookie{value: 123}}}
       iex> updated_conn = apply_cookie_ops(conn, ops)
       iex> updated_conn.resp_cookies["user_id"]
       # Returns the cookie data
   """
-  @spec apply_cookie_ops(Plug.Conn.t(), %{String.t() => Cookie.op()}) :: Plug.Conn.t()
+  @spec apply_cookie_ops(Plug.Conn.t(), %{String.t() => CookieStore.op()}) :: Plug.Conn.t()
   def apply_cookie_ops(conn, cookie_ops) do
     Enum.reduce(cookie_ops, conn, fn {cookie_name, operation}, acc_conn ->
       case operation do
