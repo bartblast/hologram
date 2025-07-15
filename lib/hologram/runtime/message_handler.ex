@@ -100,7 +100,7 @@ defmodule Hologram.Runtime.MessageHandler do
       |> PageDigestRegistry.lookup()
       |> RouterHelpers.page_bundle_path()
 
-    {"reply", page_bundle_path}
+    {"reply", page_bundle_path, connection_state}
   end
 
   def handle("ping", nil, _server_struct) do

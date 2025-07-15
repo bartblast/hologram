@@ -9,7 +9,6 @@ defmodule Hologram.Runtime.MessageHandlerTest do
   alias Hologram.Commons.SystemUtils
   alias Hologram.Runtime.CookieStore
   alias Hologram.Runtime.MessageHandler
-  alias Hologram.Server
   alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module1
   alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module2
   alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module3
@@ -227,7 +226,7 @@ defmodule Hologram.Runtime.MessageHandlerTest do
   end
 
   describe "handle/3, page_bundle_path" do
-    test "returns page bundle path" do
+    test "returns page bundle path", %{connection_state: connection_state} do
       setup_page_digest_registry(PageDigestRegistryStub)
 
       ETS.put(
@@ -236,8 +235,8 @@ defmodule Hologram.Runtime.MessageHandlerTest do
         "12345678901234567890123456789012"
       )
 
-      assert MessageHandler.handle("page_bundle_path", Module2, %Server{}) ==
-               {"reply", "/hologram/page-12345678901234567890123456789012.js"}
+      assert MessageHandler.handle("page_bundle_path", Module2, connection_state) ==
+               {"reply", "/hologram/page-12345678901234567890123456789012.js", connection_state}
     end
   end
 end
