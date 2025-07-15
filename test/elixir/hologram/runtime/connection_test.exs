@@ -161,15 +161,12 @@ defmodule Hologram.Runtime.ConnectionTest do
     end
 
     test "handles different termination reasons" do
-      # Test :normal termination
       {:ok, state_1} = init(@plug_conn)
       assert terminate(:normal, state_1) == :ok
 
-      # Test :shutdown termination  
       {:ok, state_2} = init(@plug_conn)
       assert terminate(:shutdown, state_2) == :ok
 
-      # Test error termination
       {:ok, state_3} = init(@plug_conn)
       assert terminate({:error, :some_error}, state_3) == :ok
     end
