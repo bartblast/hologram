@@ -22,8 +22,36 @@ defmodule Hologram.Runtime.ConnectionTest do
   Code.ensure_loaded(Module1)
 
   describe "init/1" do
-    test "returns {:ok, state} tuple with cookie_store and plug_conn" do
-      assert init(@plug_conn) == {:ok, @state}
+    test "returns {:ok, state} tuple with cookie_store, plug_conn, and connection_id" do
+      {:ok, state} = init(@plug_conn)
+
+      assert %{
+               connection_id: connection_id,
+               cookie_store: cookie_store,
+               plug_conn: plug_conn
+             } = state
+
+      assert cookie_store == CookieStore.from(@plug_conn)
+      assert plug_conn == @plug_conn
+      assert is_binary(connection_id)
+
+      assert String.match?(
+               connection_id,
+               ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+             )
+    end
+
+    test "registers process with gproc using connection_id" do
+      {:ok, state} = init(@plug_conn)
+
+      process_name = {:hologram_connection, state.connection_id}
+
+      # Verify the process is registered with the expected key (local registration in tests)
+      assert :gproc.whereis_name({:n, :l, process_name}) == self()
+
+      # Verify we can look up the process by connection_id
+      registered_pids = :gproc.lookup_pids({:n, :l, process_name})
+      assert registered_pids == [self()]
     end
   end
 

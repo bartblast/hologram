@@ -13,7 +13,14 @@ defmodule Hologram.Runtime.Connection do
       Phoenix.PubSub.subscribe(Hologram.PubSub, "hologram_live_reload")
     end
 
+    connection_id = UUID.uuid4()
+
+    env = Hologram.env()
+    context = if env == :test || env == :dev, do: :l, else: :g
+    :gproc.reg({:n, context, {:hologram_connection, connection_id}})
+
     state = %{
+      connection_id: connection_id,
       cookie_store: CookieStore.from(plug_conn),
       plug_conn: plug_conn
     }
