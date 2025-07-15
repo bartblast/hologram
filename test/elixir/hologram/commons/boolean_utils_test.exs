@@ -13,7 +13,9 @@ defmodule Hologram.Commons.BooleanUtilsTest do
 
     test "raises FunctionClauseError for non-boolean" do
       assert_raise FunctionClauseError, fn ->
-        to_integer(nil)
+        nil
+        |> wrap_term()
+        |> to_integer()
       end
     end
   end
