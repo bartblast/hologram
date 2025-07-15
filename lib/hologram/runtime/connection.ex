@@ -4,7 +4,8 @@ defmodule Hologram.Runtime.Connection do
   alias Hologram.Runtime.CookieStore
   alias Hologram.Runtime.Deserializer
   alias Hologram.Runtime.MessageHandler
-  alias Hologram.Server
+
+  @type state :: %{cookie_store: CookieStore.t(), plug_conn: Plug.Conn.t()}
 
   @impl WebSock
   def init(plug_conn) do
@@ -23,10 +24,13 @@ defmodule Hologram.Runtime.Connection do
   @impl WebSock
   def handle_in({message, [opcode: :text]}, state) do
     {message_type, message_payload, correlation_id} = decode(message)
-    {reply_type, reply_payload} = MessageHandler.handle(message_type, message_payload, %Server{})
+
+    {reply_type, reply_payload, new_state} =
+      MessageHandler.handle(message_type, message_payload, state)
+
     reply = encode(reply_type, reply_payload, correlation_id)
 
-    {:reply, :ok, {:text, reply}, state}
+    {:reply, :ok, {:text, reply}, new_state}
   end
 
   @impl WebSock

@@ -5,7 +5,7 @@ defmodule Hologram.Runtime.ConnectionTest do
   alias Hologram.Runtime.CookieStore
   alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module1
 
-  @http_conn %Plug.Conn{
+  @plug_conn %Plug.Conn{
     host: "localhost",
     method: "GET",
     path_info: ["hello", "world"],
@@ -14,8 +14,8 @@ defmodule Hologram.Runtime.ConnectionTest do
   }
 
   @state %{
-    cookie_store: CookieStore.from(@http_conn),
-    plug_conn: @http_conn
+    cookie_store: CookieStore.from(@plug_conn),
+    plug_conn: @plug_conn
   }
 
   # Make sure String.to_existing_atom/1 recognizes atoms from the fixture component
@@ -23,7 +23,7 @@ defmodule Hologram.Runtime.ConnectionTest do
 
   describe "init/1" do
     test "returns {:ok, state} tuple with cookie_store and plug_conn" do
-      assert init(@http_conn) == {:ok, @state}
+      assert init(@plug_conn) == {:ok, @state}
     end
   end
 
@@ -48,7 +48,7 @@ defmodule Hologram.Runtime.ConnectionTest do
     test "subscribes to hologram_live_reload topic when env is dev" do
       System.put_env("HOLOGRAM_ENV", "dev")
 
-      init(@http_conn)
+      init(@plug_conn)
 
       Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", :test_message)
 
@@ -58,7 +58,7 @@ defmodule Hologram.Runtime.ConnectionTest do
     test "does not subscribe to hologram_live_reload topic when env is not dev" do
       System.put_env("HOLOGRAM_ENV", "test")
 
-      init(@http_conn)
+      init(@plug_conn)
 
       Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", :test_message)
 
@@ -83,7 +83,7 @@ defmodule Hologram.Runtime.ConnectionTest do
          [opcode: :text]}
 
       assert handle_in(message, @state) ==
-               {:reply, :ok, {:text, ~s'["reply",[1,"Type.atom(\\"nil\\")"],123]'}, @state}
+               {:reply, :ok, {:text, ~s'["reply",[1,"Type.atom(\\"nil\\")",0],123]'}, @state}
     end
   end
 
