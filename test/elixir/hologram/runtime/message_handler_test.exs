@@ -105,7 +105,29 @@ defmodule Hologram.Runtime.MessageHandlerTest do
                {"reply", [0, expected_msg, 0], connection_state}
     end
 
-    test "command changes cookies", %{connection_state: connection_state} do
+    test "command handler can read from cookie store", %{
+      connection_state: connection_state_fixture
+    } do
+      payload = %{
+        module: Module1,
+        name: :my_command_accessing_cookie,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      connection_state = %{
+        connection_state_fixture
+        | cookie_store: %CookieStore{persisted: %{"my_cookie" => {:nop, 0, :action_from_cookie}}}
+      }
+
+      {"reply", [1, encoded_action, 0], ^connection_state} =
+        MessageHandler.handle("command", payload, connection_state)
+
+      assert encoded_action ==
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("action_from_cookie")], [Type.atom("params"), Type.map([])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+    end
+
+    test "command handler can write to cookie store", %{connection_state: connection_state} do
       payload = %{
         module: Module1,
         name: :my_command_with_cookies,
@@ -119,7 +141,9 @@ defmodule Hologram.Runtime.MessageHandlerTest do
       assert CookieStore.has_pending_ops?(new_connection_state.cookie_store)
     end
 
-    test "command doesn't change cookies", %{connection_state: connection_state} do
+    test "command handler works correctly when cookie store is not read from or written to", %{
+      connection_state: connection_state
+    } do
       payload = %{
         module: Module1,
         name: :my_command_without_cookies,
@@ -127,30 +151,10 @@ defmodule Hologram.Runtime.MessageHandlerTest do
         target: "my_target_1"
       }
 
-      {"reply", [1, _next_action, 0], new_connection_state} =
+      {"reply", [1, _next_action, 0], ^connection_state} =
         MessageHandler.handle("command", payload, connection_state)
 
-      refute CookieStore.has_pending_ops?(new_connection_state.cookie_store)
-    end
-
-    test "command has access to cookies", %{connection_state: connection_state_fixture} do
-      payload = %{
-        module: Module1,
-        name: :my_command_accessing_cookie,
-        params: %{},
-        target: "my_target_1"
-      }
-
-      connection_state = %{
-        connection_state_fixture
-        | cookie_store: %CookieStore{persisted: %{"my_cookie" => {:nop, 0, :action_from_cookie}}}
-      }
-
-      {"reply", [1, encoded_action, 0], _new_connection_state} =
-        MessageHandler.handle("command", payload, connection_state)
-
-      assert encoded_action ==
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("action_from_cookie")], [Type.atom("params"), Type.map([])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+      refute CookieStore.has_pending_ops?(connection_state.cookie_store)
     end
   end
 
@@ -187,17 +191,21 @@ defmodule Hologram.Runtime.MessageHandlerTest do
       refute String.contains?(html, "__hologramAssetManifest__")
     end
 
-    test "renderer has access to cookies from the connection state cookie store" do
+    test "command handler can read from cookie store", %{
+      connection_state: connection_state_fixture
+    } do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module7, :dummy_module_7_digest)
 
-      cookie_store = %CookieStore{persisted: %{"test_cookie" => "test_value"}}
-      connection_state = %{cookie_store: cookie_store, plug_conn: %Plug.Conn{}}
+      connection_state = %{
+        connection_state_fixture
+        | cookie_store: %CookieStore{persisted: %{"test_cookie" => {:nop, 0, "test_value"}}}
+      }
 
-      assert {"reply", "cookie = test_value", _new_connection_state} =
+      assert {"reply", "cookie = test_value", ^connection_state} =
                MessageHandler.handle("page", Module7, connection_state)
     end
 
-    test "page changes cookies", %{connection_state: connection_state} do
+    test "page handler can write to cookie store", %{connection_state: connection_state} do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module8, :dummy_module_8_digest)
 
       {"reply", _html, new_connection_state} =
@@ -206,13 +214,15 @@ defmodule Hologram.Runtime.MessageHandlerTest do
       assert CookieStore.has_pending_ops?(new_connection_state.cookie_store)
     end
 
-    test "page doesn't change cookies", %{connection_state: connection_state} do
+    test "page handler works correctly when cookie store is not read from or written to", %{
+      connection_state: connection_state
+    } do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module9, :dummy_module_9_digest)
 
-      {"reply", _html, new_connection_state} =
+      {"reply", _html, ^connection_state} =
         MessageHandler.handle("page", Module9, connection_state)
 
-      refute CookieStore.has_pending_ops?(new_connection_state.cookie_store)
+      refute CookieStore.has_pending_ops?(connection_state.cookie_store)
     end
   end
 
