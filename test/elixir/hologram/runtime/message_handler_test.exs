@@ -113,7 +113,7 @@ defmodule Hologram.Runtime.MessageHandlerTest do
         target: "my_target_1"
       }
 
-      {"reply", [1, ~s'Type.atom("nil")', 1], new_connection_state} =
+      {"reply", [1, _next_action, 1], new_connection_state} =
         MessageHandler.handle("command", payload, connection_state)
 
       assert CookieStore.has_pending_ops?(new_connection_state.cookie_store)
@@ -127,10 +127,30 @@ defmodule Hologram.Runtime.MessageHandlerTest do
         target: "my_target_1"
       }
 
-      {"reply", [1, ~s'Type.atom("nil")', 0], new_connection_state} =
+      {"reply", [1, _next_action, 0], new_connection_state} =
         MessageHandler.handle("command", payload, connection_state)
 
       refute CookieStore.has_pending_ops?(new_connection_state.cookie_store)
+    end
+
+    test "command has access to cookies", %{connection_state: connection_state_fixture} do
+      payload = %{
+        module: Module1,
+        name: :my_command_accessing_cookie,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      connection_state = %{
+        connection_state_fixture
+        | cookie_store: %CookieStore{persisted: %{"my_cookie" => {:nop, 0, :action_from_cookie}}}
+      }
+
+      {"reply", [1, encoded_action, 0], _new_connection_state} =
+        MessageHandler.handle("command", payload, connection_state)
+
+      assert encoded_action ==
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("action_from_cookie")], [Type.atom("params"), Type.map([])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
     end
   end
 
