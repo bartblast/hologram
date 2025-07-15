@@ -91,6 +91,8 @@ defmodule Hologram.Runtime.Connection do
   end
 
   defp gproc_context(:dev), do: :l
+
   defp gproc_context(:test), do: :l
+
   defp gproc_context(_env), do: :g
 end
