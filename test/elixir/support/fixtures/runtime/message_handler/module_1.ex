@@ -28,8 +28,7 @@ defmodule Hologram.Test.Fixtures.Runtime.MessageHandler.Module1 do
   end
 
   def command(:my_command_with_cookies, _params, server) do
-    server
-    |> put_cookie("test_cookie", "test_value")
+    put_cookie(server, "test_cookie", "test_value")
   end
 
   def command(:my_command_without_cookies, _params, server) do

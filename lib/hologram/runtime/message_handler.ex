@@ -87,7 +87,7 @@ defmodule Hologram.Runtime.MessageHandler do
 
     new_cookie_store = maybe_merge_cookie_ops(cookie_store, new_server_struct)
 
-    # TODO: handle session      
+    # TODO: handle session
 
     new_connection_state = %{connection_state | cookie_store: new_cookie_store}
 
