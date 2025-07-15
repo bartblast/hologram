@@ -15,8 +15,7 @@ defmodule Hologram.Runtime.Connection do
 
     connection_id = UUID.uuid4()
 
-    env = Hologram.env()
-    context = if env == :test || env == :dev, do: :l, else: :g
+    context = gproc_context(Hologram.env())
     :gproc.reg({:n, context, {:hologram_connection, connection_id}})
 
     state = %{
@@ -57,6 +56,14 @@ defmodule Hologram.Runtime.Connection do
     {:ok, state}
   end
 
+  @impl WebSock
+  def terminate(_reason, state) do
+    context = gproc_context(Hologram.env())
+    :gproc.unreg({:n, context, {:hologram_connection, state.connection_id}})
+
+    :ok
+  end
+
   defp decode(message) do
     case Jason.decode!(message) do
       [type, payload, correlation_id] ->
@@ -82,4 +89,8 @@ defmodule Hologram.Runtime.Connection do
   defp encode(type, payload, correlation_id) do
     Jason.encode!([type, payload, correlation_id])
   end
+
+  defp gproc_context(:dev), do: :l
+  defp gproc_context(:test), do: :l
+  defp gproc_context(_env), do: :g
 end

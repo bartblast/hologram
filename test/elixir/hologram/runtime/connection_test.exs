@@ -138,4 +138,40 @@ defmodule Hologram.Runtime.ConnectionTest do
       assert handle_info(message, @state) == {:ok, @state}
     end
   end
+
+  describe "terminate/2" do
+    test "returns :ok" do
+      {:ok, state} = init(@plug_conn)
+
+      assert terminate(:normal, state) == :ok
+    end
+
+    test "unregisters process from gproc" do
+      {:ok, state} = init(@plug_conn)
+
+      process_name = {:hologram_connection, state.connection_id}
+
+      # Verify the process is registered before termination
+      assert :gproc.whereis_name({:n, :l, process_name}) == self()
+
+      terminate(:normal, state)
+
+      # Verify the process is no longer registered after termination
+      assert :gproc.whereis_name({:n, :l, process_name}) == :undefined
+    end
+
+    test "handles different termination reasons" do
+      # Test :normal termination
+      {:ok, state_1} = init(@plug_conn)
+      assert terminate(:normal, state_1) == :ok
+
+      # Test :shutdown termination  
+      {:ok, state_2} = init(@plug_conn)
+      assert terminate(:shutdown, state_2) == :ok
+
+      # Test error termination
+      {:ok, state_3} = init(@plug_conn)
+      assert terminate({:error, :some_error}, state_3) == :ok
+    end
+  end
 end
