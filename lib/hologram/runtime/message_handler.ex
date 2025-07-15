@@ -103,8 +103,8 @@ defmodule Hologram.Runtime.MessageHandler do
     {"reply", page_bundle_path, connection_state}
   end
 
-  def handle("ping", nil, _server_struct) do
-    {"pong", :__no_payload__}
+  def handle("ping", nil, connection_state) do
+    {"pong", :__no_payload__, connection_state}
   end
 
   defp maybe_merge_cookie_ops(cookie_store, maybe_server_struct) do

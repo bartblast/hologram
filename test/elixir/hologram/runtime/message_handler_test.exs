@@ -239,4 +239,11 @@ defmodule Hologram.Runtime.MessageHandlerTest do
                {"reply", "/hologram/page-12345678901234567890123456789012.js", connection_state}
     end
   end
+
+  describe "handle/3, ping" do
+    test "returns pong reply", %{connection_state: connection_state} do
+      assert MessageHandler.handle("ping", nil, connection_state) ==
+               {"pong", :__no_payload__, connection_state}
+    end
+  end
 end
