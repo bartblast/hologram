@@ -56,9 +56,9 @@ defmodule Hologram.Controller do
   end
 
   @doc """
-  Extracts param values from the given URL path corresponding to the route of the given page module.
+  Extracts (uncast) params from the given URL path corresponding to the route of the given page module.
   """
-  @spec extract_params(String.t(), module) :: %{atom => any}
+  @spec extract_params(String.t(), module) :: %{String.t() => String.t()}
   def extract_params(url_path, page_module) do
     route_segments = String.split(page_module.__route__(), "/")
     url_path_segments = String.split(url_path, "/")
@@ -67,7 +67,7 @@ defmodule Hologram.Controller do
     |> Enum.zip(url_path_segments)
     |> Enum.reduce([], fn
       {":" <> key, value}, acc ->
-        [{String.to_existing_atom(key), value} | acc]
+        [{key, value} | acc]
 
       _non_param_segment, acc ->
         acc
