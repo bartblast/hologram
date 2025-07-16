@@ -96,7 +96,7 @@ defmodule Hologram.Page do
 
     params
     |> Enum.map(fn {name, value} ->
-      name_atom = if is_atom(name), do: name, else: String.to_atom(name)
+      name_atom = if is_atom(name), do: name, else: String.to_existing_atom(name)
 
       unless types[name_atom] do
         raise Hologram.ParamError,
