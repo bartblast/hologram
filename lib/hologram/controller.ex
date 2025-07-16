@@ -97,6 +97,27 @@ defmodule Hologram.Controller do
     handle_page_request(conn, page_module, params, true)
   end
 
+  @doc """
+  Handles a subsequent page request by building HTTP response.
+
+  ## Parameters
+
+    * `conn` - The Plug.Conn struct representing the HTTP request
+    * `page_module` - The page module to render
+    * `params` - A map of page parameters. Can contain either already cast or uncast 
+      parameters (both keys and values will be cast as needed)
+
+  ## Returns
+
+  The updated and halted Plug.Conn struct with the rendered HTML and applied cookies.
+  """
+  @spec handle_subsequent_page_request(Plug.Conn.t(), module, %{(atom | String.t()) => any}) ::
+          Plug.Conn.t()
+  def handle_subsequent_page_request(conn, page_module, params) do
+    cast_params = Page.cast_params(params, page_module)
+    handle_page_request(conn, page_module, cast_params, false)
+  end
+
   defp build_cookie_opts(cookie_struct) do
     opts =
       [

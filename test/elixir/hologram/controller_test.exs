@@ -229,4 +229,88 @@ defmodule Hologram.ControllerTest do
       assert Map.has_key?(conn.resp_cookies, "my_cookie")
     end
   end
+
+  describe "handle_subsequent_page_request/3" do
+    setup do
+      setup_page_digest_registry(PageDigestRegistryStub)
+      setup_server(ServerStub)
+    end
+
+    test "updates Plug.Conn fields related to HTTP response and halts the pipeline" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/page")
+        |> handle_subsequent_page_request(Module4, %{})
+
+      assert conn.halted == true
+      assert conn.state == :sent
+      assert conn.status == 200
+    end
+
+    test "initializes Hologram session" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/page")
+        |> handle_subsequent_page_request(Module4, %{})
+
+      assert Map.has_key?(conn.resp_cookies, "hologram_session")
+    end
+
+    test "casts page params and passes them to page renderer" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
+
+      params = %{"aaa" => "111", bbb: 222}
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/page")
+        |> handle_subsequent_page_request(Module1, params)
+
+      assert conn.resp_body == "param_aaa = 111, param_bbb = 222"
+    end
+
+    test "builds server struct with cookies and passes it to page renderer" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module2, :dummy_module_2_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/page")
+        |> Map.put(:req_headers, [{"cookie", "my_cookie=cookie_value"}])
+        |> handle_subsequent_page_request(Module2, %{})
+
+      assert conn.resp_body == "cookie = cookie_value"
+    end
+
+    test "passes to renderer the initial_page? opt set to false" do
+      setup_asset_path_registry(AssetPathRegistryStub)
+      AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
+
+      setup_asset_manifest_cache(AssetManifestCacheStub)
+
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/page")
+        |> handle_subsequent_page_request(Module5, %{})
+
+      # Initial pages include runtime script
+      refute String.contains?(conn.resp_body, "hologram/runtime")
+    end
+
+    test "updates Plug.Conn cookies" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module3, :dummy_module_3_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/page")
+        |> handle_subsequent_page_request(Module3, %{})
+
+      assert Map.has_key?(conn.resp_cookies, "my_cookie")
+    end
+  end
 end
