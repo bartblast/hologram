@@ -241,7 +241,7 @@ defmodule Hologram.ControllerTest do
 
       conn =
         :get
-        |> Plug.Test.conn("/hologram/page/Module4")
+        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module4")
         |> handle_subsequent_page_request(Module4)
 
       assert conn.halted == true
@@ -254,7 +254,7 @@ defmodule Hologram.ControllerTest do
 
       conn =
         :get
-        |> Plug.Test.conn("/hologram/page/Module4")
+        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module4")
         |> handle_subsequent_page_request(Module4)
 
       assert Map.has_key?(conn.resp_cookies, "hologram_session")
@@ -265,7 +265,9 @@ defmodule Hologram.ControllerTest do
 
       conn =
         :get
-        |> Plug.Test.conn("/hologram/page/Module1?aaa=111&bbb=222")
+        |> Plug.Test.conn(
+          "/hologram/page/Hologram.Test.Fixtures.Controller.Module1?aaa=111&bbb=222"
+        )
         |> handle_subsequent_page_request(Module1)
 
       assert conn.resp_body == "param_aaa = 111, param_bbb = 222"
@@ -276,7 +278,7 @@ defmodule Hologram.ControllerTest do
 
       conn =
         :get
-        |> Plug.Test.conn("/hologram/page/Module2")
+        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module2")
         |> Map.put(:req_headers, [{"cookie", "my_cookie=cookie_value"}])
         |> handle_subsequent_page_request(Module2)
 
@@ -293,7 +295,7 @@ defmodule Hologram.ControllerTest do
 
       conn =
         :get
-        |> Plug.Test.conn("/hologram/page/Module5")
+        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module5")
         |> handle_subsequent_page_request(Module5)
 
       # Initial pages include runtime script
@@ -305,7 +307,7 @@ defmodule Hologram.ControllerTest do
 
       conn =
         :get
-        |> Plug.Test.conn("/hologram/page/Module3")
+        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module3")
         |> handle_subsequent_page_request(Module3)
 
       assert Map.has_key?(conn.resp_cookies, "my_cookie")
