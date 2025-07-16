@@ -87,8 +87,8 @@ defmodule Hologram.Page do
   @doc """
   Casts page params to types specified with param/2 macro.
   """
-  @spec cast_params(module, %{(atom | String.t()) => any}) :: %{atom => any}
-  def cast_params(page_module, params) do
+  @spec cast_params(%{(atom | String.t()) => any}, module) :: %{atom => any}
+  def cast_params(params, page_module) do
     types =
       page_module.__params__()
       |> Enum.map(fn {name, type, _opts} -> {name, type} end)
