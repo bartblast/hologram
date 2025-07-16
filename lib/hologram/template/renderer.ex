@@ -158,10 +158,9 @@ defmodule Hologram.Template.Renderer do
           {String.t(), %{String.t() => %{module: module, struct: Component.t()}}, Server.t()}
   def render_page(page_module, params, server_struct, opts) do
     initial_page? = opts[:initial_page?] || false
-    casted_params = Page.cast_params(page_module, params)
 
     {page_component_struct, page_server_struct} =
-      init_component(page_module, casted_params, server_struct)
+      init_component(page_module, params, server_struct)
 
     page_digest = PageDigestRegistry.lookup(page_module)
 
@@ -174,7 +173,7 @@ defmodule Hologram.Template.Renderer do
     {initial_html, initial_component_registry, final_server_struct} =
       render_page_inside_layout(
         page_module,
-        casted_params,
+        params,
         page_component_struct_with_emitted_context_before_rendering,
         page_server_struct
       )
@@ -195,7 +194,7 @@ defmodule Hologram.Template.Renderer do
       initial_html
       |> interpolate_component_registry_js(component_registry_with_page_struct)
       |> interpolate_page_module_js(page_module)
-      |> interpolate_page_params_js(casted_params)
+      |> interpolate_page_params_js(params)
 
     {html_with_interpolated_js, component_registry_with_page_struct, final_server_struct}
   end

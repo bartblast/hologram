@@ -934,22 +934,10 @@ defmodule Hologram.Template.RendererTest do
                render_page(Module14, @params, @server, @opts)
     end
 
-    test "raises Hologram.ParamError when extraneous params are given" do
-      ETS.put(PageDigestRegistryStub.ets_table_name(), Module19, :dummy_module_19_digest)
-
-      params = %{param_1: "abc", param_2: "value_2", param_3: "123"}
-
-      assert_raise Hologram.ParamError,
-                   ~s/page "Hologram.Test.Fixtures.Template.Renderer.Module19" doesn't expect "param_2" param/,
-                   fn ->
-                     render_page(Module19, params, @server, @opts)
-                   end
-    end
-
     test "cast page param values to correct type" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module19, :dummy_module_19_digest)
 
-      params = %{param_1: "abc", param_3: "123"}
+      params = %{param_1: "abc", param_3: 123}
 
       assert {~s'page vars = %{param_1: &quot;abc&quot;, param_3: 123}', _component_registry,
               _server_struct} =
@@ -1123,7 +1111,7 @@ defmodule Hologram.Template.RendererTest do
         "102790adb6c3b1956db310be523a7693"
       )
 
-      params = %{key_1: "123", key_2: "value_2"}
+      params = %{key_1: 123, key_2: "value_2"}
 
       assert {html, _component_registry, _server_struct} =
                render_page(Module50, params, @server, @opts)
