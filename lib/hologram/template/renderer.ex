@@ -6,7 +6,6 @@ defmodule Hologram.Template.Renderer do
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.Encoder
   alias Hologram.Component
-  alias Hologram.Page
   alias Hologram.Reflection
   alias Hologram.Server
   alias Hologram.Template.DOM

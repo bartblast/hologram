@@ -148,7 +148,7 @@ defmodule Hologram.ControllerTest do
     end
   end
 
-  describe "handle_page_request/3" do
+  describe "handle_initial_page_request/2" do
     setup do
       setup_page_digest_registry(PageDigestRegistryStub)
       setup_server(ServerStub)
@@ -160,7 +160,7 @@ defmodule Hologram.ControllerTest do
       conn =
         :get
         |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module4")
-        |> handle_page_request(Module4, true)
+        |> handle_initial_page_request(Module4)
 
       assert conn.halted == true
       assert conn.state == :sent
@@ -173,18 +173,18 @@ defmodule Hologram.ControllerTest do
       conn =
         :get
         |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module4")
-        |> handle_page_request(Module4, true)
+        |> handle_initial_page_request(Module4)
 
       assert Map.has_key?(conn.resp_cookies, "hologram_session")
     end
 
-    test "extracts page params and passes them to page renderer" do
+    test "extracts and casts page params and passes them to page renderer" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
 
       conn =
         :get
         |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module1/111/ccc/222")
-        |> handle_page_request(Module1, true)
+        |> handle_initial_page_request(Module1)
 
       assert conn.resp_body == "param_aaa = 111, param_bbb = 222"
     end
@@ -196,12 +196,12 @@ defmodule Hologram.ControllerTest do
         :get
         |> Plug.Test.conn("/hologram-test-fixtures-controller-module2")
         |> Map.put(:req_headers, [{"cookie", "my_cookie=cookie_value"}])
-        |> handle_page_request(Module2, true)
+        |> handle_initial_page_request(Module2)
 
       assert conn.resp_body == "cookie = cookie_value"
     end
 
-    test "handles initial pages" do
+    test "passes to renderer the initial_page? opt set to true" do
       setup_asset_path_registry(AssetPathRegistryStub)
       AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
 
@@ -212,25 +212,10 @@ defmodule Hologram.ControllerTest do
       conn =
         :get
         |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module5")
-        |> handle_page_request(Module5, true)
+        |> handle_initial_page_request(Module5)
 
+      # Initial pages include runtime script
       assert String.contains?(conn.resp_body, "hologram/runtime")
-    end
-
-    test "handles non-initial pages" do
-      setup_asset_path_registry(AssetPathRegistryStub)
-      AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
-
-      setup_asset_manifest_cache(AssetManifestCacheStub)
-
-      ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
-
-      conn =
-        :get
-        |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module5")
-        |> handle_page_request(Module5, false)
-
-      refute String.contains?(conn.resp_body, "hologram/runtime")
     end
 
     test "updates Plug.Conn cookies" do
@@ -239,7 +224,7 @@ defmodule Hologram.ControllerTest do
       conn =
         :get
         |> Plug.Test.conn("/hologram-test-fixtures-controller-module3")
-        |> handle_page_request(Module3, true)
+        |> handle_initial_page_request(Module3)
 
       assert Map.has_key?(conn.resp_cookies, "my_cookie")
     end

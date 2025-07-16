@@ -1,6 +1,7 @@
 defmodule Hologram.Controller do
   @moduledoc false
 
+  alias Hologram.Page
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CookieStore
   alias Hologram.Server
@@ -75,7 +76,7 @@ defmodule Hologram.Controller do
   end
 
   @doc """
-  Handles the page request by building HTTP response.
+  Handles the initial page request by building HTTP response.
 
   ## Parameters
 
@@ -86,22 +87,14 @@ defmodule Hologram.Controller do
 
   The updated and halted Plug.Conn struct with the rendered HTML and applied cookies.
   """
-  @spec handle_page_request(Plug.Conn.t(), module, boolean) :: Plug.Conn.t()
-  # sobelow_skip ["XSS.HTML"]
-  def handle_page_request(conn, page_module, initial_page?) do
-    {conn_with_session, _session_id} = Session.init(conn)
+  @spec handle_initial_page_request(Plug.Conn.t(), module) :: Plug.Conn.t()
+  def handle_initial_page_request(conn, page_module) do
+    params =
+      conn.request_path
+      |> extract_params(page_module)
+      |> Page.cast_params(page_module)
 
-    params = extract_params(conn_with_session.request_path, page_module)
-    server_struct = Server.from(conn_with_session)
-    opts = [initial_page?: initial_page?]
-
-    {html, _component_registry, updated_server_struct} =
-      Renderer.render_page(page_module, params, server_struct, opts)
-
-    conn_with_session
-    |> apply_cookie_ops(updated_server_struct.__meta__.cookie_ops)
-    |> Controller.html(html)
-    |> Plug.Conn.halt()
+    handle_page_request(conn, page_module, params, true)
   end
 
   defp build_cookie_opts(cookie_struct) do
@@ -116,6 +109,21 @@ defmodule Hologram.Controller do
       ]
 
     Enum.filter(opts, fn {_key, value} -> value != nil end)
+  end
+
+  defp handle_page_request(conn, page_module, params, initial_page?) do
+    {conn_with_session, _session_id} = Session.init(conn)
+
+    server_struct = Server.from(conn_with_session)
+    opts = [initial_page?: initial_page?]
+
+    {html, _component_registry, updated_server_struct} =
+      Renderer.render_page(page_module, params, server_struct, opts)
+
+    conn_with_session
+    |> apply_cookie_ops(updated_server_struct.__meta__.cookie_ops)
+    |> Controller.html(html)
+    |> Plug.Conn.halt()
   end
 
   defp same_site_to_string(:lax), do: "Lax"

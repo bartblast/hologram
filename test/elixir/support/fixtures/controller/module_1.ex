@@ -11,7 +11,7 @@ defmodule Hologram.Test.Fixtures.Controller.Module1 do
   @impl Page
   def template do
     ~HOLO"""
-    param_aaa = {@aaa}, param_bbb = {@bbb}
+    param_aaa = {inspect(@aaa)}, param_bbb = {inspect(@bbb)}
     """
   end
 end
