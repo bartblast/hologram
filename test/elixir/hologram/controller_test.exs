@@ -160,7 +160,6 @@ defmodule Hologram.ControllerTest do
       conn =
         :get
         |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module4")
-        |> Plug.Conn.fetch_cookies()
         |> handle_page_request(Module4, true)
 
       assert conn.halted == true
@@ -174,7 +173,6 @@ defmodule Hologram.ControllerTest do
       conn =
         :get
         |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module4")
-        |> Plug.Conn.fetch_cookies()
         |> handle_page_request(Module4, true)
 
       assert Map.has_key?(conn.resp_cookies, "hologram_session")
@@ -186,7 +184,6 @@ defmodule Hologram.ControllerTest do
       conn =
         :get
         |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module1/111/ccc/222")
-        |> Plug.Conn.fetch_cookies()
         |> handle_page_request(Module1, true)
 
       assert conn.resp_body == "param_aaa = 111, param_bbb = 222"
@@ -199,7 +196,6 @@ defmodule Hologram.ControllerTest do
         :get
         |> Plug.Test.conn("/hologram-test-fixtures-controller-module2")
         |> Map.put(:req_headers, [{"cookie", "my_cookie=cookie_value"}])
-        |> Plug.Conn.fetch_cookies()
         |> handle_page_request(Module2, true)
 
       assert conn.resp_body == "cookie = cookie_value"
@@ -243,7 +239,6 @@ defmodule Hologram.ControllerTest do
       conn =
         :get
         |> Plug.Test.conn("/hologram-test-fixtures-controller-module3")
-        |> Plug.Conn.fetch_cookies()
         |> handle_page_request(Module3, true)
 
       assert Map.has_key?(conn.resp_cookies, "my_cookie")
