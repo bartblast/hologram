@@ -135,7 +135,7 @@ defmodule Hologram.Controller do
     Enum.filter(opts, fn {_key, value} -> value != nil end)
   end
 
-  # sobelow_skip ["XSS.HTML”]
+  # sobelow_skip ["XSS.HTML"]
   defp handle_page_request(conn, page_module, params, initial_page?) do
     {conn_with_session, _session_id} = Session.init(conn)
 
