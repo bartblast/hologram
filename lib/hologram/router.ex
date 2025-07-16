@@ -16,7 +16,7 @@ defmodule Hologram.Router do
 
   match _ do
     if page_module = PageModuleResolver.resolve(conn.request_path) do
-      Controller.handle_request(conn, page_module)
+      Controller.handle_page_request(conn, page_module, true)
     else
       conn
     end

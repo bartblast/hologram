@@ -86,14 +86,14 @@ defmodule Hologram.Controller do
 
   The updated and halted Plug.Conn struct with the rendered HTML and applied cookies.
   """
-  @spec handle_request(Plug.Conn.t(), module) :: Plug.Conn.t()
+  @spec handle_page_request(Plug.Conn.t(), module, boolean) :: Plug.Conn.t()
   # sobelow_skip ["XSS.HTML"]
-  def handle_request(conn, page_module) do
+  def handle_page_request(conn, page_module, initial_page?) do
     {conn_with_session, _session_id} = Session.init(conn)
 
     params = extract_params(conn_with_session.request_path, page_module)
     server_struct = Server.from(conn_with_session)
-    opts = [initial_page?: true]
+    opts = [initial_page?: initial_page?]
 
     {html, _component_registry, updated_server_struct} =
       Renderer.render_page(page_module, params, server_struct, opts)
