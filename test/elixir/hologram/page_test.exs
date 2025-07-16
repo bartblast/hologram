@@ -39,11 +39,27 @@ defmodule Hologram.PageTest do
   end
 
   describe "cast params" do
-    test "existing atom" do
+    test "string key" do
+      assert cast_params(Module6, %{"a" => :test}) == %{a: :test}
+    end
+
+    test "atom key" do
+      assert cast_params(Module6, %{a: :test}) == %{a: :test}
+    end
+
+    test "string value" do
+      assert cast_params(Module6, %{d: "abc"}) == %{d: "abc"}
+    end
+
+    test "atom value" do
+      assert cast_params(Module6, %{a: :test}) == %{a: :test}
+    end
+
+    test "string value cast to existing atom" do
       assert cast_params(Module6, %{a: "test"}) == %{a: :test}
     end
 
-    test "non-existing atom" do
+    test "string value cast to nonexistent atom" do
       random_string = random_string()
 
       assert_raise Hologram.ParamError,
@@ -53,21 +69,29 @@ defmodule Hologram.PageTest do
                    end
     end
 
-    test "valid float" do
+    test "float value" do
+      assert cast_params(Module6, %{b: 1.23}) == %{b: 1.23}
+    end
+
+    test "valid string representation of float value, cast to float" do
       assert cast_params(Module6, %{b: "1.23abc"}) == %{b: 1.23}
     end
 
-    test "invalid float" do
+    test "invalid string representation of float value" do
       assert_raise Hologram.ParamError, ~s/can't cast param "b" with value "abc" to float/, fn ->
         cast_params(Module6, %{b: "abc"})
       end
     end
 
-    test "valid integer" do
+    test "integer value" do
+      assert cast_params(Module6, %{c: 123}) == %{c: 123}
+    end
+
+    test "valid string representation of integer value, cast to integer" do
       assert cast_params(Module6, %{c: "123abc"}) == %{c: 123}
     end
 
-    test "invalid integer" do
+    test "invalid string representation of integer value" do
       assert_raise Hologram.ParamError,
                    ~s/can't cast param "c" with value "abc" to integer/,
                    fn ->
@@ -75,15 +99,19 @@ defmodule Hologram.PageTest do
                    end
     end
 
-    test "string" do
-      assert cast_params(Module6, %{d: "abc"}) == %{d: "abc"}
-    end
-
     test "multiple params" do
-      assert cast_params(Module6, %{a: "test", c: "123"}) == %{a: :test, c: 123}
+      assert cast_params(Module6, %{"a" => :test, c: "123"}) == %{a: :test, c: 123}
     end
 
-    test "extraneous param" do
+    test "extraneous string key param" do
+      assert_raise Hologram.ParamError,
+                   ~s/page "Hologram.Test.Fixtures.Page.Module6" doesn't expect "x" param/,
+                   fn ->
+                     cast_params(Module6, %{"x" => 123})
+                   end
+    end
+
+    test "extraneous atom key param" do
       assert_raise Hologram.ParamError,
                    ~s/page "Hologram.Test.Fixtures.Page.Module6" doesn't expect "x" param/,
                    fn ->

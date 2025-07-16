@@ -85,9 +85,9 @@ defmodule Hologram.Page do
   end
 
   @doc """
-  Casts page params string values to types specified with param/2 macro.
+  Casts page params to types specified with param/2 macro.
   """
-  @spec cast_params(module, %{atom => String.t()}) :: %{atom => any}
+  @spec cast_params(module, %{(atom | String.t()) => any}) :: %{atom => any}
   def cast_params(page_module, params) do
     types =
       page_module.__params__()
@@ -96,13 +96,15 @@ defmodule Hologram.Page do
 
     params
     |> Enum.map(fn {name, value} ->
-      unless types[name] do
+      name_atom = if is_atom(name), do: name, else: String.to_atom(name)
+
+      unless types[name_atom] do
         raise Hologram.ParamError,
           message:
-            ~s/page "#{Reflection.module_name(page_module)}" doesn't expect "#{name}" param/
+            ~s/page "#{Reflection.module_name(page_module)}" doesn't expect "#{name_atom}" param/
       end
 
-      {name, cast_param(types[name], value, name)}
+      {name_atom, cast_param(types[name_atom], value, name_atom)}
     end)
     |> Enum.into(%{})
   end
