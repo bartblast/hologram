@@ -5,17 +5,47 @@ defmodule Hologram.RouterTest do
   import Hologram.Test.Stubs
   import Mox
 
+  alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
   alias Hologram.Test.Fixtures.Router.Module1
+  alias Hologram.Test.Fixtures.Router.Module2
 
+  use_module_stub :asset_manifest_cache
+  use_module_stub :asset_path_registry
   use_module_stub :page_digest_registry
   use_module_stub :page_module_resolver
 
   setup :set_mox_global
 
   setup do
+    setup_asset_path_registry(AssetPathRegistryStub)
+    AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
+
+    setup_asset_manifest_cache(AssetManifestCacheStub)
+
     setup_page_digest_registry(PageDigestRegistryStub)
+
     setup_page_module_resolver(PageModuleResolverStub)
+  end
+
+  describe "hologram/page" do
+    test "responds with requested page" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module2, :dummy_module_1_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Router.Module2?a=123&b=xyz")
+        |> call([])
+
+      assert conn.halted == true
+      assert conn.state == :sent
+      assert conn.status == 200
+
+      assert String.contains?(conn.resp_body, "Module2 page, a = 123, b = :xyz")
+
+      # Initial pages include runtime script
+      refute String.contains?(conn.resp_body, "hologram/runtime")
+    end
   end
 
   describe "regular HTTP requests" do
