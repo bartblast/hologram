@@ -153,7 +153,7 @@ defmodule Hologram.Template.Renderer do
         %Server{session: %{user_id: 123}}
       }
   """
-  @spec render_page(module, %{atom => String.t()}, Server.t(), T.opts()) ::
+  @spec render_page(module, %{atom => any}, Server.t(), T.opts()) ::
           {String.t(), %{String.t() => %{module: module, struct: Component.t()}}, Server.t()}
   def render_page(page_module, params, server_struct, opts) do
     initial_page? = opts[:initial_page?] || false
