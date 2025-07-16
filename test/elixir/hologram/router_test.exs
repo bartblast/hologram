@@ -8,7 +8,6 @@ defmodule Hologram.RouterTest do
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
   alias Hologram.Test.Fixtures.Router.Module1
-  alias Hologram.Test.Fixtures.Router.Module2
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -30,18 +29,18 @@ defmodule Hologram.RouterTest do
 
   describe "hologram/page" do
     test "responds with requested page" do
-      ETS.put(PageDigestRegistryStub.ets_table_name(), Module2, :dummy_module_1_digest)
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
 
       conn =
         :get
-        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Router.Module2?a=123&b=xyz")
+        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Router.Module1?a=123&b=xyz")
         |> call([])
 
       assert conn.halted == true
       assert conn.state == :sent
       assert conn.status == 200
 
-      assert String.contains?(conn.resp_body, "Module2 page, a = 123, b = :xyz")
+      assert String.contains?(conn.resp_body, "Module1 page, a = 123, b = :xyz")
 
       # Initial pages include runtime script
       refute String.contains?(conn.resp_body, "hologram/runtime")
@@ -54,21 +53,23 @@ defmodule Hologram.RouterTest do
 
       conn =
         :get
-        |> Plug.Test.conn("/hologram-test-fixtures-router-module1")
-        |> Plug.Conn.fetch_cookies()
+        |> Plug.Test.conn("/hologram-test-fixtures-router-module1/123/xyz")
         |> call([])
 
       assert conn.halted == true
-      assert conn.resp_body == "page Hologram.Test.Fixtures.Router.Module1 template"
       assert conn.state == :sent
       assert conn.status == 200
+
+      assert String.contains?(conn.resp_body, "Module1 page, a = 123, b = :xyz")
+
+      # Initial pages include runtime script
+      assert String.contains?(conn.resp_body, "hologram/runtime")
     end
 
     test "request path is not matched" do
       conn =
         :get
         |> Plug.Test.conn("/my-unmatched-request-path")
-        |> Plug.Conn.fetch_cookies()
         |> call([])
 
       assert conn.halted == false

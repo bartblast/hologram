@@ -1,12 +1,15 @@
 defmodule Hologram.Test.Fixtures.Router.Module1 do
   use Hologram.Page
 
-  route "/hologram-test-fixtures-router-module1"
+  route "/hologram-test-fixtures-router-module1/:a/:b"
 
-  layout Hologram.Test.Fixtures.LayoutFixture
+  param :a, :integer
+  param :b, :atom
+
+  layout Hologram.Test.Fixtures.LayoutWithRuntime
 
   @impl Page
   def template do
-    ~HOLO"page Hologram.Test.Fixtures.Router.Module1 template"
+    ~HOLO"Module1 page, a = {inspect(@a)}, b = {inspect(@b)}"
   end
 end
