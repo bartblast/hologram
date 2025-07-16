@@ -2374,7 +2374,7 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    // This test case doesn't apply to the client renderer, because the client renderer receives already casted page params.
+    // This test case doesn't apply to the client renderer, because the client renderer receives already cast page params.
     // it("cast page params")
 
     it("cast layout explicit static props", () => {
