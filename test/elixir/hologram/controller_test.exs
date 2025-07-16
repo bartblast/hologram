@@ -241,8 +241,8 @@ defmodule Hologram.ControllerTest do
 
       conn =
         :get
-        |> Plug.Test.conn("/hologram/page")
-        |> handle_subsequent_page_request(Module4, %{})
+        |> Plug.Test.conn("/hologram/page/Module4")
+        |> handle_subsequent_page_request(Module4)
 
       assert conn.halted == true
       assert conn.state == :sent
@@ -254,8 +254,8 @@ defmodule Hologram.ControllerTest do
 
       conn =
         :get
-        |> Plug.Test.conn("/hologram/page")
-        |> handle_subsequent_page_request(Module4, %{})
+        |> Plug.Test.conn("/hologram/page/Module4")
+        |> handle_subsequent_page_request(Module4)
 
       assert Map.has_key?(conn.resp_cookies, "hologram_session")
     end
@@ -263,12 +263,10 @@ defmodule Hologram.ControllerTest do
     test "casts page params and passes them to page renderer" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
 
-      params = %{"aaa" => "111", bbb: 222}
-
       conn =
         :get
-        |> Plug.Test.conn("/hologram/page")
-        |> handle_subsequent_page_request(Module1, params)
+        |> Plug.Test.conn("/hologram/page/Module1?aaa=111&bbb=222")
+        |> handle_subsequent_page_request(Module1)
 
       assert conn.resp_body == "param_aaa = 111, param_bbb = 222"
     end
@@ -278,9 +276,9 @@ defmodule Hologram.ControllerTest do
 
       conn =
         :get
-        |> Plug.Test.conn("/hologram/page")
+        |> Plug.Test.conn("/hologram/page/Module2")
         |> Map.put(:req_headers, [{"cookie", "my_cookie=cookie_value"}])
-        |> handle_subsequent_page_request(Module2, %{})
+        |> handle_subsequent_page_request(Module2)
 
       assert conn.resp_body == "cookie = cookie_value"
     end
@@ -295,8 +293,8 @@ defmodule Hologram.ControllerTest do
 
       conn =
         :get
-        |> Plug.Test.conn("/hologram/page")
-        |> handle_subsequent_page_request(Module5, %{})
+        |> Plug.Test.conn("/hologram/page/Module5")
+        |> handle_subsequent_page_request(Module5)
 
       # Initial pages include runtime script
       refute String.contains?(conn.resp_body, "hologram/runtime")
@@ -307,8 +305,8 @@ defmodule Hologram.ControllerTest do
 
       conn =
         :get
-        |> Plug.Test.conn("/hologram/page")
-        |> handle_subsequent_page_request(Module3, %{})
+        |> Plug.Test.conn("/hologram/page/Module3")
+        |> handle_subsequent_page_request(Module3)
 
       assert Map.has_key?(conn.resp_cookies, "my_cookie")
     end
