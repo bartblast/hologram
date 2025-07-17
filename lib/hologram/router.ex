@@ -8,6 +8,10 @@ defmodule Hologram.Router do
   plug :match
   plug :dispatch
 
+  post "/hologram/command" do
+    Controller.handle_command_request(conn)
+  end
+
   get "/hologram/page/:module_str" do
     page_module = Module.safe_concat([module_str])
     Controller.handle_subsequent_page_request(conn, page_module)

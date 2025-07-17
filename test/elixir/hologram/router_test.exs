@@ -8,6 +8,7 @@ defmodule Hologram.RouterTest do
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
   alias Hologram.Test.Fixtures.Router.Module1
+  alias Hologram.Test.Fixtures.Router.Module2
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -25,6 +26,34 @@ defmodule Hologram.RouterTest do
     setup_page_digest_registry(PageDigestRegistryStub)
 
     setup_page_module_resolver(PageModuleResolverStub)
+  end
+
+  describe "/hologram/command" do
+    test "routes POST command request" do
+      serialized_payload =
+        Jason.encode!([
+          2,
+          %{
+            "t" => "m",
+            "d" => [
+              ["amodule", "a#{Module2}"],
+              ["aname", "amy_command"],
+              ["aparams", %{"t" => "m", "d" => []}],
+              ["atarget", "b0746573745f746172676574"]
+            ]
+          }
+        ])
+
+      conn =
+        :post
+        |> Plug.Test.conn("/hologram/command", serialized_payload)
+        |> call([])
+
+      assert conn.halted == true
+      assert conn.resp_body == ~s'[1,"Type.atom(\\\"nil\\\")"]'
+      assert conn.state == :sent
+      assert conn.status == 200
+    end
   end
 
   describe "/hologram/page" do
