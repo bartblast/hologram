@@ -7,7 +7,6 @@ defmodule Hologram.ServerTest do
 
   alias Hologram.Component.Action
   alias Hologram.Runtime.Cookie
-  alias Hologram.Runtime.CookieStore
   alias Hologram.Server
   alias Hologram.Server.Metadata
 
@@ -154,25 +153,6 @@ defmodule Hologram.ServerTest do
       result = from(conn)
 
       refute Map.has_key?(result.cookies, "hologram_session")
-    end
-
-    test "creates Server struct from CookieStore struct" do
-      cookie_store = %CookieStore{
-        persisted: %{
-          "theme" => {:put, 50, %Cookie{value: "light"}},
-          "user_id" => {:nop, 0, "abc123"}
-        },
-        pending: %{
-          "lang" => {:put, 200, %Cookie{value: "en"}},
-          "theme" => {:put, 100, %Cookie{value: "dark"}}
-        }
-      }
-
-      result = from(cookie_store)
-
-      assert result == %Server{
-               cookies: %{"user_id" => "abc123", "theme" => "dark", "lang" => "en"}
-             }
     end
   end
 

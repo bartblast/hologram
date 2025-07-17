@@ -21,6 +21,9 @@ defmodule Hologram.Runtime.Cookie do
           secure: boolean()
         }
 
+  # The second tuple element is the operation timestamp
+  @type op :: {:delete, pos_integer} | {:put, pos_integer, __MODULE__.t()}
+
   @doc """
   Decodes a potentially encoded cookie value.
 
