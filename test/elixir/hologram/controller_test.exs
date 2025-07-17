@@ -14,10 +14,8 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module3
   alias Hologram.Test.Fixtures.Controller.Module4
   alias Hologram.Test.Fixtures.Controller.Module5
-  alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module1, as: MessageHandlerModule1
-  alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module2, as: MessageHandlerModule2
-  alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module3, as: MessageHandlerModule3
-  alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module6, as: MessageHandlerModule6
+  alias Hologram.Test.Fixtures.Controller.Module6
+  alias Hologram.Test.Fixtures.Controller.Module8
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -25,12 +23,6 @@ defmodule Hologram.ControllerTest do
   use_module_stub :server
 
   setup :set_mox_global
-
-  # Make sure String.to_existing_atom/1 recognizes atoms from the fixture modules
-  Code.ensure_loaded(MessageHandlerModule1)
-  Code.ensure_loaded(MessageHandlerModule2)
-  Code.ensure_loaded(MessageHandlerModule3)
-  Code.ensure_loaded(MessageHandlerModule6)
 
   @timestamp 1_752_074_624_726_958
 
@@ -200,7 +192,7 @@ defmodule Hologram.ControllerTest do
 
     test "updates Plug.Conn fields related to HTTP response and halts the pipeline" do
       payload = %{
-        module: MessageHandlerModule1,
+        module: Module6,
         name: :my_command_a,
         params: %{},
         target: "my_target_1"
@@ -220,7 +212,7 @@ defmodule Hologram.ControllerTest do
 
     test "initializes Hologram session" do
       payload = %{
-        module: MessageHandlerModule1,
+        module: Module6,
         name: :my_command_a,
         params: %{},
         target: "my_target_1"
@@ -238,7 +230,7 @@ defmodule Hologram.ControllerTest do
 
     test "command with next action nil" do
       payload = %{
-        module: MessageHandlerModule1,
+        module: Module6,
         name: :my_command_a,
         params: %{},
         target: "my_target_1"
@@ -257,7 +249,7 @@ defmodule Hologram.ControllerTest do
 
     test "command with next action target not specified" do
       payload = %{
-        module: MessageHandlerModule1,
+        module: Module6,
         name: :my_command_b,
         params: %{a: 1, b: 2},
         target: "my_target_1"
@@ -280,7 +272,7 @@ defmodule Hologram.ControllerTest do
 
     test "command with next action target specified" do
       payload = %{
-        module: MessageHandlerModule1,
+        module: Module6,
         name: :my_command_c,
         params: %{a: 1, b: 2},
         target: "my_target_1"
@@ -303,8 +295,8 @@ defmodule Hologram.ControllerTest do
 
     test "command with encoding error for anonymous function" do
       payload = %{
-        module: MessageHandlerModule6,
-        name: :my_command_6,
+        module: Module8,
+        name: :my_command_8,
         params: %{},
         target: "my_target_1"
       }
@@ -330,7 +322,7 @@ defmodule Hologram.ControllerTest do
 
     test "command handler can read from cookies" do
       payload = %{
-        module: MessageHandlerModule1,
+        module: Module6,
         name: :my_command_accessing_cookie,
         params: %{},
         target: "my_target_1"
@@ -356,7 +348,7 @@ defmodule Hologram.ControllerTest do
 
     test "command handler can write cookies" do
       payload = %{
-        module: MessageHandlerModule1,
+        module: Module6,
         name: :my_command_with_cookies,
         params: %{},
         target: "my_target_1"
@@ -374,7 +366,7 @@ defmodule Hologram.ControllerTest do
 
     test "command handler works correctly when no cookie changes are made" do
       payload = %{
-        module: MessageHandlerModule1,
+        module: Module6,
         name: :my_command_without_cookies,
         params: %{},
         target: "my_target_1"

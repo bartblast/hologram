@@ -1,5 +1,5 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Runtime.MessageHandler.Module1 do
+defmodule Hologram.Test.Fixtures.Controller.Module6 do
   use Hologram.Component
   alias Hologram.Component.Action
 

@@ -1,11 +1,11 @@
 # credo:disable-for-this-file Credo.Check.Readability.Specs
-defmodule Hologram.Test.Fixtures.Runtime.MessageHandler.Module6 do
+defmodule Hologram.Test.Fixtures.Controller.Module8 do
   use Hologram.Component
   alias Hologram.Component.Action
 
-  def command(:my_command_6, _params, server) do
+  def command(:my_command_8, _params, server) do
     action = %Action{
-      name: :my_action_6,
+      name: :my_action_8,
       params: %{func: fn x -> x + 1 end},
       target: nil
     }
