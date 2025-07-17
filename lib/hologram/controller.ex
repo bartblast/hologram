@@ -1,9 +1,12 @@
 defmodule Hologram.Controller do
   @moduledoc false
 
+  alias Hologram.Compiler.Encoder
+  alias Hologram.Component.Action
   alias Hologram.Page
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.CookieStore
+  alias Hologram.Runtime.Deserializer
   alias Hologram.Server
   alias Hologram.Session
   alias Hologram.Template.Renderer
@@ -76,7 +79,53 @@ defmodule Hologram.Controller do
   end
 
   @doc """
-  Handles the initial page request by building HTTP response.
+  Handles HTTP POST command requests by building JSON response.
+
+  ## Parameters
+
+    * `conn` - The Plug.Conn struct representing the HTTP request
+
+  ## Returns
+
+  The updated and halted Plug.Conn struct with the JSON response and applied cookies.
+  """
+  @spec handle_command_request(Plug.Conn.t()) :: Plug.Conn.t()
+  def handle_command_request(conn) do
+    {:ok, serialized_payload, _conn} = Plug.Conn.read_body(conn)
+    payload = Deserializer.deserialize(serialized_payload)
+
+    %{module: module, name: name, params: params, target: target} = payload
+
+    {conn_with_session, _session_id} = Session.init(conn)
+    server_struct = Server.from(conn_with_session)
+
+    command_result = module.command(name, params, server_struct)
+
+    {updated_server_struct, next_action} =
+      case command_result do
+        %Server{next_action: %Action{target: nil} = action} = updated_server_struct ->
+          {updated_server_struct, %{action | target: target}}
+
+        %Server{next_action: action} = updated_server_struct ->
+          {updated_server_struct, action}
+
+        _fallback ->
+          {server_struct, nil}
+      end
+
+    # TODO: handle session
+
+    {encode_status, encoded_next_action} = Encoder.encode_term(next_action)
+    command_status = if encode_status == :ok, do: 1, else: 0
+
+    conn_with_session
+    |> apply_cookie_ops(updated_server_struct.__meta__.cookie_ops)
+    |> Controller.json([command_status, encoded_next_action])
+    |> Plug.Conn.halt()
+  end
+
+  @doc """
+  Handles the initial page HTTP GET request by building HTTP response.
 
   ## Parameters
 
@@ -98,7 +147,7 @@ defmodule Hologram.Controller do
   end
 
   @doc """
-  Handles a subsequent page request by building HTTP response.
+  Handles a subsequent page HTTP GET request by building HTTP response.
   Exracts page parameters from the query string.
 
   ## Parameters

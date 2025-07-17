@@ -7,12 +7,17 @@ defmodule Hologram.ControllerTest do
 
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
+  alias Hologram.Commons.SystemUtils
   alias Hologram.Runtime.Cookie
   alias Hologram.Test.Fixtures.Controller.Module1
   alias Hologram.Test.Fixtures.Controller.Module2
   alias Hologram.Test.Fixtures.Controller.Module3
   alias Hologram.Test.Fixtures.Controller.Module4
   alias Hologram.Test.Fixtures.Controller.Module5
+  alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module1, as: MessageHandlerModule1
+  alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module2, as: MessageHandlerModule2
+  alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module3, as: MessageHandlerModule3
+  alias Hologram.Test.Fixtures.Runtime.MessageHandler.Module6, as: MessageHandlerModule6
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -21,7 +26,47 @@ defmodule Hologram.ControllerTest do
 
   setup :set_mox_global
 
+  # Make sure String.to_existing_atom/1 recognizes atoms from the fixture modules
+  Code.ensure_loaded(MessageHandlerModule1)
+  Code.ensure_loaded(MessageHandlerModule2)
+  Code.ensure_loaded(MessageHandlerModule3)
+  Code.ensure_loaded(MessageHandlerModule6)
+
   @timestamp 1_752_074_624_726_958
+
+  defp serialize_params(params) when params == %{} do
+    %{"t" => "m", "d" => []}
+  end
+
+  defp serialize_params(params) do
+    serialized_params =
+      Enum.map(params, fn {key, value} ->
+        ["a#{key}", "i#{value}"]
+      end)
+
+    %{"t" => "m", "d" => serialized_params}
+  end
+
+  # Serialize payload in the format expected by Deserializer.deserialize/1
+  # Version 2 format: [version, serialized_data]  
+  defp serialize_payload(payload) do
+    target_hex =
+      payload.target
+      |> :binary.bin_to_list()
+      |> Enum.map(&Integer.to_string(&1, 16))
+      |> Enum.map(&String.downcase/1)
+      |> Enum.map(&String.pad_leading(&1, 2, "0"))
+      |> Enum.join()
+
+    serialized_map_data = [
+      ["amodule", "a#{payload.module}"],
+      ["aname", "a#{payload.name}"],
+      ["aparams", serialize_params(payload.params)],
+      ["atarget", "b0#{target_hex}"]
+    ]
+
+    Jason.encode!([2, %{"t" => "m", "d" => serialized_map_data}])
+  end
 
   test "extract_params/2" do
     url_path = "/hologram-test-fixtures-runtime-controller-module1/111/ccc/222"
@@ -145,6 +190,211 @@ defmodule Hologram.ControllerTest do
       refute Map.has_key?(cookie_data, :domain)
       refute Map.has_key?(cookie_data, :max_age)
       refute Map.has_key?(cookie_data, :secure)
+    end
+  end
+
+  describe "handle_command_request/1" do
+    setup do
+      setup_server(ServerStub)
+    end
+
+    test "updates Plug.Conn fields related to HTTP response and halts the pipeline" do
+      payload = %{
+        module: MessageHandlerModule1,
+        name: :my_command_a,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      serialized_payload = serialize_payload(payload)
+
+      conn =
+        :post
+        |> Plug.Test.conn("/hologram/command", serialized_payload)
+        |> handle_command_request()
+
+      assert conn.halted == true
+      assert conn.state == :sent
+      assert conn.status == 200
+    end
+
+    test "initializes Hologram session" do
+      payload = %{
+        module: MessageHandlerModule1,
+        name: :my_command_a,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      serialized_payload = serialize_payload(payload)
+
+      conn =
+        :post
+        |> Plug.Test.conn("/hologram/command", serialized_payload)
+        |> handle_command_request()
+
+      assert Map.has_key?(conn.resp_cookies, "hologram_session")
+    end
+
+    test "command with next action nil" do
+      payload = %{
+        module: MessageHandlerModule1,
+        name: :my_command_a,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      serialized_payload = serialize_payload(payload)
+
+      conn =
+        :post
+        |> Plug.Test.conn("/hologram/command", serialized_payload)
+        |> handle_command_request()
+
+      response = Jason.decode!(conn.resp_body)
+      assert response == [1, ~s'Type.atom("nil")']
+    end
+
+    test "command with next action target not specified" do
+      payload = %{
+        module: MessageHandlerModule1,
+        name: :my_command_b,
+        params: %{a: 1, b: 2},
+        target: "my_target_1"
+      }
+
+      serialized_payload = serialize_payload(payload)
+
+      conn =
+        :post
+        |> Plug.Test.conn("/hologram/command", serialized_payload)
+        |> handle_command_request()
+
+      response = Jason.decode!(conn.resp_body)
+
+      assert response == [
+               1,
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("my_action_b")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+             ]
+    end
+
+    test "command with next action target specified" do
+      payload = %{
+        module: MessageHandlerModule1,
+        name: :my_command_c,
+        params: %{a: 1, b: 2},
+        target: "my_target_1"
+      }
+
+      serialized_payload = serialize_payload(payload)
+
+      conn =
+        :post
+        |> Plug.Test.conn("/hologram/command", serialized_payload)
+        |> handle_command_request()
+
+      response = Jason.decode!(conn.resp_body)
+
+      assert response == [
+               1,
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("my_action_c")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_2")]])'
+             ]
+    end
+
+    test "command with encoding error for anonymous function" do
+      payload = %{
+        module: MessageHandlerModule6,
+        name: :my_command_6,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      serialized_payload = serialize_payload(payload)
+
+      conn =
+        :post
+        |> Plug.Test.conn("/hologram/command", serialized_payload)
+        |> handle_command_request()
+
+      response = Jason.decode!(conn.resp_body)
+
+      expected_msg =
+        if SystemUtils.otp_version() >= 23 do
+          "term contains a function that is not a named function capture"
+        else
+          "term contains a function that is not a remote function capture"
+        end
+
+      assert response == [0, expected_msg]
+    end
+
+    test "command handler can read from cookies" do
+      payload = %{
+        module: MessageHandlerModule1,
+        name: :my_command_accessing_cookie,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      serialized_payload = serialize_payload(payload)
+
+      encoded_cookie_value = Cookie.encode(:action_from_cookie)
+
+      conn =
+        :post
+        |> Plug.Test.conn("/hologram/command", serialized_payload)
+        |> Map.put(:req_headers, [{"cookie", "my_cookie=#{encoded_cookie_value}"}])
+        |> handle_command_request()
+
+      response = Jason.decode!(conn.resp_body)
+
+      assert response == [
+               1,
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("action_from_cookie")], [Type.atom("params"), Type.map([])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+             ]
+    end
+
+    test "command handler can write cookies" do
+      payload = %{
+        module: MessageHandlerModule1,
+        name: :my_command_with_cookies,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      serialized_payload = serialize_payload(payload)
+
+      conn =
+        :post
+        |> Plug.Test.conn("/hologram/command", serialized_payload)
+        |> handle_command_request()
+
+      assert Map.has_key?(conn.resp_cookies, "test_cookie")
+    end
+
+    test "command handler works correctly when no cookie changes are made" do
+      payload = %{
+        module: MessageHandlerModule1,
+        name: :my_command_without_cookies,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      serialized_payload = serialize_payload(payload)
+
+      conn =
+        :post
+        |> Plug.Test.conn("/hologram/command", serialized_payload)
+        |> Map.put(:req_headers, [{"cookie", "my_cookie=cookie_value"}])
+        |> handle_command_request()
+
+      response = Jason.decode!(conn.resp_body)
+      assert [1, _encoded_action] = response
+
+      # Only the session cookie should be set, no additional cookies from the command
+      cookie_keys = Map.keys(conn.resp_cookies)
+      assert length(cookie_keys) == 1
+      assert "hologram_session" in cookie_keys
     end
   end
 
