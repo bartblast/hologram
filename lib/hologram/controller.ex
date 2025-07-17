@@ -101,16 +101,7 @@ defmodule Hologram.Controller do
     command_result = module.command(name, params, server_struct)
 
     {updated_server_struct, next_action} =
-      case command_result do
-        %Server{next_action: %Action{target: nil} = action} = updated_server_struct ->
-          {updated_server_struct, %{action | target: target}}
-
-        %Server{next_action: action} = updated_server_struct ->
-          {updated_server_struct, action}
-
-        _fallback ->
-          {server_struct, nil}
-      end
+      process_command_result(command_result, server_struct, target)
 
     # TODO: handle session
 
@@ -199,8 +190,24 @@ defmodule Hologram.Controller do
     |> Plug.Conn.halt()
   end
 
+  defp process_command_result(command_result, server_struct, default_target) do
+    case command_result do
+      %Server{next_action: %Action{target: nil} = action} = updated_server_struct ->
+        {updated_server_struct, %{action | target: default_target}}
+
+      %Server{next_action: action} = updated_server_struct ->
+        {updated_server_struct, action}
+
+      _fallback ->
+        {server_struct, nil}
+    end
+  end
+
   defp same_site_to_string(:lax), do: "Lax"
+
   defp same_site_to_string(:none), do: "None"
+
   defp same_site_to_string(:strict), do: "Strict"
+
   defp same_site_to_string(nil), do: nil
 end

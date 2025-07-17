@@ -40,15 +40,14 @@ defmodule Hologram.ControllerTest do
   end
 
   # Serialize payload in the format expected by Deserializer.deserialize/1
-  # Version 2 format: [version, serialized_data]  
+  # Version 2 format: [version, serialized_data]
   defp serialize_payload(payload) do
     target_hex =
       payload.target
       |> :binary.bin_to_list()
       |> Enum.map(&Integer.to_string(&1, 16))
       |> Enum.map(&String.downcase/1)
-      |> Enum.map(&String.pad_leading(&1, 2, "0"))
-      |> Enum.join()
+      |> Enum.map_join(&String.pad_leading(&1, 2, "0"))
 
     serialized_map_data = [
       ["amodule", "a#{payload.module}"],
