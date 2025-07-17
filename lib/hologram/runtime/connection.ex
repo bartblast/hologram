@@ -1,11 +1,11 @@
 defmodule Hologram.Runtime.Connection do
   @behaviour WebSock
 
-  alias Hologram.Runtime.CookieStore
+  alias Hologram.Assets.PageDigestRegistry
+  alias Hologram.Router.Helpers, as: RouterHelpers
   alias Hologram.Runtime.Deserializer
-  alias Hologram.Runtime.MessageHandler
 
-  @type state :: %{cookie_store: CookieStore.t(), plug_conn: Plug.Conn.t()}
+  @type state :: %{plug_conn: Plug.Conn.t()}
 
   @impl WebSock
   def init(plug_conn) do
@@ -20,7 +20,6 @@ defmodule Hologram.Runtime.Connection do
 
     state = %{
       connection_id: connection_id,
-      cookie_store: CookieStore.from(plug_conn),
       plug_conn: plug_conn
     }
 
@@ -31,9 +30,7 @@ defmodule Hologram.Runtime.Connection do
   def handle_in({message, [opcode: :text]}, state) do
     {message_type, message_payload, correlation_id} = decode(message)
 
-    {reply_type, reply_payload, new_state} =
-      MessageHandler.handle(message_type, message_payload, state)
-
+    {reply_type, reply_payload, new_state} = handle_message(message_type, message_payload, state)
     reply = encode(reply_type, reply_payload, correlation_id)
 
     {:reply, :ok, {:text, reply}, new_state}
@@ -69,10 +66,6 @@ defmodule Hologram.Runtime.Connection do
       [type, payload, correlation_id] ->
         {type, Deserializer.deserialize(payload), correlation_id}
 
-      # Not needed (yet)
-      # [type, payload] ->
-      #   {type, Deserializer.deserialize(payload), nil}
-
       type ->
         {type, nil, nil}
     end
@@ -95,4 +88,17 @@ defmodule Hologram.Runtime.Connection do
   defp gproc_context(:test), do: :l
 
   defp gproc_context(_env), do: :g
+
+  defp handle_message("page_bundle_path", page_module, connection_state) do
+    page_bundle_path =
+      page_module
+      |> PageDigestRegistry.lookup()
+      |> RouterHelpers.page_bundle_path()
+
+    {"reply", page_bundle_path, connection_state}
+  end
+
+  defp handle_message("ping", nil, connection_state) do
+    {"pong", :__no_payload__, connection_state}
+  end
 end

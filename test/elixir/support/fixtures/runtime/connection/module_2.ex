@@ -1,7 +1,7 @@
-defmodule Hologram.Test.Fixtures.Runtime.MessageHandler.Module2 do
+defmodule Hologram.Test.Fixtures.Runtime.Connection.Module2 do
   use Hologram.Page
 
-  route "/hologram-test-fixtures-runtime-message-handler-module2"
+  route "/hologram-test-fixtures-runtime-connection-module2"
 
   layout Hologram.Test.Fixtures.LayoutFixture
 
