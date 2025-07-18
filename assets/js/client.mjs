@@ -9,6 +9,25 @@ import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 
 export default class Client {
+  // Deps: [:maps.get/2]
+  static buildCommandPayload(command) {
+    const target = Erlang_Maps["get/2"](Type.atom("target"), command);
+
+    if (!ComponentRegistry.isCidRegistered(target)) {
+      const message = `invalid command target, there is no component with CID: ${Interpreter.inspect(target)}`;
+      throw new HologramRuntimeError(message);
+    }
+
+    const module = ComponentRegistry.getComponentModule(target);
+
+    return Type.map([
+      [Type.atom("module"), module],
+      [Type.atom("name"), Erlang_Maps["get/2"](Type.atom("name"), command)],
+      [Type.atom("params"), Erlang_Maps["get/2"](Type.atom("params"), command)],
+      [Type.atom("target"), target],
+    ]);
+  }
+
   // Covered in feature tests
   static connect() {
     return Connection.connect();
@@ -77,25 +96,6 @@ export default class Client {
 
       $.#failCommand(error);
     }
-  }
-
-  // Deps: [:maps.get/2]
-  static buildCommandPayload(command) {
-    const target = Erlang_Maps["get/2"](Type.atom("target"), command);
-
-    if (!ComponentRegistry.isCidRegistered(target)) {
-      const message = `invalid command target, there is no component with CID: ${Interpreter.inspect(target)}`;
-      throw new HologramRuntimeError(message);
-    }
-
-    const module = ComponentRegistry.getComponentModule(target);
-
-    return Type.map([
-      [Type.atom("module"), module],
-      [Type.atom("name"), Erlang_Maps["get/2"](Type.atom("name"), command)],
-      [Type.atom("params"), Erlang_Maps["get/2"](Type.atom("params"), command)],
-      [Type.atom("target"), target],
-    ]);
   }
 
   static #failCommand(message) {
