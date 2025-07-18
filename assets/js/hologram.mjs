@@ -118,7 +118,7 @@ export default class Hologram {
         );
       }
 
-      Hologram.executeAsyncCommand(nextCommand);
+      Client.sendCommand(nextCommand);
     }
 
     let savedComponentStruct = Erlang_Maps["put/3"](
@@ -161,13 +161,6 @@ export default class Hologram {
     if (!Type.isNil(nextPage)) {
       $.#navigateToPage(nextPage);
     }
-  }
-
-  static executeAsyncCommand(command) {
-    return Utils.runAsyncTask(() => {
-      CommandQueue.push(command);
-      CommandQueue.process();
-    });
   }
 
   // Made public to make tests easier
@@ -283,7 +276,7 @@ export default class Hologram {
             return Hologram.executeAction(operation);
         }
       } else {
-        Hologram.executeAsyncCommand(operation);
+        Client.sendCommand(operation);
       }
     }
   }

@@ -25,26 +25,6 @@ const cid1 = Type.bitstring("my_component_1");
 const module7 = Type.alias("Hologram.Test.Fixtures.Module7");
 
 describe("Hologram", () => {
-  it("executeAsyncCommand()", async () => {
-    const commandQueueProcessStub = sinon
-      .stub(CommandQueue, "process")
-      .callsFake(() => null);
-
-    const commandQueuePushStub = sinon
-      .stub(CommandQueue, "push")
-      .callsFake((_command) => null);
-
-    const promise = Hologram.executeAsyncCommand("dummyCommand");
-    assert.instanceOf(promise, Promise);
-    await promise;
-
-    sinon.assert.calledOnceWithExactly(commandQueuePushStub, "dummyCommand");
-    sinon.assert.calledOnceWithExactly(commandQueueProcessStub);
-
-    CommandQueue.process.restore();
-    CommandQueue.push.restore();
-  });
-
   describe("executeLoadPrefetchedPageAction()", () => {
     let eventTargetNode, loadNewPageStub;
 
@@ -367,7 +347,7 @@ describe("Hologram", () => {
 
   describe("handleUiEvent()", () => {
     let executeActionStub,
-      executeAsyncCommandStub,
+      clientSendCommandStub,
       executeLoadPrefetchedPageActionStub,
       executePrefetchPageActionStub;
 
@@ -385,8 +365,8 @@ describe("Hologram", () => {
     };
 
     beforeEach(() => {
-      executeAsyncCommandStub = sinon
-        .stub(Hologram, "executeAsyncCommand")
+      clientSendCommandStub = sinon
+        .stub(Client, "sendCommand")
         .callsFake((_command) => null);
 
       executeActionStub = sinon
@@ -404,7 +384,7 @@ describe("Hologram", () => {
 
     afterEach(() => {
       Hologram.executeAction.restore();
-      Hologram.executeAsyncCommand.restore();
+      Client.sendCommand.restore();
       Hologram.executeLoadPrefetchedPageAction.restore();
       Hologram.executePrefetchPageAction.restore();
     });
@@ -425,7 +405,7 @@ describe("Hologram", () => {
       );
 
       sinon.assert.notCalled(executeActionStub);
-      sinon.assert.notCalled(executeAsyncCommandStub);
+      sinon.assert.notCalled(clientSendCommandStub);
       sinon.assert.notCalled(executeLoadPrefetchedPageActionStub);
       sinon.assert.notCalled(executePrefetchPageActionStub);
     });
@@ -438,7 +418,7 @@ describe("Hologram", () => {
         defaultTarget,
       );
 
-      sinon.assert.notCalled(executeAsyncCommandStub);
+      sinon.assert.notCalled(clientSendCommandStub);
       sinon.assert.notCalled(executeLoadPrefetchedPageActionStub);
       sinon.assert.notCalled(executePrefetchPageActionStub);
 
@@ -485,7 +465,7 @@ describe("Hologram", () => {
       );
 
       sinon.assert.notCalled(executeActionStub);
-      sinon.assert.notCalled(executeAsyncCommandStub);
+      sinon.assert.notCalled(clientSendCommandStub);
       sinon.assert.notCalled(executePrefetchPageActionStub);
 
       const expectedAction = Type.actionStruct({
@@ -536,7 +516,7 @@ describe("Hologram", () => {
       );
 
       sinon.assert.notCalled(executeActionStub);
-      sinon.assert.notCalled(executeAsyncCommandStub);
+      sinon.assert.notCalled(clientSendCommandStub);
       sinon.assert.notCalled(executeLoadPrefetchedPageActionStub);
 
       const expectedAction = Type.actionStruct({
@@ -600,7 +580,7 @@ describe("Hologram", () => {
       });
 
       sinon.assert.calledOnceWithExactly(
-        executeAsyncCommandStub,
+        clientSendCommandStub,
         expectedCommand,
       );
     });
