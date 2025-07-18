@@ -168,7 +168,7 @@ describe("Client", () => {
       } catch (error) {
         errorThrown = true;
         assert.instanceOf(error, HologramRuntimeError);
-        assert.include(error.message, "command failed: 500");
+        assert.equal(error.message, "command failed: 500");
       }
 
       assert.isTrue(errorThrown, "Expected HologramRuntimeError to be thrown");
@@ -193,7 +193,7 @@ describe("Client", () => {
       } catch (error) {
         errorThrown = true;
         assert.instanceOf(error, HologramRuntimeError);
-        assert.include(
+        assert.equal(
           error.message,
           "command failed: error message from server command handler",
         );
@@ -216,7 +216,7 @@ describe("Client", () => {
       } catch (error) {
         errorThrown = true;
         assert.instanceOf(error, HologramRuntimeError);
-        assert.include(
+        assert.equal(
           error.message,
           "command failed: TypeError: Failed to fetch",
         );

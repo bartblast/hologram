@@ -71,6 +71,10 @@ export default class Client {
         Hologram.executeAction(nextAction);
       }
     } catch (error) {
+      if (error instanceof HologramRuntimeError) {
+        throw error;
+      }
+
       $.#failCommand(error);
     }
   }
