@@ -3,6 +3,7 @@
 import ComponentRegistry from "./component_registry.mjs";
 import Config from "./config.mjs";
 import Connection from "./connection.mjs";
+import Hologram from "./hologram.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
@@ -42,15 +43,36 @@ export default class Client {
     return Connection.isConnected();
   }
 
-  // TODO: test
-  static sendCommand(payload, onSuccess, onFail) {
+  static async sendCommand(command) {
     const opts = {
-      onSuccess,
-      onError: onFail,
-      onTimeout: onFail,
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: $.buildCommandPayload(command),
     };
 
-    return Connection.sendRequest("command", payload, opts);
+    try {
+      const response = await fetch("/hologram/command", opts);
+
+      if (!response.ok) {
+        $.#failCommand(response.status);
+      }
+
+      const [status, result] = await response.json();
+
+      if (status === 0) {
+        $.#failCommand(result);
+      }
+
+      const nextAction = Interpreter.evaluateJavaScriptExpression(result);
+
+      if (!Type.isNil(nextAction)) {
+        Hologram.executeAction(nextAction);
+      }
+    } catch (error) {
+      $.#failCommand(error);
+    }
   }
 
   // Deps: [:maps.get/2]
@@ -71,4 +93,10 @@ export default class Client {
       [Type.atom("target"), target],
     ]);
   }
+
+  static #failCommand(message) {
+    throw new HologramRuntimeError(`command failed: ${message}`);
+  }
 }
+
+const $ = Client;
