@@ -3,7 +3,6 @@
 import AssetPathRegistry from "./asset_path_registry.mjs";
 import Bitstring from "./bitstring.mjs";
 import Client from "./client.mjs";
-import CommandQueue from "./command_queue.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Config from "./config.mjs";
 import Deserializer from "./deserializer.mjs";

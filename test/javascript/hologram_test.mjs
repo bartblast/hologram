@@ -9,7 +9,6 @@ import {
 } from "./support/helpers.mjs";
 
 import Client from "../../assets/js/client.mjs";
-import CommandQueue from "../../assets/js/command_queue.mjs";
 import Config from "../../assets/js/config.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
