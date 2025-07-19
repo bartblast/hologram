@@ -11,7 +11,6 @@ import {
 import Client from "../../assets/js/client.mjs";
 import Config from "../../assets/js/config.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
-import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import Type from "../../assets/js/type.mjs";
 
 import {defineModule7Fixture} from "./support/fixtures/hologram/module_7.mjs";
