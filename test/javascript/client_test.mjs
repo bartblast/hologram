@@ -11,6 +11,7 @@ import Client from "../../assets/js/client.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
+import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
@@ -452,12 +453,15 @@ describe("Client", () => {
 
       assert.deepStrictEqual(
         options.body,
-        Type.map([
-          [Type.atom("module"), module],
-          [Type.atom("name"), name],
-          [Type.atom("params"), params],
-          [Type.atom("target"), target],
-        ]),
+        Serializer.serialize(
+          Type.map([
+            [Type.atom("module"), module],
+            [Type.atom("name"), name],
+            [Type.atom("params"), params],
+            [Type.atom("target"), target],
+          ]),
+          "server",
+        ),
       );
     });
 

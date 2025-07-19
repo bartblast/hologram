@@ -7,6 +7,7 @@ import Connection from "./connection.mjs";
 import Hologram from "./hologram.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
 import Interpreter from "./interpreter.mjs";
+import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
 
 export default class Client {
@@ -121,7 +122,7 @@ export default class Client {
       headers: {
         "Content-Type": "application/json",
       },
-      body: $.buildCommandPayload(command),
+      body: Serializer.serialize($.buildCommandPayload(command), "server"),
     };
 
     try {
