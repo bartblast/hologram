@@ -31,6 +31,12 @@ export default class Client {
   }
 
   static buildPageQueryString(params) {
+    if (Type.isList(params)) {
+      params = Type.map(
+        params.data.map((param) => [param.data[0], param.data[1]]),
+      );
+    }
+
     let queryParts = [];
 
     Object.values(params.data).forEach((param) => {

@@ -157,6 +157,17 @@ describe("Client", () => {
       assert.strictEqual(result, "?active=true&visible=false");
     });
 
+    it("handles params as keyword list", () => {
+      const params = Type.keywordList([
+        [Type.atom("active"), Type.boolean(true)],
+        [Type.atom("visible"), Type.boolean(false)],
+      ]);
+
+      const result = Client.buildPageQueryString(params);
+
+      assert.strictEqual(result, "?active=true&visible=false");
+    });
+
     it("throws error when param key is not atom", () => {
       const params = Type.map([
         [Type.bitstring("status"), Type.atom("pending")],
