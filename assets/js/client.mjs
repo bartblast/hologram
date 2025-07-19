@@ -1,5 +1,6 @@
 "use strict";
 
+import Bitstring from "./bitstring.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Config from "./config.mjs";
 import Connection from "./connection.mjs";
@@ -26,6 +27,39 @@ export default class Client {
       [Type.atom("params"), Erlang_Maps["get/2"](Type.atom("params"), command)],
       [Type.atom("target"), target],
     ]);
+  }
+
+  static buildPageQueryString(params) {
+    let queryParts = [];
+
+    Object.values(params.data).forEach((param) => {
+      const key = param[0];
+
+      if (key.type !== "atom") {
+        throw new HologramRuntimeError(
+          `invalid param key type (only atom type is allowed), got: ${Interpreter.inspect(key)}`,
+        );
+      }
+
+      const value = param[1];
+
+      if (
+        value.type !== "atom" &&
+        value.type !== "float" &&
+        value.type !== "integer" &&
+        !Type.isBinary(value)
+      ) {
+        throw new HologramRuntimeError(
+          `invalid param value type (only atom, float, integer and string types are allowed), got: ${Interpreter.inspect(value)}`,
+        );
+      }
+
+      queryParts.push(
+        `${key.value}=${Type.isBitstring(value) ? Bitstring.toText(value) : value.value.toString()}`,
+      );
+    });
+
+    return queryParts.length > 0 ? `?${queryParts.join("&")}` : "";
   }
 
   // Covered in feature tests
