@@ -11,13 +11,11 @@ defmodule Hologram.Controller do
   alias Hologram.Template.Renderer
   alias Phoenix.Controller
 
-  @dialyzer {:nowarn_function, handle_command_request: 1}
-
   @typedoc """
   A connection with parsed JSON body_params containing Hologram command data.
-  The body_params should contain a list [version, data] directly.
+  The body_params should contain %{"_json" => [version, data]} directly.
   """
-  @type command_conn :: %Plug.Conn{body_params: list}
+  @type command_conn :: %Plug.Conn{body_params: map}
 
   @doc """
   Applies a map of cookie operations to the given Plug.Conn struct.
@@ -98,7 +96,11 @@ defmodule Hologram.Controller do
   """
   @spec handle_command_request(command_conn()) :: Plug.Conn.t()
   def handle_command_request(conn) do
-    payload = Deserializer.deserialize(conn.body_params)
+    payload =
+      conn.body_params
+      |> Map.get("_json")
+      |> Deserializer.deserialize()
+
     %{module: module, name: name, params: params, target: target} = payload
 
     {conn_with_session, _session_id} = Session.init(conn)

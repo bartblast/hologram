@@ -30,7 +30,7 @@ defmodule Hologram.ControllerTest do
   defp conn_with_parsed_json(method, path, parsed_json) do
     method
     |> Plug.Test.conn(path, "")
-    |> Map.put(:body_params, parsed_json)
+    |> Map.put(:body_params, %{"_json" => parsed_json})
   end
 
   defp serialize_params(params) when params == %{} do

@@ -47,7 +47,7 @@ defmodule Hologram.RouterTest do
       conn =
         :post
         |> Plug.Test.conn("/hologram/command", "")
-        |> Map.put(:body_params, parsed_json)
+        |> Map.put(:body_params, %{"_json" => parsed_json})
         |> call([])
 
       assert conn.halted == true
