@@ -12,6 +12,7 @@ import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import Type from "../../assets/js/type.mjs";
+import Interpreter from "../../assets/js/interpreter.mjs";
 
 defineGlobalErlangAndElixirModules();
 
@@ -218,6 +219,183 @@ describe("Client", () => {
         HologramRuntimeError,
         "invalid param value type (only atom, float, integer and string types are allowed), got: <<10::size(4)>>",
       );
+    });
+  });
+
+  describe("fetchPage()", () => {
+    let fetchStub, onSuccessStub;
+
+    const pageModule = Type.alias("MyPage");
+
+    const params = Type.map([
+      [Type.atom("user_id"), Type.integer(123)],
+      [Type.atom("status"), Type.atom("active")],
+    ]);
+
+    beforeEach(() => {
+      onSuccessStub = sinon.stub();
+    });
+
+    afterEach(() => {
+      sinon.restore();
+    });
+
+    describe("fetch parameters", () => {
+      it("constructs correct URL when toParam is a page module", async () => {
+        const mockResponse = {
+          ok: true,
+          text: sinon.stub().resolves("<html>Response</html>"),
+        };
+
+        fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
+
+        await Client.fetchPage(pageModule, onSuccessStub);
+
+        sinon.assert.calledOnce(fetchStub);
+        const [url] = fetchStub.firstCall.args;
+        assert.equal(url, "/hologram/page/MyPage");
+      });
+
+      it("constructs correct URL when toParam is a tuple with page module and params", async () => {
+        const mockResponse = {
+          ok: true,
+          text: sinon.stub().resolves("<html>Response</html>"),
+        };
+
+        fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
+
+        const toParam = Type.tuple([pageModule, params]);
+
+        await Client.fetchPage(toParam, onSuccessStub);
+
+        sinon.assert.calledOnce(fetchStub);
+        const [url] = fetchStub.firstCall.args;
+        assert.equal(url, "/hologram/page/MyPage?user_id=123&status=active");
+      });
+    });
+
+    describe("response handling", () => {
+      it("calls onSuccess callback with response HTML when fetch succeeds", async () => {
+        const expectedHtml = "<html><body>Success!</body></html>";
+
+        const mockResponse = {
+          ok: true,
+          text: sinon.stub().resolves(expectedHtml),
+        };
+
+        fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
+
+        await Client.fetchPage(pageModule, onSuccessStub);
+
+        sinon.assert.calledOnceWithExactly(onSuccessStub, expectedHtml);
+      });
+
+      it("throws HologramRuntimeError when response status is not ok", async () => {
+        const mockResponse = {
+          ok: false,
+          status: 404,
+        };
+
+        fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
+
+        let errorThrown = false;
+
+        try {
+          await Client.fetchPage(pageModule, onSuccessStub);
+        } catch (error) {
+          errorThrown = true;
+          assert.instanceOf(error, HologramRuntimeError);
+          assert.equal(error.message, "page fetch failed: 404");
+        }
+
+        assert.isTrue(
+          errorThrown,
+          "Expected HologramRuntimeError to be thrown",
+        );
+        sinon.assert.notCalled(onSuccessStub);
+      });
+
+      it("throws HologramRuntimeError when fetch fails due to network problems", async () => {
+        const networkError = new TypeError("Failed to fetch");
+
+        fetchStub = sinon.stub(globalThis, "fetch").rejects(networkError);
+
+        let errorThrown = false;
+
+        try {
+          await Client.fetchPage(pageModule, onSuccessStub);
+        } catch (error) {
+          errorThrown = true;
+          assert.instanceOf(error, HologramRuntimeError);
+          assert.equal(
+            error.message,
+            "page fetch failed: TypeError: Failed to fetch",
+          );
+        }
+
+        assert.isTrue(
+          errorThrown,
+          "Expected HologramRuntimeError to be thrown",
+        );
+        sinon.assert.notCalled(onSuccessStub);
+      });
+
+      it("rethrows HologramRuntimeError when error occurs during URL construction", async () => {
+        const invalidParams = Type.map([
+          [Type.bitstring("status"), Type.atom("pending")], // key is not an atom
+        ]);
+
+        const toParam = Type.tuple([pageModule, invalidParams]);
+
+        let errorThrown = false;
+
+        try {
+          await Client.fetchPage(toParam, onSuccessStub);
+        } catch (error) {
+          errorThrown = true;
+          assert.instanceOf(error, HologramRuntimeError);
+          assert.equal(
+            error.message,
+            'invalid param key type (only atom type is allowed), got: "status"',
+          );
+        }
+
+        assert.isTrue(
+          errorThrown,
+          "Expected original HologramRuntimeError to be rethrown",
+        );
+        sinon.assert.notCalled(onSuccessStub);
+      });
+    });
+
+    describe("edge cases", () => {
+      it("handles response.text() rejection", async () => {
+        const mockResponse = {
+          ok: true,
+          text: sinon.stub().rejects(new Error("Text parsing failed")),
+        };
+
+        fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
+
+        let errorThrown = false;
+
+        try {
+          await Client.fetchPage(pageModule, onSuccessStub);
+        } catch (error) {
+          errorThrown = true;
+          assert.instanceOf(error, HologramRuntimeError);
+          assert.equal(
+            error.message,
+            "page fetch failed: Error: Text parsing failed",
+          );
+        }
+
+        assert.isTrue(
+          errorThrown,
+          "Expected HologramRuntimeError to be thrown",
+        );
+        sinon.assert.notCalled(onSuccessStub);
+      });
     });
   });
 

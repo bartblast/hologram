@@ -67,16 +67,35 @@ export default class Client {
     return Connection.connect();
   }
 
-  // Covered in feature tests
-  static fetchPage(toParam, onSuccess, onFail) {
-    const opts = {
-      onSuccess,
-      onError: onFail,
-      onTimeout: onFail,
-      timeout: Config.fetchPageTimeoutMs,
-    };
+  static async fetchPage(toParam, onSuccess) {
+    let pageModule, queryString;
 
-    return Connection.sendRequest("page", toParam, opts);
+    if (Type.isAlias(toParam)) {
+      pageModule = toParam;
+      queryString = "";
+    } else {
+      pageModule = toParam.data[0];
+      queryString = $.buildPageQueryString(toParam.data[1]);
+    }
+
+    try {
+      const pageModuleName = Interpreter.moduleExName(pageModule);
+      const url = `/hologram/page/${pageModuleName}${queryString}`;
+      const response = await fetch(url);
+
+      if (!response.ok) {
+        $.#handleFetchPageError(response.status);
+      }
+
+      const html = await response.text();
+      onSuccess(html);
+    } catch (error) {
+      if (error instanceof HologramRuntimeError) {
+        throw error;
+      }
+
+      $.#handleFetchPageError(error);
+    }
   }
 
   // Covered in feature tests
@@ -134,6 +153,10 @@ export default class Client {
 
   static #failCommand(message) {
     throw new HologramRuntimeError(`command failed: ${message}`);
+  }
+
+  static #handleFetchPageError(message) {
+    throw new HologramRuntimeError(`page fetch failed: ${message}`);
   }
 }
 

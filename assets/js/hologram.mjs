@@ -211,24 +211,10 @@ export default class Hologram {
         timestamp: Date.now(),
       });
 
-      Client.fetchPage(
-        toParam,
-        (resp) => Hologram.handlePrefetchPageSuccess(mapKey, resp),
-        (resp) => Hologram.handlePrefetchPageError(mapKey, resp),
+      Client.fetchPage(toParam, (resp) =>
+        Hologram.handlePrefetchPageSuccess(mapKey, resp),
       );
     }
-  }
-
-  static handlePrefetchPageError(mapKey, _resp) {
-    const mapValue = Hologram.prefetchedPages.get(mapKey);
-
-    if (typeof mapValue === "undefined") {
-      return;
-    }
-
-    throw new HologramRuntimeError(
-      `page prefetch failed: ${mapValue.pagePath}`,
-    );
   }
 
   static handlePrefetchPageSuccess(mapKey, html) {
@@ -665,14 +651,8 @@ export default class Hologram {
   static async #navigateToPage(toParam) {
     const pagePath = $.#buildPagePath(toParam);
 
-    return Client.fetchPage(
-      toParam,
-      (resp) => Hologram.loadNewPage(pagePath, resp),
-      (_resp) => {
-        throw new HologramRuntimeError(
-          "Failed to navigate to page: " + pagePath,
-        );
-      },
+    return Client.fetchPage(toParam, (resp) =>
+      Hologram.loadNewPage(pagePath, resp),
     );
   }
 

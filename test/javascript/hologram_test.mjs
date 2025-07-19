@@ -151,9 +151,7 @@ describe("Hologram", () => {
 
   describe("executePrefetchPageAction()", () => {
     let clientFetchPageStub,
-      errorCallbacks,
       eventTargetNode,
-      handlePrefetchPageErrorStub,
       handlePrefetchPageSuccessStub,
       successCallbacks;
 
@@ -169,21 +167,15 @@ describe("Hologram", () => {
 
     beforeEach(() => {
       successCallbacks = [];
-      errorCallbacks = [];
 
       clientFetchPageStub = sinon
         .stub(Client, "fetchPage")
-        .callsFake((_toParam, successCallback, errorCallback) => {
+        .callsFake((_toParam, successCallback) => {
           successCallbacks.push(successCallback);
-          errorCallbacks.push(errorCallback);
         });
 
       handlePrefetchPageSuccessStub = sinon
         .stub(Hologram, "handlePrefetchPageSuccess")
-        .callsFake((_mapKey, _resp) => null);
-
-      handlePrefetchPageErrorStub = sinon
-        .stub(Hologram, "handlePrefetchPageError")
         .callsFake((_mapKey, _resp) => null);
 
       eventTargetNode = {id: "dummy_event_target_node"};
@@ -192,7 +184,6 @@ describe("Hologram", () => {
     afterEach(() => {
       Client.fetchPage.restore();
       Hologram.handlePrefetchPageSuccess.restore();
-      Hologram.handlePrefetchPageError.restore();
     });
 
     it("adds a Hologram ID to an event target DOM node that doesn't have one", () => {
@@ -235,7 +226,6 @@ describe("Hologram", () => {
         clientFetchPageStub,
         module7,
         successCallbacks[0],
-        errorCallbacks[0],
       );
 
       assert.equal(successCallbacks.length, 1);
@@ -244,16 +234,6 @@ describe("Hologram", () => {
 
       sinon.assert.calledOnceWithExactly(
         handlePrefetchPageSuccessStub,
-        mapKey,
-        resp,
-      );
-
-      assert.equal(errorCallbacks.length, 1);
-
-      errorCallbacks[0](resp);
-
-      sinon.assert.calledOnceWithExactly(
-        handlePrefetchPageErrorStub,
         mapKey,
         resp,
       );
@@ -295,7 +275,6 @@ describe("Hologram", () => {
         clientFetchPageStub,
         module7,
         successCallbacks[0],
-        errorCallbacks[0],
       );
 
       assert.equal(successCallbacks.length, 1);
@@ -304,16 +283,6 @@ describe("Hologram", () => {
 
       sinon.assert.calledOnceWithExactly(
         handlePrefetchPageSuccessStub,
-        mapKey,
-        resp,
-      );
-
-      assert.equal(errorCallbacks.length, 1);
-
-      errorCallbacks[0](resp);
-
-      sinon.assert.calledOnceWithExactly(
-        handlePrefetchPageErrorStub,
         mapKey,
         resp,
       );
@@ -340,7 +309,6 @@ describe("Hologram", () => {
 
       sinon.assert.notCalled(clientFetchPageStub);
       sinon.assert.notCalled(handlePrefetchPageSuccessStub);
-      sinon.assert.notCalled(handlePrefetchPageErrorStub);
     });
   });
 
@@ -581,36 +549,6 @@ describe("Hologram", () => {
       sinon.assert.calledOnceWithExactly(
         clientSendCommandStub,
         expectedCommand,
-      );
-    });
-  });
-
-  describe("handlePrefetchPageError()", () => {
-    it("no prefetchedPages map entry", () => {
-      Hologram.prefetchedPages = new Map();
-
-      assert.doesNotThrow(() =>
-        Hologram.handlePrefetchPageError("dummy_map_key", "my_resp"),
-      );
-    });
-
-    it("has prefetchedPages map entry", () => {
-      Hologram.prefetchedPages = new Map([
-        [
-          "dummy_map_key",
-          {
-            html: null,
-            isNavigateConfirmed: true,
-            pagePath: "/my-page-path",
-            timestamp: Date.now(),
-          },
-        ],
-      ]);
-
-      assert.throw(
-        () => Hologram.handlePrefetchPageError("dummy_map_key", "my_resp"),
-        HologramRuntimeError,
-        "page prefetch failed: /my-page-path",
       );
     });
   });
