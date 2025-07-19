@@ -26,6 +26,13 @@ defmodule Hologram.ControllerTest do
 
   @timestamp 1_752_074_624_726_958
 
+  # Create a test connection with parsed JSON body_params (simulating what Plug.Parsers does)
+  defp conn_with_parsed_json(method, path, parsed_json) do
+    method
+    |> Plug.Test.conn(path, "")
+    |> Map.put(:body_params, parsed_json)
+  end
+
   defp serialize_params(params) when params == %{} do
     %{"t" => "m", "d" => []}
   end
@@ -197,11 +204,14 @@ defmodule Hologram.ControllerTest do
         target: "my_target_1"
       }
 
-      serialized_payload = serialize_payload(payload)
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
 
       conn =
         :post
-        |> Plug.Test.conn("/hologram/command", serialized_payload)
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
         |> handle_command_request()
 
       assert conn.halted == true
@@ -217,11 +227,14 @@ defmodule Hologram.ControllerTest do
         target: "my_target_1"
       }
 
-      serialized_payload = serialize_payload(payload)
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
 
       conn =
         :post
-        |> Plug.Test.conn("/hologram/command", serialized_payload)
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
         |> handle_command_request()
 
       assert Map.has_key?(conn.resp_cookies, "hologram_session")
@@ -235,11 +248,14 @@ defmodule Hologram.ControllerTest do
         target: "my_target_1"
       }
 
-      serialized_payload = serialize_payload(payload)
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
 
       conn =
         :post
-        |> Plug.Test.conn("/hologram/command", serialized_payload)
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
         |> handle_command_request()
 
       response = Jason.decode!(conn.resp_body)
@@ -254,11 +270,14 @@ defmodule Hologram.ControllerTest do
         target: "my_target_1"
       }
 
-      serialized_payload = serialize_payload(payload)
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
 
       conn =
         :post
-        |> Plug.Test.conn("/hologram/command", serialized_payload)
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
         |> handle_command_request()
 
       response = Jason.decode!(conn.resp_body)
@@ -277,11 +296,14 @@ defmodule Hologram.ControllerTest do
         target: "my_target_1"
       }
 
-      serialized_payload = serialize_payload(payload)
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
 
       conn =
         :post
-        |> Plug.Test.conn("/hologram/command", serialized_payload)
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
         |> handle_command_request()
 
       response = Jason.decode!(conn.resp_body)
@@ -300,11 +322,14 @@ defmodule Hologram.ControllerTest do
         target: "my_target_1"
       }
 
-      serialized_payload = serialize_payload(payload)
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
 
       conn =
         :post
-        |> Plug.Test.conn("/hologram/command", serialized_payload)
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
         |> handle_command_request()
 
       response = Jason.decode!(conn.resp_body)
@@ -327,13 +352,16 @@ defmodule Hologram.ControllerTest do
         target: "my_target_1"
       }
 
-      serialized_payload = serialize_payload(payload)
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
 
       encoded_cookie_value = Cookie.encode(:action_from_cookie)
 
       conn =
         :post
-        |> Plug.Test.conn("/hologram/command", serialized_payload)
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
         |> Map.put(:req_headers, [{"cookie", "my_cookie=#{encoded_cookie_value}"}])
         |> handle_command_request()
 
@@ -353,11 +381,14 @@ defmodule Hologram.ControllerTest do
         target: "my_target_1"
       }
 
-      serialized_payload = serialize_payload(payload)
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
 
       conn =
         :post
-        |> Plug.Test.conn("/hologram/command", serialized_payload)
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
         |> handle_command_request()
 
       assert Map.has_key?(conn.resp_cookies, "test_cookie")
@@ -371,11 +402,14 @@ defmodule Hologram.ControllerTest do
         target: "my_target_1"
       }
 
-      serialized_payload = serialize_payload(payload)
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
 
       conn =
         :post
-        |> Plug.Test.conn("/hologram/command", serialized_payload)
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
         |> Map.put(:req_headers, [{"cookie", "my_cookie=cookie_value"}])
         |> handle_command_request()
 
@@ -386,57 +420,6 @@ defmodule Hologram.ControllerTest do
       cookie_keys = Map.keys(conn.resp_cookies)
       assert length(cookie_keys) == 1
       assert "hologram_session" in cookie_keys
-    end
-
-    test "handles command request with raw JSON body" do
-      payload = %{
-        module: Module6,
-        name: :my_command_a,
-        params: %{},
-        target: "my_target_1"
-      }
-
-      serialized_payload = serialize_payload(payload)
-
-      conn =
-        :post
-        |> Plug.Test.conn("/hologram/command", serialized_payload)
-        |> handle_command_request()
-
-      assert conn.halted == true
-      assert conn.state == :sent
-      assert conn.status == 200
-
-      response = Jason.decode!(conn.resp_body)
-      assert response == [1, ~s'Type.atom("nil")']
-    end
-
-    test "handles command request with pre-parsed JSON body" do
-      payload = %{
-        module: Module6,
-        name: :my_command_a,
-        params: %{},
-        target: "my_target_1"
-      }
-
-      # Simulate a request where JSON has already been parsed by middleware
-      serialized_payload = serialize_payload(payload)
-      parsed_body = Jason.decode!(serialized_payload)
-
-      conn =
-        :post
-        # Empty raw body since parsing already occurred
-        |> Plug.Test.conn("/hologram/command", "")
-        # Body has already been parsed into structured data
-        |> Map.put(:body_params, parsed_body)
-        |> handle_command_request()
-
-      assert conn.halted == true
-      assert conn.state == :sent
-      assert conn.status == 200
-
-      response = Jason.decode!(conn.resp_body)
-      assert response == [1, ~s'Type.atom("nil")']
     end
   end
 

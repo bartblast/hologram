@@ -30,23 +30,24 @@ defmodule Hologram.RouterTest do
 
   describe "/hologram/command" do
     test "routes POST command request" do
-      serialized_payload =
-        Jason.encode!([
-          2,
-          %{
-            "t" => "m",
-            "d" => [
-              ["amodule", "a#{Module2}"],
-              ["aname", "amy_command"],
-              ["aparams", %{"t" => "m", "d" => []}],
-              ["atarget", "b0746573745f746172676574"]
-            ]
-          }
-        ])
+      # Simulate that JSON has already been parsed upstream by Plug.Parsers  
+      parsed_json = [
+        2,
+        %{
+          "t" => "m",
+          "d" => [
+            ["amodule", "a#{Module2}"],
+            ["aname", "amy_command"],
+            ["aparams", %{"t" => "m", "d" => []}],
+            ["atarget", "b0746573745f746172676574"]
+          ]
+        }
+      ]
 
       conn =
         :post
-        |> Plug.Test.conn("/hologram/command", serialized_payload)
+        |> Plug.Test.conn("/hologram/command", "")
+        |> Map.put(:body_params, parsed_json)
         |> call([])
 
       assert conn.halted == true

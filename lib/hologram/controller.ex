@@ -11,6 +11,14 @@ defmodule Hologram.Controller do
   alias Hologram.Template.Renderer
   alias Phoenix.Controller
 
+  @dialyzer {:nowarn_function, handle_command_request: 1}
+
+  @typedoc """
+  A connection with parsed JSON body_params containing Hologram command data.
+  The body_params should contain a list [version, data] directly.
+  """
+  @type command_conn :: %Plug.Conn{body_params: list}
+
   @doc """
   Applies a map of cookie operations to the given Plug.Conn struct.
 
@@ -82,19 +90,15 @@ defmodule Hologram.Controller do
 
   ## Parameters
 
-    * `conn` - The Plug.Conn struct representing the HTTP request
+    * `conn` - The Plug.Conn struct representing the HTTP request with parsed JSON body_params
 
   ## Returns
 
   The updated and halted Plug.Conn struct with the JSON response and applied cookies.
   """
-  @spec handle_command_request(Plug.Conn.t()) :: Plug.Conn.t()
+  @spec handle_command_request(command_conn()) :: Plug.Conn.t()
   def handle_command_request(conn) do
-    payload =
-      conn
-      |> fetch_command_payload()
-      |> Deserializer.deserialize()
-
+    payload = Deserializer.deserialize(conn.body_params)
     %{module: module, name: name, params: params, target: target} = payload
 
     {conn_with_session, _session_id} = Session.init(conn)
@@ -174,17 +178,6 @@ defmodule Hologram.Controller do
       ]
 
     Enum.filter(opts, fn {_key, value} -> value != nil end)
-  end
-
-  # Read raw body if not parsed by Plug.Parsers
-  defp fetch_command_payload(%{body_params: %Plug.Conn.Unfetched{}} = conn) do
-    {:ok, serialized_payload, _conn} = Plug.Conn.read_body(conn)
-    serialized_payload
-  end
-
-  # Use the already-parsed JSON body
-  defp fetch_command_payload(conn) do
-    conn.body_params
   end
 
   # sobelow_skip ["XSS.HTML"]
