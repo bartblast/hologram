@@ -58,7 +58,7 @@ defmodule Hologram.RouterTest do
   end
 
   describe "/hologram/page" do
-    test "responds with requested page" do
+    test "routes GET page request" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
 
       conn =
@@ -74,6 +74,17 @@ defmodule Hologram.RouterTest do
 
       # Initial pages include runtime script
       refute String.contains?(conn.resp_body, "hologram/runtime")
+    end
+  end
+
+  describe "/hologram/ping" do
+    test "routes GET ping request" do
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/ping")
+        |> call([])
+
+      assert conn.resp_body == "pong"
     end
   end
 
