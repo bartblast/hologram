@@ -369,6 +369,12 @@ export function registerWebApis() {
   globalThis.window = window;
   globalThis.console = window.console;
   globalThis.DOMParser = window.DOMParser;
+
+  globalThis.fetch =
+    window.fetch ||
+    (() =>
+      Promise.reject(new Error("Fetch not implemented in test environment")));
+
   globalThis.FormData = window.FormData;
   globalThis.history = window.history;
   globalThis.indexedDB = fakeIndexedDB;

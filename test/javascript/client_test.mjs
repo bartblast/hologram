@@ -4,6 +4,7 @@ import {
   assert,
   componentRegistryEntryFixture,
   defineGlobalErlangAndElixirModules,
+  registerWebApis,
   sinon,
 } from "./support/helpers.mjs";
 
@@ -15,6 +16,7 @@ import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
+registerWebApis();
 
 describe("Client", () => {
   describe("buildCommandPayload()", () => {
