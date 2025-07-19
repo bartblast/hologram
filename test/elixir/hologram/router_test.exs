@@ -30,7 +30,7 @@ defmodule Hologram.RouterTest do
 
   describe "/hologram/command" do
     test "routes POST command request" do
-      # Simulate that JSON has already been parsed upstream by Plug.Parsers  
+      # Simulate that JSON has already been parsed upstream by Plug.Parsers
       parsed_json = [
         2,
         %{
