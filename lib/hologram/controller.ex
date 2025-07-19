@@ -90,8 +90,10 @@ defmodule Hologram.Controller do
   """
   @spec handle_command_request(Plug.Conn.t()) :: Plug.Conn.t()
   def handle_command_request(conn) do
-    {:ok, serialized_payload, _conn} = Plug.Conn.read_body(conn)
-    payload = Deserializer.deserialize(serialized_payload)
+    payload =
+      conn
+      |> fetch_command_payload()
+      |> Deserializer.deserialize()
 
     %{module: module, name: name, params: params, target: target} = payload
 
@@ -172,6 +174,17 @@ defmodule Hologram.Controller do
       ]
 
     Enum.filter(opts, fn {_key, value} -> value != nil end)
+  end
+
+  # Read raw body if not parsed by Plug.Parsers
+  defp fetch_command_payload(%{body_params: %Plug.Conn.Unfetched{}} = conn) do
+    {:ok, serialized_payload, _conn} = Plug.Conn.read_body(conn)
+    serialized_payload
+  end
+
+  # Use the already-parsed JSON body
+  defp fetch_command_payload(conn) do
+    conn.body_params
   end
 
   # sobelow_skip ["XSS.HTML"]
