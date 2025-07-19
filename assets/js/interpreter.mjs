@@ -1113,7 +1113,7 @@ export default class Interpreter {
     }
 
     if (Type.isAlias(term)) {
-      return $.moduleName(term);
+      return $.moduleExName(term);
     }
 
     return ":" + term.value;
