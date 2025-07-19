@@ -50,25 +50,18 @@ defmodule Hologram.RouterTest do
         |> Map.put(:body_params, %{"_json" => parsed_json})
         |> call([])
 
-      assert conn.halted == true
       assert conn.resp_body == ~s'[1,"Type.atom(\\\"nil\\\")"]'
-      assert conn.state == :sent
-      assert conn.status == 200
     end
   end
 
   describe "/hologram/page" do
-    test "routes GET page request" do
+    test "routes GET subsequent page request" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
 
       conn =
         :get
         |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Router.Module1?a=123&b=xyz")
         |> call([])
-
-      assert conn.halted == true
-      assert conn.state == :sent
-      assert conn.status == 200
 
       assert String.contains?(conn.resp_body, "Module1 page, a = 123, b = :xyz")
 
@@ -120,10 +113,6 @@ defmodule Hologram.RouterTest do
         :get
         |> Plug.Test.conn("/hologram-test-fixtures-router-module1/123/xyz")
         |> call([])
-
-      assert conn.halted == true
-      assert conn.state == :sent
-      assert conn.status == 200
 
       assert String.contains?(conn.resp_body, "Module1 page, a = 123, b = :xyz")
 

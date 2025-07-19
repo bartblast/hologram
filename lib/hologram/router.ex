@@ -17,6 +17,10 @@ defmodule Hologram.Router do
     Controller.handle_subsequent_page_request(conn, page_module)
   end
 
+  get "/hologram/ping" do
+    Controller.handle_ping_request(conn)
+  end
+
   get "/hologram/websocket" do
     conn
     |> WebSockAdapter.upgrade(Connection, conn, timeout: 60_000)
