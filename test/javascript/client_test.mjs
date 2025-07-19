@@ -12,7 +12,6 @@ import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
 import Type from "../../assets/js/type.mjs";
-import Interpreter from "../../assets/js/interpreter.mjs";
 
 defineGlobalErlangAndElixirModules();
 
