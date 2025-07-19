@@ -505,6 +505,22 @@ defmodule Hologram.ControllerTest do
     end
   end
 
+  describe "handle_ping_request/1" do
+    test "returns pong" do
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/ping")
+        |> handle_ping_request()
+
+      assert conn.halted == true
+      assert conn.resp_body == "pong"
+      assert conn.state == :sent
+      assert conn.status == 200
+
+      assert {"content-type", "text/plain; charset=utf-8"} in conn.resp_headers
+    end
+  end
+
   describe "handle_subsequent_page_request/3" do
     setup do
       setup_page_digest_registry(PageDigestRegistryStub)

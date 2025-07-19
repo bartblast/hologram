@@ -145,6 +145,16 @@ defmodule Hologram.Controller do
   end
 
   @doc """
+  Handles the ping HTTP GET request by building HTTP response.
+  """
+  @spec handle_ping_request(Plug.Conn.t()) :: Plug.Conn.t()
+  def handle_ping_request(conn) do
+    conn
+    |> Controller.text("pong")
+    |> Plug.Conn.halt()
+  end
+
+  @doc """
   Handles a subsequent page HTTP GET request by building HTTP response.
   Exracts page parameters from the query string.
 
