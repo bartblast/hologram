@@ -721,6 +721,10 @@ export default class Interpreter {
     }
   }
 
+  static moduleExName(alias) {
+    return alias.value.slice(7);
+  }
+
   // Based on: Hologram.Compiler.Encoder.encode_as_class_name/1
   static moduleJsName(alias) {
     const aliasStr = Type.isAtom(alias) ? alias.value : alias;
@@ -1109,7 +1113,7 @@ export default class Interpreter {
     }
 
     if (Type.isAlias(term)) {
-      return term.value.slice(7);
+      return $.moduleName(term);
     }
 
     return ":" + term.value;

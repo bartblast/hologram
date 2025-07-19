@@ -5827,6 +5827,14 @@ describe("Interpreter", () => {
     });
   });
 
+  it("moduleExName()", () => {
+    const name = "Aaa.Bbb.Ccc";
+    const alias = Type.alias(name);
+    const result = Interpreter.moduleExName(alias);
+
+    assert.equal(result, name);
+  });
+
   describe("moduleJsName()", () => {
     describe("boxed alias argument", () => {
       it("Elixir module alias without camel case segments", () => {
