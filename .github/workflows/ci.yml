@@ -289,6 +289,16 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
+      - name: Setup ChromeDriver
+        id: setup-chromedriver
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: 134
+          install-chromedriver: true
+
+      - name: Override default Chrome path
+        run: sudo ln -sf ${{ steps.setup-chromedriver.outputs.chrome-path }} /usr/bin/google-chrome
+
       ### FEATURE TESTS APP CHECKS ###
 
       # Step: Define how to cache the feature tests app Elixir dependencies.
