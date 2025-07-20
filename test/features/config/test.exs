@@ -13,6 +13,7 @@ config :wallaby,
     capabilities: %{
       chromeOptions: %{
         args: [
+          "--disable-background-timer-throttling",
           "--disable-dev-shm-usage",
           "--disable-gpu",
           "--fullscreen",
@@ -22,7 +23,9 @@ config :wallaby,
           "window-size=1280,800"
         ]
       }
-    }
+    },
+    # Increase readiness timeout to prevent chromedriver startup timeouts (default is 10_000 ms)
+    readiness_timeout: 60_000
   ],
   driver: Wallaby.Chrome,
   # Fixes occasional HTTPoison timeouts, see: https://github.com/elixir-wallaby/wallaby/issues/365
