@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.PagesTest do
-  use HologramFeatureTests.TestCase, async: true
+  use HologramFeatureTests.TestCase, async: false
 
   alias HologramFeatureTests.Pages.TemplateFilePage
   alias HologramFeatureTests.Pages.TemplateFunctionPage

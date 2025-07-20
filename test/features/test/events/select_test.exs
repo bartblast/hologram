@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.Events.SelectTest do
-  use HologramFeatureTests.TestCase, async: true
+  use HologramFeatureTests.TestCase, async: false
   alias HologramFeatureTests.Events.SelectPage
 
   defp trigger_select_event_script(elem_id) do

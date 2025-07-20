@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.ControlFlow.UnlessTest do
-  use HologramFeatureTests.TestCase, async: true
+  use HologramFeatureTests.TestCase, async: false
   alias HologramFeatureTests.ControlFlow.UnlessPage
 
   # single-expression condition / single-expression unless body / no else expression

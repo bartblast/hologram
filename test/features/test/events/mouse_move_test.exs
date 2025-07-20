@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.Events.MouseMoveTest do
-  use HologramFeatureTests.TestCase, async: true
+  use HologramFeatureTests.TestCase, async: false
   alias HologramFeatureTests.Events.MouseMovePage
 
   feature "mouse move", %{session: session} do

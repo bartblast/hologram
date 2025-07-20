@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.CommandsTest do
-  use HologramFeatureTests.TestCase, async: true
+  use HologramFeatureTests.TestCase, async: false
   alias HologramFeatureTests.CommandsPage
 
   describe "layout command" do

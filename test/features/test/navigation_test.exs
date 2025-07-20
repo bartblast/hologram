@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.NavigationTest do
-  use HologramFeatureTests.TestCase, async: true
+  use HologramFeatureTests.TestCase, async: false
 
   alias HologramFeatureTests.Navigation.Page1
   alias HologramFeatureTests.Navigation.Page2

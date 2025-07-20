@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.RoutingTest do
-  use HologramFeatureTests.TestCase, async: true
+  use HologramFeatureTests.TestCase, async: false
 
   alias HologramFeatureTests.Routing.RouteWithoutParamsPage
   alias HologramFeatureTests.Routing.RouteWithParamsPage

@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.OperatorsTest do
-  use HologramFeatureTests.TestCase, async: true
+  use HologramFeatureTests.TestCase, async: false
   alias HologramFeatureTests.OperatorsPage
 
   @boolean_a true

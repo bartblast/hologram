@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.JavaScriptInteropTest do
-  use HologramFeatureTests.TestCase, async: true
+  use HologramFeatureTests.TestCase, async: false
 
   feature "~JS sigil", %{session: session} do
     session

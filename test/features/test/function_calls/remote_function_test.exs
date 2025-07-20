@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.FunctionCalls.RemoteFunctionTest do
-  use HologramFeatureTests.TestCase, async: true
+  use HologramFeatureTests.TestCase, async: false
   alias HologramFeatureTests.FunctionCalls.RemoteFunctionPage
 
   # IMPORTANT!
