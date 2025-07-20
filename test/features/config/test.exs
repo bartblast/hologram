@@ -13,16 +13,23 @@ config :wallaby,
     capabilities: %{
       chromeOptions: %{
         args: [
+          "--disable-background-timer-throttling",
+          "--disable-backgrounding-occluded-windows",
           "--disable-dev-shm-usage",
+          "--disable-extensions",
           "--disable-gpu",
+          "--disable-plugins",
+          "--disable-renderer-backgrounding",
           "--fullscreen",
           "--headless",
           "--no-sandbox",
+          "--remote-debugging-port=9222",
           "--user-agent=Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/41.0.2228.0 Safari/537.36",
           "window-size=1280,800"
         ]
       }
-    }
+    },
+    readiness_timeout: 30_000
   ],
   driver: Wallaby.Chrome,
   # Fixes occasional HTTPoison timeouts, see: https://github.com/elixir-wallaby/wallaby/issues/365
