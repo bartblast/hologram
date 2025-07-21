@@ -29,13 +29,15 @@ export default class HttpTransport {
     });
   }
 
-  static restartPing() {
+  static restartPing(sendImmediatePing = true) {
     $.maybeStopPing();
-    $.startPing();
+    $.startPing(sendImmediatePing);
   }
 
-  static startPing() {
-    $.ping();
+  static startPing(sendImmediatePing = true) {
+    if (sendImmediatePing) {
+      $.ping();
+    }
 
     $.pingTimer = setInterval(() => {
       $.ping();

@@ -107,12 +107,56 @@ describe("HttpTransport", () => {
       HttpTransport.restartPing();
       assert.isTrue(HttpTransport.isRunning());
     });
+
+    it("should send immediate ping by default", () => {
+      HttpTransport.startPing();
+      sinon.assert.calledOnce(fetchStub);
+
+      HttpTransport.restartPing();
+      sinon.assert.calledTwice(fetchStub); // Immediate ping on restart
+    });
+
+    it("should send immediate ping when sendImmediatePing is true", () => {
+      HttpTransport.startPing();
+      sinon.assert.calledOnce(fetchStub);
+
+      HttpTransport.restartPing(true);
+      sinon.assert.calledTwice(fetchStub); // Immediate ping on restart
+    });
+
+    it("should not send immediate ping when sendImmediatePing is false", () => {
+      HttpTransport.startPing();
+      sinon.assert.calledOnce(fetchStub);
+
+      HttpTransport.restartPing(false);
+      sinon.assert.calledOnce(fetchStub); // No immediate ping on restart
+
+      // But should still ping after interval
+      clock.tick(HttpTransport.PING_INTERVAL);
+      sinon.assert.calledTwice(fetchStub);
+    });
   });
 
   describe("startPing()", () => {
-    it("should call ping immediately", () => {
+    it("should call ping immediately by default", () => {
       HttpTransport.startPing();
 
+      sinon.assert.calledOnce(fetchStub);
+    });
+
+    it("should call ping immediately when sendImmediatePing is true", () => {
+      HttpTransport.startPing(true);
+
+      sinon.assert.calledOnce(fetchStub);
+    });
+
+    it("should not call ping immediately when sendImmediatePing is false", () => {
+      HttpTransport.startPing(false);
+
+      sinon.assert.notCalled(fetchStub);
+
+      // But should still ping after interval
+      clock.tick(HttpTransport.PING_INTERVAL);
       sinon.assert.calledOnce(fetchStub);
     });
 
@@ -154,6 +198,25 @@ describe("HttpTransport", () => {
       // Complete the interval
       clock.tick(1);
       sinon.assert.calledTwice(fetchStub);
+    });
+
+    it("should call ping at regular intervals even when sendImmediatePing is false", () => {
+      HttpTransport.startPing(false);
+
+      // No initial ping
+      sinon.assert.notCalled(fetchStub);
+
+      // First interval
+      clock.tick(HttpTransport.PING_INTERVAL);
+      sinon.assert.calledOnce(fetchStub);
+
+      // Second interval
+      clock.tick(HttpTransport.PING_INTERVAL);
+      sinon.assert.calledTwice(fetchStub);
+
+      // Third interval
+      clock.tick(HttpTransport.PING_INTERVAL);
+      sinon.assert.calledThrice(fetchStub);
     });
   });
 
