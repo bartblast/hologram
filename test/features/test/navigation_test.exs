@@ -111,13 +111,13 @@ defmodule HologramFeatureTests.NavigationTest do
 
     feature "go forward to Hologram page (from non-Hologram page)", %{session: session} do
       session
-      |> visit("https://example.com/")
-      |> assert_text("Example Domain")
+      |> visit("/external")
+      |> assert_text("External Page")
       |> visit(Page1)
       |> click(button("Put page 1 result A"))
       |> assert_text("Page 1 result A")
       |> go_back()
-      |> assert_text("Example Domain")
+      |> assert_text("External Page")
       |> go_forward()
       |> assert_page(Page1)
       |> assert_text("Page 1 title")
