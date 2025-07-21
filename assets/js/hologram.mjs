@@ -610,7 +610,7 @@ export default class Hologram {
     if ("getEntriesByType" in performance) {
       return (
         !$.#isInitiated &&
-        performance.getEntriesByType("navigation")[0] === "reload"
+        performance.getEntriesByType("navigation")[0].type === "reload"
       );
     }
 
