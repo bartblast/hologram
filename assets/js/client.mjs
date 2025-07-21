@@ -70,7 +70,7 @@ export default class Client {
     return queryParts.length > 0 ? `?${queryParts.join("&")}` : "";
   }
 
-  static connect(sendImmediatePing = true) {
+  static connect(sendImmediatePing) {
     Connection.connect();
     HttpTransport.restartPing(sendImmediatePing);
   }
