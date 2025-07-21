@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.LayoutsTest do
-  use HologramFeatureTests.TestCase, async: false
+  use HologramFeatureTests.TestCase, async: true
 
   alias HologramFeatureTests.Layouts.NoPropsPage
   alias HologramFeatureTests.Layouts.PropsPassedExplicitelyPage

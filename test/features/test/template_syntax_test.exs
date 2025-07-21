@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.TemplateSyntaxTest do
-  use HologramFeatureTests.TestCase, async: false
+  use HologramFeatureTests.TestCase, async: true
 
   alias HologramFeatureTests.TemplateSyntax.ComponentPage
   alias HologramFeatureTests.TemplateSyntax.ForBlockPage

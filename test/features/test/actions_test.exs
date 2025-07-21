@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.ActionsTest do
-  use HologramFeatureTests.TestCase, async: false
+  use HologramFeatureTests.TestCase, async: true
   alias HologramFeatureTests.ActionsPage
 
   describe "syntax" do

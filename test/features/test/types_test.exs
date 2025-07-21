@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.TypesTest do
-  use HologramFeatureTests.TestCase, async: false
+  use HologramFeatureTests.TestCase, async: true
 
   alias Hologram.Commons.SystemUtils
   alias HologramFeatureTests.TypesPage

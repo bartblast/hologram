@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.ControlFlow.CondTest do
-  use HologramFeatureTests.TestCase, async: false
+  use HologramFeatureTests.TestCase, async: true
   alias HologramFeatureTests.ControlFlow.CondPage
 
   # single-expression clause condition / single clause / single-expression clause body

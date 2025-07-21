@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.FunctionCalls.LocalFunctionTest do
-  use HologramFeatureTests.TestCase, async: false
+  use HologramFeatureTests.TestCase, async: true
   alias HologramFeatureTests.FunctionCalls.LocalFunctionPage
 
   # IMPORTANT!

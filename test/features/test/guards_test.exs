@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.GuardsTest do
-  use HologramFeatureTests.TestCase, async: false
+  use HologramFeatureTests.TestCase, async: true
 
   alias HologramFeatureTests.GuardsPage
 

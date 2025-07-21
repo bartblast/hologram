@@ -1,7 +1,7 @@
 defmodule HologramFeatureTests.PatchingTest do
   # TODO: make the tests async when it's possible to set Wallaby max_wait_time per assert_has/2 or refute_has/2 call,
   # or implement custom versions of assert_has/2 and refute_has/2 functions.
-  use HologramFeatureTests.TestCase, async: false
+  use HologramFeatureTests.TestCase, async: true
 
   alias HologramFeatureTests.Patching.Page1
   alias HologramFeatureTests.Patching.Page2

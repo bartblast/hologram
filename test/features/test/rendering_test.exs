@@ -1,5 +1,5 @@
 defmodule HologramFeatureTests.RenderingTest do
-  use HologramFeatureTests.TestCase, async: false
+  use HologramFeatureTests.TestCase, async: true
 
   alias HologramFeatureTests.Rendering.Page1
   alias HologramFeatureTests.Rendering.Page2
