@@ -6,6 +6,7 @@ import Config from "./config.mjs";
 import Connection from "./connection.mjs";
 import Hologram from "./hologram.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
+import HttpTransport from "./http_transport.mjs";
 import Interpreter from "./interpreter.mjs";
 import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
@@ -69,9 +70,9 @@ export default class Client {
     return queryParts.length > 0 ? `?${queryParts.join("&")}` : "";
   }
 
-  // Covered in feature tests
-  static connect() {
-    return Connection.connect();
+  static connect(sendImmediatePing = true) {
+    Connection.connect();
+    HttpTransport.restartPing(sendImmediatePing);
   }
 
   static async fetchPage(toParam, onSuccess) {

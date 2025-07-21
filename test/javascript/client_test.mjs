@@ -10,8 +10,10 @@ import {
 
 import Client from "../../assets/js/client.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
+import Connection from "../../assets/js/connection.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramRuntimeError from "../../assets/js/errors/runtime_error.mjs";
+import HttpTransport from "../../assets/js/http_transport.mjs";
 import Serializer from "../../assets/js/serializer.mjs";
 import Type from "../../assets/js/type.mjs";
 
@@ -232,6 +234,33 @@ describe("Client", () => {
         HologramRuntimeError,
         "invalid param value type (only atom, float, integer and string types are allowed), got: <<10::size(4)>>",
       );
+    });
+  });
+
+  describe("connect()", () => {
+    let connectionConnectStub, httpTransportRestartPingStub;
+
+    beforeEach(() => {
+      connectionConnectStub = sinon.stub(Connection, "connect");
+      httpTransportRestartPingStub = sinon.stub(HttpTransport, "restartPing");
+    });
+
+    afterEach(() => {
+      sinon.restore();
+    });
+
+    it("calls Connection.connect() and HttpTransport.restartPing() with sendImmediatePing=false", () => {
+      Client.connect(false);
+
+      sinon.assert.calledOnce(connectionConnectStub);
+      sinon.assert.calledOnceWithExactly(httpTransportRestartPingStub, false);
+    });
+
+    it("calls Connection.connect() and HttpTransport.restartPing() with sendImmediatePing=true", () => {
+      Client.connect(true);
+
+      sinon.assert.calledOnce(connectionConnectStub);
+      sinon.assert.calledOnceWithExactly(httpTransportRestartPingStub, true);
     });
   });
 

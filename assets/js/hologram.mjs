@@ -564,7 +564,7 @@ export default class Hologram {
     window.addEventListener("pageshow", (event) => {
       // Reconnect when page is restored from bfcache OR when navigating back from external page
       if (event.persisted || !Client.isConnected()) {
-        Client.connect();
+        Client.connect(true);
       }
     });
 
@@ -581,7 +581,7 @@ export default class Hologram {
       history.replaceState($.#historyId, null, window.location.pathname);
     }
 
-    Client.connect();
+    Client.connect(false);
 
     Hologram.#defineManuallyPortedFunctions();
 
