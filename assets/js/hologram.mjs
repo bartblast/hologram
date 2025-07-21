@@ -49,8 +49,6 @@ export default class Hologram {
   // Made public to make tests easier
   static virtualDocument = null;
 
-  static #backForwardNavigationOccurred = false;
-
   static #deps = {
     Bitstring: Bitstring,
     HologramBoxedError: HologramBoxedError,
@@ -506,7 +504,6 @@ export default class Hologram {
 
   static async #handlePopstateEvent(event) {
     $.#savePageSnapshot();
-    $.#backForwardNavigationOccurred = true;
     $.#historyId = event.state;
 
     const serializedPageSnapshot = sessionStorage.getItem(event.state);
@@ -587,9 +584,6 @@ export default class Hologram {
       history.replaceState($.#historyId, null, window.location.pathname);
     }
 
-    // Reset back/forward navigation flag after page snapshot restoration decision is made
-    $.#backForwardNavigationOccurred = false;
-
     Client.connect(false);
 
     Hologram.#defineManuallyPortedFunctions();
@@ -606,8 +600,25 @@ export default class Hologram {
     return $.#registeredPageModules.has(pageModule.value);
   }
 
+  // Note: Although using the History API makes it impossible to use the Performance API for detecting
+  // what was the last navigation type, when the page is reloaded the navigation type will
+  // always be "reload". But the type remains the same for succeeding navigation types within
+  // Hologram navigation, hence the additional check for whether the app was already initiated.
+  // In case of the new Performance API, there will always be only one entry due to History API use.
   static #isPageReload() {
-    return !$.#backForwardNavigationOccurred;
+    // New Performance API
+    if ("getEntriesByType" in performance) {
+      return (
+        !$.#isInitiated &&
+        performance.getEntriesByType("navigation")[0] === "reload"
+      );
+    }
+
+    // Old Performance API
+    return (
+      !$.#isInitiated &&
+      performance.navigation.type === PerformanceNavigation.TYPE_RELOAD
+    );
   }
 
   static #isPrefetchPageTimedOut(mapKey) {
