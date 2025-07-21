@@ -39,7 +39,7 @@ describe("HttpTransport", () => {
     });
 
     it("should return true when pingTimer is set", () => {
-      HttpTransport.startPing();
+      HttpTransport.startPing(true);
       assert.isTrue(HttpTransport.isRunning());
     });
   });
@@ -53,7 +53,7 @@ describe("HttpTransport", () => {
     });
 
     it("should clear interval and reset timer when running", () => {
-      HttpTransport.startPing();
+      HttpTransport.startPing(true);
 
       HttpTransport.maybeStopPing();
 
@@ -84,7 +84,7 @@ describe("HttpTransport", () => {
   describe("restartPing()", () => {
     it("should stop existing ping and start new one", () => {
       // Start initial ping
-      HttpTransport.startPing();
+      HttpTransport.startPing(true);
       sinon.assert.calledOnce(fetchStub);
 
       // Let some time pass
@@ -92,7 +92,7 @@ describe("HttpTransport", () => {
       sinon.assert.calledOnce(fetchStub); // Still only initial ping
 
       // Restart ping
-      HttpTransport.restartPing();
+      HttpTransport.restartPing(true);
       sinon.assert.calledTwice(fetchStub); // New immediate ping
 
       // The interval should reset - wait full interval
@@ -101,23 +101,15 @@ describe("HttpTransport", () => {
     });
 
     it("should maintain running state during restart", () => {
-      HttpTransport.startPing();
+      HttpTransport.startPing(true);
       assert.isTrue(HttpTransport.isRunning());
 
-      HttpTransport.restartPing();
+      HttpTransport.restartPing(true);
       assert.isTrue(HttpTransport.isRunning());
-    });
-
-    it("should send immediate ping by default", () => {
-      HttpTransport.startPing();
-      sinon.assert.calledOnce(fetchStub);
-
-      HttpTransport.restartPing();
-      sinon.assert.calledTwice(fetchStub); // Immediate ping on restart
     });
 
     it("should send immediate ping when sendImmediatePing is true", () => {
-      HttpTransport.startPing();
+      HttpTransport.startPing(true);
       sinon.assert.calledOnce(fetchStub);
 
       HttpTransport.restartPing(true);
@@ -125,7 +117,7 @@ describe("HttpTransport", () => {
     });
 
     it("should not send immediate ping when sendImmediatePing is false", () => {
-      HttpTransport.startPing();
+      HttpTransport.startPing(true);
       sinon.assert.calledOnce(fetchStub);
 
       HttpTransport.restartPing(false);
@@ -138,12 +130,6 @@ describe("HttpTransport", () => {
   });
 
   describe("startPing()", () => {
-    it("should call ping immediately by default", () => {
-      HttpTransport.startPing();
-
-      sinon.assert.calledOnce(fetchStub);
-    });
-
     it("should call ping immediately when sendImmediatePing is true", () => {
       HttpTransport.startPing(true);
 
@@ -161,13 +147,13 @@ describe("HttpTransport", () => {
     });
 
     it("should set timer and mark as running", () => {
-      HttpTransport.startPing();
+      HttpTransport.startPing(true);
 
       assert.isTrue(HttpTransport.isRunning());
     });
 
     it("should call ping at regular intervals", () => {
-      HttpTransport.startPing();
+      HttpTransport.startPing(true);
 
       // Initial ping
       sinon.assert.calledOnce(fetchStub);
@@ -186,7 +172,7 @@ describe("HttpTransport", () => {
     });
 
     it("should not call ping before interval elapses", () => {
-      HttpTransport.startPing();
+      HttpTransport.startPing(true);
 
       // Initial ping
       sinon.assert.calledOnce(fetchStub);
@@ -200,7 +186,26 @@ describe("HttpTransport", () => {
       sinon.assert.calledTwice(fetchStub);
     });
 
-    it("should call ping at regular intervals even when sendImmediatePing is false", () => {
+    it("should call ping at regular intervals when sendImmediatePing is true", () => {
+      HttpTransport.startPing(true);
+
+      // Initial ping
+      sinon.assert.calledOnce(fetchStub);
+
+      // First interval
+      clock.tick(HttpTransport.PING_INTERVAL);
+      sinon.assert.calledTwice(fetchStub);
+
+      // Second interval
+      clock.tick(HttpTransport.PING_INTERVAL);
+      sinon.assert.calledThrice(fetchStub);
+
+      // Third interval
+      clock.tick(HttpTransport.PING_INTERVAL);
+      assert.equal(fetchStub.callCount, 4);
+    });
+
+    it("should call ping at regular intervals when sendImmediatePing is false", () => {
       HttpTransport.startPing(false);
 
       // No initial ping
@@ -223,7 +228,7 @@ describe("HttpTransport", () => {
   describe("integration", () => {
     it("should handle complete ping lifecycle with timing", () => {
       // Start ping
-      HttpTransport.startPing();
+      HttpTransport.startPing(true);
       assert.isTrue(HttpTransport.isRunning());
       sinon.assert.calledOnce(fetchStub);
 
@@ -245,7 +250,7 @@ describe("HttpTransport", () => {
 
     it("should handle restart without timing disruption", () => {
       // Start initial ping
-      HttpTransport.startPing();
+      HttpTransport.startPing(true);
       sinon.assert.calledOnce(fetchStub);
 
       // Wait partial interval
@@ -253,7 +258,7 @@ describe("HttpTransport", () => {
       sinon.assert.calledOnce(fetchStub);
 
       // Restart - should immediately ping and reset timer
-      HttpTransport.restartPing();
+      HttpTransport.restartPing(true);
       sinon.assert.calledTwice(fetchStub);
 
       // New interval should start from restart point
@@ -267,7 +272,7 @@ describe("HttpTransport", () => {
 
     it("should handle multiple stop/start cycles", () => {
       // First cycle
-      HttpTransport.startPing();
+      HttpTransport.startPing(true);
       sinon.assert.calledOnce(fetchStub);
 
       clock.tick(HttpTransport.PING_INTERVAL);
@@ -280,7 +285,7 @@ describe("HttpTransport", () => {
       sinon.assert.calledTwice(fetchStub);
 
       // Second cycle
-      HttpTransport.startPing();
+      HttpTransport.startPing(true);
       sinon.assert.calledThrice(fetchStub);
 
       clock.tick(HttpTransport.PING_INTERVAL);

@@ -29,12 +29,12 @@ export default class HttpTransport {
     });
   }
 
-  static restartPing(sendImmediatePing = true) {
+  static restartPing(sendImmediatePing) {
     $.maybeStopPing();
     $.startPing(sendImmediatePing);
   }
 
-  static startPing(sendImmediatePing = true) {
+  static startPing(sendImmediatePing) {
     if (sendImmediatePing) {
       $.ping();
     }
