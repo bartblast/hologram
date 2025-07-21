@@ -43,13 +43,13 @@ import {toVNode} from "snabbdom";
 
 // TODO: test
 export default class Hologram {
-  static CURRENT_URL_SESSION_STORAGE_KEY = "hologram_current_url";
-
   // Made public to make tests easier
   static prefetchedPages = new Map();
 
   // Made public to make tests easier
   static virtualDocument = null;
+
+  static #backForwardNavigationOccurred = false;
 
   static #deps = {
     Bitstring: Bitstring,
@@ -271,7 +271,6 @@ export default class Hologram {
   // Made public to make tests easier
   static loadNewPage(pagePath, html) {
     $.#savePageSnapshot();
-    $.#trackCurrentUrl();
     $.#historyId = crypto.randomUUID();
 
     window.requestAnimationFrame(() => {
@@ -507,7 +506,7 @@ export default class Hologram {
 
   static async #handlePopstateEvent(event) {
     $.#savePageSnapshot();
-    $.#trackCurrentUrl();
+    $.#backForwardNavigationOccurred = true;
     $.#historyId = event.state;
 
     const serializedPageSnapshot = sessionStorage.getItem(event.state);
@@ -563,7 +562,6 @@ export default class Hologram {
 
     window.addEventListener("beforeunload", () => {
       Hologram.#savePageSnapshot();
-      Hologram.#trackCurrentUrl();
     });
 
     window.addEventListener("popstate", Hologram.#handlePopstateEvent);
@@ -589,6 +587,9 @@ export default class Hologram {
       history.replaceState($.#historyId, null, window.location.pathname);
     }
 
+    // Reset back/forward navigation flag after page snapshot restoration decision is made
+    $.#backForwardNavigationOccurred = false;
+
     Client.connect(false);
 
     Hologram.#defineManuallyPortedFunctions();
@@ -606,24 +607,7 @@ export default class Hologram {
   }
 
   static #isPageReload() {
-    const storedUrl = sessionStorage.getItem($.CURRENT_URL_SESSION_STORAGE_KEY);
-    const currentUrl = window.location.href;
-
-    // If no stored URL, this is the first visit (not a reload)
-    if (!storedUrl) {
-      return false;
-    }
-
-    // If URLs match, this is a page reload
-    // If URLs differ, this is back/forward navigation
-    return storedUrl === currentUrl;
-  }
-
-  static #trackCurrentUrl() {
-    sessionStorage.setItem(
-      $.CURRENT_URL_SESSION_STORAGE_KEY,
-      window.location.href,
-    );
+    return !$.#backForwardNavigationOccurred;
   }
 
   static #isPrefetchPageTimedOut(mapKey) {
