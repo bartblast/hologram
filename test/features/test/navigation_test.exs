@@ -137,6 +137,63 @@ defmodule HologramFeatureTests.NavigationTest do
     |> assert_text("Page 2 result A")
   end
 
+  describe "component state management" do
+    feature "page reload resets component state", %{session: session} do
+      session
+      |> visit(Page1)
+      |> click(button("Put page 1 result A"))
+      |> assert_text("Page 1 result A")
+      |> reload()
+      |> assert_page(Page1)
+      |> assert_text("Page result: nil")
+    end
+
+    feature "back navigation preserves component state", %{session: session} do
+      session
+      |> visit(Page1)
+      |> click(button("Put page 1 result A"))
+      |> assert_text("Page 1 result A")
+      |> click(link("Page 2 link"))
+      |> assert_page(Page2)
+      |> go_back()
+      |> assert_page(Page1)
+      |> assert_text("Page 1 result A")
+    end
+
+    feature "forward navigation preserves component state", %{session: session} do
+      session
+      |> visit(Page1)
+      |> click(link("Page 2 link"))
+      |> assert_page(Page2)
+      |> click(button("Put page 2 result A"))
+      |> assert_text("Page 2 result A")
+      |> go_back()
+      |> assert_page(Page1)
+      |> go_forward()
+      |> assert_page(Page2)
+      |> assert_text("Page 2 result A")
+    end
+
+    feature "page reload after navigation resets component state", %{session: session} do
+      session
+      |> visit(Page1)
+      |> click(button("Put page 1 result A"))
+      |> assert_text("Page 1 result A")
+      |> click(link("Page 2 link"))
+      |> assert_page(Page2)
+      |> click(button("Put page 2 result A"))
+      |> assert_text("Page 2 result A")
+      |> reload()
+      |> assert_page(Page2)
+      # Reloaded page state should be reset after reload
+      |> assert_text("Page result: nil")
+      |> go_back()
+      |> assert_page(Page1)
+      # Previous page state should still be preserved
+      |> assert_text("Page 1 result A")
+    end
+  end
+
   describe "scroll position" do
     feature "when navigating to a new page", %{session: session} do
       session
