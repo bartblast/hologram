@@ -1195,7 +1195,7 @@ defmodule Hologram.Template.ParserTest do
   describe "elixir interpolation" do
     test "in text" do
       markup = "\#{@abc}"
-      assert parse_markup(markup) == [{:text, "#"}, {:expression, "{@abc}"}]
+      assert parse_markup(markup) == [text: "#", expression: "{@abc}"]
     end
 
     test "in public comment" do
