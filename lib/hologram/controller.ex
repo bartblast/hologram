@@ -7,7 +7,8 @@ defmodule Hologram.Controller do
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.Deserializer
   alias Hologram.Server
-  alias Hologram.Session
+  # TODO: uncomment when standalone Hologram is supported
+  # alias Hologram.Session
   alias Hologram.Template.Renderer
   alias Phoenix.Controller
 
@@ -103,8 +104,9 @@ defmodule Hologram.Controller do
 
     %{module: module, name: name, params: params, target: target} = payload
 
-    {conn_with_session, _session_id} = Session.init(conn)
-    server_struct = Server.from(conn_with_session)
+    # TODO: uncomment when standalone Hologram is supported
+    # {conn_with_session, _session_id} = Session.init(conn)
+    server_struct = Server.from(conn)
 
     command_result = module.command(name, params, server_struct)
 
@@ -116,7 +118,7 @@ defmodule Hologram.Controller do
     {encode_status, encoded_next_action} = Encoder.encode_term(next_action)
     command_status = if encode_status == :ok, do: 1, else: 0
 
-    conn_with_session
+    conn
     |> apply_cookie_ops(updated_server_struct.__meta__.cookie_ops)
     |> Controller.json([command_status, encoded_next_action])
     |> Plug.Conn.halt()
@@ -194,15 +196,16 @@ defmodule Hologram.Controller do
 
   # sobelow_skip ["XSS.HTML"]
   defp handle_page_request(conn, page_module, params, initial_page?) do
-    {conn_with_session, _session_id} = Session.init(conn)
+    # TODO: uncomment when standalone Hologram is supported
+    # {conn_with_session, _session_id} = Session.init(conn)
 
-    server_struct = Server.from(conn_with_session)
+    server_struct = Server.from(conn)
     opts = [initial_page?: initial_page?]
 
     {html, _component_registry, updated_server_struct} =
       Renderer.render_page(page_module, params, server_struct, opts)
 
-    conn_with_session
+    conn
     |> apply_cookie_ops(updated_server_struct.__meta__.cookie_ops)
     |> Controller.html(html)
     |> Plug.Conn.halt()

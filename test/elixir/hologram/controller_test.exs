@@ -219,26 +219,27 @@ defmodule Hologram.ControllerTest do
       assert conn.status == 200
     end
 
-    test "initializes Hologram session" do
-      payload = %{
-        module: Module6,
-        name: :my_command_a,
-        params: %{},
-        target: "my_target_1"
-      }
+    # TODO: uncomment when standalone Hologram is supported
+    # test "initializes Hologram session" do
+    #   payload = %{
+    #     module: Module6,
+    #     name: :my_command_a,
+    #     params: %{},
+    #     target: "my_target_1"
+    #   }
 
-      parsed_json =
-        payload
-        |> serialize_payload()
-        |> Jason.decode!()
+    #   parsed_json =
+    #     payload
+    #     |> serialize_payload()
+    #     |> Jason.decode!()
 
-      conn =
-        :post
-        |> conn_with_parsed_json("/hologram/command", parsed_json)
-        |> handle_command_request()
+    #   conn =
+    #     :post
+    #     |> conn_with_parsed_json("/hologram/command", parsed_json)
+    #     |> handle_command_request()
 
-      assert Map.has_key?(conn.resp_cookies, "hologram_session")
-    end
+    #   assert Map.has_key?(conn.resp_cookies, "hologram_session")
+    # end
 
     test "command with next action nil" do
       payload = %{
@@ -416,10 +417,12 @@ defmodule Hologram.ControllerTest do
       response = Jason.decode!(conn.resp_body)
       assert [1, _encoded_action] = response
 
+      # TODO: uncomment when standalone Hologram is supported
       # Only the session cookie should be set, no additional cookies from the command
       cookie_keys = Map.keys(conn.resp_cookies)
-      assert length(cookie_keys) == 1
-      assert "hologram_session" in cookie_keys
+      assert length(cookie_keys) == 0
+      # assert length(cookie_keys) == 1
+      # assert "hologram_session" in cookie_keys
     end
   end
 
@@ -442,16 +445,17 @@ defmodule Hologram.ControllerTest do
       assert conn.status == 200
     end
 
-    test "initializes Hologram session" do
-      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
+    # TODO: uncomment when standalone Hologram is supported
+    # test "initializes Hologram session" do
+    #   ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
 
-      conn =
-        :get
-        |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module4")
-        |> handle_initial_page_request(Module4)
+    #   conn =
+    #     :get
+    #     |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module4")
+    #     |> handle_initial_page_request(Module4)
 
-      assert Map.has_key?(conn.resp_cookies, "hologram_session")
-    end
+    #   assert Map.has_key?(conn.resp_cookies, "hologram_session")
+    # end
 
     test "extracts and casts page params and passes them to page renderer" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
@@ -540,16 +544,17 @@ defmodule Hologram.ControllerTest do
       assert conn.status == 200
     end
 
-    test "initializes Hologram session" do
-      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
+    # TODO: uncomment when standalone Hologram is supported
+    # test "initializes Hologram session" do
+    #   ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
 
-      conn =
-        :get
-        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module4")
-        |> handle_subsequent_page_request(Module4)
+    #   conn =
+    #     :get
+    #     |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module4")
+    #     |> handle_subsequent_page_request(Module4)
 
-      assert Map.has_key?(conn.resp_cookies, "hologram_session")
-    end
+    #   assert Map.has_key?(conn.resp_cookies, "hologram_session")
+    # end
 
     test "casts page params and passes them to page renderer" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module1, :dummy_module_1_digest)
