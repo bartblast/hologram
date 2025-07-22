@@ -19,6 +19,7 @@ defmodule HologramFeatureTests.Cookies.Page6 do
       <button $click={command: :write_cookie_with_custom_settings}>Write cookie with custom settings</button>
       <button $click={command: :read_string_encoded_cookie}>Read string-encoded cookie</button>
       <button $click={command: :read_hologram_encoded_cookie}>Read Hologram-encoded cookie</button>
+      <button $click={command: :delete_cookie}>Delete cookie</button>
     </p>
     <p>
       command_executed? = {inspect(@command_executed?)}, cookie_value = {inspect(@cookie_value)}
@@ -32,6 +33,12 @@ defmodule HologramFeatureTests.Cookies.Page6 do
 
   def action(:update_state_with_cookie_value, params, component) do
     put_state(component, command_executed?: true, cookie_value: params.cookie_value)
+  end
+
+  def command(:delete_cookie, _params, server) do
+    server
+    |> delete_cookie("cookie_key")
+    |> put_action(:set_command_executed_flag)
   end
 
   def command(:read_hologram_encoded_cookie, _params, server) do

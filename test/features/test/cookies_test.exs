@@ -144,5 +144,18 @@ defmodule HologramFeatureTests.CookiesTest do
       |> click(button("Read Hologram-encoded cookie"))
       |> assert_text(~s'command_executed? = true, cookie_value = %{a: 1, b: 2, c: 3}')
     end
+
+    feature "deletes cookie", %{session: session} do
+      assert Browser.cookies(session) == []
+
+      session
+      |> visit(EmptyPage)
+      |> Browser.set_cookie("cookie_key", "cookie_value")
+      |> visit(Page6)
+      |> click(button("Delete cookie"))
+      |> assert_text(~s'command_executed? = true')
+
+      assert Browser.cookies(session) == []
+    end
   end
 end
