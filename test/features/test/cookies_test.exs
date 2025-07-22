@@ -6,11 +6,12 @@ defmodule HologramFeatureTests.CookiesTest do
   alias HologramFeatureTests.Cookies.Page2
   alias HologramFeatureTests.Cookies.Page3
   alias HologramFeatureTests.Cookies.Page4
+  alias HologramFeatureTests.Cookies.Page5
   alias HologramFeatureTests.EmptyPage
   alias Wallaby.Browser
 
   describe "page init cookies handling" do
-    feature "reads existing string-encoded cookie", %{session: session} do
+    feature "reads string-encoded cookie", %{session: session} do
       assert Browser.cookies(session) == []
 
       session
@@ -20,7 +21,7 @@ defmodule HologramFeatureTests.CookiesTest do
       |> assert_text("cookie_value")
     end
 
-    feature "reads existing Hologram-encoded cookie", %{session: session} do
+    feature "reads Hologram-encoded cookie", %{session: session} do
       assert Browser.cookies(session) == []
 
       session
@@ -64,6 +65,17 @@ defmodule HologramFeatureTests.CookiesTest do
                  "value" => Cookie.encode("cookie_value")
                }
              ]
+    end
+
+    feature "deletes cookie", %{session: session} do
+      assert Browser.cookies(session) == []
+
+      session
+      |> visit(EmptyPage)
+      |> Browser.set_cookie("cookie_key", "cookie_value")
+      |> visit(Page5)
+
+      assert Browser.cookies(session) == []
     end
   end
 end
