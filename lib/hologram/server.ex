@@ -1,5 +1,4 @@
 defmodule Hologram.Server do
-  alias Hologram.Commons.MapUtils
   alias Hologram.Component.Action
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.PlugConnUtils
@@ -13,11 +12,6 @@ defmodule Hologram.Server do
           session: %{atom => any},
           __meta__: Metadata.t()
         }
-
-  @doc """
-  Returns the current system time in microseconds since the Unix epoch.
-  """
-  @callback timestamp() :: non_neg_integer
 
   @doc """
   Removes a cookie from the server struct and marks it for deletion in the client's browser.
@@ -52,58 +46,13 @@ defmodule Hologram.Server do
   def delete_cookie(server, key) when is_map_key(server.cookies, key) do
     new_cookies = Map.delete(server.cookies, key)
 
-    new_cookie_ops =
-      Map.put(server.__meta__.cookie_ops, key, {:delete, impl().timestamp()})
-
+    new_cookie_ops = Map.put(server.__meta__.cookie_ops, key, :delete)
     new_meta = %{server.__meta__ | cookie_ops: new_cookie_ops}
 
     %{server | cookies: new_cookies, __meta__: new_meta}
   end
 
   def delete_cookie(server, _key), do: server
-
-  @doc """
-  Computes the difference between cookies in two server structs.
-
-  Returns a map with three keys describing the changes needed to transform 
-  the cookies of `server_1` into the cookies of `server_2`:
-
-  - `:added` - New cookies (exist in server_2 but not in server_1) as `{key, value}` tuples
-  - `:edited` - Modified cookies (exist in both but with different values) as `{key, new_value}` tuples  
-  - `:removed` - Deleted cookies (exist in server_1 but not in server_2) as a list of keys
-
-  This function is useful for tracking cookie changes between different server states,
-  such as before and after processing a request or command.
-
-  ## Parameters
-
-    * `server_1` - The previous server state
-    * `server_2` - The new server state
-
-  ## Examples
-
-      iex> server_1 = %Hologram.Server{cookies: %{"user_id" => "123", "theme" => "light"}}
-      iex> server_2 = %Hologram.Server{cookies: %{"user_id" => "456", "lang" => "en"}}
-      iex> diff_cookies(server_1, server_2)
-      %{
-        added: [{"lang", "en"}],
-        removed: ["theme"],
-        edited: [{"user_id", "456"}]
-      }
-
-      iex> server_1 = %Hologram.Server{cookies: %{"user_id" => "123"}}
-      iex> server_2 = %Hologram.Server{cookies: %{"user_id" => "123"}}
-      iex> diff_cookies(server_1, server_2)
-      %{added: [], removed: [], edited: []}
-  """
-  @spec diff_cookies(t(), t()) :: %{
-          added: [{String.t(), any()}],
-          removed: [String.t()],
-          edited: [{String.t(), any()}]
-        }
-  def diff_cookies(server_1, server_2) do
-    MapUtils.diff(server_1.cookies, server_2.cookies)
-  end
 
   @doc """
   Creates a new Hologram.Server struct from a Plug.Conn struct.
@@ -228,10 +177,7 @@ defmodule Hologram.Server do
     new_cookies = Map.put(server.cookies, key, value)
 
     cookie_struct = struct!(Cookie, Keyword.put(opts, :value, value))
-
-    new_cookie_ops =
-      Map.put(server.__meta__.cookie_ops, key, {:put, impl().timestamp(), cookie_struct})
-
+    new_cookie_ops = Map.put(server.__meta__.cookie_ops, key, cookie_struct)
     new_meta = %{server.__meta__ | cookie_ops: new_cookie_ops}
 
     %{server | cookies: new_cookies, __meta__: new_meta}
@@ -245,17 +191,5 @@ defmodule Hologram.Server do
     Cookie keys must be strings according to web standards.
     Try converting your key to a string: "#{key}".\
     """
-  end
-
-  @doc """
-  Returns the current system time in microseconds since the Unix epoch.
-  """
-  @spec timestamp :: non_neg_integer
-  def timestamp do
-    :os.system_time(:microsecond)
-  end
-
-  defp impl do
-    Application.get_env(:hologram, :server_impl, __MODULE__)
   end
 end

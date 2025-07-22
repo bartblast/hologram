@@ -12,7 +12,6 @@ defmodule Hologram.Test.Stubs do
   alias Hologram.Commons.ProcessUtils
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
-  alias Hologram.Server
 
   def setup_asset_manifest_cache(stub, start_link \\ true) do
     stub_with(AssetManifestCacheMock, stub)
@@ -164,20 +163,6 @@ defmodule Hologram.Test.Stubs do
       end
 
       alias alias!(unquote(random_module).PageModuleResolverStub)
-    end
-  end
-
-  defmacro use_module_stub(:server) do
-    random_module = random_module()
-
-    quote do
-      defmodule alias!(unquote(random_module).ServerStub) do
-        @behaviour Server
-
-        def timestamp, do: unquote(123_456_789)
-      end
-
-      alias alias!(unquote(random_module).ServerStub)
     end
   end
 

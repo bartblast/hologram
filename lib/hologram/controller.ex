@@ -22,8 +22,8 @@ defmodule Hologram.Controller do
   Applies a map of cookie operations to the given Plug.Conn struct.
 
   Takes a map of cookie operations where each key is a cookie name (string) and each value
-  is either a put operation `{:put, timestamp, cookie_struct}` or a delete operation 
-  `{:delete, timestamp}`.
+  is either a `Cookie` struct representing a put operation or a `:delete` atom
+  representing a delete operation.
 
   For put operations, the cookie value is encoded and set with the provided options.
   For delete operations, the cookie is removed from the response.
@@ -39,7 +39,7 @@ defmodule Hologram.Controller do
 
   ## Examples
 
-      iex> ops = %{"user_id" => {:put, 1752074624726958, %Cookie{value: 123}}}
+      iex> ops = %{"user_id" => %Cookie{value: 123}}
       iex> updated_conn = apply_cookie_ops(conn, ops)
       iex> updated_conn.resp_cookies["user_id"]
       # Returns the cookie data
@@ -48,17 +48,17 @@ defmodule Hologram.Controller do
   def apply_cookie_ops(conn, cookie_ops) do
     Enum.reduce(cookie_ops, conn, fn {cookie_name, operation}, acc_conn ->
       case operation do
-        {:put, _timestamp, cookie_struct} ->
+        %Cookie{value: cookie_value} = cookie_struct ->
           opts = build_cookie_opts(cookie_struct)
 
           Plug.Conn.put_resp_cookie(
             acc_conn,
             cookie_name,
-            Cookie.encode(cookie_struct.value),
+            Cookie.encode(cookie_value),
             opts
           )
 
-        {:delete, _timestamp} ->
+        :delete ->
           Plug.Conn.delete_resp_cookie(acc_conn, cookie_name)
       end
     end)

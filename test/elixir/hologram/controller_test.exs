@@ -20,11 +20,8 @@ defmodule Hologram.ControllerTest do
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
   use_module_stub :page_digest_registry
-  use_module_stub :server
 
   setup :set_mox_global
-
-  @timestamp 1_752_074_624_726_958
 
   # Create a test connection with parsed JSON body_params (simulating what Plug.Parsers does)
   defp conn_with_parsed_json(method, path, parsed_json) do
@@ -79,7 +76,7 @@ defmodule Hologram.ControllerTest do
 
     test "applies put operation with default cookie opts", %{conn: conn} do
       cookie_struct = %Cookie{value: "test_value"}
-      cookie_ops = %{"test_cookie" => {:put, @timestamp, cookie_struct}}
+      cookie_ops = %{"test_cookie" => cookie_struct}
 
       updated_conn = apply_cookie_ops(conn, cookie_ops)
 
@@ -104,7 +101,7 @@ defmodule Hologram.ControllerTest do
         secure: false
       }
 
-      cookie_ops = %{"test_cookie" => {:put, @timestamp, cookie_struct}}
+      cookie_ops = %{"test_cookie" => cookie_struct}
 
       updated_conn = apply_cookie_ops(conn, cookie_ops)
 
@@ -122,7 +119,7 @@ defmodule Hologram.ControllerTest do
     end
 
     test "applies delete operation", %{conn: conn} do
-      cookie_ops = %{"existing_cookie" => {:delete, @timestamp}}
+      cookie_ops = %{"existing_cookie" => :delete}
 
       updated_conn = apply_cookie_ops(conn, cookie_ops)
 
@@ -136,9 +133,9 @@ defmodule Hologram.ControllerTest do
       cookie_struct_2 = %Cookie{value: "new_value_2", path: "/path-2"}
 
       cookie_ops = %{
-        "new_cookie_1" => {:put, @timestamp + 1, cookie_struct_1},
-        "new_cookie_2" => {:put, @timestamp + 2, cookie_struct_2},
-        "old_cookie" => {:delete, @timestamp + 3}
+        "new_cookie_1" => cookie_struct_1,
+        "new_cookie_2" => cookie_struct_2,
+        "old_cookie" => :delete
       }
 
       updated_conn = apply_cookie_ops(conn, cookie_ops)
@@ -173,7 +170,7 @@ defmodule Hologram.ControllerTest do
         secure: nil
       }
 
-      cookie_ops = %{"test_cookie" => {:put, @timestamp, cookie_struct}}
+      cookie_ops = %{"test_cookie" => cookie_struct}
 
       updated_conn = apply_cookie_ops(conn, cookie_ops)
 
@@ -192,10 +189,6 @@ defmodule Hologram.ControllerTest do
   end
 
   describe "handle_command_request/1" do
-    setup do
-      setup_server(ServerStub)
-    end
-
     test "updates Plug.Conn fields related to HTTP response and halts the pipeline" do
       payload = %{
         module: Module6,
@@ -429,7 +422,6 @@ defmodule Hologram.ControllerTest do
   describe "handle_initial_page_request/2" do
     setup do
       setup_page_digest_registry(PageDigestRegistryStub)
-      setup_server(ServerStub)
     end
 
     test "updates Plug.Conn fields related to HTTP response and halts the pipeline" do
@@ -528,7 +520,6 @@ defmodule Hologram.ControllerTest do
   describe "handle_subsequent_page_request/3" do
     setup do
       setup_page_digest_registry(PageDigestRegistryStub)
-      setup_server(ServerStub)
     end
 
     test "updates Plug.Conn fields related to HTTP response and halts the pipeline" do

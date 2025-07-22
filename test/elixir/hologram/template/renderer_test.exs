@@ -75,7 +75,7 @@ defmodule Hologram.Template.RendererTest do
     },
     __meta__: %Metadata{
       cookie_ops: %{
-        "initial_cookie_key" => {:put, @timestamp_1, %Cookie{value: :initial_cookie_value}}
+        "initial_cookie_key" => %Cookie{value: :initial_cookie_value}
       }
     }
   }
@@ -83,12 +83,8 @@ defmodule Hologram.Template.RendererTest do
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
   use_module_stub :page_digest_registry
-  use_module_stub :server
 
   setup :set_mox_global
-
-  # Must be defined after setting up Server stub.
-  @timestamp_2 ServerStub.timestamp()
 
   test "text node" do
     node = {:text, "Tom & Jerry"}
@@ -96,10 +92,6 @@ defmodule Hologram.Template.RendererTest do
   end
 
   describe "public comment node" do
-    setup do
-      setup_server(ServerStub)
-    end
-
     test "empty" do
       # <!---->
       node = {:public_comment, []}
@@ -157,10 +149,9 @@ defmodule Hologram.Template.RendererTest do
                   },
                   __meta__: %Metadata{
                     cookie_ops: %{
-                      "initial_cookie_key" =>
-                        {:put, @timestamp_1, %Cookie{value: :initial_cookie_value}},
-                      "cookie_key_3" => {:put, @timestamp_2, %Cookie{value: :cookie_value_3}},
-                      "cookie_key_7" => {:put, @timestamp_2, %Cookie{value: :cookie_value_7}}
+                      "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                      "cookie_key_3" => %Cookie{value: :cookie_value_3},
+                      "cookie_key_7" => %Cookie{value: :cookie_value_7}
                     }
                   }
                 }}
@@ -203,10 +194,6 @@ defmodule Hologram.Template.RendererTest do
   end
 
   describe "element node" do
-    setup do
-      setup_server(ServerStub)
-    end
-
     test "non-void element, without attributes or children" do
       node = {:element, "div", [], []}
       assert render_dom(node, @env, @server) == {"<div></div>", %{}, @server}
@@ -337,10 +324,9 @@ defmodule Hologram.Template.RendererTest do
                   },
                   __meta__: %Metadata{
                     cookie_ops: %{
-                      "initial_cookie_key" =>
-                        {:put, @timestamp_1, %Cookie{value: :initial_cookie_value}},
-                      "cookie_key_3" => {:put, @timestamp_2, %Cookie{value: :cookie_value_3}},
-                      "cookie_key_7" => {:put, @timestamp_2, %Cookie{value: :cookie_value_7}}
+                      "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                      "cookie_key_3" => %Cookie{value: :cookie_value_3},
+                      "cookie_key_7" => %Cookie{value: :cookie_value_7}
                     }
                   }
                 }}
@@ -356,10 +342,6 @@ defmodule Hologram.Template.RendererTest do
 
   # Some client tests are different than server tests.
   describe "node list" do
-    setup do
-      setup_server(ServerStub)
-    end
-
     test "text and expression nodes" do
       nodes = [
         {:text, "aaa"},
@@ -405,10 +387,9 @@ defmodule Hologram.Template.RendererTest do
                    },
                    __meta__: %Metadata{
                      cookie_ops: %{
-                       "initial_cookie_key" =>
-                         {:put, @timestamp_1, %Cookie{value: :initial_cookie_value}},
-                       "cookie_key_3" => {:put, @timestamp_2, %Cookie{value: :cookie_value_3}},
-                       "cookie_key_7" => {:put, @timestamp_2, %Cookie{value: :cookie_value_7}}
+                       "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                       "cookie_key_3" => %Cookie{value: :cookie_value_3},
+                       "cookie_key_7" => %Cookie{value: :cookie_value_7}
                      }
                    }
                  }
@@ -438,10 +419,9 @@ defmodule Hologram.Template.RendererTest do
                    },
                    __meta__: %Metadata{
                      cookie_ops: %{
-                       "initial_cookie_key" =>
-                         {:put, @timestamp_1, %Cookie{value: :initial_cookie_value}},
-                       "cookie_key_51" => {:put, @timestamp_2, %Cookie{value: :cookie_value_51}},
-                       "cookie_key_52" => {:put, @timestamp_2, %Cookie{value: :cookie_value_52}}
+                       "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                       "cookie_key_51" => %Cookie{value: :cookie_value_51},
+                       "cookie_key_52" => %Cookie{value: :cookie_value_52}
                      }
                    }
                  }
@@ -522,10 +502,6 @@ defmodule Hologram.Template.RendererTest do
 
   # Some client tests are different than server tests.
   describe "stateful component" do
-    setup do
-      setup_server(ServerStub)
-    end
-
     test "without props or state" do
       node = {:component, Module1, [{"cid", [text: "my_component"]}], []}
 
@@ -598,9 +574,8 @@ defmodule Hologram.Template.RendererTest do
                    },
                    __meta__: %Metadata{
                      cookie_ops: %{
-                       "initial_cookie_key" =>
-                         {:put, @timestamp_1, %Cookie{value: :initial_cookie_value}},
-                       "cookie_key_5" => {:put, @timestamp_2, %Cookie{value: :cookie_value_5}}
+                       "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                       "cookie_key_5" => %Cookie{value: :cookie_value_5}
                      }
                    }
                  }
@@ -623,9 +598,8 @@ defmodule Hologram.Template.RendererTest do
                    },
                    __meta__: %Metadata{
                      cookie_ops: %{
-                       "initial_cookie_key" =>
-                         {:put, @timestamp_1, %Cookie{value: :initial_cookie_value}},
-                       "cookie_key_6" => {:put, @timestamp_2, %Cookie{value: :cookie_value_6}}
+                       "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                       "cookie_key_6" => %Cookie{value: :cookie_value_6}
                      }
                    }
                  }
@@ -646,10 +620,6 @@ defmodule Hologram.Template.RendererTest do
   end
 
   describe "default slot" do
-    setup do
-      setup_server(ServerStub)
-    end
-
     test "with single node" do
       node = {:component, Module8, [], [text: "123"]}
       assert render_dom(node, @env, @server) == {"abc123xyz", %{}, @server}
@@ -684,11 +654,10 @@ defmodule Hologram.Template.RendererTest do
                   },
                   __meta__: %Metadata{
                     cookie_ops: %{
-                      "initial_cookie_key" =>
-                        {:put, @timestamp_1, %Cookie{value: :initial_cookie_value}},
-                      "cookie_key_10" => {:put, @timestamp_2, %Cookie{value: :cookie_value_10}},
-                      "cookie_key_11" => {:put, @timestamp_2, %Cookie{value: :cookie_value_11}},
-                      "cookie_key_12" => {:put, @timestamp_2, %Cookie{value: :cookie_value_12}}
+                      "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                      "cookie_key_10" => %Cookie{value: :cookie_value_10},
+                      "cookie_key_11" => %Cookie{value: :cookie_value_11},
+                      "cookie_key_12" => %Cookie{value: :cookie_value_12}
                     }
                   }
                 }}
@@ -745,11 +714,10 @@ defmodule Hologram.Template.RendererTest do
                   },
                   __meta__: %Metadata{
                     cookie_ops: %{
-                      "initial_cookie_key" =>
-                        {:put, @timestamp_1, %Cookie{value: :initial_cookie_value}},
-                      "cookie_key_34" => {:put, @timestamp_2, %Cookie{value: :cookie_value_34}},
-                      "cookie_key_35" => {:put, @timestamp_2, %Cookie{value: :cookie_value_35}},
-                      "cookie_key_36" => {:put, @timestamp_2, %Cookie{value: :cookie_value_36}}
+                      "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                      "cookie_key_34" => %Cookie{value: :cookie_value_34},
+                      "cookie_key_35" => %Cookie{value: :cookie_value_35},
+                      "cookie_key_36" => %Cookie{value: :cookie_value_36}
                     }
                   }
                 }}
@@ -922,8 +890,6 @@ defmodule Hologram.Template.RendererTest do
       setup_asset_manifest_cache(AssetManifestCacheStub)
 
       setup_page_digest_registry(PageDigestRegistryStub)
-
-      setup_server(ServerStub)
     end
 
     test "inside layout slot" do
@@ -1040,15 +1006,13 @@ defmodule Hologram.Template.RendererTest do
                },
                __meta__: %Metadata{
                  cookie_ops: %{
-                   "initial_cookie_key" =>
-                     {:put, @timestamp_1, %Cookie{value: :initial_cookie_value}},
-                   "cookie_key_page" => {:put, @timestamp_2, %Cookie{value: :cookie_value_page}},
-                   "cookie_key_layout" =>
-                     {:put, @timestamp_2, %Cookie{value: :cookie_value_layout}},
-                   "cookie_key_72" => {:put, @timestamp_2, %Cookie{value: :cookie_value_72}},
-                   "cookie_key_73" => {:put, @timestamp_2, %Cookie{value: :cookie_value_73}},
-                   "cookie_key_74" => {:put, @timestamp_2, %Cookie{value: :cookie_value_74}},
-                   "cookie_key_75" => {:put, @timestamp_2, %Cookie{value: :cookie_value_75}}
+                   "initial_cookie_key" => %Cookie{value: :initial_cookie_value},
+                   "cookie_key_page" => %Cookie{value: :cookie_value_page},
+                   "cookie_key_layout" => %Cookie{value: :cookie_value_layout},
+                   "cookie_key_72" => %Cookie{value: :cookie_value_72},
+                   "cookie_key_73" => %Cookie{value: :cookie_value_73},
+                   "cookie_key_74" => %Cookie{value: :cookie_value_74},
+                   "cookie_key_75" => %Cookie{value: :cookie_value_75}
                  }
                }
              }
