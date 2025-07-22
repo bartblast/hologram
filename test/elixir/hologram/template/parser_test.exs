@@ -1543,4 +1543,8 @@ defmodule Hologram.Template.ParserTest do
       test_syntax_error_msg("<div =\"abc\">", msg)
     end
   end
+
+  test "TODO: implement all special chars tests for similar case" do
+    assert parse_markup("aaa ${@var} bbb") == [text: "aaa $", expression: "{@var}", text: " bbb"]
+  end
 end

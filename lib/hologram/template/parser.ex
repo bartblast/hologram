@@ -676,6 +676,17 @@ defmodule Hologram.Template.Parser do
     parse_block_end(context, "if", token, rest)
   end
 
+  def parse_tokens(%{raw?: false, script?: false} = context, :text, [{:symbol, "${"} | rest]) do
+    context
+    |> buffer_token({:symbol, "$"})
+    |> maybe_add_text_tag()
+    |> add_processed_token({:symbol, "$"})
+    |> reset_token_buffer()
+    |> set_prev_status(:text)
+    |> push_delimiter_stack(:expression)
+    |> parse_expression({:symbol, "{"}, rest)
+  end
+
   def parse_tokens(%{raw?: false, node_type: :attribute} = context, :text, [
         {:symbol, "{"} = token | rest
       ]) do
