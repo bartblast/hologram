@@ -7,6 +7,7 @@ defmodule HologramFeatureTests.CookiesTest do
   alias HologramFeatureTests.Cookies.Page3
   alias HologramFeatureTests.Cookies.Page4
   alias HologramFeatureTests.Cookies.Page5
+  alias HologramFeatureTests.Cookies.Page6
   alias HologramFeatureTests.EmptyPage
   alias Wallaby.Browser
 
@@ -76,6 +77,50 @@ defmodule HologramFeatureTests.CookiesTest do
       |> visit(Page5)
 
       assert Browser.cookies(session) == []
+    end
+  end
+
+  describe "command cookies handling" do
+    feature "writes cookie with default settings", %{session: session} do
+      assert Browser.cookies(session) == []
+
+      session
+      |> visit(Page6)
+      |> click(button("Set cookie with default settings"))
+      |> assert_text("command_executed? = true")
+
+      assert Browser.cookies(session) == [
+               %{
+                 "domain" => "localhost",
+                 "httpOnly" => true,
+                 "name" => "cookie_key",
+                 "path" => "/",
+                 "sameSite" => "Lax",
+                 "secure" => true,
+                 "value" => Cookie.encode("cookie_value")
+               }
+             ]
+    end
+
+    feature "writes cookie with custom settings", %{session: session} do
+      assert Browser.cookies(session) == []
+
+      session
+      |> visit(Page6)
+      |> click(button("Set cookie with custom settings"))
+      |> assert_text("command_executed? = true")
+
+      assert Browser.cookies(session) == [
+               %{
+                 "domain" => "localhost",
+                 "httpOnly" => false,
+                 "name" => "cookie_key",
+                 "path" => Page6.__route__(),
+                 "sameSite" => "Strict",
+                 "secure" => false,
+                 "value" => Cookie.encode("cookie_value")
+               }
+             ]
     end
   end
 end
