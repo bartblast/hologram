@@ -86,18 +86,18 @@ defmodule HologramFeatureTests.CookiesTest do
 
       session
       |> visit(Page6)
-      |> click(button("Set cookie with default settings"))
+      |> click(button("Write cookie with default settings"))
       |> assert_text("command_executed? = true")
 
       assert Browser.cookies(session) == [
                %{
                  "domain" => "localhost",
                  "httpOnly" => true,
-                 "name" => "cookie_key",
+                 "name" => "default_settings_cookie_key",
                  "path" => "/",
                  "sameSite" => "Lax",
                  "secure" => true,
-                 "value" => Cookie.encode("cookie_value")
+                 "value" => Cookie.encode("default_settings_cookie_value")
                }
              ]
     end
@@ -107,18 +107,18 @@ defmodule HologramFeatureTests.CookiesTest do
 
       session
       |> visit(Page6)
-      |> click(button("Set cookie with custom settings"))
+      |> click(button("Write cookie with custom settings"))
       |> assert_text("command_executed? = true")
 
       assert Browser.cookies(session) == [
                %{
                  "domain" => "localhost",
                  "httpOnly" => false,
-                 "name" => "cookie_key",
+                 "name" => "custom_settings_cookie_key",
                  "path" => Page6.__route__(),
                  "sameSite" => "Strict",
                  "secure" => false,
-                 "value" => Cookie.encode("cookie_value")
+                 "value" => Cookie.encode("custom_settings_cookie_value")
                }
              ]
     end

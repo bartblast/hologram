@@ -15,8 +15,8 @@ defmodule HologramFeatureTests.Cookies.Page6 do
   def template do
     ~HOLO"""
     <p>
-      <button $click={command: :set_cookie_with_default_settings}>Set cookie with default settings</button>
-      <button $click={command: :set_cookie_with_custom_settings}>Set cookie with custom settings</button>
+      <button $click={command: :write_cookie_with_default_settings}>Write cookie with default settings</button>
+      <button $click={command: :write_cookie_with_custom_settings}>Write cookie with custom settings</button>
       <button $click={command: :read_string_encoded_cookie}>Read string-encoded cookie</button>
       <button $click={command: :read_hologram_encoded_cookie}>Read Hologram-encoded cookie</button>
     </p>
@@ -26,8 +26,8 @@ defmodule HologramFeatureTests.Cookies.Page6 do
     """
   end
 
-  def action(:toggle_command_executed_flag, _params, component) do
-    put_state(component, :command_executed?, not component.state.command_executed?)
+  def action(:set_command_executed_flag, _params, component) do
+    put_state(component, :command_executed?, true)
   end
 
   def action(:update_state_with_cookie_value, params, component) do
@@ -48,7 +48,7 @@ defmodule HologramFeatureTests.Cookies.Page6 do
     put_action(server, :update_state_with_cookie_value, cookie_value: cookie_value)
   end
 
-  def command(:set_cookie_with_custom_settings, _params, server) do
+  def command(:write_cookie_with_custom_settings, _params, server) do
     opts = [
       http_only: false,
       path: __MODULE__.__route__(),
@@ -57,13 +57,13 @@ defmodule HologramFeatureTests.Cookies.Page6 do
     ]
 
     server
-    |> put_cookie("cookie_key", "cookie_value", opts)
-    |> put_action(:toggle_command_executed_flag)
+    |> put_cookie("custom_settings_cookie_key", "custom_settings_cookie_value", opts)
+    |> put_action(:set_command_executed_flag)
   end
 
-  def command(:set_cookie_with_default_settings, _params, server) do
+  def command(:write_cookie_with_default_settings, _params, server) do
     server
-    |> put_cookie("cookie_key", "cookie_value")
-    |> put_action(:toggle_command_executed_flag)
+    |> put_cookie("default_settings_cookie_key", "default_settings_cookie_value")
+    |> put_action(:set_command_executed_flag)
   end
 end
