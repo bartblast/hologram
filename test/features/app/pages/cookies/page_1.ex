@@ -1,10 +1,10 @@
-defmodule HologramFeatureTests.Cookies.PageInitPage do
+defmodule HologramFeatureTests.Cookies.Page1 do
   use Hologram.Page
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
-  route "/cookies/page-init"
+  route "/cookies/1"
 
   layout HologramFeatureTests.Components.DefaultLayout
 
@@ -14,7 +14,7 @@ defmodule HologramFeatureTests.Cookies.PageInitPage do
 
   def template do
     ~HOLO"""
-    <h1>Page Init Cookies Tests</h1>
+    <h1>Cookies / Page 1</h1>
 
     <p>
       Result: <strong id="result"><code>{inspect(@result)}</code></strong>

@@ -1,19 +1,69 @@
 defmodule HologramFeatureTests.CookiesTest do
   use HologramFeatureTests.TestCase, async: true
 
-  alias HologramFeatureTests.Cookies.PageInitPage
+  alias Hologram.Runtime.Cookie
+  alias HologramFeatureTests.Cookies.Page1
+  alias HologramFeatureTests.Cookies.Page2
+  alias HologramFeatureTests.Cookies.Page3
+  alias HologramFeatureTests.Cookies.Page4
   alias HologramFeatureTests.EmptyPage
   alias Wallaby.Browser
 
   describe "page init cookies handling" do
-    feature "reads existing string-encoded cookie during page init", %{session: session} do
+    feature "reads existing string-encoded cookie", %{session: session} do
       assert Browser.cookies(session) == []
 
       session
       |> visit(EmptyPage)
       |> Browser.set_cookie("cookie_key", "cookie_value")
-      |> visit(PageInitPage)
+      |> visit(Page1)
       |> assert_text("cookie_value")
+    end
+
+    feature "reads existing Hologram-encoded cookie", %{session: session} do
+      assert Browser.cookies(session) == []
+
+      session
+      |> visit(EmptyPage)
+      |> Browser.set_cookie("cookie_key", Cookie.encode(%{a: 1, b: 2}))
+      |> visit(Page2)
+      |> assert_text("%{a: 1, b: 2, c: 3}")
+    end
+
+    feature "writes cookie with default settings", %{session: session} do
+      assert Browser.cookies(session) == []
+
+      visit(session, Page3)
+
+      assert Browser.cookies(session) == [
+               %{
+                 "domain" => "localhost",
+                 "httpOnly" => true,
+                 "name" => "cookie_key",
+                 "path" => "/",
+                 "sameSite" => "Lax",
+                 "secure" => true,
+                 "value" => Cookie.encode("cookie_value")
+               }
+             ]
+    end
+
+    feature "writes cookie with custom settings", %{session: session} do
+      assert Browser.cookies(session) == []
+
+      visit(session, Page4)
+
+      assert Browser.cookies(session) == [
+               %{
+                 "domain" => "localhost",
+                 "httpOnly" => false,
+                 "name" => "cookie_key",
+                 "path" => Page4.__route__(),
+                 "sameSite" => "Strict",
+                 "secure" => false,
+                 "value" => Cookie.encode("cookie_value")
+               }
+             ]
     end
   end
 end
