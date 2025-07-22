@@ -420,7 +420,7 @@ defmodule Hologram.ControllerTest do
       # TODO: uncomment when standalone Hologram is supported
       # Only the session cookie should be set, no additional cookies from the command
       cookie_keys = Map.keys(conn.resp_cookies)
-      assert length(cookie_keys) == 0
+      assert Enum.empty?(cookie_keys)
       # assert length(cookie_keys) == 1
       # assert "hologram_session" in cookie_keys
     end
