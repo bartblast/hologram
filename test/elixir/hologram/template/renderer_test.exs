@@ -67,7 +67,6 @@ defmodule Hologram.Template.RendererTest do
   @env %Renderer.Env{}
   @opts [initial_page?: true]
   @params %{}
-  @timestamp_1 987_654_321
 
   @server %Server{
     cookies: %{
