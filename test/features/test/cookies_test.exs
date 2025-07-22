@@ -12,7 +12,7 @@ defmodule HologramFeatureTests.CookiesTest do
   alias Wallaby.Browser
 
   describe "page init cookies handling" do
-    feature "writes cookie with default settings", %{session: session} do
+    feature "write cookie with default settings", %{session: session} do
       assert Browser.cookies(session) == []
 
       visit(session, Page3)
@@ -30,7 +30,7 @@ defmodule HologramFeatureTests.CookiesTest do
              ]
     end
 
-    feature "writes cookie with custom settings", %{session: session} do
+    feature "write cookie with custom settings", %{session: session} do
       assert Browser.cookies(session) == []
 
       visit(session, Page4)
@@ -48,7 +48,7 @@ defmodule HologramFeatureTests.CookiesTest do
              ]
     end
 
-    feature "reads string-encoded cookie", %{session: session} do
+    feature "read string-encoded cookie", %{session: session} do
       assert Browser.cookies(session) == []
 
       session
@@ -58,7 +58,7 @@ defmodule HologramFeatureTests.CookiesTest do
       |> assert_text("cookie_value")
     end
 
-    feature "reads Hologram-encoded cookie", %{session: session} do
+    feature "read Hologram-encoded cookie", %{session: session} do
       assert Browser.cookies(session) == []
 
       session
@@ -68,7 +68,7 @@ defmodule HologramFeatureTests.CookiesTest do
       |> assert_text("%{a: 1, b: 2, c: 3}")
     end
 
-    feature "deletes cookie", %{session: session} do
+    feature "delete cookie", %{session: session} do
       assert Browser.cookies(session) == []
 
       session
@@ -81,7 +81,7 @@ defmodule HologramFeatureTests.CookiesTest do
   end
 
   describe "command cookies handling" do
-    feature "writes cookie with default settings", %{session: session} do
+    feature "write cookie with default settings", %{session: session} do
       assert Browser.cookies(session) == []
 
       session
@@ -102,7 +102,7 @@ defmodule HologramFeatureTests.CookiesTest do
              ]
     end
 
-    feature "writes cookie with custom settings", %{session: session} do
+    feature "write cookie with custom settings", %{session: session} do
       assert Browser.cookies(session) == []
 
       session
@@ -123,7 +123,7 @@ defmodule HologramFeatureTests.CookiesTest do
              ]
     end
 
-    feature "reads string-encoded cookie", %{session: session} do
+    feature "read string-encoded cookie", %{session: session} do
       assert Browser.cookies(session) == []
 
       session
@@ -134,7 +134,7 @@ defmodule HologramFeatureTests.CookiesTest do
       |> assert_text(~s'command_executed? = true, cookie_value = "string_encoded_cookie_value"')
     end
 
-    feature "reads Hologram-encoded cookie", %{session: session} do
+    feature "read Hologram-encoded cookie", %{session: session} do
       assert Browser.cookies(session) == []
 
       session
@@ -145,7 +145,7 @@ defmodule HologramFeatureTests.CookiesTest do
       |> assert_text(~s'command_executed? = true, cookie_value = %{a: 1, b: 2, c: 3}')
     end
 
-    feature "deletes cookie", %{session: session} do
+    feature "delete cookie", %{session: session} do
       assert Browser.cookies(session) == []
 
       session
