@@ -122,5 +122,27 @@ defmodule HologramFeatureTests.CookiesTest do
                }
              ]
     end
+
+    feature "reads string-encoded cookie", %{session: session} do
+      assert Browser.cookies(session) == []
+
+      session
+      |> visit(EmptyPage)
+      |> Browser.set_cookie("string_encoded_cookie_key", "string_encoded_cookie_value")
+      |> visit(Page6)
+      |> click(button("Read string-encoded cookie"))
+      |> assert_text(~s'command_executed? = true, cookie_value = "string_encoded_cookie_value"')
+    end
+
+    feature "reads Hologram-encoded cookie", %{session: session} do
+      assert Browser.cookies(session) == []
+
+      session
+      |> visit(EmptyPage)
+      |> Browser.set_cookie("hologram_encoded_cookie_key", Cookie.encode(%{a: 1, b: 2}))
+      |> visit(Page6)
+      |> click(button("Read Hologram-encoded cookie"))
+      |> assert_text(~s'command_executed? = true, cookie_value = %{a: 1, b: 2, c: 3}')
+    end
   end
 end
