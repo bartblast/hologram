@@ -112,6 +112,7 @@ defmodule Hologram.Runtime.PlugConnUtilsTest do
 
       session_config = Plug.Session.init(session_opts)
 
+      # This simulates a Plug.Conn struct that hasn't had fetch_session/1 called on it.
       conn = Plug.Session.call(%Plug.Conn{}, session_config)
 
       result = extract_session(conn)
