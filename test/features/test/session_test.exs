@@ -6,6 +6,7 @@ defmodule HologramFeatureTests.SessionTest do
   alias HologramFeatureTests.Session.Page3
   alias HologramFeatureTests.Session.Page4
   alias HologramFeatureTests.Session.Page5
+  alias HologramFeatureTests.Session.Page6
   alias Wallaby.Browser
 
   describe "page init session handling" do
@@ -21,7 +22,7 @@ defmodule HologramFeatureTests.SessionTest do
       |> assert_text("session_value = :abc")
     end
 
-    feature "delete session entry", %{session: session} do
+    feature "delete from session", %{session: session} do
       assert Browser.cookies(session) == []
 
       session
@@ -56,6 +57,18 @@ defmodule HologramFeatureTests.SessionTest do
       |> visit(Page5)
       |> click(button("Read from session"))
       |> assert_text("command_executed? = true, session_value = :abc")
+    end
+
+    feature "delete from session", %{session: session} do
+      assert Browser.cookies(session) == []
+
+      session
+      |> visit(Page1)
+      |> visit(Page6)
+      |> click(button("Delete from session"))
+      |> assert_text("command_executed? = true")
+      |> visit(Page2)
+      |> assert_text("session_value = nil")
     end
   end
 end
