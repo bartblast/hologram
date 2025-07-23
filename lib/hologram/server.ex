@@ -70,7 +70,7 @@ defmodule Hologram.Server do
   @doc """
   Retrieves a cookie value by key from the server struct.
 
-  Returns the value associated with the given key, or the default value if the key
+  Returns the value associated with the given key or the default value if the key
   does not exist in the cookies.
 
   ## Parameters
@@ -104,6 +104,31 @@ defmodule Hologram.Server do
   @spec get_cookie_ops(t()) :: %{String.t() => Cookie.op()}
   def get_cookie_ops(server) do
     server.__meta__.cookie_ops
+  end
+
+  @doc """
+  Retrieves a session value by key from the server struct.
+
+  Atom keys are automatically converted to string.
+
+  Returns the value associated with the given key or the default value if the key
+  does not exist in the cookies.
+
+  ## Parameters
+
+    * `server` - The server struct
+    * `key` - The session entry name (atom or string)
+    * `default` - The value to return if the key is not found (default: `nil`)
+  """
+  @spec get_session(t(), String.t() | atom, any()) :: any()
+  def get_session(server, key, default \\ nil)
+
+  def get_session(server, key, default) when is_atom(key) do
+    get_session(server, Atom.to_string(key), default)
+  end
+
+  def get_session(server, key, default) do
+    Map.get(server.session, key, default)
   end
 
   @doc """

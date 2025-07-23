@@ -208,6 +208,74 @@ defmodule Hologram.ServerTest do
     end
   end
 
+  describe "get_session/2" do
+    test "returns the value for an existing session entry" do
+      server = %Server{session: %{"theme" => "dark", "user_id" => 123}}
+
+      result = get_session(server, "user_id")
+
+      assert result == 123
+    end
+
+    test "returns nil for a nonexistent session entry" do
+      server = %Server{session: %{"user_id" => 123}}
+
+      result = get_session(server, "nonexistent")
+
+      assert result == nil
+    end
+
+    test "returns nil when session is empty" do
+      server = %Server{session: %{}}
+
+      result = get_session(server, "any_key")
+
+      assert result == nil
+    end
+
+    test "converts atom session key to string" do
+      server = %Server{session: %{"theme" => "dark", "user_id" => 123}}
+
+      result = get_session(server, :user_id)
+
+      assert result == 123
+    end
+  end
+
+  describe "get_session/3" do
+    test "returns custom default for a nonexistent session entry" do
+      server = %Server{session: %{"user_id" => 123}}
+
+      result = get_session(server, "nonexistent", "default_value")
+
+      assert result == "default_value"
+    end
+
+    test "returns custom default when session is empty" do
+      server = %Server{session: %{}}
+
+      result = get_session(server, "any_key", "fallback")
+
+      assert result == "fallback"
+    end
+
+    test "returns actual value over default when session entry exists" do
+      server = %Server{session: %{"theme" => "dark"}}
+
+      result = get_session(server, "theme", "light")
+
+      assert result == "dark"
+    end
+
+    test "converts atom session key to string" do
+      server = %Server{session: %{"theme" => "dark", "user_id" => 123}}
+
+      result = get_session(server, :user_id, 987)
+
+      assert result == 123
+    end
+  end
+
   describe "has_cookie_ops?/1" do
     test "returns false when no cookie operations have been recorded" do
       server = %Server{cookies: %{"user_id" => "123"}}
