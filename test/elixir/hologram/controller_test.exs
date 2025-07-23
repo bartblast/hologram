@@ -27,6 +27,7 @@ defmodule Hologram.ControllerTest do
   defp conn_with_parsed_json(method, path, parsed_json) do
     method
     |> Plug.Test.conn(path, "")
+    |> Plug.Test.init_test_session(%{})
     |> Map.put(:body_params, %{"_json" => parsed_json})
   end
 
@@ -493,6 +494,7 @@ defmodule Hologram.ControllerTest do
       conn =
         :get
         |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module4")
+        |> Plug.Test.init_test_session(%{})
         |> handle_initial_page_request(Module4)
 
       assert conn.halted == true
@@ -518,6 +520,7 @@ defmodule Hologram.ControllerTest do
       conn =
         :get
         |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module1/111/ccc/222")
+        |> Plug.Test.init_test_session(%{})
         |> handle_initial_page_request(Module1)
 
       assert conn.resp_body == "param_aaa = 111, param_bbb = 222"
@@ -529,6 +532,7 @@ defmodule Hologram.ControllerTest do
       conn =
         :get
         |> Plug.Test.conn("/hologram-test-fixtures-controller-module2")
+        |> Plug.Test.init_test_session(%{})
         |> Map.put(:req_headers, [{"cookie", "my_cookie=cookie_value"}])
         |> handle_initial_page_request(Module2)
 
@@ -546,6 +550,7 @@ defmodule Hologram.ControllerTest do
       conn =
         :get
         |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module5")
+        |> Plug.Test.init_test_session(%{})
         |> handle_initial_page_request(Module5)
 
       # Initial pages include runtime script
@@ -558,6 +563,7 @@ defmodule Hologram.ControllerTest do
       conn =
         :get
         |> Plug.Test.conn("/hologram-test-fixtures-controller-module3")
+        |> Plug.Test.init_test_session(%{})
         |> handle_initial_page_request(Module3)
 
       assert Map.has_key?(conn.resp_cookies, "my_cookie")
@@ -591,6 +597,7 @@ defmodule Hologram.ControllerTest do
       conn =
         :get
         |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module4")
+        |> Plug.Test.init_test_session(%{})
         |> handle_subsequent_page_request(Module4)
 
       assert conn.halted == true
@@ -618,6 +625,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.conn(
           "/hologram/page/Hologram.Test.Fixtures.Controller.Module1?aaa=111&bbb=222"
         )
+        |> Plug.Test.init_test_session(%{})
         |> handle_subsequent_page_request(Module1)
 
       assert conn.resp_body == "param_aaa = 111, param_bbb = 222"
@@ -629,6 +637,7 @@ defmodule Hologram.ControllerTest do
       conn =
         :get
         |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module2")
+        |> Plug.Test.init_test_session(%{})
         |> Map.put(:req_headers, [{"cookie", "my_cookie=cookie_value"}])
         |> handle_subsequent_page_request(Module2)
 
@@ -646,6 +655,7 @@ defmodule Hologram.ControllerTest do
       conn =
         :get
         |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module5")
+        |> Plug.Test.init_test_session(%{})
         |> handle_subsequent_page_request(Module5)
 
       # Initial pages include runtime script
@@ -658,6 +668,7 @@ defmodule Hologram.ControllerTest do
       conn =
         :get
         |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module3")
+        |> Plug.Test.init_test_session(%{})
         |> handle_subsequent_page_request(Module3)
 
       assert Map.has_key?(conn.resp_cookies, "my_cookie")
