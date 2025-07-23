@@ -35,4 +35,14 @@ defmodule Hologram.Runtime.PlugConnUtils do
     |> Enum.map(fn {key, value} -> {key, Cookie.decode(value)} end)
     |> Enum.into(%{})
   end
+
+  @doc """
+  Extracts Phoenix session data from the Plug.Conn struct.
+  """
+  @spec extract_session(Plug.Conn.t()) :: %{String.t() => any}
+  def extract_session(conn) do
+    conn
+    |> Plug.Conn.fetch_session()
+    |> Plug.Conn.get_session()
+  end
 end

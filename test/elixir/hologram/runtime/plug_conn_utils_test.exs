@@ -78,4 +78,15 @@ defmodule Hologram.Runtime.PlugConnUtilsTest do
       assert result["encoded_cookie"] == %{key: "value"}
     end
   end
+
+  test "extract_session/1" do
+    conn =
+      :get
+      |> Plug.Test.conn("/")
+      |> Plug.Test.init_test_session(%{"user_id" => 123, "role" => "admin"})
+
+    result = extract_session(conn)
+
+    assert result == %{"user_id" => 123, "role" => "admin"}
+  end
 end
