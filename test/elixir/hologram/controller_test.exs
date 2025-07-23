@@ -10,12 +10,14 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Commons.SystemUtils
   alias Hologram.Runtime.Cookie
   alias Hologram.Test.Fixtures.Controller.Module1
+  alias Hologram.Test.Fixtures.Controller.Module10
   alias Hologram.Test.Fixtures.Controller.Module2
   alias Hologram.Test.Fixtures.Controller.Module3
   alias Hologram.Test.Fixtures.Controller.Module4
   alias Hologram.Test.Fixtures.Controller.Module5
   alias Hologram.Test.Fixtures.Controller.Module6
   alias Hologram.Test.Fixtures.Controller.Module8
+  alias Hologram.Test.Fixtures.Controller.Module9
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -599,17 +601,29 @@ defmodule Hologram.ControllerTest do
       assert conn.resp_body == "param_aaa = 111, param_bbb = 222"
     end
 
-    test "builds server struct with cookies and passes it to page renderer" do
+    test "passes server struct with session to page renderer" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module9, :dummy_module_9_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module9")
+        |> Plug.Test.init_test_session(%{"my_session_key" => "my_session_value"})
+        |> handle_initial_page_request(Module9)
+
+      assert conn.resp_body == "session = my_session_value"
+    end
+
+    test "passes server struct with cookies to page renderer" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module2, :dummy_module_2_digest)
 
       conn =
         :get
         |> Plug.Test.conn("/hologram-test-fixtures-controller-module2")
         |> Plug.Test.init_test_session(%{})
-        |> Map.put(:req_headers, [{"cookie", "my_cookie=cookie_value"}])
+        |> Map.put(:req_headers, [{"cookie", "my_cookie_name=my_cookie_value"}])
         |> handle_initial_page_request(Module2)
 
-      assert conn.resp_body == "cookie = cookie_value"
+      assert conn.resp_body == "cookie = my_cookie_value"
     end
 
     test "passes to renderer the initial_page? opt set to true" do
@@ -630,6 +644,18 @@ defmodule Hologram.ControllerTest do
       assert String.contains?(conn.resp_body, "hologram/runtime")
     end
 
+    test "updates Plug.Conn session" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module10, :dummy_module_10_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module10")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module10)
+
+      assert Map.has_key?(conn.private.plug_session, "my_session_key")
+    end
+
     test "updates Plug.Conn cookies" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module3, :dummy_module_3_digest)
 
@@ -639,7 +665,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.init_test_session(%{})
         |> handle_initial_page_request(Module3)
 
-      assert Map.has_key?(conn.resp_cookies, "my_cookie")
+      assert Map.has_key?(conn.resp_cookies, "my_cookie_name")
     end
   end
 
@@ -704,17 +730,29 @@ defmodule Hologram.ControllerTest do
       assert conn.resp_body == "param_aaa = 111, param_bbb = 222"
     end
 
-    test "builds server struct with cookies and passes it to page renderer" do
+    test "passes server struct with session to page renderer" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module9, :dummy_module_9_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module9")
+        |> Plug.Test.init_test_session(%{"my_session_key" => "my_session_value"})
+        |> handle_subsequent_page_request(Module9)
+
+      assert conn.resp_body == "session = my_session_value"
+    end
+
+    test "passes server struct with cookies to page renderer" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module2, :dummy_module_2_digest)
 
       conn =
         :get
         |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module2")
         |> Plug.Test.init_test_session(%{})
-        |> Map.put(:req_headers, [{"cookie", "my_cookie=cookie_value"}])
+        |> Map.put(:req_headers, [{"cookie", "my_cookie_name=my_cookie_value"}])
         |> handle_subsequent_page_request(Module2)
 
-      assert conn.resp_body == "cookie = cookie_value"
+      assert conn.resp_body == "cookie = my_cookie_value"
     end
 
     test "passes to renderer the initial_page? opt set to false" do
@@ -735,6 +773,18 @@ defmodule Hologram.ControllerTest do
       refute String.contains?(conn.resp_body, "hologram/runtime")
     end
 
+    test "updates Plug.Conn session" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module10, :dummy_module_10_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module10")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_subsequent_page_request(Module10)
+
+      assert Map.has_key?(conn.private.plug_session, "my_session_key")
+    end
+
     test "updates Plug.Conn cookies" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module3, :dummy_module_3_digest)
 
@@ -744,7 +794,7 @@ defmodule Hologram.ControllerTest do
         |> Plug.Test.init_test_session(%{})
         |> handle_subsequent_page_request(Module3)
 
-      assert Map.has_key?(conn.resp_cookies, "my_cookie")
+      assert Map.has_key?(conn.resp_cookies, "my_cookie_name")
     end
   end
 end

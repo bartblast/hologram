@@ -1,13 +1,13 @@
-defmodule Hologram.Test.Fixtures.Controller.Module3 do
+defmodule Hologram.Test.Fixtures.Controller.Module10 do
   use Hologram.Page
 
-  route "/hologram-test-fixtures-controller-module3"
+  route "/hologram-test-fixtures-controller-module10"
 
   layout Hologram.Test.Fixtures.LayoutFixture
 
   @impl Page
   def init(_params, _component, server) do
-    put_cookie(server, "my_cookie_name", 123)
+    put_session(server, "my_session_key", 123)
   end
 
   @impl Page
