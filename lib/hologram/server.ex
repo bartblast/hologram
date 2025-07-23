@@ -16,7 +16,7 @@ defmodule Hologram.Server do
   @doc """
   Removes a cookie from the server struct and marks it for deletion in the client's browser.
 
-  If the cookie exists, it is removed from the server struct's cookies map and a delete 
+  If the cookie exists, it is removed from the server struct's cookies data and a delete 
   operation is recorded in the metadata. If the cookie does not exist, this function 
   is a no-op and returns the server struct unchanged.
 
@@ -53,6 +53,38 @@ defmodule Hologram.Server do
   end
 
   def delete_cookie(server, _key), do: server
+
+  @doc """
+  Removes a session entry from the server struct and marks it for deletion in the client's browser.
+
+  If the session entry exists, it is removed from the server struct's session data and a delete 
+  operation is recorded in the metadata. If the session entry does not exist, this function 
+  is a no-op and returns the server struct unchanged.
+
+  Atom keys are automatically converted to string.
+
+  ## Parameters
+
+    * `server` - The server struct
+    * `key` - The session entry name to delete (atom or string)
+  """
+  @spec delete_session(t, atom | String.t()) :: t
+  def delete_session(server, key)
+
+  def delete_session(server, key) when is_atom(key) do
+    delete_session(server, Atom.to_string(key))
+  end
+
+  def delete_session(server, key) when is_map_key(server.session, key) do
+    new_session = Map.delete(server.session, key)
+
+    new_session_ops = Map.put(server.__meta__.session_ops, key, :delete)
+    new_meta = %{server.__meta__ | session_ops: new_session_ops}
+
+    %{server | session: new_session, __meta__: new_meta}
+  end
+
+  def delete_session(server, _key), do: server
 
   @doc """
   Creates a new Hologram.Server struct from a Plug.Conn struct.
@@ -109,10 +141,10 @@ defmodule Hologram.Server do
   @doc """
   Retrieves a session value by key from the server struct.
 
-  Atom keys are automatically converted to string.
-
   Returns the value associated with the given key or the default value if the key
   does not exist in the cookies.
+
+  Atom keys are automatically converted to string.
 
   ## Parameters
 
@@ -211,6 +243,8 @@ defmodule Hologram.Server do
 
   @doc """
   Adds a session entry.
+
+  Atom keys are automatically converted to string.
 
   ## Parameters
 

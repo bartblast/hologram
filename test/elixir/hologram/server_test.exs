@@ -10,7 +10,7 @@ defmodule Hologram.ServerTest do
 
   describe "delete_cookie/2" do
     test "removes an existing cookie from the server struct" do
-      server = %Server{cookies: %{"user_id" => "123", "theme" => "dark"}}
+      server = %Server{cookies: %{"theme" => "dark", "user_id" => 123}}
 
       result = delete_cookie(server, "user_id")
 
@@ -26,7 +26,7 @@ defmodule Hologram.ServerTest do
       assert result == server
     end
 
-    test "handles deleting from empty cookies map as no-op" do
+    test "handles deleting from empty cookies as no-op" do
       server = %Server{cookies: %{}}
 
       result = delete_cookie(server, "any_key")
@@ -36,27 +36,27 @@ defmodule Hologram.ServerTest do
 
     test "preserves existing metadata cookie_ops when deleting" do
       server = %Server{
-        cookies: %{"user_id" => "123", "theme" => "dark"},
+        cookies: %{"existing" => "some_value", "theme" => "dark", "user_id" => 123},
         __meta__: %Metadata{
           cookie_ops: %{
-            "existing_op" => %Cookie{value: "some_value"}
+            "existing" => %Cookie{value: "some_value"}
           }
         }
       }
 
       result = delete_cookie(server, "user_id")
 
-      assert result.cookies == %{"theme" => "dark"}
+      assert result.cookies == %{"existing" => "some_value", "theme" => "dark"}
+      assert result.__meta__.cookie_ops["existing"] == %Cookie{value: "some_value"}
       assert result.__meta__.cookie_ops["user_id"] == :delete
-      assert result.__meta__.cookie_ops["existing_op"] == %Cookie{value: "some_value"}
     end
 
     test "preserves existing metadata when deleting nonexistent cookie" do
       server = %Server{
-        cookies: %{"theme" => "dark"},
+        cookies: %{"existing" => "some_value", "theme" => "dark"},
         __meta__: %Metadata{
           cookie_ops: %{
-            "existing_op" => %Cookie{value: "some_value"}
+            "existing" => %Cookie{value: "some_value"}
           }
         }
       }
@@ -68,10 +68,10 @@ defmodule Hologram.ServerTest do
 
     test "overwrites existing cookie operation when same key is deleted" do
       server = %Server{
-        cookies: %{"user_id" => "123"},
+        cookies: %{"user_id" => 123},
         __meta__: %Metadata{
           cookie_ops: %{
-            "user_id" => %Cookie{value: "123"}
+            "user_id" => %Cookie{value: 123}
           }
         }
       }
@@ -84,11 +84,106 @@ defmodule Hologram.ServerTest do
 
     test "preserves other server struct fields unchanged" do
       server = %Server{
-        cookies: %{"user_id" => "123"},
+        cookies: %{"user_id" => 123},
         next_action: %Action{name: :some_action}
       }
 
       result = delete_cookie(server, "user_id")
+
+      assert result.next_action == %Action{name: :some_action}
+    end
+  end
+
+  describe "delete_session/2" do
+    test "removes an existing session entry from the server struct using atom key" do
+      server = %Server{session: %{"theme" => "dark", "user_id" => 123}}
+
+      result = delete_session(server, :user_id)
+
+      assert result.session == %{"theme" => "dark"}
+      assert result.__meta__.session_ops["user_id"] == :delete
+    end
+
+    test "removes an existing session entry from the server struct using string key" do
+      server = %Server{session: %{"theme" => "dark", "user_id" => 123}}
+
+      result = delete_session(server, "user_id")
+
+      assert result.session == %{"theme" => "dark"}
+      assert result.__meta__.session_ops["user_id"] == :delete
+    end
+
+    test "handles deleting a nonexistent session entry as no-op" do
+      server = %Server{session: %{"theme" => "dark"}}
+
+      result = delete_session(server, "nonexistent")
+
+      assert result == server
+    end
+
+    test "handles deleting from empty session as no-op" do
+      server = %Server{session: %{}}
+
+      result = delete_session(server, "any_key")
+
+      assert result == server
+    end
+
+    test "preserves existing metadata session_ops when deleting" do
+      server = %Server{
+        session: %{"existing" => "some_value", "theme" => "dark", "user_id" => 123},
+        __meta__: %Metadata{
+          session_ops: %{
+            "existing" => {:put, "some_value"}
+          }
+        }
+      }
+
+      result = delete_session(server, "user_id")
+
+      assert result.session == %{"existing" => "some_value", "theme" => "dark"}
+      assert result.__meta__.session_ops["existing"] == {:put, "some_value"}
+      assert result.__meta__.session_ops["user_id"] == :delete
+    end
+
+    test "preserves existing metadata when deleting nonexistent session entry" do
+      server = %Server{
+        session: %{"existing" => "some_value", "theme" => "dark"},
+        __meta__: %Metadata{
+          session_ops: %{
+            "existing" => {:put, "some_value"}
+          }
+        }
+      }
+
+      result = delete_session(server, "nonexistent")
+
+      assert result == server
+    end
+
+    test "overwrites existing session operation when same key is deleted" do
+      server = %Server{
+        session: %{"user_id" => 123},
+        __meta__: %Metadata{
+          cookie_ops: %{
+            "user_id" => {:put, 123}
+          }
+        }
+      }
+
+      result = delete_session(server, "user_id")
+
+      assert result.session == %{}
+      assert result.__meta__.session_ops["user_id"] == :delete
+    end
+
+    test "preserves other server struct fields unchanged" do
+      server = %Server{
+        session: %{"user_id" => 123},
+        next_action: %Action{name: :some_action}
+      }
+
+      result = delete_session(server, "user_id")
 
       assert result.next_action == %Action{name: :some_action}
     end
@@ -155,7 +250,7 @@ defmodule Hologram.ServerTest do
       assert result == nil
     end
 
-    test "returns nil when cookies map is empty" do
+    test "returns nil when cookies are empty" do
       server = %Server{cookies: %{}}
 
       result = get_cookie(server, "any_key")
@@ -173,7 +268,7 @@ defmodule Hologram.ServerTest do
       assert result == "default_value"
     end
 
-    test "returns custom default when cookies map is empty" do
+    test "returns custom default when cookies are empty" do
       server = %Server{cookies: %{}}
 
       result = get_cookie(server, "any_key", "fallback")
