@@ -222,6 +222,7 @@ defmodule Hologram.Controller do
       Renderer.render_page(page_module, params, server_struct, opts)
 
     conn
+    |> apply_session_ops(updated_server_struct.__meta__.session_ops)
     |> apply_cookie_ops(updated_server_struct.__meta__.cookie_ops)
     |> Controller.html(html)
     |> Plug.Conn.halt()
