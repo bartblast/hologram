@@ -1,6 +1,7 @@
 defmodule Hologram.Controller do
   @moduledoc false
 
+  alias Hologram.Runtime.PlugConnUtils
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.Page
@@ -111,7 +112,9 @@ defmodule Hologram.Controller do
   The updated and halted Plug.Conn struct with the JSON response and applied cookies.
   """
   @spec handle_command_request(command_conn()) :: Plug.Conn.t()
-  def handle_command_request(conn) do
+  def handle_command_request(initial_conn) do
+    conn = PlugConnUtils.init_conn(initial_conn)
+
     payload =
       conn.body_params
       |> Map.get("_json")
@@ -127,8 +130,6 @@ defmodule Hologram.Controller do
 
     {updated_server_struct, next_action} =
       process_command_result(command_result, server_struct, target)
-
-    # TODO: handle session
 
     {encode_status, encoded_next_action} = Encoder.encode_term(next_action)
     command_status = if encode_status == :ok, do: 1, else: 0
@@ -211,7 +212,9 @@ defmodule Hologram.Controller do
   end
 
   # sobelow_skip ["XSS.HTML"]
-  defp handle_page_request(conn, page_module, params, initial_page?) do
+  defp handle_page_request(initial_conn, page_module, params, initial_page?) do
+    conn = PlugConnUtils.init_conn(initial_conn)
+
     # TODO: uncomment when standalone Hologram is supported
     # {conn_with_session, _session_id} = Session.init(conn)
 
