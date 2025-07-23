@@ -45,4 +45,15 @@ defmodule Hologram.Runtime.PlugConnUtils do
     |> Plug.Conn.fetch_session()
     |> Plug.Conn.get_session()
   end
+
+  @doc """
+  Initializes the given Plug.Conn by fetching cookies and session data.
+  This ensures that both cookies and session are available for subsequent operations on the connection.
+  """
+  @spec init_conn(Plug.Conn.t()) :: Plug.Conn.t()
+  def init_conn(conn) do
+    conn
+    |> Plug.Conn.fetch_cookies()
+    |> Plug.Conn.fetch_session()
+  end
 end
