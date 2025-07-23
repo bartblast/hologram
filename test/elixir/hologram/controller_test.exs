@@ -78,9 +78,9 @@ defmodule Hologram.ControllerTest do
       cookie_struct = %Cookie{value: "test_value"}
       cookie_ops = %{"test_cookie" => cookie_struct}
 
-      updated_conn = apply_cookie_ops(conn, cookie_ops)
+      result = apply_cookie_ops(conn, cookie_ops)
 
-      assert updated_conn.resp_cookies == %{
+      assert result.resp_cookies == %{
                "test_cookie" => %{
                  value: "%Hg20AAAAKdGVzdF92YWx1ZQ",
                  http_only: true,
@@ -103,9 +103,9 @@ defmodule Hologram.ControllerTest do
 
       cookie_ops = %{"test_cookie" => cookie_struct}
 
-      updated_conn = apply_cookie_ops(conn, cookie_ops)
+      result = apply_cookie_ops(conn, cookie_ops)
 
-      assert updated_conn.resp_cookies == %{
+      assert result.resp_cookies == %{
                "test_cookie" => %{
                  value: "%Hg20AAAAKdGVzdF92YWx1ZQ",
                  domain: "example.com",
@@ -121,9 +121,9 @@ defmodule Hologram.ControllerTest do
     test "applies delete operation", %{conn: conn} do
       cookie_ops = %{"existing_cookie" => :delete}
 
-      updated_conn = apply_cookie_ops(conn, cookie_ops)
+      result = apply_cookie_ops(conn, cookie_ops)
 
-      assert updated_conn.resp_cookies == %{
+      assert result.resp_cookies == %{
                "existing_cookie" => %{universal_time: {{1970, 1, 1}, {0, 0, 0}}, max_age: 0}
              }
     end
@@ -138,14 +138,14 @@ defmodule Hologram.ControllerTest do
         "old_cookie" => :delete
       }
 
-      updated_conn = apply_cookie_ops(conn, cookie_ops)
+      result = apply_cookie_ops(conn, cookie_ops)
 
       # Check new cookies are set
-      assert updated_conn.resp_cookies["new_cookie_1"][:value]
-      assert updated_conn.resp_cookies["new_cookie_2"][:value]
+      assert result.resp_cookies["new_cookie_1"][:value]
+      assert result.resp_cookies["new_cookie_2"][:value]
 
       # Check old cookie is deleted
-      assert updated_conn.resp_cookies["old_cookie"] == %{
+      assert result.resp_cookies["old_cookie"] == %{
                universal_time: {{1970, 1, 1}, {0, 0, 0}},
                max_age: 0
              }
@@ -154,9 +154,9 @@ defmodule Hologram.ControllerTest do
     test "handles empty cookie operations", %{conn: conn} do
       cookie_ops = %{}
 
-      updated_conn = apply_cookie_ops(conn, cookie_ops)
+      result = apply_cookie_ops(conn, cookie_ops)
 
-      assert updated_conn.resp_cookies == %{}
+      assert result.resp_cookies == %{}
     end
 
     test "filters out nil cookie opts", %{conn: conn} do
@@ -172,9 +172,9 @@ defmodule Hologram.ControllerTest do
 
       cookie_ops = %{"test_cookie" => cookie_struct}
 
-      updated_conn = apply_cookie_ops(conn, cookie_ops)
+      result = apply_cookie_ops(conn, cookie_ops)
 
-      cookie_data = updated_conn.resp_cookies["test_cookie"]
+      cookie_data = result.resp_cookies["test_cookie"]
 
       # Should include non-nil opts
       assert cookie_data.http_only == true
