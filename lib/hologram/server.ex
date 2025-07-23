@@ -96,7 +96,7 @@ defmodule Hologram.Server do
   def from(%Plug.Conn{} = conn) do
     %__MODULE__{
       cookies: PlugConnUtils.extract_cookies(conn),
-      session: PlugConnUtils.extract_session(conn)
+      session: Plug.Conn.get_session(conn)
     }
   end
 

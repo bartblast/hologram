@@ -37,16 +37,6 @@ defmodule Hologram.Runtime.PlugConnUtils do
   end
 
   @doc """
-  Extracts Phoenix session data from the Plug.Conn struct.
-  """
-  @spec extract_session(Plug.Conn.t()) :: %{String.t() => any}
-  def extract_session(conn) do
-    conn
-    |> Plug.Conn.fetch_session()
-    |> Plug.Conn.get_session()
-  end
-
-  @doc """
   Initializes the given Plug.Conn by fetching cookies and session data.
   This ensures that both cookies and session are available for subsequent operations on the connection.
   """

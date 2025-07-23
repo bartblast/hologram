@@ -79,48 +79,6 @@ defmodule Hologram.Runtime.PlugConnUtilsTest do
     end
   end
 
-  describe "extract_session/1" do
-    test "extracts session from Plug.Conn struct with session data" do
-      conn =
-        :get
-        |> Plug.Test.conn("/")
-        |> Plug.Test.init_test_session(%{"user_id" => 123, "role" => "admin"})
-
-      result = extract_session(conn)
-
-      assert result == %{"user_id" => 123, "role" => "admin"}
-    end
-
-    test "extracts session from Plug.Conn struct with no session data" do
-      conn =
-        :get
-        |> Plug.Test.conn("/")
-        |> Plug.Test.init_test_session(%{})
-
-      result = extract_session(conn)
-
-      assert result == %{}
-    end
-
-    test "fetches session if it hasn't been fetched yet" do
-      session_opts = [
-        store: :cookie,
-        key: "session_key",
-        signing_salt: "abcdefgh",
-        same_site: "Lax"
-      ]
-
-      session_config = Plug.Session.init(session_opts)
-
-      # This simulates a Plug.Conn struct that hasn't had fetch_session/1 called on it.
-      conn = Plug.Session.call(%Plug.Conn{}, session_config)
-
-      result = extract_session(conn)
-
-      assert result == %{}
-    end
-  end
-
   describe "init_conn/1" do
     test "fetches cookies for the connection" do
       conn_fixture =
