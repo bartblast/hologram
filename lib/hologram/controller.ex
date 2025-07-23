@@ -7,8 +7,7 @@ defmodule Hologram.Controller do
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.Deserializer
   alias Hologram.Server
-  # TODO: uncomment when standalone Hologram is supported
-  # alias Hologram.Session
+  alias Hologram.Session
   alias Hologram.Template.Renderer
   alias Phoenix.Controller
 
@@ -60,6 +59,22 @@ defmodule Hologram.Controller do
 
         :delete ->
           Plug.Conn.delete_resp_cookie(acc_conn, cookie_name)
+      end
+    end)
+  end
+
+  @doc """
+  Applies session operations to the given Plug.Conn struct.
+  """
+  @spec apply_session_ops(Plug.Conn.t(), %{String.t() => Session.op()}) :: Plug.Conn.t()
+  def apply_session_ops(conn, session_ops) do
+    Enum.reduce(session_ops, conn, fn {key, operation}, acc_conn ->
+      case operation do
+        {:put, value} ->
+          Plug.Conn.put_session(acc_conn, key, value)
+
+        :delete ->
+          Plug.Conn.delete_session(acc_conn, key)
       end
     end)
   end

@@ -188,6 +188,69 @@ defmodule Hologram.ControllerTest do
     end
   end
 
+  describe "apply_session_ops/2" do
+    setup do
+      conn =
+        :get
+        |> Plug.Test.conn("/")
+        |> Plug.Test.init_test_session(%{"existing_key" => "existing_value"})
+
+      [conn: conn]
+    end
+
+    test "applies put operation", %{conn: conn} do
+      session_ops = %{"new_key" => {:put, "new_value"}}
+
+      result = apply_session_ops(conn, session_ops)
+
+      assert result.private == %{
+               plug_session_fetch: :done,
+               plug_session: %{"existing_key" => "existing_value", "new_key" => "new_value"},
+               plug_session_info: :write
+             }
+    end
+
+    test "applies delete operation", %{conn: conn} do
+      session_ops = %{"existing_key" => :delete}
+
+      result = apply_session_ops(conn, session_ops)
+
+      assert result.private == %{
+               plug_session_fetch: :done,
+               plug_session: %{},
+               plug_session_info: :write
+             }
+    end
+
+    test "applies multiple operations", %{conn: conn} do
+      session_ops = %{
+        "new_key_1" => {:put, "new_value_1"},
+        "new_key_2" => {:put, "new_value_2"},
+        "existing_key" => :delete
+      }
+
+      result = apply_session_ops(conn, session_ops)
+
+      assert result.private == %{
+               plug_session_fetch: :done,
+               plug_session: %{"new_key_1" => "new_value_1", "new_key_2" => "new_value_2"},
+               plug_session_info: :write
+             }
+    end
+
+    test "handles empty cookie operations", %{conn: conn} do
+      session_ops = %{}
+
+      result = apply_session_ops(conn, session_ops)
+
+      assert result.private == %{
+               plug_session_fetch: :done,
+               plug_session: %{"existing_key" => "existing_value"},
+               plug_session_info: :write
+             }
+    end
+  end
+
   describe "handle_command_request/1" do
     test "updates Plug.Conn fields related to HTTP response and halts the pipeline" do
       payload = %{
