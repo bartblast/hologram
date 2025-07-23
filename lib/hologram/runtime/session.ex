@@ -1,4 +1,4 @@
-defmodule Hologram.Session do
+defmodule Hologram.Runtime.Session do
   @moduledoc false
 
   alias Plug.Crypto.KeyGenerator

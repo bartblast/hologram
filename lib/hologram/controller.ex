@@ -6,8 +6,8 @@ defmodule Hologram.Controller do
   alias Hologram.Page
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.Deserializer
+  alias Hologram.Runtime.Session
   alias Hologram.Server
-  alias Hologram.Session
   alias Hologram.Template.Renderer
   alias Phoenix.Controller
 
