@@ -4,6 +4,7 @@ defmodule HologramFeatureTests.SessionTest do
   alias HologramFeatureTests.Session.Page1
   alias HologramFeatureTests.Session.Page2
   alias HologramFeatureTests.Session.Page3
+  alias HologramFeatureTests.Session.Page4
   alias Wallaby.Browser
 
   describe "page init session handling" do
@@ -27,6 +28,23 @@ defmodule HologramFeatureTests.SessionTest do
       |> visit(Page3)
       |> visit(Page2)
       |> assert_text("value = nil")
+    end
+  end
+
+  describe "command session handling" do
+    feature "write to session", %{session: session} do
+      assert Browser.cookies(session) == []
+
+      session
+      |> visit(Page4)
+      |> click(button("Write to session"))
+      |> assert_text("command_executed? = true")
+
+      assert [%{"name" => "phoenix_session"}] = Browser.cookies(session)
+
+      session
+      |> visit(Page2)
+      |> assert_text("value = :abc")
     end
   end
 end
