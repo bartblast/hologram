@@ -463,7 +463,7 @@ defmodule Hologram.ServerTest do
     end
   end
 
-  describe "put_session/3 & put_session/4" do
+  describe "put_session/3" do
     test "adds a session entry using atom key" do
       result = put_session(%Server{}, :username, "abc123")
 
