@@ -134,6 +134,7 @@ defmodule Hologram.Controller do
     command_status = if encode_status == :ok, do: 1, else: 0
 
     conn
+    |> apply_session_ops(updated_server_struct.__meta__.session_ops)
     |> apply_cookie_ops(updated_server_struct.__meta__.cookie_ops)
     |> Controller.json([command_status, encoded_next_action])
     |> Plug.Conn.halt()

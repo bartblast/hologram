@@ -28,15 +28,27 @@ defmodule Hologram.Test.Fixtures.Controller.Module6 do
   end
 
   def command(:my_command_with_cookies, _params, server) do
-    put_cookie(server, "test_cookie", "test_value")
+    put_cookie(server, "my_cookie_name", "my_cookie_value")
+  end
+
+  def command(:my_command_with_session, _params, server) do
+    put_session(server, "my_session_key", "my_session_value")
   end
 
   def command(:my_command_without_cookies, _params, server) do
     %{server | next_action: nil}
   end
 
+  def command(:my_command_without_session, _params, server) do
+    %{server | next_action: nil}
+  end
+
   def command(:my_command_accessing_cookie, _params, server) do
-    put_action(server, get_cookie(server, "my_cookie"))
+    put_action(server, get_cookie(server, "my_cookie_name"))
+  end
+
+  def command(:my_command_accessing_session, _params, server) do
+    put_action(server, get_session(server, "my_session_key"))
   end
 
   @impl Component

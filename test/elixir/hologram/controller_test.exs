@@ -24,10 +24,10 @@ defmodule Hologram.ControllerTest do
   setup :set_mox_global
 
   # Create a test connection with parsed JSON body_params (simulating what Plug.Parsers does)
-  defp conn_with_parsed_json(method, path, parsed_json) do
+  defp conn_with_parsed_json(method, path, parsed_json, session \\ %{}) do
     method
     |> Plug.Test.conn(path, "")
-    |> Plug.Test.init_test_session(%{})
+    |> Plug.Test.init_test_session(session)
     |> Map.put(:body_params, %{"_json" => parsed_json})
   end
 
@@ -402,6 +402,34 @@ defmodule Hologram.ControllerTest do
       assert response == [0, expected_msg]
     end
 
+    test "command handler can read from session" do
+      payload = %{
+        module: Module6,
+        name: :my_command_accessing_session,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json, %{
+          "my_session_key" => :action_from_session
+        })
+        |> handle_command_request()
+
+      response = Jason.decode!(conn.resp_body)
+
+      assert response == [
+               1,
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("action_from_session")], [Type.atom("params"), Type.map([])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+             ]
+    end
+
     test "command handler can read from cookies" do
       payload = %{
         module: Module6,
@@ -420,7 +448,7 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json)
-        |> Map.put(:req_headers, [{"cookie", "my_cookie=#{encoded_cookie_value}"}])
+        |> Map.put(:req_headers, [{"cookie", "my_cookie_name=#{encoded_cookie_value}"}])
         |> handle_command_request()
 
       response = Jason.decode!(conn.resp_body)
@@ -429,6 +457,27 @@ defmodule Hologram.ControllerTest do
                1,
                ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("action_from_cookie")], [Type.atom("params"), Type.map([])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
              ]
+    end
+
+    test "command handler can write to session" do
+      payload = %{
+        module: Module6,
+        name: :my_command_with_session,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> handle_command_request()
+
+      assert Map.has_key?(conn.private.plug_session, "my_session_key")
     end
 
     test "command handler can write cookies" do
@@ -449,7 +498,31 @@ defmodule Hologram.ControllerTest do
         |> conn_with_parsed_json("/hologram/command", parsed_json)
         |> handle_command_request()
 
-      assert Map.has_key?(conn.resp_cookies, "test_cookie")
+      assert Map.has_key?(conn.resp_cookies, "my_cookie_name")
+    end
+
+    test "command handler works correctly when no session changes are made" do
+      payload = %{
+        module: Module6,
+        name: :my_command_without_session,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> handle_command_request()
+
+      response = Jason.decode!(conn.resp_body)
+      assert [1, _encoded_action] = response
+
+      assert Enum.empty?(conn.private.plug_session)
     end
 
     test "command handler works correctly when no cookie changes are made" do
