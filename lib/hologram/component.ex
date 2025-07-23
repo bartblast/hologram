@@ -61,7 +61,17 @@ defmodule Hologram.Component do
         import Hologram.Router.Helpers, only: [asset_path: 1, page_path: 1, page_path: 2]
 
         import Hologram.Server,
-          only: [delete_cookie: 2, get_cookie: 2, get_cookie: 3, put_cookie: 3, put_cookie: 4]
+          only: [
+            delete_cookie: 2,
+            delete_session: 2,
+            get_cookie: 2,
+            get_cookie: 3,
+            get_session: 2,
+            get_session: 3,
+            put_cookie: 3,
+            put_cookie: 4,
+            put_session: 3
+          ]
 
         import Hologram.Template, only: [sigil_HOLO: 2]
 
