@@ -18,7 +18,7 @@ defmodule HologramFeatureTests.SessionTest do
 
       session
       |> visit(Page2)
-      |> assert_text("value = :abc")
+      |> assert_text("session_value = :abc")
     end
 
     feature "delete session entry", %{session: session} do
@@ -28,7 +28,7 @@ defmodule HologramFeatureTests.SessionTest do
       |> visit(Page1)
       |> visit(Page3)
       |> visit(Page2)
-      |> assert_text("value = nil")
+      |> assert_text("session_value = nil")
     end
   end
 
@@ -45,7 +45,7 @@ defmodule HologramFeatureTests.SessionTest do
 
       session
       |> visit(Page2)
-      |> assert_text("value = :abc")
+      |> assert_text("session_value = :abc")
     end
 
     feature "read from session", %{session: session} do

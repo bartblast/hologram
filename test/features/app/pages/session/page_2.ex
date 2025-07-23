@@ -6,10 +6,10 @@ defmodule HologramFeatureTests.Session.Page2 do
   layout HologramFeatureTests.Components.DefaultLayout
 
   def init(_params, component, server) do
-    put_state(component, :value, get_session(server, "session_key"))
+    put_state(component, :session_value, get_session(server, "session_key"))
   end
 
   def template do
-    ~HOLO"value = {inspect(@value)}"
+    ~HOLO"session_value = {inspect(@session_value)}"
   end
 end
