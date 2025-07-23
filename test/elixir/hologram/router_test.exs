@@ -47,6 +47,7 @@ defmodule Hologram.RouterTest do
       conn =
         :post
         |> Plug.Test.conn("/hologram/command", "")
+        |> Plug.Test.init_test_session(%{})
         |> Map.put(:body_params, %{"_json" => parsed_json})
         |> call([])
 
@@ -61,6 +62,7 @@ defmodule Hologram.RouterTest do
       conn =
         :get
         |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Router.Module1?a=123&b=xyz")
+        |> Plug.Test.init_test_session(%{})
         |> call([])
 
       assert String.contains?(conn.resp_body, "Module1 page, a = 123, b = :xyz")
@@ -112,6 +114,7 @@ defmodule Hologram.RouterTest do
       conn =
         :get
         |> Plug.Test.conn("/hologram-test-fixtures-router-module1/123/xyz")
+        |> Plug.Test.init_test_session(%{})
         |> call([])
 
       assert String.contains?(conn.resp_body, "Module1 page, a = 123, b = :xyz")
