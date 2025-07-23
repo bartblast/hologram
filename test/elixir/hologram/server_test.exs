@@ -162,7 +162,9 @@ defmodule Hologram.ServerTest do
 
       assert result == nil
     end
+  end
 
+  describe "get_cookie/3" do
     test "returns custom default for a nonexistent cookie" do
       server = %Server{cookies: %{"user_id" => "abc123"}}
 
