@@ -303,6 +303,24 @@ defmodule Hologram.ServerTest do
     end
   end
 
+  describe "get_session_ops/1" do
+    test "returns session operations recorded in the server struct's metadata" do
+      server = %Server{session: %{"existing_session_entry" => "value"}}
+
+      new_server =
+        server
+        |> put_session("new_session_entry", "new_value")
+        |> delete_session("existing_session_entry")
+
+      result = get_session_ops(new_server)
+
+      assert result == %{
+               "new_session_entry" => {:put, "new_value"},
+               "existing_session_entry" => :delete
+             }
+    end
+  end
+
   describe "get_session/2" do
     test "returns the value for an existing session entry" do
       server = %Server{session: %{"theme" => "dark", "user_id" => 123}}

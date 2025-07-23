@@ -3,6 +3,7 @@ defmodule Hologram.Server do
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.PlugConnUtils
   alias Hologram.Server.Metadata
+  alias Hologram.Session
 
   defstruct cookies: %{}, next_action: nil, session: %{}, __meta__: %Metadata{}
 
@@ -136,6 +137,14 @@ defmodule Hologram.Server do
   @spec get_cookie_ops(t()) :: %{String.t() => Cookie.op()}
   def get_cookie_ops(server) do
     server.__meta__.cookie_ops
+  end
+
+  @doc """
+  Retrieves the session operations recorded in the server struct's metadata.
+  """
+  @spec get_session_ops(t()) :: %{String.t() => Session.op()}
+  def get_session_ops(server) do
+    server.__meta__.session_ops
   end
 
   @doc """
