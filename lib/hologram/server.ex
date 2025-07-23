@@ -58,21 +58,12 @@ defmodule Hologram.Server do
   Creates a new Hologram.Server struct from a Plug.Conn struct.
 
   Excludes "hologram_session" cookie.
-
-  ## Parameters
-
-    * `conn` - A Plug.Conn struct
-
-  ## Examples
-
-      iex> conn = %Plug.Conn{req_cookies: %{"user_id" => "abc123"}}
-      iex> Hologram.Server.from(conn)
-      %Hologram.Server{cookies: %{"user_id" => "abc123"}}
   """
   @spec from(Plug.Conn.t()) :: t
   def from(%Plug.Conn{} = conn) do
     %__MODULE__{
-      cookies: PlugConnUtils.extract_cookies(conn)
+      cookies: PlugConnUtils.extract_cookies(conn),
+      session: PlugConnUtils.extract_session(conn)
     }
   end
 

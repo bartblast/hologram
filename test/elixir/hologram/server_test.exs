@@ -95,30 +95,42 @@ defmodule Hologram.ServerTest do
   end
 
   describe "from/1" do
-    test "creates Server struct from Plug.Conn struct" do
-      conn = %Plug.Conn{
-        cookies: %{"user_id" => "abc123", "theme" => "dark"},
-        req_cookies: %{"user_id" => "abc123", "theme" => "dark"}
-      }
+    setup do
+      conn =
+        :get
+        |> Plug.Test.conn("/")
+        |> Plug.Test.init_test_session(%{"role" => "admin", "user_id" => 123})
+
+      [conn: conn]
+    end
+
+    test "creates Server struct from Plug.Conn struct", %{conn: initial_conn} do
+      conn =
+        initial_conn
+        |> Map.put(:cookies, %{"theme" => "dark", "username" => "abc123"})
+        |> Map.put(:req_cookies, %{"theme" => "dark", "username" => "abc123"})
 
       result = from(conn)
 
-      assert result == %Server{cookies: %{"user_id" => "abc123", "theme" => "dark"}}
+      assert result == %Server{
+               cookies: %{"theme" => "dark", "username" => "abc123"},
+               session: %{"role" => "admin", "user_id" => 123}
+             }
     end
 
-    test "excludes hologram_session cookie from server cookies" do
-      conn = %Plug.Conn{
-        cookies: %{
+    test "excludes hologram_session cookie from server cookies", %{conn: initial_conn} do
+      conn =
+        initial_conn
+        |> Map.put(:cookies, %{
           "user_id" => "abc123",
           "theme" => "dark",
           "hologram_session" => "session_data_xyz789"
-        },
-        req_cookies: %{
+        })
+        |> Map.put(:req_cookies, %{
           "user_id" => "abc123",
           "theme" => "dark",
           "hologram_session" => "session_data_xyz789"
-        }
-      }
+        })
 
       result = from(conn)
 
