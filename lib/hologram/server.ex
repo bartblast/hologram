@@ -120,7 +120,7 @@ defmodule Hologram.Server do
     * `key` - The session entry name (atom or string)
     * `default` - The value to return if the key is not found (default: `nil`)
   """
-  @spec get_session(t(), String.t() | atom, any()) :: any()
+  @spec get_session(t(), atom | String.t(), any()) :: any()
   def get_session(server, key, default \\ nil)
 
   def get_session(server, key, default) when is_atom(key) do
@@ -207,5 +207,35 @@ defmodule Hologram.Server do
     Cookie keys must be strings according to web standards.
     Try converting your key to a string: "#{key}".\
     """
+  end
+
+  @doc """
+  Adds a session entry.
+
+  ## Parameters
+
+    * `server` - The server struct
+    * `key` - The session entry name (atom or string)
+    * `value` - The session entry value
+  """
+  @spec put_session(t(), atom | String.t(), any()) :: t()
+  def put_session(server, key, value)
+
+  def put_session(server, key, value) when is_atom(key) do
+    put_session(server, Atom.to_string(key), value)
+  end
+
+  def put_session(server, key, value) when is_binary(key) do
+    new_session = Map.put(server.session, key, value)
+
+    new_session_ops = Map.put(server.__meta__.session_ops, key, {:put, value})
+    new_meta = %{server.__meta__ | session_ops: new_session_ops}
+
+    %{server | session: new_session, __meta__: new_meta}
+  end
+
+  # TODO: reconsider if this argument validation is needed once Elixir has static typing
+  def put_session(_server, key, _value) do
+    raise ArgumentError, "Session key must be an atom or a string, but received #{inspect(key)}"
   end
 end

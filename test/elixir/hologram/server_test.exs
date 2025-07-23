@@ -316,7 +316,7 @@ defmodule Hologram.ServerTest do
     end
   end
 
-  describe "put_cookie/4" do
+  describe "put_cookie/3 & put_cookie/4" do
     test "adds a cookie with default options" do
       result = put_cookie(%Server{}, "my_cookie", "abc123")
 
@@ -408,21 +408,21 @@ defmodule Hologram.ServerTest do
     test "supports different value types" do
       result =
         %Server{}
+        |> put_cookie("atom", :abc)
         |> put_cookie("string", "text")
         |> put_cookie("integer", 42)
-        |> put_cookie("boolean", true)
         |> put_cookie("list", [1, 2, 3])
 
       cookies = result.cookies
+      assert cookies["atom"] == :abc
       assert cookies["string"] == "text"
       assert cookies["integer"] == 42
-      assert cookies["boolean"] == true
       assert cookies["list"] == [1, 2, 3]
 
       cookie_ops = result.__meta__.cookie_ops
+      assert cookie_ops["atom"] == %Cookie{value: :abc}
       assert cookie_ops["string"] == %Cookie{value: "text"}
       assert cookie_ops["integer"] == %Cookie{value: 42}
-      assert cookie_ops["boolean"] == %Cookie{value: true}
       assert cookie_ops["list"] == %Cookie{value: [1, 2, 3]}
     end
 
@@ -460,6 +460,96 @@ defmodule Hologram.ServerTest do
 
       assert result.cookies == %{"my_cookie" => "abc123"}
       assert result.__meta__.cookie_ops["my_cookie"] == expected_cookie
+    end
+  end
+
+  describe "put_session/3 & put_session/4" do
+    test "adds a session entry using atom key" do
+      result = put_session(%Server{}, :username, "abc123")
+
+      assert result.session["username"] == "abc123"
+      assert result.__meta__.session_ops["username"] == {:put, "abc123"}
+    end
+
+    test "adds a session entry using string key" do
+      result = put_session(%Server{}, "username", "abc123")
+
+      assert result.session["username"] == "abc123"
+      assert result.__meta__.session_ops["username"] == {:put, "abc123"}
+    end
+
+    test "adds multiple session entries to existing server struct" do
+      server = %Server{session: %{"existing" => "old"}}
+
+      result =
+        server
+        |> put_session("first", "value_1")
+        |> put_session("second", "value_2")
+
+      assert result == %Server{
+               session: %{
+                 "existing" => "old",
+                 "first" => "value_1",
+                 "second" => "value_2"
+               },
+               __meta__: %Metadata{
+                 session_ops: %{
+                   "first" => {:put, "value_1"},
+                   "second" => {:put, "value_2"}
+                 }
+               }
+             }
+    end
+
+    test "overwrites existing session entry with same key" do
+      server = %Server{
+        session: %{"theme" => "light"},
+        __meta__: %Metadata{
+          session_ops: %{
+            "theme" => {:put, "light"}
+          }
+        }
+      }
+
+      result = put_session(server, "theme", "dark")
+
+      assert result == %Server{
+               session: %{"theme" => "dark"},
+               __meta__: %Metadata{
+                 session_ops: %{
+                   "theme" => {:put, "dark"}
+                 }
+               }
+             }
+    end
+
+    test "supports different value types" do
+      result =
+        %Server{}
+        |> put_session("atom", :abc)
+        |> put_session("string", "text")
+        |> put_session("integer", 42)
+        |> put_session("list", [1, 2, 3])
+
+      session = result.session
+      assert session["atom"] == :abc
+      assert session["string"] == "text"
+      assert session["integer"] == 42
+      assert session["list"] == [1, 2, 3]
+
+      session_ops = result.__meta__.session_ops
+      assert session_ops["atom"] == {:put, :abc}
+      assert session_ops["string"] == {:put, "text"}
+      assert session_ops["integer"] == {:put, 42}
+      assert session_ops["list"] == {:put, [1, 2, 3]}
+    end
+
+    test "raises ArgumentError when key is not an atom or a string" do
+      assert_error ArgumentError,
+                   "Session key must be an atom or a string, but received 123",
+                   fn ->
+                     put_session(%Server{}, 123, "value")
+                   end
     end
   end
 end
