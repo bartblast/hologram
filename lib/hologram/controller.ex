@@ -1,12 +1,12 @@
 defmodule Hologram.Controller do
   @moduledoc false
 
-  alias Hologram.Runtime.PlugConnUtils
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.Page
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.Deserializer
+  alias Hologram.Runtime.PlugConnUtils
   alias Hologram.Runtime.Session
   alias Hologram.Server
   alias Hologram.Template.Renderer
