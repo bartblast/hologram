@@ -4,6 +4,8 @@ defmodule Hologram.Session do
   alias Plug.Crypto.KeyGenerator
   alias Plug.Crypto.MessageEncryptor
 
+  @type op :: :delete | {:put, any}
+
   @doc """
   Initializes or retrieves an existing session ID from the "hologram_session" cookie.
 
