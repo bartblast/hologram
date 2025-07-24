@@ -73,10 +73,6 @@ defmodule Hologram.Template.ParserTest do
       assert parse_markup("<div>") == [start_tag: {"div", []}]
     end
 
-    test "non-void SVG element start tag" do
-      assert parse_markup("<g>") == [start_tag: {"g", []}]
-    end
-
     test "void HTML element, unclosed start tag" do
       assert parse_markup("<br>") == [self_closing_tag: {"br", []}]
     end
@@ -85,11 +81,11 @@ defmodule Hologram.Template.ParserTest do
       assert parse_markup("<br />") == [self_closing_tag: {"br", []}]
     end
 
-    test "void SVG element, unclosed start tag" do
-      assert parse_markup("<path>") == [self_closing_tag: {"path", []}]
+    test "SVG element, unclosed start tag" do
+      assert parse_markup("<path>") == [start_tag: {"path", []}]
     end
 
-    test "void SVG element, self-closed start tag" do
+    test "SVG element, self-closed start tag" do
       assert parse_markup("<path />") == [self_closing_tag: {"path", []}]
     end
 

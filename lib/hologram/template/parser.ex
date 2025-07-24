@@ -981,10 +981,8 @@ defmodule Hologram.Template.Parser do
   end
 
   defp parse_start_tag_end(context, token, rest, self_closing?) do
-    tag_type = Helpers.tag_type(context.tag_name)
-
     add_tag_fun =
-      if (tag_type == :component && self_closing?) || Helpers.void_element?(context.tag_name) do
+      if self_closing? || Helpers.void_element?(context.tag_name) do
         &add_self_closing_tag/1
       else
         &add_start_tag/1

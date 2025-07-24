@@ -19,10 +19,6 @@ defmodule Hologram.Template.Helpers do
     "wbr"
   ]
 
-  # TODO: specify void SVG elements (https://github.com/segmetric/hologram/issues/21)
-  # See: https://developer.mozilla.org/en-US/docs/Web/SVG/Element
-  @void_svg_elements ["circle", "path", "rect"]
-
   @doc """
   Determines whether the given tag is an element or a component.
 
@@ -56,14 +52,6 @@ defmodule Hologram.Template.Helpers do
   """
   @spec void_element?(String.t()) :: boolean
   def void_element?(tag_name) do
-    void_html_element?(tag_name) || void_svg_element?(tag_name) || tag_name == "slot"
-  end
-
-  defp void_html_element?(tag_name) do
-    tag_name in @void_html_elements
-  end
-
-  defp void_svg_element?(tag_name) do
-    tag_name in @void_svg_elements
+    tag_name in @void_html_elements || tag_name == "slot"
   end
 end
