@@ -492,6 +492,39 @@ const Erlang = {
   // End integer_to_binary/2
   // Deps: []
 
+  // TODO: test
+  // Start iolist_to_binary/1
+  "iolist_to_binary/1": (ioListOrBinary) => {
+    // TODO: validate arg
+
+    if (Type.isBitstring(ioListOrBinary)) {
+      return ioListOrBinary;
+    }
+
+    const chunks = Erlang_Lists["flatten/1"](ioListOrBinary).data.map(
+      (term) => {
+        // TODO: validate list item (binary or integer allowed)
+
+        if (Type.isBitstring(term)) {
+          return term;
+        }
+
+        const segment = Type.bitstringSegment(term, {
+          type: "integer",
+          size: Type.integer(8),
+          unit: 1n,
+          endianness: "big",
+        });
+
+        return Bitstring.fromSegmentWithIntegerValue(segment);
+      },
+    );
+
+    return Bitstring.concat(chunks);
+  },
+  // End iolist_to_binary/1
+  // Deps: [:lists.flatten/1]
+
   // Start is_atom/1
   "is_atom/1": (term) => {
     return Type.boolean(Type.isAtom(term));
