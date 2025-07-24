@@ -669,6 +669,23 @@ const Erlang = {
   // End map_size/1
   // Deps: []
 
+  // TODO: test
+  // Start min/2
+  "min/2": (term1, term2) => {
+    switch (Interpreter.compareTerms(term1, term2)) {
+      case -1:
+        return term1;
+
+      case 0:
+        return term1;
+
+      case 1:
+        return term2;
+    }
+  },
+  // End min/2
+  // Deps: []
+
   // Start not/1
   "not/1": (term) => {
     if (!Type.isBoolean(term)) {
