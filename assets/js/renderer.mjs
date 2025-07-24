@@ -359,6 +359,24 @@ export default class Renderer {
       case "mouse_move":
         return "mousemove";
 
+      case "pointer_down":
+        return "pointerdown";
+
+      case "pointer_up":
+        return "pointerup";
+
+      case "transition_cancel":
+        return "transitioncancel";
+
+      case "transition_end":
+        return "transitionend";
+
+      case "transition_run":
+        return "transitionrun";
+
+      case "transition_start":
+        return "transitionstart";
+
       default:
         return eventType;
     }
