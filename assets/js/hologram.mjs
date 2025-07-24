@@ -22,6 +22,7 @@ import Vdom from "./vdom.mjs";
 
 // Events
 import ChangeEvent from "./events/change_event.mjs";
+import ClickEvent from "./events/click_event.mjs";
 import FocusEvent from "./events/focus_event.mjs";
 import MouseEvent from "./events/mouse_event.mjs";
 import PointerEvent from "./events/pointer_event.mjs";
@@ -466,11 +467,7 @@ export default class Hologram {
         return ChangeEvent;
 
       case "click":
-        // TODO: change to PointerEvent when Firefox and Safari bugs are fixed:
-        // See: https://stackoverflow.com/a/76900433
-        // See: https://bugzilla.mozilla.org/show_bug.cgi?id=1675847
-        // See: https://bugs.webkit.org/show_bug.cgi?id=218665
-        return MouseEvent;
+        return ClickEvent;
 
       case "mousemove":
         return MouseEvent;
