@@ -474,6 +474,7 @@ export default class Hologram {
 
       case "pointercancel":
       case "pointerdown":
+      case "pointermove":
       case "pointerup":
         return PointerEvent;
 
