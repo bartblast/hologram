@@ -670,6 +670,23 @@ const Erlang = {
   // Deps: []
 
   // TODO: test
+  // Start max/2
+  "max/2": (term1, term2) => {
+    switch (Interpreter.compareTerms(term1, term2)) {
+      case -1:
+        return term2;
+
+      case 0:
+        return term1;
+
+      case 1:
+        return term1;
+    }
+  },
+  // End max/2
+  // Deps: []
+
+  // TODO: test
   // Start min/2
   "min/2": (term1, term2) => {
     switch (Interpreter.compareTerms(term1, term2)) {
