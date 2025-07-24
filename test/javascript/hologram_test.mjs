@@ -323,6 +323,7 @@ describe("Hologram", () => {
 
     const defaultTarget = cid1;
     const eventType = "click";
+
     const notIgnoredEvent = {
       clientX: 10,
       clientY: 20,
