@@ -736,9 +736,8 @@ describe("Renderer", () => {
           Hologram.handleUiEvent.restore();
         });
 
+        // TODO: add a helper to DRY these tests
         describe("event type mapping", () => {
-          // TODO: test other event types mapping
-
           it("mouse_move", () => {
             const node = Type.tuple([
               Type.atom("element"),
@@ -765,6 +764,36 @@ describe("Renderer", () => {
             );
 
             assert.deepStrictEqual(Object.keys(vdom.data.on), ["mousemove"]);
+          });
+
+          it("pointer_cancel", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("div"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("$pointer_cancel"),
+                  Type.list([
+                    Type.tuple([
+                      Type.atom("text"),
+                      Type.bitstring("my_action"),
+                    ]),
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const vdom = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+            );
+
+            assert.deepStrictEqual(Object.keys(vdom.data.on), [
+              "pointercancel",
+            ]);
           });
 
           it("pointer_down", () => {

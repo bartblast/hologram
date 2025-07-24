@@ -472,6 +472,7 @@ export default class Hologram {
       case "mousemove":
         return MouseEvent;
 
+      case "pointercancel":
       case "pointerdown":
       case "pointerup":
         return PointerEvent;

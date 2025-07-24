@@ -359,6 +359,9 @@ export default class Renderer {
       case "mouse_move":
         return "mousemove";
 
+      case "pointer_cancel":
+        return "pointercancel";
+
       case "pointer_down":
         return "pointerdown";
 
