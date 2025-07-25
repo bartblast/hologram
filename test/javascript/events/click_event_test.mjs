@@ -21,6 +21,7 @@ describe("ClickEvent", () => {
       offsetY: 40,
       pageX: 1,
       pageY: 2,
+      pointerType: "mouse",
       screenX: 100,
       screenY: 200,
     };
@@ -38,6 +39,7 @@ describe("ClickEvent", () => {
         [Type.atom("offset_y"), Type.float(40)],
         [Type.atom("page_x"), Type.float(1)],
         [Type.atom("page_y"), Type.float(2)],
+        [Type.atom("pointer_type"), Type.atom("mouse")],
         [Type.atom("screen_x"), Type.float(100)],
         [Type.atom("screen_y"), Type.float(200)],
       ]),

@@ -40,9 +40,9 @@ describe("PointerEvent", () => {
         [Type.atom("offset_y"), Type.float(40)],
         [Type.atom("page_x"), Type.float(1)],
         [Type.atom("page_y"), Type.float(2)],
+        [Type.atom("pointer_type"), Type.atom("mouse")],
         [Type.atom("screen_x"), Type.float(100)],
         [Type.atom("screen_y"), Type.float(200)],
-        [Type.atom("pointer_type"), Type.atom("mouse")],
       ]);
 
       assert.deepStrictEqual(result, expected);
@@ -74,9 +74,9 @@ describe("PointerEvent", () => {
         [Type.atom("offset_y"), Type.float(40)],
         [Type.atom("page_x"), Type.float(1)],
         [Type.atom("page_y"), Type.float(2)],
+        [Type.atom("pointer_type"), Type.nil()],
         [Type.atom("screen_x"), Type.float(100)],
         [Type.atom("screen_y"), Type.float(200)],
-        [Type.atom("pointer_type"), Type.nil()],
       ]);
 
       assert.deepStrictEqual(result, expected);
