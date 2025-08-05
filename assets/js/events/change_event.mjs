@@ -4,10 +4,13 @@ import Type from "../type.mjs";
 
 export default class ChangeEvent {
   static buildOperationParam(event) {
-    let value = Type.bitstring(event.target.checked);
+    const target = event.target;
+    let value;
 
-    if (event.target.type === "checkbox") {
-      value = Type.boolean(event.target.checked);
+    if (target.type === "checkbox" || target.type === "radio") {
+      value = Type.boolean(target.checked);
+    } else {
+      value = Type.bitstring(target.value);
     }
 
     return Type.map([[Type.atom("value"), value]]);
