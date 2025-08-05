@@ -7,6 +7,7 @@ Website: https://hologram.page
 ## Sponsors
 
 * Calancea Daniel, [@D4no0](https://github.com/D4no0)
+* Darren Black, [@totaltrash](https://github.com/totaltrash)
 * Lucas Sifoni, [@Lucassifoni](https://github.com/Lucassifoni)
 
 If you find Hologram useful and would like to support its development, consider becoming a sponsor! Your contributions help improve the project and keep it alive.
