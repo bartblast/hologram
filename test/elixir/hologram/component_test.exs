@@ -11,6 +11,7 @@ defmodule Hologram.ComponentTest do
   alias Hologram.Test.Fixtures.Component.Module2
   alias Hologram.Test.Fixtures.Component.Module3
   alias Hologram.Test.Fixtures.Component.Module4
+  alias Hologram.Test.Fixtures.Component.Module5
 
   test "__is_hologram_component__/0" do
     assert Module1.__is_hologram_component__()
@@ -203,27 +204,26 @@ defmodule Hologram.ComponentTest do
 
   describe "put_state/3" do
     test "non-nested path" do
-      component = %Component{state: %{a: 1}}
+      component = %Component{state: %{a: 1, b: 2}}
+      result = put_state(component, :b, 3)
 
-      assert put_state(component, :b, 2) == %Component{
-               state: %{a: 1, b: 2}
+      assert result == %Component{
+               state: %{a: 1, b: 3}
              }
     end
 
-    test "nested path, key exists" do
-      component = %Component{state: %{a: 1, b: %{d: 4, e: %{g: 6, h: 7}, f: 5}, c: 3}}
+    test "nested path, map" do
+      component = %Component{state: %{a: 1, b: %{c: 2, d: 3}}}
+      result = put_state(component, [:b, :d], 4)
 
-      assert put_state(component, [:b, :e, :g], 123) == %Component{
-               state: %{a: 1, b: %{d: 4, e: %{g: 123, h: 7}, f: 5}, c: 3}
-             }
+      assert result == %Component{state: %{a: 1, b: %{c: 2, d: 4}}}
     end
 
-    test "nested path, key doesn't exist" do
-      component = %Component{state: %{a: 1, b: %{d: 4, e: %{g: 6, h: 7}, f: 5}, c: 3}}
+    test "nested path, struct" do
+      component = %Component{state: %{a: 1, b: %Module5{x: 2, y: 3}}}
+      result = put_state(component, [:b, :y], 4)
 
-      assert put_state(component, [:b, :e, :i], 123) == %Component{
-               state: %{a: 1, b: %{d: 4, e: %{g: 6, h: 7, i: 123}, f: 5}, c: 3}
-             }
+      assert result == %Component{state: %{a: 1, b: %Module5{x: 2, y: 4}}}
     end
   end
 

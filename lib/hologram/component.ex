@@ -1,4 +1,5 @@
 defmodule Hologram.Component do
+  alias Hologram.Commons.MapUtils
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.AST
   alias Hologram.Component
@@ -257,7 +258,7 @@ defmodule Hologram.Component do
   @spec put_state(Component.t(), atom | list(atom), any) :: Component.t()
 
   def put_state(component, keys, value) when is_list(keys) do
-    %{component | state: put_in(component.state, keys, value)}
+    %{component | state: MapUtils.put_nested(component.state, keys, value)}
   end
 
   def put_state(%{state: state} = component, key, value) do
