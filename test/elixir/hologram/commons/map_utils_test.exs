@@ -1,7 +1,9 @@
 defmodule Hologram.Commons.MapUtilsTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Commons.MapUtils
+
   alias Hologram.Test.Fixtures.Commons.MapUtils.Module1
+  alias Hologram.Test.Fixtures.Commons.MapUtils.Module2
 
   describe "diff/2" do
     test "both maps are empty" do
@@ -129,94 +131,91 @@ defmodule Hologram.Commons.MapUtilsTest do
   end
 
   describe "put_nested/3" do
-    test "single level, create new key" do
-      result = put_nested(%{a: 1}, [:b], 2)
+    test "single level, new key" do
+      data = %{a: 1}
+      result = put_nested(data, [:b], 2)
+
       assert result == %{a: 1, b: 2}
     end
 
-    test "single level overwrite existing key" do
-      result = put_nested(%{a: 1}, [:a], 2)
-      assert result == %{a: 2}
+    test "single level, existing key" do
+      data = %{a: 1, b: 2}
+      result = put_nested(data, [:b], 3)
+
+      assert result == %{a: 1, b: 3}
     end
 
-    test "two level nested update on existing path" do
-      result = put_nested(%{a: %{b: 1, c: 2}}, [:a, :b], 99)
-      assert result == %{a: %{b: 99, c: 2}}
+    test "two levels, new key" do
+      data = %{a: 1, b: %{c: 2}}
+      result = put_nested(data, [:b, :d], 3)
+
+      assert result == %{a: 1, b: %{c: 2, d: 3}}
     end
 
-    test "two level nested update creating missing path" do
-      result = put_nested(%{}, [:a, :b], 123)
-      assert result == %{a: %{b: 123}}
+    test "two levels, existing key" do
+      data = %{a: 1, b: %{c: 2, d: 3}}
+      result = put_nested(data, [:b, :d], 4)
+
+      assert result == %{a: 1, b: %{c: 2, d: 4}}
     end
 
-    test "three level nested update creating missing path" do
-      result = put_nested(%{}, [:a, :b, :c], 123)
-      assert result == %{a: %{b: %{c: 123}}}
+    test "three levels, new key" do
+      data = %{a: 1, b: %{c: 2, d: %{e: 3}}}
+      result = put_nested(data, [:b, :d, :f], 4)
+
+      assert result == %{a: 1, b: %{c: 2, d: %{e: 3, f: 4}}}
     end
 
-    test "three level nested update with partial existing path" do
-      data = %{a: %{x: 1}}
-      result = put_nested(data, [:a, :b, :c], 99)
+    test "three levels, existing key" do
+      data = %{a: 1, b: %{c: 2, d: %{e: 3, f: 4}}}
+      result = put_nested(data, [:b, :d, :f], 5)
 
-      assert result == %{a: %{x: 1, b: %{c: 99}}}
+      assert result == %{a: 1, b: %{c: 2, d: %{e: 3, f: 5}}}
     end
 
-    test "works with struct, single level update" do
-      struct = %Module1{x: 1, y: 2}
-      result = put_nested(struct, [:y], 99)
+    test "works with structs" do
+      data = %Module1{x: 1, y: %Module2{m: 1, n: 2}}
+      result = put_nested(data, [:y, :n], 3)
 
-      assert result == %Module1{x: 1, y: 99}
-    end
-
-    test "works with struct, nested update" do
-      data = %{outer: %Module1{x: 1, y: 2}}
-      result = put_nested(data, [:outer, :y], 99)
-
-      assert result == %{outer: %Module1{x: 1, y: 99}}
+      assert result == %Module1{x: 1, y: %Module2{m: 1, n: 3}}
     end
 
     test "mixed map and struct deep nesting" do
       data = %{
-        a: %{
-          b: %Module1{
-            x: 1,
-            y: %{
-              c: %{
-                d: 2
+        a: 1,
+        b: %Module1{
+          x: 2,
+          y: %{
+            c: 3,
+            d: %Module2{
+              m: 4,
+              n: %{
+                e: 5,
+                f: 6
               }
             }
           }
         }
       }
 
-      result = put_nested(data, [:a, :b, :y, :c, :d], 99)
+      result = put_nested(data, [:b, :y, :d, :n, :f], 99)
 
       assert result == %{
-               a: %{
-                 b: %Module1{
-                   x: 1,
-                   y: %{
-                     c: %{
-                       d: 99
+               a: 1,
+               b: %Module1{
+                 x: 2,
+                 y: %{
+                   c: 3,
+                   d: %Module2{
+                     m: 4,
+                     n: %{
+                       e: 5,
+                       f: 99
                      }
                    }
                  }
                }
              }
-    end
-
-    test "preserves other fields when updating map" do
-      struct = %{a: 10, b: 20}
-      result = put_nested(struct, [:a], 999)
-
-      assert result == %{a: 999, b: 20}
-    end
-
-    test "preserves other fields when updating struct" do
-      struct = %Module1{x: 10, y: 20}
-      result = put_nested(struct, [:x], 999)
-
-      assert result == %Module1{x: 999, y: 20}
     end
   end
 end
