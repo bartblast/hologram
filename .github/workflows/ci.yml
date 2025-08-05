@@ -1,13 +1,13 @@
 name: CI
 
 # Define workflow that runs when changes are pushed to the
-# `master` branch or pushed to a PR branch that targets the `master`
-# branch.
+# `dev` or `master` branch or pushed to a PR branch that targets the `dev`
+# or `master` branch.
 on:
   push:
-    branches: ["master"]
+    branches: ["dev", "master"]
   pull_request:
-    branches: ["master"]
+    branches: ["dev", "master"]
 
 # Sets the ENV `MIX_ENV` to `test` for running tests
 env:
