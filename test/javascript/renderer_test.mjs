@@ -1331,6 +1331,98 @@ describe("Renderer", () => {
           assert.deepStrictEqual(result, expected);
         });
       });
+
+      describe("input value handling", () => {
+        it("input element with value attribute sets up hooks", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("value"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("test_value")],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+          );
+
+          // Should not have the value as an attribute
+          assert.isUndefined(result.data.attrs.value);
+
+          // Should not have the temporary data-hologram-value attribute
+          assert.isUndefined(result.data.attrs["data-hologram-value"]);
+
+          // Should have hooks for handling the value property
+          assert.strictEqual(typeof result.data.hook, "object");
+          assert.strictEqual(typeof result.data.hook.create, "function");
+          assert.strictEqual(typeof result.data.hook.update, "function");
+        });
+
+        it("input element without value attribute works normally", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("type"),
+                Type.keywordList([[Type.atom("text"), Type.bitstring("text")]]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+          );
+
+          // Should have the type attribute normally
+          assert.strictEqual(result.data.attrs.type, "text");
+
+          // Should not have hooks since there's no value attribute
+          assert.isUndefined(result.data.hook);
+        });
+
+        it("non-input element with value attribute works normally", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("div"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("value"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("test_value")],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+          );
+
+          // Should have the value as a normal attribute for non-input elements
+          assert.strictEqual(result.data.attrs.value, "test_value");
+
+          // Should not have hooks since it's not an input
+          assert.isUndefined(result.data.hook);
+        });
+      });
     });
   });
 

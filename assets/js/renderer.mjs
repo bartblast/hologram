@@ -296,6 +296,20 @@ export default class Renderer {
     return moduleProxy.__props__;
   }
 
+  static #handleInputValueUpdate(element, newValue) {
+    if (!element || element.tagName !== "INPUT") {
+      return;
+    }
+
+    // Always set the property for programmatic updates from HOLO templates
+    // We never update the attribute to maintain proper form behavior
+    // - Preserves the browser's dirty flag tracking
+    // - Ensures correct form reset behavior (resets to original defaultValue)
+    // - Maintains proper autocomplete/autofill behavior
+    // See: https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#concept-fe-dirty
+    element.value = newValue;
+  }
+
   // Based on has_cid_prop?/1
   static #hasCidProp(props) {
     return "atom(cid)" in props.data;
@@ -455,25 +469,45 @@ export default class Renderer {
   }
 
   // Based on render_attributes/1
-  static #renderAttributes(attrsDom) {
+  // "props" are Snabbdom props, not Hologram component props
+  static #renderAttributesAndProps(attrsDom, tagName) {
+    const attrs = {};
+    const props = {};
+
     if (attrsDom.data.length === 0) {
-      return {};
+      return {attrs, props};
     }
 
-    return attrsDom.data
-      .filter((attrDom) => !Bitstring.toText(attrDom.data[0]).startsWith("$"))
-      .reduce((acc, attrDom) => {
-        const [nameText, valueText] = Renderer.#renderAttribute(
-          attrDom.data[0],
-          attrDom.data[1],
-        );
+    // Filter out event attributes (starting with $)
+    const regularAttrs = attrsDom.data.filter(
+      (attrDom) => !Bitstring.toText(attrDom.data[0]).startsWith("$"),
+    );
 
-        if (valueText !== null) {
-          acc[nameText] = valueText;
+    // Check if this is an input element - they have special treatment related to value patching
+    const isInputElement = tagName === "input";
+
+    for (const attrDom of regularAttrs) {
+      const [nameText, valueText] = Renderer.#renderAttribute(
+        attrDom.data[0],
+        attrDom.data[1],
+      );
+
+      if (valueText !== null) {
+        // For input value: only set the property, never the attribute to maintain proper form behavior
+        // - Preserves the browser's dirty flag tracking
+        // - Ensures correct form reset behavior (resets to original defaultValue)
+        // - Maintains proper autocomplete/autofill behavior
+        // See: https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#concept-fe-dirty
+        if (isInputElement && nameText === "value") {
+          // Store the value for later use in hooks
+          attrs["data-hologram-value"] = valueText;
+        } else {
+          attrs[nameText] = valueText;
         }
+      }
+    }
 
-        return acc;
-      }, {});
+    return {attrs, props};
   }
 
   // Based on render_dom/3 (component case)
@@ -519,7 +553,9 @@ export default class Renderer {
     }
 
     const attrsDom = dom.data[2];
-    const attrsVdom = Renderer.#renderAttributes(attrsDom);
+
+    const {attrs: attrsVdom, props: propsVdom} =
+      Renderer.#renderAttributesAndProps(attrsDom, tagName);
 
     const eventListenersVdom = Renderer.#renderEventListeners(
       attrsDom,
@@ -536,6 +572,26 @@ export default class Renderer {
     );
 
     const data = {attrs: attrsVdom, on: eventListenersVdom};
+
+    if (Object.keys(propsVdom).length > 0) {
+      data.props = propsVdom;
+    }
+
+    if (tagName === "input" && attrsVdom["data-hologram-value"]) {
+      const hologramValue = attrsVdom["data-hologram-value"];
+
+      // Remove the temporary attribute
+      delete attrsVdom["data-hologram-value"];
+
+      data.hook = {
+        update: (_oldVnode, vnode) => {
+          Renderer.#handleInputValueUpdate(vnode.elm, hologramValue);
+        },
+        create: (_emptyVnode, vnode) => {
+          Renderer.#handleInputValueUpdate(vnode.elm, hologramValue);
+        },
+      };
+    }
 
     if (
       tagName === "link" &&
