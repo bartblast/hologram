@@ -3,12 +3,12 @@ defmodule HologramFeatureTests.Helpers do
   import Hologram.Commons.Guards, only: [is_regex: 1]
   import Wallaby.Browser, only: [execute_query: 2]
 
-  require Wallaby.Browser
-
   alias Hologram.Router
   alias Wallaby.Browser
   alias Wallaby.Element
   alias Wallaby.Query
+
+  require Wallaby.Browser
 
   @max_wait_time Application.compile_env(:wallaby, :max_wait_time, 3_000)
 
