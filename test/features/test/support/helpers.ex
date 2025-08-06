@@ -48,15 +48,15 @@ defmodule HologramFeatureTests.Helpers do
     session
   end
 
-  def assert_input_value(session, css_selector, expected_value) do
+  def assert_input_value(session, css_selector, expected_attr_value, expected_node_value) do
     session
-    |> Browser.assert_has(Query.css("#{css_selector}[value='#{expected_value}']"))
+    |> Browser.assert_has(Query.css("#{css_selector}[value='#{expected_attr_value}']"))
     |> Browser.execute_script(
       "return document.querySelector('#{css_selector}').value;",
       [],
       fn actual_value ->
-        assert actual_value == expected_value,
-               "Expected input value property to be '#{expected_value}' but got '#{actual_value}'"
+        assert actual_value == expected_node_value,
+               "Expected input value property to be '#{expected_node_value}' but got '#{actual_value}'"
       end
     )
   end
