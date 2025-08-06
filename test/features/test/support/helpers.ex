@@ -1,6 +1,9 @@
 defmodule HologramFeatureTests.Helpers do
   import ExUnit.Assertions, only: [assert: 2, assert_raise: 3]
   import Hologram.Commons.Guards, only: [is_regex: 1]
+  import Wallaby.Browser, only: [execute_query: 2]
+
+  require Wallaby.Browser
 
   alias Hologram.Router
   alias Wallaby.Browser
@@ -43,6 +46,19 @@ defmodule HologramFeatureTests.Helpers do
   def assert_count(session, css_selector, count) do
     Browser.find(session, Query.css(css_selector, count: count))
     session
+  end
+
+  def assert_input_value(session, css_selector, expected_value) do
+    session
+    |> Browser.assert_has(Query.css("#{css_selector}[value='#{expected_value}']"))
+    |> Browser.execute_script(
+      "return document.querySelector('#{css_selector}').value;",
+      [],
+      fn actual_value ->
+        assert actual_value == expected_value,
+               "Expected input value property to be '#{expected_value}' but got '#{actual_value}'"
+      end
+    )
   end
 
   def assert_js_error(session, expected_msg, fun) when is_binary(expected_msg) do
