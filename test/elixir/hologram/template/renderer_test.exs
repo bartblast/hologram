@@ -251,6 +251,18 @@ defmodule Hologram.Template.RendererTest do
       assert render_dom(node, @env, @server) == {~s(<img attr_2="value_2" />), %{}, @server}
     end
 
+    test "attributes that evaluate to false are not rendered" do
+      node =
+        {:element, "img",
+         [
+           {"attr_1", [expression: {false}]},
+           {"attr_2", [expression: {"value_2"}]},
+           {"attr_3", [expression: {false}]}
+         ], []}
+
+      assert render_dom(node, @env, @server) == {~s(<img attr_2="value_2" />), %{}, @server}
+    end
+
     test "if there are no attributes to render there is no whitespace inside the tag, non-void element" do
       node =
         {:element, "div",

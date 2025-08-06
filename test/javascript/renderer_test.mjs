@@ -484,6 +484,38 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("attributes that evaluate to false are not rendered", () => {
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("img"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("attr_1"),
+            Type.keywordList([
+              [Type.atom("expression"), Type.tuple([Type.boolean(false)])],
+            ]),
+          ]),
+          Type.tuple([
+            Type.bitstring("attr_2"),
+            Type.keywordList([[Type.atom("text"), Type.bitstring("value_2")]]),
+          ]),
+          Type.tuple([
+            Type.bitstring("attr_3"),
+            Type.keywordList([
+              [Type.atom("expression"), Type.tuple([Type.boolean(false)])],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+
+      const expected = vnode("img", {attrs: {attr_2: "value_2"}, on: {}}, []);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     // This test case doesn't apply to the client renderer
     // it("if there are no attributes to render there is no whitespace inside the tag, non-void element")
 

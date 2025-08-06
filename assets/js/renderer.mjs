@@ -438,12 +438,13 @@ export default class Renderer {
       return [nameText, true];
     }
 
-    // [expression: {nil}]
+    // [expression: {nil}] or [expression: {false}]
     if (
       valueDom.data.length === 1 &&
       Type.isTuple(valueDom.data[0].data[1]) &&
       valueDom.data[0].data[1].data.length === 1 &&
-      Type.isNil(valueDom.data[0].data[1].data[0])
+      (Type.isNil(valueDom.data[0].data[1].data[0]) ||
+        Type.isFalse(valueDom.data[0].data[1].data[0]))
     ) {
       return [nameText, null];
     }

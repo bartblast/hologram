@@ -354,6 +354,8 @@ defmodule Hologram.Template.Renderer do
 
   defp render_attribute(_name, expression: {nil}), do: ""
 
+  defp render_attribute(_name, expression: {false}), do: ""
+
   defp render_attribute(name, value_dom) do
     {value_str, %{}, _server_struct} =
       render_dom(value_dom, %Env{node_type: :attribute}, %Server{})
