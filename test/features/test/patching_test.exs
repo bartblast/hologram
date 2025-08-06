@@ -17,43 +17,45 @@ defmodule HologramFeatureTests.PatchingTest do
     end)
   end
 
-  feature "root element attributes patching after action", %{session: session} do
-    session
-    |> visit(Page1)
-    |> refute_has(css("html[attr_1]"))
-    |> refute_has(css("html[attr_2]"))
-    |> click(button("Add root elem attr 2"))
-    |> refute_has(css("html[attr_1]"))
-    |> assert_has(css("html[attr_2='value_2a']"))
-    |> click(button("Add root elem attr 1"))
-    |> assert_has(css("html[attr_1='value_1a']"))
-    |> assert_has(css("html[attr_2='value_2a']"))
-    |> click(button("Change root elem attr 2"))
-    |> assert_has(css("html[attr_1='value_1a']"))
-    |> assert_has(css("html[attr_2='value_2b']"))
-    |> click(button("Change root elem attr 1"))
-    |> assert_has(css("html[attr_1='value_1b']"))
-    |> assert_has(css("html[attr_2='value_2b']"))
-    |> click(button("Remove root elem attr 2"))
-    |> assert_has(css("html[attr_1='value_1b']"))
-    |> refute_has(css("html[attr_2]"))
-    |> click(button("Remove root elem attr 1"))
-    |> refute_has(css("html[attr_1]"))
-    |> refute_has(css("html[attr_2]"))
-  end
+  describe "root element attributes patching" do
+    feature "after action", %{session: session} do
+      session
+      |> visit(Page1)
+      |> refute_has(css("html[attr_1]"))
+      |> refute_has(css("html[attr_2]"))
+      |> click(button("Add root elem attr 2"))
+      |> refute_has(css("html[attr_1]"))
+      |> assert_has(css("html[attr_2='value_2a']"))
+      |> click(button("Add root elem attr 1"))
+      |> assert_has(css("html[attr_1='value_1a']"))
+      |> assert_has(css("html[attr_2='value_2a']"))
+      |> click(button("Change root elem attr 2"))
+      |> assert_has(css("html[attr_1='value_1a']"))
+      |> assert_has(css("html[attr_2='value_2b']"))
+      |> click(button("Change root elem attr 1"))
+      |> assert_has(css("html[attr_1='value_1b']"))
+      |> assert_has(css("html[attr_2='value_2b']"))
+      |> click(button("Remove root elem attr 2"))
+      |> assert_has(css("html[attr_1='value_1b']"))
+      |> refute_has(css("html[attr_2]"))
+      |> click(button("Remove root elem attr 1"))
+      |> refute_has(css("html[attr_1]"))
+      |> refute_has(css("html[attr_2]"))
+    end
 
-  feature "root element attributes patching after navigation", %{session: session} do
-    session
-    |> visit(Page1)
-    |> click(button("Add root elem attr 1"))
-    |> click(button("Add root elem attr 2"))
-    |> assert_has(css("html[attr_1='value_1a']"))
-    |> assert_has(css("html[attr_2='value_2a']"))
-    |> click(link("Page 2 link"))
-    |> assert_page(Page2)
-    |> refute_has(css("html[attr_1]"))
-    |> refute_has(css("html[attr_2]"))
-    |> assert_has(css("html[attr_3='value_3']"))
+    feature "after navigation", %{session: session} do
+      session
+      |> visit(Page1)
+      |> click(button("Add root elem attr 1"))
+      |> click(button("Add root elem attr 2"))
+      |> assert_has(css("html[attr_1='value_1a']"))
+      |> assert_has(css("html[attr_2='value_2a']"))
+      |> click(link("Page 2 link"))
+      |> assert_page(Page2)
+      |> refute_has(css("html[attr_1]"))
+      |> refute_has(css("html[attr_2]"))
+      |> assert_has(css("html[attr_3='value_3']"))
+    end
   end
 
   describe "class attribute in root element patching" do
