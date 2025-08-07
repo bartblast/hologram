@@ -1,14 +1,11 @@
 defmodule HologramFeatureTests.Helpers do
   import ExUnit.Assertions, only: [assert: 2, assert_raise: 3]
   import Hologram.Commons.Guards, only: [is_regex: 1]
-  import Wallaby.Browser, only: [execute_query: 2]
 
   alias Hologram.Router
   alias Wallaby.Browser
   alias Wallaby.Element
   alias Wallaby.Query
-
-  require Wallaby.Browser
 
   @max_wait_time Application.compile_env(:wallaby, :max_wait_time, 3_000)
 
@@ -48,15 +45,14 @@ defmodule HologramFeatureTests.Helpers do
     session
   end
 
-  def assert_input_value(session, css_selector, expected_attr_value, expected_node_value) do
-    session
-    |> Browser.assert_has(Query.css("#{css_selector}[value='#{expected_attr_value}']"))
-    |> Browser.execute_script(
+  def assert_input_value(session, css_selector, expected_value) do
+    Browser.execute_script(
+      session,
       "return document.querySelector('#{css_selector}').value;",
       [],
       fn actual_value ->
-        assert actual_value == expected_node_value,
-               "Expected input value property to be '#{expected_node_value}' but got '#{actual_value}'"
+        assert actual_value == expected_value,
+               "Expected input value to be '#{expected_value}' but got '#{actual_value}'"
       end
     )
   end
