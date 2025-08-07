@@ -128,5 +128,24 @@ defmodule HologramFeatureTests.PatchingTest do
       |> refute_has(css("#text_input[value]"))
       |> assert_input_value("#text_input", "")
     end
+
+    feature "email input value patching", %{session: session} do
+      session
+      |> visit(Page5)
+      |> refute_has(css("#email_input[value]"))
+      |> assert_input_value("#email_input", "initial email")
+      |> click(button("Update Email 1"))
+      |> refute_has(css("#email_input[value]"))
+      |> assert_input_value("#email_input", "updated email 1")
+      |> fill_in(css("#email_input"), with: "filled email")
+      |> refute_has(css("#email_input[value]"))
+      |> assert_input_value("#email_input", "filled email")
+      |> click(button("Update Email 2"))
+      |> refute_has(css("#email_input[value]"))
+      |> assert_input_value("#email_input", "updated email 2")
+      |> click(button("Clear State"))
+      |> refute_has(css("#email_input[value]"))
+      |> assert_input_value("#email_input", "")
+    end
   end
 end
