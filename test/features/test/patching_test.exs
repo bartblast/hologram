@@ -7,6 +7,7 @@ defmodule HologramFeatureTests.PatchingTest do
   alias HologramFeatureTests.Patching.Page2
   alias HologramFeatureTests.Patching.Page3
   alias HologramFeatureTests.Patching.Page4
+  alias HologramFeatureTests.Patching.Page5
 
   setup do
     current_max_wait_time = Application.fetch_env!(:wallaby, :max_wait_time)
@@ -105,6 +106,27 @@ defmodule HologramFeatureTests.PatchingTest do
       |> refute_has(css("html[class]"))
       |> click(button("Change to class 2"))
       |> assert_has(css("html[class='my_class_2']"))
+    end
+  end
+
+  describe "form elements value patching" do
+    feature "text input value patching", %{session: session} do
+      session
+      |> visit(Page5)
+      |> refute_has(css("#text_input[value]"))
+      |> assert_input_value("#text_input", "initial text")
+      |> click(button("Update Text 1"))
+      |> refute_has(css("#text_input[value]"))
+      |> assert_input_value("#text_input", "updated text 1")
+      |> fill_in(css("#text_input"), with: "filled text")
+      |> refute_has(css("#text_input[value]"))
+      |> assert_input_value("#text_input", "filled text")
+      |> click(button("Update Text 2"))
+      |> refute_has(css("#text_input[value]"))
+      |> assert_input_value("#text_input", "updated text 2")
+      |> click(button("Clear State"))
+      |> refute_has(css("#text_input[value]"))
+      |> assert_input_value("#text_input", "")
     end
   end
 end
