@@ -1487,6 +1487,248 @@ describe("Renderer", () => {
           // Should not have hooks
           assert.isUndefined(result.data.hook);
         });
+
+        describe("input value preservation during updates", () => {
+          let mockInput;
+
+          beforeEach(() => {
+            mockInput = {
+              tagName: "INPUT",
+              value: "",
+              __hologramLastProgrammaticValue__: undefined,
+            };
+          });
+
+          it("sets initial value on create hook without user modification check", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("initial_value")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+            );
+
+            // Call the create hook with mock vnode
+            const mockVnode = {elm: mockInput};
+            result.data.hook.create(null, mockVnode);
+
+            // Should set the value and track it
+            assert.strictEqual(mockInput.value, "initial_value");
+            assert.strictEqual(
+              mockInput.__hologramLastProgrammaticValue__,
+              "initial_value",
+            );
+          });
+
+          it("updates value when user hasn't modified input", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("new_value")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+            );
+
+            // Simulate that we previously set a value
+            mockInput.value = "old_value";
+            mockInput.__hologramLastProgrammaticValue__ = "old_value";
+
+            // Call the update hook
+            const mockVnode = {elm: mockInput};
+            result.data.hook.update(null, mockVnode);
+
+            // Should update the value since it's a new programmatic value
+            assert.strictEqual(mockInput.value, "new_value");
+            assert.strictEqual(
+              mockInput.__hologramLastProgrammaticValue__,
+              "new_value",
+            );
+          });
+
+          it("preserves user input when same programmatic value is set again", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("same_value")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+            );
+
+            // Simulate that we previously set this same value, but user has typed something different
+            mockInput.value = "user_typed_text";
+            mockInput.__hologramLastProgrammaticValue__ = "same_value";
+
+            // Call the update hook with the same value
+            const mockVnode = {elm: mockInput};
+            result.data.hook.update(null, mockVnode);
+
+            // Should not update the value since it's the same programmatic value and user has modified it
+            assert.strictEqual(mockInput.value, "user_typed_text");
+
+            // Should not update the tracking value either
+            assert.strictEqual(
+              mockInput.__hologramLastProgrammaticValue__,
+              "same_value",
+            );
+          });
+
+          it("overrides user input when programmatic value actually changes", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [
+                      Type.atom("text"),
+                      Type.bitstring("new_programmatic_value"),
+                    ],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+            );
+
+            // Simulate that user has typed something different from what we previously set
+            mockInput.value = "user_typed_text";
+            mockInput.__hologramLastProgrammaticValue__ =
+              "old_programmatic_value";
+
+            // Call the update hook with a new programmatic value
+            const mockVnode = {elm: mockInput};
+            result.data.hook.update(null, mockVnode);
+
+            // Should update the value since it's a genuinely new programmatic value
+            assert.strictEqual(mockInput.value, "new_programmatic_value");
+            assert.strictEqual(
+              mockInput.__hologramLastProgrammaticValue__,
+              "new_programmatic_value",
+            );
+          });
+
+          it("updates value when user input matches programmatic value", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("new_value")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+            );
+
+            // Simulate that current value matches what we set before
+            mockInput.value = "current_value";
+            mockInput.__hologramLastProgrammaticValue__ = "current_value";
+
+            // Call the update hook
+            const mockVnode = {elm: mockInput};
+            result.data.hook.update(null, mockVnode);
+
+            // Should update the value since it's a new programmatic value
+            assert.strictEqual(mockInput.value, "new_value");
+            assert.strictEqual(
+              mockInput.__hologramLastProgrammaticValue__,
+              "new_value",
+            );
+          });
+
+          it("handles case when no previous value was tracked", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("first_value")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+            );
+
+            // Simulate input that never had a programmatic value set
+            mockInput.value = "whatever";
+            mockInput.__hologramLastProgrammaticValue__ = undefined;
+
+            // Call the update hook
+            const mockVnode = {elm: mockInput};
+            result.data.hook.update(null, mockVnode);
+
+            // Should update since we have no tracking info
+            assert.strictEqual(mockInput.value, "first_value");
+            assert.strictEqual(
+              mockInput.__hologramLastProgrammaticValue__,
+              "first_value",
+            );
+          });
+        });
       });
     });
   });

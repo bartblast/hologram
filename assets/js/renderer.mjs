@@ -296,7 +296,7 @@ export default class Renderer {
     return moduleProxy.__props__;
   }
 
-  static #handleInputValueUpdate(element, newValue) {
+  static #handleInputValueUpdate(element, newValue, skipUserModificationCheck) {
     if (!element || element.tagName !== "INPUT") {
       return;
     }
@@ -307,7 +307,23 @@ export default class Renderer {
     // - Ensures correct form reset behavior (resets to original defaultValue)
     // - Maintains proper autocomplete/autofill behavior
     // See: https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#concept-fe-dirty
+
+    // For updates, preserve user input only if they've modified it and we're setting the same value again
+    if (!skipUserModificationCheck) {
+      const lastProgrammaticValue = element.__hologramLastProgrammaticValue__;
+      if (
+        lastProgrammaticValue !== undefined &&
+        newValue === lastProgrammaticValue &&
+        element.value !== lastProgrammaticValue
+      ) {
+        return;
+      }
+    }
+
     element.value = newValue;
+
+    // Track the value we're setting for future comparisons
+    element.__hologramLastProgrammaticValue__ = newValue;
   }
 
   // Based on has_cid_prop?/1
@@ -596,10 +612,12 @@ export default class Renderer {
 
       data.hook = {
         update: (_oldVnode, vnode) => {
-          Renderer.#handleInputValueUpdate(vnode.elm, hologramValue);
+          // Don't skip user modification check for updates - preserve user input
+          Renderer.#handleInputValueUpdate(vnode.elm, hologramValue, false);
         },
         create: (_emptyVnode, vnode) => {
-          Renderer.#handleInputValueUpdate(vnode.elm, hologramValue);
+          // Skip user modification check for create - always set initial value
+          Renderer.#handleInputValueUpdate(vnode.elm, hologramValue, true);
         },
       };
     }
