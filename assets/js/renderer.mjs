@@ -444,7 +444,7 @@ export default class Renderer {
   }
 
   // Based on render_attribute/2
-  static #renderAttribute(name, valueDom) {
+  static #renderAttribute(name, valueDom, isInputValue) {
     const nameText = Bitstring.toText(name);
 
     // []
@@ -464,6 +464,13 @@ export default class Renderer {
     }
 
     const valueText = Renderer.#valueDomToText(valueDom);
+
+    // For input value attributes, preserve empty strings instead of converting to true
+    // Input values are passed to the element's value property (via Snabbdom hooks) and expect strings,
+    // while for other elements, empty strings represent boolean attributes that should be set to true
+    if (isInputValue) {
+      return [nameText, valueText];
+    }
 
     return [nameText, valueText === "" ? true : valueText];
   }
@@ -487,9 +494,13 @@ export default class Renderer {
     const isInputElement = tagName === "input";
 
     for (const attrDom of regularAttrs) {
-      const [nameText, valueText] = Renderer.#renderAttribute(
+      const nameText = Bitstring.toText(attrDom.data[0]);
+      const isInputValue = isInputElement && nameText === "value";
+
+      const [, valueText] = Renderer.#renderAttribute(
         attrDom.data[0],
         attrDom.data[1],
+        isInputValue,
       );
 
       if (valueText !== null) {
@@ -498,7 +509,7 @@ export default class Renderer {
         // - Ensures correct form reset behavior (resets to original defaultValue)
         // - Maintains proper autocomplete/autofill behavior
         // See: https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#concept-fe-dirty
-        if (isInputElement && nameText === "value") {
+        if (isInputValue) {
           // Store the value for later use in hooks
           attrs["data-hologram-value"] = valueText;
         } else {
