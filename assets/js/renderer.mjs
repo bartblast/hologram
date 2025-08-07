@@ -311,6 +311,7 @@ export default class Renderer {
     // For updates, preserve user input only if they've modified it and we're setting the same value again
     if (!skipUserModificationCheck) {
       const lastProgrammaticValue = element.__hologramLastProgrammaticValue__;
+
       if (
         lastProgrammaticValue !== undefined &&
         newValue === lastProgrammaticValue &&
