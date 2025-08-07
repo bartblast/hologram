@@ -588,7 +588,10 @@ export default class Renderer {
       data.props = propsVdom;
     }
 
-    if (tagName === "input" && attrsVdom["data-hologram-value"]) {
+    if (
+      tagName === "input" &&
+      attrsVdom["data-hologram-value"] !== "undefined"
+    ) {
       const hologramValue = attrsVdom["data-hologram-value"];
 
       // Remove the temporary attribute
