@@ -1,1 +1,2 @@
 Module3 template
+<Link to={Module6}>Module6</Link>
