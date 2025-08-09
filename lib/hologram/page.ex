@@ -87,14 +87,35 @@ defmodule Hologram.Page do
     ]
   end
 
-  defmacro __before_compile__(_env) do
-    quote do
-      @doc """
-      Returns the list of param definitions for the compiled page.
-      """
-      @spec __params__() :: list({atom, atom, keyword})
-      def __params__, do: Enum.reverse(@__params__)
-    end
+  defmacro __before_compile__(env) do
+    # Check if there's a colocated template markup stored
+    markup = Module.get_attribute(env.module, :__colocated_template_markup__)
+    behaviour = Module.get_attribute(env.module, :__colocated_template_behaviour__)
+
+    template_clause =
+      if markup do
+        quote do
+          @impl unquote(behaviour)
+          def template do
+            import Hologram.Template, only: [sigil_HOLO: 2]
+            sigil_HOLO(unquote(markup), [])
+          end
+        end
+      else
+        quote do
+        end
+      end
+
+    params_clause =
+      quote do
+        @doc """
+        Returns the list of param definitions for the compiled page.
+        """
+        @spec __params__() :: list({atom, atom, keyword})
+        def __params__, do: Enum.reverse(@__params__)
+      end
+
+    [template_clause, params_clause]
   end
 
   @doc """

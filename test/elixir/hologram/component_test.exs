@@ -56,12 +56,9 @@ defmodule Hologram.ComponentTest do
       assert {:__block__, [],
               [
                 {:@, [{:context, Component} | _imports_1],
-                 [{:impl, [context: Component], [Component]}]},
-                {:def, [{:context, Component} | _imports_2],
-                 [
-                   {:template, [context: Component], Component},
-                   [do: {:sigil_HOLO, [], ["My template 1", []]}]
-                 ]}
+                 [{:__colocated_template_markup__, [context: Component], ["My template 1"]}]},
+                {:@, [{:context, Component} | _imports_2],
+                 [{:__colocated_template_behaviour__, [context: Component], [Component]}]}
               ]} = maybe_define_template_fun(template_path, Component)
     end
 

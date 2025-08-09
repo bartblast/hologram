@@ -107,14 +107,35 @@ defmodule Hologram.Component do
     ]
   end
 
-  defmacro __before_compile__(_env) do
-    quote do
-      @doc """
-      Returns the list of property definitions for the compiled component.
-      """
-      @spec __props__() :: list({atom, atom, keyword})
-      def __props__, do: Enum.reverse(@__props__)
-    end
+  defmacro __before_compile__(env) do
+    # Check if there's a colocated template markup stored
+    markup = Module.get_attribute(env.module, :__colocated_template_markup__)
+    behaviour = Module.get_attribute(env.module, :__colocated_template_behaviour__)
+
+    template_clause =
+      if markup do
+        quote do
+          @impl unquote(behaviour)
+          def template do
+            import Hologram.Template, only: [sigil_HOLO: 2]
+            sigil_HOLO(unquote(markup), [])
+          end
+        end
+      else
+        quote do
+        end
+      end
+
+    props_clause =
+      quote do
+        @doc """
+        Returns the list of property definitions for the compiled component.
+        """
+        @spec __props__() :: list({atom, atom, keyword})
+        def __props__, do: Enum.reverse(@__props__)
+      end
+
+    [template_clause, props_clause]
   end
 
   @doc """
@@ -135,10 +156,8 @@ defmodule Hologram.Component do
       markup = File.read!(template_path)
 
       quote do
-        @impl unquote(behaviour)
-        def template do
-          sigil_HOLO(unquote(markup), [])
-        end
+        @__colocated_template_markup__ unquote(markup)
+        @__colocated_template_behaviour__ unquote(behaviour)
       end
     end
   end
