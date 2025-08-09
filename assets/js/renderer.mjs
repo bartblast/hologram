@@ -362,8 +362,25 @@ export default class Renderer {
     return Erlang_Maps["merge/2"](propsFromTemplate, propsFromContext);
   }
 
-  static #mapEventType(eventType) {
-    return eventType.replace(/_/g, "");
+  static #mapEventName(eventName, tagName, attrsVdom) {
+    if (eventName === "change") {
+      if (tagName === "textarea") {
+        return "input";
+      }
+
+      if (tagName === "input") {
+        const inputType =
+          typeof attrsVdom?.type === "string"
+            ? attrsVdom.type.toLowerCase()
+            : "text";
+
+        if (inputType !== "checkbox" && inputType !== "radio") {
+          return "input";
+        }
+      }
+    }
+
+    return eventName;
   }
 
   // Deps: [:maps.get/2]
@@ -426,6 +443,10 @@ export default class Renderer {
 
       return acc;
     }, []);
+  }
+
+  static #normalizeEventName(eventName) {
+    return eventName.replace(/_/g, "");
   }
 
   // Based on normalize_prop_name/1
@@ -564,6 +585,8 @@ export default class Renderer {
 
     const eventListenersVdom = Renderer.#renderEventListeners(
       attrsDom,
+      tagName,
+      attrsVdom,
       defaultTarget,
     );
 
@@ -624,28 +647,37 @@ export default class Renderer {
     return vnode(tagName, data, childrenVdom);
   }
 
-  static #renderEventListeners(attrsDom, defaultTarget) {
+  static #renderEventListeners(attrsDom, tagName, attrsVdom, defaultTarget) {
     if (attrsDom.data.length === 0) {
       return {};
     }
 
-    return attrsDom.data
-      .filter((attrDom) => Bitstring.toText(attrDom.data[0]).startsWith("$"))
-      .reduce((acc, attrDom) => {
-        const nameText = $.#mapEventType(
-          Bitstring.toText(attrDom.data[0]).substring(1),
+    return attrsDom.data.reduce((acc, attrDom) => {
+      const attributeName = Bitstring.toText(attrDom.data[0]);
+
+      if (!attributeName.startsWith("$")) {
+        return acc;
+      }
+
+      const originalEventName = attributeName.substring(1);
+      const normalizedEventName = $.#normalizeEventName(originalEventName);
+
+      const effectiveDomEventName = $.#mapEventName(
+        normalizedEventName,
+        tagName,
+        attrsVdom,
+      );
+
+      acc[effectiveDomEventName] = (event) =>
+        Hologram.handleUiEvent(
+          event,
+          effectiveDomEventName,
+          attrDom.data[1],
+          defaultTarget,
         );
 
-        acc[nameText] = (event) =>
-          Hologram.handleUiEvent(
-            event,
-            nameText,
-            attrDom.data[1],
-            defaultTarget,
-          );
-
-        return acc;
-      }, {});
+      return acc;
+    }, {});
   }
 
   // Based on render_dom/3 (list case)
