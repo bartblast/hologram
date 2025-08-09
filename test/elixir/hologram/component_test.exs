@@ -49,21 +49,20 @@ defmodule Hologram.ComponentTest do
     end
   end
 
-  describe "maybe_define_template_fun/1" do
+  describe "maybe_register_colocated_template_markup/1" do
     test "valid template path" do
-      template_path = "#{@fixtures_dir}/template/template_1.holo"
+      template_path = "#{@fixtures_dir}/component/template_7.holo"
 
-      assert {:__block__, [],
-              [
-                {:@, [{:context, Component} | _imports_1],
-                 [{:__colocated_template_markup__, [context: Component], ["My template 1"]}]},
-                {:@, [{:context, Component} | _imports_2],
-                 [{:__colocated_template_behaviour__, [context: Component], [Component]}]}
-              ]} = maybe_define_template_fun(template_path, Component)
+      assert maybe_register_colocated_template_markup(template_path) ==
+               {:@, [context: Hologram.Component, imports: [{1, Kernel}]],
+                [
+                  {:__colocated_template_markup__, [context: Hologram.Component],
+                   ["My template 7"]}
+                ]}
     end
 
     test "invalid template path" do
-      refute maybe_define_template_fun("/my_invalid_template_path.holo", Component)
+      refute maybe_register_colocated_template_markup("/my_invalid_template_path.holo")
     end
   end
 

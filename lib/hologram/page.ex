@@ -82,29 +82,13 @@ defmodule Hologram.Page do
 
         defoverridable init: 3
       end,
-      Component.maybe_define_template_fun(template_path, __MODULE__),
+      Component.maybe_register_colocated_template_markup(template_path),
       Page.register_params_accumulator()
     ]
   end
 
   defmacro __before_compile__(env) do
-    # Check if there's a colocated template markup stored
-    markup = Module.get_attribute(env.module, :__colocated_template_markup__)
-    behaviour = Module.get_attribute(env.module, :__colocated_template_behaviour__)
-
-    template_clause =
-      if markup do
-        quote do
-          @impl unquote(behaviour)
-          def template do
-            import Hologram.Template, only: [sigil_HOLO: 2]
-            sigil_HOLO(unquote(markup), [])
-          end
-        end
-      else
-        quote do
-        end
-      end
+    template_clause = Component.maybe_build_colocated_template_clause(env, Page)
 
     params_clause =
       quote do

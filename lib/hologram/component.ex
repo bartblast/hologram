@@ -102,29 +102,13 @@ defmodule Hologram.Component do
 
         defoverridable init: 3
       end,
-      maybe_define_template_fun(template_path, __MODULE__),
+      maybe_register_colocated_template_markup(template_path),
       register_props_accumulator()
     ]
   end
 
   defmacro __before_compile__(env) do
-    # Check if there's a colocated template markup stored
-    markup = Module.get_attribute(env.module, :__colocated_template_markup__)
-    behaviour = Module.get_attribute(env.module, :__colocated_template_behaviour__)
-
-    template_clause =
-      if markup do
-        quote do
-          @impl unquote(behaviour)
-          def template do
-            import Hologram.Template, only: [sigil_HOLO: 2]
-            sigil_HOLO(unquote(markup), [])
-          end
-        end
-      else
-        quote do
-        end
-      end
+    template_clause = maybe_build_colocated_template_clause(env, Component)
 
     props_clause =
       quote do
@@ -147,17 +131,34 @@ defmodule Hologram.Component do
   end
 
   @doc """
-  Returns the AST of template/0 function definition that uses markup fetched from the give template file.
-  If the given template file doesn't exist nil is returned.
+  Builds the template clause for colocated templates if markup is stored in module attributes.
+  Returns nil if no colocated template is found.
   """
-  @spec maybe_define_template_fun(String.t(), module) :: AST.t() | nil
-  def maybe_define_template_fun(template_path, behaviour) do
+  @spec maybe_build_colocated_template_clause(Macro.Env.t(), module) :: AST.t()
+  def maybe_build_colocated_template_clause(env, behaviour) do
+    markup = Module.get_attribute(env.module, :__colocated_template_markup__)
+
+    if markup do
+      quote do
+        @impl unquote(behaviour)
+        def template do
+          Hologram.Template.sigil_HOLO(unquote(markup), [])
+        end
+      end
+    end
+  end
+
+  @doc """
+  Registers colocated template markup in a module attribute if the template file exists.
+  Returns nil if the template file doesn't exist.
+  """
+  @spec maybe_register_colocated_template_markup(String.t()) :: AST.t() | nil
+  def maybe_register_colocated_template_markup(template_path) do
     if File.exists?(template_path) do
       markup = File.read!(template_path)
 
       quote do
         @__colocated_template_markup__ unquote(markup)
-        @__colocated_template_behaviour__ unquote(behaviour)
       end
     end
   end
