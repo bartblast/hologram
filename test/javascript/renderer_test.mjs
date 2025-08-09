@@ -945,6 +945,90 @@ describe("Renderer", () => {
 
           Hologram.handleUiEvent.restore();
         });
+
+        it("maps $change event to $input event for input element with uppercased TEXT type", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("type"),
+                Type.keywordList([[Type.atom("text"), Type.bitstring("TEXT")]]),
+              ]),
+              Type.tuple([
+                Type.bitstring("$change"),
+                Type.list([
+                  Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          assert.deepStrictEqual(Object.keys(vdom.data.on), ["input"]);
+
+          const stub = sinon
+            .stub(Hologram, "handleUiEvent")
+            .callsFake((..._args) => null);
+
+          vdom.data.on.input("dummyEvent");
+
+          sinon.assert.calledWith(
+            stub,
+            "dummyEvent",
+            "input",
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+            ]),
+            defaultTarget,
+          );
+
+          Hologram.handleUiEvent.restore();
+        });
+
+        it("keeps $change event for input element with uppercased CHECKBOX type", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("type"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("CHECKBOX")],
+                ]),
+              ]),
+              Type.tuple([
+                Type.bitstring("$change"),
+                Type.list([
+                  Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          assert.deepStrictEqual(Object.keys(vdom.data.on), ["change"]);
+
+          const stub = sinon
+            .stub(Hologram, "handleUiEvent")
+            .callsFake((..._args) => null);
+
+          vdom.data.on.change("dummyEvent");
+
+          sinon.assert.calledWith(
+            stub,
+            "dummyEvent",
+            "change",
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+            ]),
+            defaultTarget,
+          );
+
+          Hologram.handleUiEvent.restore();
+        });
       });
 
       describe("default operation target", () => {
