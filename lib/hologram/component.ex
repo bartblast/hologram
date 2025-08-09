@@ -131,7 +131,7 @@ defmodule Hologram.Component do
   end
 
   @doc """
-  Builds the template clause for colocated templates if markup is stored in module attributes.
+  Builds the template clause for colocated template if markup is registered in module attribute.
   Returns nil if no colocated template is found.
   """
   @spec maybe_build_colocated_template_clause(Macro.Env.t(), module) :: AST.t()
