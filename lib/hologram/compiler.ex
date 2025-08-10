@@ -361,6 +361,7 @@ defmodule Hologram.Compiler do
   Saves the package.json digest to package_json_digest.bin file in build_dir.
   """
   @spec install_js_deps(T.file_path(), T.file_path()) :: :ok
+  # sobelow_skip ["CI.System"]
   def install_js_deps(assets_dir, build_dir) do
     npm_executable = find_npm_executable!()
     opts = [cd: assets_dir, into: IO.stream(:stdio, :line)]
