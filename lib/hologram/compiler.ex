@@ -362,8 +362,9 @@ defmodule Hologram.Compiler do
   """
   @spec install_js_deps(T.file_path(), T.file_path()) :: :ok
   def install_js_deps(assets_dir, build_dir) do
+    npm_executable = find_npm_executable!()
     opts = [cd: assets_dir, into: IO.stream(:stdio, :line)]
-    {_result, exit_status} = System.cmd("npm", ["install"], opts)
+    {_result, exit_status} = System.cmd(npm_executable, ["install"], opts)
 
     if exit_status != 0 do
       raise RuntimeError, message: "npm install command failed"
@@ -592,5 +593,19 @@ defmodule Hologram.Compiler do
     end)
     |> Task.await_many(:infinity)
     |> Enum.join("\n\n")
+  end
+
+  @doc """
+  Finds the npm executable path.
+  """
+  @spec find_npm_executable!() :: String.t()
+  def find_npm_executable! do
+    case System.find_executable("npm") do
+      nil ->
+        raise RuntimeError, message: "npm executable not found in PATH"
+
+      npm_path ->
+        npm_path
+    end
   end
 end

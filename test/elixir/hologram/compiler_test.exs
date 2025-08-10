@@ -1,5 +1,5 @@
 defmodule Hologram.CompilerTest do
-  use Hologram.Test.BasicCase, async: true
+  use Hologram.Test.BasicCase, async: false
   import Hologram.Compiler
 
   alias Hologram.Commons.PLT
@@ -429,6 +429,28 @@ defmodule Hologram.CompilerTest do
     assert Enum.sort(result.added_modules) == [:module_2, :module_4]
     assert Enum.sort(result.removed_modules) == [:module_5, :module_7]
     assert Enum.sort(result.edited_modules) == [:module_3, :module_6]
+  end
+
+  describe "find_npm_executable!/0" do
+    test "finds npm executable" do
+      result = find_npm_executable!()
+
+      assert is_binary(result)
+      assert File.exists?(result)
+    end
+
+    test "raises RuntimeError when npm is not found" do
+      # Temporarily modify PATH to exclude npm
+      original_path = System.get_env("PATH")
+      System.put_env("PATH", "/nonexistent/path")
+
+      assert_raise RuntimeError, "npm executable not found in PATH", fn ->
+        find_npm_executable!()
+      end
+
+      # Restore original PATH
+      System.put_env("PATH", original_path)
+    end
   end
 
   describe "format_files/2" do
