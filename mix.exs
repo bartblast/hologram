@@ -156,7 +156,7 @@ defmodule Hologram.MixProject do
       end
 
     opts = [cd: "assets", into: IO.stream(:stdio, :line)]
-    npm_executable = Hologram.Compiler.find_npm_executable!()
+    npm_executable = System.find_executable("npm") || raise "npm executable not found in PATH"
     System.cmd(npm_executable, ["install"], opts)
     {_exit_msg, exit_status} = System.cmd(npm_executable, cmd, opts)
 
