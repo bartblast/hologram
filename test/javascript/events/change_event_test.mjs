@@ -16,6 +16,7 @@ describe("ChangeEvent", () => {
       const event = {
         target: {tagName: "INPUT", type: "checkbox", checked: true},
       };
+
       const result = ChangeEvent.buildOperationParam(event);
 
       assert.deepStrictEqual(
@@ -54,6 +55,7 @@ describe("ChangeEvent", () => {
           selectedOptions: selectedOptions,
         },
       };
+
       const result = ChangeEvent.buildOperationParam(event);
 
       assert.deepStrictEqual(
