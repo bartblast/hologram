@@ -12,18 +12,10 @@ defineGlobalErlangAndElixirModules();
 
 describe("ChangeEvent", () => {
   describe("buildOperationParam()", () => {
-    it("handles text inputs", () => {
-      const event = {target: {type: "text", value: "my_value"}};
-      const result = ChangeEvent.buildOperationParam(event);
-
-      assert.deepStrictEqual(
-        result,
-        Type.map([[Type.atom("value"), Type.bitstring("my_value")]]),
-      );
-    });
-
     it("handles checkbox inputs", () => {
-      const event = {target: {type: "checkbox", checked: true}};
+      const event = {
+        target: {tagName: "INPUT", type: "checkbox", checked: true},
+      };
       const result = ChangeEvent.buildOperationParam(event);
 
       assert.deepStrictEqual(
@@ -33,7 +25,7 @@ describe("ChangeEvent", () => {
     });
 
     it("handles radio inputs", () => {
-      const event = {target: {type: "radio", checked: false}};
+      const event = {target: {tagName: "INPUT", type: "radio", checked: false}};
       const result = ChangeEvent.buildOperationParam(event);
 
       assert.deepStrictEqual(
@@ -42,8 +34,54 @@ describe("ChangeEvent", () => {
       );
     });
 
+    it("handles single select elements", () => {
+      const event = {target: {tagName: "SELECT", value: "option_2"}};
+      const result = ChangeEvent.buildOperationParam(event);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.atom("value"), Type.bitstring("option_2")]]),
+      );
+    });
+
+    it("handles multiple select elements", () => {
+      const selectedOptions = [{value: "option_1"}, {value: "option_3"}];
+
+      const event = {
+        target: {
+          tagName: "SELECT",
+          multiple: true,
+          selectedOptions: selectedOptions,
+        },
+      };
+      const result = ChangeEvent.buildOperationParam(event);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [
+            Type.atom("value"),
+            Type.list([Type.bitstring("option_1"), Type.bitstring("option_3")]),
+          ],
+        ]),
+      );
+    });
+
+    it("handles textarea elements", () => {
+      const event = {target: {tagName: "TEXTAREA", value: "Some text content"}};
+      const result = ChangeEvent.buildOperationParam(event);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([[Type.atom("value"), Type.bitstring("Some text content")]]),
+      );
+    });
+
     it("handles other input types as text", () => {
-      const event = {target: {type: "email", value: "test@example.com"}};
+      const event = {
+        target: {tagName: "INPUT", type: "email", value: "test@example.com"},
+      };
+
       const result = ChangeEvent.buildOperationParam(event);
 
       assert.deepStrictEqual(
