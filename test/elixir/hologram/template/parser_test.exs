@@ -35,8 +35,11 @@ defmodule Hologram.Template.ParserTest do
     "?"
   ]
 
-  defp test_syntax_error_msg(markup, msg) do
-    assert_raise TemplateSyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
+  defp test_syntax_error_msg(markup, expected_msg) do
+    normalized_expected_msg = normalize_newlines(expected_msg)
+    regex = ~r/#{Regex.escape(normalized_expected_msg)}/s
+
+    assert_raise TemplateSyntaxError, regex, fn ->
       parse_markup(markup)
     end
   end
