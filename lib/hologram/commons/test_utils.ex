@@ -3,6 +3,7 @@ defmodule Hologram.Commons.TestUtils do
 
   alias Hologram.Commons.IntegerUtils
   alias Hologram.Commons.KernelUtils
+  alias Hologram.Commons.StringUtils
   alias Hologram.Reflection
 
   defdelegate pid(str), to: IEx.Helpers
@@ -14,11 +15,11 @@ defmodule Hologram.Commons.TestUtils do
   """
   @spec build_argument_error_msg(integer(), String.t()) :: String.t()
   def build_argument_error_msg(arg_idx, blame) do
-    """
+    StringUtils.normalize_newlines("""
     errors were found at the given arguments:
 
       * #{IntegerUtils.ordinal(arg_idx)} argument: #{blame}
-    """
+    """)
   end
 
   @doc """
@@ -33,11 +34,11 @@ defmodule Hologram.Commons.TestUtils do
         args
         |> Enum.with_index()
         |> Enum.reduce(initial_acc, fn {arg, idx}, acc ->
-          """
+          StringUtils.normalize_newlines("""
           #{acc}
               # #{idx + 1}
               #{KernelUtils.inspect(arg)}
-          """
+          """)
         end)
       else
         ""
@@ -62,9 +63,9 @@ defmodule Hologram.Commons.TestUtils do
         ""
       end
 
-    """
+    StringUtils.normalize_newlines("""
     no function clause matching in #{fun_name}#{args_info}#{attempted_clauses_info}\
-    """
+    """)
   end
 
   @doc """

@@ -5,13 +5,14 @@ defmodule Hologram.Commons.TestUtilsTest do
   test "build_argument_error_msg/2" do
     result = build_argument_error_msg(2, "my blame")
 
-    expected = """
-    errors were found at the given arguments:
+    expected =
+      normalize_newlines("""
+      errors were found at the given arguments:
 
-      * 2nd argument: my blame
-    """
+        * 2nd argument: my blame
+      """)
 
-    assert normalize_newlines(result) == normalize_newlines(expected)
+    assert result == expected
   end
 
   describe "build_function_clause_error_msg/3" do
@@ -24,47 +25,50 @@ defmodule Hologram.Commons.TestUtilsTest do
     test "single arg" do
       result = build_function_clause_error_msg("my_fun/2", [:a])
 
-      expected = """
-      no function clause matching in my_fun/2
+      expected =
+        normalize_newlines("""
+        no function clause matching in my_fun/2
 
-      The following arguments were given to my_fun/2:
+        The following arguments were given to my_fun/2:
 
-          # 1
-          :a
-      """
+            # 1
+            :a
+        """)
 
-      assert normalize_newlines(result) == normalize_newlines(expected)
+      assert result == expected
     end
 
     test "multiple args" do
       result = build_function_clause_error_msg("my_fun/2", [:a, :b])
 
-      expected = """
-      no function clause matching in my_fun/2
+      expected =
+        normalize_newlines("""
+        no function clause matching in my_fun/2
 
-      The following arguments were given to my_fun/2:
+        The following arguments were given to my_fun/2:
 
-          # 1
-          :a
+            # 1
+            :a
 
-          # 2
-          :b
-      """
+            # 2
+            :b
+        """)
 
-      assert normalize_newlines(result) == normalize_newlines(expected)
+      assert result == expected
     end
 
     test "single attempted clause" do
       result = build_function_clause_error_msg("my_fun/2", [], ["my attempted clause"])
 
-      expected = """
-      no function clause matching in my_fun/2
-      Attempted function clauses (showing 1 out of 1):
+      expected =
+        normalize_newlines("""
+        no function clause matching in my_fun/2
+        Attempted function clauses (showing 1 out of 1):
 
-          my attempted clause
-      """
+            my attempted clause
+        """)
 
-      assert normalize_newlines(result) == normalize_newlines(expected)
+      assert result == expected
     end
 
     test "multiple attempted clasues" do
@@ -74,15 +78,16 @@ defmodule Hologram.Commons.TestUtilsTest do
           "my attempted clause 2"
         ])
 
-      expected = """
-      no function clause matching in my_fun/2
-      Attempted function clauses (showing 2 out of 2):
+      expected =
+        normalize_newlines("""
+        no function clause matching in my_fun/2
+        Attempted function clauses (showing 2 out of 2):
 
-          my attempted clause 1
-          my attempted clause 2
-      """
+            my attempted clause 1
+            my attempted clause 2
+        """)
 
-      assert normalize_newlines(result) == normalize_newlines(expected)
+      assert result == expected
     end
 
     test "multiple args and attempted clauses" do
@@ -92,24 +97,25 @@ defmodule Hologram.Commons.TestUtilsTest do
           "my attempted clause 2"
         ])
 
-      expected = """
-      no function clause matching in my_fun/2
+      expected =
+        normalize_newlines("""
+        no function clause matching in my_fun/2
 
-      The following arguments were given to my_fun/2:
+        The following arguments were given to my_fun/2:
 
-          # 1
-          :a
+            # 1
+            :a
 
-          # 2
-          :b
+            # 2
+            :b
 
-      Attempted function clauses (showing 2 out of 2):
+        Attempted function clauses (showing 2 out of 2):
 
-          my attempted clause 1
-          my attempted clause 2
-      """
+            my attempted clause 1
+            my attempted clause 2
+        """)
 
-      assert normalize_newlines(result) == normalize_newlines(expected)
+      assert result == expected
     end
   end
 
@@ -123,13 +129,14 @@ defmodule Hologram.Commons.TestUtilsTest do
     test "single similar function" do
       result = build_undefined_function_error({MyModule, :my_fun, 2}, [{:my_other_fun, 3}])
 
-      expected = """
-      function MyModule.my_fun/2 is undefined or private. Did you mean:
+      expected =
+        normalize_newlines("""
+        function MyModule.my_fun/2 is undefined or private. Did you mean:
 
-            * my_other_fun/3
-      """
+              * my_other_fun/3
+        """)
 
-      assert normalize_newlines(result) == normalize_newlines(expected)
+      assert result == expected
     end
 
     test "multiple similar functions" do
@@ -139,14 +146,15 @@ defmodule Hologram.Commons.TestUtilsTest do
           {:my_other_fun_2, 4}
         ])
 
-      expected = """
-      function MyModule.my_fun/2 is undefined or private. Did you mean:
+      expected =
+        normalize_newlines("""
+        function MyModule.my_fun/2 is undefined or private. Did you mean:
 
-            * my_other_fun_1/3
-            * my_other_fun_2/4
-      """
+              * my_other_fun_1/3
+              * my_other_fun_2/4
+        """)
 
-      assert normalize_newlines(result) == normalize_newlines(expected)
+      assert result == expected
     end
 
     test "module is not available" do
