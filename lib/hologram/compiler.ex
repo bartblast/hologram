@@ -161,7 +161,7 @@ defmodule Hologram.Compiler do
   def build_runtime_js(runtime_mfas, ir_plt, js_dir) do
     erlang_function_defs =
       runtime_mfas
-      |> render_erlang_function_defs("#{js_dir}/erlang")
+      |> render_erlang_function_defs(Path.join(js_dir, "erlang"))
       |> render_block()
 
     elixir_function_defs =
