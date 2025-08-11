@@ -5,9 +5,11 @@ name: CI
 # branch.
 on:
   push:
-    branches: ["master"]
+    branches:
+      - "**"
   pull_request:
-    branches: ["master"]
+    branches:
+      - "**"
 
 # Sets the ENV `MIX_ENV` to `test` for running tests
 env:
