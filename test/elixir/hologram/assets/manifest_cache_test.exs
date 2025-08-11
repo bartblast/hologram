@@ -3,7 +3,6 @@ defmodule Hologram.Assets.ManifestCacheTest do
 
   import Hologram.Assets.ManifestCache
   import Hologram.Test.Stubs
-  import Hologram.Test.Helpers, only: [normalize_newlines: 1, persistent_term_exists?: 1]
   import Mox
 
   alias Hologram.Assets.ManifestCache, as: AssetManifestCache
