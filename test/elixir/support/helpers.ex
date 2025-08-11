@@ -7,6 +7,7 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Commons.ETS
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.ProcessUtils
+  alias Hologram.Commons.StringUtils
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
@@ -20,6 +21,7 @@ defmodule Hologram.Test.Helpers do
   defdelegate ast(code), to: AST, as: :for_code
   defdelegate clean_dir(file_path), to: FileUtils, as: :recreate_dir
   defdelegate ir(code, context \\ %Context{}), to: IR, as: :for_code
+  defdelegate normalize_newlines(string), to: StringUtils
   defdelegate parsed_tags(markup), to: Parser, as: :parse_markup
 
   @doc """
@@ -140,21 +142,6 @@ defmodule Hologram.Test.Helpers do
     code
     |> ir(%Context{})
     |> Encoder.encode_ir(%Context{})
-  end
-
-  @doc """
-  Normalizes newlines in a string to Unix format (\n) for cross-platform testing.
-
-  ## Examples
-
-      iex> normalize_newlines("hello\r\nworld")
-      "hello\nworld"
-      iex> normalize_newlines("hello\nworld")
-      "hello\nworld"
-  """
-  @spec normalize_newlines(String.t()) :: String.t()
-  def normalize_newlines(string) do
-    String.replace(string, "\r\n", "\n")
   end
 
   @doc """

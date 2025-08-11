@@ -22,6 +22,21 @@ defmodule Hologram.Commons.StringUtils do
   end
 
   @doc """
+  Normalizes newlines in a string to Unix format (\n).
+
+  ## Examples
+
+      iex> normalize_newlines("hello\r\nworld")
+      "hello\nworld"
+      iex> normalize_newlines("hello\nworld")
+      "hello\nworld"
+  """
+  @spec normalize_newlines(String.t()) :: String.t()
+  def normalize_newlines(string) do
+    String.replace(string, "\r\n", "\n")
+  end
+
+  @doc """
   Prepends the prefix to the given string.
 
   ## Examples

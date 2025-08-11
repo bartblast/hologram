@@ -14,6 +14,24 @@ defmodule Hologram.Commons.StringUtilsTest do
     end
   end
 
+  describe "normalize_newlines/1" do
+    test "converts Windows line endings to Unix format" do
+      assert normalize_newlines("hello\r\nworld") == "hello\nworld"
+    end
+
+    test "keeps Unix line endings unchanged" do
+      assert normalize_newlines("hello\nworld") == "hello\nworld"
+    end
+
+    test "handles mixed line endings" do
+      assert normalize_newlines("hello\r\nworld\ntest\r\n") == "hello\nworld\ntest\n"
+    end
+
+    test "handles empty string" do
+      assert normalize_newlines("") == ""
+    end
+  end
+
   test "prepend/2" do
     assert prepend("abc", "xyz") == "xyzabc"
   end
