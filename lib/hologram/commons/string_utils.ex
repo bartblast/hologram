@@ -14,7 +14,7 @@ defmodule Hologram.Commons.StringUtils do
   @spec line_separator() :: String.t()
   def line_separator do
     case :os.type() do
-      # Unix-like (Linux, macOS, BSD, Solaris, etc.)      
+      # Unix-like (Linux, macOS, BSD, Solaris, etc.)
       {:unix, _name} -> "\n"
       # Windows (NT, CE, etc.)
       {:win32, _name} -> "\r\n"
