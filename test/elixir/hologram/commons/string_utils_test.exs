@@ -1,5 +1,10 @@
 defmodule Hologram.Commons.StringUtilsTest do
   use Hologram.Test.BasicCase, async: true
+
+  # Hologram.Test.BasicCase imports Hologram.Test.Helpers and
+  # Hologram.Test.Helpers delegate normalize_newlines/1 to StringUtils
+  import Hologram.Test.Helpers, only: []
+
   import Hologram.Commons.StringUtils
 
   test "line_separator/0" do
