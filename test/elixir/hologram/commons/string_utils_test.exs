@@ -2,6 +2,18 @@ defmodule Hologram.Commons.StringUtilsTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Commons.StringUtils
 
+  test "line_separator/0" do
+    result = line_separator()
+
+    case :os.type() do
+      {:unix, _name} ->
+        assert result == "\n"
+
+      _fallback ->
+        assert result == "\r\n"
+    end
+  end
+
   test "prepend/2" do
     assert prepend("abc", "xyz") == "xyzabc"
   end
