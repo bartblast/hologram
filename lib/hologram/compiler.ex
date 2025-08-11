@@ -338,12 +338,11 @@ defmodule Hologram.Compiler do
           {Collectable.t(), exit_status :: non_neg_integer()}
   # sobelow_skip ["CI.System"]
   def format_files(file_paths, opts) do
-    max_bundle_size = Application.get_env(:hologram, :max_bundle_size, 1024 * 1024)
-
     cmd_args = [
       "format",
       "--write",
-      "--files-max-size=#{max_bundle_size}"
+      # Effectively disable the size check (1 GB)
+      "--files-max-size=#{1024 * 1024 * 1024}"
       | file_paths
     ]
 
