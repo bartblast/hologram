@@ -89,7 +89,9 @@ defmodule Hologram.Compiler.Encoder do
       end
 
     if source_code do
-      ~s/Interpreter.defineErlangFunction("#{module}", "#{function}", #{arity}, #{source_code});/
+      normalized_source_code = StringUtils.normalize_newlines(source_code)
+
+      ~s/Interpreter.defineErlangFunction("#{module}", "#{function}", #{arity}, #{normalized_source_code});/
     else
       ~s/Interpreter.defineNotImplementedErlangFunction("#{module}", "#{function}", #{arity});/
     end
