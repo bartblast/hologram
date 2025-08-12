@@ -17,7 +17,7 @@
     "sinon": "^21"
   },
   "scripts": {
-    "test": "mocha '../test/javascript/**/*.mjs' --color --require jsdom-global/register",
+    "test": "mocha ../test/javascript/*.mjs ../test/javascript/*/*.mjs ../test/javascript/*/*/*.mjs ../test/javascript/*/*/*/*.mjs --color --require jsdom-global/register",
     "test-file": "mocha --color --require jsdom-global/register"
   }
 }
