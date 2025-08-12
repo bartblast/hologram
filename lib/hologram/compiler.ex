@@ -12,6 +12,8 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
 
+  @windows_exec_suffixes [".bat", ".cmd", ".exe"]
+
   @doc """
   Builds the call graph of all modules in the project.
   """
@@ -230,7 +232,8 @@ defmodule Hologram.Compiler do
       "--target=es2021"
     ]
 
-    {_exit_msg, exit_status} = System.cmd(opts[:esbuild_bin_path], esbuild_cmd, parallelism: true)
+    {_exit_msg, exit_status} =
+      system_cmd_cross_platform(opts[:esbuild_bin_path], esbuild_cmd, parallelism: true)
 
     if exit_status != 0 do
       raise RuntimeError,
@@ -338,8 +341,9 @@ defmodule Hologram.Compiler do
   def format_files(file_paths, opts) do
     cmd_args = ["format", "--write" | file_paths]
     cmd_opts = [cd: opts[:assets_dir], parallelism: true]
-    formatter_executable = find_formatter_executable!(opts[:formatter_bin_path])
-    {exit_msg, exit_status} = System.cmd(formatter_executable, cmd_args, cmd_opts)
+
+    {exit_msg, exit_status} =
+      system_cmd_cross_platform(opts[:formatter_bin_path], cmd_args, cmd_opts)
 
     if exit_status != 0 do
       raise RuntimeError,
@@ -364,9 +368,8 @@ defmodule Hologram.Compiler do
   @spec install_js_deps(T.file_path(), T.file_path()) :: :ok
   # sobelow_skip ["CI.System"]
   def install_js_deps(assets_dir, build_dir) do
-    npm_executable = find_npm_executable!()
     opts = [cd: assets_dir, into: IO.stream(:stdio, :line)]
-    {_result, exit_status} = System.cmd(npm_executable, ["install"], opts)
+    {_result, exit_status} = system_cmd_cross_platform("npm", ["install"], opts)
 
     if exit_status != 0 do
       raise RuntimeError, message: "npm install command failed"
@@ -597,31 +600,54 @@ defmodule Hologram.Compiler do
     |> Enum.join("\n\n")
   end
 
-  @doc """
-  Finds the formatter executable path.
-  """
-  @spec find_formatter_executable!(T.file_path()) :: String.t()
-  def find_formatter_executable!(formatter_bin_path) do
-    case System.find_executable(formatter_bin_path) do
-      nil ->
-        raise RuntimeError, message: "formatter executable not found at #{formatter_bin_path}"
+  defp resolve_command_path!(command_name_or_path, windows?) do
+    has_separator? = String.contains?(command_name_or_path, ["/", "\\"])
 
-      executable_path ->
-        executable_path
+    if has_separator? do
+      resolve_explicit_command_path!(command_name_or_path, windows?)
+    else
+      case System.find_executable(command_name_or_path) do
+        nil ->
+          raise RuntimeError,
+            message: "executable not found in PATH: #{command_name_or_path}"
+
+        resolved_command_path ->
+          resolved_command_path
+      end
     end
   end
 
-  @doc """
-  Finds the npm executable path.
-  """
-  @spec find_npm_executable!() :: String.t()
-  def find_npm_executable! do
-    case System.find_executable("npm") do
-      nil ->
-        raise RuntimeError, message: "npm executable not found in PATH"
+  defp resolve_explicit_command_path!(explicit_command_path, windows?) do
+    cond do
+      File.exists?(explicit_command_path) ->
+        explicit_command_path
 
-      npm_path ->
-        npm_path
+      windows? ->
+        @windows_exec_suffixes
+        |> Enum.map(&(explicit_command_path <> &1))
+        |> Enum.find(&File.exists?/1)
+        |> case do
+          nil -> raise RuntimeError, message: "executable not found at #{explicit_command_path}"
+          resolved_command_path -> resolved_command_path
+        end
+
+      true ->
+        raise RuntimeError, message: "executable not found at #{explicit_command_path}"
+    end
+  end
+
+  # Executes the given command cross-platform.
+  # Accepts either a bare command name (resolved via PATH) or an executable file path.
+  # On Windows, .cmd/.bat wrappers must be executed via "cmd /c".
+  defp system_cmd_cross_platform(command_name_or_path, args, opts) do
+    windows? = match?({:win32, _name}, :os.type())
+
+    resolved_command_path = resolve_command_path!(command_name_or_path, windows?)
+
+    if windows? and String.match?(resolved_command_path, ~r/\.(cmd|bat)$/i) do
+      System.cmd("cmd", ["/c", resolved_command_path | args], opts)
+    else
+      System.cmd(resolved_command_path, args, opts)
     end
   end
 end

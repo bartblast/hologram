@@ -431,43 +431,7 @@ defmodule Hologram.CompilerTest do
     assert Enum.sort(result.edited_modules) == [:module_3, :module_6]
   end
 
-  describe "find_formatter_executable!/1" do
-    test "finds formatter executable" do
-      formatter_bin_path = Path.join([@assets_dir, "node_modules", ".bin", "biome"])
-      result = find_formatter_executable!(formatter_bin_path)
-
-      assert is_binary(result)
-      assert File.exists?(result)
-    end
-
-    test "raises RuntimeError when formatter is not found" do
-      assert_raise RuntimeError, "formatter executable not found at /nonexistent/formatter", fn ->
-        find_formatter_executable!("/nonexistent/formatter")
-      end
-    end
-  end
-
-  describe "find_npm_executable!/0" do
-    test "finds npm executable" do
-      result = find_npm_executable!()
-
-      assert is_binary(result)
-      assert File.exists?(result)
-    end
-
-    test "raises RuntimeError when npm is not found" do
-      # Temporarily modify PATH to exclude npm
-      original_path = System.get_env("PATH")
-      System.put_env("PATH", "/nonexistent/path")
-
-      assert_raise RuntimeError, "npm executable not found in PATH", fn ->
-        find_npm_executable!()
-      end
-
-      # Restore original PATH
-      System.put_env("PATH", original_path)
-    end
-  end
+  # find_* executable helpers have been removed; covered indirectly via system_cmd_cross_platform/3
 
   describe "format_files/2" do
     @unformatted_valid_js_code "const myVar  =  123"
