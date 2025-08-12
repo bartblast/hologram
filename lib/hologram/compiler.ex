@@ -338,7 +338,8 @@ defmodule Hologram.Compiler do
   def format_files(file_paths, opts) do
     cmd_args = ["format", "--write" | file_paths]
     cmd_opts = [cd: opts[:assets_dir], parallelism: true]
-    {exit_msg, exit_status} = System.cmd(opts[:formatter_bin_path], cmd_args, cmd_opts)
+    formatter_executable = find_formatter_executable!(opts[:formatter_bin_path])
+    {exit_msg, exit_status} = System.cmd(formatter_executable, cmd_args, cmd_opts)
 
     if exit_status != 0 do
       raise RuntimeError,
@@ -594,6 +595,20 @@ defmodule Hologram.Compiler do
     end)
     |> Task.await_many(:infinity)
     |> Enum.join("\n\n")
+  end
+
+  @doc """
+  Finds the formatter executable path.
+  """
+  @spec find_formatter_executable!(T.file_path()) :: String.t()
+  def find_formatter_executable!(formatter_bin_path) do
+    case System.find_executable(formatter_bin_path) do
+      nil ->
+        raise RuntimeError, message: "formatter executable not found at #{formatter_bin_path}"
+
+      executable_path ->
+        executable_path
+    end
   end
 
   @doc """

@@ -28,8 +28,8 @@ defmodule Hologram.CompilerTest do
     build_dir = Path.join(test_tmp_dir, "build")
 
     clean_dir(test_tmp_dir)
-    File.mkdir!(assets_dir)
-    File.mkdir!(build_dir)
+    File.mkdir_p!(assets_dir)
+    File.mkdir_p!(build_dir)
 
     lib_package_json_path = Path.join(@assets_dir, "package.json")
     fixture_package_json_path = Path.join(assets_dir, "package.json")
@@ -429,6 +429,22 @@ defmodule Hologram.CompilerTest do
     assert Enum.sort(result.added_modules) == [:module_2, :module_4]
     assert Enum.sort(result.removed_modules) == [:module_5, :module_7]
     assert Enum.sort(result.edited_modules) == [:module_3, :module_6]
+  end
+
+  describe "find_formatter_executable!/1" do
+    test "finds formatter executable" do
+      formatter_bin_path = Path.join([@assets_dir, "node_modules", ".bin", "biome"])
+      result = find_formatter_executable!(formatter_bin_path)
+
+      assert is_binary(result)
+      assert File.exists?(result)
+    end
+
+    test "raises RuntimeError when formatter is not found" do
+      assert_raise RuntimeError, "formatter executable not found at /nonexistent/formatter", fn ->
+        find_formatter_executable!("/nonexistent/formatter")
+      end
+    end
   end
 
   describe "find_npm_executable!/0" do
