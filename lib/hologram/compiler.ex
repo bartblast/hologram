@@ -664,6 +664,7 @@ defmodule Hologram.Compiler do
   # Accepts either a bare command name (resolved via PATH) or an executable file path.
   # On Windows, .cmd/.bat wrappers must be executed via "cmd /c".
   # sobelow_skip ["CI.System"]
+  # credo:disable-for-lines:11 Credo.Check.Design.DuplicatedCode
   defp system_cmd_cross_platform(command_name_or_path, args, opts) do
     windows? = match?({:win32, _name}, :os.type())
 
