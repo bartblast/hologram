@@ -119,7 +119,9 @@ defmodule Hologram.Commons.FileUtilsTest do
       File.rm_rf!(@dir_path)
 
       # Ensure parent directories exist
-      File.mkdir_p!(Path.dirname(@dir_path))
+      @dir_path
+      |> Path.dirname()
+      |> File.mkdir_p!()
 
       # Create a regular file at the intended directory path
       File.write!(@dir_path, "content")

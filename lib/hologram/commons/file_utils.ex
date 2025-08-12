@@ -77,7 +77,5 @@ defmodule Hologram.Commons.FileUtils do
           raise "Failed to fully remove #{path} after #{max_attempts} attempts"
       end
     end)
-
-    :ok
   end
 end
