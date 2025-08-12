@@ -11,27 +11,28 @@ defmodule Hologram.Template.Parser do
       }
   end
 
+  alias Hologram.Commons.StringUtils
   alias Hologram.Template.Helpers
   alias Hologram.Template.Parser
   alias Hologram.Template.Tokenizer
   alias Hologram.TemplateSyntaxError
 
-  @default_error_details """
-  Reason:
-  Unknown reason.
+  @default_error_details StringUtils.normalize_newlines("""
+                         Reason:
+                         Unknown reason.
 
-  Hint:
-  Please report that you received this message here: https://github.com/bartblast/hologram/issues
-  and include a markup snippet that will allow us to reproduce the issue.
-  """
+                         Hint:
+                         Please report that you received this message here: https://github.com/bartblast/hologram/issues
+                         and include a markup snippet that will allow us to reproduce the issue.
+                         """)
 
-  @unescaped_lt_char_details """
-  Reason:
-  Unescaped '<' character inside text node.
+  @unescaped_lt_char_details StringUtils.normalize_newlines("""
+                             Reason:
+                             Unescaped '<' character inside text node.
 
-  Hint:
-  To escape use HTML entity: '&lt;'.
-  """
+                             Hint:
+                             To escape use HTML entity: '&lt;'.
+                             """)
 
   @type parsed_tag ::
           {:block_end
@@ -159,13 +160,14 @@ defmodule Hologram.Template.Parser do
     tag_type = Helpers.tag_type(context.tag_name)
     node_name = if tag_type == :element, do: "attribute", else: "property"
 
-    details = """
-    Reason:
-    Expression #{node_name} value inside raw block detected.
+    details =
+      StringUtils.normalize_newlines("""
+      Reason:
+      Expression #{node_name} value inside raw block detected.
 
-    Hint:
-    Either wrap the #{node_name} value with double quotes or remove the parent raw block".
-    """
+      Hint:
+      Either wrap the #{node_name} value with double quotes or remove the parent raw block".
+      """)
 
     raise_error(details, context, :attribute_assignment, token, rest)
   end
@@ -218,13 +220,14 @@ defmodule Hologram.Template.Parser do
   # --- DOCTYPE ---
 
   def parse_tokens(context, :doctype, []) do
-    details = """
-    Reason:
-    Unclosed DOCTYPE declaration.
+    details =
+      StringUtils.normalize_newlines("""
+      Reason:
+      Unclosed DOCTYPE declaration.
 
-    Hint:
-    Close the DOCTYPE declaration with '>' character.
-    """
+      Hint:
+      Close the DOCTYPE declaration with '>' character.
+      """)
 
     raise_error(details, context, :doctype, nil, [])
   end
@@ -441,13 +444,14 @@ defmodule Hologram.Template.Parser do
   # --- START TAG ---
 
   def parse_tokens(context, :start_tag, []) do
-    details = """
-    Reason:
-    Unclosed start tag.
+    details =
+      StringUtils.normalize_newlines("""
+      Reason:
+      Unclosed start tag.
 
-    Hint:
-    Close the start tag with '>' character.
-    """
+      Hint:
+      Close the start tag with '>' character.
+      """)
 
     raise_error(details, context, :start_tag, nil, [])
   end
@@ -459,13 +463,14 @@ defmodule Hologram.Template.Parser do
   end
 
   def parse_tokens(context, :start_tag, [{:symbol, "="} = token | rest]) do
-    details = """
-    Reason:
-    Missing attribute name.
+    details =
+      StringUtils.normalize_newlines("""
+      Reason:
+      Missing attribute name.
 
-    Hint:
-    Specify the attribute name before the '=' character.
-    """
+      Hint:
+      Specify the attribute name before the '=' character.
+      """)
 
     raise_error(details, context, :start_tag, token, rest)
   end
@@ -497,13 +502,14 @@ defmodule Hologram.Template.Parser do
   # --- TEXT ---
 
   def parse_tokens(%{node_type: :public_comment} = context, :text, []) do
-    details = """
-    Reason:
-    Unclosed public comment.
+    details =
+      StringUtils.normalize_newlines("""
+      Reason:
+      Unclosed public comment.
 
-    Hint:
-    Close the public comment with '-->' marker.
-    """
+      Hint:
+      Close the public comment with '-->' marker.
+      """)
 
     raise_error(details, context, :text, nil, [])
   end
@@ -762,13 +768,14 @@ defmodule Hologram.Template.Parser do
   def parse_tokens(%{node_type: :text, script?: false} = context, :text, [
         {:symbol, ">"} = token | rest
       ]) do
-    details = """
-    Reason:
-    Unescaped '>' character inside text node.
+    details =
+      StringUtils.normalize_newlines("""
+      Reason:
+      Unescaped '>' character inside text node.
 
-    Hint:
-    To escape use HTML entity: '&gt;'.
-    """
+      Hint:
+      To escape use HTML entity: '&gt;'.
+      """)
 
     raise_error(details, context, :text, token, rest)
   end
@@ -1039,19 +1046,20 @@ defmodule Hologram.Template.Parser do
       |> String.slice(0, 20)
       |> escape_non_printable_chars()
 
-    message = """
+    message =
+      StringUtils.normalize_newlines("""
 
 
-    #{details}
-    #{escaped_prev_fragment}#{current_fragment}#{next_fragment}
-    #{indent}^
+      #{details}
+      #{escaped_prev_fragment}#{current_fragment}#{next_fragment}
+      #{indent}^
 
-    status = #{inspect(status)}
+      status = #{inspect(status)}
 
-    token = #{inspect(token)}
+      token = #{inspect(token)}
 
-    context = #{inspect(context)}
-    """
+      context = #{inspect(context)}
+      """)
 
     raise TemplateSyntaxError, message: message
   end
