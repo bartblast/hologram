@@ -18,7 +18,7 @@ defmodule HologramFeatureTests.MixProject do
     [
       {:credo, "~> 1.0", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
-      {:hologram, git: "https://github.com/bartblast/hologram.git", branch: "master"},
+      {:hologram, git: "https://github.com/bartblast/hologram.git", branch: "fix-233"},
       {:jason, "~> 1.0"},
       {:phoenix, "~> 1.7"},
       {:plug_cowboy, "~> 2.0"},
