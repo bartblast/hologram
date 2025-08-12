@@ -7,9 +7,9 @@ defmodule Hologram.Commons.StringUtils do
   ## Examples
 
       iex> line_separator()
-      "\n"  # On Unix/Linux/macOS/BSD
+      "\n" # On Unix/Linux/macOS/BSD
       iex> line_separator()
-      "\r\n"  # On Windows
+      "\r\n" # On Windows
   """
   @spec line_separator() :: String.t()
   def line_separator do
