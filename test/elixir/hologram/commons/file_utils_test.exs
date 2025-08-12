@@ -133,4 +133,88 @@ defmodule Hologram.Commons.FileUtilsTest do
       assert File.ls!(@dir_path) == []
     end
   end
+
+  describe "rm_rf_with_retries!/3" do
+    @base_dir Path.join([
+                Reflection.tmp_dir(),
+                "tests",
+                "commons",
+                "file_utils",
+                "rm_rf_with_retries!_3"
+              ])
+
+    test "removes a regular file" do
+      dir_path = Path.join(@base_dir, "file")
+      clean_dir(dir_path)
+
+      file_path = Path.join(dir_path, "file.txt")
+      File.write!(file_path, "content")
+
+      assert File.regular?(file_path)
+
+      assert rm_rf_with_retries!(file_path, 5, 10) == :ok
+      refute File.exists?(file_path)
+    end
+
+    test "removes an empty directory" do
+      dir_path = Path.join(@base_dir, "empty_dir")
+      clean_dir(dir_path)
+
+      assert File.dir?(dir_path)
+
+      assert rm_rf_with_retries!(dir_path, 5, 10) == :ok
+      refute File.exists?(dir_path)
+    end
+
+    test "removes a non-empty directory" do
+      dir_path = Path.join(@base_dir, "non_empty_dir")
+      clean_dir(dir_path)
+
+      nested_dir_path = Path.join(dir_path, "nested")
+      File.mkdir!(nested_dir_path)
+
+      nested_file_path = Path.join(nested_dir_path, "file.txt")
+      File.write!(nested_file_path, "content")
+
+      assert File.dir?(dir_path)
+      assert File.regular?(nested_file_path)
+
+      assert rm_rf_with_retries!(dir_path, 5, 10) == :ok
+      refute File.exists?(dir_path)
+    end
+
+    test "succeeds if path does not exist" do
+      path = Path.join(@base_dir, "nonexistent_path")
+      refute File.exists?(path)
+
+      assert rm_rf_with_retries!(path, 5, 10) == :ok
+      refute File.exists?(path)
+    end
+
+    test "raises if cannot remove after retries due to permissions" do
+      dir_path = Path.join(@base_dir, "protected_dir")
+      clean_dir(dir_path)
+
+      # Create a nested file so the directory is non-empty
+      nested_file_path = Path.join(dir_path, "file.txt")
+      File.write!(nested_file_path, "content")
+
+      # On Windows, chmod may be a no-op; in that case, just assert no raise
+      if match?({:win32, _name}, :os.type()) do
+        assert rm_rf_with_retries!(dir_path, 5, 10) == :ok
+      else
+        # Remove write permission on the directory while keeping execute so listing works
+        File.chmod!(dir_path, 0o555)
+
+        assert_raise RuntimeError, "Failed to fully remove #{dir_path} after 5 attempts", fn ->
+          rm_rf_with_retries!(dir_path, 5, 10)
+        end
+
+        # Cleanup: restore permissions for reliable removal
+        if File.exists?(dir_path) do
+          File.chmod!(dir_path, 0o755)
+        end
+      end
+    end
+  end
 end
