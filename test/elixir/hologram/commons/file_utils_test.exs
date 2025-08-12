@@ -118,6 +118,9 @@ defmodule Hologram.Commons.FileUtilsTest do
     test "replaces a regular file with an empty directory" do
       File.rm_rf!(@dir_path)
 
+      # Ensure parent directories exist
+      File.mkdir_p!(Path.dirname(@dir_path))
+
       # Create a regular file at the intended directory path
       File.write!(@dir_path, "content")
 
