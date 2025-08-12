@@ -12,7 +12,14 @@ System.put_env(
   "test_secret_key_base_that_is_long_enough_for_testing_purposes_in_hologram"
 )
 
-ExUnit.start()
+# Skip tests that don't work reliably on Windows
+exclude_opts =
+  case :os.type() do
+    {:win32, _name} -> [:skip_on_windows]
+    _fallback -> []
+  end
+
+ExUnit.start(exclude: exclude_opts)
 
 Mox.defmock(AssetManifestCacheMock, for: AssetManifestCache)
 Application.put_env(:hologram, :asset_manifest_cache_impl, AssetManifestCacheMock)

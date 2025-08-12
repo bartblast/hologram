@@ -147,6 +147,8 @@ defmodule Hologram.Commons.FileUtilsTest do
       refute File.exists?(path)
     end
 
+    # chmod may be a no-op on Windows, making this test unreliable on Windows
+    @tag :skip_on_windows
     test "raises if cannot remove after retries due to permissions" do
       dir_path = Path.join(@base_dir, "protected_dir")
       clean_dir(dir_path)
@@ -155,21 +157,16 @@ defmodule Hologram.Commons.FileUtilsTest do
       nested_file_path = Path.join(dir_path, "file.txt")
       File.write!(nested_file_path, "content")
 
-      # On Windows, chmod may be a no-op; in that case, just assert no raise
-      if match?({:win32, _name}, :os.type()) do
-        assert rm_rf_with_retries!(dir_path, 5, 10) == :ok
-      else
-        # Remove write permission on the directory while keeping execute so listing works
-        File.chmod!(dir_path, 0o555)
+      # Remove write permission on the directory while keeping execute so listing works
+      File.chmod!(dir_path, 0o555)
 
-        assert_raise RuntimeError, "Failed to fully remove #{dir_path} after 5 attempts", fn ->
-          rm_rf_with_retries!(dir_path, 5, 10)
-        end
+      assert_raise RuntimeError, "Failed to fully remove #{dir_path} after 5 attempts", fn ->
+        rm_rf_with_retries!(dir_path, 5, 10)
+      end
 
-        # Cleanup: restore permissions for reliable removal
-        if File.exists?(dir_path) do
-          File.chmod!(dir_path, 0o755)
-        end
+      # Cleanup: restore permissions for reliable removal
+      if File.exists?(dir_path) do
+        File.chmod!(dir_path, 0o755)
       end
     end
   end
