@@ -293,6 +293,11 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
 
+      # Step: Setup Chrome for Wallaby tests (Windows only)
+      - name: Setup Chrome
+        if: ${{ matrix.os == 'windows-latest' }}
+        uses: browser-actions/setup-chrome@v2
+
       ### FEATURE TESTS APP CHECKS ###
 
       # Step: Define how to cache the feature tests app Elixir dependencies.
