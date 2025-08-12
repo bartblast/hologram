@@ -107,7 +107,7 @@ defmodule Hologram.LiveReloadTest do
     assert Enum.all?(result, &is_binary/1)
 
     # All paths should be absolute
-    assert Enum.all?(result, fn path -> String.starts_with?(path, "/") end)
+    assert Enum.all?(result, fn path -> Path.type(path) == :absolute end)
 
     # Should contain the lib directory (standard in elixirc_paths)
     lib_path = Path.join([File.cwd!(), "lib"])
