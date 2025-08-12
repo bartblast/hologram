@@ -49,8 +49,34 @@ defmodule Hologram.Commons.FileUtils do
   """
   @spec recreate_dir(T.file_path()) :: :ok
   def recreate_dir(dir_path) do
-    File.rm_rf!(dir_path)
+    ensure_removed_with_retries!(dir_path, 5, 10)
     File.mkdir_p!(dir_path)
+
+    :ok
+  end
+
+  defp ensure_removed_with_retries!(path, max_attempts, sleep_ms) do
+    Enum.reduce_while(1..max_attempts, nil, fn attempt, _acc ->
+      case File.rm_rf(path) do
+        {:ok, _files_and_dirs} -> :ok
+        {:error, _reason, _partial} -> :error
+      end
+
+      cond do
+        not File.exists?(path) ->
+          {:halt, :ok}
+
+        File.dir?(path) and File.ls!(path) == [] ->
+          {:halt, :ok}
+
+        attempt < max_attempts ->
+          Process.sleep(sleep_ms)
+          {:cont, nil}
+
+        true ->
+          raise "Failed to fully remove #{path} after #{max_attempts} attempts"
+      end
+    end)
 
     :ok
   end
