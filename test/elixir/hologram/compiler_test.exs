@@ -431,8 +431,6 @@ defmodule Hologram.CompilerTest do
     assert Enum.sort(result.edited_modules) == [:module_3, :module_6]
   end
 
-  # find_* executable helpers have been removed; covered indirectly via system_cmd_cross_platform/3
-
   describe "format_files/2" do
     @unformatted_valid_js_code "const myVar  =  123"
     @formatted_valid_js_code "const myVar = 123;\n"
