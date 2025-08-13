@@ -298,6 +298,35 @@ jobs:
         if: ${{ matrix.os == 'windows-latest' }}
         uses: browser-actions/setup-chrome@v2
 
+      # Step: Ensure Chrome version is available in Windows registry for Wallaby (Windows only)
+      - name: Register Chrome version in Windows registry for Wallaby
+        if: ${{ matrix.os == 'windows-latest' }}
+        shell: pwsh
+        run: |
+          $chromePath = $env:CHROME_PATH
+          if (-not $chromePath) {
+            Write-Error "CHROME_PATH is not set"
+            exit 1
+          }
+          $versionOutput = & "$chromePath" --version
+          if (-not $versionOutput) {
+            Write-Error "Failed to get Chrome version from $chromePath"
+            exit 1
+          }
+          if ($versionOutput -match '(\d+\.\d+\.\d+\.\d+)') {
+            $version = $Matches[1]
+          } else {
+            Write-Error "Failed to parse Chrome version from: $versionOutput"
+            exit 1
+          }
+          # Write to HKLM (machine) and HKCU (user) to satisfy any lookup Wallaby performs
+          foreach ($root in @("HKLM:", "HKCU:")) {
+            New-Item -Path "$root\SOFTWARE\Google\Chrome" -Force | Out-Null
+            New-Item -Path "$root\SOFTWARE\Google\Chrome\BLBeacon" -Force | Out-Null
+            New-ItemProperty -Path "$root\SOFTWARE\Google\Chrome\BLBeacon" -Name "version" -Value $version -PropertyType String -Force | Out-Null
+          }
+          Write-Host "Registered Chrome version $version for Wallaby in HKLM and HKCU"
+
       ### FEATURE TESTS APP CHECKS ###
 
       # Step: Define how to cache the feature tests app Elixir dependencies.
