@@ -316,20 +316,15 @@ jobs:
         if: ${{ matrix.os == 'windows-latest' }}
         shell: pwsh
         run: |
-          $chromePath = $env:CHROME_PATH
-          if (-not $chromePath) {
-            Write-Error "CHROME_PATH is not set"
-            exit 1
-          }
-          $versionOutput = & "$chromePath" --version
+          $versionOutput = "${{ steps.setup-chrome.outputs.chrome-version }}"
           if (-not $versionOutput) {
-            Write-Error "Failed to get Chrome version from $chromePath"
+            Write-Error "setup-chrome output chrome-version is empty"
             exit 1
           }
           if ($versionOutput -match '(\d+\.\d+\.\d+\.\d+)') {
             $version = $Matches[1]
           } else {
-            Write-Error "Failed to parse Chrome version from: $versionOutput"
+            Write-Error "Failed to parse Chrome version from setup-chrome output: $versionOutput"
             exit 1
           }
           # Write to HKLM (machine) and HKCU (user) to satisfy any lookup Wallaby performs
