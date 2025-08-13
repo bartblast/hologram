@@ -312,7 +312,7 @@ jobs:
           echo "CHROME_PATH=$chromePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       # Step: Ensure Chrome version is available in Windows registry for Wallaby (Windows only)
-      - name: Register Chrome version in Windows registry for Wallaby
+      - name: Shim reg.exe to return Chrome version for Wallaby (Windows only)
         if: ${{ matrix.os == 'windows-latest' }}
         shell: pwsh
         run: |
@@ -327,11 +327,19 @@ jobs:
             Write-Error "Failed to parse Chrome version from setup-chrome output: $versionOutput"
             exit 1
           }
-          # Write to HKCU (user hive). Writing to HKLM typically requires admin and fails on GitHub-hosted runners.
-          New-Item -Path "HKCU:\SOFTWARE\Google\Chrome" -Force | Out-Null
-          New-Item -Path "HKCU:\SOFTWARE\Google\Chrome\BLBeacon" -Force | Out-Null
-          New-ItemProperty -Path "HKCU:\SOFTWARE\Google\Chrome\BLBeacon" -Name "version" -Value $version -PropertyType String -Force | Out-Null
-          Write-Host "Registered Chrome version $version for Wallaby in HKCU"
+          $shimDir = "$env:USERPROFILE\wallaby_shims"
+          New-Item -ItemType Directory -Path $shimDir -Force | Out-Null
+          $batPath = "$shimDir\reg.bat"
+          Set-Content -Path $batPath -Value '@echo off' -Encoding ASCII
+          Add-Content -Path $batPath -Value 'if "%1"=="query" if "%2"=="HKLM\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Google Chrome" (' -Encoding ASCII
+          Add-Content -Path $batPath -Value ('  echo DisplayVersion    REG_SZ    ' + $version) -Encoding ASCII
+          Add-Content -Path $batPath -Value '  exit /b 0' -Encoding ASCII
+          Add-Content -Path $batPath -Value ')' -Encoding ASCII
+          Add-Content -Path $batPath -Value '"%SystemRoot%\System32\reg.exe" %*' -Encoding ASCII
+          # Prepend shim dir to PATH and ensure .BAT is before .EXE so our shim is used
+          echo "$shimDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "PATHEXT=.BAT;.CMD;.COM;.EXE" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Installed reg shim in $shimDir; will report Chrome version $version to Wallaby"
 
       ### FEATURE TESTS APP CHECKS ###
 
