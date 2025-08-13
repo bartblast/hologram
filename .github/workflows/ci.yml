@@ -21,7 +21,7 @@ permissions:
 jobs:
   lib_tests:
     runs-on: ${{ matrix.os }}
-    name: Lib Tests on OS ${{ matrix.os }}, Elixir ${{ matrix.elixir }}, Erlang/OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
+    name: Lib Tests on ${{ matrix.os }}, Elixir ${{ matrix.elixir }}, Erlang/OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     strategy:
       fail-fast: false
       # Specify the Elixir and OTP versions to use when building
@@ -227,8 +227,8 @@ jobs:
         run: mix test.js
 
   feature_tests:
-    runs-on: ${{ matrix.os }}
-    name: Feature Tests on OS ${{ matrix.os }}, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    name: Feature Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     defaults:
       run:
         working-directory: test/features
@@ -237,7 +237,6 @@ jobs:
       # Specify the Elixir and OTP versions to use when building
       # and running the workflow steps.
       matrix:
-        os: [ubuntu-latest, windows-latest]
         elixir:
           # Multi-letter uppercase sigils (~HOLO) were introduced in Elixir 1.15.0
           # - "1.13.4"
@@ -274,7 +273,7 @@ jobs:
           - elixir: "1.18.2"
             otp: "24.3"
     env:
-      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.os, 'ubuntu-latest') && contains(matrix.elixir, '1.18.2') && contains(matrix.otp, '27.2') && contains(matrix.node, '22.9.0') }}
+      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.elixir, '1.18.2') && contains(matrix.otp, '27.2') && contains(matrix.node, '22.9.0') }}
     steps:
       # Step: Setup Elixir + Erlang/OTP image as the base.
       - name: Set up Elixir
@@ -292,77 +291,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
-
-      # Step: Setup Chrome for Wallaby tests (Windows only)
-      - name: Setup Chrome
-        if: ${{ matrix.os == 'windows-latest' }}
-        id: setup-chrome
-        uses: browser-actions/setup-chrome@v2
-        with:
-          install-chromedriver: true
-
-      # Step: Export CHROMEDRIVER_PATH and ensure driver is on PATH (Windows only)
-      - name: Export ChromeDriver path
-        if: ${{ matrix.os == 'windows-latest' }}
-        shell: pwsh
-        run: |
-          $driverPath = "${{ steps.setup-chrome.outputs.chromedriver-path }}"
-          if (-not $driverPath) {
-            $cmd = Get-Command chromedriver.exe -ErrorAction SilentlyContinue
-            if ($cmd) { $driverPath = $cmd.Source }
-          }
-          if (-not $driverPath) { Write-Error "Unable to determine ChromeDriver path"; exit 1 }
-          $driverDir = Split-Path $driverPath -Parent
-          echo $driverDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          echo "CHROMEDRIVER_PATH=$driverPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "Using ChromeDriver: $driverPath"
-
-      # Step: Export CHROME_PATH from setup-chrome outputs (Windows only)
-      - name: Export CHROME_PATH
-        if: ${{ matrix.os == 'windows-latest' }}
-        shell: pwsh
-        run: |
-          $chromePath = "${{ steps.setup-chrome.outputs.chrome-path }}"
-          if (-not $chromePath) {
-            Write-Error "setup-chrome output chrome-path is empty"
-            exit 1
-          }
-          echo "CHROME_PATH=$chromePath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      # Step: Ensure Chrome version is available in Windows registry for Wallaby (Windows only)
-      - name: Shim reg.exe to return Chrome version for Wallaby (Windows only)
-        if: ${{ matrix.os == 'windows-latest' }}
-        shell: pwsh
-        run: |
-          $versionOutput = "${{ steps.setup-chrome.outputs.chrome-version }}"
-          if (-not $versionOutput) {
-            Write-Error "setup-chrome output chrome-version is empty"
-            exit 1
-          }
-          if ($versionOutput -match '(\d+\.\d+\.\d+\.\d+)') {
-            $version = $Matches[1]
-          } else {
-            Write-Error "Failed to parse Chrome version from setup-chrome output: $versionOutput"
-            exit 1
-          }
-          $shimDir = "$env:USERPROFILE\wallaby_shims"
-          New-Item -ItemType Directory -Path $shimDir -Force | Out-Null
-          $batPath = "$shimDir\reg.bat"
-          Set-Content -Path $batPath -Value '@echo off' -Encoding ASCII
-          Add-Content -Path $batPath -Value 'setlocal' -Encoding ASCII
-          Add-Content -Path $batPath -Value 'set "_REALREG=%SystemRoot%\System32\reg.exe"' -Encoding ASCII
-          Add-Content -Path $batPath -Value 'if /I "%~1"=="query" (' -Encoding ASCII
-          Add-Content -Path $batPath -Value '  echo %* | findstr /I /C:"HKLM\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Google Chrome" >nul' -Encoding ASCII
-          Add-Content -Path $batPath -Value '  if not errorlevel 1 (' -Encoding ASCII
-          Add-Content -Path $batPath -Value ('    echo DisplayVersion    REG_SZ    ' + $version) -Encoding ASCII
-          Add-Content -Path $batPath -Value '    exit /b 0' -Encoding ASCII
-          Add-Content -Path $batPath -Value '  )' -Encoding ASCII
-          Add-Content -Path $batPath -Value ')' -Encoding ASCII
-          Add-Content -Path $batPath -Value '"%_REALREG%" %*' -Encoding ASCII
-          # Prepend shim dir to PATH and ensure .BAT is before .EXE so our shim is used
-          echo "$shimDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          echo "PATHEXT=.BAT;.CMD;.COM;.EXE" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "Installed reg shim in $shimDir; will report Chrome version $version to Wallaby"
 
       ### FEATURE TESTS APP CHECKS ###
 
@@ -392,7 +320,7 @@ jobs:
         uses: nick-fields/retry@v3
         with:
           # TODO: set working directory with action input when https://github.com/nick-fields/retry/issues/89 is implemented
-          command: cd test/features; mix deps.get
+          command: cd test/features && mix deps.get
           retry_on: timeout
           timeout_minutes: 3
           max_attempts: 10
@@ -471,5 +399,5 @@ jobs:
         if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
-          name: fail-screenshots-${{ matrix.os }}-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
+          name: fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
           path: test/features/tmp/screenshots

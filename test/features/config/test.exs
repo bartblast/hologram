@@ -9,7 +9,6 @@ config :logger, level: :warning
 
 config :wallaby,
   chromedriver: [
-    path: System.get_env("CHROMEDRIVER_PATH") || "chromedriver",
     # Optimize for GithHub Actions CI environment, see: https://github.com/elixir-wallaby/wallaby/issues/468#issuecomment-1113520767
     capabilities: %{
       chromeOptions: %{
