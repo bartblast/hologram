@@ -306,15 +306,12 @@ jobs:
         if: ${{ matrix.os == 'windows-latest' }}
         shell: pwsh
         run: |
-          $chromePath = "${{ steps.setup-chrome.outputs.chrome-path }}"
-          if (-not $chromePath) { Write-Error "setup-chrome output chrome-path is empty"; exit 1 }
-          $chromeDir = Split-Path $chromePath -Parent
-          $driver = Get-ChildItem -Path $chromeDir -Recurse -Filter chromedriver.exe -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $driver) { Write-Error "chromedriver.exe not found under $chromeDir"; exit 1 }
-          $driverDir = Split-Path $driver.FullName -Parent
-          echo $driverDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          Write-Host "Added ChromeDriver to PATH: $driverDir"
-          echo "CHROMEDRIVER_PATH=$($driver.FullName)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $cmd = Get-Command chromedriver.exe -ErrorAction SilentlyContinue
+          if (-not $cmd) { Write-Error "chromedriver.exe not found in PATH"; exit 1 }
+          $driverPath = $cmd.Source
+          $driverDir = Split-Path $driverPath -Parent
+          Write-Host "Found ChromeDriver: $driverPath"
+          echo "CHROMEDRIVER_PATH=$driverPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       # Step: Export CHROME_PATH from setup-chrome outputs (Windows only)
       - name: Export CHROME_PATH
