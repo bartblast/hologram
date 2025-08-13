@@ -327,13 +327,11 @@ jobs:
             Write-Error "Failed to parse Chrome version from setup-chrome output: $versionOutput"
             exit 1
           }
-          # Write to HKLM (machine) and HKCU (user) to satisfy any lookup Wallaby performs
-          foreach ($root in @("HKLM:", "HKCU:")) {
-            New-Item -Path "$root\SOFTWARE\Google\Chrome" -Force | Out-Null
-            New-Item -Path "$root\SOFTWARE\Google\Chrome\BLBeacon" -Force | Out-Null
-            New-ItemProperty -Path "$root\SOFTWARE\Google\Chrome\BLBeacon" -Name "version" -Value $version -PropertyType String -Force | Out-Null
-          }
-          Write-Host "Registered Chrome version $version for Wallaby in HKLM and HKCU"
+          # Write to HKCU (user hive). Writing to HKLM typically requires admin and fails on GitHub-hosted runners.
+          New-Item -Path "HKCU:\SOFTWARE\Google\Chrome" -Force | Out-Null
+          New-Item -Path "HKCU:\SOFTWARE\Google\Chrome\BLBeacon" -Force | Out-Null
+          New-ItemProperty -Path "HKCU:\SOFTWARE\Google\Chrome\BLBeacon" -Name "version" -Value $version -PropertyType String -Force | Out-Null
+          Write-Host "Registered Chrome version $version for Wallaby in HKCU"
 
       ### FEATURE TESTS APP CHECKS ###
 
