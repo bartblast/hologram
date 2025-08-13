@@ -301,17 +301,21 @@ jobs:
         with:
           install-chromedriver: true
 
-      # Step: Ensure ChromeDriver is on PATH (Windows only)
-      - name: Add ChromeDriver to PATH
+      # Step: Export CHROMEDRIVER_PATH and ensure driver is on PATH (Windows only)
+      - name: Export ChromeDriver path
         if: ${{ matrix.os == 'windows-latest' }}
         shell: pwsh
         run: |
-          $cmd = Get-Command chromedriver.exe -ErrorAction SilentlyContinue
-          if (-not $cmd) { Write-Error "chromedriver.exe not found in PATH"; exit 1 }
-          $driverPath = $cmd.Source
+          $driverPath = "${{ steps.setup-chrome.outputs.chromedriver-path }}"
+          if (-not $driverPath) {
+            $cmd = Get-Command chromedriver.exe -ErrorAction SilentlyContinue
+            if ($cmd) { $driverPath = $cmd.Source }
+          }
+          if (-not $driverPath) { Write-Error "Unable to determine ChromeDriver path"; exit 1 }
           $driverDir = Split-Path $driverPath -Parent
-          Write-Host "Found ChromeDriver: $driverPath"
+          echo $driverDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           echo "CHROMEDRIVER_PATH=$driverPath" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Using ChromeDriver: $driverPath"
 
       # Step: Export CHROME_PATH from setup-chrome outputs (Windows only)
       - name: Export CHROME_PATH
