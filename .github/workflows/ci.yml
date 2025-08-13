@@ -298,6 +298,8 @@ jobs:
         if: ${{ matrix.os == 'windows-latest' }}
         id: setup-chrome
         uses: browser-actions/setup-chrome@v2
+        with:
+          install-chromedriver: true
 
       # Step: Export CHROME_PATH from setup-chrome outputs (Windows only)
       - name: Export CHROME_PATH
