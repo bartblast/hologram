@@ -331,11 +331,16 @@ jobs:
           New-Item -ItemType Directory -Path $shimDir -Force | Out-Null
           $batPath = "$shimDir\reg.bat"
           Set-Content -Path $batPath -Value '@echo off' -Encoding ASCII
-          Add-Content -Path $batPath -Value 'if "%1"=="query" if "%2"=="HKLM\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Google Chrome" (' -Encoding ASCII
-          Add-Content -Path $batPath -Value ('  echo DisplayVersion    REG_SZ    ' + $version) -Encoding ASCII
-          Add-Content -Path $batPath -Value '  exit /b 0' -Encoding ASCII
+          Add-Content -Path $batPath -Value 'setlocal' -Encoding ASCII
+          Add-Content -Path $batPath -Value 'set "_REALREG=%SystemRoot%\System32\reg.exe"' -Encoding ASCII
+          Add-Content -Path $batPath -Value 'if /I "%~1"=="query" (' -Encoding ASCII
+          Add-Content -Path $batPath -Value '  echo %* | findstr /I /C:"HKLM\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\Google Chrome" >nul' -Encoding ASCII
+          Add-Content -Path $batPath -Value '  if not errorlevel 1 (' -Encoding ASCII
+          Add-Content -Path $batPath -Value ('    echo DisplayVersion    REG_SZ    ' + $version) -Encoding ASCII
+          Add-Content -Path $batPath -Value '    exit /b 0' -Encoding ASCII
+          Add-Content -Path $batPath -Value '  )' -Encoding ASCII
           Add-Content -Path $batPath -Value ')' -Encoding ASCII
-          Add-Content -Path $batPath -Value '"%SystemRoot%\System32\reg.exe" %*' -Encoding ASCII
+          Add-Content -Path $batPath -Value '"%_REALREG%" %*' -Encoding ASCII
           # Prepend shim dir to PATH and ensure .BAT is before .EXE so our shim is used
           echo "$shimDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           echo "PATHEXT=.BAT;.CMD;.COM;.EXE" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
