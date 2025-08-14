@@ -1796,7 +1796,10 @@ describe("Renderer", () => {
             mockInput.value = "old_value";
 
             // Call the update hook
-            const mockVnode = {elm: mockInput};
+            const mockVnode = {
+              elm: mockInput,
+              data: {hologramValue: "new_value"},
+            };
             result.data.hook.update(null, mockVnode);
 
             // Should always update the value
@@ -1832,7 +1835,10 @@ describe("Renderer", () => {
             mockInput.value = "user_typed_text";
 
             // Call the update hook with a new programmatic value
-            const mockVnode = {elm: mockInput};
+            const mockVnode = {
+              elm: mockInput,
+              data: {hologramValue: "new_programmatic_value"},
+            };
             result.data.hook.update(null, mockVnode);
 
             // Should always update the value
@@ -1865,7 +1871,10 @@ describe("Renderer", () => {
             mockInput.value = "current_value";
 
             // Call the update hook
-            const mockVnode = {elm: mockInput};
+            const mockVnode = {
+              elm: mockInput,
+              data: {hologramValue: "new_value"},
+            };
             result.data.hook.update(null, mockVnode);
 
             // Should always update the value
@@ -1898,7 +1907,10 @@ describe("Renderer", () => {
             mockInput.value = "whatever";
 
             // Call the update hook
-            const mockVnode = {elm: mockInput};
+            const mockVnode = {
+              elm: mockInput,
+              data: {hologramValue: "first_value"},
+            };
             result.data.hook.update(null, mockVnode);
 
             // Should always update the value
@@ -1941,9 +1953,13 @@ describe("Renderer", () => {
               configurable: true,
             });
 
-            // Call the update hook
-            const mockVnode = {elm: mockInput};
-            result.data.hook.update(null, mockVnode);
+            // Call the update hook with same value (to test no change)
+            const oldVnode = {data: {hologramValue: "same_value"}};
+            const mockVnode = {
+              elm: mockInput,
+              data: {hologramValue: "same_value"},
+            };
+            result.data.hook.update(oldVnode, mockVnode);
 
             // Should not have called the setter since value didn't change
             assert.strictEqual(setterCallCount, 0);

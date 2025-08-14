@@ -296,8 +296,15 @@ export default class Renderer {
     return moduleProxy.__props__;
   }
 
-  static #handleInputValueUpdate(element, newValue) {
-    if (element.value === newValue) {
+  static #handleInputValueUpdate(element, newValue, oldValue) {
+    // Only update input.value when the template-provided value changes.
+    // Prevents wiping user-typed text on $change (mapped to input) re-renders.
+    if (newValue === oldValue) {
+      return;
+    }
+
+    // Skip redundant DOM writes
+    if (newValue === element.value) {
       return;
     }
 
@@ -611,18 +618,20 @@ export default class Renderer {
       // Remove the temporary attribute
       delete attrsVdom["data-hologram-value"];
 
-      // Always set the property for programmatic updates from HOLO templates
-      // We never update the attribute to maintain proper form behavior
-      // - Preserves the browser's dirty flag tracking
-      // - Ensures correct form reset behavior (resets to original defaultValue)
-      // - Maintains proper autocomplete/autofill behavior
-      // See: https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#concept-fe-dirty
+      data.hologramValue = hologramValue;
+
       data.hook = {
-        update: (_oldVnode, vnode) => {
-          Renderer.#handleInputValueUpdate(vnode.elm, hologramValue);
+        update: (oldVnode, newVnode) => {
+          const oldValue = oldVnode?.data?.hologramValue;
+          const newValue = newVnode.data.hologramValue;
+          Renderer.#handleInputValueUpdate(newVnode.elm, newValue, oldValue);
         },
-        create: (_emptyVnode, vnode) => {
-          Renderer.#handleInputValueUpdate(vnode.elm, hologramValue);
+        create: (_emptyVnode, newVnode) => {
+          Renderer.#handleInputValueUpdate(
+            newVnode.elm,
+            hologramValue,
+            undefined,
+          );
         },
       };
     }
