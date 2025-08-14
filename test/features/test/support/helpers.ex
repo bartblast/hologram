@@ -133,6 +133,8 @@ defmodule HologramFeatureTests.Helpers do
     parent
     |> Browser.find(query)
     |> assert_text(regex)
+
+    parent
   end
 
   def go_back(session) do
