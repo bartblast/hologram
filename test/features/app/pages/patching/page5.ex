@@ -27,7 +27,7 @@ defmodule HologramFeatureTests.Patching.Page5 do
           <form>
             <button type="button" $click="clear_state">Clear State</button>
             <br /><br />
-                    
+
             <label for="text_input">Text Input:</label>
             <input type="text" id="text_input" value={@text} />
             <button type="button" $click="update_text_1">Update Text 1</button>
