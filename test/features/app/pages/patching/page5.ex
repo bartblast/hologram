@@ -55,11 +55,11 @@ defmodule HologramFeatureTests.Patching.Page5 do
   end
 
   def action(:update_text_1, _params, component) do
-    put_state(component, :text, "updated text 1")
+    put_state(component, :text, "programmatic 1")
   end
 
   def action(:update_text_2, _params, component) do
-    put_state(component, :text, "updated text 2")
+    put_state(component, :text, "programmatic 2")
   end
 
   def action(:clear_state, _params, component) do

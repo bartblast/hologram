@@ -16,6 +16,7 @@ export default class ChangeEvent {
         const selectedOptions = Array.from(target.selectedOptions).map(
           (option) => option.value,
         );
+
         value = Type.list(
           selectedOptions.map((optionValue) => Type.bitstring(optionValue)),
         );

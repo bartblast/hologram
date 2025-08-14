@@ -127,7 +127,7 @@ defmodule HologramFeatureTests.PatchingTest do
       |> refute_has(css("#text_input[value]"))
       # --- Setup A: establish baseline programmatic value
       |> click(button("Update Text 1"))
-      |> assert_input_value("#text_input", "updated text 1")
+      |> assert_input_value("#text_input", "programmatic 1")
       |> refute_has(css("#text_input[value]"))
       # --- Group 1 (Cond 6): change manually to a non-empty value that is different than the last programmatic value
       |> fill_in(css("#text_input"), with: "manual 1")
@@ -135,19 +135,19 @@ defmodule HologramFeatureTests.PatchingTest do
       |> refute_has(css("#text_input[value]"))
       # --- Group 2 (Cond 1): change programmatically to a non-empty value that is the same as the last programmatic value
       |> click(button("Update Text 1"))
-      |> assert_input_value("#text_input", "updated text 1")
+      |> assert_input_value("#text_input", "programmatic 1")
       |> refute_has(css("#text_input[value]"))
       # --- Group 3 (Cond 2): change programmatically to a non-empty value that is different than the last programmatic value
       |> click(button("Update Text 2"))
-      |> assert_input_value("#text_input", "updated text 2")
+      |> assert_input_value("#text_input", "programmatic 2")
       |> refute_has(css("#text_input[value]"))
       # --- Setup B: switch to a different manual value
       |> fill_in(css("#text_input"), with: "manual 2")
       |> assert_input_value("#text_input", "manual 2")
       |> refute_has(css("#text_input[value]"))
       # --- Group 4 (Cond 5): change manually to a non-empty value that is the same as the last programmatic value
-      |> fill_in(css("#text_input"), with: "updated text 2")
-      |> assert_input_value("#text_input", "updated text 2")
+      |> fill_in(css("#text_input"), with: "programmatic 2")
+      |> assert_input_value("#text_input", "programmatic 2")
       |> refute_has(css("#text_input[value]"))
       # --- Group 5 (Cond 4): change programmatically to an empty value when the last programmatic value was not empty
       |> click(button("Clear State"))
@@ -171,7 +171,7 @@ defmodule HologramFeatureTests.PatchingTest do
       |> refute_has(css("#text_input[value]"))
       # --- Setup E: set non-empty programmatic value
       |> click(button("Update Text 1"))
-      |> assert_input_value("#text_input", "updated text 1")
+      |> assert_input_value("#text_input", "programmatic 1")
       |> refute_has(css("#text_input[value]"))
       # --- Group 8 (Cond 8): change manually to an empty value when the last programmatic value was not empty
       |> fill_in(css("#text_input"), with: "")
