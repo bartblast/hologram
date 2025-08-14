@@ -19,6 +19,9 @@ defmodule HologramFeatureTests.Events.ChangePage do
         <input $change="handle_text_input_change" type="text" id="text_input_elem" value="initial text" />
         <br /><br />
         
+        <input $change="handle_email_input_change" type="email" id="email_input_elem" value="initial email" />
+        <br /><br />
+        
         <textarea $change="handle_textarea_change" id="textarea_elem">initial textarea</textarea>
         <br /><br />
         
@@ -33,10 +36,18 @@ defmodule HologramFeatureTests.Events.ChangePage do
         <label for="radio_elem_2">Radio Option 2</label>
         <br /><br />
 
-        <select $change="handle_select_change" id="select_elem">
+        <select $change="handle_single_select_change" id="single_select_elem">
           <option value="option_1">Option 1</option>
           <option value="option_2" selected>Option 2</option>
           <option value="option_3">Option 3</option>
+        </select>
+        <br /><br />
+        
+        <select $change="handle_multiple_select_change" id="multiple_select_elem" multiple>
+          <option value="option_1">Option 1</option>
+          <option value="option_2" selected>Option 2</option>
+          <option value="option_3" selected>Option 3</option>
+          <option value="option_4">Option 4</option>
         </select>
       </form>
     </p>
@@ -51,23 +62,31 @@ defmodule HologramFeatureTests.Events.ChangePage do
     """
   end
 
-  def action(:handle_text_input_change, params, component) do
-    put_state(component, :result, {"text input", params})
-  end
-
-  def action(:handle_textarea_change, params, component) do
-    put_state(component, :result, {"textarea", params})
-  end
-
   def action(:handle_checkbox_change, params, component) do
     put_state(component, :result, {"checkbox", params})
+  end
+
+  def action(:handle_email_input_change, params, component) do
+    put_state(component, :result, {"email input", params})
+  end
+
+  def action(:handle_multiple_select_change, params, component) do
+    put_state(component, :result, {"multiple select", params})
   end
 
   def action(:handle_radio_change, params, component) do
     put_state(component, :result, {"radio", params})
   end
 
-  def action(:handle_select_change, params, component) do
-    put_state(component, :result, {"select", params})
+  def action(:handle_single_select_change, params, component) do
+    put_state(component, :result, {"single select", params})
+  end
+
+  def action(:handle_text_input_change, params, component) do
+    put_state(component, :result, {"text input", params})
+  end
+
+  def action(:handle_textarea_change, params, component) do
+    put_state(component, :result, {"textarea", params})
   end
 end
