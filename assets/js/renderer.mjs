@@ -296,13 +296,7 @@ export default class Renderer {
     return moduleProxy.__props__;
   }
 
-  static #handleInputValueUpdate(element, newValue, oldValue) {
-    // Only update input.value when the template-provided value changes.
-    // Prevents wiping user-typed text on $change (mapped to input) re-renders.
-    if (newValue === oldValue) {
-      return;
-    }
-
+  static #handleInputValueUpdate(element, newValue) {
     // Skip redundant DOM writes
     if (newValue === element.value) {
       return;
@@ -621,17 +615,12 @@ export default class Renderer {
       data.hologramValue = hologramValue;
 
       data.hook = {
-        update: (oldVnode, newVnode) => {
-          const oldValue = oldVnode?.data?.hologramValue;
+        update: (_oldVnode, newVnode) => {
           const newValue = newVnode.data.hologramValue;
-          Renderer.#handleInputValueUpdate(newVnode.elm, newValue, oldValue);
+          Renderer.#handleInputValueUpdate(newVnode.elm, newValue);
         },
         create: (_emptyVnode, newVnode) => {
-          Renderer.#handleInputValueUpdate(
-            newVnode.elm,
-            hologramValue,
-            undefined,
-          );
+          Renderer.#handleInputValueUpdate(newVnode.elm, hologramValue);
         },
       };
     }
