@@ -125,7 +125,7 @@ defmodule HologramFeatureTests.PatchingTest do
       |> visit(Page5)
       |> assert_input_value("#text_input", "initial text")
       |> refute_has(css("#text_input[value]"))
-      # --- Setup A: baseline programmatic value
+      # --- Setup A: establish baseline programmatic value
       |> click(button("Update Text 1"))
       |> assert_input_value("#text_input", "programmatic 1")
       |> refute_has(css("#text_input[value]"))
@@ -141,7 +141,7 @@ defmodule HologramFeatureTests.PatchingTest do
       |> click(button("Update Text 2"))
       |> assert_input_value("#text_input", "programmatic 2")
       |> refute_has(css("#text_input[value]"))
-      # --- Setup B: different manual value
+      # --- Setup B: switch to a different manual value
       |> fill_in(css("#text_input"), with: "manual 2")
       |> assert_input_value("#text_input", "manual 2")
       |> refute_has(css("#text_input[value]"))
@@ -153,7 +153,7 @@ defmodule HologramFeatureTests.PatchingTest do
       |> click(button("Clear State"))
       |> assert_input_value("#text_input", "")
       |> refute_has(css("#text_input[value]"))
-      # --- Setup C: different manual value
+      # --- Setup C: switch to a different manual value
       |> fill_in(css("#text_input"), with: "manual 3")
       |> assert_input_value("#text_input", "manual 3")
       |> refute_has(css("#text_input[value]"))
@@ -161,7 +161,7 @@ defmodule HologramFeatureTests.PatchingTest do
       |> fill_in(css("#text_input"), with: "")
       |> assert_input_value("#text_input", "")
       |> refute_has(css("#text_input[value]"))
-      # --- Setup D: different manual value
+      # --- Setup D: switch to a different manual value
       |> fill_in(css("#text_input"), with: "manual 4")
       |> assert_input_value("#text_input", "manual 4")
       |> refute_has(css("#text_input[value]"))
@@ -169,7 +169,7 @@ defmodule HologramFeatureTests.PatchingTest do
       |> click(button("Clear State"))
       |> assert_input_value("#text_input", "")
       |> refute_has(css("#text_input[value]"))
-      # --- Setup E: non-empty programmatic value
+      # --- Setup E: set non-empty programmatic value
       |> click(button("Update Text 1"))
       |> assert_input_value("#text_input", "programmatic 1")
       |> refute_has(css("#text_input[value]"))
