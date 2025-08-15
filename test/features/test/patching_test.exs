@@ -125,55 +125,55 @@ defmodule HologramFeatureTests.PatchingTest do
       |> visit(Page5)
       |> assert_input_value("#text_input", "initial text")
       |> refute_has(css("#text_input[value]"))
-      # --- Setup A: establish baseline programmatic value
+      # --- Setup A: baseline programmatic value
       |> click(button("Update Text 1"))
       |> assert_input_value("#text_input", "programmatic 1")
       |> refute_has(css("#text_input[value]"))
-      # --- Group 1 (Cond 6): change manually to a non-empty value that is different than the last programmatic value
+      # --- Group 1 (Cond 6): manual non-empty, different from last prog
       |> fill_in(css("#text_input"), with: "manual 1")
       |> assert_input_value("#text_input", "manual 1")
       |> refute_has(css("#text_input[value]"))
-      # --- Group 2 (Cond 1): change programmatically to a non-empty value that is the same as the last programmatic value
+      # --- Group 2 (Cond 1): prog non-empty, same as last prog
       |> click(button("Update Text 1"))
       |> assert_input_value("#text_input", "programmatic 1")
       |> refute_has(css("#text_input[value]"))
-      # --- Group 3 (Cond 2): change programmatically to a non-empty value that is different than the last programmatic value
+      # --- Group 3 (Cond 2): prog non-empty, different from last prog
       |> click(button("Update Text 2"))
       |> assert_input_value("#text_input", "programmatic 2")
       |> refute_has(css("#text_input[value]"))
-      # --- Setup B: switch to a different manual value
+      # --- Setup B: different manual value
       |> fill_in(css("#text_input"), with: "manual 2")
       |> assert_input_value("#text_input", "manual 2")
       |> refute_has(css("#text_input[value]"))
-      # --- Group 4 (Cond 5): change manually to a non-empty value that is the same as the last programmatic value
+      # --- Group 4 (Cond 5): manual non-empty, same as last prog
       |> fill_in(css("#text_input"), with: "programmatic 2")
       |> assert_input_value("#text_input", "programmatic 2")
       |> refute_has(css("#text_input[value]"))
-      # --- Group 5 (Cond 4): change programmatically to an empty value when the last programmatic value was not empty
+      # --- Group 5 (Cond 4): prog empty, last prog was not empty
       |> click(button("Clear State"))
       |> assert_input_value("#text_input", "")
       |> refute_has(css("#text_input[value]"))
-      # --- Setup C: switch to a different manual value
+      # --- Setup C: different manual value
       |> fill_in(css("#text_input"), with: "manual 3")
       |> assert_input_value("#text_input", "manual 3")
       |> refute_has(css("#text_input[value]"))
-      # --- Group 6 (Cond 7): change manually to an empty value when the last programmatic value was also empty
+      # --- Group 6 (Cond 7): manual empty, last prog was also empty
       |> fill_in(css("#text_input"), with: "")
       |> assert_input_value("#text_input", "")
       |> refute_has(css("#text_input[value]"))
-      # --- Setup D: switch to a different manual value
+      # --- Setup D: different manual value
       |> fill_in(css("#text_input"), with: "manual 4")
       |> assert_input_value("#text_input", "manual 4")
       |> refute_has(css("#text_input[value]"))
-      # --- Group 7 (Cond 3): change programmatically to an empty value when the last programmatic value was also empty
+      # --- Group 7 (Cond 3): prog empty, last prog was also empty
       |> click(button("Clear State"))
       |> assert_input_value("#text_input", "")
       |> refute_has(css("#text_input[value]"))
-      # --- Setup E: set non-empty programmatic value
+      # --- Setup E: non-empty programmatic value
       |> click(button("Update Text 1"))
       |> assert_input_value("#text_input", "programmatic 1")
       |> refute_has(css("#text_input[value]"))
-      # --- Group 8 (Cond 8): change manually to an empty value when the last programmatic value was not empty
+      # --- Group 8 (Cond 8): manual empty, last prog was not empty
       |> fill_in(css("#text_input"), with: "")
       |> assert_input_value("#text_input", "")
       |> refute_has(css("#text_input[value]"))
