@@ -128,6 +128,7 @@ export default class Client {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-Csrf-Token": globalThis.hologram.csrfToken,
       },
       body: Serializer.serialize($.buildCommandPayload(command), "server"),
     };
@@ -136,6 +137,12 @@ export default class Client {
       const response = await fetch("/hologram/command", opts);
 
       if (!response.ok) {
+        if (response.status === 403) {
+          console.error(
+            "Hologram: CSRF token validation failed. This might indicate a security issue or the page needs to be refreshed.",
+          );
+        }
+
         $.#failCommand(response.status);
       }
 
