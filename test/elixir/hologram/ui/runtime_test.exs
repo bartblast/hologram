@@ -79,7 +79,7 @@ defmodule Hologram.UI.RuntimeTest do
     context = Map.put(initial_context, {Hologram.Runtime, :initial_page?}, true)
     markup = render_component(Runtime, %{}, context)
 
-    assert String.contains?(markup, "globalThis.hologram.csrfToken = \"test-csrf-token-12345\";")
+    assert String.contains?(markup, ~s'globalThis.hologram.csrfToken = "test-csrf-token-12345";')
   end
 
   test "page_digest prop", %{context: context} do
