@@ -442,9 +442,7 @@ describe("Client", () => {
   });
 
   describe("sendCommand()", () => {
-    let fetchStub;
-    let hologramExecuteActionStub;
-    let consoleErrorStub;
+    let consoleErrorStub, fetchStub, hologramExecuteActionStub;
 
     const module = Type.alias("MyComponent");
     const name = Type.atom("my_command");
