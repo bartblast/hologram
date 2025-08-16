@@ -2500,6 +2500,79 @@ describe("Renderer", () => {
     });
   });
 
+  describe("escapeHtml()", () => {
+    const escapeHtml = Renderer.escapeHtml;
+
+    it("returns text unchanged when no special characters", () => {
+      const result = escapeHtml("abc");
+      assert.deepStrictEqual(result, "abc");
+    });
+
+    it("escapes double quotes", () => {
+      assert.deepStrictEqual(escapeHtml('"'), "&quot;");
+      assert.deepStrictEqual(escapeHtml('"bar'), "&quot;bar");
+      assert.deepStrictEqual(escapeHtml('foo"'), "foo&quot;");
+      assert.deepStrictEqual(escapeHtml('foo"bar'), "foo&quot;bar");
+      assert.deepStrictEqual(escapeHtml('foo""bar'), "foo&quot;&quot;bar");
+    });
+
+    it("escapes ampersands", () => {
+      assert.deepStrictEqual(escapeHtml("&"), "&amp;");
+      assert.deepStrictEqual(escapeHtml("&bar"), "&amp;bar");
+      assert.deepStrictEqual(escapeHtml("foo&"), "foo&amp;");
+      assert.deepStrictEqual(escapeHtml("foo&bar"), "foo&amp;bar");
+      assert.deepStrictEqual(escapeHtml("foo&&bar"), "foo&amp;&amp;bar");
+    });
+
+    it("escapes single quotes", () => {
+      assert.deepStrictEqual(escapeHtml("'"), "&#39;");
+      assert.deepStrictEqual(escapeHtml("'bar"), "&#39;bar");
+      assert.deepStrictEqual(escapeHtml("foo'"), "foo&#39;");
+      assert.deepStrictEqual(escapeHtml("foo'bar"), "foo&#39;bar");
+      assert.deepStrictEqual(escapeHtml("foo''bar"), "foo&#39;&#39;bar");
+    });
+
+    it("escapes less than signs", () => {
+      assert.deepStrictEqual(escapeHtml("<"), "&lt;");
+      assert.deepStrictEqual(escapeHtml("<bar"), "&lt;bar");
+      assert.deepStrictEqual(escapeHtml("foo<"), "foo&lt;");
+      assert.deepStrictEqual(escapeHtml("foo<bar"), "foo&lt;bar");
+      assert.deepStrictEqual(escapeHtml("foo<<bar"), "foo&lt;&lt;bar");
+    });
+
+    it("escapes greater than signs", () => {
+      assert.deepStrictEqual(escapeHtml(">"), "&gt;");
+      assert.deepStrictEqual(escapeHtml(">bar"), "&gt;bar");
+      assert.deepStrictEqual(escapeHtml("foo>"), "foo&gt;");
+      assert.deepStrictEqual(escapeHtml("foo>bar"), "foo&gt;bar");
+      assert.deepStrictEqual(escapeHtml("foo>>bar"), "foo&gt;&gt;bar");
+    });
+
+    it("escapes multiple special characters in mixed text", () => {
+      const result = escapeHtml('&foo <> bar "fizz" l\'a');
+
+      assert.deepStrictEqual(
+        result,
+        "&amp;foo &lt;&gt; bar &quot;fizz&quot; l&#39;a",
+      );
+    });
+
+    it("handles empty string", () => {
+      const result = escapeHtml("");
+      assert.deepStrictEqual(result, "");
+    });
+
+    it("handles string with only special characters", () => {
+      const result = escapeHtml("&<>\"'");
+      assert.deepStrictEqual(result, "&amp;&lt;&gt;&quot;&#39;");
+    });
+
+    it("handles string with special characters at boundaries", () => {
+      const result = escapeHtml("<div>content</div>");
+      assert.deepStrictEqual(result, "&lt;div&gt;content&lt;/div&gt;");
+    });
+  });
+
   describe("toBitstring()", () => {
     const toBitstring = Renderer.toBitstring;
 

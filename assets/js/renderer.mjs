@@ -14,6 +14,73 @@ import {h as vnode} from "snabbdom";
 import vnodeToHtml from "snabbdom-to-html";
 
 export default class Renderer {
+  // Based on: https://github.com/SukkaW/fast-escape-html (941dab1ec4b1ad7ba5f1899adcd121563ab10dab)
+  static escapeHtml(text) {
+    const regexEscapedChars = /["&'<>]/;
+    const match = regexEscapedChars.exec(text);
+
+    // Faster than !match since there is no type conversion
+    if (match === null) {
+      return text;
+    }
+
+    let entity = "";
+    let escaped = "";
+
+    let index = match.index;
+    let lastIndex = 0;
+
+    const len = text.length;
+
+    // Switch cases ordered by frequency of occurrence in typical HTML content:
+    // Based on analysis of the ECMAScript specification (https://tc39.es/ecma262):
+    //  <  Most common, used in tags and comparisons
+    //  >  Often paired with <, but slightly less frequent
+    //  "  Preferred over ' in HTML attributes
+    //  '  Less common, mainly in attribute values
+    //  &  Used in entity references and logical operations
+
+    for (; index < len; index++) {
+      switch (text.charCodeAt(index)) {
+        case 60: // <
+          entity = "&lt;";
+          break;
+
+        case 62: // >
+          entity = "&gt;";
+          break;
+
+        case 34: // "
+          entity = "&quot;";
+          break;
+
+        case 39: // '
+          entity = "&#39;";
+          break;
+
+        case 38: // &
+          entity = "&amp;";
+          break;
+
+        default:
+          continue;
+      }
+
+      if (lastIndex !== index) {
+        escaped += text.slice(lastIndex, index);
+      }
+
+      escaped += entity;
+      lastIndex = index + 1;
+    }
+
+    if (lastIndex !== index) {
+      escaped += text.slice(lastIndex, index);
+    }
+
+    return escaped;
+  }
+
   // Based on render_dom/3
   static renderDom(dom, context, slots, defaultTarget) {
     if (Type.isList(dom)) {
