@@ -1318,6 +1318,89 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   # The client version works exactly the same as binary_to_atom/2.
   # test "binary_to_existing_atom/2"
 
+  describe "binary_to_integer/1" do
+    test "positive integer, without plus sign" do
+      assert :erlang.binary_to_integer("123") == 123
+    end
+
+    test "positive integer, with plus sign" do
+      assert :erlang.binary_to_integer("+123") == 123
+    end
+
+    test "negative integer" do
+      assert :erlang.binary_to_integer("-456") == -456
+    end
+
+    test "zero" do
+      assert :erlang.binary_to_integer("0") == 0
+    end
+
+    test "large integer" do
+      assert :erlang.binary_to_integer("90071992547409919007199254740991") ==
+               90_071_992_547_409_919_007_199_254_740_991
+    end
+
+    test "raises ArgumentError with leading whitespace" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of an integer"),
+                   {:erlang, :binary_to_integer, ["  123"]}
+    end
+
+    test "raises ArgumentError with trailing whitespace" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of an integer"),
+                   {:erlang, :binary_to_integer, ["123  "]}
+    end
+
+    test "raises ArgumentError with surrounding whitespace" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of an integer"),
+                   {:erlang, :binary_to_integer, ["  789  "]}
+    end
+
+    test "raises ArgumentError if the argument is not a bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :binary_to_integer, [:abc]}
+    end
+
+    test "raises ArgumentError if the argument is a non-binary bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :binary_to_integer, [<<5::size(3)>>]}
+    end
+
+    test "raises ArgumentError if the binary contains non-numeric text" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of an integer"),
+                   {:erlang, :binary_to_integer, ["abc"]}
+    end
+
+    test "raises ArgumentError if the binary contains decimal point" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of an integer"),
+                   {:erlang, :binary_to_integer, ["123.45"]}
+    end
+
+    test "raises ArgumentError if the binary is empty" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of an integer"),
+                   {:erlang, :binary_to_integer, [""]}
+    end
+
+    test "raises ArgumentError if the binary contains only whitespace" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of an integer"),
+                   {:erlang, :binary_to_integer, ["   "]}
+    end
+
+    test "raises ArgumentError if the binary contains mixed text and numbers" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of an integer"),
+                   {:erlang, :binary_to_integer, ["123abc"]}
+    end
+  end
+
   describe "bit_size/1" do
     test "bitstring" do
       assert :erlang.bit_size(<<2::7>>) == 7
