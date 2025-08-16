@@ -194,6 +194,30 @@ defmodule Hologram.Template.Renderer do
     {html_with_interpolated_js, component_registry_with_page_struct, final_server_struct}
   end
 
+  @doc """
+  Converts a value to a string for safe interpolation in HTML templates.
+
+  This function is specifically designed for converting Elixir values into strings
+  that can be safely interpolated into HTML templates. It handles different data
+  types appropriately and can optionally HTML-escape the output to prevent XSS.
+
+  ## Parameters
+
+    * `value` - The Elixir value to convert for template interpolation
+    * `escape` - Whether to HTML-escape the result to prevent XSS (default: true)
+
+  ## Examples
+
+      iex> stringify_for_interpolation("hello")
+      "hello"
+      
+      iex> stringify_for_interpolation("<script>", true)
+      "&lt;script&gt;"
+      
+      iex> stringify_for_interpolation("<script>", false)
+      "<script>"
+  """
+  @spec stringify_for_interpolation(any, boolean) :: String.t()
   def stringify_for_interpolation(value, escape \\ true)
 
   def stringify_for_interpolation(value, true) do
