@@ -1105,4 +1105,82 @@ defmodule Hologram.Template.RendererTest do
              """
     end
   end
+
+  describe "stringify_for_interpolation/1" do
+    test "atom, non-boolean and non-nil" do
+      assert stringify_for_interpolation(:abc) == "abc"
+    end
+
+    test "atom, true" do
+      assert stringify_for_interpolation(true) == "true"
+    end
+
+    test "atom, false" do
+      assert stringify_for_interpolation(false) == "false"
+    end
+
+    test "atom, nil" do
+      assert stringify_for_interpolation(nil) == ""
+    end
+
+    test "bitstring, binary" do
+      assert stringify_for_interpolation(<<97::6, 98::4>>) == "&lt;&lt;132, 2::size(2)&gt;&gt;"
+    end
+
+    test "bitstring, non-binary" do
+      assert stringify_for_interpolation(<<97, 98, 99>>) == "abc"
+    end
+
+    test "float" do
+      assert stringify_for_interpolation(1.23) == "1.23"
+    end
+
+    test "function, anonymous" do
+      value = fn x, y -> x + y end
+      assert stringify_for_interpolation(value) =~ ~r'#Function&lt;.+&gt;'
+    end
+
+    test "function, captured" do
+      assert stringify_for_interpolation(&Map.put/3) == "&amp;Map.put/3"
+    end
+
+    test "integer" do
+      assert stringify_for_interpolation(123) == "123"
+    end
+
+    test "list" do
+      assert stringify_for_interpolation([1, nil, 2]) == "[1, nil, 2]"
+    end
+
+    test "map, atom keys" do
+      value = %{a: 1, b: 2}
+      assert stringify_for_interpolation(value) == "%{a: 1, b: 2}"
+    end
+
+    test "map, mixed keys" do
+      value = %{:a => 1, "b" => nil, 2 => 3}
+
+      assert stringify_for_interpolation(value) ==
+               ~s'%{2 =&gt; 3, :a =&gt; 1, &quot;b&quot; =&gt; nil}'
+    end
+
+    test "pid" do
+      value = pid("0.11.222")
+      assert stringify_for_interpolation(value) == "#PID&lt;0.11.222&gt;"
+    end
+
+    test "port" do
+      value = port("0.11")
+      assert stringify_for_interpolation(value) == "#Port&lt;0.11&gt;"
+    end
+
+    test "reference" do
+      value = ref("0.1.2.3")
+      assert stringify_for_interpolation(value) == "#Reference&lt;0.1.2.3&gt;"
+    end
+
+    test "tuple" do
+      assert stringify_for_interpolation({1, nil, 2}) == "{1, nil, 2}"
+    end
+  end
 end

@@ -2,6 +2,7 @@ defmodule Hologram.Template.Renderer do
   @moduledoc false
 
   alias Hologram.Assets.PageDigestRegistry
+  alias Hologram.Commons.KernelUtils
   alias Hologram.Commons.StringUtils
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.Encoder
@@ -94,12 +95,7 @@ defmodule Hologram.Template.Renderer do
   end
 
   def render_dom({:expression, {value}}, _env, server_struct) do
-    html =
-      value
-      |> to_string()
-      |> HtmlEntities.encode()
-
-    {html, %{}, server_struct}
+    {stringify_for_interpolation(value), %{}, server_struct}
   end
 
   def render_dom({:public_comment, children_dom}, env, server_struct) do
@@ -196,6 +192,19 @@ defmodule Hologram.Template.Renderer do
       |> interpolate_page_params_js(params)
 
     {html_with_interpolated_js, component_registry_with_page_struct, final_server_struct}
+  end
+
+  def stringify_for_interpolation(value)
+      when is_atom(value) or is_binary(value) or is_number(value) do
+    value
+    |> to_string()
+    |> HtmlEntities.encode()
+  end
+
+  def stringify_for_interpolation(value) do
+    value
+    |> KernelUtils.inspect()
+    |> HtmlEntities.encode()
   end
 
   defp build_layout_props_dom(page_module, page_state) do
