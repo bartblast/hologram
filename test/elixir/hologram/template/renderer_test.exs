@@ -1182,5 +1182,9 @@ defmodule Hologram.Template.RendererTest do
     test "tuple" do
       assert stringify_for_interpolation({1, nil, 2}) == "{1, nil, 2}"
     end
+
+    test "when the escape param is false HTML entities are not escaped" do
+      assert stringify_for_interpolation(&Map.put/3, false) == "&Map.put/3"
+    end
   end
 end

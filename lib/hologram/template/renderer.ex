@@ -91,7 +91,7 @@ defmodule Hologram.Template.Renderer do
         %Env{node_type: :element, tag_name: "script"},
         server_struct
       ) do
-    {to_string(value), %{}, server_struct}
+    {stringify_for_interpolation(value, false), %{}, server_struct}
   end
 
   def render_dom({:expression, {value}}, _env, server_struct) do
@@ -194,17 +194,21 @@ defmodule Hologram.Template.Renderer do
     {html_with_interpolated_js, component_registry_with_page_struct, final_server_struct}
   end
 
-  def stringify_for_interpolation(value)
-      when is_atom(value) or is_binary(value) or is_number(value) do
+  def stringify_for_interpolation(value, escape \\ true)
+
+  def stringify_for_interpolation(value, true) do
     value
-    |> to_string()
+    |> stringify_for_interpolation(false)
     |> HtmlEntities.encode()
   end
 
-  def stringify_for_interpolation(value) do
-    value
-    |> KernelUtils.inspect()
-    |> HtmlEntities.encode()
+  def stringify_for_interpolation(value, false)
+      when is_atom(value) or is_binary(value) or is_number(value) do
+    to_string(value)
+  end
+
+  def stringify_for_interpolation(value, false) do
+    KernelUtils.inspect(value)
   end
 
   defp build_layout_props_dom(page_module, page_state) do
