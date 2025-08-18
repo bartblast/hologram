@@ -66,7 +66,7 @@ defmodule Hologram.Template.RendererTest do
 
   @csrf_token "test-csrf-token"
   @env %Renderer.Env{}
-  @opts [initial_page?: true, csrf_token: @csrf_token]
+  @opts [csrf_token: @csrf_token, initial_page?: true]
   @params %{}
 
   @server %Server{
