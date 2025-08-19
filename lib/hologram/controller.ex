@@ -5,6 +5,7 @@ defmodule Hologram.Controller do
   alias Hologram.Component.Action
   alias Hologram.Page
   alias Hologram.Runtime.Cookie
+  alias Hologram.Runtime.CSRFProtection
   alias Hologram.Runtime.Deserializer
   alias Hologram.Runtime.PlugConnUtils
   alias Hologram.Runtime.Session
@@ -154,13 +155,20 @@ defmodule Hologram.Controller do
   The updated and halted Plug.Conn struct with the rendered HTML and applied cookies.
   """
   @spec handle_initial_page_request(Plug.Conn.t(), module) :: Plug.Conn.t()
-  def handle_initial_page_request(conn, page_module) do
+  def handle_initial_page_request(initial_conn, page_module) do
+    conn = PlugConnUtils.init_conn(initial_conn)
+
     params =
       conn.request_path
       |> extract_params(page_module)
       |> Page.cast_params(page_module)
 
-    handle_page_request(conn, page_module, params, true)
+    {conn_with_csrf_token, {masked_csrf_token, _unmasked_csrf_token}} =
+      CSRFProtection.get_or_generate_session_tokens(conn)
+
+    renderer_opts = [csrf_token: masked_csrf_token, initial_page?: true]
+
+    handle_page_request(conn_with_csrf_token, page_module, params, renderer_opts)
   end
 
   @doc """
@@ -187,14 +195,16 @@ defmodule Hologram.Controller do
   The updated and halted Plug.Conn struct with the rendered HTML and applied cookies.
   """
   @spec handle_subsequent_page_request(Plug.Conn.t(), module) :: Plug.Conn.t()
-  def handle_subsequent_page_request(conn, page_module) do
+  def handle_subsequent_page_request(initial_conn, page_module) do
+    conn = PlugConnUtils.init_conn(initial_conn)
+
     params =
       conn
       |> Plug.Conn.fetch_query_params()
       |> Map.get(:query_params)
       |> Page.cast_params(page_module)
 
-    handle_page_request(conn, page_module, params, false)
+    handle_page_request(conn, page_module, params, initial_page?: false)
   end
 
   defp build_cookie_opts(cookie_struct) do
@@ -212,17 +222,14 @@ defmodule Hologram.Controller do
   end
 
   # sobelow_skip ["XSS.HTML"]
-  defp handle_page_request(initial_conn, page_module, params, initial_page?) do
-    conn = PlugConnUtils.init_conn(initial_conn)
-
+  defp handle_page_request(conn, page_module, params, renderer_opts) do
     # TODO: uncomment when standalone Hologram is supported
     # {conn_with_session, _session_id} = Session.init(conn)
 
     server_struct = Server.from(conn)
-    opts = [initial_page?: initial_page?]
 
     {html, _component_registry, updated_server_struct} =
-      Renderer.render_page(page_module, params, server_struct, opts)
+      Renderer.render_page(page_module, params, server_struct, renderer_opts)
 
     conn
     |> apply_session_ops(updated_server_struct.__meta__.session_ops)

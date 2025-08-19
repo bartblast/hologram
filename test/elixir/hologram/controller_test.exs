@@ -19,6 +19,8 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module8
   alias Hologram.Test.Fixtures.Controller.Module9
 
+  @csrf_token_session_key "hologram_csrf_token"
+
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
   use_module_stub :page_digest_registry
@@ -644,6 +646,21 @@ defmodule Hologram.ControllerTest do
       assert String.contains?(conn.resp_body, "hologram/runtime")
     end
 
+    test "generates and includes CSRF token for initial page requests" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module4")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module4)
+
+      # Should have a CSRF token in the session
+      csrf_token = Plug.Conn.get_session(conn, @csrf_token_session_key)
+      assert is_binary(csrf_token)
+      assert byte_size(csrf_token) == 24
+    end
+
     test "updates Plug.Conn session" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module10, :dummy_module_10_digest)
 
@@ -771,6 +788,20 @@ defmodule Hologram.ControllerTest do
 
       # Initial pages include runtime script
       refute String.contains?(conn.resp_body, "hologram/runtime")
+    end
+
+    test "does not generate CSRF token for subsequent page requests" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module4")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_subsequent_page_request(Module4)
+
+      # Should not have a CSRF token in the session for subsequent page requests
+      csrf_token = Plug.Conn.get_session(conn, @csrf_token_session_key)
+      assert is_nil(csrf_token)
     end
 
     test "updates Plug.Conn session" do
