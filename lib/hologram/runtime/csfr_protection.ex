@@ -56,6 +56,23 @@ defmodule Hologram.Runtime.CSRFProtection do
   end
 
   @doc """
+  Gets or generates CSRF tokens for the given Plug connection.
+  """
+  @spec get_or_generate_session_tokens(Plug.Conn.t()) :: {Plug.Conn.t(), {String.t(), String.t()}}
+  def get_or_generate_session_tokens(conn) do
+    case Plug.Conn.get_session(conn, @csrf_token_session_key) do
+      nil ->
+        {masked_token, unmasked_token} = generate_tokens()
+        updated_conn = Plug.Conn.put_session(conn, @csrf_token_session_key, unmasked_token)
+        {updated_conn, {masked_token, unmasked_token}}
+
+      unmasked_token ->
+        masked_token = get_masked_token(unmasked_token)
+        {conn, {masked_token, unmasked_token}}
+    end
+  end
+
+  @doc """
   Validates a client-provided CSRF token against the session token.
 
   Returns `true` if the masked client token is valid for the given session token.
