@@ -1,8 +1,9 @@
 defmodule Hologram.Runtime.CSRFProtectionTest do
   use ExUnit.Case, async: true
   import Hologram.Runtime.CSRFProtection
+  alias Hologram.Runtime.CSRFProtection
 
-  @csrf_token_session_key "hologram_csrf_token"
+  @session_key CSRFProtection.session_key()
 
   describe "ensure_session_token/1" do
     test "when there is no token in the session, generates and stores a new token" do
@@ -11,7 +12,7 @@ defmodule Hologram.Runtime.CSRFProtectionTest do
       updated_conn = ensure_session_token(conn)
 
       # Should have a token in the session
-      session_token = Plug.Conn.get_session(updated_conn, @csrf_token_session_key)
+      session_token = Plug.Conn.get_session(updated_conn, @session_key)
       assert is_binary(session_token)
       assert byte_size(session_token) == 24
 
@@ -25,13 +26,13 @@ defmodule Hologram.Runtime.CSRFProtectionTest do
 
       # First, ensure a token exists
       conn_with_token = ensure_session_token(conn)
-      original_token = Plug.Conn.get_session(conn_with_token, @csrf_token_session_key)
+      original_token = Plug.Conn.get_session(conn_with_token, @session_key)
 
       # Call ensure_session_token again
       updated_conn = ensure_session_token(conn_with_token)
 
       # Should have the same token
-      current_token = Plug.Conn.get_session(updated_conn, @csrf_token_session_key)
+      current_token = Plug.Conn.get_session(updated_conn, @session_key)
       assert current_token == original_token
     end
   end
@@ -109,7 +110,7 @@ defmodule Hologram.Runtime.CSRFProtectionTest do
       assert byte_size(masked_token) > 24
 
       # Should store unmasked token in session
-      session_token = Plug.Conn.get_session(updated_conn, @csrf_token_session_key)
+      session_token = Plug.Conn.get_session(updated_conn, @session_key)
       assert session_token == unmasked_token
 
       # Tokens should validate correctly
@@ -122,7 +123,7 @@ defmodule Hologram.Runtime.CSRFProtectionTest do
 
       conn =
         Plug.Test.init_test_session(%Plug.Conn{}, %{
-          @csrf_token_session_key => existing_unmasked_token
+          @session_key => existing_unmasked_token
         })
 
       {updated_conn, {masked_token, unmasked_token}} = get_or_generate_session_tokens(conn)
@@ -135,7 +136,7 @@ defmodule Hologram.Runtime.CSRFProtectionTest do
       assert byte_size(masked_token) > 24
 
       # Session should still contain the same unmasked token
-      session_token = Plug.Conn.get_session(updated_conn, @csrf_token_session_key)
+      session_token = Plug.Conn.get_session(updated_conn, @session_key)
       assert session_token == existing_unmasked_token
 
       # Tokens should validate correctly
