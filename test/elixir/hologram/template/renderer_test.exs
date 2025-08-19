@@ -1129,37 +1129,63 @@ defmodule Hologram.Template.RendererTest do
              """
     end
 
-    test "CSRF token is put into page emitted context when provided" do
+    test "CSRF token is put into page emitted context for initial page requests" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module28, :dummy_module_28_digest)
 
-      opts_with_csrf = [csrf_token: @csrf_token, initial_page?: true]
+      opts = [csrf_token: @csrf_token, initial_page?: true]
 
       assert {_html, component_registry, _server_struct} =
-               render_page(Module28, @params, @server, opts_with_csrf)
+               render_page(Module28, @params, @server, opts)
 
       page_emitted_context = component_registry["page"].struct.emitted_context
 
       assert page_emitted_context[{Hologram.Runtime, :csrf_token}] == @csrf_token
     end
 
-    test "raises ArgumentError when CSRF token is not provided" do
+    test "CSRF token is not put into page emitted context for subsequent page requests even when provided" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module28, :dummy_module_28_digest)
 
-      opts_without_csrf = [initial_page?: true]
+      opts = [csrf_token: @csrf_token, initial_page?: false]
 
-      assert_raise ArgumentError, "CSRF token is required", fn ->
-        render_page(Module28, @params, @server, opts_without_csrf)
+      assert {_html, component_registry, _server_struct} =
+               render_page(Module28, @params, @server, opts)
+
+      page_emitted_context = component_registry["page"].struct.emitted_context
+
+      refute Map.has_key?(page_emitted_context, {Hologram.Runtime, :csrf_token})
+    end
+
+    test "raises ArgumentError when CSRF token is not provided for initial page requests" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module28, :dummy_module_28_digest)
+
+      opts = [initial_page?: true]
+
+      assert_raise ArgumentError, "CSRF token is required for initial page requests", fn ->
+        render_page(Module28, @params, @server, opts)
       end
     end
 
-    test "raises ArgumentError when CSRF token is nil" do
+    test "raises ArgumentError when CSRF token is nil for initial page requests" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module28, :dummy_module_28_digest)
 
-      opts_with_nil_csrf = [csrf_token: nil, initial_page?: true]
+      opts = [csrf_token: nil, initial_page?: true]
 
-      assert_raise ArgumentError, "CSRF token is required", fn ->
-        render_page(Module28, @params, @server, opts_with_nil_csrf)
+      assert_raise ArgumentError, "CSRF token is required for initial page requests", fn ->
+        render_page(Module28, @params, @server, opts)
       end
+    end
+
+    test "CSRF token is not required for subsequent page requests" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module28, :dummy_module_28_digest)
+
+      opts = [initial_page?: false]
+
+      assert {_html, component_registry, _server_struct} =
+               render_page(Module28, @params, @server, opts)
+
+      page_emitted_context = component_registry["page"].struct.emitted_context
+
+      refute Map.has_key?(page_emitted_context, {Hologram.Runtime, :csrf_token})
     end
   end
 end

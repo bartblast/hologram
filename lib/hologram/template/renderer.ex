@@ -157,7 +157,6 @@ defmodule Hologram.Template.Renderer do
           {String.t(), %{String.t() => %{module: module, struct: Component.t()}}, Server.t()}
   def render_page(page_module, params, server_struct, opts) do
     initial_page? = opts[:initial_page?] || false
-    csrf_token = opts[:csrf_token] || raise ArgumentError, "CSRF token is required"
 
     {page_component_struct, page_server_struct} =
       init_component(page_module, params, server_struct)
@@ -169,7 +168,7 @@ defmodule Hologram.Template.Renderer do
       |> put_initial_page_flag_context(initial_page?)
       |> put_page_digest_context(page_digest)
       |> put_page_mounted_flag_context(false)
-      |> put_csrf_token_context(csrf_token)
+      |> maybe_put_csrf_token_context(opts, initial_page?)
 
     {initial_html, initial_component_registry, final_server_struct} =
       render_page_inside_layout(
@@ -322,16 +321,23 @@ defmodule Hologram.Template.Renderer do
     String.replace(html, "$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
   end
 
-  defp normalize_prop_name({name, value}) do
-    {String.to_existing_atom(name), value}
-  end
+  defp maybe_put_csrf_token_context(page_component_struct, opts, true) do
+    csrf_token =
+      opts[:csrf_token] || raise ArgumentError, "CSRF token is required for initial page requests"
 
-  defp put_csrf_token_context(page_component_struct, csrf_token) do
     Component.put_context(
       page_component_struct,
       {Hologram.Runtime, :csrf_token},
       csrf_token
     )
+  end
+
+  defp maybe_put_csrf_token_context(page_component_struct, _opts, false) do
+    page_component_struct
+  end
+
+  defp normalize_prop_name({name, value}) do
+    {String.to_existing_atom(name), value}
   end
 
   defp put_initial_page_flag_context(page_component_struct, initial_page?) do
