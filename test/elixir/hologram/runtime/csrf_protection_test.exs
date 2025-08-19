@@ -90,7 +90,7 @@ defmodule Hologram.Runtime.CSRFProtectionTest do
 
       assert masked_1 != masked_2
 
-      # Should validate correctly      
+      # Should validate correctly
       assert validate_token(unmasked, masked_1)
       assert validate_token(unmasked, masked_2)
     end

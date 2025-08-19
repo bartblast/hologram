@@ -41,7 +41,9 @@ defmodule Hologram.Runtime.CSRFProtection do
   @spec generate_unmasked_token :: String.t()
   def generate_unmasked_token do
     # Use the same token generation as Plug.CSRFProtection
-    Base.url_encode64(:crypto.strong_rand_bytes(@token_size))
+    @token_size
+    |> :crypto.strong_rand_bytes()
+    |> Base.url_encode64()
   end
 
   @doc """
@@ -52,7 +54,12 @@ defmodule Hologram.Runtime.CSRFProtection do
     mask = generate_unmasked_token()
 
     # Use the same masking algorithm as Plug.CSRFProtection
-    Base.url_encode64(Plug.Crypto.mask(unmasked_token, mask)) <> mask
+    encoded_masked_token =
+      unmasked_token
+      |> Plug.Crypto.mask(mask)
+      |> Base.url_encode64()
+
+    encoded_masked_token <> mask
   end
 
   @doc """
