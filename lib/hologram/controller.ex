@@ -116,30 +116,37 @@ defmodule Hologram.Controller do
   def handle_command_request(initial_conn) do
     conn = PlugConnUtils.init_conn(initial_conn)
 
-    payload =
-      conn.body_params
-      |> Map.get("_json")
-      |> Deserializer.deserialize()
+    if validate_csrf_token(conn) do
+      payload =
+        conn.body_params
+        |> Map.get("_json")
+        |> Deserializer.deserialize()
 
-    %{module: module, name: name, params: params, target: target} = payload
+      %{module: module, name: name, params: params, target: target} = payload
 
-    # TODO: uncomment when standalone Hologram is supported
-    # {conn_with_session, _session_id} = Session.init(conn)
-    server_struct = Server.from(conn)
+      # TODO: uncomment when standalone Hologram is supported
+      # {conn_with_session, _session_id} = Session.init(conn)
+      server_struct = Server.from(conn)
 
-    command_result = module.command(name, params, server_struct)
+      command_result = module.command(name, params, server_struct)
 
-    {updated_server_struct, next_action} =
-      process_command_result(command_result, server_struct, target)
+      {updated_server_struct, next_action} =
+        process_command_result(command_result, server_struct, target)
 
-    {encode_status, encoded_next_action} = Encoder.encode_term(next_action)
-    command_status = if encode_status == :ok, do: 1, else: 0
+      {encode_status, encoded_next_action} = Encoder.encode_term(next_action)
+      command_status = if encode_status == :ok, do: 1, else: 0
 
-    conn
-    |> apply_session_ops(updated_server_struct.__meta__.session_ops)
-    |> apply_cookie_ops(updated_server_struct.__meta__.cookie_ops)
-    |> Controller.json([command_status, encoded_next_action])
-    |> Plug.Conn.halt()
+      conn
+      |> apply_session_ops(updated_server_struct.__meta__.session_ops)
+      |> apply_cookie_ops(updated_server_struct.__meta__.cookie_ops)
+      |> Controller.json([command_status, encoded_next_action])
+      |> Plug.Conn.halt()
+    else
+      conn
+      |> Plug.Conn.put_status(403)
+      |> Controller.text("Forbidden")
+      |> Plug.Conn.halt()
+    end
   end
 
   @doc """
@@ -221,6 +228,20 @@ defmodule Hologram.Controller do
     Enum.filter(opts, fn {_key, value} -> value != nil end)
   end
 
+  defp get_csrf_token_from_header(conn) do
+    case Plug.Conn.get_req_header(conn, "x-csrf-token") do
+      [token] when is_binary(token) and token != "" -> {:ok, token}
+      _fallback -> :error
+    end
+  end
+
+  defp get_csrf_token_from_session(conn) do
+    case Plug.Conn.get_session(conn, CSRFProtection.session_key()) do
+      token when is_binary(token) -> {:ok, token}
+      _fallback -> :error
+    end
+  end
+
   # sobelow_skip ["XSS.HTML"]
   defp handle_page_request(conn, page_module, params, renderer_opts) do
     # TODO: uncomment when standalone Hologram is supported
@@ -258,4 +279,14 @@ defmodule Hologram.Controller do
   defp same_site_to_string(:strict), do: "Strict"
 
   defp same_site_to_string(nil), do: nil
+
+  defp validate_csrf_token(conn) do
+    with {:ok, client_token} <- get_csrf_token_from_header(conn),
+         {:ok, session_token} <- get_csrf_token_from_session(conn),
+         true <- CSRFProtection.validate_token(session_token, client_token) do
+      true
+    else
+      _fallback -> false
+    end
+  end
 end

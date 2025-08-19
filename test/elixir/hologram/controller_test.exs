@@ -9,6 +9,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Commons.ETS
   alias Hologram.Commons.SystemUtils
   alias Hologram.Runtime.Cookie
+  alias Hologram.Runtime.CSRFProtection
   alias Hologram.Test.Fixtures.Controller.Module1
   alias Hologram.Test.Fixtures.Controller.Module10
   alias Hologram.Test.Fixtures.Controller.Module2
@@ -19,7 +20,11 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module8
   alias Hologram.Test.Fixtures.Controller.Module9
 
-  @csrf_token_session_key "hologram_csrf_token"
+  @unmasked_csrf_token CSRFProtection.generate_unmasked_token()
+  @masked_csrf_token CSRFProtection.get_masked_token(@unmasked_csrf_token)
+
+  @csrf_token_session_key CSRFProtection.session_key()
+  @session %{@csrf_token_session_key => @unmasked_csrf_token}
 
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
@@ -28,7 +33,7 @@ defmodule Hologram.ControllerTest do
   setup :set_mox_global
 
   # Create a test connection with parsed JSON body_params (simulating what Plug.Parsers does)
-  defp conn_with_parsed_json(method, path, parsed_json, session \\ %{}) do
+  defp conn_with_parsed_json(method, path, parsed_json, session \\ @session) do
     method
     |> Plug.Test.conn(path, "")
     |> Plug.Test.init_test_session(session)
@@ -257,7 +262,7 @@ defmodule Hologram.ControllerTest do
   end
 
   describe "handle_command_request/1" do
-    test "updates Plug.Conn fields related to HTTP response and halts the pipeline" do
+    test "returns 403 when CSRF token is missing from header" do
       payload = %{
         module: Module6,
         name: :my_command_a,
@@ -273,11 +278,120 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json)
+        # No X-Csrf-Token header provided
+        |> handle_command_request()
+
+      assert conn.halted == true
+      assert conn.state == :sent
+      assert conn.status == 403
+      assert conn.resp_body == "Forbidden"
+    end
+
+    test "returns 403 when CSRF token header is empty" do
+      payload = %{
+        module: Module6,
+        name: :my_command_a,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", "")
+        |> handle_command_request()
+
+      assert conn.halted == true
+      assert conn.state == :sent
+      assert conn.status == 403
+      assert conn.resp_body == "Forbidden"
+    end
+
+    test "returns 403 when session CSRF token is missing" do
+      payload = %{
+        module: Module6,
+        name: :my_command_a,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json, %{})
+        # No session token, but provide header token
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
+      assert conn.halted == true
+      assert conn.state == :sent
+      assert conn.status == 403
+      assert conn.resp_body == "Forbidden"
+    end
+
+    test "returns 403 when CSRF token validation fails" do
+      payload = %{
+        module: Module6,
+        name: :my_command_a,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      {another_masked_token, _another_unmasked_token} = CSRFProtection.generate_tokens()
+
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        # Use a different masked token that won't validate against the session token
+        |> Plug.Conn.put_req_header("x-csrf-token", another_masked_token)
+        |> handle_command_request()
+
+      assert conn.halted == true
+      assert conn.state == :sent
+      assert conn.status == 403
+      assert conn.resp_body == "Forbidden"
+    end
+
+    test "when CSRF token validation succeeds: processes command successfully & updates Plug.Conn fields related to HTTP response and halts the pipeline" do
+      payload = %{
+        module: Module6,
+        name: :my_command_a,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
       assert conn.halted == true
       assert conn.state == :sent
       assert conn.status == 200
+
+      # Should return successful command response
+      response = Jason.decode!(conn.resp_body)
+      assert response == [1, ~s'Type.atom("nil")']
     end
 
     # TODO: uncomment when standalone Hologram is supported
@@ -318,6 +432,7 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
       response = Jason.decode!(conn.resp_body)
@@ -340,6 +455,7 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
       response = Jason.decode!(conn.resp_body)
@@ -366,6 +482,7 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
       response = Jason.decode!(conn.resp_body)
@@ -392,6 +509,7 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
       response = Jason.decode!(conn.resp_body)
@@ -422,8 +540,10 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json, %{
-          "my_session_key" => :action_from_session
+          "my_session_key" => :action_from_session,
+          @csrf_token_session_key => @unmasked_csrf_token
         })
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
       response = Jason.decode!(conn.resp_body)
@@ -452,7 +572,10 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json)
-        |> Map.put(:req_headers, [{"cookie", "my_cookie_name=#{encoded_cookie_value}"}])
+        |> Map.put(:req_headers, [
+          {"cookie", "my_cookie_name=#{encoded_cookie_value}"},
+          {"x-csrf-token", @masked_csrf_token}
+        ])
         |> handle_command_request()
 
       response = Jason.decode!(conn.resp_body)
@@ -479,6 +602,7 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
       assert Map.has_key?(conn.private.plug_session, "my_session_key")
@@ -500,6 +624,7 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
       assert Map.has_key?(conn.resp_cookies, "my_cookie_name")
@@ -521,12 +646,14 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
       response = Jason.decode!(conn.resp_body)
       assert [1, _encoded_action] = response
 
-      assert Enum.empty?(conn.private.plug_session)
+      # Only the CSRF token should be in the session
+      assert Map.keys(conn.private.plug_session) == [@csrf_token_session_key]
     end
 
     test "command handler works correctly when no cookie changes are made" do
@@ -545,7 +672,10 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json)
-        |> Map.put(:req_headers, [{"cookie", "my_cookie=cookie_value"}])
+        |> Map.put(:req_headers, [
+          {"cookie", "my_cookie=cookie_value"},
+          {"x-csrf-token", @masked_csrf_token}
+        ])
         |> handle_command_request()
 
       response = Jason.decode!(conn.resp_body)
