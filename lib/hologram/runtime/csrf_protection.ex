@@ -7,21 +7,6 @@ defmodule Hologram.Runtime.CSRFProtection do
   @token_size 18
 
   @doc """
-  Ensures that a CSRF token exists in the session.
-  """
-  @spec ensure_session_token(Plug.Conn.t()) :: Plug.Conn.t()
-  def ensure_session_token(conn) do
-    case Plug.Conn.get_session(conn, @session_key) do
-      nil ->
-        {_masked_token, unmasked_token} = generate_tokens()
-        Plug.Conn.put_session(conn, @session_key, unmasked_token)
-
-      _unmasked_token ->
-        conn
-    end
-  end
-
-  @doc """
   Generates both masked and unmasked CSRF tokens.
 
   Returns `{masked_token, unmasked_token}` where the masked token should be 

@@ -5,38 +5,6 @@ defmodule Hologram.Runtime.CSRFProtectionTest do
 
   @session_key CSRFProtection.session_key()
 
-  describe "ensure_session_token/1" do
-    test "when there is no token in the session, generates and stores a new token" do
-      conn = Plug.Test.init_test_session(%Plug.Conn{}, %{})
-
-      updated_conn = ensure_session_token(conn)
-
-      # Should have a token in the session
-      session_token = Plug.Conn.get_session(updated_conn, @session_key)
-      assert is_binary(session_token)
-      assert byte_size(session_token) == 24
-
-      # Should be a valid unmasked token
-      masked_token = get_masked_token(session_token)
-      assert validate_token(session_token, masked_token)
-    end
-
-    test "when there is already a token in the session, does nothing" do
-      conn = Plug.Test.init_test_session(%Plug.Conn{}, %{})
-
-      # First, ensure a token exists
-      conn_with_token = ensure_session_token(conn)
-      original_token = Plug.Conn.get_session(conn_with_token, @session_key)
-
-      # Call ensure_session_token again
-      updated_conn = ensure_session_token(conn_with_token)
-
-      # Should have the same token
-      current_token = Plug.Conn.get_session(updated_conn, @session_key)
-      assert current_token == original_token
-    end
-  end
-
   describe "generate_tokens/0" do
     test "returns a tuple with masked and unmasked tokens" do
       {masked, unmasked} = generate_tokens()
