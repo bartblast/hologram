@@ -80,7 +80,10 @@ defmodule Hologram.MixProject do
         "README.md"
       ],
       licenses: ["Apache-2.0"],
-      links: %{"GitHub" => "https://github.com/bartblast/hologram"},
+      links: %{
+        "GitHub" => "https://github.com/bartblast/hologram",
+        "Sponsor" => "https://github.com/sponsors/bartblast"
+      },
       maintainers: ["Bart Blast"]
     ]
   end
