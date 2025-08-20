@@ -41,6 +41,25 @@ defmodule Hologram.ControllerTest do
     |> Map.put(:body_params, %{"_json" => parsed_json})
   end
 
+  defp execute_successful_command_a_request do
+    payload = %{
+      module: Module6,
+      name: :my_command_a,
+      params: %{},
+      target: "my_target_1"
+    }
+
+    parsed_json =
+      payload
+      |> serialize_payload()
+      |> Jason.decode!()
+
+    :post
+    |> conn_with_parsed_json("/hologram/command", parsed_json)
+    |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+    |> handle_command_request()
+  end
+
   defp serialize_params(params) when params == %{} do
     %{"t" => "m", "d" => []}
   end
@@ -392,25 +411,8 @@ defmodule Hologram.ControllerTest do
     end
 
     test "processes command successfully when CSRF token validation succeeds" do
-      payload = %{
-        module: Module6,
-        name: :my_command_a,
-        params: %{},
-        target: "my_target_1"
-      }
+      conn = execute_successful_command_a_request()
 
-      parsed_json =
-        payload
-        |> serialize_payload()
-        |> Jason.decode!()
-
-      conn =
-        :post
-        |> conn_with_parsed_json("/hologram/command", parsed_json)
-        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
-        |> handle_command_request()
-
-      # Should return successful command response
       response = Jason.decode!(conn.resp_body)
       assert response == [1, ~s'Type.atom("nil")']
     end
@@ -462,23 +464,7 @@ defmodule Hologram.ControllerTest do
     # end
 
     test "command with next action nil" do
-      payload = %{
-        module: Module6,
-        name: :my_command_a,
-        params: %{},
-        target: "my_target_1"
-      }
-
-      parsed_json =
-        payload
-        |> serialize_payload()
-        |> Jason.decode!()
-
-      conn =
-        :post
-        |> conn_with_parsed_json("/hologram/command", parsed_json)
-        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
-        |> handle_command_request()
+      conn = execute_successful_command_a_request()
 
       response = Jason.decode!(conn.resp_body)
       assert response == [1, ~s'Type.atom("nil")']
