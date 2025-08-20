@@ -61,6 +61,8 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module69
   alias Hologram.Test.Fixtures.Template.Renderer.Module7
   alias Hologram.Test.Fixtures.Template.Renderer.Module70
+  alias Hologram.Test.Fixtures.Template.Renderer.Module76
+  alias Hologram.Test.Fixtures.Template.Renderer.Module77
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
 
@@ -478,6 +480,28 @@ defmodule Hologram.Template.RendererTest do
       node = {:component, Module66, [{"prop_2", [expression: {:xyz}]}], []}
 
       assert {~s'component vars = %{prop_2: :xyz}', _component_registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "declared to take value from context, value in context" do
+      node = {:component, Module37, [{"cid", [text: "component_37"]}], []}
+
+      assert {"prop_aaa = 123", _component_registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "declared to take value from context, value not in context, default value not specified" do
+      node = {:component, Module76, [{"cid", [text: "component_76"]}], []}
+
+      assert_raise KeyError, ~r/key :aaa not found/, fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "declared to take value from context, value not in context, default value specified" do
+      node = {:component, Module77, [{"cid", [text: "component_77"]}], []}
+
+      assert {"prop_aaa = 987", _component_registry, _server_struct} =
                render_dom(node, @env, @server)
     end
   end

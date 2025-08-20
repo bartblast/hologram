@@ -299,7 +299,9 @@ defmodule Hologram.Template.Renderer do
   defp inject_props_from_context(props, module, context) do
     props_from_context =
       module.__props__()
-      |> Enum.filter(fn {_name, _type, opts} -> opts[:from_context] end)
+      |> Enum.filter(fn {_name, _type, opts} ->
+        opts[:from_context] && Map.has_key?(context, opts[:from_context])
+      end)
       |> Enum.map(fn {name, _type, opts} -> {name, context[opts[:from_context]]} end)
       |> Enum.into(%{})
 
