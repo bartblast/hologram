@@ -381,3 +381,10 @@ export function registerWebApis() {
   globalThis.sessionStorage = window.sessionStorage;
   globalThis.WebSocket = window.WebSocket;
 }
+
+// Waits for asynchronous operations scheduled with setTimeout(..., 0) to complete.
+// This is useful in tests when you need to wait for async actions that are scheduled
+// to run on the next tick of the event loop.
+export function waitForEventLoop() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
