@@ -391,7 +391,31 @@ defmodule Hologram.ControllerTest do
       assert log =~ "CSRF token validation failed"
     end
 
-    test "when CSRF token validation succeeds: processes command successfully & updates Plug.Conn fields related to HTTP response and halts the pipeline" do
+    test "processes command successfully when CSRF token validation succeeds" do
+      payload = %{
+        module: Module6,
+        name: :my_command_a,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
+      # Should return successful command response
+      response = Jason.decode!(conn.resp_body)
+      assert response == [1, ~s'Type.atom("nil")']
+    end
+
+    test "updates Plug.Conn fields related to HTTP response and halts the pipeline when CSRF token validation succeeds" do
       payload = %{
         module: Module6,
         name: :my_command_a,
@@ -413,10 +437,6 @@ defmodule Hologram.ControllerTest do
       assert conn.halted == true
       assert conn.state == :sent
       assert conn.status == 200
-
-      # Should return successful command response
-      response = Jason.decode!(conn.resp_body)
-      assert response == [1, ~s'Type.atom("nil")']
     end
 
     # TODO: uncomment when standalone Hologram is supported
