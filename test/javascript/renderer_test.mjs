@@ -65,6 +65,9 @@ import {defineModule66Fixture} from "./support/fixtures/renderer/module_66.mjs";
 import {defineModule67Fixture} from "./support/fixtures/renderer/module_67.mjs";
 import {defineModule68Fixture} from "./support/fixtures/renderer/module_68.mjs";
 import {defineModule7Fixture} from "./support/fixtures/renderer/module_7.mjs";
+import {defineModule76Fixture} from "./support/fixtures/renderer/module_76.mjs";
+import {defineModule77Fixture} from "./support/fixtures/renderer/module_77.mjs";
+import {defineModule78Fixture} from "./support/fixtures/renderer/module_78.mjs";
 import {defineModule8Fixture} from "./support/fixtures/renderer/module_8.mjs";
 import {defineModule9Fixture} from "./support/fixtures/renderer/module_9.mjs";
 
@@ -130,6 +133,9 @@ defineModule66Fixture();
 defineModule67Fixture();
 defineModule68Fixture();
 defineModule7Fixture();
+defineModule76Fixture();
+defineModule77Fixture();
+defineModule78Fixture();
 defineModule8Fixture();
 defineModule9Fixture();
 
@@ -2238,6 +2244,83 @@ describe("Renderer", () => {
 
       const result = Renderer.renderDom(node, context, slots, defaultTarget);
       const expected = ["component vars = %{prop_2: :xyz}"];
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("declared to take value from context, value in context", () => {
+      const context = Type.map([
+        [
+          Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
+          Type.integer(123),
+        ],
+      ]);
+
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module37"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([
+              [Type.atom("text"), Type.bitstring("component_37")],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      initComponentRegistryEntry(Type.bitstring("component_37"));
+
+      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const expected = ["prop_aaa = 123"];
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("declared to take value from context, value not in context, default value not specified", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module76"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([
+              [Type.atom("text"), Type.bitstring("component_76")],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      initComponentRegistryEntry(Type.bitstring("component_76"));
+
+      assertBoxedError(
+        () => Renderer.renderDom(node, context, slots, defaultTarget),
+        "KeyError",
+        Interpreter.buildKeyErrorMsg(Type.atom("aaa"), Type.map()),
+      );
+    });
+
+    it("declared to take value from context, value not in context, default value specified", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module77"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([
+              [Type.atom("text"), Type.bitstring("component_77")],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      initComponentRegistryEntry(Type.bitstring("component_77"));
+
+      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const expected = ["prop_aaa = 987"];
 
       assert.deepStrictEqual(result, expected);
     });

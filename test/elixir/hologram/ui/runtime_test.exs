@@ -54,8 +54,12 @@ defmodule Hologram.UI.RuntimeTest do
     assert String.contains?(markup, "hologram/page")
   end
 
-  test "not initial page, page mounted", %{context: context} do
-    context = Map.put(context, {Hologram.Runtime, :page_mounted?}, true)
+  test "not initial page, page mounted", %{context: initial_context} do
+    context =
+      initial_context
+      |> Map.delete({Hologram.Runtime, :csrf_token})
+      |> Map.put({Hologram.Runtime, :page_mounted?}, true)
+
     markup = render_component(Runtime, %{}, context)
 
     refute String.contains?(markup, "globalThis.hologram.assetManifest")
@@ -65,7 +69,8 @@ defmodule Hologram.UI.RuntimeTest do
     refute String.contains?(markup, "hologram/page")
   end
 
-  test "not initial page, page not mounted", %{context: context} do
+  test "not initial page, page not mounted", %{context: initial_context} do
+    context = Map.delete(initial_context, {Hologram.Runtime, :csrf_token})
     markup = render_component(Runtime, %{}, context)
 
     refute String.contains?(markup, "globalThis.hologram.assetManifest")

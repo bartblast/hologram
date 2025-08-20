@@ -343,10 +343,16 @@ export default class Renderer {
   }
 
   // Based on inject_props_from_context/3
-  // Deps: [:maps.from_list/1, :maps.get/2, :maps.merge/2]
+  // Deps: [:maps.from_list/1, :maps.get/2, :maps.is_key/2, :maps.merge/2]
   static #injectPropsFromContext(propsFromTemplate, moduleProxy, context) {
     const propsFromContextTuples = Renderer.#getPropDefinitions(moduleProxy)
-      .data.filter((prop) => Renderer.#contextKey(prop.data[2]) !== null)
+      .data.filter((prop) => {
+        const contextKey = Renderer.#contextKey(prop.data[2]);
+        return (
+          contextKey !== null &&
+          Type.isTrue(Erlang_Maps["is_key/2"](contextKey, context))
+        );
+      })
       .map((prop) => {
         const contextKey = Renderer.#contextKey(prop.data[2]);
 
