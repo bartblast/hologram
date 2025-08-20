@@ -17,7 +17,7 @@ defmodule HologramFeatureTests.Security.Page2 do
     <div>
       <h1>Security / Page 2</h1>
       <p>
-        <button $click={:test_action, m: 300}>
+        <button $click={:test_action_2, m: 300}>
           Test Action 2
         </button>
       </p>
