@@ -7,12 +7,12 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   use Mix.Task.Compiler
 
+  require Logger
+
   alias Hologram.Commons.PLT
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Reflection
-
-  require Logger
 
   @impl Mix.Task.Compiler
   # If the options are strings, it means that the task was executed directly by the Elixir compiler.
