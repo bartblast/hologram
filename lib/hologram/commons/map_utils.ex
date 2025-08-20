@@ -1,4 +1,6 @@
 defmodule Hologram.Commons.MapUtils do
+  @moduledoc false
+
   @doc """
   Computes the difference between two maps.
 

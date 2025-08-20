@@ -1,4 +1,6 @@
 defmodule Hologram.Runtime.Connection do
+  @moduledoc false
+
   @behaviour WebSock
 
   alias Hologram.Assets.PageDigestRegistry
