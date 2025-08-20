@@ -6,6 +6,7 @@ import {
   defineGlobalErlangAndElixirModules,
   registerWebApis,
   sinon,
+  waitForEventLoop,
 } from "./support/helpers.mjs";
 
 import Client from "../../assets/js/client.mjs";
@@ -519,6 +520,9 @@ describe("Client", () => {
       fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
 
       await Client.sendCommand(command);
+
+      // Wait for async actions to complete
+      await waitForEventLoop();
 
       sinon.assert.calledOnceWithExactly(
         hologramExecuteActionStub,

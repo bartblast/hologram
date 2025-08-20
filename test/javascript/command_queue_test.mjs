@@ -7,6 +7,7 @@ import {
   defineGlobalErlangAndElixirModules,
   sinon,
   UUID_REGEX,
+  waitForEventLoop,
 } from "./support/helpers.mjs";
 
 import Client from "../../assets/js/client.mjs";
@@ -242,7 +243,7 @@ describe("CommandQueue", () => {
       Hologram.executeAction.restore();
     });
 
-    it("it executes next action if it is not nil", () => {
+    it("it executes next action if it is not nil", async () => {
       CommandQueue.isProcessing = false;
 
       sinon.stub(Client, "isConnected").callsFake(() => true);
@@ -262,6 +263,9 @@ describe("CommandQueue", () => {
       CommandQueue.process();
 
       successCallbacks.forEach((callback) => callback([1, '"dummy_action"']));
+
+      // Wait for async actions to complete
+      await waitForEventLoop();
 
       Client.isConnected.restore();
       Client.sendCommand.restore();

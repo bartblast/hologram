@@ -144,6 +144,8 @@ export default class Hologram {
       PerformanceTimer.diff(startTime),
     );
 
+    Hologram.render();
+
     if (!Type.isNil(nextAction)) {
       if (Type.isNil(Erlang_Maps["get/2"](Type.atom("target"), nextAction))) {
         nextAction = Erlang_Maps["put/3"](
@@ -153,9 +155,8 @@ export default class Hologram {
         );
       }
 
-      Hologram.executeAction(nextAction);
-    } else {
-      Hologram.render();
+      // Execute next action asynchronously to allow animations and prevent blocking the event loop
+      setTimeout(() => Hologram.executeAction(nextAction), 0);
     }
 
     if (!Type.isNil(nextPage)) {
