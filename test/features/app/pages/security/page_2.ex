@@ -29,6 +29,6 @@ defmodule HologramFeatureTests.Security.Page2 do
   end
 
   def action(:test_action_2, params, component) do
-    put_state(component, :result, %{n: params.m + 1})
+    put_state(component, :result, params.m + 1)
   end
 end

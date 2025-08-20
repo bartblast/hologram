@@ -38,14 +38,14 @@ defmodule HologramFeatureTests.Security.Page1 do
   end
 
   def action(:render_command_result, params, component) do
-    put_state(component, :result, params)
+    put_state(component, :result, params.y)
   end
 
   def action(:test_action_1, params, component) do
-    put_state(component, :result, %{b: params.a + 1})
+    put_state(component, :result, params.a + 1)
   end
 
   def command(:test_command, params, server) do
-    put_action(server, :render_command_result, %{y: params.x + 1})
+    put_action(server, :render_command_result, y: params.x + 1)
   end
 end

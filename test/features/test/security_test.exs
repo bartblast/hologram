@@ -9,7 +9,7 @@ defmodule HologramFeatureTests.SecurityTest do
       session
       |> visit(Page1)
       |> click(button("Test Action 1"))
-      |> assert_text(css("#result"), "%{b: 101}")
+      |> assert_text(css("#result"), "101")
     end
 
     feature "subsequent page request is successful", %{session: session} do
@@ -18,14 +18,14 @@ defmodule HologramFeatureTests.SecurityTest do
       |> click(link("Navigate to Page 2"))
       |> assert_page(Page2)
       |> click(button("Test Action 2"))
-      |> assert_text(css("#result"), "%{n: 301}")
+      |> assert_text(css("#result"), "301")
     end
 
     feature "command request is successful when CSRF token is valid", %{session: session} do
       session
       |> visit(Page1)
       |> click(button("Test Command"))
-      |> assert_text(css("#result"), "%{y: 201}")
+      |> assert_text(css("#result"), "201")
     end
 
     feature "command request fails when CSRF token is invalid", %{session: session} do
