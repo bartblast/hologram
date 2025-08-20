@@ -5,6 +5,53 @@ defmodule Hologram.Runtime.CSRFProtectionTest do
 
   @session_key CSRFProtection.session_key()
 
+  describe "ensure_tokens/1" do
+    test "when there is no token in the session, generates new tokens and stores unmasked token" do
+      conn = Plug.Test.init_test_session(%Plug.Conn{}, %{})
+
+      {updated_conn, {masked_token, unmasked_token}} = ensure_tokens(conn)
+
+      # Should return valid tokens
+      assert is_binary(masked_token)
+      assert is_binary(unmasked_token)
+      assert byte_size(unmasked_token) == 24
+      assert byte_size(masked_token) > 24
+
+      # Should store unmasked token in session
+      session_token = Plug.Conn.get_session(updated_conn, @session_key)
+      assert session_token == unmasked_token
+
+      # Tokens should validate correctly
+      assert validate_token(unmasked_token, masked_token)
+    end
+
+    test "when there is already a token in the session, uses existing token and generates new masked token" do
+      # Set up connection with existing token
+      existing_unmasked_token = generate_unmasked_token()
+
+      conn =
+        Plug.Test.init_test_session(%Plug.Conn{}, %{
+          @session_key => existing_unmasked_token
+        })
+
+      {updated_conn, {masked_token, unmasked_token}} = ensure_tokens(conn)
+
+      # Should return the existing unmasked token
+      assert unmasked_token == existing_unmasked_token
+
+      # Should generate a new masked token
+      assert is_binary(masked_token)
+      assert byte_size(masked_token) > 24
+
+      # Session should still contain the same unmasked token
+      session_token = Plug.Conn.get_session(updated_conn, @session_key)
+      assert session_token == existing_unmasked_token
+
+      # Tokens should validate correctly
+      assert validate_token(unmasked_token, masked_token)
+    end
+  end
+
   describe "generate_tokens/0" do
     test "returns a tuple with masked and unmasked tokens" do
       {masked, unmasked} = generate_tokens()
@@ -62,53 +109,6 @@ defmodule Hologram.Runtime.CSRFProtectionTest do
       # Should validate correctly
       assert validate_token(unmasked, masked_1)
       assert validate_token(unmasked, masked_2)
-    end
-  end
-
-  describe "get_or_generate_session_tokens/1" do
-    test "when there is no token in the session, generates new tokens and stores unmasked token" do
-      conn = Plug.Test.init_test_session(%Plug.Conn{}, %{})
-
-      {updated_conn, {masked_token, unmasked_token}} = get_or_generate_session_tokens(conn)
-
-      # Should return valid tokens
-      assert is_binary(masked_token)
-      assert is_binary(unmasked_token)
-      assert byte_size(unmasked_token) == 24
-      assert byte_size(masked_token) > 24
-
-      # Should store unmasked token in session
-      session_token = Plug.Conn.get_session(updated_conn, @session_key)
-      assert session_token == unmasked_token
-
-      # Tokens should validate correctly
-      assert validate_token(unmasked_token, masked_token)
-    end
-
-    test "when there is already a token in the session, uses existing token and generates new masked token" do
-      # Set up connection with existing token
-      existing_unmasked_token = generate_unmasked_token()
-
-      conn =
-        Plug.Test.init_test_session(%Plug.Conn{}, %{
-          @session_key => existing_unmasked_token
-        })
-
-      {updated_conn, {masked_token, unmasked_token}} = get_or_generate_session_tokens(conn)
-
-      # Should return the existing unmasked token
-      assert unmasked_token == existing_unmasked_token
-
-      # Should generate a new masked token
-      assert is_binary(masked_token)
-      assert byte_size(masked_token) > 24
-
-      # Session should still contain the same unmasked token
-      session_token = Plug.Conn.get_session(updated_conn, @session_key)
-      assert session_token == existing_unmasked_token
-
-      # Tokens should validate correctly
-      assert validate_token(unmasked_token, masked_token)
     end
   end
 

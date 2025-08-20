@@ -48,10 +48,13 @@ defmodule Hologram.Runtime.CSRFProtection do
   end
 
   @doc """
-  Gets or generates CSRF tokens for the given Plug connection.
+  Ensures CSRF tokens exist for the given Plug connection.
+
+  Returns `{conn, {masked_token, unmasked_token}}` where the masked token should be
+  sent to the client and the unmasked token is stored in the session.
   """
-  @spec get_or_generate_session_tokens(Plug.Conn.t()) :: {Plug.Conn.t(), {String.t(), String.t()}}
-  def get_or_generate_session_tokens(conn) do
+  @spec ensure_tokens(Plug.Conn.t()) :: {Plug.Conn.t(), {String.t(), String.t()}}
+  def ensure_tokens(conn) do
     case Plug.Conn.get_session(conn, @session_key) do
       nil ->
         {masked_token, unmasked_token} = generate_tokens()

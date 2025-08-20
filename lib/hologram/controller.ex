@@ -175,7 +175,7 @@ defmodule Hologram.Controller do
       |> Page.cast_params(page_module)
 
     {conn_with_csrf_token, {masked_csrf_token, _unmasked_csrf_token}} =
-      CSRFProtection.get_or_generate_session_tokens(conn)
+      CSRFProtection.ensure_tokens(conn)
 
     renderer_opts = [csrf_token: masked_csrf_token, initial_page?: true]
 
