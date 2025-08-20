@@ -7,6 +7,26 @@ defmodule Hologram.Runtime.CSRFProtection do
   @token_size 18
 
   @doc """
+  Ensures CSRF tokens exist for the given Plug connection.
+
+  Returns `{conn, {masked_token, unmasked_token}}` where the masked token should be
+  sent to the client and the unmasked token is stored in the session.
+  """
+  @spec ensure_tokens(Plug.Conn.t()) :: {Plug.Conn.t(), {String.t(), String.t()}}
+  def ensure_tokens(conn) do
+    case Plug.Conn.get_session(conn, @session_key) do
+      nil ->
+        {masked_token, unmasked_token} = generate_tokens()
+        updated_conn = Plug.Conn.put_session(conn, @session_key, unmasked_token)
+        {updated_conn, {masked_token, unmasked_token}}
+
+      unmasked_token ->
+        masked_token = get_masked_token(unmasked_token)
+        {conn, {masked_token, unmasked_token}}
+    end
+  end
+
+  @doc """
   Generates both masked and unmasked CSRF tokens.
 
   Returns `{masked_token, unmasked_token}` where the masked token should be 
@@ -45,26 +65,6 @@ defmodule Hologram.Runtime.CSRFProtection do
       |> Base.url_encode64()
 
     encoded_masked_token <> mask
-  end
-
-  @doc """
-  Ensures CSRF tokens exist for the given Plug connection.
-
-  Returns `{conn, {masked_token, unmasked_token}}` where the masked token should be
-  sent to the client and the unmasked token is stored in the session.
-  """
-  @spec ensure_tokens(Plug.Conn.t()) :: {Plug.Conn.t(), {String.t(), String.t()}}
-  def ensure_tokens(conn) do
-    case Plug.Conn.get_session(conn, @session_key) do
-      nil ->
-        {masked_token, unmasked_token} = generate_tokens()
-        updated_conn = Plug.Conn.put_session(conn, @session_key, unmasked_token)
-        {updated_conn, {masked_token, unmasked_token}}
-
-      unmasked_token ->
-        masked_token = get_masked_token(unmasked_token)
-        {conn, {masked_token, unmasked_token}}
-    end
   end
 
   @doc """
