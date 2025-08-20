@@ -137,6 +137,12 @@ defmodule HologramFeatureTests.Helpers do
     parent
   end
 
+  def cookies(session) do
+    session
+    |> Browser.cookies()
+    |> Enum.sort_by(& &1["name"], :asc)
+  end
+
   def go_back(session) do
     Browser.execute_script(session, "history.back();")
   end
