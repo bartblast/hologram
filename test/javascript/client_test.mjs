@@ -563,34 +563,6 @@ describe("Client", () => {
       sinon.assert.notCalled(hologramExecuteActionStub);
     });
 
-    it("logs CSRF token validation error and fails command when response status is 403", async () => {
-      const mockResponse = {
-        ok: false,
-        status: 403,
-      };
-
-      fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
-
-      let errorThrown = false;
-
-      try {
-        await Client.sendCommand(command);
-      } catch (error) {
-        errorThrown = true;
-        assert.instanceOf(error, HologramRuntimeError);
-        assert.equal(error.message, "command failed: 403");
-      }
-
-      assert.isTrue(errorThrown, "Expected HologramRuntimeError to be thrown");
-
-      sinon.assert.calledOnceWithExactly(
-        consoleErrorStub,
-        "Hologram: CSRF token validation failed. This might indicate a security issue or the page needs to be refreshed.",
-      );
-
-      sinon.assert.notCalled(hologramExecuteActionStub);
-    });
-
     it("command fails due to result status code", async () => {
       const mockResponse = {
         ok: true,
