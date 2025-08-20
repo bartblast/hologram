@@ -1,6 +1,8 @@
 defmodule Hologram.Controller do
   @moduledoc false
 
+  require Logger
+
   alias Hologram.Compiler.Encoder
   alias Hologram.Component.Action
   alias Hologram.Page
@@ -142,6 +144,8 @@ defmodule Hologram.Controller do
       |> Controller.json([command_status, encoded_next_action])
       |> Plug.Conn.halt()
     else
+      Logger.warning("CSRF token validation failed")
+
       conn
       |> Plug.Conn.put_status(403)
       |> Controller.text("Forbidden")

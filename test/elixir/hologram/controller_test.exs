@@ -1,6 +1,7 @@
 defmodule Hologram.ControllerTest do
   use Hologram.Test.BasicCase, async: false
 
+  import ExUnit.CaptureLog
   import Hologram.Controller
   import Hologram.Test.Stubs
   import Mox
@@ -364,6 +365,30 @@ defmodule Hologram.ControllerTest do
       assert conn.state == :sent
       assert conn.status == 403
       assert conn.resp_body == "Forbidden"
+    end
+
+    test "logs warning when CSRF token validation fails" do
+      payload = %{
+        module: Module6,
+        name: :my_command_a,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      log =
+        capture_log(fn ->
+          :post
+          |> conn_with_parsed_json("/hologram/command", parsed_json)
+          # No X-Csrf-Token header provided
+          |> handle_command_request()
+        end)
+
+      assert log =~ "CSRF token validation failed"
     end
 
     test "when CSRF token validation succeeds: processes command successfully & updates Plug.Conn fields related to HTTP response and halts the pipeline" do
