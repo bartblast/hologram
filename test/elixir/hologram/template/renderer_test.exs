@@ -493,7 +493,7 @@ defmodule Hologram.Template.RendererTest do
     test "declared to take value from context, value not in context, default value not specified" do
       node = {:component, Module76, [{"cid", [text: "component_76"]}], []}
 
-      assert_raise KeyError, ~r/key :aaa not found/, fn ->
+      assert_raise KeyError, build_key_error_msg(:aaa, %{}), fn ->
         render_dom(node, @env, @server)
       end
     end
