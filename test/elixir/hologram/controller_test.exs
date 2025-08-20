@@ -41,7 +41,7 @@ defmodule Hologram.ControllerTest do
     |> Map.put(:body_params, %{"_json" => parsed_json})
   end
 
-  defp execute_successful_command_a_request do
+  defp execute_successful_command_request do
     payload = %{
       module: Module6,
       name: :my_command_a,
