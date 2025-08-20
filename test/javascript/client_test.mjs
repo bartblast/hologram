@@ -442,7 +442,7 @@ describe("Client", () => {
   });
 
   describe("sendCommand()", () => {
-    let consoleErrorStub, fetchStub, hologramExecuteActionStub;
+    let fetchStub, hologramExecuteActionStub;
 
     const module = Type.alias("MyComponent");
     const name = Type.atom("my_command");
@@ -465,7 +465,6 @@ describe("Client", () => {
       const entry = componentRegistryEntryFixture({module: module});
       ComponentRegistry.putEntry(Type.bitstring("my_target"), entry);
 
-      consoleErrorStub = sinon.stub(console, "error");
       hologramExecuteActionStub = sinon.stub(Hologram, "executeAction");
 
       globalThis.hologram = {csrfToken: "test-csrf-token-123"};
