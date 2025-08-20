@@ -411,7 +411,7 @@ defmodule Hologram.ControllerTest do
     end
 
     test "processes command successfully when CSRF token validation succeeds" do
-      conn = execute_successful_command_a_request()
+      conn = execute_successful_command_request()
 
       response = Jason.decode!(conn.resp_body)
       assert response == [1, ~s'Type.atom("nil")']
@@ -464,7 +464,7 @@ defmodule Hologram.ControllerTest do
     # end
 
     test "command with next action nil" do
-      conn = execute_successful_command_a_request()
+      conn = execute_successful_command_request()
 
       response = Jason.decode!(conn.resp_body)
       assert response == [1, ~s'Type.atom("nil")']
