@@ -1,6 +1,9 @@
 defmodule HologramFeatureTests.ActionsTest do
   use HologramFeatureTests.TestCase, async: true
+
   alias HologramFeatureTests.ActionsPage
+  alias HologramFeatureTests.Actions.Page2
+  alias HologramFeatureTests.Actions.Page3
 
   describe "syntax" do
     feature "text syntax", %{session: session} do
@@ -170,5 +173,19 @@ defmodule HologramFeatureTests.ActionsTest do
 
     # Covered in preceding (syntax) tests:
     # feature "state"
+  end
+
+  describe "actions queued in server-side init/3" do
+    feature "page init/3, target not specified", %{session: session} do
+      session
+      |> visit(Page2)
+      |> assert_text(css("#page_result"), "{:page_action_result, 223}")
+    end
+
+    feature "page init/3, target specified", %{session: session} do
+      session
+      |> visit(Page3)
+      |> assert_text(css("#component_result"), "{:component_action_result, 334}")
+    end
   end
 end
