@@ -679,7 +679,6 @@ export default class Hologram {
 
       GlobalRegistry.set("mountedPage", Interpreter.inspect($.#pageModule));
 
-      // Schedule all queued init actions after page mount is complete
       Hologram.#scheduleQueuedInitActions();
     });
   }
