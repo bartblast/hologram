@@ -119,8 +119,10 @@ defmodule Hologram.Compiler.CallGraph do
       {:lists, :keymember, 3},
       {:maps, :from_list, 1},
       {:maps, :get, 2},
+      {:maps, :get, 3},
       {:maps, :is_key, 2},
-      {:maps, :merge, 2}
+      {:maps, :merge, 2},
+      {:maps, :put, 3}
     ],
     type_class: [
       {:maps, :get, 3},
