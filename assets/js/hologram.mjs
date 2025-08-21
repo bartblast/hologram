@@ -282,6 +282,38 @@ export default class Hologram {
   }
 
   // Made public to make tests easier
+  // Deps: [:maps.get/2, :maps.get/3, :maps.put/3]
+  static queueActionsFromServerInits() {
+    for (const [cid, entry] of Object.values(ComponentRegistry.entries.data)) {
+      const componentStruct = Erlang_Maps["get/2"](Type.atom("struct"), entry);
+
+      const nextAction = Erlang_Maps["get/3"](
+        Type.atom("next_action"),
+        componentStruct,
+        Type.nil(),
+      );
+
+      if (!Type.isNil(nextAction)) {
+        let actionWithTarget = nextAction;
+
+        if (
+          Type.isNil(
+            Erlang_Maps["get/3"](Type.atom("target"), nextAction, Type.nil()),
+          )
+        ) {
+          actionWithTarget = Erlang_Maps["put/3"](
+            Type.atom("target"),
+            cid,
+            nextAction,
+          );
+        }
+
+        InitActionQueue.enqueue(actionWithTarget);
+      }
+    }
+  }
+
+  // Made public to make tests easier
   static render() {
     const startTime = performance.now();
 
@@ -667,7 +699,7 @@ export default class Hologram {
 
     Hologram.prefetchedPages.clear();
 
-    Hologram.#queueActionsFromServerInits();
+    Hologram.queueActionsFromServerInits();
 
     window.requestAnimationFrame(() => {
       $.render();
@@ -716,37 +748,6 @@ export default class Hologram {
       Hologram.virtualDocument,
       newVirtualDocument,
     );
-  }
-
-  // Deps: [:maps.get/2, :maps.get/3, :maps.put/3]
-  static #queueActionsFromServerInits() {
-    for (const [cid, entry] of ComponentRegistry.entries.data) {
-      const componentStruct = Erlang_Maps["get/2"](Type.atom("struct"), entry);
-
-      const nextAction = Erlang_Maps["get/3"](
-        Type.atom("next_action"),
-        componentStruct,
-        Type.nil(),
-      );
-
-      if (!Type.isNil(nextAction)) {
-        let actionWithTarget = nextAction;
-
-        if (
-          Type.isNil(
-            Erlang_Maps["get/3"](Type.atom("target"), nextAction, Type.nil()),
-          )
-        ) {
-          actionWithTarget = Erlang_Maps["put/3"](
-            Type.atom("target"),
-            cid,
-            nextAction,
-          );
-        }
-
-        InitActionQueue.enqueue(actionWithTarget);
-      }
-    }
   }
 
   static #registerPageModule(pageModule) {

@@ -14,6 +14,9 @@ import Hologram from "../../assets/js/hologram.mjs";
 import Type from "../../assets/js/type.mjs";
 
 import {defineModule7Fixture} from "./support/fixtures/hologram/module_7.mjs";
+import InitActionQueue from "../../assets/js/init_action_queue.mjs";
+import ComponentRegistry from "../../assets/js/component_registry.mjs";
+import Erlang_Maps from "../../assets/js/erlang/maps.mjs";
 
 defineGlobalErlangAndElixirModules();
 registerWebApis();
@@ -689,6 +692,192 @@ describe("Hologram", () => {
       });
 
       sinon.assert.notCalled(loadNewPageStub);
+    });
+  });
+
+  describe("queueActionsFromServerInits()", () => {
+    const cid1 = Type.bitstring("component_1");
+    const cid2 = Type.bitstring("component_2");
+    const cid3 = Type.bitstring("component_3");
+    const cid4 = Type.bitstring("component_4");
+    const cid5 = Type.bitstring("component_5");
+    const cid6 = Type.bitstring("component_6");
+
+    const action1 = Type.actionStruct({
+      name: Type.atom("action_1"),
+      params: Type.map(),
+      target: Type.bitstring("my_target_1"),
+    });
+
+    const action2 = Type.actionStruct({
+      name: Type.atom("action_2"),
+      params: Type.map([[Type.atom("my_param"), Type.integer(42)]]),
+      target: Type.bitstring("my_target_2"),
+    });
+
+    const action3 = Type.actionStruct({
+      name: Type.atom("action_3"),
+      params: Type.map(),
+      target: Type.nil(),
+    });
+
+    const action6 = Type.actionStruct({
+      name: Type.atom("action_6"),
+      params: Type.map(),
+      target: Type.bitstring("my_target_6"),
+    });
+
+    const componentStruct1 = Type.componentStruct({
+      nextAction: action1,
+    });
+
+    const componentStruct2 = Type.componentStruct({
+      nextAction: action2,
+    });
+
+    const componentStruct3 = Type.componentStruct({
+      nextAction: action3,
+    });
+
+    const componentStruct4 = Type.componentStruct({
+      nextAction: Type.nil(),
+    });
+
+    const componentStruct5 = Type.componentStruct({
+      nextAction: Type.nil(),
+    });
+
+    const componentStruct6 = Type.componentStruct({
+      nextAction: action6,
+    });
+
+    const entry1 = Type.map([
+      [Type.atom("module"), Type.alias("Module1")],
+      [Type.atom("struct"), componentStruct1],
+    ]);
+
+    const entry2 = Type.map([
+      [Type.atom("module"), Type.alias("Module2")],
+      [Type.atom("struct"), componentStruct2],
+    ]);
+
+    const entry3 = Type.map([
+      [Type.atom("module"), Type.alias("Module3")],
+      [Type.atom("struct"), componentStruct3],
+    ]);
+
+    const entry4 = Type.map([
+      [Type.atom("module"), Type.alias("Module4")],
+      [Type.atom("struct"), componentStruct4],
+    ]);
+
+    const entry5 = Type.map([
+      [Type.atom("module"), Type.alias("Module5")],
+      [Type.atom("struct"), componentStruct5],
+    ]);
+
+    const entry6 = Type.map([
+      [Type.atom("module"), Type.alias("Module6")],
+      [Type.atom("struct"), componentStruct6],
+    ]);
+
+    beforeEach(() => {
+      ComponentRegistry.clear();
+      InitActionQueue.dequeueAll();
+    });
+
+    it("queues actions from all components that have next_action set", () => {
+      ComponentRegistry.entries = Type.map([
+        [cid1, entry1],
+        [cid2, entry2],
+      ]);
+
+      Hologram.queueActionsFromServerInits();
+
+      const queuedActions = InitActionQueue.dequeueAll();
+      assert.equal(queuedActions.length, 2);
+
+      assert.deepStrictEqual(queuedActions[0], action1);
+      assert.deepStrictEqual(queuedActions[1], action2);
+    });
+
+    it("skips components that don't have next_action set", () => {
+      ComponentRegistry.entries = Type.map([
+        [cid1, entry1],
+        [cid4, entry4],
+        [cid2, entry2],
+      ]);
+
+      Hologram.queueActionsFromServerInits();
+
+      const queuedActions = InitActionQueue.dequeueAll();
+      assert.equal(queuedActions.length, 2);
+
+      assert.deepStrictEqual(queuedActions[0], action1);
+      assert.deepStrictEqual(queuedActions[1], action2);
+    });
+
+    it("handles empty component registry", () => {
+      Hologram.queueActionsFromServerInits();
+
+      const queuedActions = InitActionQueue.dequeueAll();
+      assert.equal(queuedActions.length, 0);
+    });
+
+    it("handles component registry with only components without next_action", () => {
+      ComponentRegistry.entries = Type.map([
+        [cid4, entry4],
+        [cid5, entry5],
+      ]);
+
+      Hologram.queueActionsFromServerInits();
+
+      const queuedActions = InitActionQueue.dequeueAll();
+      assert.equal(queuedActions.length, 0);
+    });
+
+    it("preserves existing target when action already has one", () => {
+      ComponentRegistry.entries = Type.map([[cid1, entry1]]);
+
+      Hologram.queueActionsFromServerInits();
+
+      const queuedActions = InitActionQueue.dequeueAll();
+
+      // Should not modify the action
+      assert.deepStrictEqual(queuedActions[0], action1);
+    });
+
+    it("adds component ID as target when action has nil target", () => {
+      ComponentRegistry.entries = Type.map([[cid3, entry3]]);
+
+      Hologram.queueActionsFromServerInits();
+
+      const queuedActions = InitActionQueue.dequeueAll();
+
+      const expectedAction = Erlang_Maps["put/3"](
+        Type.atom("component_3"),
+        cid3,
+        action3,
+      );
+
+      assert.deepStrictEqual(queuedActions[0], expectedAction);
+    });
+
+    it("processes components in the order they appear in the registry", () => {
+      ComponentRegistry.entries = Type.map([
+        [cid2, entry2],
+        [cid6, entry6],
+        [cid1, entry1],
+      ]);
+
+      Hologram.queueActionsFromServerInits();
+
+      const queuedActions = InitActionQueue.dequeueAll();
+      assert.equal(queuedActions.length, 3);
+
+      assert.deepStrictEqual(queuedActions[0], action2);
+      assert.deepStrictEqual(queuedActions[1], action6);
+      assert.deepStrictEqual(queuedActions[2], action1);
     });
   });
 
