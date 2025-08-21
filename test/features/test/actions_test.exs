@@ -1,14 +1,14 @@
 defmodule HologramFeatureTests.ActionsTest do
   use HologramFeatureTests.TestCase, async: true
 
-  alias HologramFeatureTests.ActionsPage
+  alias HologramFeatureTests.Actions.Page1
   alias HologramFeatureTests.Actions.Page2
   alias HologramFeatureTests.Actions.Page3
 
   describe "syntax" do
     feature "text syntax", %{session: session} do
       session
-      |> visit(ActionsPage)
+      |> visit(Page1)
       |> click(css("button[id='page_action_1']"))
       |> assert_text(
         css("#page_result"),
@@ -18,7 +18,7 @@ defmodule HologramFeatureTests.ActionsTest do
 
     feature "expression shorthand syntax without params", %{session: session} do
       session
-      |> visit(ActionsPage)
+      |> visit(Page1)
       |> click(css("button[id='page_action_2']"))
       |> assert_text(
         css("#page_result"),
@@ -28,7 +28,7 @@ defmodule HologramFeatureTests.ActionsTest do
 
     feature "expression shorthand syntax with params", %{session: session} do
       session
-      |> visit(ActionsPage)
+      |> visit(Page1)
       |> click(css("button[id='page_action_3']"))
       |> assert_text(
         css("#page_result"),
@@ -38,7 +38,7 @@ defmodule HologramFeatureTests.ActionsTest do
 
     feature "expression longhand syntax", %{session: session} do
       session
-      |> visit(ActionsPage)
+      |> visit(Page1)
       |> click(css("button[id='page_action_4']"))
       |> assert_text(
         css("#page_result"),
@@ -48,7 +48,7 @@ defmodule HologramFeatureTests.ActionsTest do
 
     feature "multi-chunk syntax", %{session: session} do
       session
-      |> visit(ActionsPage)
+      |> visit(Page1)
       |> click(css("button[id='page_action_5']"))
       |> assert_text(
         css("#page_result"),
@@ -60,7 +60,7 @@ defmodule HologramFeatureTests.ActionsTest do
   describe "layout action" do
     feature "triggered from layout (default target)", %{session: session} do
       session
-      |> visit(ActionsPage)
+      |> visit(Page1)
       |> click(css("button[id='layout_action_1']"))
       |> assert_text(
         css("#layout_result"),
@@ -70,7 +70,7 @@ defmodule HologramFeatureTests.ActionsTest do
 
     feature "triggered from page", %{session: session} do
       session
-      |> visit(ActionsPage)
+      |> visit(Page1)
       |> click(css("button[id='layout_action_2']"))
       |> assert_text(
         css("#layout_result"),
@@ -80,7 +80,7 @@ defmodule HologramFeatureTests.ActionsTest do
 
     feature "triggered from component", %{session: session} do
       session
-      |> visit(ActionsPage)
+      |> visit(Page1)
       |> click(css("button[id='layout_action_3']"))
       |> assert_text(
         css("#layout_result"),
@@ -95,7 +95,7 @@ defmodule HologramFeatureTests.ActionsTest do
 
     feature "triggered from layout", %{session: session} do
       session
-      |> visit(ActionsPage)
+      |> visit(Page1)
       |> click(css("button[id='page_action_6']"))
       |> assert_text(
         css("#page_result"),
@@ -105,7 +105,7 @@ defmodule HologramFeatureTests.ActionsTest do
 
     feature "triggered from component", %{session: session} do
       session
-      |> visit(ActionsPage)
+      |> visit(Page1)
       |> click(css("button[id='page_action_7']"))
       |> assert_text(
         css("#page_result"),
@@ -117,7 +117,7 @@ defmodule HologramFeatureTests.ActionsTest do
   describe "component action" do
     feature "triggered from layout", %{session: session} do
       session
-      |> visit(ActionsPage)
+      |> visit(Page1)
       |> click(css("button[id='component_1_action_3']"))
       |> assert_text(
         css("#component_1_result"),
@@ -127,7 +127,7 @@ defmodule HologramFeatureTests.ActionsTest do
 
     feature "triggered from page", %{session: session} do
       session
-      |> visit(ActionsPage)
+      |> visit(Page1)
       |> click(css("button[id='component_1_action_2']"))
       |> assert_text(
         css("#component_1_result"),
@@ -137,7 +137,7 @@ defmodule HologramFeatureTests.ActionsTest do
 
     feature "triggered from component (default target)", %{session: session} do
       session
-      |> visit(ActionsPage)
+      |> visit(Page1)
       |> click(css("button[id='component_1_action_1']"))
       |> assert_text(
         css("#component_1_result"),
@@ -149,21 +149,21 @@ defmodule HologramFeatureTests.ActionsTest do
   describe "component struct mutations" do
     feature "emitted context", %{session: session} do
       session
-      |> visit(ActionsPage)
+      |> visit(Page1)
       |> click(css("button[id='page_action_8']"))
       |> assert_text(css("#component_1_prop_1"), ":updated_value")
     end
 
     feature "next action", %{session: session} do
       session
-      |> visit(ActionsPage)
+      |> visit(Page1)
       |> click(css("button[id='page_action_9']"))
       |> assert_text(css("#page_result"), ~s/{"page_action_10", %{x: 10, y: 20}}/)
     end
 
     feature "next command", %{session: session} do
       session
-      |> visit(ActionsPage)
+      |> visit(Page1)
       |> click(css("button[id='page_action_11']"))
       |> assert_text(css("#page_result"), ~s/{"page_action_12", %{x: 10, y: 20}}/)
     end
