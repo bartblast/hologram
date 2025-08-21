@@ -423,7 +423,7 @@ export default class Renderer {
           componentStruct,
         );
 
-        Renderer.#maybeQueueInitAction(componentStruct, cid);
+        Renderer.#maybeQueueActionFromClientInit(componentStruct, cid);
       } else {
         const message = `component ${Interpreter.inspectModuleJsName(
           moduleProxy.__jsName__,
@@ -440,7 +440,7 @@ export default class Renderer {
   }
 
   // Deps: [:maps.get/2, :maps.get/3, :maps.put/3]
-  static #maybeQueueInitAction(componentStruct, cid) {
+  static #maybeQueueActionFromClientInit(componentStruct, cid) {
     const nextAction = Erlang_Maps["get/2"](
       Type.atom("next_action"),
       componentStruct,
