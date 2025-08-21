@@ -6,6 +6,7 @@ import Bitstring from "./bitstring.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Hologram from "./hologram.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
+import InitActionQueue from "./init_action_queue.mjs";
 import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
@@ -421,6 +422,8 @@ export default class Renderer {
           Type.atom("emitted_context"),
           componentStruct,
         );
+
+        Renderer.#maybeQueueInitAction(componentStruct, cid);
       } else {
         const message = `component ${Interpreter.inspectModuleJsName(
           moduleProxy.__jsName__,
@@ -434,6 +437,34 @@ export default class Renderer {
     }
 
     return [componentState, componentEmittedContext];
+  }
+
+  // Deps: [:maps.get/2, :maps.get/3, :maps.put/3]
+  static #maybeQueueInitAction(componentStruct, cid) {
+    const nextAction = Erlang_Maps["get/2"](
+      Type.atom("next_action"),
+      componentStruct,
+    );
+
+    if (!Type.isNil(nextAction)) {
+      let actionWithTarget = nextAction;
+
+      const existingTarget = Erlang_Maps["get/3"](
+        Type.atom("target"),
+        nextAction,
+        Type.nil(),
+      );
+
+      if (Type.isNil(existingTarget)) {
+        actionWithTarget = Erlang_Maps["put/3"](
+          Type.atom("target"),
+          cid,
+          nextAction,
+        );
+      }
+
+      InitActionQueue.enqueue(actionWithTarget);
+    }
   }
 
   static #mergeNeighbouringTextNodes(nodes) {

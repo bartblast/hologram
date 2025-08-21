@@ -70,10 +70,13 @@ import {defineModule77Fixture} from "./support/fixtures/renderer/module_77.mjs";
 import {defineModule78Fixture} from "./support/fixtures/renderer/module_78.mjs";
 import {defineModule8Fixture} from "./support/fixtures/renderer/module_8.mjs";
 import {defineModule9Fixture} from "./support/fixtures/renderer/module_9.mjs";
+import {defineClientOnlyModule1Fixture} from "./support/fixtures/renderer/client_only/module_1.mjs";
+import {defineClientOnlyModule2Fixture} from "./support/fixtures/renderer/client_only/module_2.mjs";
 
 import Bitstring from "../../assets/js/bitstring.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
+import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -138,6 +141,8 @@ defineModule77Fixture();
 defineModule78Fixture();
 defineModule8Fixture();
 defineModule9Fixture();
+defineClientOnlyModule1Fixture();
+defineClientOnlyModule2Fixture();
 
 describe("Renderer", () => {
   beforeEach(() => {
@@ -3388,6 +3393,141 @@ describe("Renderer", () => {
       const result = Renderer.valueDomToBitstring(dom);
 
       assert.deepStrictEqual(result, Type.bitstring("123aaa987"));
+    });
+  });
+
+  describe("init action queuing", () => {
+    beforeEach(() => {
+      InitActionQueue.queue = [];
+    });
+
+    it("does not queue action when init/2 doesn't set next action", () => {
+      const cid = Type.bitstring("my_component");
+
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module3"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      // Render the component - should trigger init/2 without next_action
+      Renderer.renderDom(node, context, slots, defaultTarget);
+
+      // Check that no action was queued
+      assert.strictEqual(InitActionQueue.queue.length, 0);
+    });
+
+    it("does not queue action when component is already initialized", () => {
+      const cid = Type.bitstring("my_component");
+
+      // Pre-initialize the component in registry
+      const entry = componentRegistryEntryFixture({
+        state: Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.atom("b"), Type.integer(2)],
+        ]),
+      });
+      ComponentRegistry.putEntry(cid, entry);
+
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias(
+          "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module1",
+        ),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      // Render the component - should not trigger init/2 since already initialized
+      Renderer.renderDom(node, context, slots, defaultTarget);
+
+      // Check that no action was queued
+      assert.strictEqual(InitActionQueue.queue.length, 0);
+    });
+
+    it("queues action when init/2 sets next action", () => {
+      const cid = Type.bitstring("my_component");
+
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias(
+          "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module1",
+        ),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      // Render the component - should trigger init/2 and queue the action
+      Renderer.renderDom(node, context, slots, defaultTarget);
+
+      // Check that action was queued with original target preserved
+
+      assert.strictEqual(InitActionQueue.queue.length, 1);
+
+      const queuedAction = InitActionQueue.queue[0];
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](Type.atom("name"), queuedAction),
+        Type.atom("test_action_from_init"),
+      );
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](Type.atom("target"), queuedAction),
+        Type.bitstring("custom_target_from_init"),
+      );
+    });
+
+    it("sets the current component as the target when init/2 sets next action that doesn't have target specified", () => {
+      const cid = Type.bitstring("my_component");
+
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias(
+          "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module2",
+        ),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      // Render the component - should trigger init/2 and queue the action
+      Renderer.renderDom(node, context, slots, defaultTarget);
+
+      // Check that action was queued with target added
+
+      assert.strictEqual(InitActionQueue.queue.length, 1);
+
+      const queuedAction = InitActionQueue.queue[0];
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](Type.atom("name"), queuedAction),
+        Type.atom("targetless_action_from_init"),
+      );
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](Type.atom("target"), queuedAction),
+        cid,
+      );
     });
   });
 });
