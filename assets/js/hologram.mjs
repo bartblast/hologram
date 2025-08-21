@@ -10,6 +10,7 @@ import GlobalRegistry from "./global_registry.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
+import InitActionQueue from "./init_action_queue.mjs";
 import Interpreter from "./interpreter.mjs";
 import MemoryStorage from "./memory_storage.mjs";
 import Operation from "./operation.mjs";
@@ -155,8 +156,7 @@ export default class Hologram {
         );
       }
 
-      // Execute next action asynchronously to allow animations and prevent blocking the event loop
-      setTimeout(() => Hologram.executeAction(nextAction), 0);
+      Hologram.scheduleAction(nextAction);
     }
 
     if (!Type.isNil(nextPage)) {
@@ -315,6 +315,11 @@ export default class Hologram {
         throw error;
       }
     });
+  }
+
+  // Execute action asynchronously to allow animations and prevent blocking the event loop
+  static scheduleAction(action) {
+    setTimeout(() => Hologram.executeAction(action), 0);
   }
 
   static #buildPagePath(toParam) {
@@ -662,6 +667,8 @@ export default class Hologram {
 
     Hologram.prefetchedPages.clear();
 
+    Hologram.#queueActionsFromServerInits();
+
     window.requestAnimationFrame(() => {
       $.render();
 
@@ -671,6 +678,9 @@ export default class Hologram {
       }
 
       GlobalRegistry.set("mountedPage", Interpreter.inspect($.#pageModule));
+
+      // Schedule all queued init actions after page mount is complete
+      Hologram.#scheduleQueuedInitActions();
     });
   }
 
@@ -709,6 +719,37 @@ export default class Hologram {
     );
   }
 
+  // Deps: [:maps.get/2, :maps.get/3, :maps.put/3]
+  static #queueActionsFromServerInits() {
+    for (const [cid, entry] of ComponentRegistry.entries.data) {
+      const componentStruct = Erlang_Maps["get/2"](Type.atom("struct"), entry);
+
+      const nextAction = Erlang_Maps["get/3"](
+        Type.atom("next_action"),
+        componentStruct,
+        Type.nil(),
+      );
+
+      if (!Type.isNil(nextAction)) {
+        let actionWithTarget = nextAction;
+
+        if (
+          Type.isNil(
+            Erlang_Maps["get/3"](Type.atom("target"), nextAction, Type.nil()),
+          )
+        ) {
+          actionWithTarget = Erlang_Maps["put/3"](
+            Type.atom("target"),
+            cid,
+            nextAction,
+          );
+        }
+
+        InitActionQueue.enqueue(actionWithTarget);
+      }
+    }
+  }
+
   static #registerPageModule(pageModule) {
     $.#registeredPageModules.add(pageModule.value);
   }
@@ -738,6 +779,14 @@ export default class Hologram {
     );
 
     sessionStorage.setItem($.#historyId, serializedPageSnapshot);
+  }
+
+  static #scheduleQueuedInitActions() {
+    const actions = InitActionQueue.dequeueAll();
+
+    actions.forEach((action) => {
+      Hologram.scheduleAction(action);
+    });
   }
 }
 

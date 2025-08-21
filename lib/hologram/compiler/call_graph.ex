@@ -90,6 +90,7 @@ defmodule Hologram.Compiler.CallGraph do
     ],
     hologram_class: [
       {:maps, :get, 2},
+      {:maps, :get, 3},
       {:maps, :put, 3}
     ],
     interpreter_class: [

@@ -691,4 +691,64 @@ describe("Hologram", () => {
       sinon.assert.notCalled(loadNewPageStub);
     });
   });
+
+  describe("scheduleAction()", () => {
+    let clock, executeActionStub;
+
+    const action1 = Type.actionStruct({
+      name: Type.atom("test_action"),
+      params: Type.map(),
+      target: cid1,
+    });
+
+    beforeEach(() => {
+      clock = sinon.useFakeTimers();
+
+      executeActionStub = sinon
+        .stub(Hologram, "executeAction")
+        .callsFake((_action) => null);
+    });
+
+    afterEach(() => {
+      clock.restore();
+      sinon.restore();
+    });
+
+    it("schedules action execution with setTimeout and 0 delay", () => {
+      // Before scheduling, executeAction should not have been called
+      sinon.assert.notCalled(executeActionStub);
+
+      Hologram.scheduleAction(action1);
+
+      // Action should not execute immediately
+      sinon.assert.notCalled(executeActionStub);
+
+      // Advance time by 0ms to trigger setTimeout callback
+      clock.tick(0);
+
+      // Now the action should have been executed
+      sinon.assert.calledOnceWithExactly(executeActionStub, action1);
+    });
+
+    it("schedules multiple actions independently", () => {
+      const action2 = Type.actionStruct({
+        name: Type.atom("test_action_2"),
+        params: Type.map(),
+        target: Type.bitstring("component_2"),
+      });
+
+      Hologram.scheduleAction(action1);
+      Hologram.scheduleAction(action2);
+
+      // Neither should execute immediately
+      sinon.assert.notCalled(executeActionStub);
+
+      // Both should execute after time advancement
+      clock.tick(0);
+
+      sinon.assert.calledTwice(executeActionStub);
+      sinon.assert.calledWith(executeActionStub.getCall(0), action1);
+      sinon.assert.calledWith(executeActionStub.getCall(1), action2);
+    });
+  });
 });
