@@ -9,7 +9,7 @@ import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 
 defineGlobalErlangAndElixirModules();
 
-describe.only("InitActionQueue", () => {
+describe("InitActionQueue", () => {
   beforeEach(() => {
     InitActionQueue.queue = [];
   });

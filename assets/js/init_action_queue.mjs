@@ -1,6 +1,7 @@
 "use strict";
 
 export default class InitActionQueue {
+  // Made public to make tests easier
   static queue = [];
 
   static dequeueAll() {
