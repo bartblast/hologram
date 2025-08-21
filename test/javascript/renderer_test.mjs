@@ -3396,7 +3396,7 @@ describe("Renderer", () => {
     });
   });
 
-  describe("init action queuing", () => {
+  describe("queuing actions from client-side init/2", () => {
     beforeEach(() => {
       InitActionQueue.queue = [];
     });
