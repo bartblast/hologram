@@ -9,14 +9,13 @@ import {
 } from "./support/helpers.mjs";
 
 import Client from "../../assets/js/client.mjs";
+import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Config from "../../assets/js/config.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
+import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Type from "../../assets/js/type.mjs";
 
 import {defineModule7Fixture} from "./support/fixtures/hologram/module_7.mjs";
-import InitActionQueue from "../../assets/js/init_action_queue.mjs";
-import ComponentRegistry from "../../assets/js/component_registry.mjs";
-import Erlang_Maps from "../../assets/js/erlang/maps.mjs";
 
 defineGlobalErlangAndElixirModules();
 registerWebApis();
