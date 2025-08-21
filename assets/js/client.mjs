@@ -149,8 +149,7 @@ export default class Client {
       const nextAction = Interpreter.evaluateJavaScriptExpression(result);
 
       if (!Type.isNil(nextAction)) {
-        // Execute next action asynchronously to allow animations and prevent blocking the event loop
-        setTimeout(() => Hologram.executeAction(nextAction), 0);
+        Hologram.scheduleAction(nextAction);
       }
     } catch (error) {
       if (error instanceof HologramRuntimeError) {
