@@ -4,6 +4,8 @@ defmodule HologramFeatureTests.ActionsTest do
   alias HologramFeatureTests.Actions.Page1
   alias HologramFeatureTests.Actions.Page2
   alias HologramFeatureTests.Actions.Page3
+  alias HologramFeatureTests.Actions.Page4
+  alias HologramFeatureTests.Actions.Page5
 
   describe "syntax" do
     feature "text syntax", %{session: session} do
@@ -182,10 +184,22 @@ defmodule HologramFeatureTests.ActionsTest do
       |> assert_text(css("#page_result"), "{:page_action_result, 223}")
     end
 
-    feature "page init/3, target specified", %{session: session} do
+    feature "page init/3, target is a component", %{session: session} do
       session
       |> visit(Page3)
       |> assert_text(css("#component_result"), "{:component_action_result, 334}")
+    end
+
+    feature "component init/3, target not specified", %{session: session} do
+      session
+      |> visit(Page4)
+      |> assert_text(css("#component_2_result"), "{:component_2_action_result, 203}")
+    end
+
+    feature "component init/3, target is another component", %{session: session} do
+      session
+      |> visit(Page5)
+      |> assert_text(css("#component_4_result"), "{:component_4_action_result, 205}")
     end
   end
 end
