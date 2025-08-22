@@ -24,8 +24,7 @@ defmodule HologramFeatureTests.MixProject do
       {:plug_cowboy, "~> 2.0"},
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"},
-      {:wallaby, "~> 0.30", only: :test},
-      {:timex, "~> 3.0"}
+      {:wallaby, "~> 0.30", only: :test}
     ]
   end
 
