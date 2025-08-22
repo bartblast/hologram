@@ -212,7 +212,7 @@ defmodule HologramFeatureTests.ActionsTest do
       )
     end
 
-    # The order is based on CIDs in ascending alphabetical order
+    # The order is based on CIDs in ascending alphabetical order (page's CID is "page", layout's CID is "layout")
     feature "all actions queued in server-side inits are executed in deterministic order", %{
       session: session
     } do
