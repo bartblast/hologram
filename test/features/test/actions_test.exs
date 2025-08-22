@@ -6,6 +6,7 @@ defmodule HologramFeatureTests.ActionsTest do
   alias HologramFeatureTests.Actions.Page3
   alias HologramFeatureTests.Actions.Page4
   alias HologramFeatureTests.Actions.Page5
+  alias HologramFeatureTests.Actions.Page6
 
   describe "syntax" do
     feature "text syntax", %{session: session} do
@@ -208,6 +209,18 @@ defmodule HologramFeatureTests.ActionsTest do
       |> assert_text(
         css("#component_4_result"),
         ~s'{:component_4_action_result, %{queued_from: "component_3"}}'
+      )
+    end
+
+    # The order is based on CIDs in ascending alphabetical order
+    feature "all actions queued in server-side inits are executed in deterministic order", %{
+      session: session
+    } do
+      session
+      |> visit(Page6)
+      |> assert_text(
+        css("#combined_result"),
+        "[:component_5_action_executed, :component_9_action_executed, :layout_action_executed, :component_7_action_executed, :page_action_executed, :component_6_action_executed]"
       )
     end
   end
