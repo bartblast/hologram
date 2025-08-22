@@ -181,25 +181,34 @@ defmodule HologramFeatureTests.ActionsTest do
     feature "page init/3, target not specified", %{session: session} do
       session
       |> visit(Page2)
-      |> assert_text(css("#page_result"), "{:page_action_result, 223}")
+      |> assert_text(css("#page_result"), ~s'{:page_action_result, %{queued_from: "page"}}')
     end
 
-    feature "page init/3, target is a component", %{session: session} do
+    feature "page init/3, target is specified", %{session: session} do
       session
       |> visit(Page3)
-      |> assert_text(css("#component_result"), "{:component_action_result, 334}")
+      |> assert_text(
+        css("#component_1_result"),
+        ~s'{:component_1_action_result, %{queued_from: "page"}}'
+      )
     end
 
     feature "component init/3, target not specified", %{session: session} do
       session
       |> visit(Page4)
-      |> assert_text(css("#component_2_result"), "{:component_2_action_result, 203}")
+      |> assert_text(
+        css("#component_2_result"),
+        ~s'{:component_2_action_result, %{queued_from: "component_2"}}'
+      )
     end
 
-    feature "component init/3, target is another component", %{session: session} do
+    feature "component init/3, target is specified", %{session: session} do
       session
       |> visit(Page5)
-      |> assert_text(css("#component_4_result"), "{:component_4_action_result, 205}")
+      |> assert_text(
+        css("#component_4_result"),
+        ~s'{:component_4_action_result, %{queued_from: "component_3"}}'
+      )
     end
   end
 end

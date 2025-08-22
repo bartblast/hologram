@@ -17,6 +17,6 @@ defmodule HologramFeatureTests.Components.Actions.Component4 do
   end
 
   def action(:component_4_action, params, component) do
-    put_state(component, :result, {:component_4_action_result, params.x + 1})
+    put_state(component, :result, {:component_4_action_result, params})
   end
 end

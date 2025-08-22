@@ -3,7 +3,11 @@ defmodule HologramFeatureTests.Components.Actions.Component3 do
   alias HologramFeatureTests.Components.Actions.Component4
 
   def init(_params, component, _server) do
-    put_action(component, name: :component_4_action, target: "component_4", params: %{x: 204})
+    put_action(component,
+      name: :component_4_action,
+      target: "component_4",
+      params: %{queued_from: "component_3"}
+    )
   end
 
   def template do
