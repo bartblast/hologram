@@ -577,6 +577,13 @@ export default class Renderer {
   // Based on render_dom/3 (component case)
   static #renderComponent(dom, context, slots, defaultTarget) {
     const moduleProxy = Interpreter.moduleProxy(dom.data[1]);
+    if (moduleProxy == undefined) {
+      throw new Error(
+        "Module proxy undefined:",
+        Interpreter.moduleJsName(dom.data[1]),
+      );
+    }
+
     const propsDom = dom.data[2];
     let childrenDom = dom.data[3];
 
