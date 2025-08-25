@@ -67,6 +67,9 @@ jobs:
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
         with:
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
           elixir-version: ${{ matrix.elixir }}
           otp-version: ${{ matrix.otp }}
 
@@ -276,6 +279,9 @@ jobs:
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
         with:
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
           elixir-version: ${{ matrix.elixir }}
           otp-version: ${{ matrix.otp }}
 
