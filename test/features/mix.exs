@@ -51,6 +51,7 @@ defmodule HologramFeatureTests.MixProject do
         plt_core_path: "priv/plts/core.plt",
         plt_local_path: "priv/plts/project.plt"
       ],
+      listeners: [Phoenix.CodeReloader],
       start_permanent: Mix.env() == :prod,
       version: "0.1.0"
     ]
