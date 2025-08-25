@@ -167,13 +167,12 @@ defmodule Hologram.Compiler.CallGraph do
   def build(call_graph, ir, from_vertex \\ nil)
 
   def build(call_graph, %IR.AtomType{value: value}, from_vertex) do
-    if Reflection.elixir_module?(value) do
+    if Reflection.alias?(value) do
       call_graph
       |> add_edge(from_vertex, value)
       |> maybe_add_protocol_call_graph_edges(value)
       |> maybe_add_struct_call_graph_edges(value)
       |> maybe_add_ecto_schema_call_graph_edges(value)
-      |> maybe_add_templatable_call_graph_edges(value)
     end
 
     call_graph
