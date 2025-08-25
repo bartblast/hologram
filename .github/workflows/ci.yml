@@ -111,7 +111,6 @@ jobs:
         uses: nick-fields/retry@v3
         with:
           command: mix deps.get
-          retry_on: timeout
           timeout_minutes: 3
           max_attempts: 10
 
@@ -120,7 +119,6 @@ jobs:
         uses: nick-fields/retry@v3
         with:
           command: cd assets && npm clean-install
-          retry_on: any
           timeout_minutes: 3
           max_attempts: 10
 
@@ -324,7 +322,6 @@ jobs:
         with:
           # TODO: set working directory with action input when https://github.com/nick-fields/retry/issues/89 is implemented
           command: cd test/features && mix deps.get
-          retry_on: timeout
           timeout_minutes: 3
           max_attempts: 10
 
