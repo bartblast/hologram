@@ -119,7 +119,6 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert result == call_graph
 
       assert sorted_vertices(call_graph) == [Module1, :vertex_1]
-
       assert edges(call_graph) == [{:vertex_1, Module1}]
     end
 
@@ -129,14 +128,8 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert result == call_graph
 
-      assert sorted_vertices(call_graph) == [
-               Module2,
-               :vertex_1
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {:vertex_1, Module2}
-             ]
+      assert sorted_vertices(call_graph) == [Module2, :vertex_1]
+      assert sorted_edges(call_graph) == [{:vertex_1, Module2}]
     end
 
     test "atom type ir, which is an alias of a layout module", %{empty_call_graph: call_graph} do
@@ -145,14 +138,8 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert result == call_graph
 
-      assert sorted_vertices(call_graph) == [
-               Module3,
-               :vertex_1
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {:vertex_1, Module3}
-             ]
+      assert sorted_vertices(call_graph) == [Module3, :vertex_1]
+      assert sorted_edges(call_graph) == [{:vertex_1, Module3}]
     end
 
     test "atom type ir, which is an alias of a component module", %{empty_call_graph: call_graph} do
@@ -161,14 +148,8 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert result == call_graph
 
-      assert sorted_vertices(call_graph) == [
-               Module4,
-               :vertex_1
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {:vertex_1, Module4}
-             ]
+      assert sorted_vertices(call_graph) == [Module4, :vertex_1]
+      assert sorted_edges(call_graph) == [{:vertex_1, Module4}]
     end
 
     test "function definition ir, with outbound vertices", %{empty_call_graph: call_graph} do
@@ -227,7 +208,6 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert result == call_graph
 
       assert sorted_vertices(call_graph) == [{Module1, :my_fun, 2}]
-
       assert sorted_edges(call_graph) == []
     end
 
