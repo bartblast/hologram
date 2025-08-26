@@ -4,6 +4,7 @@ defmodule Hologram.Test.Helpers do
   import Hologram.Commons.TestUtils, only: [wrap_term: 1]
   import Hologram.Template, only: [sigil_HOLO: 2]
 
+  alias Hologram.Commons.StringUtils
   alias Hologram.Commons.ETS
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.ProcessUtils
@@ -180,6 +181,7 @@ defmodule Hologram.Test.Helpers do
     |> inspect()
     |> String.replace(["#", "<", ".", ">"], "")
     |> String.replace("Reference", "M")
+    |> StringUtils.prepend("Elixir.")
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     |> String.to_atom()
   end
