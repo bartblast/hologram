@@ -147,6 +147,8 @@ export default class Hologram {
 
     Hologram.render();
 
+    Hologram.#scheduleQueuedInitActions();
+
     if (!Type.isNil(nextAction)) {
       if (Type.isNil(Erlang_Maps["get/2"](Type.atom("target"), nextAction))) {
         nextAction = Erlang_Maps["put/3"](
