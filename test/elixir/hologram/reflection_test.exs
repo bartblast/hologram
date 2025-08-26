@@ -162,6 +162,20 @@ defmodule Hologram.ReflectionTest do
     assert Enum.sort(list_all_otp_apps()) == Enum.sort(list_all_otp_apps())
   end
 
+  test "list_ebin_modules/1" do
+    result = list_ebin_modules(:beam_file)
+
+    expected_modules = [
+      BeamFile,
+      BeamFile.DebugInfo,
+      BeamFile.Error,
+      BeamFile.Normalizer,
+      Mix.Tasks.Beam.File
+    ]
+
+    assert Enum.sort(result) == expected_modules
+  end
+
   test "list_elixir_modules/0" do
     result = list_elixir_modules()
 
