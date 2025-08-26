@@ -231,16 +231,19 @@ defmodule Hologram.Reflection do
   """
   @spec list_ebin_modules(atom) :: list(module)
   def list_ebin_modules(app) do
-    ebin_path =
-      app
-      |> :code.lib_dir()
-      |> Path.join("ebin")
+    case :code.lib_dir(app) do
+      {:error, :bad_name} ->
+        []
 
-    [ebin_path, "*.beam"]
-    |> Path.join()
-    |> Path.wildcard()
-    |> Enum.map(&Path.basename(&1, ".beam"))
-    |> Enum.map(&String.to_existing_atom/1)
+      lib_dir ->
+        ebin_path = Path.join([lib_dir, "ebin"])
+
+        [ebin_path, "*.beam"]
+        |> Path.join()
+        |> Path.wildcard()
+        |> Enum.map(&Path.basename(&1, ".beam"))
+        |> Enum.map(&String.to_existing_atom/1)
+    end
   end
 
   @doc """

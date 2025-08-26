@@ -162,16 +162,22 @@ defmodule Hologram.ReflectionTest do
     assert Enum.sort(list_all_otp_apps()) == Enum.sort(list_all_otp_apps())
   end
 
-  test "list_ebin_modules/1" do
-    result = list_ebin_modules(:websock_adapter)
+  describe "list_ebin_modules/1" do
+    test "OTP app has ebin dir" do
+      result = list_ebin_modules(:websock_adapter)
 
-    expected_modules = [
-      WebSockAdapter,
-      WebSockAdapter.UpgradeError,
-      WebSockAdapter.UpgradeValidation
-    ]
+      expected_modules = [
+        WebSockAdapter,
+        WebSockAdapter.UpgradeError,
+        WebSockAdapter.UpgradeValidation
+      ]
 
-    assert Enum.sort(result) == expected_modules
+      assert Enum.sort(result) == expected_modules
+    end
+
+    test "OTP app doesn't have ebin dir" do
+      assert list_ebin_modules(:ssl) == []
+    end
   end
 
   test "list_elixir_modules/0" do
