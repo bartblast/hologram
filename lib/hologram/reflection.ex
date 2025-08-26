@@ -242,7 +242,7 @@ defmodule Hologram.Reflection do
         |> Path.join()
         |> Path.wildcard()
         |> Enum.map(&Path.basename(&1, ".beam"))
-        |> Enum.map(&String.to_existing_atom/1)
+        |> Enum.map(&String.to_atom/1)
     end
   end
 
