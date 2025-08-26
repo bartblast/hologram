@@ -336,6 +336,64 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert has_edge?(call_graph, Module4, {Module4, :template, 0})
     end
 
+    test "module definition ir, struct module adds struct-specific edges", %{
+      empty_call_graph: call_graph
+    } do
+      module_25_ir = IR.for_module(Module25)
+      result = build(call_graph, module_25_ir)
+
+      assert result == call_graph
+
+      assert has_vertex?(call_graph, {Module25, :__struct__, 0})
+      assert has_vertex?(call_graph, {Module25, :__struct__, 1})
+
+      assert has_edge?(call_graph, Module25, {Module25, :__struct__, 0})
+      assert has_edge?(call_graph, Module25, {Module25, :__struct__, 1})
+    end
+
+    test "module definition ir, Ecto schema module adds Ecto schema-specific edges", %{
+      empty_call_graph: call_graph
+    } do
+      module_21_ir = IR.for_module(Module21)
+      result = build(call_graph, module_21_ir)
+
+      assert result == call_graph
+
+      assert has_vertex?(call_graph, {Module21, :__changeset__, 0})
+      assert has_vertex?(call_graph, {Module21, :__schema__, 1})
+      assert has_vertex?(call_graph, {Module21, :__schema__, 2})
+
+      assert has_edge?(call_graph, Module21, {Module21, :__changeset__, 0})
+      assert has_edge?(call_graph, Module21, {Module21, :__schema__, 1})
+      assert has_edge?(call_graph, Module21, {Module21, :__schema__, 2})
+    end
+
+    test "module definition ir, protocol module adds protocol-specific edges", %{
+      empty_call_graph: call_graph
+    } do
+      string_chars_ir = IR.for_module(String.Chars)
+      result = build(call_graph, string_chars_ir)
+
+      assert result == call_graph
+
+      from_vertex = {String.Chars, :to_string, 1}
+
+      assert has_edge?(call_graph, from_vertex, {String.Chars.Atom, :__impl__, 1})
+      assert has_edge?(call_graph, from_vertex, {String.Chars.Atom, :to_string, 1})
+
+      assert has_edge?(
+               call_graph,
+               from_vertex,
+               {String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, :__impl__, 1}
+             )
+
+      assert has_edge?(
+               call_graph,
+               from_vertex,
+               {String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, :to_string, 1}
+             )
+    end
+
     test "remote function call ir, module field as an atom", %{empty_call_graph: call_graph} do
       ir = %IR.RemoteFunctionCall{
         module: %IR.AtomType{value: Module5},
@@ -451,15 +509,11 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_vertices(call_graph) == [
                Calendar.ISO,
                DateTime,
-               {DateTime, :__struct__, 0},
-               {DateTime, :__struct__, 1},
                {Module1, :my_fun_1, 4},
                {:erlang, :apply, 3}
              ]
 
       assert sorted_edges(call_graph) == [
-               {DateTime, {DateTime, :__struct__, 0}},
-               {DateTime, {DateTime, :__struct__, 1}},
                {{Module1, :my_fun_1, 4}, Calendar.ISO},
                {{Module1, :my_fun_1, 4}, DateTime},
                {{Module1, :my_fun_1, 4}, {:erlang, :apply, 3}}
@@ -510,38 +564,6 @@ defmodule Hologram.Compiler.CallGraphTest do
                {:vertex_1, Module1},
                {:vertex_1, Module5}
              ]
-    end
-
-    test "protocol (implementation edges are added)", %{empty_call_graph: call_graph} do
-      ir = IR.for_module(String.Chars)
-      build(call_graph, ir)
-
-      from_vertex = {String.Chars, :to_string, 1}
-
-      assert has_edge?(call_graph, from_vertex, {String.Chars.Atom, :__impl__, 1})
-
-      assert has_edge?(call_graph, from_vertex, {String.Chars.Atom, :to_string, 1})
-
-      assert has_edge?(
-               call_graph,
-               from_vertex,
-               {String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, :__impl__, 1}
-             )
-
-      assert has_edge?(
-               call_graph,
-               from_vertex,
-               {String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, :to_string, 1}
-             )
-    end
-
-    # TODO: verify programatically that "use Ecto.Schema"
-    # still adds __changeset__/0 (maybe in consistency tests)
-    test "Ecto schema (__changeset__/0 edge is added)", %{empty_call_graph: call_graph} do
-      ir = IR.for_module(Module21)
-      build(call_graph, ir)
-
-      assert has_edge?(call_graph, Module21, {Module21, :__changeset__, 0})
     end
   end
 
