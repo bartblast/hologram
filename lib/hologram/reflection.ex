@@ -230,6 +230,7 @@ defmodule Hologram.Reflection do
   Application.spec yet during development.
   """
   @spec list_ebin_modules(atom) :: list(module)
+  # sobelow_skip ["DOS.StringToAtom"]
   def list_ebin_modules(app) do
     case :code.lib_dir(app) do
       {:error, :bad_name} ->
