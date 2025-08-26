@@ -163,14 +163,12 @@ defmodule Hologram.ReflectionTest do
   end
 
   test "list_ebin_modules/1" do
-    result = list_ebin_modules(:beam_file)
+    result = list_ebin_modules(:websock_adapter)
 
     expected_modules = [
-      BeamFile,
-      BeamFile.DebugInfo,
-      BeamFile.Error,
-      BeamFile.Normalizer,
-      Mix.Tasks.Beam.File
+      WebSockAdapter,
+      WebSockAdapter.UpgradeError,
+      WebSockAdapter.UpgradeValidation
     ]
 
     assert Enum.sort(result) == expected_modules
