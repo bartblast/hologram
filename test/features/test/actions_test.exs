@@ -7,6 +7,8 @@ defmodule HologramFeatureTests.ActionsTest do
   alias HologramFeatureTests.Actions.Page4
   alias HologramFeatureTests.Actions.Page5
   alias HologramFeatureTests.Actions.Page6
+  alias HologramFeatureTests.Actions.Page7
+  alias HologramFeatureTests.Actions.Page8
 
   describe "syntax" do
     feature "text syntax", %{session: session} do
@@ -221,6 +223,31 @@ defmodule HologramFeatureTests.ActionsTest do
       |> assert_text(
         css("#combined_result"),
         "[:component_5_action_executed, :component_9_action_executed, :layout_action_executed, :component_7_action_executed, :page_action_executed, :component_6_action_executed]"
+      )
+    end
+  end
+
+  describe "actions queued in component client-side init/2" do
+    feature "target not specified", %{session: session} do
+      session
+      |> visit(Page8)
+      |> assert_text("Component11 is hidden")
+      |> click(button("Show component"))
+      |> assert_text(
+        css("#component_11_result"),
+        ~s'{:component_11_action_result, %{queued_from: "component_11"}}'
+      )
+    end
+
+    feature "target specified", %{session: session} do
+      session
+      |> visit(Page7)
+      |> assert_text(css("#page_result"), "nil")
+      |> assert_text("Component10 is hidden")
+      |> click(button("Show component"))
+      |> assert_text(
+        css("#page_result"),
+        ~s'{:page_action_result, %{queued_from: "component_10"}}'
       )
     end
   end
