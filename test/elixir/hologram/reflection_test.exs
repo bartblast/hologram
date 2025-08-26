@@ -241,7 +241,7 @@ defmodule Hologram.ReflectionTest do
         File.write!(beam_file_path, beam_binary)
 
         assert Code.ensure_loaded(module_name) == {:module, module_name}
-        assert apply(module_name, :test_function, []) == :test_value
+        assert module_name.test_function() == :test_value
 
         current_spec_modules =
           :hologram
