@@ -4,10 +4,10 @@ defmodule Hologram.Test.Helpers do
   import Hologram.Commons.TestUtils, only: [wrap_term: 1]
   import Hologram.Template, only: [sigil_HOLO: 2]
 
-  alias Hologram.Commons.StringUtils
   alias Hologram.Commons.ETS
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.ProcessUtils
+  alias Hologram.Commons.StringUtils
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
