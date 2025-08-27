@@ -8,9 +8,14 @@ defmodule Hologram.Component do
   defstruct emitted_context: %{}, next_action: nil, next_command: nil, next_page: nil, state: %{}
 
   defmodule Action do
-    defstruct name: nil, params: %{}, target: nil
+    defstruct delay: 0, name: nil, params: %{}, target: nil
 
-    @type t :: %__MODULE__{name: :atom, params: %{atom => any}, target: String.t() | nil}
+    @type t :: %__MODULE__{
+            delay: non_neg_integer,
+            name: :atom,
+            params: %{atom => any},
+            target: String.t() | nil
+          }
   end
 
   defmodule Command do
@@ -175,7 +180,7 @@ defmodule Hologram.Component do
 
   @doc """
   Puts the given action spec to the component or server struct's next_action field.
-  Next action will be executed by the runtime synchronously.
+  Next action will be executed by the client-side runtime after the specified delay (in milliseconds, defaults to 0).
   """
   @spec put_action(Component.t() | Server.t(), atom | keyword) :: Component.t() | Server.t()
   def put_action(struct, name_or_spec)
@@ -188,13 +193,14 @@ defmodule Hologram.Component do
     name = spec[:name]
     params = Map.new(spec[:params] || [])
     target = spec[:target]
+    delay = spec[:delay] || 0
 
-    %{struct | next_action: %Action{name: name, params: params, target: target}}
+    %{struct | next_action: %Action{name: name, params: params, target: target, delay: delay}}
   end
 
   @doc """
   Puts the given action spec to the component or server struct's next_action field.
-  Next action will be executed by the runtime synchronously.
+  Next action will be executed by the client-side runtime after the specified delay (in milliseconds, defaults to 0).
   """
   @spec put_action(Component.t() | Server.t(), atom, keyword) :: Component.t() | Server.t()
   def put_action(struct, name, params) do

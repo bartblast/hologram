@@ -90,6 +90,28 @@ defmodule Hologram.ComponentTest do
                next_action: %Action{name: nil, target: "my_target", params: %{}}
              }
     end
+
+    test "spec: delay" do
+      assert put_action(%Component{}, delay: 500) == %Component{
+               next_action: %Action{name: nil, params: %{}, target: nil, delay: 500}
+             }
+    end
+
+    test "spec: name, params, target, delay" do
+      assert put_action(%Component{},
+               name: :my_action,
+               params: [a: 1, b: 2],
+               target: "my_target",
+               delay: 500
+             ) == %Component{
+               next_action: %Action{
+                 name: :my_action,
+                 params: %{a: 1, b: 2},
+                 target: "my_target",
+                 delay: 500
+               }
+             }
+    end
   end
 
   describe "put_action/2, server struct" do
@@ -114,6 +136,28 @@ defmodule Hologram.ComponentTest do
     test "spec: target" do
       assert put_action(%Server{}, target: "my_target") == %Server{
                next_action: %Action{name: nil, target: "my_target", params: %{}}
+             }
+    end
+
+    test "spec: delay" do
+      assert put_action(%Server{}, delay: 750) == %Server{
+               next_action: %Action{name: nil, params: %{}, target: nil, delay: 750}
+             }
+    end
+
+    test "spec: name, params, target, delay" do
+      assert put_action(%Server{},
+               name: :my_action,
+               params: [a: 1, b: 2],
+               target: "my_target",
+               delay: 750
+             ) == %Server{
+               next_action: %Action{
+                 name: :my_action,
+                 params: %{a: 1, b: 2},
+                 target: "my_target",
+                 delay: 750
+               }
              }
     end
   end
