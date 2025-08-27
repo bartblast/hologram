@@ -252,6 +252,8 @@ export default class Hologram {
       );
 
       if (Operation.isAction(operation)) {
+        let delay;
+
         switch (Hologram.#getActionName(operation)) {
           case "__load_prefetched_page__":
             return Hologram.executeLoadPrefetchedPageAction(
@@ -263,7 +265,7 @@ export default class Hologram {
             return Hologram.executePrefetchPageAction(operation, event.target);
 
           default:
-            const delay = Erlang_Maps["get/3"](
+            delay = Erlang_Maps["get/3"](
               Type.atom("delay"),
               operation,
               Type.integer(0),
