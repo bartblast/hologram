@@ -4,6 +4,7 @@ defmodule HologramFeatureTests.ActionsTest do
   alias HologramFeatureTests.Actions.Page1
   alias HologramFeatureTests.Actions.Page10
   alias HologramFeatureTests.Actions.Page11
+  alias HologramFeatureTests.Actions.Page12
   alias HologramFeatureTests.Actions.Page2
   alias HologramFeatureTests.Actions.Page3
   alias HologramFeatureTests.Actions.Page4
@@ -290,6 +291,18 @@ defmodule HologramFeatureTests.ActionsTest do
       |> assert_text(css("#result"), "nil")
       |> sleep(1_000)
       |> assert_text(css("#result"), ":delayed_action_11_executed")
+    end
+
+    feature "queued in component init/2", %{session: session} do
+      session
+      |> visit(Page12)
+      |> assert_text(css("#result"), "nil")
+      |> click(button("Show component"))
+      |> assert_text(css("#result"), "nil")
+      |> sleep(2_000)
+      |> assert_text(css("#result"), "nil")
+      |> sleep(1_000)
+      |> assert_text(css("#result"), ":delayed_action_12_executed")
     end
   end
 end
