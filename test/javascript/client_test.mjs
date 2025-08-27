@@ -443,7 +443,7 @@ describe("Client", () => {
   });
 
   describe("sendCommand()", () => {
-    let fetchStub, hologramExecuteActionStub;
+    let fetchStub, hologramScheduleActionStub;
 
     const module = Type.alias("MyComponent");
     const name = Type.atom("my_command");
@@ -466,7 +466,7 @@ describe("Client", () => {
       const entry = componentRegistryEntryFixture({module: module});
       ComponentRegistry.putEntry(Type.bitstring("my_target"), entry);
 
-      hologramExecuteActionStub = sinon.stub(Hologram, "executeAction");
+      hologramScheduleActionStub = sinon.stub(Hologram, "scheduleAction");
 
       globalThis.hologram = {csrfToken: "test-csrf-token-123"};
     });
@@ -514,7 +514,12 @@ describe("Client", () => {
     it("command succeeds, next action is not nil", async () => {
       const mockResponse = {
         ok: true,
-        json: sinon.stub().resolves([1, '(() => "dummy_" + "action")()']),
+        json: sinon
+          .stub()
+          .resolves([
+            1,
+            'Type.actionStruct({name: Type.atom("dummy_action")})',
+          ]),
       };
 
       fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
@@ -525,8 +530,8 @@ describe("Client", () => {
       await waitForEventLoop();
 
       sinon.assert.calledOnceWithExactly(
-        hologramExecuteActionStub,
-        "dummy_action",
+        hologramScheduleActionStub,
+        Type.actionStruct({name: Type.atom("dummy_action")}),
       );
     });
 
@@ -540,7 +545,7 @@ describe("Client", () => {
 
       await Client.sendCommand(command);
 
-      sinon.assert.notCalled(hologramExecuteActionStub);
+      sinon.assert.notCalled(hologramScheduleActionStub);
     });
 
     it("command fails due to response status code", async () => {
@@ -563,7 +568,7 @@ describe("Client", () => {
 
       assert.isTrue(errorThrown, "Expected HologramRuntimeError to be thrown");
 
-      sinon.assert.notCalled(hologramExecuteActionStub);
+      sinon.assert.notCalled(hologramScheduleActionStub);
     });
 
     it("command fails due to result status code", async () => {
@@ -591,7 +596,7 @@ describe("Client", () => {
 
       assert.isTrue(errorThrown, "Expected HologramRuntimeError to be thrown");
 
-      sinon.assert.notCalled(hologramExecuteActionStub);
+      sinon.assert.notCalled(hologramScheduleActionStub);
     });
 
     it("command fails due to network error", async () => {
@@ -614,7 +619,7 @@ describe("Client", () => {
 
       assert.isTrue(errorThrown, "Expected HologramRuntimeError to be thrown");
 
-      sinon.assert.notCalled(hologramExecuteActionStub);
+      sinon.assert.notCalled(hologramScheduleActionStub);
     });
   });
 });
