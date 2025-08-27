@@ -2,6 +2,7 @@ defmodule HologramFeatureTests.ActionsTest do
   use HologramFeatureTests.TestCase, async: true
 
   alias HologramFeatureTests.Actions.Page1
+  alias HologramFeatureTests.Actions.Page10
   alias HologramFeatureTests.Actions.Page2
   alias HologramFeatureTests.Actions.Page3
   alias HologramFeatureTests.Actions.Page4
@@ -266,6 +267,18 @@ defmodule HologramFeatureTests.ActionsTest do
         css("#combined_result"),
         "[:component_12_action_executed, :component_14_action_executed, :component_16_action_executed, :component_13_action_executed]"
       )
+    end
+  end
+
+  describe "with delay" do
+    feature "queued in page init/3", %{session: session} do
+      session
+      |> visit(Page10)
+      |> assert_text(css("#result"), "nil")
+      |> sleep(2_000)
+      |> assert_text(css("#result"), "nil")
+      |> sleep(1_000)
+      |> assert_text(css("#result"), ":delayed_action_10_executed")
     end
   end
 end
