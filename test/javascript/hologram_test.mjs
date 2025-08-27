@@ -938,5 +938,78 @@ describe("Hologram", () => {
       sinon.assert.calledWith(executeActionStub.getCall(0), action1);
       sinon.assert.calledWith(executeActionStub.getCall(1), action2);
     });
+
+    it("schedules action execution with custom delay", () => {
+      const actionWithDelay = Type.actionStruct({
+        name: Type.atom("test_action_with_delay"),
+        params: Type.map(),
+        target: cid1,
+        delay: Type.integer(500),
+      });
+
+      sinon.assert.notCalled(executeActionStub);
+
+      Hologram.scheduleAction(actionWithDelay);
+
+      // Action should not execute immediately
+      sinon.assert.notCalled(executeActionStub);
+
+      // Action should not execute after short delay
+      clock.tick(100);
+      sinon.assert.notCalled(executeActionStub);
+
+      // Action should execute after specified delay
+      clock.tick(400);
+      sinon.assert.calledOnceWithExactly(executeActionStub, actionWithDelay);
+    });
+
+    it("schedules multiple actions with different delays in correct order", () => {
+      const actionDelayed100 = Type.actionStruct({
+        name: Type.atom("action_100ms"),
+        params: Type.map(),
+        target: cid1,
+        delay: Type.integer(100),
+      });
+
+      const actionDelayed300 = Type.actionStruct({
+        name: Type.atom("action_300ms"),
+        params: Type.map(),
+        target: cid1,
+        delay: Type.integer(300),
+      });
+
+      Hologram.scheduleAction(actionDelayed300);
+      Hologram.scheduleAction(actionDelayed100);
+
+      // Neither should execute immediately
+      sinon.assert.notCalled(executeActionStub);
+
+      // After 100ms, only the first action should execute
+      clock.tick(100);
+      sinon.assert.calledOnceWithExactly(executeActionStub, actionDelayed100);
+
+      // After another 200ms (total 300ms), the second action should execute
+      clock.tick(200);
+      sinon.assert.calledTwice(executeActionStub);
+      sinon.assert.calledWith(executeActionStub.getCall(1), actionDelayed300);
+    });
+
+    it("handles action with zero delay same as no delay specified", () => {
+      const actionZeroDelay = Type.actionStruct({
+        name: Type.atom("test_action_zero_delay"),
+        params: Type.map(),
+        target: cid1,
+        delay: Type.integer(0),
+      });
+
+      Hologram.scheduleAction(actionZeroDelay);
+
+      // Action should not execute immediately
+      sinon.assert.notCalled(executeActionStub);
+
+      // Action should execute after 0ms timeout
+      clock.tick(0);
+      sinon.assert.calledOnceWithExactly(executeActionStub, actionZeroDelay);
+    });
   });
 });

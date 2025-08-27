@@ -352,8 +352,15 @@ export default class Hologram {
   }
 
   // Execute action asynchronously to allow animations and prevent blocking the event loop
+  // Deps: [:maps.get/3]
   static scheduleAction(action) {
-    setTimeout(() => Hologram.executeAction(action), 0);
+    const delay = Erlang_Maps["get/3"](
+      Type.atom("delay"),
+      action,
+      Type.integer(0),
+    );
+
+    setTimeout(() => Hologram.executeAction(action), Number(delay.value));
   }
 
   static #buildPagePath(toParam) {
