@@ -189,6 +189,11 @@ defmodule HologramFeatureTests.Helpers do
     Browser.execute_script(session, "window.scrollTo(#{x}, #{y});")
   end
 
+  def sleep(session, duration) do
+    :timer.sleep(duration)
+    session
+  end
+
   def visit(session, path_or_url) when is_binary(path_or_url) do
     Browser.visit(session, path_or_url)
   end
