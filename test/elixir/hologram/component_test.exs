@@ -68,42 +68,55 @@ defmodule Hologram.ComponentTest do
 
   describe "put_action/2, component struct" do
     test "name" do
-      assert put_action(%Component{}, :my_action) == %Component{
+      result = put_action(%Component{}, :my_action)
+
+      assert result == %Component{
                next_action: %Action{name: :my_action, params: %{}, target: nil}
              }
     end
 
     test "spec: name" do
-      assert put_action(%Component{}, name: :my_action) == %Component{
+      result = put_action(%Component{}, name: :my_action)
+
+      assert result == %Component{
                next_action: %Action{name: :my_action, params: %{}, target: nil}
              }
     end
 
     test "spec: params" do
-      assert put_action(%Component{}, params: [a: 1, b: 2]) == %Component{
+      result = put_action(%Component{}, params: [a: 1, b: 2])
+
+      assert result == %Component{
                next_action: %Action{name: nil, params: %{a: 1, b: 2}, target: nil}
              }
     end
 
     test "spec: target" do
-      assert put_action(%Component{}, target: "my_target") == %Component{
+      result = put_action(%Component{}, target: "my_target")
+
+      assert result == %Component{
                next_action: %Action{name: nil, target: "my_target", params: %{}}
              }
     end
 
     test "spec: delay" do
-      assert put_action(%Component{}, delay: 500) == %Component{
+      result = put_action(%Component{}, delay: 500)
+
+      assert result == %Component{
                next_action: %Action{name: nil, params: %{}, target: nil, delay: 500}
              }
     end
 
     test "spec: name, params, target, delay" do
-      assert put_action(%Component{},
-               name: :my_action,
-               params: [a: 1, b: 2],
-               target: "my_target",
-               delay: 500
-             ) == %Component{
+      result =
+        put_action(%Component{},
+          name: :my_action,
+          params: [a: 1, b: 2],
+          target: "my_target",
+          delay: 500
+        )
+
+      assert result == %Component{
                next_action: %Action{
                  name: :my_action,
                  params: %{a: 1, b: 2},
@@ -116,42 +129,55 @@ defmodule Hologram.ComponentTest do
 
   describe "put_action/2, server struct" do
     test "name" do
-      assert put_action(%Server{}, :my_action) == %Server{
+      result = put_action(%Server{}, :my_action)
+
+      assert result == %Server{
                next_action: %Action{name: :my_action, params: %{}, target: nil}
              }
     end
 
     test "spec: name" do
-      assert put_action(%Server{}, name: :my_action) == %Server{
+      result = put_action(%Server{}, name: :my_action)
+
+      assert result == %Server{
                next_action: %Action{name: :my_action, params: %{}, target: nil}
              }
     end
 
     test "spec: params" do
-      assert put_action(%Server{}, params: [a: 1, b: 2]) == %Server{
+      result = put_action(%Server{}, params: [a: 1, b: 2])
+
+      assert result == %Server{
                next_action: %Action{name: nil, params: %{a: 1, b: 2}, target: nil}
              }
     end
 
     test "spec: target" do
-      assert put_action(%Server{}, target: "my_target") == %Server{
+      result = put_action(%Server{}, target: "my_target")
+
+      assert result == %Server{
                next_action: %Action{name: nil, target: "my_target", params: %{}}
              }
     end
 
     test "spec: delay" do
-      assert put_action(%Server{}, delay: 750) == %Server{
+      result = put_action(%Server{}, delay: 750)
+
+      assert result == %Server{
                next_action: %Action{name: nil, params: %{}, target: nil, delay: 750}
              }
     end
 
     test "spec: name, params, target, delay" do
-      assert put_action(%Server{},
-               name: :my_action,
-               params: [a: 1, b: 2],
-               target: "my_target",
-               delay: 750
-             ) == %Server{
+      result =
+        put_action(%Server{},
+          name: :my_action,
+          params: [a: 1, b: 2],
+          target: "my_target",
+          delay: 750
+        )
+
+      assert result == %Server{
                next_action: %Action{
                  name: :my_action,
                  params: %{a: 1, b: 2},
@@ -163,45 +189,59 @@ defmodule Hologram.ComponentTest do
   end
 
   test "put_action/3, component struct" do
-    assert put_action(%Component{}, :my_action, a: 1, b: 2) == %Component{
+    result = put_action(%Component{}, :my_action, a: 1, b: 2)
+
+    assert result == %Component{
              next_action: %Action{name: :my_action, params: %{a: 1, b: 2}, target: nil}
            }
   end
 
   test "put_action/3, server struct" do
-    assert put_action(%Server{}, :my_action, a: 1, b: 2) == %Server{
+    result = put_action(%Server{}, :my_action, a: 1, b: 2)
+
+    assert result == %Server{
              next_action: %Action{name: :my_action, params: %{a: 1, b: 2}, target: nil}
            }
   end
 
   describe "put_command/2" do
     test "name" do
-      assert put_command(%Component{}, :my_command) == %Component{
+      result = put_command(%Component{}, :my_command)
+
+      assert result == %Component{
                next_command: %Command{name: :my_command, params: %{}, target: nil}
              }
     end
 
     test "spec: name" do
-      assert put_command(%Component{}, name: :my_command) == %Component{
+      result = put_command(%Component{}, name: :my_command)
+
+      assert result == %Component{
                next_command: %Command{name: :my_command, params: %{}, target: nil}
              }
     end
 
     test "spec: params" do
-      assert put_command(%Component{}, params: [a: 1, b: 2]) == %Component{
+      result = put_command(%Component{}, params: [a: 1, b: 2])
+
+      assert result == %Component{
                next_command: %Command{name: nil, params: %{a: 1, b: 2}, target: nil}
              }
     end
 
     test "spec: target" do
-      assert put_command(%Component{}, target: "my_target") == %Component{
+      result = put_command(%Component{}, target: "my_target")
+
+      assert result == %Component{
                next_command: %Command{name: nil, target: "my_target", params: %{}}
              }
     end
   end
 
   test "put_command/3" do
-    assert put_command(%Component{}, :my_command, a: 1, b: 2) == %Component{
+    result = put_command(%Component{}, :my_command, a: 1, b: 2)
+
+    assert result == %Component{
              next_command: %Command{name: :my_command, params: %{a: 1, b: 2}, target: nil}
            }
   end
