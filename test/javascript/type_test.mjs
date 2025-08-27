@@ -22,6 +22,7 @@ describe("Type", () => {
           [Type.atom("name"), Type.nil()],
           [Type.atom("params"), Type.map()],
           [Type.atom("target"), Type.nil()],
+          [Type.atom("delay"), Type.integer(0)],
         ]),
       );
     });
@@ -36,7 +37,9 @@ describe("Type", () => {
 
       const target = Type.bitstring("my_target");
 
-      const result = Type.actionStruct({name, params, target});
+      const delay = Type.integer(750);
+
+      const result = Type.actionStruct({name, params, target, delay});
 
       assert.deepStrictEqual(
         result,
@@ -45,6 +48,7 @@ describe("Type", () => {
           [Type.atom("name"), name],
           [Type.atom("params"), params],
           [Type.atom("target"), target],
+          [Type.atom("delay"), delay],
         ]),
       );
     });
@@ -1397,6 +1401,7 @@ describe("Type", () => {
           [Type.atom("name"), Type.nil()],
           [Type.atom("params"), Type.map()],
           [Type.atom("target"), Type.nil()],
+          [Type.atom("delay"), Type.integer(0)],
         ]),
       );
     });
