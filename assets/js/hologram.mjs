@@ -236,6 +236,7 @@ export default class Hologram {
     }
   }
 
+  // Deps: [:maps.get/3]
   static handleUiEvent(event, eventType, operationSpecDom, defaultTarget) {
     const eventImpl = Hologram.#getEventImplementation(eventType);
 
@@ -262,7 +263,17 @@ export default class Hologram {
             return Hologram.executePrefetchPageAction(operation, event.target);
 
           default:
-            return Hologram.executeAction(operation);
+            const delay = Erlang_Maps["get/3"](
+              Type.atom("delay"),
+              operation,
+              Type.integer(0),
+            );
+
+            if (delay.value === 0n) {
+              return Hologram.executeAction(operation);
+            } else {
+              return Hologram.scheduleAction(operation);
+            }
         }
       } else {
         Client.sendCommand(operation);

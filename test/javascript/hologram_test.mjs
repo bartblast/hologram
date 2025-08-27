@@ -317,7 +317,8 @@ describe("Hologram", () => {
     let executeActionStub,
       clientSendCommandStub,
       executeLoadPrefetchedPageActionStub,
-      executePrefetchPageActionStub;
+      executePrefetchPageActionStub,
+      scheduleActionStub;
 
     const actionSpecDom = Type.keywordList([
       [Type.atom("text"), Type.bitstring("my_action")],
@@ -358,13 +359,18 @@ describe("Hologram", () => {
       executePrefetchPageActionStub = sinon
         .stub(Hologram, "executePrefetchPageAction")
         .callsFake((_action, _eventTargetNode) => null);
+
+      scheduleActionStub = sinon
+        .stub(Hologram, "scheduleAction")
+        .callsFake((_action) => null);
     });
 
     afterEach(() => {
-      Hologram.executeAction.restore();
       Client.sendCommand.restore();
+      Hologram.executeAction.restore();
       Hologram.executeLoadPrefetchedPageAction.restore();
       Hologram.executePrefetchPageAction.restore();
+      Hologram.scheduleAction.restore();
     });
 
     it("event is ignored", () => {
@@ -391,13 +397,14 @@ describe("Hologram", () => {
         defaultTarget,
       );
 
-      sinon.assert.notCalled(executeActionStub);
       sinon.assert.notCalled(clientSendCommandStub);
+      sinon.assert.notCalled(executeActionStub);
       sinon.assert.notCalled(executeLoadPrefetchedPageActionStub);
       sinon.assert.notCalled(executePrefetchPageActionStub);
+      sinon.assert.notCalled(scheduleActionStub);
     });
 
-    it("regular action", () => {
+    it("regular action without delay", () => {
       Hologram.handleUiEvent(
         notIgnoredEvent,
         eventType,
@@ -433,6 +440,59 @@ describe("Hologram", () => {
       });
 
       sinon.assert.calledOnceWithExactly(executeActionStub, expectedAction);
+      sinon.assert.notCalled(scheduleActionStub);
+    });
+
+    it("regular action with delay", () => {
+      const delayedActionSpecDom = Type.keywordList([
+        [
+          Type.atom("expression"),
+          Type.tuple([
+            Type.keywordList([
+              [Type.atom("action"), Type.atom("my_delayed_action")],
+              [Type.atom("delay"), Type.integer(500)],
+            ]),
+          ]),
+        ],
+      ]);
+
+      Hologram.handleUiEvent(
+        notIgnoredEvent,
+        eventType,
+        delayedActionSpecDom,
+        defaultTarget,
+      );
+
+      sinon.assert.notCalled(clientSendCommandStub);
+      sinon.assert.notCalled(executeLoadPrefetchedPageActionStub);
+      sinon.assert.notCalled(executePrefetchPageActionStub);
+
+      const expectedAction = Type.actionStruct({
+        name: Type.atom("my_delayed_action"),
+        params: Type.map([
+          [
+            Type.atom("event"),
+            Type.map([
+              [Type.atom("client_x"), Type.float(10)],
+              [Type.atom("client_y"), Type.float(20)],
+              [Type.atom("movement_x"), Type.float(5)],
+              [Type.atom("movement_y"), Type.float(15)],
+              [Type.atom("offset_x"), Type.float(30)],
+              [Type.atom("offset_y"), Type.float(40)],
+              [Type.atom("page_x"), Type.float(1)],
+              [Type.atom("page_y"), Type.float(2)],
+              [Type.atom("pointer_type"), Type.atom("mouse")],
+              [Type.atom("screen_x"), Type.float(100)],
+              [Type.atom("screen_y"), Type.float(200)],
+            ]),
+          ],
+        ]),
+        target: defaultTarget,
+        delay: Type.integer(500),
+      });
+
+      sinon.assert.calledOnceWithExactly(scheduleActionStub, expectedAction);
+      sinon.assert.notCalled(executeActionStub);
     });
 
     it("navigate to prefetched page action", () => {
@@ -460,9 +520,10 @@ describe("Hologram", () => {
         defaultTarget,
       );
 
-      sinon.assert.notCalled(executeActionStub);
       sinon.assert.notCalled(clientSendCommandStub);
+      sinon.assert.notCalled(executeActionStub);
       sinon.assert.notCalled(executePrefetchPageActionStub);
+      sinon.assert.notCalled(scheduleActionStub);
 
       const expectedAction = Type.actionStruct({
         name: Type.atom("__load_prefetched_page__"),
@@ -520,9 +581,10 @@ describe("Hologram", () => {
         defaultTarget,
       );
 
-      sinon.assert.notCalled(executeActionStub);
       sinon.assert.notCalled(clientSendCommandStub);
+      sinon.assert.notCalled(executeActionStub);
       sinon.assert.notCalled(executeLoadPrefetchedPageActionStub);
+      sinon.assert.notCalled(scheduleActionStub);
 
       const expectedAction = Type.actionStruct({
         name: Type.atom("__prefetch_page__"),
@@ -576,8 +638,9 @@ describe("Hologram", () => {
       );
 
       sinon.assert.notCalled(executeActionStub);
-      sinon.assert.notCalled(executePrefetchPageActionStub);
       sinon.assert.notCalled(executeLoadPrefetchedPageActionStub);
+      sinon.assert.notCalled(executePrefetchPageActionStub);
+      sinon.assert.notCalled(scheduleActionStub);
 
       const expectedCommand = Type.commandStruct({
         name: Type.atom("my_command"),
