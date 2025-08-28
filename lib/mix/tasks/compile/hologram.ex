@@ -36,7 +36,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   """
   @impl Mix.Task.Compiler
   def run(opts) do
-    lock_path = Path.join(opts[:build_dir], "hologram_compiler.lock")
+    lock_path = Path.join(opts[:build_dir], Reflection.compiler_lock_file_name())
 
     with_lock(lock_path, fn ->
       compile(opts)
