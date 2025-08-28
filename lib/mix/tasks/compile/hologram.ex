@@ -36,6 +36,14 @@ defmodule Mix.Tasks.Compile.Hologram do
   """
   @impl Mix.Task.Compiler
   def run(opts) do
+    lock_path = Path.join(opts[:build_dir], "hologram_compiler.lock")
+
+    with_lock(lock_path, fn ->
+      compile(opts)
+    end)
+  end
+
+  defp compile(opts) do
     Logger.info("Hologram: compiler started")
 
     assets_dir = opts[:assets_dir]
@@ -146,5 +154,29 @@ defmodule Mix.Tasks.Compile.Hologram do
 
   defp elixir_ls_build?(opts) do
     String.contains?(opts[:build_dir], "/.elixir_ls/")
+  end
+
+  defp with_lock(lock_path, fun) do
+    lock_path
+    |> Path.dirname()
+    |> File.mkdir_p!()
+
+    case File.open(lock_path, [:write, :exclusive]) do
+      {:ok, file} ->
+        try do
+          fun.()
+        after
+          File.close(file)
+          File.rm!(lock_path)
+        end
+
+      {:error, :eexist} ->
+        Logger.info("Hologram: compiler already running, waiting...")
+        :timer.sleep(1_000)
+        with_lock(lock_path, fun)
+
+      {:error, reason} ->
+        raise "Hologram: failed to acquire compiler lock: #{inspect(reason)}"
+    end
   end
 end
