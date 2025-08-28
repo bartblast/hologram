@@ -8,6 +8,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
 
+  @compiler_lock_file_name Reflection.compiler_lock_file_name()
+
   @test_dir Path.join([
               Reflection.tmp_dir(),
               "tests",
@@ -170,5 +172,69 @@ defmodule Mix.Tasks.Compile.HologramTest do
     run(opts)
     test_build_artifacts()
     test_old_build_static_artifacts_cleanup()
+  end
+
+  describe "compiler locking" do
+    test "locking mechanism prevents concurrent compilation", %{opts: opts} do
+      tasks =
+        Enum.map(1..3, fn _i ->
+          Task.async(fn ->
+            run(opts)
+            System.system_time(:millisecond)
+          end)
+        end)
+
+      end_times =
+        tasks
+        |> Task.await_many(60_000)
+        |> Enum.sort()
+
+      [first_end, second_end, third_end] = end_times
+
+      # Verify end times are spaced apart (indicating serialization)
+      # Each compilation should end at different times (with reasonable gaps)
+      # If they were running in parallel, end times would be very close
+      # Expect at least 1000ms gap between compilations
+      assert second_end - first_end > 1_000
+      assert third_end - second_end > 1_000
+
+      test_build_artifacts()
+    end
+
+    test "lock file is cleaned up after successful compilation", %{opts: opts} do
+      lock_path = Path.join(opts[:build_dir], @compiler_lock_file_name)
+      refute File.exists?(lock_path)
+
+      run(opts)
+
+      refute File.exists?(lock_path)
+    end
+
+    test "lock file is cleaned up after compilation error", %{opts: opts} do
+      lock_path = Path.join(opts[:build_dir], @compiler_lock_file_name)
+      refute File.exists?(lock_path)
+
+      # Create invalid opts that will cause compilation to fail early
+      invalid_opts = Keyword.put(opts, :assets_dir, "/nonexistent/assets/dir")
+
+      assert_raise RuntimeError, "npm install command failed", fn ->
+        run(invalid_opts)
+      end
+
+      refute File.exists?(lock_path)
+    end
+
+    test "lock directory is created if it doesn't exist", %{opts: opts} do
+      File.rm_rf!(opts[:build_dir])
+      refute File.exists?(opts[:build_dir])
+
+      lock_path = Path.join(opts[:build_dir], @compiler_lock_file_name)
+
+      run(opts)
+
+      assert File.exists?(opts[:build_dir])
+
+      refute File.exists?(lock_path)
+    end
   end
 end
