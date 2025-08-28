@@ -54,6 +54,10 @@ defmodule Hologram.ReflectionTest do
     assert call_graph_dump_file_name() == "call_graph.bin"
   end
 
+  test "compiler_lock_file_name/0" do
+    assert String.length(compiler_lock_file_name()) > 0
+  end
+
   describe "component?" do
     test "is a component module" do
       assert component?(Module3)
