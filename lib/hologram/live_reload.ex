@@ -3,6 +3,11 @@ defmodule Hologram.LiveReload do
 
   use GenServer
 
+  @doc """
+  Reloads the given file path using the given endpoint.
+  """
+  @callback reload(String.t(), any) :: :ok
+
   alias Hologram.Assets.ManifestCache
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Assets.PathRegistry
@@ -38,40 +43,27 @@ defmodule Hologram.LiveReload do
   end
 
   @impl GenServer
-  def handle_info({:file_event, _pid, {_file_path, [:renamed]}}, state) do
-    {:noreply, state}
-  end
-
-  @impl GenServer
   def handle_info({:file_event, _pid, {file_path, _events}}, state) do
-    if state.timer_ref, do: Process.cancel_timer(state.timer_ref)
+    case should_process_file_event?(file_path) do
+      {:ok, target_file_path} ->
+        if state.timer_ref, do: Process.cancel_timer(state.timer_ref)
 
-    # File change events are debounced to avoid multiple recompilations
-    # when the same file is modified multiple times in quick succession.
-    timer_ref = Process.send_after(self(), {:debounced_reload, file_path}, @debounce_delay)
+        # File change events are debounced to avoid multiple recompilations
+        # when the same file is modified multiple times in quick succession.
+        timer_ref =
+          Process.send_after(self(), {:debounced_reload, target_file_path}, @debounce_delay)
 
-    {:noreply, %{state | timer_ref: timer_ref}}
+        {:noreply, %{state | timer_ref: timer_ref}}
+
+      :ignore ->
+        # Ignore irrelevant files (backup files, temp files, etc.)
+        {:noreply, state}
+    end
   end
 
   @impl GenServer
-  def handle_info({:debounced_reload, modified_file_path}, state) do
-    recompiled_file_path =
-      case Path.extname(modified_file_path) do
-        ".ex" ->
-          modified_file_path
-
-        ".holo" ->
-          ex_file = Path.rootname(modified_file_path) <> ".ex"
-          if File.exists?(ex_file), do: ex_file
-
-        _fallback ->
-          nil
-      end
-
-    if recompiled_file_path do
-      reload(recompiled_file_path, state.endpoint)
-    end
-
+  def handle_info({:debounced_reload, target_file_path}, state) do
+    impl().reload(target_file_path, state.endpoint)
     {:noreply, %{state | timer_ref: nil}}
   end
 
@@ -80,6 +72,26 @@ defmodule Hologram.LiveReload do
   """
   @spec debounce_delay :: pos_integer
   def debounce_delay, do: @debounce_delay
+
+  @doc """
+  Reloads the application after a file change by recompiling Elixir code,
+  recompiling Hologram components, reloading Hologram runtime, and 
+  broadcasting reload notifications to connected clients.
+
+  If code reloading fails, broadcasts a compilation error instead.
+  """
+  @spec reload(String.t(), any) :: :ok
+  def reload(_file_path, endpoint) do
+    case reload_code(endpoint) do
+      :ok ->
+        recompile_hologram()
+        reload_runtime()
+        broadcast_reload()
+
+      {:error, output} ->
+        broadcast_compilation_error(output)
+    end
+  end
 
   @doc """
   Returns the list of directories that are watched for file changes.
@@ -124,21 +136,13 @@ defmodule Hologram.LiveReload do
     Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", :reload)
   end
 
+  defp impl do
+    Application.get_env(:hologram, :live_reload_impl, __MODULE__)
+  end
+
   defp recompile_hologram do
     # credo:disable-for-next-line Credo.Check.Design.AliasUsage
     Mix.Tasks.Compile.Hologram.run([])
-  end
-
-  defp reload(_file_path, endpoint) do
-    case reload_code(endpoint) do
-      :ok ->
-        recompile_hologram()
-        reload_runtime()
-        broadcast_reload()
-
-      {:error, output} ->
-        broadcast_compilation_error(output)
-    end
   end
 
   defp reload_code(endpoint) do
@@ -155,5 +159,25 @@ defmodule Hologram.LiveReload do
     PathRegistry.reload()
     ManifestCache.reload()
     PageDigestRegistry.reload()
+  end
+
+  # Determines whether to process a file event and returns the target file to reload
+  defp should_process_file_event?(file_path) do
+    case Path.extname(file_path) do
+      ".ex" ->
+        {:ok, file_path}
+
+      ".holo" ->
+        ex_file = Path.rootname(file_path) <> ".ex"
+
+        if File.exists?(ex_file) do
+          {:ok, ex_file}
+        else
+          :ignore
+        end
+
+      _fallback ->
+        :ignore
+    end
   end
 end

@@ -12,17 +12,6 @@ defmodule Hologram.LiveReloadTest do
   @debounce_delay LiveReload.debounce_delay()
   @file_path Path.join([@fixtures_dir, "live_reload", "module_1.ex"])
 
-  defp suppress_phoenix_errors(fun) do
-    original_level = Logger.level()
-    Logger.configure(level: :emergency)
-
-    try do
-      fun.()
-    after
-      Logger.configure(level: original_level)
-    end
-  end
-
   setup do
     wait_for_process_cleanup(Hologram.PubSub)
     start_supervised!({Phoenix.PubSub, name: Hologram.PubSub})
@@ -47,16 +36,50 @@ defmodule Hologram.LiveReloadTest do
       assert result == {:noreply, state}
     end
 
-    test "ignores :renamed file events", %{state: state} do
-      result = LiveReload.handle_info({:file_event, self(), {@file_path, [:renamed]}}, state)
-      assert result == {:noreply, state}
-    end
-
-    test "starts debounce timer for file changes", %{state: state} do
+    test "starts debounce timer for .ex file changes", %{state: state} do
       result = LiveReload.handle_info({:file_event, self(), {@file_path, [:modified]}}, state)
 
       assert {:noreply, new_state} = result
       assert is_reference(new_state.timer_ref)
+    end
+
+    test "starts debounce timer for .holo file changes", %{state: state} do
+      holo_file = Path.join([@fixtures_dir, "live_reload", "module_1.holo"])
+      result = LiveReload.handle_info({:file_event, self(), {holo_file, [:modified]}}, state)
+
+      assert {:noreply, new_state} = result
+      assert is_reference(new_state.timer_ref)
+    end
+
+    test "processes :renamed events for .ex files", %{state: state} do
+      result = LiveReload.handle_info({:file_event, self(), {@file_path, [:renamed]}}, state)
+
+      assert {:noreply, new_state} = result
+      assert is_reference(new_state.timer_ref)
+    end
+
+    test "processes :renamed events for .holo files", %{state: state} do
+      holo_file = Path.join([@fixtures_dir, "live_reload", "module_1.holo"])
+      result = LiveReload.handle_info({:file_event, self(), {holo_file, [:renamed]}}, state)
+
+      assert {:noreply, new_state} = result
+      assert is_reference(new_state.timer_ref)
+    end
+
+    test "ignores irrelevant file types", %{state: state} do
+      irrelevant_files = [
+        Path.join([@fixtures_dir, "live_reload", "file.css"]),
+        Path.join([@fixtures_dir, "live_reload", "file.json"]),
+        Path.join([@fixtures_dir, "live_reload", "file.md"]),
+        Path.join([@fixtures_dir, "live_reload", "file.txt"]),
+        Path.join([@fixtures_dir, "live_reload", "backup.holo~"]),
+        Path.join([@fixtures_dir, "live_reload", ".#temp.holo"])
+      ]
+
+      for file_path <- irrelevant_files do
+        result = LiveReload.handle_info({:file_event, self(), {file_path, [:modified]}}, state)
+        assert result == {:noreply, state}
+      end
     end
 
     test "cancels existing timer and starts new one", %{state: state} do
@@ -71,10 +94,25 @@ defmodule Hologram.LiveReloadTest do
       assert is_reference(new_state.timer_ref)
     end
 
-    test "debounce timer sends debounced_reload message after delay", %{state: state} do
+    test "debounce timer sends debounced_reload message with target file after delay", %{
+      state: state
+    } do
       LiveReload.handle_info({:file_event, self(), {@file_path, [:modified]}}, state)
 
+      # For .ex files, the target file is the same as the original file
       assert_receive {:debounced_reload, @file_path}, @debounce_delay + 100
+    end
+
+    test "debounce timer sends debounced_reload message with .ex target for .holo files", %{
+      state: state
+    } do
+      holo_file = Path.join([@fixtures_dir, "live_reload", "module_1.holo"])
+      ex_file = Path.join([@fixtures_dir, "live_reload", "module_1.ex"])
+
+      LiveReload.handle_info({:file_event, self(), {holo_file, [:modified]}}, state)
+
+      # For .holo files, the target file should be the corresponding .ex file
+      assert_receive {:debounced_reload, ^ex_file}, @debounce_delay + 100
     end
 
     test "multiple file events are debounced", %{state: state_0} do
@@ -144,52 +182,39 @@ defmodule Hologram.LiveReloadTest do
     end
   end
 
-  # This tests the private logic indirectly by checking what file types trigger reload attempts
-  describe "file path processing" do
+  describe "debounced reload handling" do
     setup do
-      [state: %{endpoint: nil, timer_ref: make_ref()}]
+      [state: %{endpoint: :dummy_endpoint, timer_ref: make_ref()}]
     end
 
-    test "handles .ex files", %{state: state} do
-      # The error being raised proves that .ex files trigger compilation attempts,
-      # but fail due to missing Phoenix setup (nil endpoint)
-      suppress_phoenix_errors(fn ->
-        catch_exit(LiveReload.handle_info({:debounced_reload, @file_path}, state))
+    test "debounced_reload always triggers reload attempt", %{state: state} do
+      import Mox, only: [expect: 3]
+
+      # Mock the reload function to be called (but can raise an error to simulate real behavior)
+      LiveReloadMock
+      |> expect(:reload, fn @file_path, :dummy_endpoint ->
+        # Simulate Phoenix.CodeReloader failure
+        raise "expected test error"
       end)
+
+      assert_raise RuntimeError, "expected test error", fn ->
+        LiveReload.handle_info({:debounced_reload, @file_path}, state)
+      end
     end
 
-    test "handles .holo files with corresponding .ex files", %{state: state} do
-      holo_file = Path.join([@fixtures_dir, "live_reload", "module_1.holo"])
+    test "debounced_reload clears timer_ref", %{state: state} do
+      import Mox, only: [expect: 3]
 
-      # The error being raised proves that .holo files with corresponding .ex files
-      # trigger compilation attempts, but fail due to missing Phoenix setup (nil endpoint)
-      suppress_phoenix_errors(fn ->
-        catch_exit(LiveReload.handle_info({:debounced_reload, holo_file}, state))
-      end)
-    end
+      timer_ref = make_ref()
+      state_with_timer = %{state | timer_ref: timer_ref}
 
-    test "ignores .holo files without corresponding .ex files", %{state: state} do
-      orphaned_holo_file = Path.join([@fixtures_dir, "live_reload", "orphaned.holo"])
+      LiveReloadMock
+      |> expect(:reload, fn @file_path, :dummy_endpoint -> :ok end)
 
-      result = LiveReload.handle_info({:debounced_reload, orphaned_holo_file}, state)
+      result = LiveReload.handle_info({:debounced_reload, @file_path}, state_with_timer)
 
       assert {:noreply, new_state} = result
       assert new_state.timer_ref == nil
-    end
-
-    test "ignores files with extensions other than .ex or .holo", %{state: state} do
-      ignored_files = [
-        Path.join([@fixtures_dir, "live_reload", "file.css"]),
-        Path.join([@fixtures_dir, "live_reload", "file.json"]),
-        Path.join([@fixtures_dir, "live_reload", "file.md"]),
-        Path.join([@fixtures_dir, "live_reload", "file.text"])
-      ]
-
-      for file_path <- ignored_files do
-        result = LiveReload.handle_info({:debounced_reload, file_path}, state)
-        assert {:noreply, new_state} = result
-        assert new_state.timer_ref == nil
-      end
     end
   end
 end
