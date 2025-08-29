@@ -1124,11 +1124,11 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "bitstring, binary" do
-      assert stringify_for_interpolation(<<97::6, 98::4>>) == "&lt;&lt;132, 2::size(2)&gt;&gt;"
+      assert stringify_for_interpolation(<<97, 98, 99>>) == "abc"
     end
 
     test "bitstring, non-binary" do
-      assert stringify_for_interpolation(<<97, 98, 99>>) == "abc"
+      assert stringify_for_interpolation(<<97::6, 98::4>>) == "&lt;&lt;132, 2::size(2)&gt;&gt;"
     end
 
     test "float" do
