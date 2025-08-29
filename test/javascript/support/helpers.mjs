@@ -258,6 +258,13 @@ function defineElixirStringCharsModule() {
           return Type.bitstring(term.value);
 
         case "bitstring":
+          if (!Type.isBinary(term)) {
+            Interpreter.raiseError(
+              "Protocol.UndefinedError",
+              "protocol String.Chars not implemented for type BitString, cannot convert a bitstring to a string",
+            );
+          }
+
           return term;
 
         case "float":
