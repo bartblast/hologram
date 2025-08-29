@@ -141,11 +141,19 @@ describe("Renderer", () => {
   const cid = Type.bitstring("my_component");
   const context = Type.map();
   const defaultTarget = Type.bitstring("my_default_target");
+  const parentTagName = "div";
   const slots = Type.keywordList();
 
   it("text node", () => {
     const node = Type.tuple([Type.atom("text"), Type.bitstring("abc")]);
-    const result = Renderer.renderDom(node, context, slots, defaultTarget);
+
+    const result = Renderer.renderDom(
+      node,
+      context,
+      slots,
+      defaultTarget,
+      parentTagName,
+    );
 
     assert.equal(result, "abc");
   });
@@ -155,7 +163,14 @@ describe("Renderer", () => {
       // <!---->
       const node = Type.tuple([Type.atom("public_comment"), Type.list()]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = vnode("!", "");
 
       assert.deepStrictEqual(result, expected);
@@ -175,7 +190,14 @@ describe("Renderer", () => {
         ]),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = vnode("!", "<div></div>");
 
       assert.deepStrictEqual(result, expected);
@@ -196,7 +218,14 @@ describe("Renderer", () => {
         ]),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = vnode("!", "abc<div></div>");
 
       assert.deepStrictEqual(result, expected);
@@ -267,7 +296,13 @@ describe("Renderer", () => {
 
       ComponentRegistry.putEntry(cid7, entry7);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       const expected = vnode(
         "!",
@@ -280,7 +315,14 @@ describe("Renderer", () => {
 
   it("DOCTYPE node", () => {
     const node = Type.tuple([Type.atom("doctype"), Type.bitstring("html")]);
-    const result = Renderer.renderDom(node, context, slots, defaultTarget);
+
+    const result = Renderer.renderDom(
+      node,
+      context,
+      slots,
+      defaultTarget,
+      null,
+    );
 
     assert.deepStrictEqual(result, Type.nil());
   });
@@ -291,7 +333,13 @@ describe("Renderer", () => {
       Type.tuple([Type.integer(123)]),
     ]);
 
-    const result = Renderer.renderDom(node, context, slots, defaultTarget);
+    const result = Renderer.renderDom(
+      node,
+      context,
+      slots,
+      defaultTarget,
+      parentTagName,
+    );
 
     assert.equal(result, "123");
   });
@@ -305,7 +353,14 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = vnode("div", {attrs: {}, on: {}}, []);
 
       assert.deepStrictEqual(result, expected);
@@ -338,7 +393,13 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       const expected = vnode(
         "div",
@@ -365,7 +426,13 @@ describe("Renderer", () => {
         ]),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       const expected = vnode("div", {attrs: {}, on: {}}, [
         vnode("span", {attrs: {}, on: {}}, ["abc"]),
@@ -383,7 +450,14 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = vnode("img", {attrs: {}, on: {}}, []);
 
       assert.deepStrictEqual(result, expected);
@@ -416,7 +490,13 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       const expected = vnode(
         "img",
@@ -441,7 +521,13 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       const expected = vnode(
         "img",
@@ -477,7 +563,13 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       const expected = vnode("img", {attrs: {attr_2: "value_2"}, on: {}}, []);
 
@@ -537,7 +629,13 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result.data.attrs, {
         attr_1: "aaa",
@@ -604,7 +702,13 @@ describe("Renderer", () => {
 
       ComponentRegistry.putEntry(cid7, entry7);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(
         result,
@@ -642,7 +746,13 @@ describe("Renderer", () => {
             ]),
           ]);
 
-          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
 
           assert.deepStrictEqual(Object.keys(vdom.data.on), ["click"]);
 
@@ -694,7 +804,13 @@ describe("Renderer", () => {
             Type.list(),
           ]);
 
-          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
 
           assert.deepStrictEqual(Object.keys(vdom.data.on), ["click", "focus"]);
 
@@ -751,7 +867,13 @@ describe("Renderer", () => {
             Type.list(),
           ]);
 
-          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            null,
+          );
 
           assert.deepStrictEqual(Object.keys(vdom.data.on), ["mousemove"]);
         });
@@ -775,7 +897,13 @@ describe("Renderer", () => {
 
           initComponentRegistryEntry(cid);
 
-          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
 
           const stub = sinon
             .stub(Hologram, "handleUiEvent")
@@ -808,7 +936,13 @@ describe("Renderer", () => {
             Type.list(),
           ]);
 
-          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
 
           const stub = sinon
             .stub(Hologram, "handleUiEvent")
@@ -931,7 +1065,13 @@ describe("Renderer", () => {
           initComponentRegistryEntry(Type.bitstring("component_60"));
           initComponentRegistryEntry(Type.bitstring("component_61"));
 
-          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
 
           const stub = sinon
             .stub(Hologram, "handleUiEvent")
@@ -995,7 +1135,9 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
+
           const expected = vnode("a", {attrs: {href: "my_href"}, on: {}}, []);
 
           assert.deepStrictEqual(result, expected);
@@ -1021,7 +1163,9 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
+
           const expected = vnode(
             "link",
             {attrs: {rel: "stylesheet"}, on: {}},
@@ -1049,7 +1193,9 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
+
           const expected = vnode("link", {attrs: {href: true}, on: {}}, []);
 
           assert.deepStrictEqual(result, expected);
@@ -1070,7 +1216,9 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
+
           const expected = vnode("link", {attrs: {href: true}, on: {}}, []);
 
           assert.deepStrictEqual(result, expected);
@@ -1096,7 +1244,9 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
+
           const expected = vnode(
             "link",
             {
@@ -1132,7 +1282,9 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
+
           const expected = vnode("img", {attrs: {src: "my_src"}, on: {}}, []);
 
           assert.deepStrictEqual(result, expected);
@@ -1158,7 +1310,9 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
+
           const expected = vnode(
             "script",
             {attrs: {type: "text/javascript"}, on: {}},
@@ -1186,7 +1340,9 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
+
           const expected = vnode("script", {attrs: {src: true}, on: {}}, []);
 
           assert.deepStrictEqual(result, expected);
@@ -1207,6 +1363,7 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
 
           const expected = vnode("script", {attrs: {src: true}, on: {}}, []);
@@ -1234,6 +1391,7 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
 
           const expected = vnode(
@@ -1264,6 +1422,7 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
 
           const expected = vnode(
@@ -1292,6 +1451,7 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
 
           const expected = vnode("script", {attrs: {}, on: {}}, []);
@@ -1316,7 +1476,14 @@ describe("Renderer", () => {
         Type.tuple([Type.atom("text"), Type.bitstring("bbb")]),
       ]);
 
-      const result = Renderer.renderDom(nodes, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        nodes,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = ["aaa", vnode("div", {attrs: {}, on: {}}, []), "bbb"];
 
       assert.deepStrictEqual(result, expected);
@@ -1330,7 +1497,13 @@ describe("Renderer", () => {
         Type.tuple([Type.atom("expression"), Type.tuple([Type.integer(222)])]),
       ]);
 
-      const result = Renderer.renderDom(nodes, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        nodes,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, ["aaa111bbb222"]);
     });
@@ -1343,7 +1516,13 @@ describe("Renderer", () => {
         Type.nil(),
       ]);
 
-      const result = Renderer.renderDom(nodes, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        nodes,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, ["aaabbb"]);
     });
@@ -1397,7 +1576,13 @@ describe("Renderer", () => {
 
       ComponentRegistry.putEntry(cid7, entry7);
 
-      const result = Renderer.renderDom(nodes, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        nodes,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, [
         "abc",
@@ -1464,7 +1649,13 @@ describe("Renderer", () => {
 
       ComponentRegistry.putEntry(cid52, entry52);
 
-      const result = Renderer.renderDom(nodes, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        nodes,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, [
         "abc",
@@ -1501,7 +1692,14 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = ["my_prop = 123"];
 
       assert.deepStrictEqual(result, expected);
@@ -1525,7 +1723,14 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = ["my_prop = {1, 2, 3}"];
 
       assert.deepStrictEqual(result, expected);
@@ -1546,7 +1751,14 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = [
         'component vars = %{prop_1: "abc", prop_2: :xyz, prop_3: 123}',
       ];
@@ -1569,7 +1781,14 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = ["component vars = %{prop_2: :xyz}"];
 
       assert.deepStrictEqual(result, expected);
@@ -1585,7 +1804,14 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = [vnode("div", {attrs: {}, on: {}}, ["abc"])];
 
       assert.deepStrictEqual(result, expected);
@@ -1620,7 +1846,13 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       const expected = [
         vnode("div", {attrs: {}, on: {}}, [
@@ -1651,7 +1883,14 @@ describe("Renderer", () => {
       ]);
 
       assertBoxedError(
-        () => Renderer.renderDom(node, context, slots, defaultTarget),
+        () =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          ),
         "KeyError",
         Interpreter.buildKeyErrorMsg(
           Type.atom("b"),
@@ -1683,7 +1922,9 @@ describe("Renderer", () => {
         context,
         slots,
         defaultTarget,
+        parentTagName,
       );
+
       const expectedVdom = [vnode("div", {attrs: {}, on: {}}, ["abc"])];
       assert.deepStrictEqual(resultVDom, expectedVdom);
 
@@ -1735,6 +1976,7 @@ describe("Renderer", () => {
         context,
         slots,
         defaultTarget,
+        parentTagName,
       );
 
       const expectedVdom = [
@@ -1782,6 +2024,7 @@ describe("Renderer", () => {
         context,
         slots,
         defaultTarget,
+        parentTagName,
       );
 
       const expectedVdom = [
@@ -1817,6 +2060,7 @@ describe("Renderer", () => {
         context,
         slots,
         defaultTarget,
+        parentTagName,
       );
 
       const expectedVdom = [
@@ -1877,6 +2121,7 @@ describe("Renderer", () => {
         context,
         slots,
         defaultTarget,
+        parentTagName,
       );
 
       const expectedVdom = [
@@ -1930,7 +2175,13 @@ describe("Renderer", () => {
 
       initComponentRegistryEntry(cid);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.equal(
         result,
@@ -1975,7 +2226,14 @@ describe("Renderer", () => {
       );
 
       assertBoxedError(
-        () => Renderer.renderDom(node, context, slots, defaultTarget),
+        () =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          ),
         "KeyError",
         expectedMessage,
       );
@@ -1991,7 +2249,13 @@ describe("Renderer", () => {
         Type.keywordList([[Type.atom("text"), Type.bitstring("123")]]),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, ["abc123xyz"]);
     });
@@ -2007,7 +2271,13 @@ describe("Renderer", () => {
         ]),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, ["abc123456xyz"]);
     });
@@ -2027,7 +2297,13 @@ describe("Renderer", () => {
         ]),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, ["abcdef789uvwxyz"]);
     });
@@ -2067,7 +2343,14 @@ describe("Renderer", () => {
 
       ComponentRegistry.putEntry(cid12, entry12);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       assert.deepStrictEqual(result, ["10,11,10,12,10"]);
 
       assert.deepStrictEqual(
@@ -2088,7 +2371,13 @@ describe("Renderer", () => {
         Type.keywordList([[Type.atom("text"), Type.bitstring("abc")]]),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, [
         "31a,32a,31b,33a,31c,abc,31x,33z,31y,32z,31z",
@@ -2150,7 +2439,13 @@ describe("Renderer", () => {
 
       ComponentRegistry.putEntry(cid36, entry36);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, [
         "34a_prop,35a_prop,34b_state,36a_prop,34c_state,abc,34x_state,36z_state,34y_state,35z_state,34z_state",
@@ -2174,7 +2469,13 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, ["\n  \n"]);
     });
@@ -2337,7 +2638,13 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, ["prop_aaa = 123"]);
     });

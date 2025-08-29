@@ -82,9 +82,15 @@ export default class Renderer {
   }
 
   // Based on render_dom/3
-  static renderDom(dom, context, slots, defaultTarget) {
+  static renderDom(dom, context, slots, defaultTarget, parentTagName) {
     if (Type.isList(dom)) {
-      return Renderer.#renderNodes(dom, context, slots, defaultTarget);
+      return Renderer.#renderNodes(
+        dom,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
     }
 
     const nodeType = dom.data[0].value;
@@ -95,10 +101,22 @@ export default class Renderer {
         return Bitstring.toText(dom.data[1]);
 
       case "element":
-        return Renderer.#renderElement(dom, context, slots, defaultTarget);
+        return Renderer.#renderElement(
+          dom,
+          context,
+          slots,
+          defaultTarget,
+          parentTagName,
+        );
 
       case "component":
-        return Renderer.#renderComponent(dom, context, slots, defaultTarget);
+        return Renderer.#renderComponent(
+          dom,
+          context,
+          slots,
+          defaultTarget,
+          parentTagName,
+        );
 
       case "expression":
         return $.toText(dom.data[1].data[0]);
@@ -109,6 +127,7 @@ export default class Renderer {
           context,
           slots,
           Type.bitstring("page"),
+          parentTagName,
         );
 
       case "doctype":
@@ -120,6 +139,7 @@ export default class Renderer {
           context,
           slots,
           defaultTarget,
+          parentTagName,
         );
     }
   }
@@ -543,7 +563,7 @@ export default class Renderer {
   }
 
   // Based on render_dom/3 (component case)
-  static #renderComponent(dom, context, slots, defaultTarget) {
+  static #renderComponent(dom, context, slots, defaultTarget, parentTagName) {
     const moduleProxy = Interpreter.moduleProxy(dom.data[1]);
     const propsDom = dom.data[2];
     let childrenDom = dom.data[3];
@@ -564,6 +584,7 @@ export default class Renderer {
         props,
         expandedChildrenDom,
         context,
+        parentTagName,
       );
     } else {
       return Renderer.#renderTemplate(
@@ -572,16 +593,22 @@ export default class Renderer {
         expandedChildrenDom,
         context,
         defaultTarget,
+        parentTagName,
       );
     }
   }
 
   // Based on render_dom/3 (element & slot case)
-  static #renderElement(dom, context, slots, defaultTarget) {
-    const tagName = Bitstring.toText(dom.data[1]);
+  static #renderElement(dom, context, slots, defaultTarget, parentTagName) {
+    const currentTagName = Bitstring.toText(dom.data[1]);
 
-    if (tagName === "slot") {
-      return Renderer.#renderSlotElement(slots, context, defaultTarget);
+    if (currentTagName === "slot") {
+      return Renderer.#renderSlotElement(
+        slots,
+        context,
+        defaultTarget,
+        parentTagName,
+      );
     }
 
     const attrsDom = dom.data[2];
@@ -599,28 +626,29 @@ export default class Renderer {
       context,
       slots,
       defaultTarget,
+      currentTagName,
     );
 
     const data = {attrs: attrsVdom, on: eventListenersVdom};
 
     if (
-      tagName === "link" &&
+      currentTagName === "link" &&
       typeof attrsVdom.href === "string" &&
       attrsVdom.href
     ) {
       data.key = `__hologramLink__:${attrsVdom.href}`;
     } else if (
-      tagName === "script" &&
+      currentTagName === "script" &&
       typeof attrsVdom.src === "string" &&
       attrsVdom.src
     ) {
       data.key = `__hologramScript__:${attrsVdom.src}`;
-    } else if (tagName === "script" && childrenVdom[0]) {
+    } else if (currentTagName === "script" && childrenVdom[0]) {
       // Make sure the script is executed if the code changes.
       data.key = `__hologramScript__:${childrenVdom[0]}`;
     }
 
-    return vnode(tagName, data, childrenVdom);
+    return vnode(currentTagName, data, childrenVdom);
   }
 
   static #renderEventListeners(attrsDom, defaultTarget) {
@@ -648,12 +676,20 @@ export default class Renderer {
   }
 
   // Based on render_dom/3 (list case)
-  static #renderNodes(nodes, context, slots, defaultTarget) {
+  static #renderNodes(nodes, context, slots, defaultTarget, parentTagName) {
     return Renderer.#mergeNeighbouringTextNodes(
       nodes.data
         // There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if} or DOCTYPE
         .filter((node) => !Type.isNil(node))
-        .map((node) => Renderer.renderDom(node, context, slots, defaultTarget))
+        .map((node) =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          ),
+        )
         .flat(),
     );
   }
@@ -699,11 +735,18 @@ export default class Renderer {
       pageEmittedContext,
       Type.keywordList(),
       Type.bitstring("layout"),
+      null,
     );
   }
 
   // Based on render_dom/3 (public comment case)
-  static #renderPublicComment(dom, context, slots, defaultTarget) {
+  static #renderPublicComment(
+    dom,
+    context,
+    slots,
+    defaultTarget,
+    parentTagName,
+  ) {
     const childrenDom = dom.data[1];
 
     let childrenVdom = Renderer.renderDom(
@@ -711,6 +754,7 @@ export default class Renderer {
       context,
       slots,
       defaultTarget,
+      parentTagName,
     );
 
     const commentContent = childrenVdom
@@ -721,7 +765,7 @@ export default class Renderer {
   }
 
   // Based on render_dom/3 (slot case)
-  static #renderSlotElement(slots, context, defaultTarget) {
+  static #renderSlotElement(slots, context, defaultTarget, parentTagName) {
     const slotDom = Interpreter.accessKeywordListElement(
       slots,
       Type.atom("default"),
@@ -732,12 +776,19 @@ export default class Renderer {
       context,
       Type.keywordList(),
       defaultTarget,
+      parentTagName,
     );
   }
 
   // Based on render_stateful_component/4
   // Deps: [:maps.get/2, :maps.merge/2]
-  static #renderStatefulComponent(moduleProxy, props, childrenDom, context) {
+  static #renderStatefulComponent(
+    moduleProxy,
+    props,
+    childrenDom,
+    context,
+    parentTagName,
+  ) {
     const cid = Erlang_Maps["get/2"](Type.atom("cid"), props);
 
     const [componentState, componentEmittedContext] =
@@ -755,6 +806,7 @@ export default class Renderer {
       childrenDom,
       mergedContext,
       cid,
+      parentTagName,
     );
   }
 
@@ -765,11 +817,18 @@ export default class Renderer {
     childrenDom,
     context,
     defaultTarget,
+    parentTagName,
   ) {
     const dom = Renderer.#evaluateTemplate(moduleProxy, vars);
     const slots = Type.keywordList([[Type.atom("default"), childrenDom]]);
 
-    return Renderer.renderDom(dom, context, slots, defaultTarget);
+    return Renderer.renderDom(
+      dom,
+      context,
+      slots,
+      defaultTarget,
+      parentTagName,
+    );
   }
 
   static #valueDomToText(valueDom) {
