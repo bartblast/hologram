@@ -124,7 +124,7 @@ describe("Interpreter", () => {
 
       const expected = "no function clause matching in MyModule.my_fun/2";
 
-      assert.deepStrictEqual(result, expected);
+      assert.equal(result, expected);
     });
 
     it("0 args", () => {
@@ -135,7 +135,7 @@ describe("Interpreter", () => {
 
       const expected = "no function clause matching in MyModule.my_fun/2";
 
-      assert.deepStrictEqual(result, expected);
+      assert.equal(result, expected);
     });
 
     it("1 arg", () => {
@@ -147,7 +147,7 @@ describe("Interpreter", () => {
       const expected =
         "no function clause matching in MyModule.my_fun/2\n\nThe following arguments were given to MyModule.my_fun/2:\n\n    # 1\n    123\n";
 
-      assert.deepStrictEqual(result, expected);
+      assert.equal(result, expected);
     });
 
     it("2 args", () => {
@@ -159,7 +159,7 @@ describe("Interpreter", () => {
       const expected =
         "no function clause matching in MyModule.my_fun/2\n\nThe following arguments were given to MyModule.my_fun/2:\n\n    # 1\n    123\n\n    # 2\n    :abc\n";
 
-      assert.deepStrictEqual(result, expected);
+      assert.equal(result, expected);
     });
   });
 
@@ -181,7 +181,7 @@ describe("Interpreter", () => {
     const result = Interpreter.buildMatchErrorMsg(Type.atom("abc"));
     const expected = "no match of right hand side value: :abc";
 
-    assert.deepStrictEqual(result, expected);
+    assert.equal(result, expected);
   });
 
   it("buildProtocolUndefinedErrorMsg()", () => {
@@ -205,7 +205,7 @@ describe("Interpreter", () => {
       "{MyModule, :my_fun, 3} can't be transpiled automatically to JavaScript, because its output is too big.\n" +
       "See what to do here: https://www.hologram.page/TODO";
 
-    assert.deepStrictEqual(result, expected);
+    assert.equal(result, expected);
   });
 
   describe("buildUndefinedFunctionErrorMsg", () => {
