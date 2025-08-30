@@ -15,6 +15,7 @@ import Erlang_Unicode from "../../../assets/js/erlang/unicode.mjs";
 import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
+import Renderer from "../../../assets/js/renderer.mjs";
 import Serializer from "../../../assets/js/serializer.mjs";
 import Type from "../../../assets/js/type.mjs";
 
@@ -254,33 +255,14 @@ function defineElixirStringCharsModule() {
   return {
     "to_string/1": (term) => {
       switch (term.type) {
-        case "atom":
-          return Type.bitstring(term.value);
+        case "list":
+          return "Test String.Chars protocol implementation for List type";
 
-        case "bitstring":
-          if (!Type.isBinary(term)) {
-            Interpreter.raiseError(
-              "Protocol.UndefinedError",
-              "protocol String.Chars not implemented for type BitString, cannot convert a bitstring to a string",
-            );
-          }
+        case "map":
+          return "Test String.Chars protocol implementation for Map type";
 
-          return term;
-
-        case "float":
-          return Type.bitstring(term.value.toString());
-
-        case "integer":
-          return Type.bitstring(term.value.toString());
-
-        case "dummy_type":
-          return Type.bitstring("dummy_value");
-
-        default: {
-          const inspectedTerm = Interpreter.inspect(term);
-          const msg = `client test version of String.Chars.to_string/1 doesn't know how to handle: ${inspectedTerm} of type "${term.type}"`;
-          throw new HologramInterpreterError(msg);
-        }
+        default:
+          return Renderer.toText(term);
       }
     },
   };
