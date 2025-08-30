@@ -816,6 +816,17 @@ export default class Interpreter {
     Interpreter.raiseError("MatchError", message);
   }
 
+  // TODO: make the client-side error message consistent with the server-side error message
+  static raiseProtocolUndefinedError(protocol, term) {
+    const message =
+      `protocol ${protocol} not implemented for type ` +
+      `${term.type.charAt(0).toUpperCase() + term.type.slice(1)}\n\n` +
+      "Got value:\n\n" +
+      `    ${Interpreter.inspect(term)}`;
+
+    $.raiseError("Protocol.UndefinedError", message);
+  }
+
   static raiseUndefinedFunctionError(message) {
     Interpreter.raiseError("UndefinedFunctionError", message);
   }

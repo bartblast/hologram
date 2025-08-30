@@ -6030,6 +6030,18 @@ describe("Interpreter", () => {
     );
   });
 
+  it("raiseProtocolUndefinedError()", () => {
+    assertBoxedError(
+      () =>
+        Interpreter.raiseProtocolUndefinedError(
+          "String.Chars",
+          Type.tuple([Type.integer(1), Type.integer(2)]),
+        ),
+      "Protocol.UndefinedError",
+      "protocol String.Chars not implemented for type Tuple\n\nGot value:\n\n    {1, 2}",
+    );
+  });
+
   it("raiseUndefinedFunctionError()", () => {
     assertBoxedError(
       () => Interpreter.raiseUndefinedFunctionError("my_message"),
