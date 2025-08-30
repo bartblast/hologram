@@ -6,6 +6,7 @@ import {
   assert,
   assertBoxedError,
   componentRegistryEntryFixture,
+  contextFixture,
   defineGlobalErlangAndElixirModules,
   initComponentRegistryEntry,
   sinon,
@@ -2897,60 +2898,161 @@ describe("Renderer", () => {
   describe("toText()", () => {
     const toText = Renderer.toText;
 
-    it("atom", () => {
-      const term = Type.atom("abc");
-      const result = toText(term);
+    describe("supported types", () => {
+      describe("atom", () => {
+        it("non-boolean and non-nil", () => {
+          const term = Type.atom("abc");
+          const result = toText(term);
 
-      assert.deepStrictEqual(result, "abc");
+          assert.deepStrictEqual(result, "abc");
+        });
+
+        it("true", () => {
+          const term = Type.boolean(true);
+          const result = toText(term);
+
+          assert.deepStrictEqual(result, "true");
+        });
+
+        it("false", () => {
+          const term = Type.boolean(false);
+          const result = toText(term);
+
+          assert.deepStrictEqual(result, "false");
+        });
+
+        it("nil", () => {
+          const term = Type.nil();
+          const result = toText(term);
+
+          assert.deepStrictEqual(result, "");
+        });
+      });
+
+      describe("bitstring", () => {
+        it("binary", () => {
+          const term = Bitstring.fromBytes([97, 98, 99]);
+          const result = toText(term);
+
+          assert.deepStrictEqual(result, "abc");
+        });
+      });
+
+      it("float", () => {
+        const term = Type.float(1.23);
+        const result = toText(term);
+
+        assert.deepStrictEqual(result, "1.23");
+      });
+
+      it("integer", () => {
+        const term = Type.integer(123);
+        const result = toText(term);
+
+        assert.deepStrictEqual(result, "123");
+      });
+
+      it("list", () => {
+        const term = Type.list([Type.integer(1), Type.integer(2)]);
+        const result = toText(term);
+
+        assert.deepStrictEqual(
+          result,
+          "Test String.Chars protocol implementation for List type",
+        );
+      });
+
+      it("map", () => {
+        const term = Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.atom("b"), Type.integer(2)],
+        ]);
+
+        const result = toText(term);
+
+        assert.deepStrictEqual(
+          result,
+          "Test String.Chars protocol implementation for Map type",
+        );
+      });
     });
 
-    it("bitstring", () => {
-      const term = Bitstring.fromBytes([97, 98, 99]);
-      const result = toText(term);
+    describe("unsupported types", () => {
+      it("anonymous function", () => {
+        const clauses = ["dummy_clause_1", "dummy_clause_2"];
+        const context = contextFixture();
+        const term = Type.anonymousFunction(2, clauses, context);
 
-      assert.deepStrictEqual(result, "abc");
-    });
+        assertBoxedError(
+          () => toText(term),
+          "Protocol.UndefinedError",
+          Interpreter.buildProtocolUndefinedErrorMsg("String.Chars", term),
+        );
+      });
 
-    it("float", () => {
-      const term = Type.float(1.23);
-      const result = toText(term);
+      describe("bistring", () => {
+        it("non-binary", () => {
+          const segment1 = Type.bitstringSegment(Type.integer(97), {
+            type: "integer",
+            size: Type.integer(6),
+            unit: 1n,
+          });
 
-      assert.deepStrictEqual(result, "1.23");
-    });
+          const segment2 = Type.bitstringSegment(Type.integer(98), {
+            type: "integer",
+            size: Type.integer(4),
+            unit: 1n,
+          });
 
-    it("integer", () => {
-      const term = Type.integer(123);
-      const result = toText(term);
+          const term = Bitstring.fromSegments([segment1, segment2]);
 
-      assert.deepStrictEqual(result, "123");
-    });
+          assertBoxedError(
+            () => toText(term),
+            "Protocol.UndefinedError",
+            Interpreter.buildProtocolUndefinedErrorMsg("String.Chars", term),
+          );
+        });
+      });
 
-    it("PID", () => {
-      const term = Type.pid("my_node", [0, 11, 222], "server");
-      const result = toText(term);
+      it("PID", () => {
+        const term = Type.pid("my_node", [0, 11, 222], "server");
 
-      assert.deepStrictEqual(result, "#PID<0.11.222>");
-    });
+        assertBoxedError(
+          () => toText(term),
+          "Protocol.UndefinedError",
+          Interpreter.buildProtocolUndefinedErrorMsg("String.Chars", term),
+        );
+      });
 
-    it("port", () => {
-      const term = Type.port("my_node", [0, 11], "server");
-      const result = toText(term);
+      it("port", () => {
+        const term = Type.port("my_node", [0, 11], "server");
 
-      assert.deepStrictEqual(result, "#Port<0.11>");
-    });
+        assertBoxedError(
+          () => toText(term),
+          "Protocol.UndefinedError",
+          Interpreter.buildProtocolUndefinedErrorMsg("String.Chars", term),
+        );
+      });
 
-    it("reference", () => {
-      const term = Type.reference("my_node", [0, 1, 2, 3], "server");
-      const result = toText(term);
+      it("reference", () => {
+        const term = Type.reference("my_node", [0, 1, 2, 3], "server");
 
-      assert.deepStrictEqual(result, "#Reference<0.1.2.3>");
-    });
+        assertBoxedError(
+          () => toText(term),
+          "Protocol.UndefinedError",
+          Interpreter.buildProtocolUndefinedErrorMsg("String.Chars", term),
+        );
+      });
 
-    it("delegates to String.Chars.to_string/1 for cases that it can't handle by itself", () => {
-      const term = {type: "dummy_type"};
-      const result = toText(term);
+      it("tuple", () => {
+        const term = Type.tuple([Type.integer(1), Type.integer(2)]);
 
-      assert.deepStrictEqual(result, "dummy_value");
+        assertBoxedError(
+          () => toText(term),
+          "Protocol.UndefinedError",
+          Interpreter.buildProtocolUndefinedErrorMsg("String.Chars", term),
+        );
+      });
     });
   });
 

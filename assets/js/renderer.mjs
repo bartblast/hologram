@@ -172,34 +172,39 @@ export default class Renderer {
     return Type.isBitstring(term) ? term : Type.bitstring($.toText(term));
   }
 
+  // Similar to Kernel.to_string/1
+  // (it is supposed to be a fast alternative to Kernel.to_string/1 for the client-side renderer only)
+  // TODO: consider implementing consistency tests
   // Deps: [String.Chars.to_string/1]
   static toText(term) {
     // Cases ordered by expected frequency (most common first)
     switch (term.type) {
       case "atom":
-        return term.value;
+        return term.value === "nil" ? "" : term.value;
+
+      // Some structs (which are maps) may have their own implementation of String.Chars protocol
+      case "map":
+        return Bitstring.toText(Elixir_String_Chars["to_string/1"](term));
 
       case "bitstring":
+        if (!Type.isBinary(term)) {
+          Interpreter.raiseProtocolUndefinedError("String.Chars", term);
+        }
+
         return Bitstring.toText(term);
+
+      // String.Chars protocol has special behaviour for lists, e.g. to_string([97, 98]) -> "ab"
+      case "list":
+        return Bitstring.toText(Elixir_String_Chars["to_string/1"](term));
 
       case "integer":
         return term.value.toString();
 
       case "float":
         return term.value.toString();
-
-      case "pid":
-        return `#PID<${term.segments.join(".")}>`;
-
-      case "reference":
-        return `#Reference<${term.segments.join(".")}>`;
-
-      case "port":
-        return `#Port<${term.segments.join(".")}>`;
-
-      default:
-        return Bitstring.toText(Elixir_String_Chars["to_string/1"](term));
     }
+
+    Interpreter.raiseProtocolUndefinedError("String.Chars", term);
   }
 
   static valueDomToBitstring(valueDom) {
