@@ -95,6 +95,15 @@ export default class Interpreter {
     return "no match of right hand side value: " + Interpreter.inspect(right);
   }
 
+  static buildProtocolUndefinedErrorMsg(protocol, term) {
+    return (
+      `protocol ${protocol} not implemented for type ` +
+      `${term.type.charAt(0).toUpperCase() + term.type.slice(1)}\n\n` +
+      "Got value:\n\n" +
+      `    ${$.inspect(term)}`
+    );
+  }
+
   static buildTooBigOutputErrorMsg(mfa) {
     return (
       `${mfa} can't be transpiled automatically to JavaScript, because its output is too big.\n` +

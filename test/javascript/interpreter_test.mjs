@@ -184,6 +184,18 @@ describe("Interpreter", () => {
     assert.deepStrictEqual(result, expected);
   });
 
+  it("buildProtocolUndefinedErrorMsg()", () => {
+    const result = Interpreter.buildProtocolUndefinedErrorMsg(
+      "String.Chars",
+      Type.tuple([Type.integer(1), Type.integer(2)]),
+    );
+
+    const expected =
+      "protocol String.Chars not implemented for type Tuple\n\nGot value:\n\n    {1, 2}";
+
+    assert.equal(result, expected);
+  });
+
   it("buildTooBigOutputErrorMsg()", () => {
     const result = Interpreter.buildTooBigOutputErrorMsg(
       "{MyModule, :my_fun, 3}",
@@ -6031,14 +6043,12 @@ describe("Interpreter", () => {
   });
 
   it("raiseProtocolUndefinedError()", () => {
+    const term = Type.tuple([Type.integer(1), Type.integer(2)]);
+
     assertBoxedError(
-      () =>
-        Interpreter.raiseProtocolUndefinedError(
-          "String.Chars",
-          Type.tuple([Type.integer(1), Type.integer(2)]),
-        ),
+      () => Interpreter.raiseProtocolUndefinedError("String.Chars", term),
       "Protocol.UndefinedError",
-      "protocol String.Chars not implemented for type Tuple\n\nGot value:\n\n    {1, 2}",
+      Interpreter.buildProtocolUndefinedErrorMsg("String.Chars", term),
     );
   });
 
