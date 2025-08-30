@@ -2904,28 +2904,28 @@ describe("Renderer", () => {
           const term = Type.atom("abc");
           const result = toText(term);
 
-          assert.deepStrictEqual(result, "abc");
+          assert.equal(result, "abc");
         });
 
         it("true", () => {
           const term = Type.boolean(true);
           const result = toText(term);
 
-          assert.deepStrictEqual(result, "true");
+          assert.equal(result, "true");
         });
 
         it("false", () => {
           const term = Type.boolean(false);
           const result = toText(term);
 
-          assert.deepStrictEqual(result, "false");
+          assert.equal(result, "false");
         });
 
         it("nil", () => {
           const term = Type.nil();
           const result = toText(term);
 
-          assert.deepStrictEqual(result, "");
+          assert.equal(result, "");
         });
       });
 
@@ -2934,7 +2934,7 @@ describe("Renderer", () => {
           const term = Bitstring.fromBytes([97, 98, 99]);
           const result = toText(term);
 
-          assert.deepStrictEqual(result, "abc");
+          assert.equal(result, "abc");
         });
       });
 
@@ -2942,21 +2942,21 @@ describe("Renderer", () => {
         const term = Type.float(1.23);
         const result = toText(term);
 
-        assert.deepStrictEqual(result, "1.23");
+        assert.equal(result, "1.23");
       });
 
       it("integer", () => {
         const term = Type.integer(123);
         const result = toText(term);
 
-        assert.deepStrictEqual(result, "123");
+        assert.equal(result, "123");
       });
 
       it("list", () => {
         const term = Type.list([Type.integer(1), Type.integer(2)]);
         const result = toText(term);
 
-        assert.deepStrictEqual(
+        assert.equal(
           result,
           "Test String.Chars protocol implementation for List type",
         );
@@ -2970,7 +2970,7 @@ describe("Renderer", () => {
 
         const result = toText(term);
 
-        assert.deepStrictEqual(
+        assert.equal(
           result,
           "Test String.Chars protocol implementation for Map type",
         );
