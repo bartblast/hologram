@@ -572,7 +572,7 @@ export default class Renderer {
 
     const valueText = Renderer.#valueDomToText(valueDom);
 
-    return [nameText, valueText === "" ? true : valueText];
+    return [nameText, valueText === "" ? true : $.escapeHtml(valueText)];
   }
 
   // Based on render_attributes/1

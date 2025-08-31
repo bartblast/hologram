@@ -2891,6 +2891,39 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("text inside attribute", () => {
+      // <div class="abc < xyz"></div>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("class"),
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("abc < xyz")]),
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode(
+        "div",
+        {attrs: {class: "abc &lt; xyz"}, on: {}},
+        [],
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("expression inside non-script elements", () => {
       // <div>{"abc < xyz"}</div>
       const node = Type.tuple([
@@ -2973,6 +3006,42 @@ describe("Renderer", () => {
       );
 
       const expected = vnode("!", " abc &lt; xyz ");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("expression inside attribute", () => {
+      // <div class={"abc < xyz"}></div>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("class"),
+            Type.list([
+              Type.tuple([
+                Type.atom("expression"),
+                Type.tuple([Type.bitstring("abc < xyz")]),
+              ]),
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode(
+        "div",
+        {attrs: {class: "abc &lt; xyz"}, on: {}},
+        [],
+      );
 
       assert.deepStrictEqual(result, expected);
     });
