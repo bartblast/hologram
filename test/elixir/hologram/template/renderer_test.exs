@@ -1100,6 +1100,14 @@ defmodule Hologram.Template.RendererTest do
       assert render_dom(node, @env, @server) == {"<!-- abc < xyz -->", %{}, @server}
     end
 
+    test "text inside attribute" do
+      # <div class="abc < xyz"></div>
+      node = {:element, "div", [{"class", [text: "abc < xyz"]}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s'<div class="abc &lt; xyz"></div>', %{}, @server}
+    end
+
     test "expression inside non-script elements" do
       # <div>{"abc < xyz"}</div>
       node = {:element, "div", [], [expression: {"abc < xyz"}]}
@@ -1120,6 +1128,14 @@ defmodule Hologram.Template.RendererTest do
       node = {:public_comment, [text: " ", expression: {"abc < xyz"}, text: " "]}
 
       assert render_dom(node, @env, @server) == {"<!-- abc &lt; xyz -->", %{}, @server}
+    end
+
+    test "expression inside attribute" do
+      # <div class={"abc < xyz"}></div>
+      node = {:element, "div", [{"class", [expression: {"abc < xyz"}]}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s'<div class="abc &lt; xyz"></div>', %{}, @server}
     end
   end
 
