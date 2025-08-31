@@ -90,6 +90,7 @@ defmodule Hologram.Compiler.CallGraph do
     ],
     hologram_class: [
       {:maps, :get, 2},
+      {:maps, :get, 3},
       {:maps, :put, 3}
     ],
     interpreter_class: [
@@ -119,8 +120,10 @@ defmodule Hologram.Compiler.CallGraph do
       {:lists, :keymember, 3},
       {:maps, :from_list, 1},
       {:maps, :get, 2},
+      {:maps, :get, 3},
       {:maps, :is_key, 2},
-      {:maps, :merge, 2}
+      {:maps, :merge, 2},
+      {:maps, :put, 3}
     ],
     type_class: [
       {:maps, :get, 3},
@@ -164,13 +167,8 @@ defmodule Hologram.Compiler.CallGraph do
   def build(call_graph, ir, from_vertex \\ nil)
 
   def build(call_graph, %IR.AtomType{value: value}, from_vertex) do
-    if Reflection.elixir_module?(value) do
-      call_graph
-      |> add_edge(from_vertex, value)
-      |> maybe_add_protocol_call_graph_edges(value)
-      |> maybe_add_struct_call_graph_edges(value)
-      |> maybe_add_ecto_schema_call_graph_edges(value)
-      |> maybe_add_templatable_call_graph_edges(value)
+    if Reflection.alias?(value) do
+      add_edge(call_graph, from_vertex, value)
     end
 
     call_graph
@@ -207,6 +205,9 @@ defmodule Hologram.Compiler.CallGraph do
       ) do
     call_graph
     |> maybe_add_templatable_call_graph_edges(module)
+    |> maybe_add_protocol_call_graph_edges(module)
+    |> maybe_add_struct_call_graph_edges(module)
+    |> maybe_add_ecto_schema_call_graph_edges(module)
     |> build(body, module)
   end
 

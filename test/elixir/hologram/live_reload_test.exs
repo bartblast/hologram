@@ -6,8 +6,8 @@
 
 defmodule Hologram.LiveReloadTest do
   use Hologram.Test.BasicCase, async: false
-  alias Hologram.LiveReload
   require Logger
+  alias Hologram.LiveReload
 
   @debounce_delay LiveReload.debounce_delay()
   @file_path Path.join([@fixtures_dir, "live_reload", "module_1.ex"])

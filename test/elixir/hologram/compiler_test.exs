@@ -352,6 +352,42 @@ defmodule Hologram.CompilerTest do
 
       assert File.ls!(opts[:static_dir]) == []
     end
+
+    test "raises when generated bundle exceeds :max_bundle_size and does not write static files" do
+      tmp_dir =
+        Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_exceeds_max_size"])
+
+      opts = [
+        esbuild_bin_path: Path.join([@root_dir, "assets", "node_modules", ".bin", "esbuild"]),
+        static_dir: Path.join(tmp_dir, "static"),
+        tmp_dir: tmp_dir
+      ]
+
+      clean_dir(tmp_dir)
+      File.mkdir!(opts[:static_dir])
+
+      entry_file_path = Path.join(tmp_dir, "MyPage.entry.js")
+      File.write!(entry_file_path, "export const myVar = 123;\n")
+
+      original_max = Application.get_env(:hologram, :max_bundle_size)
+      Application.put_env(:hologram, :max_bundle_size, 1)
+
+      on_exit(fn ->
+        if is_nil(original_max) do
+          Application.delete_env(:hologram, :max_bundle_size)
+        else
+          Application.put_env(:hologram, :max_bundle_size, original_max)
+        end
+      end)
+
+      exception =
+        assert_raise RuntimeError, fn ->
+          bundle(MyPage, entry_file_path, "my_bundle_name", opts)
+        end
+
+      assert exception.message =~ "early warning system"
+      assert File.ls!(opts[:static_dir]) == []
+    end
   end
 
   test "create_page_entry_files/4", %{

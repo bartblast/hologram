@@ -7,7 +7,7 @@
     "snabbdom-to-html": "^7"
   },
   "devDependencies": {
-    "chai": "^5",
+    "chai": "^6",
     "eslint": "^9",
     "fake-indexeddb": "^6",
     "jsdom": "^26",

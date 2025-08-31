@@ -18,7 +18,7 @@ defmodule HologramFeatureTests.MixProject do
     [
       {:credo, "~> 1.0", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev, :test], runtime: false},
-      {:hologram, git: "https://github.com/bartblast/hologram.git", branch: "fix-233"},
+      {:hologram, git: "https://github.com/bartblast/hologram.git", branch: "dev"},
       {:jason, "~> 1.0"},
       {:phoenix, "~> 1.7"},
       {:plug_cowboy, "~> 2.0"},
@@ -51,6 +51,7 @@ defmodule HologramFeatureTests.MixProject do
         plt_core_path: "priv/plts/core.plt",
         plt_local_path: "priv/plts/project.plt"
       ],
+      listeners: [Phoenix.CodeReloader],
       start_permanent: Mix.env() == :prod,
       version: "0.1.0"
     ]

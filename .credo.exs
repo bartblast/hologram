@@ -48,7 +48,9 @@
           {Credo.Check.Readability.SinglePipe, []},
           {Credo.Check.Readability.SpaceAfterCommas, []},
           {Credo.Check.Readability.Specs, []},
-          {Credo.Check.Readability.StrictModuleLayout, []},
+          # Order based on: https://github.com/christopheradams/elixir_style_guide#module-attribute-ordering
+          {Credo.Check.Readability.StrictModuleLayout,
+           [order: [:shortdoc, :moduledoc, :behaviour, :use, :import, :require, :alias]]},
           {Credo.Check.Readability.StringSigils, []},
           {Credo.Check.Readability.TrailingBlankLine, []},
           {Credo.Check.Readability.TrailingWhiteSpace, []},

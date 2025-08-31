@@ -89,43 +89,6 @@ export function assertBoxedTrue(boxed) {
   assert.isTrue(Type.isTrue(boxed));
 }
 
-export function commandQueueItemFixture(data = {}) {
-  let {id, failCount, module, name, params, status, target} = data;
-
-  if (typeof id === "undefined") {
-    id = crypto.randomUUID();
-  }
-
-  if (typeof failCount === "undefined") {
-    failCount = 0;
-  }
-
-  if (typeof name === "undefined") {
-    name = "my_command";
-  }
-
-  if (typeof module === "undefined") {
-    module = Type.alias("MyModule");
-  }
-
-  if (typeof params === "undefined") {
-    params = Type.map([
-      [Type.atom("a"), Type.integer(1)],
-      [Type.atom("b"), Type.integer(2)],
-    ]);
-  }
-
-  if (typeof status === "undefined") {
-    status = "pending";
-  }
-
-  if (typeof target === "undefined") {
-    target = "my_target";
-  }
-
-  return {id, failCount, module, name, params, status, target};
-}
-
 export function componentRegistryEntryFixture(data = {}) {
   let {module} = data;
 
@@ -380,4 +343,11 @@ export function registerWebApis() {
   globalThis.indexedDB = fakeIndexedDB;
   globalThis.sessionStorage = window.sessionStorage;
   globalThis.WebSocket = window.WebSocket;
+}
+
+// Waits for asynchronous operations scheduled with setTimeout(..., 0) to complete.
+// This is useful in tests when you need to wait for async actions that are scheduled
+// to run on the next tick of the event loop.
+export function waitForEventLoop() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }

@@ -326,9 +326,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
 
   describe "update/3" do
     test "when the map doesn't have the given key" do
-      expected_msg = build_key_error_msg(:b, %{a: 1})
-
-      assert_error KeyError, expected_msg, fn ->
+      assert_error KeyError, build_key_error_msg(:b, %{a: 1}), fn ->
         :maps.update(:b, 2, %{a: 1})
       end
     end

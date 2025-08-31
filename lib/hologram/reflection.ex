@@ -3,6 +3,8 @@ defmodule Hologram.Reflection do
 
   @call_graph_dump_file_name "call_graph.bin"
 
+  @compiler_lock_file_name "hologram_compiler.lock"
+
   @ignored_modules [Kernel.SpecialForms]
 
   @ir_plt_dump_file_name "ir.plt"
@@ -81,6 +83,12 @@ defmodule Hologram.Reflection do
   @spec call_graph_dump_file_name() :: String.t()
   def call_graph_dump_file_name do
     @call_graph_dump_file_name
+  end
+
+  @doc "Returns Hologram compiler lock file name."
+  @spec compiler_lock_file_name :: String.t()
+  def compiler_lock_file_name do
+    @compiler_lock_file_name
   end
 
   @doc """
@@ -225,6 +233,29 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Lists modules by scanning BEAM files in the given OTP app's ebin directory.
+  This is useful for detecting newly compiled modules that haven't been added to
+  Application.spec yet during development.
+  """
+  @spec list_ebin_modules(atom) :: list(module)
+  # sobelow_skip ["DOS.StringToAtom"]
+  def list_ebin_modules(app) do
+    case :code.lib_dir(app) do
+      {:error, :bad_name} ->
+        []
+
+      lib_dir ->
+        ebin_path = Path.join([lib_dir, "ebin"])
+
+        [ebin_path, "*.beam"]
+        |> Path.join()
+        |> Path.wildcard()
+        |> Enum.map(&Path.basename(&1, ".beam"))
+        |> Enum.map(&String.to_atom/1)
+    end
+  end
+
+  @doc """
   Lists Elixir modules belonging to any of the loaded OTP applications used by the project (except :hex).
   Elixir modules listed in @ignored_modules module attribute, Elixir modules without a BEAM file, and Erlang modules are filtered out.
   The project OTP application is included.
@@ -247,12 +278,7 @@ defmodule Hologram.Reflection do
   @spec list_elixir_modules(list(atom)) :: list(module)
   def list_elixir_modules(apps) do
     apps
-    |> Enum.reduce([], fn app, acc ->
-      app
-      |> Application.spec()
-      |> Keyword.fetch!(:modules)
-      |> Kernel.++(acc)
-    end)
+    |> Enum.reduce([], &include_app_elixir_modules/2)
     |> Enum.filter(&elixir_module?/1)
     |> Kernel.--(@ignored_modules)
   end
@@ -531,5 +557,27 @@ defmodule Hologram.Reflection do
   @spec tmp_dir() :: String.t()
   def tmp_dir do
     Path.join(root_dir(), "tmp")
+  end
+
+  defp include_app_elixir_modules(app, modules) do
+    # Get modules from Application.spec (faster, but may miss newly compiled modules)
+    spec_modules =
+      app
+      |> Application.spec()
+      |> Keyword.fetch!(:modules)
+
+    # For dev and test environments, also scan ebin directory BEAM files to catch newly compiled modules
+    # that haven't been added to Application.spec yet
+    env = Hologram.env()
+
+    ebin_modules =
+      if env == :dev || env == :test do
+        list_ebin_modules(app)
+      else
+        []
+      end
+
+    # Combine both sources and remove duplicates
+    Enum.uniq(modules ++ spec_modules ++ ebin_modules)
   end
 end

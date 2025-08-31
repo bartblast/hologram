@@ -182,6 +182,7 @@ defmodule Hologram.Test.Helpers do
     |> inspect()
     |> String.replace(["#", "<", ".", ">"], "")
     |> String.replace("Reference", "M")
+    |> StringUtils.prepend("Elixir.")
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     |> String.to_atom()
   end

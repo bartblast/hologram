@@ -6,6 +6,7 @@ import {
   defineGlobalErlangAndElixirModules,
   registerWebApis,
   sinon,
+  waitForEventLoop,
 } from "./support/helpers.mjs";
 
 import Client from "../../assets/js/client.mjs";
@@ -442,8 +443,7 @@ describe("Client", () => {
   });
 
   describe("sendCommand()", () => {
-    let fetchStub;
-    let hologramExecuteActionStub;
+    let fetchStub, hologramScheduleActionStub;
 
     const module = Type.alias("MyComponent");
     const name = Type.atom("my_command");
@@ -466,14 +466,17 @@ describe("Client", () => {
       const entry = componentRegistryEntryFixture({module: module});
       ComponentRegistry.putEntry(Type.bitstring("my_target"), entry);
 
-      hologramExecuteActionStub = sinon.stub(Hologram, "executeAction");
+      hologramScheduleActionStub = sinon.stub(Hologram, "scheduleAction");
+
+      globalThis.hologram = {csrfToken: "test-csrf-token-123"};
     });
 
     afterEach(() => {
       sinon.restore();
+      delete globalThis.hologram;
     });
 
-    it("calls fetch with correct URL, options, and payload", async () => {
+    it("calls fetch with correct URL, options, and payload including CSRF token", async () => {
       const mockResponse = {
         ok: true,
         json: sinon.stub().resolves([1, "Type.nil()"]),
@@ -491,6 +494,7 @@ describe("Client", () => {
 
       assert.deepStrictEqual(options.headers, {
         "Content-Type": "application/json",
+        "X-Csrf-Token": "test-csrf-token-123",
       });
 
       assert.deepStrictEqual(
@@ -510,16 +514,24 @@ describe("Client", () => {
     it("command succeeds, next action is not nil", async () => {
       const mockResponse = {
         ok: true,
-        json: sinon.stub().resolves([1, '(() => "dummy_" + "action")()']),
+        json: sinon
+          .stub()
+          .resolves([
+            1,
+            'Type.actionStruct({name: Type.atom("dummy_action")})',
+          ]),
       };
 
       fetchStub = sinon.stub(globalThis, "fetch").resolves(mockResponse);
 
       await Client.sendCommand(command);
 
+      // Wait for async actions to complete
+      await waitForEventLoop();
+
       sinon.assert.calledOnceWithExactly(
-        hologramExecuteActionStub,
-        "dummy_action",
+        hologramScheduleActionStub,
+        Type.actionStruct({name: Type.atom("dummy_action")}),
       );
     });
 
@@ -533,7 +545,7 @@ describe("Client", () => {
 
       await Client.sendCommand(command);
 
-      sinon.assert.notCalled(hologramExecuteActionStub);
+      sinon.assert.notCalled(hologramScheduleActionStub);
     });
 
     it("command fails due to response status code", async () => {
@@ -556,7 +568,7 @@ describe("Client", () => {
 
       assert.isTrue(errorThrown, "Expected HologramRuntimeError to be thrown");
 
-      sinon.assert.notCalled(hologramExecuteActionStub);
+      sinon.assert.notCalled(hologramScheduleActionStub);
     });
 
     it("command fails due to result status code", async () => {
@@ -584,7 +596,7 @@ describe("Client", () => {
 
       assert.isTrue(errorThrown, "Expected HologramRuntimeError to be thrown");
 
-      sinon.assert.notCalled(hologramExecuteActionStub);
+      sinon.assert.notCalled(hologramScheduleActionStub);
     });
 
     it("command fails due to network error", async () => {
@@ -607,7 +619,7 @@ describe("Client", () => {
 
       assert.isTrue(errorThrown, "Expected HologramRuntimeError to be thrown");
 
-      sinon.assert.notCalled(hologramExecuteActionStub);
+      sinon.assert.notCalled(hologramScheduleActionStub);
     });
   });
 });

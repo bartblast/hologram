@@ -7,6 +7,7 @@ defmodule Hologram.RouterTest do
 
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.Commons.ETS
+  alias Hologram.Runtime.CSRFProtection
   alias Hologram.Test.Fixtures.Router.Module1
   alias Hologram.Test.Fixtures.Router.Module2
 
@@ -30,6 +31,8 @@ defmodule Hologram.RouterTest do
 
   describe "/hologram/command" do
     test "routes POST command request" do
+      {masked_csrf_token, unmasked_csrf_token} = CSRFProtection.generate_tokens()
+
       # Simulate that JSON has already been parsed upstream by Plug.Parsers
       parsed_json = [
         2,
@@ -47,8 +50,9 @@ defmodule Hologram.RouterTest do
       conn =
         :post
         |> Plug.Test.conn("/hologram/command", "")
-        |> Plug.Test.init_test_session(%{})
+        |> Plug.Test.init_test_session(%{CSRFProtection.session_key() => unmasked_csrf_token})
         |> Map.put(:body_params, %{"_json" => parsed_json})
+        |> Plug.Conn.put_req_header("x-csrf-token", masked_csrf_token)
         |> call([])
 
       assert conn.resp_body == ~s'[1,"Type.atom(\\\"nil\\\")"]'

@@ -1,5 +1,5 @@
 defmodule Hologram.ReflectionTest do
-  use Hologram.Test.BasicCase, async: true
+  use Hologram.Test.BasicCase, async: false
   import Hologram.Reflection
 
   alias Hologram.Test.Fixtures.Reflection.Module1
@@ -52,6 +52,10 @@ defmodule Hologram.ReflectionTest do
 
   test "call_graph_dump_file_name/0" do
     assert call_graph_dump_file_name() == "call_graph.bin"
+  end
+
+  test "compiler_lock_file_name/0" do
+    assert String.length(compiler_lock_file_name()) > 0
   end
 
   describe "component?" do
@@ -162,6 +166,24 @@ defmodule Hologram.ReflectionTest do
     assert Enum.sort(list_all_otp_apps()) == Enum.sort(list_all_otp_apps())
   end
 
+  describe "list_ebin_modules/1" do
+    test "OTP app has ebin dir" do
+      result = list_ebin_modules(:websock_adapter)
+
+      expected_modules = [
+        WebSockAdapter,
+        WebSockAdapter.UpgradeError,
+        WebSockAdapter.UpgradeValidation
+      ]
+
+      assert Enum.sort(result) == expected_modules
+    end
+
+    test "OTP app doesn't have ebin dir" do
+      assert list_ebin_modules(:ssl) == []
+    end
+  end
+
   test "list_elixir_modules/0" do
     result = list_elixir_modules()
 
@@ -178,20 +200,85 @@ defmodule Hologram.ReflectionTest do
     refute Kernel.SpecialForms in result
   end
 
-  test "list_elixir_modules/1" do
-    result = list_elixir_modules([:elixir, :hologram])
+  describe "list_elixir_modules/1" do
+    test "returns all Elixir modules belonging to the given OTP apps" do
+      result = list_elixir_modules([:elixir, :hologram])
 
-    assert Calendar.ISO in result
-    assert Hologram.Template.Tokenizer in result
-    assert Mix.Tasks.Holo.Test.CheckFileNames in result
-    refute Sobelow.CI in result
-    refute Mix.Tasks.Sobelow in result
+      assert Calendar.ISO in result
+      assert Hologram.Template.Tokenizer in result
+      assert Mix.Tasks.Holo.Test.CheckFileNames in result
+      refute Sobelow.CI in result
+      refute Mix.Tasks.Sobelow in result
 
-    refute :elixir_map in result
-    refute :dialyzer in result
+      refute :elixir_map in result
+      refute :dialyzer in result
 
-    refute Enumerable.Atom in result
-    refute Kernel.SpecialForms in result
+      refute Enumerable.Atom in result
+      refute Kernel.SpecialForms in result
+    end
+
+    # This test can't be async, because it manipulates global state
+    # (compiles modules and modifies the file system)
+    test "includes newly compiled module found in ebin but not in Application.spec" do
+      module_name = random_module()
+
+      module_source = """
+      defmodule #{module_name} do
+        def test_function do
+          :test_value
+        end
+      end
+      """
+
+      hologram_ebin_path =
+        :hologram
+        |> :code.lib_dir()
+        |> Path.join("ebin")
+
+      beam_file_path = Path.join(hologram_ebin_path, "#{module_name}.beam")
+
+      try do
+        [{^module_name, beam_binary}] = Code.compile_string(module_source)
+
+        # This simulates a newly compiled module that exists in ebin
+        # but hasn't been added to Application.spec yet
+        File.write!(beam_file_path, beam_binary)
+
+        assert Code.ensure_loaded(module_name) == {:module, module_name}
+        assert module_name.test_function() == :test_value
+
+        current_spec_modules =
+          :hologram
+          |> Application.spec()
+          |> Keyword.get(:modules, [])
+
+        # Verify our module is NOT in Application.spec
+        refute module_name in current_spec_modules
+
+        ebin_modules = list_ebin_modules(:hologram)
+
+        # Verify our module IS found by list_ebin_modules/1
+        assert module_name in ebin_modules
+
+        # Now test the actual list_elixir_modules/1 functionality...
+
+        # Ensure we're actually in test environment
+        assert Hologram.env() == :test
+
+        result = list_elixir_modules([:hologram])
+
+        assert module_name in result
+      after
+        # Clean up...
+
+        if File.exists?(beam_file_path) do
+          File.rm!(beam_file_path)
+        end
+
+        :code.purge(module_name)
+        :code.delete(module_name)
+      end
+    end
   end
 
   test "list_loaded_otp_apps/0" do

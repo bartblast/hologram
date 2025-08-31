@@ -61,11 +61,14 @@ defmodule Hologram.Template.RendererTest do
   alias Hologram.Test.Fixtures.Template.Renderer.Module69
   alias Hologram.Test.Fixtures.Template.Renderer.Module7
   alias Hologram.Test.Fixtures.Template.Renderer.Module70
+  alias Hologram.Test.Fixtures.Template.Renderer.Module76
+  alias Hologram.Test.Fixtures.Template.Renderer.Module77
   alias Hologram.Test.Fixtures.Template.Renderer.Module8
   alias Hologram.Test.Fixtures.Template.Renderer.Module9
 
+  @csrf_token "test-csrf-token"
   @env %Renderer.Env{}
-  @opts [initial_page?: true]
+  @opts [csrf_token: @csrf_token, initial_page?: true]
   @params %{}
 
   @server %Server{
@@ -246,6 +249,18 @@ defmodule Hologram.Template.RendererTest do
            {"attr_1", [expression: {nil}]},
            {"attr_2", [expression: {"value_2"}]},
            {"attr_3", [expression: {nil}]}
+         ], []}
+
+      assert render_dom(node, @env, @server) == {~s(<img attr_2="value_2" />), %{}, @server}
+    end
+
+    test "attributes that evaluate to false are not rendered" do
+      node =
+        {:element, "img",
+         [
+           {"attr_1", [expression: {false}]},
+           {"attr_2", [expression: {"value_2"}]},
+           {"attr_3", [expression: {false}]}
          ], []}
 
       assert render_dom(node, @env, @server) == {~s(<img attr_2="value_2" />), %{}, @server}
@@ -465,6 +480,28 @@ defmodule Hologram.Template.RendererTest do
       node = {:component, Module66, [{"prop_2", [expression: {:xyz}]}], []}
 
       assert {~s'component vars = %{prop_2: :xyz}', _component_registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "declared to take value from context, value in context" do
+      node = {:component, Module37, [{"cid", [text: "component_37"]}], []}
+
+      assert {"prop_aaa = 123", _component_registry, _server_struct} =
+               render_dom(node, @env, @server)
+    end
+
+    test "declared to take value from context, value not in context, default value not specified" do
+      node = {:component, Module76, [{"cid", [text: "component_76"]}], []}
+
+      assert_raise KeyError, build_key_error_msg(:aaa, %{}), fn ->
+        render_dom(node, @env, @server)
+      end
+    end
+
+    test "declared to take value from context, value not in context, default value specified" do
+      node = {:component, Module77, [{"cid", [text: "component_77"]}], []}
+
+      assert {"prop_aaa = 987", _component_registry, _server_struct} =
                render_dom(node, @env, @server)
     end
   end
@@ -755,6 +792,7 @@ defmodule Hologram.Template.RendererTest do
                     module: Module39,
                     struct: %Component{
                       emitted_context: %{
+                        {Hologram.Runtime, :csrf_token} => @csrf_token,
                         {Hologram.Runtime, :initial_page?} => false,
                         {Hologram.Runtime, :page_digest} => :dummy_module_39_digest,
                         {Hologram.Runtime, :page_mounted?} => true,
@@ -781,6 +819,7 @@ defmodule Hologram.Template.RendererTest do
                     module: Module46,
                     struct: %Component{
                       emitted_context: %{
+                        {Hologram.Runtime, :csrf_token} => @csrf_token,
                         {Hologram.Runtime, :initial_page?} => false,
                         {Hologram.Runtime, :page_digest} => :dummy_module_46_digest,
                         {Hologram.Runtime, :page_mounted?} => true,
@@ -807,6 +846,7 @@ defmodule Hologram.Template.RendererTest do
                     module: Module40,
                     struct: %Component{
                       emitted_context: %{
+                        {Hologram.Runtime, :csrf_token} => @csrf_token,
                         {Hologram.Runtime, :initial_page?} => false,
                         {Hologram.Runtime, :page_digest} => :dummy_module_40_digest,
                         {Hologram.Runtime, :page_mounted?} => true,
@@ -833,6 +873,7 @@ defmodule Hologram.Template.RendererTest do
                     module: Module43,
                     struct: %Component{
                       emitted_context: %{
+                        {Hologram.Runtime, :csrf_token} => @csrf_token,
                         {Hologram.Runtime, :initial_page?} => false,
                         {Hologram.Runtime, :page_digest} => :dummy_module_43_digest,
                         {Hologram.Runtime, :page_mounted?} => true
@@ -858,6 +899,7 @@ defmodule Hologram.Template.RendererTest do
                     module: Module45,
                     struct: %Component{
                       emitted_context: %{
+                        {Hologram.Runtime, :csrf_token} => @csrf_token,
                         {Hologram.Runtime, :initial_page?} => false,
                         {Hologram.Runtime, :page_digest} => :dummy_module_45_digest,
                         {Hologram.Runtime, :page_mounted?} => true
@@ -957,6 +999,7 @@ defmodule Hologram.Template.RendererTest do
                     module: Module28,
                     struct: %Component{
                       emitted_context: %{
+                        {Hologram.Runtime, :csrf_token} => @csrf_token,
                         {Hologram.Runtime, :initial_page?} => false,
                         {Hologram.Runtime, :page_digest} => :dummy_module_28_digest,
                         {Hologram.Runtime, :page_mounted?} => true
@@ -983,6 +1026,7 @@ defmodule Hologram.Template.RendererTest do
                     module: Module29,
                     struct: %Component{
                       emitted_context: %{
+                        {Hologram.Runtime, :csrf_token} => @csrf_token,
                         {Hologram.Runtime, :initial_page?} => false,
                         {Hologram.Runtime, :page_digest} => :dummy_module_29_digest,
                         {Hologram.Runtime, :page_mounted?} => true
@@ -1024,8 +1068,10 @@ defmodule Hologram.Template.RendererTest do
     test "injects asset manifest when the initial_page? opt is set to true" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module53, :dummy_module_53_digest)
 
+      opts = [csrf_token: @csrf_token, initial_page?: true]
+
       assert {html, _component_registry, _server_struct} =
-               render_page(Module53, @params, @server, initial_page?: true)
+               render_page(Module53, @params, @server, opts)
 
       assert String.contains?(html, "globalThis.hologram.assetManifest")
     end
@@ -1033,8 +1079,10 @@ defmodule Hologram.Template.RendererTest do
     test "doesn't inject asset manifest when the initial_page? opt is set to false" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module53, :dummy_module_53_digest)
 
+      opts = [csrf_token: @csrf_token, initial_page?: false]
+
       assert {html, _component_registry, _server_struct} =
-               render_page(Module53, @params, @server, initial_page?: false)
+               render_page(Module53, @params, @server, opts)
 
       refute String.contains?(html, "globalThis.hologram.assetManifest")
     end
@@ -1050,7 +1098,7 @@ defmodule Hologram.Template.RendererTest do
                render_page(Module48, @params, @server, @opts)
 
       expected =
-        ~s/componentRegistry: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module49")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])], [Type.bitstring("page"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("initial_page?")]), Type.atom("false")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_mounted?")]), Type.atom("true")]])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])]])/
+        ~s/componentRegistry: Type.map([[Type.bitstring("layout"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module49")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])], [Type.bitstring("page"), Type.map([[Type.atom("module"), Type.atom("Elixir.Hologram.Test.Fixtures.Template.Renderer.Module48")], [Type.atom("struct"), Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component")], [Type.atom("emitted_context"), Type.map([[Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("csrf_token")]), Type.bitstring("#{@csrf_token}")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("initial_page?")]), Type.atom("false")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_digest")]), Type.bitstring("102790adb6c3b1956db310be523a7693")], [Type.tuple([Type.atom("Elixir.Hologram.Runtime"), Type.atom("page_mounted?")]), Type.atom("true")]])], [Type.atom("next_action"), Type.atom("nil")], [Type.atom("next_command"), Type.atom("nil")], [Type.atom("next_page"), Type.atom("nil")], [Type.atom("state"), Type.map([])]])]])]])/
 
       assert String.contains?(html, expected)
     end
@@ -1109,6 +1157,65 @@ defmodule Hologram.Template.RendererTest do
       """
 
       assert normalize_newlines(html) == normalize_newlines(expected_html)
+    end
+
+    test "CSRF token is put into page emitted context for initial page requests" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module28, :dummy_module_28_digest)
+
+      opts = [csrf_token: @csrf_token, initial_page?: true]
+
+      assert {_html, component_registry, _server_struct} =
+               render_page(Module28, @params, @server, opts)
+
+      page_emitted_context = component_registry["page"].struct.emitted_context
+
+      assert page_emitted_context[{Hologram.Runtime, :csrf_token}] == @csrf_token
+    end
+
+    test "CSRF token is not put into page emitted context for subsequent page requests even when provided" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module28, :dummy_module_28_digest)
+
+      opts = [csrf_token: @csrf_token, initial_page?: false]
+
+      assert {_html, component_registry, _server_struct} =
+               render_page(Module28, @params, @server, opts)
+
+      page_emitted_context = component_registry["page"].struct.emitted_context
+
+      refute Map.has_key?(page_emitted_context, {Hologram.Runtime, :csrf_token})
+    end
+
+    test "raises ArgumentError when CSRF token is not provided for initial page requests" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module28, :dummy_module_28_digest)
+
+      opts = [initial_page?: true]
+
+      assert_raise ArgumentError, "CSRF token is required for initial page requests", fn ->
+        render_page(Module28, @params, @server, opts)
+      end
+    end
+
+    test "raises ArgumentError when CSRF token is nil for initial page requests" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module28, :dummy_module_28_digest)
+
+      opts = [csrf_token: nil, initial_page?: true]
+
+      assert_raise ArgumentError, "CSRF token is required for initial page requests", fn ->
+        render_page(Module28, @params, @server, opts)
+      end
+    end
+
+    test "CSRF token is not required for subsequent page requests" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module28, :dummy_module_28_digest)
+
+      opts = [initial_page?: false]
+
+      assert {_html, component_registry, _server_struct} =
+               render_page(Module28, @params, @server, opts)
+
+      page_emitted_context = component_registry["page"].struct.emitted_context
+
+      refute Map.has_key?(page_emitted_context, {Hologram.Runtime, :csrf_token})
     end
   end
 end

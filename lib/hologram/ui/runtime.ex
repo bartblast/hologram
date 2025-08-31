@@ -4,6 +4,7 @@ defmodule Hologram.UI.Runtime do
   alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Router.Helpers, as: RouterHelpers
 
+  prop :csrf_token, :string, from_context: {Hologram.Runtime, :csrf_token}
   prop :initial_page?, :boolean, from_context: {Hologram.Runtime, :initial_page?}
   prop :page_digest, :string, from_context: {Hologram.Runtime, :page_digest}
   prop :page_mounted?, :boolean, from_context: {Hologram.Runtime, :page_mounted?}
@@ -14,6 +15,7 @@ defmodule Hologram.UI.Runtime do
     {%if @initial_page? && !@page_mounted?}
       <script>
         globalThis.hologram ??= \{\};
+        globalThis.hologram.csrfToken = "{@csrf_token}";
         {AssetManifestCache.get_manifest_js()}
       </script>
     {/if}

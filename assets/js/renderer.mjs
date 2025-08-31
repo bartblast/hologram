@@ -6,6 +6,7 @@ import Bitstring from "./bitstring.mjs";
 import ComponentRegistry from "./component_registry.mjs";
 import Hologram from "./hologram.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
+import InitActionQueue from "./init_action_queue.mjs";
 import Interpreter from "./interpreter.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
@@ -296,6 +297,15 @@ export default class Renderer {
     return moduleProxy.__props__;
   }
 
+  static #handleInputValueUpdate(element, newValue) {
+    // Skip redundant DOM writes
+    if (newValue === element.value) {
+      return;
+    }
+
+    element.value = newValue;
+  }
+
   // Based on has_cid_prop?/1
   static #hasCidProp(props) {
     return "atom(cid)" in props.data;
@@ -334,10 +344,16 @@ export default class Renderer {
   }
 
   // Based on inject_props_from_context/3
-  // Deps: [:maps.from_list/1, :maps.get/2, :maps.merge/2]
+  // Deps: [:maps.from_list/1, :maps.get/2, :maps.is_key/2, :maps.merge/2]
   static #injectPropsFromContext(propsFromTemplate, moduleProxy, context) {
     const propsFromContextTuples = Renderer.#getPropDefinitions(moduleProxy)
-      .data.filter((prop) => Renderer.#contextKey(prop.data[2]) !== null)
+      .data.filter((prop) => {
+        const contextKey = Renderer.#contextKey(prop.data[2]);
+        return (
+          contextKey !== null &&
+          Type.isTrue(Erlang_Maps["is_key/2"](contextKey, context))
+        );
+      })
       .map((prop) => {
         const contextKey = Renderer.#contextKey(prop.data[2]);
 
@@ -354,8 +370,25 @@ export default class Renderer {
     return Erlang_Maps["merge/2"](propsFromTemplate, propsFromContext);
   }
 
-  static #mapEventType(eventType) {
-    return eventType.replace(/_/g, "");
+  static #mapEventName(eventName, tagName, attrsVdom) {
+    if (eventName === "change") {
+      if (tagName === "textarea") {
+        return "input";
+      }
+
+      if (tagName === "input") {
+        const inputType =
+          typeof attrsVdom?.type === "string"
+            ? attrsVdom.type.toLowerCase()
+            : "text";
+
+        if (inputType !== "checkbox" && inputType !== "radio") {
+          return "input";
+        }
+      }
+    }
+
+    return eventName;
   }
 
   // Deps: [:maps.get/2]
@@ -389,6 +422,8 @@ export default class Renderer {
           Type.atom("emitted_context"),
           componentStruct,
         );
+
+        Renderer.#maybeQueueActionFromClientInit(componentStruct, cid);
       } else {
         const message = `component ${Interpreter.inspectModuleJsName(
           moduleProxy.__jsName__,
@@ -402,6 +437,34 @@ export default class Renderer {
     }
 
     return [componentState, componentEmittedContext];
+  }
+
+  // Deps: [:maps.get/2, :maps.get/3, :maps.put/3]
+  static #maybeQueueActionFromClientInit(componentStruct, cid) {
+    const nextAction = Erlang_Maps["get/2"](
+      Type.atom("next_action"),
+      componentStruct,
+    );
+
+    if (!Type.isNil(nextAction)) {
+      let actionWithTarget = nextAction;
+
+      const existingTarget = Erlang_Maps["get/3"](
+        Type.atom("target"),
+        nextAction,
+        Type.nil(),
+      );
+
+      if (Type.isNil(existingTarget)) {
+        actionWithTarget = Erlang_Maps["put/3"](
+          Type.atom("target"),
+          cid,
+          nextAction,
+        );
+      }
+
+      InitActionQueue.enqueue(actionWithTarget);
+    }
   }
 
   static #mergeNeighbouringTextNodes(nodes) {
@@ -420,6 +483,10 @@ export default class Renderer {
     }, []);
   }
 
+  static #normalizeEventName(eventName) {
+    return eventName.replace(/_/g, "");
+  }
+
   // Based on normalize_prop_name/1
   // Deps: [:erlang.binary_to_atom/1]
   static #normalizePropName(propDom) {
@@ -430,7 +497,7 @@ export default class Renderer {
   }
 
   // Based on render_attribute/2
-  static #renderAttribute(name, valueDom) {
+  static #renderAttribute(name, valueDom, isInputValue) {
     const nameText = Bitstring.toText(name);
 
     // []
@@ -438,46 +505,85 @@ export default class Renderer {
       return [nameText, true];
     }
 
-    // [expression: {nil}]
+    // [expression: {nil}] or [expression: {false}]
     if (
       valueDom.data.length === 1 &&
       Type.isTuple(valueDom.data[0].data[1]) &&
       valueDom.data[0].data[1].data.length === 1 &&
-      Type.isNil(valueDom.data[0].data[1].data[0])
+      (Type.isNil(valueDom.data[0].data[1].data[0]) ||
+        Type.isFalse(valueDom.data[0].data[1].data[0]))
     ) {
       return [nameText, null];
     }
 
     const valueText = Renderer.#valueDomToText(valueDom);
 
+    // For input value attributes, preserve empty strings instead of converting to true
+    // Input values are passed to the element's value property (via Snabbdom hooks) and expect strings,
+    // while for other elements, empty strings represent boolean attributes that should be set to true
+    if (isInputValue) {
+      return [nameText, valueText];
+    }
+
     return [nameText, valueText === "" ? true : valueText];
   }
 
   // Based on render_attributes/1
-  static #renderAttributes(attrsDom) {
+  // "props" are Snabbdom props, not Hologram component props
+  static #renderAttributesAndProps(attrsDom, tagName) {
+    const attrs = {};
+    const props = {};
+
     if (attrsDom.data.length === 0) {
-      return {};
+      return {attrs, props};
     }
 
-    return attrsDom.data
-      .filter((attrDom) => !Bitstring.toText(attrDom.data[0]).startsWith("$"))
-      .reduce((acc, attrDom) => {
-        const [nameText, valueText] = Renderer.#renderAttribute(
-          attrDom.data[0],
-          attrDom.data[1],
-        );
+    // Filter out event attributes (starting with $)
+    const regularAttrs = attrsDom.data.filter(
+      (attrDom) => !Bitstring.toText(attrDom.data[0]).startsWith("$"),
+    );
 
-        if (valueText !== null) {
-          acc[nameText] = valueText;
+    // Check if this is an input element - they have special treatment related to value patching
+    const isInputElement = tagName === "input";
+
+    for (const attrDom of regularAttrs) {
+      const nameText = Bitstring.toText(attrDom.data[0]);
+      const isInputValue = isInputElement && nameText === "value";
+
+      const [, valueText] = Renderer.#renderAttribute(
+        attrDom.data[0],
+        attrDom.data[1],
+        isInputValue,
+      );
+
+      if (valueText !== null) {
+        // For input value: only set the property, never the attribute to maintain proper form behavior
+        // - Preserves the browser's dirty flag tracking
+        // - Ensures correct form reset behavior (resets to original defaultValue)
+        // - Maintains proper autocomplete/autofill behavior
+        // See: https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#concept-fe-dirty
+        if (isInputValue) {
+          // Store the value for later use in hooks
+          attrs["data-hologram-value"] = valueText;
+        } else {
+          attrs[nameText] = valueText;
         }
+      }
+    }
 
-        return acc;
-      }, {});
+    return {attrs, props};
   }
 
   // Based on render_dom/3 (component case)
   static #renderComponent(dom, context, slots, defaultTarget) {
     const moduleProxy = Interpreter.moduleProxy(dom.data[1]);
+    if (moduleProxy == undefined) {
+      throw new Error(
+        "Module proxy undefined:",
+        Interpreter.moduleJsName(dom.data[1]),
+      );
+    }
+
     const propsDom = dom.data[2];
     let childrenDom = dom.data[3];
 
@@ -518,10 +624,14 @@ export default class Renderer {
     }
 
     const attrsDom = dom.data[2];
-    const attrsVdom = Renderer.#renderAttributes(attrsDom);
+
+    const {attrs: attrsVdom, props: propsVdom} =
+      Renderer.#renderAttributesAndProps(attrsDom, tagName);
 
     const eventListenersVdom = Renderer.#renderEventListeners(
       attrsDom,
+      tagName,
+      attrsVdom,
       defaultTarget,
     );
 
@@ -535,6 +645,29 @@ export default class Renderer {
     );
 
     const data = {attrs: attrsVdom, on: eventListenersVdom};
+
+    if (Object.keys(propsVdom).length > 0) {
+      data.props = propsVdom;
+    }
+
+    if (tagName === "input" && attrsVdom["data-hologram-value"] !== undefined) {
+      const hologramValue = attrsVdom["data-hologram-value"];
+
+      // Remove the temporary attribute
+      delete attrsVdom["data-hologram-value"];
+
+      data.hologramValue = hologramValue;
+
+      data.hook = {
+        update: (_oldVnode, newVnode) => {
+          const newValue = newVnode.data.hologramValue;
+          Renderer.#handleInputValueUpdate(newVnode.elm, newValue);
+        },
+        create: (_emptyVnode, newVnode) => {
+          Renderer.#handleInputValueUpdate(newVnode.elm, hologramValue);
+        },
+      };
+    }
 
     if (
       tagName === "link" &&
@@ -556,28 +689,37 @@ export default class Renderer {
     return vnode(tagName, data, childrenVdom);
   }
 
-  static #renderEventListeners(attrsDom, defaultTarget) {
+  static #renderEventListeners(attrsDom, tagName, attrsVdom, defaultTarget) {
     if (attrsDom.data.length === 0) {
       return {};
     }
 
-    return attrsDom.data
-      .filter((attrDom) => Bitstring.toText(attrDom.data[0]).startsWith("$"))
-      .reduce((acc, attrDom) => {
-        const nameText = $.#mapEventType(
-          Bitstring.toText(attrDom.data[0]).substring(1),
+    return attrsDom.data.reduce((acc, attrDom) => {
+      const attributeName = Bitstring.toText(attrDom.data[0]);
+
+      if (!attributeName.startsWith("$")) {
+        return acc;
+      }
+
+      const originalEventName = attributeName.substring(1);
+      const normalizedEventName = $.#normalizeEventName(originalEventName);
+
+      const effectiveDomEventName = $.#mapEventName(
+        normalizedEventName,
+        tagName,
+        attrsVdom,
+      );
+
+      acc[effectiveDomEventName] = (event) =>
+        Hologram.handleUiEvent(
+          event,
+          effectiveDomEventName,
+          attrDom.data[1],
+          defaultTarget,
         );
 
-        acc[nameText] = (event) =>
-          Hologram.handleUiEvent(
-            event,
-            nameText,
-            attrDom.data[1],
-            defaultTarget,
-          );
-
-        return acc;
-      }, {});
+      return acc;
+    }, {});
   }
 
   // Based on render_dom/3 (list case)

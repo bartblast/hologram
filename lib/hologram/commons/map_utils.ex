@@ -1,4 +1,6 @@
 defmodule Hologram.Commons.MapUtils do
+  @moduledoc false
+
   @doc """
   Computes the difference between two maps.
 
@@ -67,5 +69,43 @@ defmodule Hologram.Commons.MapUtils do
           do: key
 
     %{added: added, removed: removed, edited: edited}
+  end
+
+  @doc """
+  Puts a value in a nested path within a map-like structure (maps and structs).
+
+  This function works with both maps and structs, unlike `Kernel.put_in/3` which only 
+  works with structures that implement the Access behavior.
+
+  ## Parameters
+
+  - `data` - The map or struct to update
+  - `keys` - A list of keys representing the nested path
+  - `value` - The value to put at the specified path
+
+  ## Returns
+
+  The updated map or struct with the value set at the specified nested path.
+  Missing intermediate paths will be created as empty maps.
+
+  ## Examples
+
+      iex> put_nested(%{a: %{b: 1}}, [:a, :b], 2)
+      %{a: %{b: 2}}
+
+      iex> put_nested(%{}, [:a, :b, :c], "value")
+      %{a: %{b: %{c: "value"}}}
+
+      iex> put_nested(%MyStruct{field: %{nested: 1}}, [:field, :nested], 99)
+      %MyStruct{field: %{nested: 99}}
+  """
+  @spec put_nested(map, [any], any) :: map
+  def put_nested(data, [key], value) do
+    Map.put(data, key, value)
+  end
+
+  def put_nested(data, [key | rest], value) do
+    nested_data = Map.get(data, key, %{})
+    Map.put(data, key, put_nested(nested_data, rest, value))
   end
 end

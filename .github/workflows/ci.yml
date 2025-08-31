@@ -1,8 +1,8 @@
 name: CI
 
 # Define workflow that runs when changes are pushed to the
-# `master` branch or pushed to a PR branch that targets the `master`
-# branch.
+# `dev` or `master` branch or pushed to a PR branch that targets the `dev`
+# or `master` branch.
 on:
   push:
     branches:
@@ -70,12 +70,15 @@ jobs:
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
         with:
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
           elixir-version: ${{ matrix.elixir }}
           otp-version: ${{ matrix.otp }}
 
       # Step: Checkout the code.
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Step: Setup Node.js.
       - name: Set up Node.js
@@ -111,7 +114,6 @@ jobs:
         uses: nick-fields/retry@v3
         with:
           command: mix deps.get
-          retry_on: timeout
           timeout_minutes: 3
           max_attempts: 10
 
@@ -120,7 +122,6 @@ jobs:
         uses: nick-fields/retry@v3
         with:
           command: cd assets; npm clean-install
-          retry_on: any
           timeout_minutes: 3
           max_attempts: 10
 
@@ -279,12 +280,15 @@ jobs:
       - name: Set up Elixir
         uses: erlef/setup-beam@v1
         with:
+          hexpm-mirrors: |
+            https://builds.hex.pm
+            https://cdn.jsdelivr.net/hex
           elixir-version: ${{ matrix.elixir }}
           otp-version: ${{ matrix.otp }}
 
       # Step: Checkout the code.
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Step: Setup Node.js.
       - name: Set up Node.js
@@ -321,7 +325,6 @@ jobs:
         with:
           # TODO: set working directory with action input when https://github.com/nick-fields/retry/issues/89 is implemented
           command: cd test/features && mix deps.get
-          retry_on: timeout
           timeout_minutes: 3
           max_attempts: 10
 

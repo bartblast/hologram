@@ -168,6 +168,7 @@ defmodule Hologram.Template.Renderer do
       |> put_initial_page_flag_context(initial_page?)
       |> put_page_digest_context(page_digest)
       |> put_page_mounted_flag_context(false)
+      |> maybe_put_csrf_token_context(opts, initial_page?)
 
     {initial_html, initial_component_registry, final_server_struct} =
       render_page_inside_layout(
@@ -298,7 +299,9 @@ defmodule Hologram.Template.Renderer do
   defp inject_props_from_context(props, module, context) do
     props_from_context =
       module.__props__()
-      |> Enum.filter(fn {_name, _type, opts} -> opts[:from_context] end)
+      |> Enum.filter(fn {_name, _type, opts} ->
+        opts[:from_context] && Map.has_key?(context, opts[:from_context])
+      end)
       |> Enum.map(fn {name, _type, opts} -> {name, context[opts[:from_context]]} end)
       |> Enum.into(%{})
 
@@ -318,6 +321,21 @@ defmodule Hologram.Template.Renderer do
   defp interpolate_page_params_js(html, page_params) do
     page_params_js = Encoder.encode_term!(page_params)
     String.replace(html, "$PAGE_PARAMS_JS_PLACEHOLDER", page_params_js)
+  end
+
+  defp maybe_put_csrf_token_context(page_component_struct, opts, true) do
+    csrf_token =
+      opts[:csrf_token] || raise ArgumentError, "CSRF token is required for initial page requests"
+
+    Component.put_context(
+      page_component_struct,
+      {Hologram.Runtime, :csrf_token},
+      csrf_token
+    )
+  end
+
+  defp maybe_put_csrf_token_context(page_component_struct, _opts, false) do
+    page_component_struct
   end
 
   defp normalize_prop_name({name, value}) do
@@ -353,6 +371,8 @@ defmodule Hologram.Template.Renderer do
   defp render_attribute(name, []), do: name
 
   defp render_attribute(_name, expression: {nil}), do: ""
+
+  defp render_attribute(_name, expression: {false}), do: ""
 
   defp render_attribute(name, value_dom) do
     {value_str, %{}, _server_struct} =

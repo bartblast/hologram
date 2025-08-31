@@ -45,6 +45,18 @@ defmodule HologramFeatureTests.Helpers do
     session
   end
 
+  def assert_input_value(session, css_selector, expected_value) do
+    Browser.execute_script(
+      session,
+      "return document.querySelector('#{css_selector}').value;",
+      [],
+      fn actual_value ->
+        assert actual_value == expected_value,
+               "Expected input value to be '#{expected_value}' but got '#{actual_value}'"
+      end
+    )
+  end
+
   def assert_js_error(session, expected_msg, fun) when is_binary(expected_msg) do
     regex = ~r/^There was an uncaught JavaScript error:.+: #{Regex.escape(expected_msg)}\n$/su
 
@@ -121,6 +133,14 @@ defmodule HologramFeatureTests.Helpers do
     parent
     |> Browser.find(query)
     |> assert_text(regex)
+
+    parent
+  end
+
+  def cookies(session) do
+    session
+    |> Browser.cookies()
+    |> Enum.sort_by(& &1["name"], :asc)
   end
 
   def go_back(session) do
@@ -167,6 +187,11 @@ defmodule HologramFeatureTests.Helpers do
 
   def scroll_to(session, x, y) do
     Browser.execute_script(session, "window.scrollTo(#{x}, #{y});")
+  end
+
+  def sleep(session, duration) do
+    :timer.sleep(duration)
+    session
   end
 
   def visit(session, path_or_url) when is_binary(path_or_url) do

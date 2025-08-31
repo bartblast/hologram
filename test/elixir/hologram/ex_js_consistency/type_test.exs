@@ -13,7 +13,7 @@ defmodule Hologram.ExJsConsistency.TypeTest do
   @moduletag :consistency
 
   test "action struct" do
-    assert %Action{} == %{__struct__: Action, name: nil, params: %{}, target: nil}
+    assert %Action{} == %{__struct__: Action, name: nil, params: %{}, target: nil, delay: 0}
   end
 
   test "command struct" do

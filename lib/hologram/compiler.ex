@@ -241,6 +241,8 @@ defmodule Hologram.Compiler do
           "esbuild bundler failed for entry file: #{entry_file_path} (probably there were JavaScript syntax errors)"
     end
 
+    ensure_bundle_within_size_limit!(entry_name, output_bundle_path)
+
     digest =
       output_bundle_path
       |> File.read!()
@@ -339,8 +341,15 @@ defmodule Hologram.Compiler do
           {Collectable.t(), exit_status :: non_neg_integer()}
   # sobelow_skip ["CI.System"]
   def format_files(file_paths, opts) do
-    cmd_args = ["format", "--write" | file_paths]
-    cmd_opts = [cd: opts[:assets_dir], parallelism: true]
+    cmd_args = [
+      "format",
+      "--write",
+      # Effectively disable the size check (1 GB)
+      "--files-max-size=#{1024 * 1024 * 1024}"
+      | file_paths
+    ]
+    
+    cmd_opts = [cd: opts[:assets_dir], parallelism: true, stderr_to_stdout: true]
 
     {exit_msg, exit_status} =
       system_cmd_cross_platform(opts[:formatter_bin_path], cmd_args, cmd_opts)
@@ -529,6 +538,26 @@ defmodule Hologram.Compiler do
     File.write!(entry_file_path, js)
 
     entry_file_path
+  end
+
+  defp ensure_bundle_within_size_limit!(entry_name, bundle_path) do
+    max_bundle_size = Application.get_env(:hologram, :max_bundle_size, 1024 * 1024)
+    bundle_size = File.stat!(bundle_path).size
+
+    if bundle_size > max_bundle_size do
+      raise RuntimeError,
+        message: """
+        Generated JavaScript bundle '#{entry_name}' is #{bundle_size} bytes, which exceeds the configured maximum of #{max_bundle_size} bytes.
+
+        This limit acts as an early warning system to surface abnormally large bundles before they reach your app (e.g., accidentally pulling in too many modules or dependencies).
+
+        You can temporarily increase this limit by setting the [:hologram, :max_bundle_size] config value (bytes). For example, in your config file add:
+
+            config :hologram, max_bundle_size: 2 * 1024 * 1024
+
+        Please report this by opening a GitHub issue (https://github.com/bartblast/hologram/issues) and include a minimal public repository that reproduces the problem so we can investigate.\
+        """
+    end
   end
 
   defp filter_elixir_mfas(mfas) do

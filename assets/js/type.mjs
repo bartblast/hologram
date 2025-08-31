@@ -8,7 +8,7 @@ import Serializer from "./serializer.mjs";
 
 export default class Type {
   static actionStruct(data = {}) {
-    let {name, params, target} = data;
+    let {name, params, target, delay} = data;
 
     if (typeof name === "undefined") {
       name = Type.nil();
@@ -22,10 +22,15 @@ export default class Type {
       target = Type.nil();
     }
 
+    if (typeof delay === "undefined") {
+      delay = Type.integer(0);
+    }
+
     return Type.struct("Hologram.Component.Action", [
       [Type.atom("name"), name],
       [Type.atom("params"), params],
       [Type.atom("target"), target],
+      [Type.atom("delay"), delay],
     ]);
   }
 
