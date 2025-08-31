@@ -2808,6 +2808,176 @@ describe("Renderer", () => {
     });
   });
 
+  // IMPORTANT!
+  // Keep client-side Renderer "escaping" and server-side Renderer "escaping" unit tests consistent.
+  describe("escaping", () => {
+    const context = Type.map();
+    const defaultTarget = Type.bitstring("my_target");
+    const parentTagName = "div";
+    const slots = Type.keywordList();
+
+    it("text inside non-script elements", () => {
+      // <div>abc < xyz</div>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list(),
+        Type.list([
+          Type.tuple([Type.atom("text"), Type.bitstring("abc < xyz")]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode("div", {attrs: {}, on: {}}, ["abc &lt; xyz"]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("text inside script elements", () => {
+      // <script>abc < xyz</script>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("script"),
+        Type.list(),
+        Type.list([
+          Type.tuple([Type.atom("text"), Type.bitstring("abc < xyz")]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode(
+        "script",
+        {attrs: {}, key: "__hologramScript__:abc < xyz", on: {}},
+        ["abc < xyz"],
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    // TODO: shouldn't escape
+    it("text inside public comments", () => {
+      // <!-- abc < xyz -->
+      const node = Type.tuple([
+        Type.atom("public_comment"),
+        Type.list([
+          Type.tuple([Type.atom("text"), Type.bitstring(" abc < xyz ")]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode("!", " abc &lt; xyz ");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("expression inside non-script elements", () => {
+      // <div>{"abc < xyz"}</div>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list(),
+        Type.list([
+          Type.tuple([
+            Type.atom("expression"),
+            Type.tuple([Type.bitstring("abc < xyz")]),
+          ]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode("div", {attrs: {}, on: {}}, ["abc &lt; xyz"]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("expression inside script elements", () => {
+      // <script>{"abc < xyz"}</script>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("script"),
+        Type.list(),
+        Type.list([
+          Type.tuple([
+            Type.atom("expression"),
+            Type.tuple([Type.bitstring("abc < xyz")]),
+          ]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode(
+        "script",
+        {attrs: {}, key: "__hologramScript__:abc < xyz", on: {}},
+        ["abc < xyz"],
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    // TODO: shouldn't escape
+    it("expression inside public comments", () => {
+      // <!-- {"abc < xyz"} -->
+      const node = Type.tuple([
+        Type.atom("public_comment"),
+        Type.list([
+          Type.tuple([Type.atom("text"), Type.bitstring(" ")]),
+          Type.tuple([
+            Type.atom("expression"),
+            Type.tuple([Type.bitstring("abc < xyz")]),
+          ]),
+          Type.tuple([Type.atom("text"), Type.bitstring(" ")]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode("!", " abc &lt; xyz ");
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
   describe("escapeHtml()", () => {
     const escapeHtml = Renderer.escapeHtml;
 

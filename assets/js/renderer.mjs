@@ -98,7 +98,8 @@ export default class Renderer {
     // Cases ordered by expected frequency (most common first)
     switch (nodeType) {
       case "text":
-        return Bitstring.toText(dom.data[1]);
+        const text = Bitstring.toText(dom.data[1]);
+        return parentTagName === "script" ? text : $.escapeHtml(text);
 
       case "element":
         return Renderer.#renderElement(
@@ -119,7 +120,10 @@ export default class Renderer {
         );
 
       case "expression":
-        return $.stringifyForInterpolation(dom.data[1].data[0]);
+        return $.stringifyForInterpolation(
+          dom.data[1].data[0],
+          parentTagName !== "script",
+        );
 
       case "page":
         return Renderer.renderDom(

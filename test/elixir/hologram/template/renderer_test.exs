@@ -1076,6 +1076,8 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  # IMPORTANT!
+  # Keep client-side Renderer "escaping" and server-side Renderer "escaping" unit tests consistent.  
   describe "escaping" do
     test "text inside non-script elements" do
       # <div>abc < xyz</div>
