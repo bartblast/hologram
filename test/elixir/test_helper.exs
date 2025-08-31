@@ -1,6 +1,7 @@
 alias Hologram.Assets.ManifestCache, as: AssetManifestCache
 alias Hologram.Assets.PageDigestRegistry
 alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
+alias Hologram.LiveReload
 alias Hologram.Reflection
 alias Hologram.Router.PageModuleResolver
 
@@ -26,6 +27,9 @@ Application.put_env(:hologram, :asset_manifest_cache_impl, AssetManifestCacheMoc
 
 Mox.defmock(AssetPathRegistryMock, for: AssetPathRegistry)
 Application.put_env(:hologram, :asset_path_registry_impl, AssetPathRegistryMock)
+
+Mox.defmock(LiveReloadMock, for: LiveReload)
+Application.put_env(:hologram, :live_reload_impl, LiveReloadMock)
 
 Mox.defmock(PageModuleResolverMock, for: PageModuleResolver)
 Application.put_env(:hologram, :page_module_resolver_impl, PageModuleResolverMock)
