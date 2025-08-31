@@ -343,6 +343,30 @@ const Erlang = {
   // End binary_to_existing_atom/2
   // Deps: [:erlang.binary_to_atom/2]
 
+  // Start binary_to_integer/1
+  "binary_to_integer/1": (binary) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    const text = Bitstring.toText(binary);
+
+    if (!/^[+-]?\d+$/.test(text)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    }
+
+    return Type.integer(BigInt(text));
+  },
+  // End binary_to_integer/1
+  // Deps: []
+
   // Start bit_size/1
   "bit_size/1": (term) => {
     if (!Type.isBitstring(term)) {

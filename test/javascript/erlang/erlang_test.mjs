@@ -1550,6 +1550,154 @@ describe("Erlang", () => {
     });
   });
 
+  describe("binary_to_integer/1", () => {
+    const binary_to_integer = Erlang["binary_to_integer/1"];
+
+    it("positive integer, without plus sign", () => {
+      const binary = Type.bitstring("123");
+      const result = binary_to_integer(binary);
+      const expected = Type.integer(123);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("positive integer, with plus sign", () => {
+      const binary = Type.bitstring("+123");
+      const result = binary_to_integer(binary);
+      const expected = Type.integer(123);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("negative integer", () => {
+      const binary = Type.bitstring("-456");
+      const result = binary_to_integer(binary);
+      const expected = Type.integer(-456);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("zero", () => {
+      const binary = Type.bitstring("0");
+      const result = binary_to_integer(binary);
+      const expected = Type.integer(0);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("large integer", () => {
+      const binary = Type.bitstring("90071992547409919007199254740991");
+      const result = binary_to_integer(binary);
+      const expected = Type.integer(90071992547409919007199254740991n);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError with leading whitespace", () => {
+      assertBoxedError(
+        () => binary_to_integer(Type.bitstring("  123")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+
+    it("raises ArgumentError with trailing whitespace", () => {
+      assertBoxedError(
+        () => binary_to_integer(Type.bitstring("123  ")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+
+    it("raises ArgumentError with surrounding whitespace", () => {
+      assertBoxedError(
+        () => binary_to_integer(Type.bitstring("  789  ")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+
+    it("raises ArgumentError if the argument is not a bitstring", () => {
+      assertBoxedError(
+        () => binary_to_integer(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("raises ArgumentError if the argument is a non-binary bitstring", () => {
+      assertBoxedError(
+        () => binary_to_integer(Type.bitstring([1, 0, 1])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("raises ArgumentError if the binary contains non-numeric text", () => {
+      assertBoxedError(
+        () => binary_to_integer(Type.bitstring("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+
+    it("raises ArgumentError if the binary contains decimal point", () => {
+      assertBoxedError(
+        () => binary_to_integer(Type.bitstring("123.45")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+
+    it("raises ArgumentError if the binary is empty", () => {
+      assertBoxedError(
+        () => binary_to_integer(Type.bitstring("")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+
+    it("raises ArgumentError if the binary contains only whitespace", () => {
+      assertBoxedError(
+        () => binary_to_integer(Type.bitstring("   ")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+
+    it("raises ArgumentError if the binary contains mixed text and numbers", () => {
+      assertBoxedError(
+        () => binary_to_integer(Type.bitstring("123abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    });
+  });
+
   describe("bit_size/1", () => {
     const bit_size = Erlang["bit_size/1"];
 
