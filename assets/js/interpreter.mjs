@@ -27,12 +27,13 @@ export default class Interpreter {
   static assertStructuralComparisonSupportedType(term) {
     if (
       !Type.isAtom(term) &&
+      !Type.isBitstring(term) &&
       !Type.isFloat(term) &&
       !Type.isInteger(term) &&
       !Type.isPid(term) &&
       !Type.isTuple(term)
     ) {
-      const message = `Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: ${Interpreter.inspect(
+      const message = `Structural comparison currently supports only atoms, bitstrings, floats, integers, pids and tuples, got: ${Interpreter.inspect(
         term,
       )}`;
 
@@ -250,6 +251,9 @@ export default class Interpreter {
           : term1.value < term2.value
             ? -1
             : 1;
+
+      case "bitstring":
+        return Bitstring.compare(term1, term2);
 
       case "pid":
         return Interpreter.#comparePids(term1, term2);

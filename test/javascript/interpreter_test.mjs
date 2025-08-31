@@ -336,6 +336,15 @@ describe("Interpreter", () => {
       });
     });
 
+    it("bitstring type", () => {
+      const result = Interpreter.compareTerms(
+        Type.bitstring("aaa"),
+        Type.bitstring("bbb"),
+      );
+
+      assert.equal(result, -1);
+    });
+
     describe("number types (float or integer)", () => {
       it("float == float", () => {
         const result = Interpreter.compareTerms(
