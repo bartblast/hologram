@@ -1,4 +1,5 @@
 defmodule Hologram.Component do
+  alias Hologram.Commons.MapUtils
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.AST
   alias Hologram.Component
@@ -7,9 +8,14 @@ defmodule Hologram.Component do
   defstruct emitted_context: %{}, next_action: nil, next_command: nil, next_page: nil, state: %{}
 
   defmodule Action do
-    defstruct name: nil, params: %{}, target: nil
+    defstruct delay: 0, name: nil, params: %{}, target: nil
 
-    @type t :: %__MODULE__{name: :atom, params: %{atom => any}, target: String.t() | nil}
+    @type t :: %__MODULE__{
+            delay: non_neg_integer,
+            name: :atom,
+            params: %{atom => any},
+            target: String.t() | nil
+          }
   end
 
   defmodule Command do
@@ -101,19 +107,24 @@ defmodule Hologram.Component do
 
         defoverridable init: 3
       end,
-      maybe_define_template_fun(template_path, __MODULE__),
+      maybe_register_colocated_template_markup(template_path),
       register_props_accumulator()
     ]
   end
 
-  defmacro __before_compile__(_env) do
-    quote do
-      @doc """
-      Returns the list of property definitions for the compiled component.
-      """
-      @spec __props__() :: list({atom, atom, keyword})
-      def __props__, do: Enum.reverse(@__props__)
-    end
+  defmacro __before_compile__(env) do
+    template_clause = maybe_build_colocated_template_clause(env, Component)
+
+    props_clause =
+      quote do
+        @doc """
+        Returns the list of property definitions for the compiled component.
+        """
+        @spec __props__() :: list({atom, atom, keyword})
+        def __props__, do: Enum.reverse(@__props__)
+      end
+
+    [template_clause, props_clause]
   end
 
   @doc """
@@ -125,19 +136,34 @@ defmodule Hologram.Component do
   end
 
   @doc """
-  Returns the AST of template/0 function definition that uses markup fetched from the give template file.
-  If the given template file doesn't exist nil is returned.
+  Builds the template clause for colocated template if markup is registered in module attribute.
+  Returns nil if no colocated template is found.
   """
-  @spec maybe_define_template_fun(String.t(), module) :: AST.t() | nil
-  def maybe_define_template_fun(template_path, behaviour) do
+  @spec maybe_build_colocated_template_clause(Macro.Env.t(), module) :: AST.t()
+  def maybe_build_colocated_template_clause(env, behaviour) do
+    markup = Module.get_attribute(env.module, :__colocated_template_markup__)
+
+    if markup do
+      quote do
+        @impl unquote(behaviour)
+        def template do
+          Hologram.Template.sigil_HOLO(unquote(markup), [])
+        end
+      end
+    end
+  end
+
+  @doc """
+  Registers colocated template markup in a module attribute if the template file exists.
+  Returns nil if the template file doesn't exist.
+  """
+  @spec maybe_register_colocated_template_markup(String.t()) :: AST.t() | nil
+  def maybe_register_colocated_template_markup(template_path) do
     if File.exists?(template_path) do
       markup = File.read!(template_path)
 
       quote do
-        @impl unquote(behaviour)
-        def template do
-          sigil_HOLO(unquote(markup), [])
-        end
+        @__colocated_template_markup__ unquote(markup)
       end
     end
   end
@@ -154,7 +180,7 @@ defmodule Hologram.Component do
 
   @doc """
   Puts the given action spec to the component or server struct's next_action field.
-  Next action will be executed by the runtime synchronously.
+  Next action will be executed by the client-side runtime after the specified delay (in milliseconds, defaults to 0).
   """
   @spec put_action(Component.t() | Server.t(), atom | keyword) :: Component.t() | Server.t()
   def put_action(struct, name_or_spec)
@@ -167,13 +193,14 @@ defmodule Hologram.Component do
     name = spec[:name]
     params = Map.new(spec[:params] || [])
     target = spec[:target]
+    delay = spec[:delay] || 0
 
-    %{struct | next_action: %Action{name: name, params: params, target: target}}
+    %{struct | next_action: %Action{name: name, params: params, target: target, delay: delay}}
   end
 
   @doc """
   Puts the given action spec to the component or server struct's next_action field.
-  Next action will be executed by the runtime synchronously.
+  Next action will be executed by the client-side runtime after the specified delay (in milliseconds, defaults to 0).
   """
   @spec put_action(Component.t() | Server.t(), atom, keyword) :: Component.t() | Server.t()
   def put_action(struct, name, params) do
@@ -257,7 +284,7 @@ defmodule Hologram.Component do
   @spec put_state(Component.t(), atom | list(atom), any) :: Component.t()
 
   def put_state(component, keys, value) when is_list(keys) do
-    %{component | state: put_in(component.state, keys, value)}
+    %{component | state: MapUtils.put_nested(component.state, keys, value)}
   end
 
   def put_state(%{state: state} = component, key, value) do

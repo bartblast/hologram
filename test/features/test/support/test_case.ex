@@ -14,7 +14,10 @@ defmodule HologramFeatureTests.TestCase do
       import Hologram.Commons.KernelUtils, only: [inspect: 1]
       import Hologram.Commons.TestUtils
       import HologramFeatureTests.Helpers
-      import Wallaby.Browser, except: [assert_text: 2, assert_text: 3, has_text?: 2, visit: 2]
+
+      import Wallaby.Browser,
+        except: [assert_text: 2, assert_text: 3, cookies: 1, has_text?: 2, visit: 2]
+
       import Wallaby.Feature
       import Wallaby.Query
 

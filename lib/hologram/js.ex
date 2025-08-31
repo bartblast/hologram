@@ -1,7 +1,5 @@
 defmodule Hologram.JS do
-  @moduledoc """
-  JavaScript interop.
-  """
+  @moduledoc false
 
   @doc """
   Executes JavaScript code.

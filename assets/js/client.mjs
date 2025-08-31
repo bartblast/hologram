@@ -128,6 +128,7 @@ export default class Client {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "X-Csrf-Token": globalThis.hologram.csrfToken,
       },
       body: Serializer.serialize($.buildCommandPayload(command), "server"),
     };
@@ -148,7 +149,7 @@ export default class Client {
       const nextAction = Interpreter.evaluateJavaScriptExpression(result);
 
       if (!Type.isNil(nextAction)) {
-        Hologram.executeAction(nextAction);
+        Hologram.scheduleAction(nextAction);
       }
     } catch (error) {
       if (error instanceof HologramRuntimeError) {

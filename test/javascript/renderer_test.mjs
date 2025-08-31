@@ -66,12 +66,18 @@ import {defineModule66Fixture} from "./support/fixtures/renderer/module_66.mjs";
 import {defineModule67Fixture} from "./support/fixtures/renderer/module_67.mjs";
 import {defineModule68Fixture} from "./support/fixtures/renderer/module_68.mjs";
 import {defineModule7Fixture} from "./support/fixtures/renderer/module_7.mjs";
+import {defineModule76Fixture} from "./support/fixtures/renderer/module_76.mjs";
+import {defineModule77Fixture} from "./support/fixtures/renderer/module_77.mjs";
+import {defineModule78Fixture} from "./support/fixtures/renderer/module_78.mjs";
 import {defineModule8Fixture} from "./support/fixtures/renderer/module_8.mjs";
 import {defineModule9Fixture} from "./support/fixtures/renderer/module_9.mjs";
+import {defineClientOnlyModule1Fixture} from "./support/fixtures/renderer/client_only/module_1.mjs";
+import {defineClientOnlyModule2Fixture} from "./support/fixtures/renderer/client_only/module_2.mjs";
 
 import Bitstring from "../../assets/js/bitstring.mjs";
 import ComponentRegistry from "../../assets/js/component_registry.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
+import InitActionQueue from "../../assets/js/init_action_queue.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
 import Renderer from "../../assets/js/renderer.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -131,8 +137,13 @@ defineModule66Fixture();
 defineModule67Fixture();
 defineModule68Fixture();
 defineModule7Fixture();
+defineModule76Fixture();
+defineModule77Fixture();
+defineModule78Fixture();
 defineModule8Fixture();
 defineModule9Fixture();
+defineClientOnlyModule1Fixture();
+defineClientOnlyModule2Fixture();
 
 describe("Renderer", () => {
   beforeEach(() => {
@@ -577,6 +588,38 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it("attributes that evaluate to false are not rendered", () => {
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("img"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("attr_1"),
+            Type.keywordList([
+              [Type.atom("expression"), Type.tuple([Type.boolean(false)])],
+            ]),
+          ]),
+          Type.tuple([
+            Type.bitstring("attr_2"),
+            Type.keywordList([[Type.atom("text"), Type.bitstring("value_2")]]),
+          ]),
+          Type.tuple([
+            Type.bitstring("attr_3"),
+            Type.keywordList([
+              [Type.atom("expression"), Type.tuple([Type.boolean(false)])],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+
+      const expected = vnode("img", {attrs: {attr_2: "value_2"}, on: {}}, []);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     // This test case doesn't apply to the client renderer
     // it("if there are no attributes to render there is no whitespace inside the tag, non-void element")
 
@@ -877,6 +920,248 @@ describe("Renderer", () => {
           );
 
           assert.deepStrictEqual(Object.keys(vdom.data.on), ["mousemove"]);
+        });
+
+        it("maps $change event to $input event for text input element", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("type"),
+                Type.keywordList([[Type.atom("text"), Type.bitstring("text")]]),
+              ]),
+              Type.tuple([
+                Type.bitstring("$change"),
+                Type.list([
+                  Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          assert.deepStrictEqual(Object.keys(vdom.data.on), ["input"]);
+
+          const stub = sinon
+            .stub(Hologram, "handleUiEvent")
+            .callsFake((..._args) => null);
+
+          vdom.data.on.input("dummyEvent");
+
+          sinon.assert.calledWith(
+            stub,
+            "dummyEvent",
+            "input",
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+            ]),
+            defaultTarget,
+          );
+
+          Hologram.handleUiEvent.restore();
+        });
+
+        it("keeps $change event for checkbox element", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("type"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("checkbox")],
+                ]),
+              ]),
+              Type.tuple([
+                Type.bitstring("$change"),
+                Type.list([
+                  Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          assert.deepStrictEqual(Object.keys(vdom.data.on), ["change"]);
+
+          const stub = sinon
+            .stub(Hologram, "handleUiEvent")
+            .callsFake((..._args) => null);
+
+          vdom.data.on.change("dummyEvent");
+
+          sinon.assert.calledWith(
+            stub,
+            "dummyEvent",
+            "change",
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+            ]),
+            defaultTarget,
+          );
+
+          Hologram.handleUiEvent.restore();
+        });
+
+        it("maps $change event to $input event for textarea element", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("textarea"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("$change"),
+                Type.list([
+                  Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          assert.deepStrictEqual(Object.keys(vdom.data.on), ["input"]);
+
+          const stub = sinon
+            .stub(Hologram, "handleUiEvent")
+            .callsFake((..._args) => null);
+
+          vdom.data.on.input("dummyEvent");
+
+          sinon.assert.calledWith(
+            stub,
+            "dummyEvent",
+            "input",
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+            ]),
+            defaultTarget,
+          );
+
+          Hologram.handleUiEvent.restore();
+        });
+
+        it("maps $change event to $input event for input element without type attribute", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("$change"),
+                Type.list([
+                  Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          assert.deepStrictEqual(Object.keys(vdom.data.on), ["input"]);
+
+          const stub = sinon
+            .stub(Hologram, "handleUiEvent")
+            .callsFake((..._args) => null);
+
+          vdom.data.on.input("dummyEvent");
+
+          sinon.assert.calledWith(
+            stub,
+            "dummyEvent",
+            "input",
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+            ]),
+            defaultTarget,
+          );
+
+          Hologram.handleUiEvent.restore();
+        });
+
+        it("maps $change event to $input event for input element with uppercased TEXT type", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("type"),
+                Type.keywordList([[Type.atom("text"), Type.bitstring("TEXT")]]),
+              ]),
+              Type.tuple([
+                Type.bitstring("$change"),
+                Type.list([
+                  Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          assert.deepStrictEqual(Object.keys(vdom.data.on), ["input"]);
+
+          const stub = sinon
+            .stub(Hologram, "handleUiEvent")
+            .callsFake((..._args) => null);
+
+          vdom.data.on.input("dummyEvent");
+
+          sinon.assert.calledWith(
+            stub,
+            "dummyEvent",
+            "input",
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+            ]),
+            defaultTarget,
+          );
+
+          Hologram.handleUiEvent.restore();
+        });
+
+        it("keeps $change event for input element with uppercased CHECKBOX type", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("type"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("CHECKBOX")],
+                ]),
+              ]),
+              Type.tuple([
+                Type.bitstring("$change"),
+                Type.list([
+                  Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          assert.deepStrictEqual(Object.keys(vdom.data.on), ["change"]);
+
+          const stub = sinon
+            .stub(Hologram, "handleUiEvent")
+            .callsFake((..._args) => null);
+
+          vdom.data.on.change("dummyEvent");
+
+          sinon.assert.calledWith(
+            stub,
+            "dummyEvent",
+            "change",
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+            ]),
+            defaultTarget,
+          );
+
+          Hologram.handleUiEvent.restore();
         });
       });
 
@@ -1460,6 +1745,399 @@ describe("Renderer", () => {
           assert.deepStrictEqual(result, expected);
         });
       });
+
+      describe("input value handling", () => {
+        it("input element with value attribute sets up hooks", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("value"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("test_value")],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+          );
+
+          // Should not have the value as an attribute
+          assert.isUndefined(result.data.attrs.value);
+
+          // Should not have the temporary data-hologram-value attribute
+          assert.isUndefined(result.data.attrs["data-hologram-value"]);
+
+          // Should have hooks for handling the value property
+          assert.strictEqual(typeof result.data.hook, "object");
+          assert.strictEqual(typeof result.data.hook.create, "function");
+          assert.strictEqual(typeof result.data.hook.update, "function");
+        });
+
+        it("input element without value attribute does not set up value hooks", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("type"),
+                Type.keywordList([[Type.atom("text"), Type.bitstring("text")]]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+          );
+
+          // Should have the type attribute
+          assert.strictEqual(result.data.attrs.type, "text");
+
+          // Should not have hooks since there's no value attribute
+          assert.isUndefined(result.data.hook);
+        });
+
+        it("non-input element with value attribute treats value as regular attribute", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("div"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("value"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("test_value")],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+          );
+
+          // Should have the value as a normal attribute for non-input elements
+          assert.strictEqual(result.data.attrs.value, "test_value");
+
+          // Should not have hooks since it's not an input
+          assert.isUndefined(result.data.hook);
+        });
+
+        it("input element with empty string value attribute preserves empty string", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("value"),
+                Type.keywordList([[Type.atom("text"), Type.bitstring("")]]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+          );
+
+          // Should not have the value as an attribute
+          assert.isUndefined(result.data.attrs.value);
+
+          // Should not have the temporary data-hologram-value attribute (it gets removed after creating hooks)
+          assert.isUndefined(result.data.attrs["data-hologram-value"]);
+
+          // Should have hooks for handling the value property (empty string is still a valid value)
+          assert.strictEqual(typeof result.data.hook, "object");
+          assert.strictEqual(typeof result.data.hook.create, "function");
+          assert.strictEqual(typeof result.data.hook.update, "function");
+        });
+
+        // nil or false value or attribute not present
+        it("input element with undefined value does not set up hooks", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("value"),
+                Type.keywordList([
+                  [Type.atom("expression"), Type.tuple([Type.nil()])],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+          );
+
+          // Should not have the value as an attribute
+          assert.isUndefined(result.data.attrs.value);
+
+          // Should not have the temporary data-hologram-value attribute
+          assert.isUndefined(result.data.attrs["data-hologram-value"]);
+
+          // Should not have hooks
+          assert.isUndefined(result.data.hook);
+        });
+
+        describe("input value handling during updates", () => {
+          let mockInput;
+
+          beforeEach(() => {
+            mockInput = {
+              tagName: "INPUT",
+              value: "",
+            };
+          });
+
+          it("sets initial value on create hook", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("initial_value")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+            );
+
+            // Call the create hook with mock vnode
+            const mockVnode = {elm: mockInput};
+            result.data.hook.create(null, mockVnode);
+
+            // Should set the value
+            assert.strictEqual(mockInput.value, "initial_value");
+          });
+
+          it("always updates value on update hook", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("new_value")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+            );
+
+            // Simulate that we previously set a value
+            mockInput.value = "old_value";
+
+            // Call the update hook
+            const mockVnode = {
+              elm: mockInput,
+              data: {hologramValue: "new_value"},
+            };
+            result.data.hook.update(null, mockVnode);
+
+            // Should always update the value
+            assert.strictEqual(mockInput.value, "new_value");
+          });
+
+          it("always overrides user input when value changes", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [
+                      Type.atom("text"),
+                      Type.bitstring("new_programmatic_value"),
+                    ],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+            );
+
+            // Simulate that user has typed something different
+            mockInput.value = "user_typed_text";
+
+            // Call the update hook with a new programmatic value
+            const mockVnode = {
+              elm: mockInput,
+              data: {hologramValue: "new_programmatic_value"},
+            };
+            result.data.hook.update(null, mockVnode);
+
+            // Should always update the value
+            assert.strictEqual(mockInput.value, "new_programmatic_value");
+          });
+
+          it("updates value regardless of current input value", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("new_value")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+            );
+
+            // Simulate that current value is something else
+            mockInput.value = "current_value";
+
+            // Call the update hook
+            const mockVnode = {
+              elm: mockInput,
+              data: {hologramValue: "new_value"},
+            };
+            result.data.hook.update(null, mockVnode);
+
+            // Should always update the value
+            assert.strictEqual(mockInput.value, "new_value");
+          });
+
+          it("sets value on any input element", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("first_value")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+            );
+
+            // Simulate input with any current value
+            mockInput.value = "whatever";
+
+            // Call the update hook
+            const mockVnode = {
+              elm: mockInput,
+              data: {hologramValue: "first_value"},
+            };
+            result.data.hook.update(null, mockVnode);
+
+            // Should always update the value
+            assert.strictEqual(mockInput.value, "first_value");
+          });
+
+          it("does not update value when it hasn't changed", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("same_value")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+            );
+
+            // Set input to the same value as what will be set
+            mockInput.value = "same_value";
+
+            // Spy on the value setter to verify it's not called
+            let setterCallCount = 0;
+            const originalValue = mockInput.value;
+            Object.defineProperty(mockInput, "value", {
+              get: () => originalValue,
+              set: () => {
+                setterCallCount++;
+              },
+              configurable: true,
+            });
+
+            // Call the update hook with same value (to test no change)
+            const oldVnode = {data: {hologramValue: "same_value"}};
+            const mockVnode = {
+              elm: mockInput,
+              data: {hologramValue: "same_value"},
+            };
+            result.data.hook.update(oldVnode, mockVnode);
+
+            // Should not have called the setter since value didn't change
+            assert.strictEqual(setterCallCount, 0);
+          });
+        });
+      });
     });
   });
 
@@ -1791,6 +2469,83 @@ describe("Renderer", () => {
       );
 
       const expected = ["component vars = %{prop_2: :xyz}"];
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("declared to take value from context, value in context", () => {
+      const context = Type.map([
+        [
+          Type.tuple([Type.atom("my_scope"), Type.atom("my_key")]),
+          Type.integer(123),
+        ],
+      ]);
+
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module37"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([
+              [Type.atom("text"), Type.bitstring("component_37")],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      initComponentRegistryEntry(Type.bitstring("component_37"));
+
+      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const expected = ["prop_aaa = 123"];
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("declared to take value from context, value not in context, default value not specified", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module76"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([
+              [Type.atom("text"), Type.bitstring("component_76")],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      initComponentRegistryEntry(Type.bitstring("component_76"));
+
+      assertBoxedError(
+        () => Renderer.renderDom(node, context, slots, defaultTarget),
+        "KeyError",
+        Interpreter.buildKeyErrorMsg(Type.atom("aaa"), Type.map()),
+      );
+    });
+
+    it("declared to take value from context, value not in context, default value specified", () => {
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module77"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([
+              [Type.atom("text"), Type.bitstring("component_77")],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      initComponentRegistryEntry(Type.bitstring("component_77"));
+
+      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const expected = ["prop_aaa = 987"];
 
       assert.deepStrictEqual(result, expected);
     });
@@ -3529,6 +4284,141 @@ describe("Renderer", () => {
       const result = Renderer.valueDomToBitstring(dom);
 
       assert.deepStrictEqual(result, Type.bitstring("123aaa987"));
+    });
+  });
+
+  describe("queuing actions from client-side init/2", () => {
+    beforeEach(() => {
+      InitActionQueue.queue = [];
+    });
+
+    it("does not queue action when init/2 doesn't set next action", () => {
+      const cid = Type.bitstring("my_component");
+
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias("Hologram.Test.Fixtures.Template.Renderer.Module3"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      // Render the component - should trigger init/2 without next_action
+      Renderer.renderDom(node, context, slots, defaultTarget);
+
+      // Check that no action was queued
+      assert.strictEqual(InitActionQueue.queue.length, 0);
+    });
+
+    it("does not queue action when component is already initialized", () => {
+      const cid = Type.bitstring("my_component");
+
+      // Pre-initialize the component in registry
+      const entry = componentRegistryEntryFixture({
+        state: Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.atom("b"), Type.integer(2)],
+        ]),
+      });
+      ComponentRegistry.putEntry(cid, entry);
+
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias(
+          "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module1",
+        ),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      // Render the component - should not trigger init/2 since already initialized
+      Renderer.renderDom(node, context, slots, defaultTarget);
+
+      // Check that no action was queued
+      assert.strictEqual(InitActionQueue.queue.length, 0);
+    });
+
+    it("queues action when init/2 sets next action", () => {
+      const cid = Type.bitstring("my_component");
+
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias(
+          "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module1",
+        ),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      // Render the component - should trigger init/2 and queue the action
+      Renderer.renderDom(node, context, slots, defaultTarget);
+
+      // Check that action was queued with original target preserved
+
+      assert.strictEqual(InitActionQueue.queue.length, 1);
+
+      const queuedAction = InitActionQueue.queue[0];
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](Type.atom("name"), queuedAction),
+        Type.atom("test_action_from_init"),
+      );
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](Type.atom("target"), queuedAction),
+        Type.bitstring("custom_target_from_init"),
+      );
+    });
+
+    it("sets the current component as the target when init/2 sets next action that doesn't have target specified", () => {
+      const cid = Type.bitstring("my_component");
+
+      const node = Type.tuple([
+        Type.atom("component"),
+        Type.alias(
+          "Hologram.Test.Fixtures.Template.Renderer.ClientOnly.Module2",
+        ),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("cid"),
+            Type.keywordList([[Type.atom("text"), cid]]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      // Render the component - should trigger init/2 and queue the action
+      Renderer.renderDom(node, context, slots, defaultTarget);
+
+      // Check that action was queued with target added
+
+      assert.strictEqual(InitActionQueue.queue.length, 1);
+
+      const queuedAction = InitActionQueue.queue[0];
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](Type.atom("name"), queuedAction),
+        Type.atom("targetless_action_from_init"),
+      );
+
+      assert.deepStrictEqual(
+        Erlang_Maps["get/2"](Type.atom("target"), queuedAction),
+        cid,
+      );
     });
   });
 });

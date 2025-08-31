@@ -138,7 +138,11 @@ defmodule Hologram.PageTest do
     end
 
     test "file (colocated)" do
-      assert Module5.template().(%{}) == [text: "Module5 template"]
+      assert Module5.template().(%{}) == [
+               {:text, "Module5 template\n"},
+               {:component, Hologram.UI.Link,
+                [{"to", [expression: {Hologram.Test.Fixtures.Page.Module2}]}], [text: "Module2"]}
+             ]
     end
   end
 end

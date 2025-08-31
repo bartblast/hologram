@@ -106,8 +106,8 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert result == call_graph
 
-      assert vertices(call_graph) == []
-      assert edges(call_graph) == []
+      assert sorted_vertices(call_graph) == [Aaa.Bbb, :vertex_1]
+      assert edges(call_graph) == [{:vertex_1, Aaa.Bbb}]
     end
 
     test "atom type ir, which is an alias of an existing non-templatable module", %{
@@ -119,7 +119,6 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert result == call_graph
 
       assert sorted_vertices(call_graph) == [Module1, :vertex_1]
-
       assert edges(call_graph) == [{:vertex_1, Module1}]
     end
 
@@ -129,18 +128,8 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert result == call_graph
 
-      assert sorted_vertices(call_graph) == [
-               Module2,
-               :vertex_1,
-               {Module2, :__params__, 0},
-               {Module2, :__route__, 0}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {Module2, {Module2, :__params__, 0}},
-               {Module2, {Module2, :__route__, 0}},
-               {:vertex_1, Module2}
-             ]
+      assert sorted_vertices(call_graph) == [Module2, :vertex_1]
+      assert sorted_edges(call_graph) == [{:vertex_1, Module2}]
     end
 
     test "atom type ir, which is an alias of a layout module", %{empty_call_graph: call_graph} do
@@ -149,22 +138,8 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert result == call_graph
 
-      assert sorted_vertices(call_graph) == [
-               Module3,
-               :vertex_1,
-               {Module3, :__props__, 0},
-               {Module3, :action, 3},
-               {Module3, :init, 2},
-               {Module3, :template, 0}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {Module3, {Module3, :__props__, 0}},
-               {Module3, {Module3, :action, 3}},
-               {Module3, {Module3, :init, 2}},
-               {Module3, {Module3, :template, 0}},
-               {:vertex_1, Module3}
-             ]
+      assert sorted_vertices(call_graph) == [Module3, :vertex_1]
+      assert sorted_edges(call_graph) == [{:vertex_1, Module3}]
     end
 
     test "atom type ir, which is an alias of a component module", %{empty_call_graph: call_graph} do
@@ -173,22 +148,8 @@ defmodule Hologram.Compiler.CallGraphTest do
 
       assert result == call_graph
 
-      assert sorted_vertices(call_graph) == [
-               Module4,
-               :vertex_1,
-               {Module4, :__props__, 0},
-               {Module4, :action, 3},
-               {Module4, :init, 2},
-               {Module4, :template, 0}
-             ]
-
-      assert sorted_edges(call_graph) == [
-               {Module4, {Module4, :__props__, 0}},
-               {Module4, {Module4, :action, 3}},
-               {Module4, {Module4, :init, 2}},
-               {Module4, {Module4, :template, 0}},
-               {:vertex_1, Module4}
-             ]
+      assert sorted_vertices(call_graph) == [Module4, :vertex_1]
+      assert sorted_edges(call_graph) == [{:vertex_1, Module4}]
     end
 
     test "function definition ir, with outbound vertices", %{empty_call_graph: call_graph} do
@@ -247,7 +208,6 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert result == call_graph
 
       assert sorted_vertices(call_graph) == [{Module1, :my_fun, 2}]
-
       assert sorted_edges(call_graph) == []
     end
 
@@ -315,10 +275,9 @@ defmodule Hologram.Compiler.CallGraphTest do
              ]
     end
 
-    # credo:disable-for-lines:48 Credo.Check.Design.DuplicatedCode
-    test "module definition ir", %{empty_call_graph: call_graph} do
+    test "module definition ir, regular module", %{empty_call_graph: call_graph} do
       ir = %IR.ModuleDefinition{
-        module: %IR.AtomType{value: Module11},
+        module: %IR.AtomType{value: Module1},
         body: %IR.Block{
           expressions: [
             %IR.AtomType{value: Module5},
@@ -332,19 +291,107 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert result == call_graph
 
       assert sorted_vertices(call_graph) == [
-               Module11,
+               Module1,
                Module5,
-               Module6,
-               {Module11, :__params__, 0},
-               {Module11, :__route__, 0}
+               Module6
              ]
 
       assert sorted_edges(call_graph) == [
-               {Module11, Module5},
-               {Module11, Module6},
-               {Module11, {Module11, :__params__, 0}},
-               {Module11, {Module11, :__route__, 0}}
+               {Module1, Module5},
+               {Module1, Module6}
              ]
+    end
+
+    test "module definition ir, page module adds page-specific edges", %{
+      empty_call_graph: call_graph
+    } do
+      module_2_ir = IR.for_module(Module2)
+      result = build(call_graph, module_2_ir)
+
+      assert result == call_graph
+
+      assert has_vertex?(call_graph, {Module2, :__params__, 0})
+      assert has_vertex?(call_graph, {Module2, :__route__, 0})
+
+      assert has_edge?(call_graph, Module2, {Module2, :__params__, 0})
+      assert has_edge?(call_graph, Module2, {Module2, :__route__, 0})
+    end
+
+    test "module definition ir, component module adds component-specific edges", %{
+      empty_call_graph: call_graph
+    } do
+      module_4_ir = IR.for_module(Module4)
+      result = build(call_graph, module_4_ir)
+
+      assert result == call_graph
+
+      assert has_vertex?(call_graph, {Module4, :__props__, 0})
+      assert has_vertex?(call_graph, {Module4, :action, 3})
+      assert has_vertex?(call_graph, {Module4, :init, 2})
+      assert has_vertex?(call_graph, {Module4, :template, 0})
+
+      assert has_edge?(call_graph, Module4, {Module4, :__props__, 0})
+      assert has_edge?(call_graph, Module4, {Module4, :action, 3})
+      assert has_edge?(call_graph, Module4, {Module4, :init, 2})
+      assert has_edge?(call_graph, Module4, {Module4, :template, 0})
+    end
+
+    test "module definition ir, struct module adds struct-specific edges", %{
+      empty_call_graph: call_graph
+    } do
+      module_25_ir = IR.for_module(Module25)
+      result = build(call_graph, module_25_ir)
+
+      assert result == call_graph
+
+      assert has_vertex?(call_graph, {Module25, :__struct__, 0})
+      assert has_vertex?(call_graph, {Module25, :__struct__, 1})
+
+      assert has_edge?(call_graph, Module25, {Module25, :__struct__, 0})
+      assert has_edge?(call_graph, Module25, {Module25, :__struct__, 1})
+    end
+
+    test "module definition ir, Ecto schema module adds Ecto schema-specific edges", %{
+      empty_call_graph: call_graph
+    } do
+      module_21_ir = IR.for_module(Module21)
+      result = build(call_graph, module_21_ir)
+
+      assert result == call_graph
+
+      assert has_vertex?(call_graph, {Module21, :__changeset__, 0})
+      assert has_vertex?(call_graph, {Module21, :__schema__, 1})
+      assert has_vertex?(call_graph, {Module21, :__schema__, 2})
+
+      assert has_edge?(call_graph, Module21, {Module21, :__changeset__, 0})
+      assert has_edge?(call_graph, Module21, {Module21, :__schema__, 1})
+      assert has_edge?(call_graph, Module21, {Module21, :__schema__, 2})
+    end
+
+    test "module definition ir, protocol module adds protocol-specific edges", %{
+      empty_call_graph: call_graph
+    } do
+      string_chars_ir = IR.for_module(String.Chars)
+      result = build(call_graph, string_chars_ir)
+
+      assert result == call_graph
+
+      from_vertex = {String.Chars, :to_string, 1}
+
+      assert has_edge?(call_graph, from_vertex, {String.Chars.Atom, :__impl__, 1})
+      assert has_edge?(call_graph, from_vertex, {String.Chars.Atom, :to_string, 1})
+
+      assert has_edge?(
+               call_graph,
+               from_vertex,
+               {String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, :__impl__, 1}
+             )
+
+      assert has_edge?(
+               call_graph,
+               from_vertex,
+               {String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, :to_string, 1}
+             )
     end
 
     test "remote function call ir, module field as an atom", %{empty_call_graph: call_graph} do
@@ -462,15 +509,11 @@ defmodule Hologram.Compiler.CallGraphTest do
       assert sorted_vertices(call_graph) == [
                Calendar.ISO,
                DateTime,
-               {DateTime, :__struct__, 0},
-               {DateTime, :__struct__, 1},
                {Module1, :my_fun_1, 4},
                {:erlang, :apply, 3}
              ]
 
       assert sorted_edges(call_graph) == [
-               {DateTime, {DateTime, :__struct__, 0}},
-               {DateTime, {DateTime, :__struct__, 1}},
                {{Module1, :my_fun_1, 4}, Calendar.ISO},
                {{Module1, :my_fun_1, 4}, DateTime},
                {{Module1, :my_fun_1, 4}, {:erlang, :apply, 3}}
@@ -521,38 +564,6 @@ defmodule Hologram.Compiler.CallGraphTest do
                {:vertex_1, Module1},
                {:vertex_1, Module5}
              ]
-    end
-
-    test "protocol (implementation edges are added)", %{empty_call_graph: call_graph} do
-      ir = IR.for_module(String.Chars)
-      build(call_graph, ir)
-
-      from_vertex = {String.Chars, :to_string, 1}
-
-      assert has_edge?(call_graph, from_vertex, {String.Chars.Atom, :__impl__, 1})
-
-      assert has_edge?(call_graph, from_vertex, {String.Chars.Atom, :to_string, 1})
-
-      assert has_edge?(
-               call_graph,
-               from_vertex,
-               {String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, :__impl__, 1}
-             )
-
-      assert has_edge?(
-               call_graph,
-               from_vertex,
-               {String.Chars.Hologram.Test.Fixtures.Compiler.CallGraph.Module12, :to_string, 1}
-             )
-    end
-
-    # TODO: verify programatically that "use Ecto.Schema"
-    # still adds __changeset__/0 (maybe in consistency tests)
-    test "Ecto schema (__changeset__/0 edge is added)", %{empty_call_graph: call_graph} do
-      ir = IR.for_module(Module21)
-      build(call_graph, ir)
-
-      assert has_edge?(call_graph, Module21, {Module21, :__changeset__, 0})
     end
   end
 

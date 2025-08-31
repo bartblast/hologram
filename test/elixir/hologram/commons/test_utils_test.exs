@@ -3,11 +3,16 @@ defmodule Hologram.Commons.TestUtilsTest do
   import Hologram.Commons.TestUtils
 
   test "build_argument_error_msg/2" do
-    assert build_argument_error_msg(2, "my blame") === """
-           errors were found at the given arguments:
+    result = build_argument_error_msg(2, "my blame")
 
-             * 2nd argument: my blame
-           """
+    expected =
+      normalize_newlines("""
+      errors were found at the given arguments:
+
+        * 2nd argument: my blame
+      """)
+
+    assert result == expected
   end
 
   describe "build_function_clause_error_msg/3" do
@@ -18,72 +23,99 @@ defmodule Hologram.Commons.TestUtilsTest do
     end
 
     test "single arg" do
-      assert build_function_clause_error_msg("my_fun/2", [:a]) == """
-             no function clause matching in my_fun/2
+      result = build_function_clause_error_msg("my_fun/2", [:a])
 
-             The following arguments were given to my_fun/2:
+      expected =
+        normalize_newlines("""
+        no function clause matching in my_fun/2
 
-                 # 1
-                 :a
-             """
+        The following arguments were given to my_fun/2:
+
+            # 1
+            :a
+        """)
+
+      assert result == expected
     end
 
     test "multiple args" do
-      assert build_function_clause_error_msg("my_fun/2", [:a, :b]) == """
-             no function clause matching in my_fun/2
+      result = build_function_clause_error_msg("my_fun/2", [:a, :b])
 
-             The following arguments were given to my_fun/2:
+      expected =
+        normalize_newlines("""
+        no function clause matching in my_fun/2
 
-                 # 1
-                 :a
+        The following arguments were given to my_fun/2:
 
-                 # 2
-                 :b
-             """
+            # 1
+            :a
+
+            # 2
+            :b
+        """)
+
+      assert result == expected
     end
 
     test "single attempted clause" do
-      assert build_function_clause_error_msg("my_fun/2", [], ["my attempted clause"]) == """
-             no function clause matching in my_fun/2
-             Attempted function clauses (showing 1 out of 1):
+      result = build_function_clause_error_msg("my_fun/2", [], ["my attempted clause"])
 
-                 my attempted clause
-             """
+      expected =
+        normalize_newlines("""
+        no function clause matching in my_fun/2
+        Attempted function clauses (showing 1 out of 1):
+
+            my attempted clause
+        """)
+
+      assert result == expected
     end
 
     test "multiple attempted clasues" do
-      assert build_function_clause_error_msg("my_fun/2", [], [
-               "my attempted clause 1",
-               "my attempted clause 2"
-             ]) == """
-             no function clause matching in my_fun/2
-             Attempted function clauses (showing 2 out of 2):
+      result =
+        build_function_clause_error_msg("my_fun/2", [], [
+          "my attempted clause 1",
+          "my attempted clause 2"
+        ])
 
-                 my attempted clause 1
-                 my attempted clause 2
-             """
+      expected =
+        normalize_newlines("""
+        no function clause matching in my_fun/2
+        Attempted function clauses (showing 2 out of 2):
+
+            my attempted clause 1
+            my attempted clause 2
+        """)
+
+      assert result == expected
     end
 
     test "multiple args and attempted clauses" do
-      assert build_function_clause_error_msg("my_fun/2", [:a, :b], [
-               "my attempted clause 1",
-               "my attempted clause 2"
-             ]) == """
-             no function clause matching in my_fun/2
+      result =
+        build_function_clause_error_msg("my_fun/2", [:a, :b], [
+          "my attempted clause 1",
+          "my attempted clause 2"
+        ])
 
-             The following arguments were given to my_fun/2:
+      expected =
+        normalize_newlines("""
+        no function clause matching in my_fun/2
 
-                 # 1
-                 :a
+        The following arguments were given to my_fun/2:
 
-                 # 2
-                 :b
+            # 1
+            :a
 
-             Attempted function clauses (showing 2 out of 2):
+            # 2
+            :b
 
-                 my attempted clause 1
-                 my attempted clause 2
-             """
+        Attempted function clauses (showing 2 out of 2):
+
+            my attempted clause 1
+            my attempted clause 2
+        """)
+
+      assert result == expected
     end
   end
 
@@ -95,23 +127,34 @@ defmodule Hologram.Commons.TestUtilsTest do
     end
 
     test "single similar function" do
-      assert build_undefined_function_error({MyModule, :my_fun, 2}, [{:my_other_fun, 3}]) == """
-             function MyModule.my_fun/2 is undefined or private. Did you mean:
+      result = build_undefined_function_error({MyModule, :my_fun, 2}, [{:my_other_fun, 3}])
 
-                   * my_other_fun/3
-             """
+      expected =
+        normalize_newlines("""
+        function MyModule.my_fun/2 is undefined or private. Did you mean:
+
+              * my_other_fun/3
+        """)
+
+      assert result == expected
     end
 
     test "multiple similar functions" do
-      assert build_undefined_function_error({MyModule, :my_fun, 2}, [
-               {:my_other_fun_1, 3},
-               {:my_other_fun_2, 4}
-             ]) == """
-             function MyModule.my_fun/2 is undefined or private. Did you mean:
+      result =
+        build_undefined_function_error({MyModule, :my_fun, 2}, [
+          {:my_other_fun_1, 3},
+          {:my_other_fun_2, 4}
+        ])
 
-                   * my_other_fun_1/3
-                   * my_other_fun_2/4
-             """
+      expected =
+        normalize_newlines("""
+        function MyModule.my_fun/2 is undefined or private. Did you mean:
+
+              * my_other_fun_1/3
+              * my_other_fun_2/4
+        """)
+
+      assert result == expected
     end
 
     test "module is not available" do

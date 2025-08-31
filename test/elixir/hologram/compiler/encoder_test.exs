@@ -43,11 +43,14 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode_ir(ir) == """
-             Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("x")], guards: [], body: (context) => {
-             return Type.atom("expr");
-             }}], context)\
-             """
+      expected =
+        normalize_newlines("""
+        Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("x")], guards: [], body: (context) => {
+        return Type.atom("expr");
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
     end
 
     test "with multiple clauses" do
@@ -77,13 +80,16 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode_ir(ir) == """
-             Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("x")], guards: [], body: (context) => {
-             return Type.atom("expr_a");
-             }}, {params: (context) => [Type.variablePattern("y")], guards: [], body: (context) => {
-             return Type.atom("expr_b");
-             }}], context)\
-             """
+      expected =
+        normalize_newlines("""
+        Type.anonymousFunction(1, [{params: (context) => [Type.variablePattern("x")], guards: [], body: (context) => {
+        return Type.atom("expr_a");
+        }}, {params: (context) => [Type.variablePattern("y")], guards: [], body: (context) => {
+        return Type.atom("expr_b");
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
     end
 
     test "with Elixir module/function capture info" do
@@ -116,11 +122,14 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode_ir(ir) == """
-             Type.functionCapture("Calendar.ISO", "parse_date", 2, [{params: (context) => [Type.variablePattern("$1"), Type.variablePattern("$2")], guards: [], body: (context) => {
-             return Elixir_Calendar_ISO["parse_date/2"](context.vars["$1"], context.vars["$2"]);
-             }}], context)\
-             """
+      expected =
+        normalize_newlines("""
+        Type.functionCapture("Calendar.ISO", "parse_date", 2, [{params: (context) => [Type.variablePattern("$1"), Type.variablePattern("$2")], guards: [], body: (context) => {
+        return Elixir_Calendar_ISO["parse_date/2"](context.vars["$1"], context.vars["$2"]);
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
     end
 
     test "with Erlang module/function capture info" do
@@ -152,11 +161,14 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode_ir(ir) == """
-             Type.functionCapture(":persistent_term", "get", 2, [{params: (context) => [Type.variablePattern("$1"), Type.variablePattern("$2")], guards: [], body: (context) => {
-             return Erlang_Persistent_Term["get/2"](context.vars["$1"], context.vars["$2"]);
-             }}], context)\
-             """
+      expected =
+        normalize_newlines("""
+        Type.functionCapture(":persistent_term", "get", 2, [{params: (context) => [Type.variablePattern("$1"), Type.variablePattern("$2")], guards: [], body: (context) => {
+        return Erlang_Persistent_Term["get/2"](context.vars["$1"], context.vars["$2"]);
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
     end
   end
 
@@ -346,12 +358,14 @@ defmodule Hologram.Compiler.EncoderTest do
       # end
       ir = %IR.Block{expressions: []}
 
-      assert encode_ir(ir) ==
-               """
-               ((context) => {
-               return Type.atom("nil");
-               })(context)\
-               """
+      expected =
+        normalize_newlines("""
+        ((context) => {
+        return Type.atom("nil");
+        })(context)\
+        """)
+
+      assert encode_ir(ir) == expected
     end
 
     test "single expression" do
@@ -364,12 +378,14 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode_ir(ir) ==
-               """
-               ((context) => {
-               return Type.integer(1n);
-               })(context)\
-               """
+      expected =
+        normalize_newlines("""
+        ((context) => {
+        return Type.integer(1n);
+        })(context)\
+        """)
+
+      assert encode_ir(ir) == expected
     end
 
     test "multiple expressions" do
@@ -384,13 +400,15 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode_ir(ir) ==
-               """
-               ((context) => {
-               Type.integer(1n);
-               return Type.integer(2n);
-               })(context)\
-               """
+      expected =
+        normalize_newlines("""
+        ((context) => {
+        Type.integer(1n);
+        return Type.integer(2n);
+        })(context)\
+        """)
+
+      assert encode_ir(ir) == expected
     end
 
     test "the last expression in the block, having a nested match operator" do
@@ -408,13 +426,16 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode_ir(ir) == """
-             ((context) => {
-             globalThis.hologram.return = Erlang["+/2"](context.vars.x, Interpreter.matchOperator(Type.integer(123n), Type.variablePattern("y"), context));
-             Interpreter.updateVarsToMatchedValues(context);
-             return globalThis.hologram.return;
-             })(context)\
-             """
+      expected =
+        normalize_newlines("""
+        ((context) => {
+        globalThis.hologram.return = Erlang["+/2"](context.vars.x, Interpreter.matchOperator(Type.integer(123n), Type.variablePattern("y"), context));
+        Interpreter.updateVarsToMatchedValues(context);
+        return globalThis.hologram.return;
+        })(context)\
+        """)
+
+      assert encode_ir(ir) == expected
     end
 
     test "the last expression in the block, not having a nested match operator" do
@@ -432,11 +453,14 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode_ir(ir) == """
-             ((context) => {
-             return Erlang["+/2"](context.vars.x, context.vars.y);
-             })(context)\
-             """
+      expected =
+        normalize_newlines("""
+        ((context) => {
+        return Erlang["+/2"](context.vars.x, context.vars.y);
+        })(context)\
+        """)
+
+      assert encode_ir(ir) == expected
     end
 
     test "not the last expression in the block, having a nested match operator" do
@@ -456,13 +480,16 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode_ir(ir) == """
-             ((context) => {
-             Erlang["+/2"](context.vars.x, Interpreter.matchOperator(Type.integer(123n), Type.variablePattern("y"), context));
-             Interpreter.updateVarsToMatchedValues(context);
-             return Type.atom("ok");
-             })(context)\
-             """
+      expected =
+        normalize_newlines("""
+        ((context) => {
+        Erlang["+/2"](context.vars.x, Interpreter.matchOperator(Type.integer(123n), Type.variablePattern("y"), context));
+        Interpreter.updateVarsToMatchedValues(context);
+        return Type.atom("ok");
+        })(context)\
+        """)
+
+      assert encode_ir(ir) == expected
     end
 
     test "not the last expression in the block, not having a nested match operator" do
@@ -482,12 +509,15 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode_ir(ir) == """
-             ((context) => {
-             Erlang["+/2"](context.vars.x, context.vars.y);
-             return Type.atom("ok");
-             })(context)\
-             """
+      expected =
+        normalize_newlines("""
+        ((context) => {
+        Erlang["+/2"](context.vars.x, context.vars.y);
+        return Type.atom("ok");
+        })(context)\
+        """)
+
+      assert encode_ir(ir) == expected
     end
 
     test "as a function argument" do
@@ -515,13 +545,16 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode_ir(ir) == """
-             Erlang_["my_fun/2"](Type.integer(1n), ((context) => {
-             Interpreter.matchOperator(Type.integer(2n), Type.variablePattern("x"), context);
-             Interpreter.updateVarsToMatchedValues(context);
-             return Erlang["+/2"](context.vars.x, Type.integer(3n));
-             })(context))\
-             """
+      expected =
+        normalize_newlines("""
+        Erlang_["my_fun/2"](Type.integer(1n), ((context) => {
+        Interpreter.matchOperator(Type.integer(2n), Type.variablePattern("x"), context);
+        Interpreter.updateVarsToMatchedValues(context);
+        return Erlang["+/2"](context.vars.x, Type.integer(3n));
+        })(context))\
+        """)
+
+      assert encode_ir(ir) == expected
     end
   end
 
@@ -565,13 +598,16 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode_ir(ir) == """
-             Interpreter.case(context.vars.my_var, [{match: Type.variablePattern("x"), guards: [(context) => Erlang["==/2"](context.vars.x, Type.integer(100n))], body: (context) => {
-             return Type.atom("ok");
-             }}, {match: Type.variablePattern("y"), guards: [], body: (context) => {
-             return context.vars.y;
-             }}], context)\
-             """
+      expected =
+        normalize_newlines("""
+        Interpreter.case(context.vars.my_var, [{match: Type.variablePattern("x"), guards: [(context) => Erlang["==/2"](context.vars.x, Type.integer(100n))], body: (context) => {
+        return Type.atom("ok");
+        }}, {match: Type.variablePattern("y"), guards: [], body: (context) => {
+        return context.vars.y;
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
     end
 
     test "multiple-expression condition" do
@@ -596,14 +632,17 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode_ir(ir) == """
-             Interpreter.case((context) => {
-             Type.integer(1n);
-             return Type.integer(2n);
-             }, [{match: Type.integer(2n), guards: [], body: (context) => {
-             return Type.atom("ok");
-             }}], context)\
-             """
+      expected =
+        normalize_newlines("""
+        Interpreter.case((context) => {
+        Type.integer(1n);
+        return Type.integer(2n);
+        }, [{match: Type.integer(2n), guards: [], body: (context) => {
+        return Type.atom("ok");
+        }}], context)\
+        """)
+
+      assert encode_ir(ir) == expected
     end
   end
 
@@ -827,13 +866,16 @@ defmodule Hologram.Compiler.EncoderTest do
     # end
     ir = %IR.Cond{clauses: [clause_1, clause_2]}
 
-    assert encode_ir(ir) == """
-           Interpreter.cond([{condition: (context) => Erlang["</2"](context.vars.x, Type.integer(1n)), body: (context) => {
-           return Type.integer(1n);
-           }}, {condition: (context) => Erlang["</2"](context.vars.x, Type.integer(2n)), body: (context) => {
-           return Type.integer(2n);
-           }}], context)\
-           """
+    expected =
+      normalize_newlines("""
+      Interpreter.cond([{condition: (context) => Erlang["</2"](context.vars.x, Type.integer(1n)), body: (context) => {
+      return Type.integer(1n);
+      }}, {condition: (context) => Erlang["</2"](context.vars.x, Type.integer(2n)), body: (context) => {
+      return Type.integer(2n);
+      }}], context)\
+      """)
+
+    assert encode_ir(ir) == expected
   end
 
   test "cond clause" do
@@ -857,12 +899,15 @@ defmodule Hologram.Compiler.EncoderTest do
       }
     }
 
-    assert encode_ir(ir) == """
-           {condition: (context) => Erlang[\"</2\"](context.vars.x, Type.integer(3n)), body: (context) => {
-           Type.integer(1n);
-           return Type.integer(2n);
-           }}\
-           """
+    expected =
+      normalize_newlines("""
+      {condition: (context) => Erlang[\"</2\"](context.vars.x, Type.integer(3n)), body: (context) => {
+      Type.integer(1n);
+      return Type.integer(2n);
+      }}\
+      """)
+
+    assert encode_ir(ir) == expected
   end
 
   describe "cons operator" do
@@ -918,65 +963,74 @@ defmodule Hologram.Compiler.EncoderTest do
       }
     ]
 
-    assert encode_elixir_function("Aaa.Bbb", :fun_2, 1, :private, clauses, %Context{}) == """
-           Interpreter.defineElixirFunction("Aaa.Bbb", "fun_2", 1, "private", [{params: (context) => [Type.integer(9n)], guards: [], body: (context) => {
-           return Type.atom("expr_2");
-           }}, {params: (context) => [Type.variablePattern("z")], guards: [(context) => Erlang["is_float/1"](context.vars.z)], body: (context) => {
-           return context.vars.z;
-           }}]);\
-           """
+    expected =
+      normalize_newlines("""
+      Interpreter.defineElixirFunction("Aaa.Bbb", "fun_2", 1, "private", [{params: (context) => [Type.integer(9n)], guards: [], body: (context) => {
+      return Type.atom("expr_2");
+      }}, {params: (context) => [Type.variablePattern("z")], guards: [(context) => Erlang["is_float/1"](context.vars.z)], body: (context) => {
+      return context.vars.z;
+      }}]);\
+      """)
+
+    assert encode_elixir_function("Aaa.Bbb", :fun_2, 1, :private, clauses, %Context{}) == expected
   end
 
   describe "encode_erlang_function/4" do
     test ":erlang module function that is implemented" do
-      output = encode_erlang_function(:erlang, :+, 2, @erlang_source_dir)
+      result = encode_erlang_function(:erlang, :+, 2, @erlang_source_dir)
 
-      assert output == """
-             Interpreter.defineErlangFunction("erlang", "+", 2, (left, right) => {
-                 if (!Type.isNumber(left) || !Type.isNumber(right)) {
-                   const blame = `${Interpreter.inspect(left)} + ${Interpreter.inspect(right)}`;
-                   Interpreter.raiseArithmeticError(blame);
-                 }
+      expected =
+        normalize_newlines("""
+        Interpreter.defineErlangFunction("erlang", "+", 2, (left, right) => {
+            if (!Type.isNumber(left) || !Type.isNumber(right)) {
+              const blame = `${Interpreter.inspect(left)} + ${Interpreter.inspect(right)}`;
+              Interpreter.raiseArithmeticError(blame);
+            }
 
-                 const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
-                   left,
-                   right,
-                 );
+            const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
+              left,
+              right,
+            );
 
-                 const result = leftValue.value + rightValue.value;
+            const result = leftValue.value + rightValue.value;
 
-                 return type === "float" ? Type.float(result) : Type.integer(result);
-               });\
-             """
+            return type === "float" ? Type.float(result) : Type.integer(result);
+          });\
+        """)
+
+      assert result == expected
     end
 
     test ":erlang module function that is not implemented" do
-      output = encode_erlang_function(:erlang, :not_implemented, 2, @erlang_source_dir)
+      result = encode_erlang_function(:erlang, :not_implemented, 2, @erlang_source_dir)
 
-      assert output ==
+      assert result ==
                ~s/Interpreter.defineNotImplementedErlangFunction("erlang", "not_implemented", 2);/
     end
 
     test ":maps module function that is implemented" do
-      output = encode_erlang_function(:maps, :get, 2, @erlang_source_dir)
+      result = encode_erlang_function(:maps, :get, 2, @erlang_source_dir)
 
-      assert output == """
-             Interpreter.defineErlangFunction("maps", "get", 2, (key, map) => {
-                 const value = Erlang_Maps["get/3"](key, map, null);
+      expected =
+        normalize_newlines("""
+        Interpreter.defineErlangFunction("maps", "get", 2, (key, map) => {
+            const value = Erlang_Maps["get/3"](key, map, null);
 
-                 if (value !== null) {
-                   return value;
-                 }
+            if (value !== null) {
+              return value;
+            }
 
-                 Interpreter.raiseKeyError(Interpreter.buildKeyErrorMsg(key, map));
-               });\
-             """
+            Interpreter.raiseKeyError(Interpreter.buildKeyErrorMsg(key, map));
+          });\
+        """)
+
+      assert result == expected
     end
 
     test ":maps module function that is not implemented" do
-      output = encode_erlang_function(:maps, :not_implemented, 2, @erlang_source_dir)
+      result = encode_erlang_function(:maps, :not_implemented, 2, @erlang_source_dir)
 
-      assert output ==
+      assert result ==
                ~s/Interpreter.defineNotImplementedErlangFunction("maps", "not_implemented", 2);/
     end
   end
@@ -999,12 +1053,15 @@ defmodule Hologram.Compiler.EncoderTest do
         }
       }
 
-      assert encode_ir(ir) == """
-             {params: (context) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (context) => {
-             Type.atom("expr_1");
-             return Type.atom("expr_2");
-             }}\
-             """
+      expected =
+        normalize_newlines("""
+        {params: (context) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (context) => {
+        Type.atom("expr_1");
+        return Type.atom("expr_2");
+        }}\
+        """)
+
+      assert encode_ir(ir) == expected
     end
 
     test "with single guard" do
@@ -1025,12 +1082,15 @@ defmodule Hologram.Compiler.EncoderTest do
         }
       }
 
-      assert encode_ir(ir) == """
-             {params: (context) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [(context) => Erlang["is_integer/1"](context.vars.x)], body: (context) => {
-             Type.atom("expr_1");
-             return Type.atom("expr_2");
-             }}\
-             """
+      expected =
+        normalize_newlines("""
+        {params: (context) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [(context) => Erlang["is_integer/1"](context.vars.x)], body: (context) => {
+        Type.atom("expr_1");
+        return Type.atom("expr_2");
+        }}\
+        """)
+
+      assert encode_ir(ir) == expected
     end
 
     test "with multiple guards" do
@@ -1056,12 +1116,15 @@ defmodule Hologram.Compiler.EncoderTest do
         }
       }
 
-      assert encode_ir(ir) == """
-             {params: (context) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [(context) => Erlang["is_integer/1"](context.vars.x), (context) => Erlang["is_integer/1"](context.vars.y)], body: (context) => {
-             Type.atom("expr_1");
-             return Type.atom("expr_2");
-             }}\
-             """
+      expected =
+        normalize_newlines("""
+        {params: (context) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [(context) => Erlang["is_integer/1"](context.vars.x), (context) => Erlang["is_integer/1"](context.vars.y)], body: (context) => {
+        Type.atom("expr_1");
+        return Type.atom("expr_2");
+        }}\
+        """)
+
+      assert encode_ir(ir) == expected
     end
 
     test "with match operator in param" do
@@ -1083,11 +1146,14 @@ defmodule Hologram.Compiler.EncoderTest do
         }
       }
 
-      assert encode_ir(ir) == """
-             {params: (context) => [Interpreter.matchOperator(Interpreter.matchOperator(Type.variablePattern("y"), Type.integer(1n), context), Type.variablePattern("x"), context)], guards: [], body: (context) => {
-             return Type.atom("ok");
-             }}\
-             """
+      expected =
+        normalize_newlines("""
+        {params: (context) => [Interpreter.matchOperator(Interpreter.matchOperator(Type.variablePattern("y"), Type.integer(1n), context), Type.variablePattern("x"), context)], guards: [], body: (context) => {
+        return Type.atom("ok");
+        }}\
+        """)
+
+      assert encode_ir(ir) == expected
     end
   end
 
@@ -1448,27 +1514,30 @@ defmodule Hologram.Compiler.EncoderTest do
         }
       }
 
-      assert encode_ir(ir) == """
-             Interpreter.defineElixirFunction("Aaa.Bbb", "fun_1", 1, "public", [{params: (context) => [Type.variablePattern("c")], guards: [(context) => Erlang["is_integer/1"](context.vars.c)], body: (context) => {
-             return context.vars.c;
-             }}]);
+      expected =
+        normalize_newlines("""
+        Interpreter.defineElixirFunction("Aaa.Bbb", "fun_1", 1, "public", [{params: (context) => [Type.variablePattern("c")], guards: [(context) => Erlang["is_integer/1"](context.vars.c)], body: (context) => {
+        return context.vars.c;
+        }}]);
 
-             Interpreter.defineElixirFunction("Aaa.Bbb", "fun_1", 2, "public", [{params: (context) => [Type.integer(9n), Type.integer(8n)], guards: [], body: (context) => {
-             return Type.atom("expr_1");
-             }}, {params: (context) => [Type.variablePattern("a"), Type.variablePattern("b")], guards: [], body: (context) => {
-             return Erlang["+/2"](context.vars.a, context.vars.b);
-             }}]);
+        Interpreter.defineElixirFunction("Aaa.Bbb", "fun_1", 2, "public", [{params: (context) => [Type.integer(9n), Type.integer(8n)], guards: [], body: (context) => {
+        return Type.atom("expr_1");
+        }}, {params: (context) => [Type.variablePattern("a"), Type.variablePattern("b")], guards: [], body: (context) => {
+        return Erlang["+/2"](context.vars.a, context.vars.b);
+        }}]);
 
-             Interpreter.defineElixirFunction("Aaa.Bbb", "fun_2", 1, "private", [{params: (context) => [Type.integer(9n)], guards: [], body: (context) => {
-             return Type.atom("expr_2");
-             }}, {params: (context) => [Type.variablePattern("z")], guards: [(context) => Erlang["is_float/1"](context.vars.z)], body: (context) => {
-             return context.vars.z;
-             }}]);
+        Interpreter.defineElixirFunction("Aaa.Bbb", "fun_2", 1, "private", [{params: (context) => [Type.integer(9n)], guards: [], body: (context) => {
+        return Type.atom("expr_2");
+        }}, {params: (context) => [Type.variablePattern("z")], guards: [(context) => Erlang["is_float/1"](context.vars.z)], body: (context) => {
+        return context.vars.z;
+        }}]);
 
-             Interpreter.defineElixirFunction("Aaa.Bbb", "fun_2", 2, "private", [{params: (context) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (context) => {
-             return Erlang["*/2"](context.vars.x, context.vars.y);
-             }}]);\
-             """
+        Interpreter.defineElixirFunction("Aaa.Bbb", "fun_2", 2, "private", [{params: (context) => [Type.variablePattern("x"), Type.variablePattern("y")], guards: [], body: (context) => {
+        return Erlang["*/2"](context.vars.x, context.vars.y);
+        }}]);\
+        """)
+
+      assert encode_ir(ir) == expected
     end
 
     test "invalid IR" do
@@ -1506,10 +1575,11 @@ defmodule Hologram.Compiler.EncoderTest do
         }
       }
 
-      expected_msg = """
-      can't encode Aaa.Bbb module definition
-      no function clause matching in Hologram.Compiler.Encoder.encode_ir/2\
-      """
+      expected_msg =
+        normalize_newlines("""
+        can't encode Aaa.Bbb module definition
+        no function clause matching in Hologram.Compiler.Encoder.encode_ir/2\
+        """)
 
       assert_raise RuntimeError, expected_msg, fn -> encode_ir(ir) end
     end
@@ -1599,13 +1669,16 @@ defmodule Hologram.Compiler.EncoderTest do
         ]
       }
 
-      assert encode_ir(ir, %Context{module: MyModule}) == """
-             Interpreter.callNamedFunction(Interpreter.case(context.vars.my_var, [{match: Type.atom("a"), guards: [], body: (context) => {
-             return Type.atom("Elixir.MyModule1");
-             }}, {match: Type.atom("b"), guards: [], body: (context) => {
-             return Type.atom("Elixir.MyModule2");
-             }}], context), Type.atom("my_fun!"), Type.list([Type.integer(1n), Type.integer(2n)]), context)\
-             """
+      expected =
+        normalize_newlines("""
+        Interpreter.callNamedFunction(Interpreter.case(context.vars.my_var, [{match: Type.atom("a"), guards: [], body: (context) => {
+        return Type.atom("Elixir.MyModule1");
+        }}, {match: Type.atom("b"), guards: [], body: (context) => {
+        return Type.atom("Elixir.MyModule2");
+        }}], context), Type.atom("my_fun!"), Type.list([Type.integer(1n), Type.integer(2n)]), context)\
+        """)
+
+      assert encode_ir(ir, %Context{module: MyModule}) == expected
     end
 
     test ":erlang.andalso/2 call" do
@@ -1831,11 +1904,14 @@ defmodule Hologram.Compiler.EncoderTest do
         after_block: nil
       }
 
-      assert encode_ir(ir) == """
-             Interpreter.try((context) => {
-             return Type.atom("ok");
-             }, [], [], [], null, context)\
-             """
+      expected =
+        normalize_newlines("""
+        Interpreter.try((context) => {
+        return Type.atom("ok");
+        }, [], [], [], null, context)\
+        """)
+
+      assert encode_ir(ir) == expected
     end
 
     test "single rescue clause / without variable / with single module" do
@@ -1862,13 +1938,16 @@ defmodule Hologram.Compiler.EncoderTest do
         after_block: nil
       }
 
-      assert encode_ir(ir) == """
-             Interpreter.try((context) => {
-             return Type.atom("ok");
-             }, [{variable: null, modules: [Type.atom("Elixir.RuntimeError")], body: (context) => {
-             return Type.atom("error");
-             }}], [], [], null, context)\
-             """
+      expected =
+        normalize_newlines("""
+        Interpreter.try((context) => {
+        return Type.atom("ok");
+        }, [{variable: null, modules: [Type.atom("Elixir.RuntimeError")], body: (context) => {
+        return Type.atom("error");
+        }}], [], [], null, context)\
+        """)
+
+      assert encode_ir(ir) == expected
     end
 
     test "multiple rescue clauses" do
@@ -1903,15 +1982,18 @@ defmodule Hologram.Compiler.EncoderTest do
         after_block: nil
       }
 
-      assert encode_ir(ir) == """
-             Interpreter.try((context) => {
-             return Type.atom("ok");
-             }, [{variable: null, modules: [Type.atom("Elixir.ArgumentError")], body: (context) => {
-             return Type.atom("error_1");
-             }}, {variable: null, modules: [Type.atom("Elixir.RuntimeError")], body: (context) => {
-             return Type.atom("error_2");
-             }}], [], [], null, context)\
-             """
+      expected =
+        normalize_newlines("""
+        Interpreter.try((context) => {
+        return Type.atom("ok");
+        }, [{variable: null, modules: [Type.atom("Elixir.ArgumentError")], body: (context) => {
+        return Type.atom("error_1");
+        }}, {variable: null, modules: [Type.atom("Elixir.RuntimeError")], body: (context) => {
+        return Type.atom("error_2");
+        }}], [], [], null, context)\
+        """)
+
+      assert encode_ir(ir) == expected
     end
 
     test "with variable" do
@@ -1938,13 +2020,16 @@ defmodule Hologram.Compiler.EncoderTest do
         after_block: nil
       }
 
-      assert encode_ir(ir) == """
-             Interpreter.try((context) => {
-             return Type.atom("ok");
-             }, [{variable: Type.variablePattern("e"), modules: [], body: (context) => {
-             return Type.atom("error");
-             }}], [], [], null, context)\
-             """
+      expected =
+        normalize_newlines("""
+        Interpreter.try((context) => {
+        return Type.atom("ok");
+        }, [{variable: Type.variablePattern("e"), modules: [], body: (context) => {
+        return Type.atom("error");
+        }}], [], [], null, context)\
+        """)
+
+      assert encode_ir(ir) == expected
     end
 
     test "with multiple modules" do
@@ -1974,13 +2059,16 @@ defmodule Hologram.Compiler.EncoderTest do
         after_block: nil
       }
 
-      assert encode_ir(ir) == """
-             Interpreter.try((context) => {
-             return Type.atom("ok");
-             }, [{variable: null, modules: [Type.atom("Elixir.ArgumentError"), Type.atom("Elixir.RuntimeError")], body: (context) => {
-             return Type.atom("error");
-             }}], [], [], null, context)\
-             """
+      expected =
+        normalize_newlines("""
+        Interpreter.try((context) => {
+        return Type.atom("ok");
+        }, [{variable: null, modules: [Type.atom("Elixir.ArgumentError"), Type.atom("Elixir.RuntimeError")], body: (context) => {
+        return Type.atom("error");
+        }}], [], [], null, context)\
+        """)
+
+      assert encode_ir(ir) == expected
     end
   end
 
@@ -2110,11 +2198,14 @@ defmodule Hologram.Compiler.EncoderTest do
     end
 
     test "anonymous function (capture)" do
-      assert encode_term!(&DateTime.now/2) == """
-             Type.functionCapture("DateTime", "now", 2, [{params: (context) => [Type.variablePattern("$1"), Type.variablePattern("$2")], guards: [], body: (context) => {
-             return Elixir_DateTime["now/2"](context.vars["$1"], context.vars["$2"]);
-             }}], context)\
-             """
+      expected =
+        normalize_newlines("""
+        Type.functionCapture("DateTime", "now", 2, [{params: (context) => [Type.variablePattern("$1"), Type.variablePattern("$2")], guards: [], body: (context) => {
+        return Elixir_DateTime["now/2"](context.vars["$1"], context.vars["$2"]);
+        }}], context)\
+        """)
+
+      assert encode_term!(&DateTime.now/2) == expected
     end
 
     test "atom" do

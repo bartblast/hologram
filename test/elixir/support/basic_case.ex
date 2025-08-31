@@ -6,7 +6,7 @@ defmodule Hologram.Test.BasicCase do
       import Hologram.Commons.TestUtils
       import Hologram.Test.Helpers
 
-      @fixtures_dir "#{File.cwd!()}/test/elixir/support/fixtures"
+      @fixtures_dir Path.join([File.cwd!(), "test", "elixir", "support", "fixtures"])
     end
   end
 end

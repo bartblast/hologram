@@ -10,6 +10,7 @@ import GlobalRegistry from "./global_registry.mjs";
 import HologramBoxedError from "./errors/boxed_error.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import HologramRuntimeError from "./errors/runtime_error.mjs";
+import InitActionQueue from "./init_action_queue.mjs";
 import Interpreter from "./interpreter.mjs";
 import MemoryStorage from "./memory_storage.mjs";
 import Operation from "./operation.mjs";
@@ -24,6 +25,7 @@ import Vdom from "./vdom.mjs";
 import ChangeEvent from "./events/change_event.mjs";
 import ClickEvent from "./events/click_event.mjs";
 import FocusEvent from "./events/focus_event.mjs";
+import InputEvent from "./events/input_event.mjs";
 import MouseEvent from "./events/mouse_event.mjs";
 import PointerEvent from "./events/pointer_event.mjs";
 import SelectEvent from "./events/select_event.mjs";
@@ -143,6 +145,10 @@ export default class Hologram {
       PerformanceTimer.diff(startTime),
     );
 
+    Hologram.render();
+
+    Hologram.#scheduleQueuedInitActions();
+
     if (!Type.isNil(nextAction)) {
       if (Type.isNil(Erlang_Maps["get/2"](Type.atom("target"), nextAction))) {
         nextAction = Erlang_Maps["put/3"](
@@ -152,9 +158,7 @@ export default class Hologram {
         );
       }
 
-      Hologram.executeAction(nextAction);
-    } else {
-      Hologram.render();
+      Hologram.scheduleAction(nextAction);
     }
 
     if (!Type.isNil(nextPage)) {
@@ -232,6 +236,7 @@ export default class Hologram {
     }
   }
 
+  // Deps: [:maps.get/3]
   static handleUiEvent(event, eventType, operationSpecDom, defaultTarget) {
     const eventImpl = Hologram.#getEventImplementation(eventType);
 
@@ -247,6 +252,8 @@ export default class Hologram {
       );
 
       if (Operation.isAction(operation)) {
+        let delay;
+
         switch (Hologram.#getActionName(operation)) {
           case "__load_prefetched_page__":
             return Hologram.executeLoadPrefetchedPageAction(
@@ -258,7 +265,17 @@ export default class Hologram {
             return Hologram.executePrefetchPageAction(operation, event.target);
 
           default:
-            return Hologram.executeAction(operation);
+            delay = Erlang_Maps["get/3"](
+              Type.atom("delay"),
+              operation,
+              Type.integer(0),
+            );
+
+            if (delay.value === 0n) {
+              return Hologram.executeAction(operation);
+            } else {
+              return Hologram.scheduleAction(operation);
+            }
         }
       } else {
         Client.sendCommand(operation);
@@ -277,6 +294,38 @@ export default class Hologram {
 
       history.pushState($.#historyId, null, pagePath);
     });
+  }
+
+  // Made public to make tests easier
+  // Deps: [:maps.get/2, :maps.get/3, :maps.put/3]
+  static queueActionsFromServerInits() {
+    for (const [cid, entry] of Object.values(ComponentRegistry.entries.data)) {
+      const componentStruct = Erlang_Maps["get/2"](Type.atom("struct"), entry);
+
+      const nextAction = Erlang_Maps["get/3"](
+        Type.atom("next_action"),
+        componentStruct,
+        Type.nil(),
+      );
+
+      if (!Type.isNil(nextAction)) {
+        let actionWithTarget = nextAction;
+
+        if (
+          Type.isNil(
+            Erlang_Maps["get/3"](Type.atom("target"), nextAction, Type.nil()),
+          )
+        ) {
+          actionWithTarget = Erlang_Maps["put/3"](
+            Type.atom("target"),
+            cid,
+            nextAction,
+          );
+        }
+
+        InitActionQueue.enqueue(actionWithTarget);
+      }
+    }
   }
 
   // Made public to make tests easier
@@ -313,6 +362,18 @@ export default class Hologram {
         throw error;
       }
     });
+  }
+
+  // Execute action asynchronously to allow animations and prevent blocking the event loop
+  // Deps: [:maps.get/3]
+  static scheduleAction(action) {
+    const delay = Erlang_Maps["get/3"](
+      Type.atom("delay"),
+      action,
+      Type.integer(0),
+    );
+
+    setTimeout(() => Hologram.executeAction(action), Number(delay.value));
   }
 
   static #buildPagePath(toParam) {
@@ -468,6 +529,9 @@ export default class Hologram {
 
       case "click":
         return ClickEvent;
+
+      case "input":
+        return InputEvent;
 
       case "mousemove":
         return MouseEvent;
@@ -657,6 +721,8 @@ export default class Hologram {
 
     Hologram.prefetchedPages.clear();
 
+    Hologram.queueActionsFromServerInits();
+
     window.requestAnimationFrame(() => {
       $.render();
 
@@ -666,6 +732,8 @@ export default class Hologram {
       }
 
       GlobalRegistry.set("mountedPage", Interpreter.inspect($.#pageModule));
+
+      Hologram.#scheduleQueuedInitActions();
     });
   }
 
@@ -733,6 +801,14 @@ export default class Hologram {
     );
 
     sessionStorage.setItem($.#historyId, serializedPageSnapshot);
+  }
+
+  static #scheduleQueuedInitActions() {
+    const actions = InitActionQueue.dequeueAll();
+
+    actions.forEach((action) => {
+      Hologram.scheduleAction(action);
+    });
   }
 }
 

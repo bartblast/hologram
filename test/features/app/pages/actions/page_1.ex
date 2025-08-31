@@ -1,11 +1,12 @@
-defmodule HologramFeatureTests.ActionsPage do
+defmodule HologramFeatureTests.Actions.Page1 do
   use Hologram.Page
-  alias HologramFeatureTests.Components.Operations.Component1
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
-  route "/actions"
+  alias HologramFeatureTests.Components.Operations.Component1
+
+  route "/actions/1"
 
   layout HologramFeatureTests.Components.ActionsLayout
 

@@ -28,8 +28,8 @@ defmodule Hologram.CompilerTest do
     build_dir = Path.join(test_tmp_dir, "build")
 
     clean_dir(test_tmp_dir)
-    File.mkdir!(assets_dir)
-    File.mkdir!(build_dir)
+    File.mkdir_p!(assets_dir)
+    File.mkdir_p!(build_dir)
 
     lib_package_json_path = Path.join(@assets_dir, "package.json")
     fixture_package_json_path = Path.join(assets_dir, "package.json")
@@ -233,41 +233,45 @@ defmodule Hologram.CompilerTest do
              }
            ]
 
-    expected_bundle_js_1 = """
-    (()=>{var o=111;})();
-    //# sourceMappingURL=page-936cdd48d87d4ecd5720ad33b7fb4b7c.js.map
-    """
+    expected_bundle_js_1 =
+      normalize_newlines("""
+      (()=>{var o=111;})();
+      //# sourceMappingURL=page-936cdd48d87d4ecd5720ad33b7fb4b7c.js.map
+      """)
 
     assert File.read!(expected_static_bundle_path_1) == expected_bundle_js_1
 
-    expected_bundle_js_2 = """
-    (()=>{var o=222;})();
-    //# sourceMappingURL=runtime-52169d07278b312ea39145c3b94c0203.js.map
-    """
+    expected_bundle_js_2 =
+      normalize_newlines("""
+      (()=>{var o=222;})();
+      //# sourceMappingURL=runtime-52169d07278b312ea39145c3b94c0203.js.map
+      """)
 
     assert File.read!(expected_static_bundle_path_2) == expected_bundle_js_2
 
-    expected_source_map_js_1 = """
-    {
-      "version": 3,
-      "sources": ["MyPage.entry.js"],
-      "sourcesContent": ["export const myVar = 111;\\n"],
-      "mappings": "MAAO,IAAMA,EAAQ",
-      "names": ["myVar"]
-    }
-    """
+    expected_source_map_js_1 =
+      normalize_newlines("""
+      {
+        "version": 3,
+        "sources": ["MyPage.entry.js"],
+        "sourcesContent": ["export const myVar = 111;\\n"],
+        "mappings": "MAAO,IAAMA,EAAQ",
+        "names": ["myVar"]
+      }
+      """)
 
     assert File.read!(expected_static_source_map_path_1) == expected_source_map_js_1
 
-    expected_source_map_js_2 = """
-    {
-      "version": 3,
-      "sources": ["runtime.entry.js"],
-      "sourcesContent": ["export const myVar = 222;\\n"],
-      "mappings": "MAAO,IAAMA,EAAQ",
-      "names": ["myVar"]
-    }
-    """
+    expected_source_map_js_2 =
+      normalize_newlines("""
+      {
+        "version": 3,
+        "sources": ["runtime.entry.js"],
+        "sourcesContent": ["export const myVar = 222;\\n"],
+        "mappings": "MAAO,IAAMA,EAAQ",
+        "names": ["myVar"]
+      }
+      """)
 
     assert File.read!(expected_static_source_map_path_2) == expected_source_map_js_2
   end
@@ -302,22 +306,24 @@ defmodule Hologram.CompilerTest do
                static_source_map_path: expected_static_source_map_path
              }
 
-      expected_bundle_js = """
-      (()=>{var o=123;})();
-      //# sourceMappingURL=my_bundle_name-76f1f092f95a34da067e35caad5e3317.js.map
-      """
+      expected_bundle_js =
+        normalize_newlines("""
+        (()=>{var o=123;})();
+        //# sourceMappingURL=my_bundle_name-76f1f092f95a34da067e35caad5e3317.js.map
+        """)
 
       assert File.read!(expected_static_bundle_path) == expected_bundle_js
 
-      expected_source_map_js = """
-      {
-        "version": 3,
-        "sources": ["MyPage.entry.js"],
-        "sourcesContent": ["export const myVar = 123;\\n"],
-        "mappings": "MAAO,IAAMA,EAAQ",
-        "names": ["myVar"]
-      }
-      """
+      expected_source_map_js =
+        normalize_newlines("""
+        {
+          "version": 3,
+          "sources": ["MyPage.entry.js"],
+          "sourcesContent": ["export const myVar = 123;\\n"],
+          "mappings": "MAAO,IAAMA,EAAQ",
+          "names": ["myVar"]
+        }
+        """)
 
       assert File.read!(expected_static_source_map_path) == expected_source_map_js
     end
@@ -344,6 +350,42 @@ defmodule Hologram.CompilerTest do
                      bundle(MyPage, entry_file_path, "my_bundle_name", opts)
                    end
 
+      assert File.ls!(opts[:static_dir]) == []
+    end
+
+    test "raises when generated bundle exceeds :max_bundle_size and does not write static files" do
+      tmp_dir =
+        Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_exceeds_max_size"])
+
+      opts = [
+        esbuild_bin_path: Path.join([@root_dir, "assets", "node_modules", ".bin", "esbuild"]),
+        static_dir: Path.join(tmp_dir, "static"),
+        tmp_dir: tmp_dir
+      ]
+
+      clean_dir(tmp_dir)
+      File.mkdir!(opts[:static_dir])
+
+      entry_file_path = Path.join(tmp_dir, "MyPage.entry.js")
+      File.write!(entry_file_path, "export const myVar = 123;\n")
+
+      original_max = Application.get_env(:hologram, :max_bundle_size)
+      Application.put_env(:hologram, :max_bundle_size, 1)
+
+      on_exit(fn ->
+        if is_nil(original_max) do
+          Application.delete_env(:hologram, :max_bundle_size)
+        else
+          Application.put_env(:hologram, :max_bundle_size, original_max)
+        end
+      end)
+
+      exception =
+        assert_raise RuntimeError, fn ->
+          bundle(MyPage, entry_file_path, "my_bundle_name", opts)
+        end
+
+      assert exception.message =~ "early warning system"
       assert File.ls!(opts[:static_dir]) == []
     end
   end
@@ -429,28 +471,6 @@ defmodule Hologram.CompilerTest do
     assert Enum.sort(result.added_modules) == [:module_2, :module_4]
     assert Enum.sort(result.removed_modules) == [:module_5, :module_7]
     assert Enum.sort(result.edited_modules) == [:module_3, :module_6]
-  end
-
-  describe "find_npm_executable!/0" do
-    test "finds npm executable" do
-      result = find_npm_executable!()
-
-      assert is_binary(result)
-      assert File.exists?(result)
-    end
-
-    test "raises RuntimeError when npm is not found" do
-      # Temporarily modify PATH to exclude npm
-      original_path = System.get_env("PATH")
-      System.put_env("PATH", "/nonexistent/path")
-
-      assert_raise RuntimeError, "npm executable not found in PATH", fn ->
-        find_npm_executable!()
-      end
-
-      # Restore original PATH
-      System.put_env("PATH", original_path)
-    end
   end
 
   describe "format_files/2" do

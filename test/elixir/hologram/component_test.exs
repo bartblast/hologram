@@ -11,6 +11,7 @@ defmodule Hologram.ComponentTest do
   alias Hologram.Test.Fixtures.Component.Module2
   alias Hologram.Test.Fixtures.Component.Module3
   alias Hologram.Test.Fixtures.Component.Module4
+  alias Hologram.Test.Fixtures.Component.Module5
 
   test "__is_hologram_component__/0" do
     assert Module1.__is_hologram_component__()
@@ -48,119 +49,199 @@ defmodule Hologram.ComponentTest do
     end
   end
 
-  describe "maybe_define_template_fun/1" do
+  describe "maybe_register_colocated_template_markup/1" do
     test "valid template path" do
-      template_path = "#{@fixtures_dir}/template/template_1.holo"
+      template_path = "#{@fixtures_dir}/component/template_7.holo"
 
-      assert {:__block__, [],
-              [
-                {:@, [{:context, Component} | _imports_1],
-                 [{:impl, [context: Component], [Component]}]},
-                {:def, [{:context, Component} | _imports_2],
-                 [
-                   {:template, [context: Component], Component},
-                   [do: {:sigil_HOLO, [], ["My template 1", []]}]
-                 ]}
-              ]} = maybe_define_template_fun(template_path, Component)
+      assert maybe_register_colocated_template_markup(template_path) ==
+               {:@, [context: Hologram.Component, imports: [{1, Kernel}]],
+                [
+                  {:__colocated_template_markup__, [context: Hologram.Component],
+                   ["My template 7"]}
+                ]}
     end
 
     test "invalid template path" do
-      refute maybe_define_template_fun("/my_invalid_template_path.holo", Component)
+      refute maybe_register_colocated_template_markup("/my_invalid_template_path.holo")
     end
   end
 
   describe "put_action/2, component struct" do
     test "name" do
-      assert put_action(%Component{}, :my_action) == %Component{
+      result = put_action(%Component{}, :my_action)
+
+      assert result == %Component{
                next_action: %Action{name: :my_action, params: %{}, target: nil}
              }
     end
 
     test "spec: name" do
-      assert put_action(%Component{}, name: :my_action) == %Component{
+      result = put_action(%Component{}, name: :my_action)
+
+      assert result == %Component{
                next_action: %Action{name: :my_action, params: %{}, target: nil}
              }
     end
 
     test "spec: params" do
-      assert put_action(%Component{}, params: [a: 1, b: 2]) == %Component{
+      result = put_action(%Component{}, params: [a: 1, b: 2])
+
+      assert result == %Component{
                next_action: %Action{name: nil, params: %{a: 1, b: 2}, target: nil}
              }
     end
 
     test "spec: target" do
-      assert put_action(%Component{}, target: "my_target") == %Component{
+      result = put_action(%Component{}, target: "my_target")
+
+      assert result == %Component{
                next_action: %Action{name: nil, target: "my_target", params: %{}}
+             }
+    end
+
+    test "spec: delay" do
+      result = put_action(%Component{}, delay: 500)
+
+      assert result == %Component{
+               next_action: %Action{name: nil, params: %{}, target: nil, delay: 500}
+             }
+    end
+
+    test "spec: name, params, target, delay" do
+      result =
+        put_action(%Component{},
+          name: :my_action,
+          params: [a: 1, b: 2],
+          target: "my_target",
+          delay: 500
+        )
+
+      assert result == %Component{
+               next_action: %Action{
+                 name: :my_action,
+                 params: %{a: 1, b: 2},
+                 target: "my_target",
+                 delay: 500
+               }
              }
     end
   end
 
   describe "put_action/2, server struct" do
     test "name" do
-      assert put_action(%Server{}, :my_action) == %Server{
+      result = put_action(%Server{}, :my_action)
+
+      assert result == %Server{
                next_action: %Action{name: :my_action, params: %{}, target: nil}
              }
     end
 
     test "spec: name" do
-      assert put_action(%Server{}, name: :my_action) == %Server{
+      result = put_action(%Server{}, name: :my_action)
+
+      assert result == %Server{
                next_action: %Action{name: :my_action, params: %{}, target: nil}
              }
     end
 
     test "spec: params" do
-      assert put_action(%Server{}, params: [a: 1, b: 2]) == %Server{
+      result = put_action(%Server{}, params: [a: 1, b: 2])
+
+      assert result == %Server{
                next_action: %Action{name: nil, params: %{a: 1, b: 2}, target: nil}
              }
     end
 
     test "spec: target" do
-      assert put_action(%Server{}, target: "my_target") == %Server{
+      result = put_action(%Server{}, target: "my_target")
+
+      assert result == %Server{
                next_action: %Action{name: nil, target: "my_target", params: %{}}
+             }
+    end
+
+    test "spec: delay" do
+      result = put_action(%Server{}, delay: 750)
+
+      assert result == %Server{
+               next_action: %Action{name: nil, params: %{}, target: nil, delay: 750}
+             }
+    end
+
+    test "spec: name, params, target, delay" do
+      result =
+        put_action(%Server{},
+          name: :my_action,
+          params: [a: 1, b: 2],
+          target: "my_target",
+          delay: 750
+        )
+
+      assert result == %Server{
+               next_action: %Action{
+                 name: :my_action,
+                 params: %{a: 1, b: 2},
+                 target: "my_target",
+                 delay: 750
+               }
              }
     end
   end
 
   test "put_action/3, component struct" do
-    assert put_action(%Component{}, :my_action, a: 1, b: 2) == %Component{
+    result = put_action(%Component{}, :my_action, a: 1, b: 2)
+
+    assert result == %Component{
              next_action: %Action{name: :my_action, params: %{a: 1, b: 2}, target: nil}
            }
   end
 
   test "put_action/3, server struct" do
-    assert put_action(%Server{}, :my_action, a: 1, b: 2) == %Server{
+    result = put_action(%Server{}, :my_action, a: 1, b: 2)
+
+    assert result == %Server{
              next_action: %Action{name: :my_action, params: %{a: 1, b: 2}, target: nil}
            }
   end
 
   describe "put_command/2" do
     test "name" do
-      assert put_command(%Component{}, :my_command) == %Component{
+      result = put_command(%Component{}, :my_command)
+
+      assert result == %Component{
                next_command: %Command{name: :my_command, params: %{}, target: nil}
              }
     end
 
     test "spec: name" do
-      assert put_command(%Component{}, name: :my_command) == %Component{
+      result = put_command(%Component{}, name: :my_command)
+
+      assert result == %Component{
                next_command: %Command{name: :my_command, params: %{}, target: nil}
              }
     end
 
     test "spec: params" do
-      assert put_command(%Component{}, params: [a: 1, b: 2]) == %Component{
+      result = put_command(%Component{}, params: [a: 1, b: 2])
+
+      assert result == %Component{
                next_command: %Command{name: nil, params: %{a: 1, b: 2}, target: nil}
              }
     end
 
     test "spec: target" do
-      assert put_command(%Component{}, target: "my_target") == %Component{
+      result = put_command(%Component{}, target: "my_target")
+
+      assert result == %Component{
                next_command: %Command{name: nil, target: "my_target", params: %{}}
              }
     end
   end
 
   test "put_command/3" do
-    assert put_command(%Component{}, :my_command, a: 1, b: 2) == %Component{
+    result = put_command(%Component{}, :my_command, a: 1, b: 2)
+
+    assert result == %Component{
              next_command: %Command{name: :my_command, params: %{a: 1, b: 2}, target: nil}
            }
   end
@@ -203,27 +284,26 @@ defmodule Hologram.ComponentTest do
 
   describe "put_state/3" do
     test "non-nested path" do
-      component = %Component{state: %{a: 1}}
+      component = %Component{state: %{a: 1, b: 2}}
+      result = put_state(component, :b, 3)
 
-      assert put_state(component, :b, 2) == %Component{
-               state: %{a: 1, b: 2}
+      assert result == %Component{
+               state: %{a: 1, b: 3}
              }
     end
 
-    test "nested path, key exists" do
-      component = %Component{state: %{a: 1, b: %{d: 4, e: %{g: 6, h: 7}, f: 5}, c: 3}}
+    test "nested path, map" do
+      component = %Component{state: %{a: 1, b: %{c: 2, d: 3}}}
+      result = put_state(component, [:b, :d], 4)
 
-      assert put_state(component, [:b, :e, :g], 123) == %Component{
-               state: %{a: 1, b: %{d: 4, e: %{g: 123, h: 7}, f: 5}, c: 3}
-             }
+      assert result == %Component{state: %{a: 1, b: %{c: 2, d: 4}}}
     end
 
-    test "nested path, key doesn't exist" do
-      component = %Component{state: %{a: 1, b: %{d: 4, e: %{g: 6, h: 7}, f: 5}, c: 3}}
+    test "nested path, struct" do
+      component = %Component{state: %{a: 1, b: %Module5{x: 2, y: 3}}}
+      result = put_state(component, [:b, :y], 4)
 
-      assert put_state(component, [:b, :e, :i], 123) == %Component{
-               state: %{a: 1, b: %{d: 4, e: %{g: 6, h: 7, i: 123}, f: 5}, c: 3}
-             }
+      assert result == %Component{state: %{a: 1, b: %Module5{x: 2, y: 4}}}
     end
   end
 
@@ -233,7 +313,12 @@ defmodule Hologram.ComponentTest do
     end
 
     test "file (colocated)" do
-      assert Module3.template().(%{}) == [text: "Module3 template"]
+      assert Module3.template().(%{}) == [
+               {:text, "Module3 template\n"},
+               {:component, Hologram.UI.Link,
+                [{"to", [expression: {Hologram.Test.Fixtures.Component.Module6}]}],
+                [text: "Module6"]}
+             ]
     end
   end
 end

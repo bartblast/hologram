@@ -82,19 +82,24 @@ defmodule Hologram.Page do
 
         defoverridable init: 3
       end,
-      Component.maybe_define_template_fun(template_path, __MODULE__),
+      Component.maybe_register_colocated_template_markup(template_path),
       Page.register_params_accumulator()
     ]
   end
 
-  defmacro __before_compile__(_env) do
-    quote do
-      @doc """
-      Returns the list of param definitions for the compiled page.
-      """
-      @spec __params__() :: list({atom, atom, keyword})
-      def __params__, do: Enum.reverse(@__params__)
-    end
+  defmacro __before_compile__(env) do
+    template_clause = Component.maybe_build_colocated_template_clause(env, Page)
+
+    params_clause =
+      quote do
+        @doc """
+        Returns the list of param definitions for the compiled page.
+        """
+        @spec __params__() :: list({atom, atom, keyword})
+        def __params__, do: Enum.reverse(@__params__)
+      end
+
+    [template_clause, params_clause]
   end
 
   @doc """

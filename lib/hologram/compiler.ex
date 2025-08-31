@@ -12,6 +12,8 @@ defmodule Hologram.Compiler do
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
 
+  @windows_exec_suffixes [".bat", ".cmd", ".exe"]
+
   @doc """
   Builds the call graph of all modules in the project.
   """
@@ -161,7 +163,7 @@ defmodule Hologram.Compiler do
   def build_runtime_js(runtime_mfas, ir_plt, js_dir) do
     erlang_function_defs =
       runtime_mfas
-      |> render_erlang_function_defs("#{js_dir}/erlang")
+      |> render_erlang_function_defs(Path.join(js_dir, "erlang"))
       |> render_block()
 
     elixir_function_defs =
@@ -230,13 +232,16 @@ defmodule Hologram.Compiler do
       "--target=es2021"
     ]
 
-    {_exit_msg, exit_status} = System.cmd(opts[:esbuild_bin_path], esbuild_cmd, parallelism: true)
+    {_exit_msg, exit_status} =
+      system_cmd_cross_platform(opts[:esbuild_bin_path], esbuild_cmd, parallelism: true)
 
     if exit_status != 0 do
       raise RuntimeError,
         message:
           "esbuild bundler failed for entry file: #{entry_file_path} (probably there were JavaScript syntax errors)"
     end
+
+    ensure_bundle_within_size_limit!(entry_name, output_bundle_path)
 
     digest =
       output_bundle_path
@@ -336,9 +341,18 @@ defmodule Hologram.Compiler do
           {Collectable.t(), exit_status :: non_neg_integer()}
   # sobelow_skip ["CI.System"]
   def format_files(file_paths, opts) do
-    cmd_args = ["format", "--write" | file_paths]
-    cmd_opts = [cd: opts[:assets_dir], parallelism: true]
-    {exit_msg, exit_status} = System.cmd(opts[:formatter_bin_path], cmd_args, cmd_opts)
+    cmd_args = [
+      "format",
+      "--write",
+      # Effectively disable the size check (1 GB)
+      "--files-max-size=#{1024 * 1024 * 1024}"
+      | file_paths
+    ]
+    
+    cmd_opts = [cd: opts[:assets_dir], parallelism: true, stderr_to_stdout: true]
+
+    {exit_msg, exit_status} =
+      system_cmd_cross_platform(opts[:formatter_bin_path], cmd_args, cmd_opts)
 
     if exit_status != 0 do
       raise RuntimeError,
@@ -363,9 +377,8 @@ defmodule Hologram.Compiler do
   @spec install_js_deps(T.file_path(), T.file_path()) :: :ok
   # sobelow_skip ["CI.System"]
   def install_js_deps(assets_dir, build_dir) do
-    npm_executable = find_npm_executable!()
     opts = [cd: assets_dir, into: IO.stream(:stdio, :line)]
-    {_result, exit_status} = System.cmd(npm_executable, ["install"], opts)
+    {_result, exit_status} = system_cmd_cross_platform("npm", ["install"], opts)
 
     if exit_status != 0 do
       raise RuntimeError, message: "npm install command failed"
@@ -527,6 +540,26 @@ defmodule Hologram.Compiler do
     entry_file_path
   end
 
+  defp ensure_bundle_within_size_limit!(entry_name, bundle_path) do
+    max_bundle_size = Application.get_env(:hologram, :max_bundle_size, 1024 * 1024)
+    bundle_size = File.stat!(bundle_path).size
+
+    if bundle_size > max_bundle_size do
+      raise RuntimeError,
+        message: """
+        Generated JavaScript bundle '#{entry_name}' is #{bundle_size} bytes, which exceeds the configured maximum of #{max_bundle_size} bytes.
+
+        This limit acts as an early warning system to surface abnormally large bundles before they reach your app (e.g., accidentally pulling in too many modules or dependencies).
+
+        You can temporarily increase this limit by setting the [:hologram, :max_bundle_size] config value (bytes). For example, in your config file add:
+
+            config :hologram, max_bundle_size: 2 * 1024 * 1024
+
+        Please report this by opening a GitHub issue (https://github.com/bartblast/hologram/issues) and include a minimal public repository that reproduces the problem so we can investigate.\
+        """
+    end
+  end
+
   defp filter_elixir_mfas(mfas) do
     Enum.filter(mfas, fn {module, _function, _arity} -> Reflection.elixir_module?(module) end)
   end
@@ -535,11 +568,26 @@ defmodule Hologram.Compiler do
     Enum.filter(mfas, fn {module, _function, _arity} -> Reflection.erlang_module?(module) end)
   end
 
+  defp find_windows_wrapper(explicit_command_path) do
+    @windows_exec_suffixes
+    |> Enum.map(&(explicit_command_path <> &1))
+    |> Enum.find(&File.exists?/1)
+  end
+
   defp get_package_json_digest(assets_dir) do
     assets_dir
     |> Path.join("package.json")
     |> File.read!()
     |> CryptographicUtils.digest(:sha256, :binary)
+  end
+
+  defp has_windows_exec_ext?(path) do
+    ext =
+      path
+      |> Path.extname()
+      |> String.downcase()
+
+    ext in @windows_exec_suffixes
   end
 
   defp rebuild_ir_plt_entry!(ir_plt, module) do
@@ -596,17 +644,65 @@ defmodule Hologram.Compiler do
     |> Enum.join("\n\n")
   end
 
-  @doc """
-  Finds the npm executable path.
-  """
-  @spec find_npm_executable!() :: String.t()
-  def find_npm_executable! do
-    case System.find_executable("npm") do
-      nil ->
-        raise RuntimeError, message: "npm executable not found in PATH"
+  defp resolve_command_path!(command_name_or_path, windows?) do
+    has_separator? = String.contains?(command_name_or_path, ["/", "\\"])
 
-      npm_path ->
-        npm_path
+    if has_separator? do
+      resolve_explicit_command_path!(command_name_or_path, windows?)
+    else
+      case System.find_executable(command_name_or_path) do
+        nil ->
+          raise RuntimeError,
+            message: "executable not found in PATH: #{command_name_or_path}"
+
+        resolved_command_path ->
+          resolved_command_path
+      end
+    end
+  end
+
+  defp resolve_explicit_command_path!(explicit_command_path, true) do
+    if has_windows_exec_ext?(explicit_command_path) and File.exists?(explicit_command_path) do
+      explicit_command_path
+    else
+      resolve_windows_executable_path!(explicit_command_path)
+    end
+  end
+
+  defp resolve_explicit_command_path!(explicit_command_path, false) do
+    if File.exists?(explicit_command_path) do
+      explicit_command_path
+    else
+      raise RuntimeError, message: "executable not found at #{explicit_command_path}"
+    end
+  end
+
+  defp resolve_windows_executable_path!(explicit_command_path) do
+    if resolved_path = find_windows_wrapper(explicit_command_path) do
+      resolved_path
+    else
+      if File.exists?(explicit_command_path) do
+        explicit_command_path
+      else
+        raise RuntimeError, message: "executable not found at #{explicit_command_path}"
+      end
+    end
+  end
+
+  # Executes the given command cross-platform.
+  # Accepts either a bare command name (resolved via PATH) or an executable file path.
+  # On Windows, .cmd/.bat wrappers must be executed via "cmd /c".
+  # sobelow_skip ["CI.System"]
+  # credo:disable-for-lines:11 Credo.Check.Design.DuplicatedCode
+  defp system_cmd_cross_platform(command_name_or_path, args, opts) do
+    windows? = match?({:win32, _name}, :os.type())
+
+    resolved_command_path = resolve_command_path!(command_name_or_path, windows?)
+
+    if windows? and String.match?(resolved_command_path, ~r/\.(cmd|bat)$/i) do
+      System.cmd("cmd", ["/c", resolved_command_path | args], opts)
+    else
+      System.cmd(resolved_command_path, args, opts)
     end
   end
 end

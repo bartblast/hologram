@@ -1,4 +1,6 @@
 defmodule Hologram.Runtime.PlugConnUtils do
+  @moduledoc false
+
   alias Hologram.Runtime.Cookie
 
   @doc """

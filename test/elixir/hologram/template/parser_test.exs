@@ -35,8 +35,11 @@ defmodule Hologram.Template.ParserTest do
     "?"
   ]
 
-  defp test_syntax_error_msg(markup, msg) do
-    assert_raise TemplateSyntaxError, ~r/#{Regex.escape(msg)}/s, fn ->
+  defp test_syntax_error_msg(markup, expected_msg) do
+    normalized_expected_msg = normalize_newlines(expected_msg)
+    regex = ~r/#{Regex.escape(normalized_expected_msg)}/s
+
+    assert_raise TemplateSyntaxError, regex, fn ->
       parse_markup(markup)
     end
   end
@@ -1130,12 +1133,13 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "escaped curly brackets' processed tokens are accumulated in escaped form" do
-      msg = """
-      aaa\\{bbb\\}ccc<div
-                       ^\
-      """
+      expected_msg =
+        normalize_newlines("""
+        aaa\\{bbb\\}ccc<div
+                         ^\
+        """)
 
-      assert_raise TemplateSyntaxError, ~r/.+#{Regex.escape(msg)}.+/s, fn ->
+      assert_raise TemplateSyntaxError, ~r/.+#{Regex.escape(expected_msg)}.+/s, fn ->
         parse_markup("aaa\\{bbb\\}ccc<div")
       end
     end
@@ -1407,153 +1411,163 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "unescaped '<' character inside text node" do
-      msg = """
-      Reason:
-      Unescaped '<' character inside text node.
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unescaped '<' character inside text node.
 
-      Hint:
-      To escape use HTML entity: '&lt;'.
+        Hint:
+        To escape use HTML entity: '&lt;'.
 
-      abc < xyz
-          ^
-      """
+        abc < xyz
+            ^
+        """)
 
-      test_syntax_error_msg("abc < xyz", msg)
+      test_syntax_error_msg("abc < xyz", expected_msg)
     end
 
     test "unescaped '>' character inside text node" do
-      msg = """
-      Reason:
-      Unescaped '>' character inside text node.
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unescaped '>' character inside text node.
 
-      Hint:
-      To escape use HTML entity: '&gt;'.
+        Hint:
+        To escape use HTML entity: '&gt;'.
 
-      abc > xyz
-          ^
-      """
+        abc > xyz
+            ^
+        """)
 
-      test_syntax_error_msg("abc > xyz", msg)
+      test_syntax_error_msg("abc > xyz", expected_msg)
     end
 
     test "expression attribute value inside raw block" do
-      msg = """
-      Reason:
-      Expression attribute value inside raw block detected.
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Expression attribute value inside raw block detected.
 
-      Hint:
-      Either wrap the attribute value with double quotes or remove the parent raw block".
+        Hint:
+        Either wrap the attribute value with double quotes or remove the parent raw block".
 
-      {%raw}<div id={@abc}></div>{/raw}
-                    ^
-      """
+        {%raw}<div id={@abc}></div>{/raw}
+                      ^
+        """)
 
-      test_syntax_error_msg("{%raw}<div id={@abc}></div>{/raw}", msg)
+      test_syntax_error_msg("{%raw}<div id={@abc}></div>{/raw}", expected_msg)
     end
 
     test "expression property value inside raw block" do
-      msg = """
-      Reason:
-      Expression property value inside raw block detected.
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Expression property value inside raw block detected.
 
-      Hint:
-      Either wrap the property value with double quotes or remove the parent raw block".
+        Hint:
+        Either wrap the property value with double quotes or remove the parent raw block".
 
-      {%raw}<Aa.Bb cid={@abc}></Aa.Bb>{/raw}
-                       ^
-      """
+        {%raw}<Aa.Bb cid={@abc}></Aa.Bb>{/raw}
+                         ^
+        """)
 
-      test_syntax_error_msg("{%raw}<Aa.Bb cid={@abc}></Aa.Bb>{/raw}", msg)
+      test_syntax_error_msg("{%raw}<Aa.Bb cid={@abc}></Aa.Bb>{/raw}", expected_msg)
     end
 
     test "unclosed start tag" do
-      msg = """
-      Reason:
-      Unclosed start tag.
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed start tag.
 
-      Hint:
-      Close the start tag with '>' character.
+        Hint:
+        Close the start tag with '>' character.
 
-      <div
-          ^
-      """
+        <div
+            ^
+        """)
 
-      test_syntax_error_msg("<div", msg)
+      test_syntax_error_msg("<div", expected_msg)
     end
 
     test "unclosed public comment" do
-      msg = """
-      Reason:
-      Unclosed public comment.
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed public comment.
 
-      Hint:
-      Close the public comment with '-->' marker.
+        Hint:
+        Close the public comment with '-->' marker.
 
-      <!--
-          ^
-      """
+        <!--
+            ^
+        """)
 
-      test_syntax_error_msg("<!--", msg)
+      test_syntax_error_msg("<!--", expected_msg)
     end
 
     test "unclosed DOCTYPE declaration" do
-      msg = """
-      Reason:
-      Unclosed DOCTYPE declaration.
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unclosed DOCTYPE declaration.
 
-      Hint:
-      Close the DOCTYPE declaration with '>' character.
+        Hint:
+        Close the DOCTYPE declaration with '>' character.
 
-      <!DOCTYPE html
-                    ^
-      """
+        <!DOCTYPE html
+                      ^
+        """)
 
-      test_syntax_error_msg("<!DOCTYPE html", msg)
+      test_syntax_error_msg("<!DOCTYPE html", expected_msg)
     end
 
     test "'<!' symbol followed by a string other than 'DOCTYPE' (case insensitive)" do
-      msg = """
-      Reason:
-      Unescaped '<' character inside text node.
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unescaped '<' character inside text node.
 
-      Hint:
-      To escape use HTML entity: '&lt;'.
+        Hint:
+        To escape use HTML entity: '&lt;'.
 
-      <!abc html>
-      ^
-      """
+        <!abc html>
+        ^
+        """)
 
-      test_syntax_error_msg("<!abc html>", msg)
+      test_syntax_error_msg("<!abc html>", expected_msg)
     end
 
     test "'<!' symbol followed by a whitespace" do
-      msg = """
-      Reason:
-      Unescaped '<' character inside text node.
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Unescaped '<' character inside text node.
 
-      Hint:
-      To escape use HTML entity: '&lt;'.
+        Hint:
+        To escape use HTML entity: '&lt;'.
 
-      <! DOCTYPE html>
-      ^
-      """
+        <! DOCTYPE html>
+        ^
+        """)
 
-      test_syntax_error_msg("<! DOCTYPE html>", msg)
+      test_syntax_error_msg("<! DOCTYPE html>", expected_msg)
     end
 
     test "missing attribute name" do
-      msg = """
-      Reason:
-      Missing attribute name.
+      expected_msg =
+        normalize_newlines("""
+        Reason:
+        Missing attribute name.
 
-      Hint:
-      Specify the attribute name before the '=' character.
+        Hint:
+        Specify the attribute name before the '=' character.
 
-      <div ="abc">
-           ^
-      """
+        <div ="abc">
+             ^
+        """)
 
-      test_syntax_error_msg("<div =\"abc\">", msg)
+      test_syntax_error_msg("<div =\"abc\">", expected_msg)
     end
   end
 end

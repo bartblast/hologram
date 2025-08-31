@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
+import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Renderer from "./renderer.mjs";
 import Type from "./type.mjs";
@@ -31,6 +32,7 @@ export default class Operation {
       name: operation.name,
       params: operation.params,
       target: operation.target,
+      delay: operation.delay,
     });
   }
 
@@ -86,9 +88,28 @@ export default class Operation {
       this.#defaultTarget,
     );
 
-    const opStructBuilder = actionName ? Type.actionStruct : Type.commandStruct;
+    const delay = Interpreter.accessKeywordListElement(
+      specKeywordList,
+      Type.atom("delay"),
+      Type.integer(0),
+    );
 
-    return opStructBuilder({name: name, params: params, target: target});
+    if (actionName) {
+      return Type.actionStruct({
+        name: name,
+        params: params,
+        target: target,
+        delay: delay,
+      });
+    } else {
+      if (!Interpreter.isStrictlyEqual(delay, Type.integer(0))) {
+        throw new HologramInterpreterError(
+          "Command delay is not yet implemented in Hologram",
+        );
+      }
+
+      return Type.commandStruct({name: name, params: params, target: target});
+    }
   }
 
   // Example: $click={:my_action, a: 1, b: 2}
@@ -97,6 +118,7 @@ export default class Operation {
   #constructFromExpressionShorthandSyntaxSpec() {
     this.name = this.#specDom.data[0].data[1].data[0];
     this.target = this.#defaultTarget;
+    this.delay = Type.integer(0);
 
     const paramsKeywordList =
       this.#specDom.data[0].data[1].data[1] || Type.keywordList();
@@ -114,6 +136,7 @@ export default class Operation {
     this.name = Type.atom(nameText);
     this.params = Type.map([[Type.atom("event"), this.#eventParam]]);
     this.target = this.#defaultTarget;
+    this.delay = Type.integer(0);
   }
 
   // Example: $click="my_action"
@@ -125,6 +148,7 @@ export default class Operation {
     this.name = Type.atom(nameText);
     this.params = Type.map([[Type.atom("event"), this.#eventParam]]);
     this.target = this.#defaultTarget;
+    this.delay = Type.integer(0);
   }
 
   // Example: $click={action: :my_action, target: "my_target", params: %{a: 1, b: 2}}

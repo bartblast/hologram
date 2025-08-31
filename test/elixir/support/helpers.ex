@@ -7,6 +7,7 @@ defmodule Hologram.Test.Helpers do
   alias Hologram.Commons.ETS
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.ProcessUtils
+  alias Hologram.Commons.StringUtils
   alias Hologram.Compiler.AST
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.Encoder
@@ -20,6 +21,7 @@ defmodule Hologram.Test.Helpers do
   defdelegate ast(code), to: AST, as: :for_code
   defdelegate clean_dir(file_path), to: FileUtils, as: :recreate_dir
   defdelegate ir(code, context \\ %Context{}), to: IR, as: :for_code
+  defdelegate normalize_newlines(string), to: StringUtils
   defdelegate parsed_tags(markup), to: Parser, as: :parse_markup
 
   @doc """
@@ -180,6 +182,7 @@ defmodule Hologram.Test.Helpers do
     |> inspect()
     |> String.replace(["#", "<", ".", ">"], "")
     |> String.replace("Reference", "M")
+    |> StringUtils.prepend("Elixir.")
     # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     |> String.to_atom()
   end

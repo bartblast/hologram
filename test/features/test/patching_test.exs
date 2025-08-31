@@ -7,6 +7,7 @@ defmodule HologramFeatureTests.PatchingTest do
   alias HologramFeatureTests.Patching.Page2
   alias HologramFeatureTests.Patching.Page3
   alias HologramFeatureTests.Patching.Page4
+  alias HologramFeatureTests.Patching.Page5
 
   setup do
     current_max_wait_time = Application.fetch_env!(:wallaby, :max_wait_time)
@@ -17,43 +18,45 @@ defmodule HologramFeatureTests.PatchingTest do
     end)
   end
 
-  feature "root element attributes patching after action", %{session: session} do
-    session
-    |> visit(Page1)
-    |> refute_has(css("html[attr_1]"))
-    |> refute_has(css("html[attr_2]"))
-    |> click(button("Add root elem attr 2"))
-    |> refute_has(css("html[attr_1]"))
-    |> assert_has(css("html[attr_2='value_2a']"))
-    |> click(button("Add root elem attr 1"))
-    |> assert_has(css("html[attr_1='value_1a']"))
-    |> assert_has(css("html[attr_2='value_2a']"))
-    |> click(button("Change root elem attr 2"))
-    |> assert_has(css("html[attr_1='value_1a']"))
-    |> assert_has(css("html[attr_2='value_2b']"))
-    |> click(button("Change root elem attr 1"))
-    |> assert_has(css("html[attr_1='value_1b']"))
-    |> assert_has(css("html[attr_2='value_2b']"))
-    |> click(button("Remove root elem attr 2"))
-    |> assert_has(css("html[attr_1='value_1b']"))
-    |> refute_has(css("html[attr_2]"))
-    |> click(button("Remove root elem attr 1"))
-    |> refute_has(css("html[attr_1]"))
-    |> refute_has(css("html[attr_2]"))
-  end
+  describe "root element attributes patching" do
+    feature "after action", %{session: session} do
+      session
+      |> visit(Page1)
+      |> refute_has(css("html[attr_1]"))
+      |> refute_has(css("html[attr_2]"))
+      |> click(button("Add root elem attr 2"))
+      |> refute_has(css("html[attr_1]"))
+      |> assert_has(css("html[attr_2='value_2a']"))
+      |> click(button("Add root elem attr 1"))
+      |> assert_has(css("html[attr_1='value_1a']"))
+      |> assert_has(css("html[attr_2='value_2a']"))
+      |> click(button("Change root elem attr 2"))
+      |> assert_has(css("html[attr_1='value_1a']"))
+      |> assert_has(css("html[attr_2='value_2b']"))
+      |> click(button("Change root elem attr 1"))
+      |> assert_has(css("html[attr_1='value_1b']"))
+      |> assert_has(css("html[attr_2='value_2b']"))
+      |> click(button("Remove root elem attr 2"))
+      |> assert_has(css("html[attr_1='value_1b']"))
+      |> refute_has(css("html[attr_2]"))
+      |> click(button("Remove root elem attr 1"))
+      |> refute_has(css("html[attr_1]"))
+      |> refute_has(css("html[attr_2]"))
+    end
 
-  feature "root element attributes patching after navigation", %{session: session} do
-    session
-    |> visit(Page1)
-    |> click(button("Add root elem attr 1"))
-    |> click(button("Add root elem attr 2"))
-    |> assert_has(css("html[attr_1='value_1a']"))
-    |> assert_has(css("html[attr_2='value_2a']"))
-    |> click(link("Page 2 link"))
-    |> assert_page(Page2)
-    |> refute_has(css("html[attr_1]"))
-    |> refute_has(css("html[attr_2]"))
-    |> assert_has(css("html[attr_3='value_3']"))
+    feature "after navigation", %{session: session} do
+      session
+      |> visit(Page1)
+      |> click(button("Add root elem attr 1"))
+      |> click(button("Add root elem attr 2"))
+      |> assert_has(css("html[attr_1='value_1a']"))
+      |> assert_has(css("html[attr_2='value_2a']"))
+      |> click(link("Page 2 link"))
+      |> assert_page(Page2)
+      |> refute_has(css("html[attr_1]"))
+      |> refute_has(css("html[attr_2]"))
+      |> assert_has(css("html[attr_3='value_3']"))
+    end
   end
 
   describe "class attribute in root element patching" do
@@ -103,6 +106,96 @@ defmodule HologramFeatureTests.PatchingTest do
       |> refute_has(css("html[class]"))
       |> click(button("Change to class 2"))
       |> assert_has(css("html[class='my_class_2']"))
+    end
+  end
+
+  describe "form elements value patching" do
+    feature "text input value patching", %{session: session} do
+      # We're testing different combinations of specific user operations:
+      # 1) change programmatically to a non-empty value that is the same as the last programmatic value
+      # 2) change programmatically to a non-empty value that is different than the last programmatic value
+      # 3) change programmatically to an empty value when the last programmatic value was also empty
+      # 4) change programmatically to an empty value when the last programmatic value was not empty
+      # 5) change manually to a non-empty value that is the same as the last programmatic value
+      # 6) change manually to a non-empty value that is different than the last programmatic value
+      # 7) change manually to an empty value when the last programmatic value was also empty
+      # 8) change manually to an empty value when the last programmatic value was not empty
+
+      session
+      |> visit(Page5)
+      |> assert_input_value("#text_input", "initial text")
+      |> refute_has(css("#text_input[value]"))
+      # --- Setup A: establish baseline programmatic value
+      |> click(button("Update Text 1"))
+      |> assert_input_value("#text_input", "programmatic 1")
+      |> refute_has(css("#text_input[value]"))
+      # --- Group 1 (Cond 6): manual non-empty, different from last prog
+      |> fill_in(css("#text_input"), with: "manual 1")
+      |> assert_input_value("#text_input", "manual 1")
+      |> refute_has(css("#text_input[value]"))
+      # --- Group 2 (Cond 1): prog non-empty, same as last prog
+      |> click(button("Update Text 1"))
+      |> assert_input_value("#text_input", "programmatic 1")
+      |> refute_has(css("#text_input[value]"))
+      # --- Group 3 (Cond 2): prog non-empty, different from last prog
+      |> click(button("Update Text 2"))
+      |> assert_input_value("#text_input", "programmatic 2")
+      |> refute_has(css("#text_input[value]"))
+      # --- Setup B: switch to a different manual value
+      |> fill_in(css("#text_input"), with: "manual 2")
+      |> assert_input_value("#text_input", "manual 2")
+      |> refute_has(css("#text_input[value]"))
+      # --- Group 4 (Cond 5): manual non-empty, same as last prog
+      |> fill_in(css("#text_input"), with: "programmatic 2")
+      |> assert_input_value("#text_input", "programmatic 2")
+      |> refute_has(css("#text_input[value]"))
+      # --- Group 5 (Cond 4): prog empty, last prog was not empty
+      |> click(button("Clear State"))
+      |> assert_input_value("#text_input", "")
+      |> refute_has(css("#text_input[value]"))
+      # --- Setup C: switch to a different manual value
+      |> fill_in(css("#text_input"), with: "manual 3")
+      |> assert_input_value("#text_input", "manual 3")
+      |> refute_has(css("#text_input[value]"))
+      # --- Group 6 (Cond 7): manual empty, last prog was also empty
+      |> fill_in(css("#text_input"), with: "")
+      |> assert_input_value("#text_input", "")
+      |> refute_has(css("#text_input[value]"))
+      # --- Setup D: switch to a different manual value
+      |> fill_in(css("#text_input"), with: "manual 4")
+      |> assert_input_value("#text_input", "manual 4")
+      |> refute_has(css("#text_input[value]"))
+      # --- Group 7 (Cond 3): prog empty, last prog was also empty
+      |> click(button("Clear State"))
+      |> assert_input_value("#text_input", "")
+      |> refute_has(css("#text_input[value]"))
+      # --- Setup E: set non-empty programmatic value
+      |> click(button("Update Text 1"))
+      |> assert_input_value("#text_input", "programmatic 1")
+      |> refute_has(css("#text_input[value]"))
+      # --- Group 8 (Cond 8): manual empty, last prog was not empty
+      |> fill_in(css("#text_input"), with: "")
+      |> assert_input_value("#text_input", "")
+      |> refute_has(css("#text_input[value]"))
+    end
+
+    feature "email input value patching", %{session: session} do
+      session
+      |> visit(Page5)
+      |> refute_has(css("#email_input[value]"))
+      |> assert_input_value("#email_input", "initial email")
+      |> click(button("Update Email 1"))
+      |> refute_has(css("#email_input[value]"))
+      |> assert_input_value("#email_input", "updated email 1")
+      |> fill_in(css("#email_input"), with: "filled email")
+      |> refute_has(css("#email_input[value]"))
+      |> assert_input_value("#email_input", "filled email")
+      |> click(button("Update Email 2"))
+      |> refute_has(css("#email_input[value]"))
+      |> assert_input_value("#email_input", "updated email 2")
+      |> click(button("Clear State"))
+      |> refute_has(css("#email_input[value]"))
+      |> assert_input_value("#email_input", "")
     end
   end
 end

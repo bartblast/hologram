@@ -1,4 +1,6 @@
 defmodule Hologram.Server.Metadata do
+  @moduledoc false
+
   alias Hologram.Runtime.Cookie
   alias Hologram.Runtime.Session
 

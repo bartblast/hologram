@@ -1,6 +1,7 @@
 defmodule Hologram.ControllerTest do
   use Hologram.Test.BasicCase, async: false
 
+  import ExUnit.CaptureLog
   import Hologram.Controller
   import Hologram.Test.Stubs
   import Mox
@@ -9,6 +10,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Commons.ETS
   alias Hologram.Commons.SystemUtils
   alias Hologram.Runtime.Cookie
+  alias Hologram.Runtime.CSRFProtection
   alias Hologram.Test.Fixtures.Controller.Module1
   alias Hologram.Test.Fixtures.Controller.Module10
   alias Hologram.Test.Fixtures.Controller.Module2
@@ -19,6 +21,12 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Test.Fixtures.Controller.Module8
   alias Hologram.Test.Fixtures.Controller.Module9
 
+  @unmasked_csrf_token CSRFProtection.generate_unmasked_token()
+  @masked_csrf_token CSRFProtection.get_masked_token(@unmasked_csrf_token)
+
+  @csrf_token_session_key CSRFProtection.session_key()
+  @session %{@csrf_token_session_key => @unmasked_csrf_token}
+
   use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
   use_module_stub :page_digest_registry
@@ -26,11 +34,30 @@ defmodule Hologram.ControllerTest do
   setup :set_mox_global
 
   # Create a test connection with parsed JSON body_params (simulating what Plug.Parsers does)
-  defp conn_with_parsed_json(method, path, parsed_json, session \\ %{}) do
+  defp conn_with_parsed_json(method, path, parsed_json, session \\ @session) do
     method
     |> Plug.Test.conn(path, "")
     |> Plug.Test.init_test_session(session)
     |> Map.put(:body_params, %{"_json" => parsed_json})
+  end
+
+  defp execute_successful_command_request do
+    payload = %{
+      module: Module6,
+      name: :my_command_a,
+      params: %{},
+      target: "my_target_1"
+    }
+
+    parsed_json =
+      payload
+      |> serialize_payload()
+      |> Jason.decode!()
+
+    :post
+    |> conn_with_parsed_json("/hologram/command", parsed_json)
+    |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+    |> handle_command_request()
   end
 
   defp serialize_params(params) when params == %{} do
@@ -255,7 +282,7 @@ defmodule Hologram.ControllerTest do
   end
 
   describe "handle_command_request/1" do
-    test "updates Plug.Conn fields related to HTTP response and halts the pipeline" do
+    test "returns 403 when CSRF token is missing from header" do
       payload = %{
         module: Module6,
         name: :my_command_a,
@@ -271,6 +298,142 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json)
+        # No X-Csrf-Token header provided
+        |> handle_command_request()
+
+      assert conn.halted == true
+      assert conn.state == :sent
+      assert conn.status == 403
+      assert conn.resp_body == "Forbidden"
+    end
+
+    test "returns 403 when CSRF token header is empty" do
+      payload = %{
+        module: Module6,
+        name: :my_command_a,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", "")
+        |> handle_command_request()
+
+      assert conn.halted == true
+      assert conn.state == :sent
+      assert conn.status == 403
+      assert conn.resp_body == "Forbidden"
+    end
+
+    test "returns 403 when session CSRF token is missing" do
+      payload = %{
+        module: Module6,
+        name: :my_command_a,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json, %{})
+        # No session token, but provide header token
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
+        |> handle_command_request()
+
+      assert conn.halted == true
+      assert conn.state == :sent
+      assert conn.status == 403
+      assert conn.resp_body == "Forbidden"
+    end
+
+    test "returns 403 when CSRF token validation fails" do
+      payload = %{
+        module: Module6,
+        name: :my_command_a,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      {another_masked_token, _another_unmasked_token} = CSRFProtection.generate_tokens()
+
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        # Use a different masked token that won't validate against the session token
+        |> Plug.Conn.put_req_header("x-csrf-token", another_masked_token)
+        |> handle_command_request()
+
+      assert conn.halted == true
+      assert conn.state == :sent
+      assert conn.status == 403
+      assert conn.resp_body == "Forbidden"
+    end
+
+    test "logs warning when CSRF token validation fails" do
+      payload = %{
+        module: Module6,
+        name: :my_command_a,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      log =
+        capture_log(fn ->
+          :post
+          |> conn_with_parsed_json("/hologram/command", parsed_json)
+          # No X-Csrf-Token header provided
+          |> handle_command_request()
+        end)
+
+      assert log =~ "CSRF token validation failed"
+    end
+
+    test "processes command successfully when CSRF token validation succeeds" do
+      conn = execute_successful_command_request()
+
+      response = Jason.decode!(conn.resp_body)
+      assert response == [1, ~s'Type.atom("nil")']
+    end
+
+    test "updates Plug.Conn fields related to HTTP response and halts the pipeline when CSRF token validation succeeds" do
+      payload = %{
+        module: Module6,
+        name: :my_command_a,
+        params: %{},
+        target: "my_target_1"
+      }
+
+      parsed_json =
+        payload
+        |> serialize_payload()
+        |> Jason.decode!()
+
+      conn =
+        :post
+        |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
       assert conn.halted == true
@@ -301,22 +464,7 @@ defmodule Hologram.ControllerTest do
     # end
 
     test "command with next action nil" do
-      payload = %{
-        module: Module6,
-        name: :my_command_a,
-        params: %{},
-        target: "my_target_1"
-      }
-
-      parsed_json =
-        payload
-        |> serialize_payload()
-        |> Jason.decode!()
-
-      conn =
-        :post
-        |> conn_with_parsed_json("/hologram/command", parsed_json)
-        |> handle_command_request()
+      conn = execute_successful_command_request()
 
       response = Jason.decode!(conn.resp_body)
       assert response == [1, ~s'Type.atom("nil")']
@@ -338,13 +486,14 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
       response = Jason.decode!(conn.resp_body)
 
       assert response == [
                1,
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("my_action_b")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_b")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
              ]
     end
 
@@ -364,13 +513,14 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
       response = Jason.decode!(conn.resp_body)
 
       assert response == [
                1,
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("my_action_c")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_2")]])'
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("my_action_c")], [Type.atom("params"), Type.map([[Type.atom("c"), Type.integer(3n)]])], [Type.atom("target"), Type.bitstring("my_target_2")]])'
              ]
     end
 
@@ -390,6 +540,7 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
       response = Jason.decode!(conn.resp_body)
@@ -420,15 +571,17 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json, %{
-          "my_session_key" => :action_from_session
+          "my_session_key" => :action_from_session,
+          @csrf_token_session_key => @unmasked_csrf_token
         })
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
       response = Jason.decode!(conn.resp_body)
 
       assert response == [
                1,
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("action_from_session")], [Type.atom("params"), Type.map([])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("action_from_session")], [Type.atom("params"), Type.map([])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
              ]
     end
 
@@ -450,14 +603,17 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json)
-        |> Map.put(:req_headers, [{"cookie", "my_cookie_name=#{encoded_cookie_value}"}])
+        |> Map.put(:req_headers, [
+          {"cookie", "my_cookie_name=#{encoded_cookie_value}"},
+          {"x-csrf-token", @masked_csrf_token}
+        ])
         |> handle_command_request()
 
       response = Jason.decode!(conn.resp_body)
 
       assert response == [
                1,
-               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("name"), Type.atom("action_from_cookie")], [Type.atom("params"), Type.map([])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
+               ~s'Type.map([[Type.atom("__struct__"), Type.atom("Elixir.Hologram.Component.Action")], [Type.atom("delay"), Type.integer(0n)], [Type.atom("name"), Type.atom("action_from_cookie")], [Type.atom("params"), Type.map([])], [Type.atom("target"), Type.bitstring("my_target_1")]])'
              ]
     end
 
@@ -477,6 +633,7 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
       assert Map.has_key?(conn.private.plug_session, "my_session_key")
@@ -498,6 +655,7 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
       assert Map.has_key?(conn.resp_cookies, "my_cookie_name")
@@ -519,12 +677,14 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json)
+        |> Plug.Conn.put_req_header("x-csrf-token", @masked_csrf_token)
         |> handle_command_request()
 
       response = Jason.decode!(conn.resp_body)
       assert [1, _encoded_action] = response
 
-      assert Enum.empty?(conn.private.plug_session)
+      # Only the CSRF token should be in the session
+      assert Map.keys(conn.private.plug_session) == [@csrf_token_session_key]
     end
 
     test "command handler works correctly when no cookie changes are made" do
@@ -543,7 +703,10 @@ defmodule Hologram.ControllerTest do
       conn =
         :post
         |> conn_with_parsed_json("/hologram/command", parsed_json)
-        |> Map.put(:req_headers, [{"cookie", "my_cookie=cookie_value"}])
+        |> Map.put(:req_headers, [
+          {"cookie", "my_cookie=cookie_value"},
+          {"x-csrf-token", @masked_csrf_token}
+        ])
         |> handle_command_request()
 
       response = Jason.decode!(conn.resp_body)
@@ -642,6 +805,21 @@ defmodule Hologram.ControllerTest do
 
       # Initial pages include runtime script
       assert String.contains?(conn.resp_body, "hologram/runtime")
+    end
+
+    test "generates and includes CSRF token for initial page requests" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-runtime-controller-module4")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module4)
+
+      # Should have a CSRF token in the session
+      csrf_token = Plug.Conn.get_session(conn, @csrf_token_session_key)
+      assert is_binary(csrf_token)
+      assert byte_size(csrf_token) == 24
     end
 
     test "updates Plug.Conn session" do
@@ -771,6 +949,20 @@ defmodule Hologram.ControllerTest do
 
       # Initial pages include runtime script
       refute String.contains?(conn.resp_body, "hologram/runtime")
+    end
+
+    test "does not generate CSRF token for subsequent page requests" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
+
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram/page/Hologram.Test.Fixtures.Controller.Module4")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_subsequent_page_request(Module4)
+
+      # Should not have a CSRF token in the session for subsequent page requests
+      csrf_token = Plug.Conn.get_session(conn, @csrf_token_session_key)
+      assert is_nil(csrf_token)
     end
 
     test "updates Plug.Conn session" do

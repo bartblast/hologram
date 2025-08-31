@@ -13,43 +13,43 @@ defmodule HologramFeatureTests.CookiesTest do
 
   describe "page init cookies handling" do
     feature "write cookie with default settings", %{session: session} do
-      assert Browser.cookies(session) == []
+      assert cookies(session) == []
 
       visit(session, Page3)
 
-      assert Browser.cookies(session) == [
-               %{
-                 "domain" => "localhost",
-                 "httpOnly" => true,
-                 "name" => "cookie_key",
-                 "path" => "/",
-                 "sameSite" => "Lax",
-                 "secure" => true,
-                 "value" => Cookie.encode("cookie_value")
-               }
-             ]
+      expected_cookie = %{
+        "domain" => "localhost",
+        "httpOnly" => true,
+        "name" => "cookie_key",
+        "path" => "/",
+        "sameSite" => "Lax",
+        "secure" => true,
+        "value" => Cookie.encode("cookie_value")
+      }
+
+      assert [^expected_cookie, %{"name" => "phoenix_session"}] = cookies(session)
     end
 
     feature "write cookie with custom settings", %{session: session} do
-      assert Browser.cookies(session) == []
+      assert cookies(session) == []
 
       visit(session, Page4)
 
-      assert Browser.cookies(session) == [
-               %{
-                 "domain" => "localhost",
-                 "httpOnly" => false,
-                 "name" => "cookie_key",
-                 "path" => Page4.__route__(),
-                 "sameSite" => "Strict",
-                 "secure" => false,
-                 "value" => Cookie.encode("cookie_value")
-               }
-             ]
+      expected_cookie = %{
+        "domain" => "localhost",
+        "httpOnly" => false,
+        "name" => "cookie_key",
+        "path" => Page4.__route__(),
+        "sameSite" => "Strict",
+        "secure" => false,
+        "value" => Cookie.encode("cookie_value")
+      }
+
+      assert [^expected_cookie, %{"name" => "phoenix_session"}] = cookies(session)
     end
 
     feature "read string-encoded cookie", %{session: session} do
-      assert Browser.cookies(session) == []
+      assert cookies(session) == []
 
       session
       |> visit(EmptyPage)
@@ -59,7 +59,7 @@ defmodule HologramFeatureTests.CookiesTest do
     end
 
     feature "read Hologram-encoded cookie", %{session: session} do
-      assert Browser.cookies(session) == []
+      assert cookies(session) == []
 
       session
       |> visit(EmptyPage)
@@ -69,62 +69,62 @@ defmodule HologramFeatureTests.CookiesTest do
     end
 
     feature "delete cookie", %{session: session} do
-      assert Browser.cookies(session) == []
+      assert cookies(session) == []
 
       session
       |> visit(EmptyPage)
       |> Browser.set_cookie("cookie_key", "cookie_value")
       |> visit(Page5)
 
-      assert Browser.cookies(session) == []
+      assert [%{"name" => "phoenix_session"}] = cookies(session)
     end
   end
 
   describe "command cookies handling" do
     feature "write cookie with default settings", %{session: session} do
-      assert Browser.cookies(session) == []
+      assert cookies(session) == []
 
       session
       |> visit(Page6)
       |> click(button("Write cookie with default settings"))
       |> assert_text("command_executed? = true")
 
-      assert Browser.cookies(session) == [
-               %{
-                 "domain" => "localhost",
-                 "httpOnly" => true,
-                 "name" => "default_settings_cookie_key",
-                 "path" => "/",
-                 "sameSite" => "Lax",
-                 "secure" => true,
-                 "value" => Cookie.encode("default_settings_cookie_value")
-               }
-             ]
+      expected_cookie = %{
+        "domain" => "localhost",
+        "httpOnly" => true,
+        "name" => "default_settings_cookie_key",
+        "path" => "/",
+        "sameSite" => "Lax",
+        "secure" => true,
+        "value" => Cookie.encode("default_settings_cookie_value")
+      }
+
+      assert [^expected_cookie, %{"name" => "phoenix_session"}] = cookies(session)
     end
 
     feature "write cookie with custom settings", %{session: session} do
-      assert Browser.cookies(session) == []
+      assert cookies(session) == []
 
       session
       |> visit(Page6)
       |> click(button("Write cookie with custom settings"))
       |> assert_text("command_executed? = true")
 
-      assert Browser.cookies(session) == [
-               %{
-                 "domain" => "localhost",
-                 "httpOnly" => false,
-                 "name" => "custom_settings_cookie_key",
-                 "path" => Page6.__route__(),
-                 "sameSite" => "Strict",
-                 "secure" => false,
-                 "value" => Cookie.encode("custom_settings_cookie_value")
-               }
-             ]
+      expected_cookie = %{
+        "domain" => "localhost",
+        "httpOnly" => false,
+        "name" => "custom_settings_cookie_key",
+        "path" => Page6.__route__(),
+        "sameSite" => "Strict",
+        "secure" => false,
+        "value" => Cookie.encode("custom_settings_cookie_value")
+      }
+
+      assert [^expected_cookie, %{"name" => "phoenix_session"}] = cookies(session)
     end
 
     feature "read string-encoded cookie", %{session: session} do
-      assert Browser.cookies(session) == []
+      assert cookies(session) == []
 
       session
       |> visit(EmptyPage)
@@ -135,7 +135,7 @@ defmodule HologramFeatureTests.CookiesTest do
     end
 
     feature "read Hologram-encoded cookie", %{session: session} do
-      assert Browser.cookies(session) == []
+      assert cookies(session) == []
 
       session
       |> visit(EmptyPage)
@@ -146,7 +146,7 @@ defmodule HologramFeatureTests.CookiesTest do
     end
 
     feature "delete cookie", %{session: session} do
-      assert Browser.cookies(session) == []
+      assert cookies(session) == []
 
       session
       |> visit(EmptyPage)
@@ -155,7 +155,7 @@ defmodule HologramFeatureTests.CookiesTest do
       |> click(button("Delete cookie"))
       |> assert_text(~s'command_executed? = true')
 
-      assert Browser.cookies(session) == []
+      assert [%{"name" => "phoenix_session"}] = cookies(session)
     end
   end
 end
