@@ -2964,9 +2964,7 @@ describe("Renderer", () => {
       it("captured", () => {
         const clauses = ["dummy_clause_1", "dummy_clause_2", "dummy_clause_3"];
         const context = contextFixture({module: "Map"});
-
         const term = Type.functionCapture("Map", "put", 3, clauses, context);
-
         const result = stringifyForInterpolation(term);
 
         assert.equal(result, "&amp;Map.put/3");
@@ -3044,7 +3042,9 @@ describe("Renderer", () => {
     });
 
     it("when the escape param is false HTML entities are not escaped", () => {
-      const term = Type.functionCapture("Map", "put", 3);
+      const clauses = ["dummy_clause_1", "dummy_clause_2", "dummy_clause_3"];
+      const context = contextFixture({module: "Map"});
+      const term = Type.functionCapture("Map", "put", 3, clauses, context);
       const result = stringifyForInterpolation(term, false);
 
       assert.equal(result, "&Map.put/3");
