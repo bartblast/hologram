@@ -37,11 +37,6 @@ export default class Bitstring {
   // "Bitstrings are compared byte by byte, incomplete bytes are compared bit by bit."
   // Returns -1 if bitstring1 < bitstring2, 0 if equal, 1 if bitstring1 > bitstring2
   static compare(bitstring1, bitstring2) {
-    // Fast path: reference equality
-    if (bitstring1 === bitstring2) {
-      return 0;
-    }
-
     // Fast path: text-based comparison for identical text representations
     if (bitstring1.text !== null && bitstring2.text !== null) {
       if (
