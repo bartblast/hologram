@@ -511,43 +511,43 @@ export default class Interpreter {
     }
   }
 
-  // TODO: implement other types (e.g. ports, structs)
+  // TODO: use String.Chars (to_string/1) protocol for structs
   // TODO: implement opts param
   static inspect(term, opts = Type.keywordList()) {
+    // Cases ordered by expected frequency (most common first)
     switch (term.type) {
-      case "anonymous_function":
-        return Interpreter.#inspectAnonymousFunction(term, opts);
-
       case "atom":
         return Interpreter.#inspectAtom(term, opts);
-
-      case "bitstring":
-        return Interpreter.#inspectBitstring(term, opts);
-
-      case "float":
-        return Interpreter.#inspectFloat(term, opts);
-
-      case "integer":
-        return term.value.toString();
-
-      case "list":
-        return Interpreter.#inspectList(term, opts);
 
       case "map":
         return Interpreter.#inspectMap(term, opts);
 
-      case "pid":
-        return `#PID<${term.segments.join(".")}>`;
+      case "bitstring":
+        return Interpreter.#inspectBitstring(term, opts);
 
-      case "string":
-        return `"${term.value}"`;
+      case "list":
+        return Interpreter.#inspectList(term, opts);
+
+      case "integer":
+        return term.value.toString();
 
       case "tuple":
         return Interpreter.#inspectTuple(term, opts);
 
-      // TODO: remove when all types are supported
-      default:
-        return Serializer.serialize(term, "client");
+      case "anonymous_function":
+        return Interpreter.#inspectAnonymousFunction(term, opts);
+
+      case "float":
+        return Interpreter.#inspectFloat(term, opts);
+
+      case "pid":
+        return `#PID<${term.segments.join(".")}>`;
+
+      case "reference":
+        return `#Reference<${term.segments.join(".")}>`;
+
+      case "port":
+        return `#Port<${term.segments.join(".")}>`;
     }
   }
 
