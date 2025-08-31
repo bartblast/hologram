@@ -348,7 +348,7 @@ defmodule Hologram.Compiler do
       "--files-max-size=#{1024 * 1024 * 1024}"
       | file_paths
     ]
-    
+
     cmd_opts = [cd: opts[:assets_dir], parallelism: true, stderr_to_stdout: true]
 
     {exit_msg, exit_status} =
