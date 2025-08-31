@@ -3,7 +3,6 @@
 import Bitstring from "./bitstring.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
-import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
