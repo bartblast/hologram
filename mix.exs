@@ -4,6 +4,9 @@ defmodule Hologram.MixProject do
 
   @version "0.5.1"
 
+  # Copied from Hologram.Compiler
+  @windows_exec_suffixes [".bat", ".cmd", ".exe"]
+
   defp aliases do
     [
       eslint:
@@ -150,6 +153,90 @@ defmodule Hologram.MixProject do
     ]
   end
 
+  # Copied from Hologram.Compiler
+  defp find_windows_wrapper(explicit_command_path) do
+    @windows_exec_suffixes
+    |> Enum.map(&(explicit_command_path <> &1))
+    |> Enum.find(&File.exists?/1)
+  end
+
+  # Copied from Hologram.Compiler
+  defp has_windows_exec_ext?(path) do
+    ext =
+      path
+      |> Path.extname()
+      |> String.downcase()
+
+    ext in @windows_exec_suffixes
+  end
+
+  # Copied from Hologram.Compiler
+  defp resolve_command_path!(command_name_or_path, windows?) do
+    has_separator? = String.contains?(command_name_or_path, ["/", "\\"])
+
+    if has_separator? do
+      resolve_explicit_command_path!(command_name_or_path, windows?)
+    else
+      case System.find_executable(command_name_or_path) do
+        nil ->
+          raise RuntimeError,
+            message: "executable not found in PATH: #{command_name_or_path}"
+
+        resolved_command_path ->
+          resolved_command_path
+      end
+    end
+  end
+
+  # Copied from Hologram.Compiler
+  defp resolve_explicit_command_path!(explicit_command_path, true) do
+    if has_windows_exec_ext?(explicit_command_path) and File.exists?(explicit_command_path) do
+      explicit_command_path
+    else
+      resolve_windows_executable_path!(explicit_command_path)
+    end
+  end
+
+  # Copied from Hologram.Compiler
+  defp resolve_explicit_command_path!(explicit_command_path, false) do
+    if File.exists?(explicit_command_path) do
+      explicit_command_path
+    else
+      raise RuntimeError, message: "executable not found at #{explicit_command_path}"
+    end
+  end
+
+  # Copied from Hologram.Compiler
+  defp resolve_windows_executable_path!(explicit_command_path) do
+    if resolved_path = find_windows_wrapper(explicit_command_path) do
+      resolved_path
+    else
+      if File.exists?(explicit_command_path) do
+        explicit_command_path
+      else
+        raise RuntimeError, message: "executable not found at #{explicit_command_path}"
+      end
+    end
+  end
+
+  # Copied from Hologram.Compiler
+  # Executes the given command cross-platform.
+  # Accepts either a bare command name (resolved via PATH) or an executable file path.
+  # On Windows, .cmd/.bat wrappers must be executed via "cmd /c".
+  # sobelow_skip ["CI.System"]
+  # credo:disable-for-lines:11 Credo.Check.Design.DuplicatedCode
+  defp system_cmd_cross_platform(command_name_or_path, args, opts) do
+    windows? = match?({:win32, _name}, :os.type())
+
+    resolved_command_path = resolve_command_path!(command_name_or_path, windows?)
+
+    if windows? and String.match?(resolved_command_path, ~r/\.(cmd|bat)$/i) do
+      System.cmd("cmd", ["/c", resolved_command_path | args], opts)
+    else
+      System.cmd(resolved_command_path, args, opts)
+    end
+  end
+
   defp test_js(args) do
     cmd =
       if Enum.empty?(args) do
@@ -159,8 +246,10 @@ defmodule Hologram.MixProject do
       end
 
     opts = [cd: "assets", into: IO.stream(:stdio, :line)]
-    System.cmd("npm", ["install"], opts)
-    {_exit_msg, exit_status} = System.cmd("npm", cmd, opts)
+
+    system_cmd_cross_platform("npm", ["install"], opts)
+
+    {_exit_msg, exit_status} = system_cmd_cross_platform("npm", cmd, opts)
 
     if exit_status > 0 do
       Mix.raise("JavaScript tests failed!")

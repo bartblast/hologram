@@ -89,7 +89,9 @@ defmodule Hologram.Compiler.Encoder do
       end
 
     if source_code do
-      ~s/Interpreter.defineErlangFunction("#{module}", "#{function}", #{arity}, #{source_code});/
+      normalized_source_code = StringUtils.normalize_newlines(source_code)
+
+      ~s/Interpreter.defineErlangFunction("#{module}", "#{function}", #{arity}, #{normalized_source_code});/
     else
       ~s/Interpreter.defineNotImplementedErlangFunction("#{module}", "#{function}", #{arity});/
     end
@@ -331,10 +333,11 @@ defmodule Hologram.Compiler.Encoder do
     |> Enum.join("\n\n")
   rescue
     error ->
-      message = """
-      can't encode #{Reflection.module_name(module.value)} module definition
-      #{Exception.message(error)}\
-      """
+      message =
+        StringUtils.normalize_newlines("""
+        can't encode #{Reflection.module_name(module.value)} module definition
+        #{Exception.message(error)}\
+        """)
 
       reraise RuntimeError, [message: message], __STACKTRACE__
   end
@@ -561,12 +564,12 @@ defmodule Hologram.Compiler.Encoder do
   defp encode_block_expr(expr_js, last_expr?, has_match_operator?)
 
   defp encode_block_expr(expr_js, true, true) do
-    """
+    StringUtils.normalize_newlines("""
 
     globalThis.hologram.return = #{expr_js};
     Interpreter.updateVarsToMatchedValues(context);
     return globalThis.hologram.return;\
-    """
+    """)
   end
 
   defp encode_block_expr(expr_js, true, false) do
@@ -574,11 +577,11 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   defp encode_block_expr(expr_js, false, true) do
-    """
+    StringUtils.normalize_newlines("""
 
     #{expr_js};
     Interpreter.updateVarsToMatchedValues(context);\
-    """
+    """)
   end
 
   defp encode_block_expr(expr_js, false, false) do

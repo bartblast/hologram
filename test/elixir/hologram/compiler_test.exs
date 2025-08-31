@@ -28,8 +28,8 @@ defmodule Hologram.CompilerTest do
     build_dir = Path.join(test_tmp_dir, "build")
 
     clean_dir(test_tmp_dir)
-    File.mkdir!(assets_dir)
-    File.mkdir!(build_dir)
+    File.mkdir_p!(assets_dir)
+    File.mkdir_p!(build_dir)
 
     lib_package_json_path = Path.join(@assets_dir, "package.json")
     fixture_package_json_path = Path.join(assets_dir, "package.json")
@@ -233,41 +233,45 @@ defmodule Hologram.CompilerTest do
              }
            ]
 
-    expected_bundle_js_1 = """
-    (()=>{var o=111;})();
-    //# sourceMappingURL=page-936cdd48d87d4ecd5720ad33b7fb4b7c.js.map
-    """
+    expected_bundle_js_1 =
+      normalize_newlines("""
+      (()=>{var o=111;})();
+      //# sourceMappingURL=page-936cdd48d87d4ecd5720ad33b7fb4b7c.js.map
+      """)
 
     assert File.read!(expected_static_bundle_path_1) == expected_bundle_js_1
 
-    expected_bundle_js_2 = """
-    (()=>{var o=222;})();
-    //# sourceMappingURL=runtime-52169d07278b312ea39145c3b94c0203.js.map
-    """
+    expected_bundle_js_2 =
+      normalize_newlines("""
+      (()=>{var o=222;})();
+      //# sourceMappingURL=runtime-52169d07278b312ea39145c3b94c0203.js.map
+      """)
 
     assert File.read!(expected_static_bundle_path_2) == expected_bundle_js_2
 
-    expected_source_map_js_1 = """
-    {
-      "version": 3,
-      "sources": ["MyPage.entry.js"],
-      "sourcesContent": ["export const myVar = 111;\\n"],
-      "mappings": "MAAO,IAAMA,EAAQ",
-      "names": ["myVar"]
-    }
-    """
+    expected_source_map_js_1 =
+      normalize_newlines("""
+      {
+        "version": 3,
+        "sources": ["MyPage.entry.js"],
+        "sourcesContent": ["export const myVar = 111;\\n"],
+        "mappings": "MAAO,IAAMA,EAAQ",
+        "names": ["myVar"]
+      }
+      """)
 
     assert File.read!(expected_static_source_map_path_1) == expected_source_map_js_1
 
-    expected_source_map_js_2 = """
-    {
-      "version": 3,
-      "sources": ["runtime.entry.js"],
-      "sourcesContent": ["export const myVar = 222;\\n"],
-      "mappings": "MAAO,IAAMA,EAAQ",
-      "names": ["myVar"]
-    }
-    """
+    expected_source_map_js_2 =
+      normalize_newlines("""
+      {
+        "version": 3,
+        "sources": ["runtime.entry.js"],
+        "sourcesContent": ["export const myVar = 222;\\n"],
+        "mappings": "MAAO,IAAMA,EAAQ",
+        "names": ["myVar"]
+      }
+      """)
 
     assert File.read!(expected_static_source_map_path_2) == expected_source_map_js_2
   end
@@ -302,22 +306,24 @@ defmodule Hologram.CompilerTest do
                static_source_map_path: expected_static_source_map_path
              }
 
-      expected_bundle_js = """
-      (()=>{var o=123;})();
-      //# sourceMappingURL=my_bundle_name-76f1f092f95a34da067e35caad5e3317.js.map
-      """
+      expected_bundle_js =
+        normalize_newlines("""
+        (()=>{var o=123;})();
+        //# sourceMappingURL=my_bundle_name-76f1f092f95a34da067e35caad5e3317.js.map
+        """)
 
       assert File.read!(expected_static_bundle_path) == expected_bundle_js
 
-      expected_source_map_js = """
-      {
-        "version": 3,
-        "sources": ["MyPage.entry.js"],
-        "sourcesContent": ["export const myVar = 123;\\n"],
-        "mappings": "MAAO,IAAMA,EAAQ",
-        "names": ["myVar"]
-      }
-      """
+      expected_source_map_js =
+        normalize_newlines("""
+        {
+          "version": 3,
+          "sources": ["MyPage.entry.js"],
+          "sourcesContent": ["export const myVar = 123;\\n"],
+          "mappings": "MAAO,IAAMA,EAAQ",
+          "names": ["myVar"]
+        }
+        """)
 
       assert File.read!(expected_static_source_map_path) == expected_source_map_js
     end

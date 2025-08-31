@@ -13,7 +13,9 @@ defmodule Mix.Tasks.Holo.Test.CheckFileNames do
   """
 
   use Mix.Task
+
   alias Hologram.Commons.FileUtils
+  alias Hologram.Commons.PathUtils
 
   @requirements ["app.config"]
 
@@ -26,17 +28,12 @@ defmodule Mix.Tasks.Holo.Test.CheckFileNames do
     |> print_result_and_exit()
   end
 
-  defp determine_os_dir_separator do
-    <<_a::utf8, separator::utf8, _b::utf8>> = Path.join("a", "b")
-    <<separator>>
-  end
-
   defp find_invalid_file_names(path) do
     path
     |> FileUtils.list_files_recursively()
     |> Enum.reject(
       &(String.ends_with?(&1, "_test.exs") ||
-          String.starts_with?(&1, Path.join(path, "support") <> determine_os_dir_separator()) ||
+          String.starts_with?(&1, Path.join(path, "support") <> PathUtils.path_separator()) ||
           &1 == Path.join(path, "test_helper.exs"))
     )
   end

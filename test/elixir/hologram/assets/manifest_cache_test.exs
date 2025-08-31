@@ -20,19 +20,23 @@ defmodule Hologram.Assets.ManifestCacheTest do
   test "get_manifest_js/0" do
     init(nil)
 
-    assert get_manifest_js() == """
-           globalThis.hologram.assetManifest = {
-           "hologram/runtime.js": "/hologram/runtime-00000000000000000000000000000000.js",
-           "hologram/test_file_9.css": "/hologram/test_file_9-99999999999999999999999999999999.css",
-           "test_dir_1/test_dir_2/page.js": "/test_dir_1/test_dir_2/page-33333333333333333333333333333333.js",
-           "test_dir_1/test_dir_2/test_file_1.css": "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css",
-           "test_dir_1/test_dir_2/test_file_2.css": "/test_dir_1/test_dir_2/test_file_2-22222222222222222222222222222222.css",
-           "test_dir_3/page.js": "/test_dir_3/page-66666666666666666666666666666666.js",
-           "test_dir_3/test_file_10.css": "/test_dir_3/test_file_10.css",
-           "test_dir_3/test_file_4.css": "/test_dir_3/test_file_4-44444444444444444444444444444444.css",
-           "test_dir_3/test_file_5.css": "/test_dir_3/test_file_5-55555555555555555555555555555555.css"
-           };\
-           """
+    result = get_manifest_js()
+
+    expected = """
+    globalThis.hologram.assetManifest = {
+    "hologram/runtime.js": "/hologram/runtime-00000000000000000000000000000000.js",
+    "hologram/test_file_9.css": "/hologram/test_file_9-99999999999999999999999999999999.css",
+    "test_dir_1/test_dir_2/page.js": "/test_dir_1/test_dir_2/page-33333333333333333333333333333333.js",
+    "test_dir_1/test_dir_2/test_file_1.css": "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css",
+    "test_dir_1/test_dir_2/test_file_2.css": "/test_dir_1/test_dir_2/test_file_2-22222222222222222222222222222222.css",
+    "test_dir_3/page.js": "/test_dir_3/page-66666666666666666666666666666666.js",
+    "test_dir_3/test_file_10.css": "/test_dir_3/test_file_10.css",
+    "test_dir_3/test_file_4.css": "/test_dir_3/test_file_4-44444444444444444444444444444444.css",
+    "test_dir_3/test_file_5.css": "/test_dir_3/test_file_5-55555555555555555555555555555555.css"
+    };\
+    """
+
+    assert normalize_newlines(result) == normalize_newlines(expected)
   end
 
   test "init/1" do
@@ -47,20 +51,23 @@ defmodule Hologram.Assets.ManifestCacheTest do
     :persistent_term.put(key, :dummy_value)
 
     reload()
+    manifest_js = :persistent_term.get(key)
 
-    assert :persistent_term.get(key) == """
-           globalThis.hologram.assetManifest = {
-           "hologram/runtime.js": "/hologram/runtime-00000000000000000000000000000000.js",
-           "hologram/test_file_9.css": "/hologram/test_file_9-99999999999999999999999999999999.css",
-           "test_dir_1/test_dir_2/page.js": "/test_dir_1/test_dir_2/page-33333333333333333333333333333333.js",
-           "test_dir_1/test_dir_2/test_file_1.css": "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css",
-           "test_dir_1/test_dir_2/test_file_2.css": "/test_dir_1/test_dir_2/test_file_2-22222222222222222222222222222222.css",
-           "test_dir_3/page.js": "/test_dir_3/page-66666666666666666666666666666666.js",
-           "test_dir_3/test_file_10.css": "/test_dir_3/test_file_10.css",
-           "test_dir_3/test_file_4.css": "/test_dir_3/test_file_4-44444444444444444444444444444444.css",
-           "test_dir_3/test_file_5.css": "/test_dir_3/test_file_5-55555555555555555555555555555555.css"
-           };\
-           """
+    expected = """
+    globalThis.hologram.assetManifest = {
+    "hologram/runtime.js": "/hologram/runtime-00000000000000000000000000000000.js",
+    "hologram/test_file_9.css": "/hologram/test_file_9-99999999999999999999999999999999.css",
+    "test_dir_1/test_dir_2/page.js": "/test_dir_1/test_dir_2/page-33333333333333333333333333333333.js",
+    "test_dir_1/test_dir_2/test_file_1.css": "/test_dir_1/test_dir_2/test_file_1-11111111111111111111111111111111.css",
+    "test_dir_1/test_dir_2/test_file_2.css": "/test_dir_1/test_dir_2/test_file_2-22222222222222222222222222222222.css",
+    "test_dir_3/page.js": "/test_dir_3/page-66666666666666666666666666666666.js",
+    "test_dir_3/test_file_10.css": "/test_dir_3/test_file_10.css",
+    "test_dir_3/test_file_4.css": "/test_dir_3/test_file_4-44444444444444444444444444444444.css",
+    "test_dir_3/test_file_5.css": "/test_dir_3/test_file_5-55555555555555555555555555555555.css"
+    };\
+    """
+
+    assert normalize_newlines(manifest_js) == normalize_newlines(expected)
   end
 
   test "start_link/1" do

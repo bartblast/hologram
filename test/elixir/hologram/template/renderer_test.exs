@@ -762,7 +762,11 @@ defmodule Hologram.Template.RendererTest do
     test "with nested nil node resulting from if block" do
       node = {:component, Module67, [], []}
 
-      assert render_dom(node, @env, @server) == {"\n  \n", %{}, @server}
+      {html, component_registry, server_struct} = render_dom(node, @env, @server)
+
+      assert normalize_newlines(html) == "\n  \n"
+      assert component_registry == %{}
+      assert server_struct == @server
     end
   end
 
@@ -1143,14 +1147,16 @@ defmodule Hologram.Template.RendererTest do
       assert {html, _component_registry, _server_struct} =
                render_page(Module62, @params, @server, @opts)
 
-      assert html == """
-             <!DOCTYPE html>
-             <html>
-               <body>
-                 Module62
-               </body>
-             </html>\
-             """
+      expected_html = """
+      <!DOCTYPE html>
+      <html>
+        <body>
+          Module62
+        </body>
+      </html>\
+      """
+
+      assert normalize_newlines(html) == normalize_newlines(expected_html)
     end
 
     test "CSRF token is put into page emitted context for initial page requests" do

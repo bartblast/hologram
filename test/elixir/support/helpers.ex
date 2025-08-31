@@ -21,6 +21,7 @@ defmodule Hologram.Test.Helpers do
   defdelegate ast(code), to: AST, as: :for_code
   defdelegate clean_dir(file_path), to: FileUtils, as: :recreate_dir
   defdelegate ir(code, context \\ %Context{}), to: IR, as: :for_code
+  defdelegate normalize_newlines(string), to: StringUtils
   defdelegate parsed_tags(markup), to: Parser, as: :parse_markup
 
   @doc """

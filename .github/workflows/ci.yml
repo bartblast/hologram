@@ -5,9 +5,11 @@ name: CI
 # or `master` branch.
 on:
   push:
-    branches: ["dev", "master"]
+    branches:
+      - "**"
   pull_request:
-    branches: ["dev", "master"]
+    branches:
+      - "**"
 
 # Sets the ENV `MIX_ENV` to `test` for running tests
 env:
@@ -18,13 +20,14 @@ permissions:
 
 jobs:
   lib_tests:
-    runs-on: ubuntu-latest
-    name: Lib Tests on Elixir ${{ matrix.elixir }}, Erlang/OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    name: Lib Tests on ${{ matrix.os }}, Elixir ${{ matrix.elixir }}, Erlang/OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     strategy:
       fail-fast: false
       # Specify the Elixir and OTP versions to use when building
       # and running the workflow steps.
       matrix:
+        os: [ubuntu-latest, windows-latest]
         elixir:
           # Multi-letter uppercase sigils (~HOLO) were introduced in Elixir 1.15.0
           # - "1.13.4"
@@ -61,7 +64,7 @@ jobs:
           - elixir: "1.18.2"
             otp: "24.3"
     env:
-      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.elixir, '1.18.2') && contains(matrix.otp, '27.2') && contains(matrix.node, '22.9.0') }}
+      IS_HIGHEST_MATRIX_COMBINATION: ${{ contains(matrix.os, 'ubuntu-latest') && contains(matrix.elixir, '1.18.2') && contains(matrix.otp, '27.2') && contains(matrix.node, '22.9.0') }}
     steps:
       # Step: Setup Elixir + Erlang/OTP image as the base.
       - name: Set up Elixir
@@ -118,7 +121,7 @@ jobs:
       - name: Download lib JavaScript deps
         uses: nick-fields/retry@v3
         with:
-          command: cd assets && npm clean-install
+          command: cd assets; npm clean-install
           timeout_minutes: 3
           max_attempts: 10
 
@@ -226,7 +229,7 @@ jobs:
 
   feature_tests:
     runs-on: ubuntu-latest
-    name: Feature Tests on Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
+    name: Feature Tests on ubuntu-latest, Elixir ${{ matrix.elixir }}, OTP ${{ matrix.otp }}, Node.js ${{ matrix.node }}
     defaults:
       run:
         working-directory: test/features
@@ -399,5 +402,5 @@ jobs:
         if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
-          name: fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node}}
+          name: fail-screenshots-${{ matrix.elixir }}-${{ matrix.otp }}-${{ matrix.node }}
           path: test/features/tmp/screenshots
