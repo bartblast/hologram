@@ -32,6 +32,131 @@ export default class Bitstring {
     return $.#encoder.encode(text).length;
   }
 
+  // Performs structural comparison of two bitstrings consistent with Elixir's behavior.
+  // See: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
+  // "Bitstrings are compared byte by byte, incomplete bytes are compared bit by bit."
+  // Returns -1 if bitstring1 < bitstring2, 0 if equal, 1 if bitstring1 > bitstring2
+  static compare(bitstring1, bitstring2) {
+    // Fast path: reference equality
+    if (bitstring1 === bitstring2) {
+      return 0;
+    }
+
+    // Fast path: text-based comparison for identical text representations
+    if (bitstring1.text !== null && bitstring2.text !== null) {
+      if (
+        bitstring1.text === bitstring2.text &&
+        bitstring1.leftoverBitCount === bitstring2.leftoverBitCount
+      ) {
+        return 0;
+      }
+      // If both are text-based but different, fall through to byte comparison
+    }
+
+    // Ensure both bitstrings have bytes representation
+    $.maybeSetBytesFromText(bitstring1);
+    $.maybeSetBytesFromText(bitstring2);
+
+    const bytes1 = bitstring1.bytes;
+    const bytes2 = bitstring2.bytes;
+    const leftover1 = bitstring1.leftoverBitCount;
+    const leftover2 = bitstring2.leftoverBitCount;
+
+    // Fast path: if both have no leftover bits, use optimized byte array comparison
+    if (leftover1 === 0 && leftover2 === 0) {
+      const len1 = bytes1.length;
+      const len2 = bytes2.length;
+      const minLen = Math.min(len1, len2);
+
+      // Compare bytes in chunks for better performance
+      let i = 0;
+
+      // Process 4 bytes at a time when possible (unrolled loop)
+      const end4 = minLen - (minLen % 4);
+      for (; i < end4; i += 4) {
+        if (bytes1[i] !== bytes2[i]) return bytes1[i] < bytes2[i] ? -1 : 1;
+        if (bytes1[i + 1] !== bytes2[i + 1])
+          return bytes1[i + 1] < bytes2[i + 1] ? -1 : 1;
+        if (bytes1[i + 2] !== bytes2[i + 2])
+          return bytes1[i + 2] < bytes2[i + 2] ? -1 : 1;
+        if (bytes1[i + 3] !== bytes2[i + 3])
+          return bytes1[i + 3] < bytes2[i + 3] ? -1 : 1;
+      }
+
+      // Handle remaining bytes
+      for (; i < minLen; i++) {
+        if (bytes1[i] !== bytes2[i]) {
+          return bytes1[i] < bytes2[i] ? -1 : 1;
+        }
+      }
+
+      // All common bytes are equal, compare lengths
+      return len1 === len2 ? 0 : len1 < len2 ? -1 : 1;
+    }
+
+    // Complex case: handle leftover bits
+    const completeBytes1 = leftover1 === 0 ? bytes1.length : bytes1.length - 1;
+    const completeBytes2 = leftover2 === 0 ? bytes2.length : bytes2.length - 1;
+    const minCompleteBytes = Math.min(completeBytes1, completeBytes2);
+
+    // Compare complete bytes first
+    for (let i = 0; i < minCompleteBytes; i++) {
+      if (bytes1[i] !== bytes2[i]) {
+        return bytes1[i] < bytes2[i] ? -1 : 1;
+      }
+    }
+
+    // Handle case where one bitstring has more complete bytes
+    if (completeBytes1 !== completeBytes2) {
+      const isFirstLonger = completeBytes1 > completeBytes2;
+      const longerBytes = isFirstLonger ? bytes1 : bytes2;
+      const shorterLeftover = isFirstLonger ? leftover2 : leftover1;
+      const nextByte = longerBytes[minCompleteBytes];
+
+      if (shorterLeftover === 0) {
+        // Shorter bitstring has no more bits
+        return isFirstLonger ? 1 : -1;
+      }
+
+      // Compare next byte from longer with leftover bits from shorter
+      const shorterBytes = isFirstLonger ? bytes2 : bytes1;
+      const shorterLastByte = shorterBytes[shorterBytes.length - 1];
+      const mask = 0xff << (8 - shorterLeftover);
+      const shorterMasked = shorterLastByte & mask;
+
+      if (nextByte !== shorterMasked) {
+        const result = nextByte < shorterMasked ? -1 : 1;
+        return isFirstLonger ? result : -result;
+      }
+
+      // Equal up to leftover bits, longer one wins
+      return isFirstLonger ? 1 : -1;
+    }
+
+    // Both have same number of complete bytes, compare leftover bits
+    if (leftover1 === 0) {
+      return leftover2 === 0 ? 0 : -1;
+    }
+    if (leftover2 === 0) {
+      return 1;
+    }
+
+    // Both have leftover bits
+    const lastByte1 = bytes1[bytes1.length - 1];
+    const lastByte2 = bytes2[bytes2.length - 1];
+    const minLeftover = Math.min(leftover1, leftover2);
+    const mask = 0xff << (8 - minLeftover);
+    const masked1 = lastByte1 & mask;
+    const masked2 = lastByte2 & mask;
+
+    if (masked1 !== masked2) {
+      return masked1 < masked2 ? -1 : 1;
+    }
+
+    // Common bits equal, more leftover bits wins
+    return leftover1 === leftover2 ? 0 : leftover1 < leftover2 ? -1 : 1;
+  }
+
   static concat(bitstrings) {
     // Fast path: if a single bitstring is given return it as is
     if (bitstrings.length === 1) {
