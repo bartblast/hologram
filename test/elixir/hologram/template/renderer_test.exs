@@ -158,13 +158,6 @@ defmodule Hologram.Template.RendererTest do
                   }
                 }}
     end
-
-    test "HTML entities inside public comments are not escaped" do
-      # <!-- abc < xyz -->
-      node = {:public_comment, [text: " abc < xyz "]}
-
-      assert render_dom(node, @env, @server) == {"<!-- abc < xyz -->", %{}, @server}
-    end
   end
 
   test "DOCTYPE node" do
@@ -172,27 +165,11 @@ defmodule Hologram.Template.RendererTest do
     assert render_dom(node, @env, @server) == {"<!DOCTYPE html>", %{}, @server}
   end
 
-  describe "expression node" do
-    test "expression value is converted to string" do
-      # {123}
-      node = {:expression, {123}}
+  test "expression node" do
+    # {123}
+    node = {:expression, {123}}
 
-      assert render_dom(node, @env, @server) == {"123", %{}, @server}
-    end
-
-    test "HTML entities inside script elements are not escaped" do
-      # <script>{"abc < xyz"}</script>
-      node = {:element, "script", [], [expression: {"abc < xyz"}]}
-
-      assert render_dom(node, @env, @server) == {"<script>abc < xyz</script>", %{}, @server}
-    end
-
-    test "HTML entities inside non-script elements are escaped" do
-      # <div>{"abc < xyz"}</div>
-      node = {:element, "div", [], [expression: {"abc < xyz"}]}
-
-      assert render_dom(node, @env, @server) == {"<div>abc &lt; xyz</div>", %{}, @server}
-    end
+    assert render_dom(node, @env, @server) == {"123", %{}, @server}
   end
 
   describe "element node" do
@@ -344,13 +321,6 @@ defmodule Hologram.Template.RendererTest do
                     }
                   }
                 }}
-    end
-
-    test "HTML entities inside script tags are not escaped" do
-      # <script>abc < xyz</script>
-      node = {:element, "script", [], [text: "abc < xyz"]}
-
-      assert render_dom(node, @env, @server) == {"<script>abc < xyz</script>", %{}, @server}
     end
   end
 
@@ -1216,6 +1186,153 @@ defmodule Hologram.Template.RendererTest do
       page_emitted_context = component_registry["page"].struct.emitted_context
 
       refute Map.has_key?(page_emitted_context, {Hologram.Runtime, :csrf_token})
+    end
+  end
+
+  # IMPORTANT!
+  # Keep client-side Renderer "escaping" and server-side Renderer "escaping" unit tests consistent.  
+  describe "escaping" do
+    test "text inside non-script elements" do
+      # <div>abc < xyz</div>
+      node = {:element, "div", [], [text: "abc < xyz"]}
+
+      assert render_dom(node, @env, @server) == {"<div>abc &lt; xyz</div>", %{}, @server}
+    end
+
+    test "text inside script elements" do
+      # <script>abc < xyz</script>
+      node = {:element, "script", [], [text: "abc < xyz"]}
+
+      assert render_dom(node, @env, @server) == {"<script>abc < xyz</script>", %{}, @server}
+    end
+
+    test "text inside public comments" do
+      # <!-- abc < xyz -->
+      node = {:public_comment, [text: " abc < xyz "]}
+
+      assert render_dom(node, @env, @server) == {"<!-- abc < xyz -->", %{}, @server}
+    end
+
+    test "text inside attribute" do
+      # <div class="abc < xyz"></div>
+      node = {:element, "div", [{"class", [text: "abc < xyz"]}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s'<div class="abc &lt; xyz"></div>', %{}, @server}
+    end
+
+    test "expression inside non-script elements" do
+      # <div>{"abc < xyz"}</div>
+      node = {:element, "div", [], [expression: {"abc < xyz"}]}
+
+      assert render_dom(node, @env, @server) == {"<div>abc &lt; xyz</div>", %{}, @server}
+    end
+
+    test "expression inside script elements" do
+      # <script>{"abc < xyz"}</script>
+      node = {:element, "script", [], [expression: {"abc < xyz"}]}
+
+      assert render_dom(node, @env, @server) == {"<script>abc < xyz</script>", %{}, @server}
+    end
+
+    # TODO: shouldn't escape
+    test "expression inside public comments" do
+      # <!-- {"abc < xyz"} -->
+      node = {:public_comment, [text: " ", expression: {"abc < xyz"}, text: " "]}
+
+      assert render_dom(node, @env, @server) == {"<!-- abc &lt; xyz -->", %{}, @server}
+    end
+
+    test "expression inside attribute" do
+      # <div class={"abc < xyz"}></div>
+      node = {:element, "div", [{"class", [expression: {"abc < xyz"}]}], []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s'<div class="abc &lt; xyz"></div>', %{}, @server}
+    end
+  end
+
+  # IMPORTANT!
+  # Keep client-side Renderer.stringifyForInterpolation() and server-side Renderer.stringify_for_interpolation/2 unit tests consistent.  
+  describe "stringify_for_interpolation/1" do
+    test "atom, non-boolean and non-nil" do
+      assert stringify_for_interpolation(:abc) == "abc"
+    end
+
+    test "atom, true" do
+      assert stringify_for_interpolation(true) == "true"
+    end
+
+    test "atom, false" do
+      assert stringify_for_interpolation(false) == "false"
+    end
+
+    test "atom, nil" do
+      assert stringify_for_interpolation(nil) == ""
+    end
+
+    test "bitstring, binary" do
+      assert stringify_for_interpolation(<<97, 98, 99>>) == "abc"
+    end
+
+    test "bitstring, non-binary" do
+      assert stringify_for_interpolation(<<97::6, 98::4>>) == "&lt;&lt;132, 2::size(2)&gt;&gt;"
+    end
+
+    test "float" do
+      assert stringify_for_interpolation(1.23) == "1.23"
+    end
+
+    test "function, anonymous" do
+      value = fn x, y -> x + y end
+      assert stringify_for_interpolation(value) =~ ~r'#Function&lt;.+&gt;'
+    end
+
+    test "function, captured" do
+      assert stringify_for_interpolation(&Map.put/3) == "&amp;Map.put/3"
+    end
+
+    test "integer" do
+      assert stringify_for_interpolation(123) == "123"
+    end
+
+    test "list" do
+      assert stringify_for_interpolation([1, nil, 2]) == "[1, nil, 2]"
+    end
+
+    test "map, atom keys" do
+      value = %{a: 1, b: 2}
+      assert stringify_for_interpolation(value) == "%{a: 1, b: 2}"
+    end
+
+    test "map, mixed keys" do
+      value = %{:a => 1, "b" => nil, 2 => 3}
+
+      assert stringify_for_interpolation(value) ==
+               ~s'%{2 =&gt; 3, :a =&gt; 1, &quot;b&quot; =&gt; nil}'
+    end
+
+    test "pid" do
+      value = pid("0.11.222")
+      assert stringify_for_interpolation(value) == "#PID&lt;0.11.222&gt;"
+    end
+
+    test "port" do
+      value = port("0.11")
+      assert stringify_for_interpolation(value) == "#Port&lt;0.11&gt;"
+    end
+
+    test "reference" do
+      value = ref("0.1.2.3")
+      assert stringify_for_interpolation(value) == "#Reference&lt;0.1.2.3&gt;"
+    end
+
+    test "tuple" do
+      assert stringify_for_interpolation({1, nil, 2}) == "{1, nil, 2}"
+    end
+
+    test "when the escape param is false HTML entities are not escaped" do
+      assert stringify_for_interpolation(&Map.put/3, false) == "&Map.put/3"
     end
   end
 end

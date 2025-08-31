@@ -15,10 +15,83 @@ import {h as vnode} from "snabbdom";
 import vnodeToHtml from "snabbdom-to-html";
 
 export default class Renderer {
+  // Based on: https://github.com/SukkaW/fast-escape-html (941dab1ec4b1ad7ba5f1899adcd121563ab10dab)
+  static escapeHtml(text) {
+    const regexEscapedChars = /["&'<>]/;
+    const match = regexEscapedChars.exec(text);
+
+    // Faster than !match since there is no type conversion
+    if (match === null) {
+      return text;
+    }
+
+    let entity = "";
+    let escaped = "";
+
+    let index = match.index;
+    let lastIndex = 0;
+
+    const len = text.length;
+
+    // Switch cases ordered by frequency of occurrence in typical HTML content:
+    // Based on analysis of the ECMAScript specification (https://tc39.es/ecma262):
+    //  <  Most common, used in tags and comparisons
+    //  >  Often paired with <, but slightly less frequent
+    //  "  Preferred over ' in HTML attributes
+    //  '  Less common, mainly in attribute values
+    //  &  Used in entity references and logical operations
+
+    for (; index < len; index++) {
+      switch (text.charCodeAt(index)) {
+        case 60: // <
+          entity = "&lt;";
+          break;
+
+        case 62: // >
+          entity = "&gt;";
+          break;
+
+        case 34: // "
+          entity = "&quot;";
+          break;
+
+        case 39: // '
+          entity = "&#39;";
+          break;
+
+        case 38: // &
+          entity = "&amp;";
+          break;
+
+        default:
+          continue;
+      }
+
+      if (lastIndex !== index) {
+        escaped += text.slice(lastIndex, index);
+      }
+
+      escaped += entity;
+      lastIndex = index + 1;
+    }
+
+    if (lastIndex !== index) {
+      escaped += text.slice(lastIndex, index);
+    }
+
+    return escaped;
+  }
+
   // Based on render_dom/3
-  static renderDom(dom, context, slots, defaultTarget) {
+  static renderDom(dom, context, slots, defaultTarget, parentTagName) {
     if (Type.isList(dom)) {
-      return Renderer.#renderNodes(dom, context, slots, defaultTarget);
+      return Renderer.#renderNodes(
+        dom,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
     }
 
     const nodeType = dom.data[0].value;
@@ -26,16 +99,32 @@ export default class Renderer {
     // Cases ordered by expected frequency (most common first)
     switch (nodeType) {
       case "text":
-        return Bitstring.toText(dom.data[1]);
+        const text = Bitstring.toText(dom.data[1]);
+        return parentTagName === "script" ? text : $.escapeHtml(text);
 
       case "element":
-        return Renderer.#renderElement(dom, context, slots, defaultTarget);
+        return Renderer.#renderElement(
+          dom,
+          context,
+          slots,
+          defaultTarget,
+          parentTagName,
+        );
 
       case "component":
-        return Renderer.#renderComponent(dom, context, slots, defaultTarget);
+        return Renderer.#renderComponent(
+          dom,
+          context,
+          slots,
+          defaultTarget,
+          parentTagName,
+        );
 
       case "expression":
-        return $.toText(dom.data[1].data[0]);
+        return $.stringifyForInterpolation(
+          dom.data[1].data[0],
+          parentTagName !== "script",
+        );
 
       case "page":
         return Renderer.renderDom(
@@ -43,6 +132,7 @@ export default class Renderer {
           context,
           slots,
           Type.bitstring("page"),
+          parentTagName,
         );
 
       case "doctype":
@@ -54,6 +144,7 @@ export default class Renderer {
           context,
           slots,
           defaultTarget,
+          parentTagName,
         );
     }
   }
@@ -82,38 +173,69 @@ export default class Renderer {
     return htmlVnode;
   }
 
+  // Based on stringify_for_interpolation/2
+  static stringifyForInterpolation(value, escape = true) {
+    let text;
+
+    if (Type.isAtom(value) || Type.isBinary(value) || Type.isNumber(value)) {
+      text = $.toText(value);
+    } else {
+      let opts;
+
+      if (Type.isMap(value)) {
+        opts = Type.keywordList([
+          [
+            Type.atom("custom_options"),
+            Type.keywordList([[Type.atom("sort_maps"), Type.boolean(true)]]),
+          ],
+        ]);
+      } else {
+        opts = Type.list();
+      }
+
+      text = Interpreter.inspect(value, opts);
+    }
+
+    return escape ? $.escapeHtml(text) : text;
+  }
+
   static toBitstring(term) {
     return Type.isBitstring(term) ? term : Type.bitstring($.toText(term));
   }
 
+  // Similar to Kernel.to_string/1
+  // (it is supposed to be a fast alternative to Kernel.to_string/1 for the client-side renderer only)
+  // TODO: consider implementing consistency tests
   // Deps: [String.Chars.to_string/1]
   static toText(term) {
     // Cases ordered by expected frequency (most common first)
     switch (term.type) {
       case "atom":
-        return term.value;
+        return term.value === "nil" ? "" : term.value;
+
+      // Some structs (which are maps) may have their own implementation of String.Chars protocol
+      case "map":
+        return Bitstring.toText(Elixir_String_Chars["to_string/1"](term));
 
       case "bitstring":
+        if (!Type.isBinary(term)) {
+          Interpreter.raiseProtocolUndefinedError("String.Chars", term);
+        }
+
         return Bitstring.toText(term);
+
+      // String.Chars protocol has special behaviour for lists, e.g. to_string([97, 98]) -> "ab"
+      case "list":
+        return Bitstring.toText(Elixir_String_Chars["to_string/1"](term));
 
       case "integer":
         return term.value.toString();
 
       case "float":
         return term.value.toString();
-
-      case "pid":
-        return `#PID<${term.segments.join(".")}>`;
-
-      case "reference":
-        return `#Reference<${term.segments.join(".")}>`;
-
-      case "port":
-        return `#Port<${term.segments.join(".")}>`;
-
-      default:
-        return Bitstring.toText(Elixir_String_Chars["to_string/1"](term));
     }
+
+    Interpreter.raiseProtocolUndefinedError("String.Chars", term);
   }
 
   static valueDomToBitstring(valueDom) {
@@ -525,7 +647,7 @@ export default class Renderer {
       return [nameText, valueText];
     }
 
-    return [nameText, valueText === "" ? true : valueText];
+    return [nameText, valueText === "" ? true : $.escapeHtml(valueText)];
   }
 
   // Based on render_attributes/1
@@ -575,7 +697,7 @@ export default class Renderer {
   }
 
   // Based on render_dom/3 (component case)
-  static #renderComponent(dom, context, slots, defaultTarget) {
+  static #renderComponent(dom, context, slots, defaultTarget, parentTagName) {
     const moduleProxy = Interpreter.moduleProxy(dom.data[1]);
     if (moduleProxy == undefined) {
       throw new Error(
@@ -603,6 +725,7 @@ export default class Renderer {
         props,
         expandedChildrenDom,
         context,
+        parentTagName,
       );
     } else {
       return Renderer.#renderTemplate(
@@ -611,16 +734,22 @@ export default class Renderer {
         expandedChildrenDom,
         context,
         defaultTarget,
+        parentTagName,
       );
     }
   }
 
   // Based on render_dom/3 (element & slot case)
-  static #renderElement(dom, context, slots, defaultTarget) {
-    const tagName = Bitstring.toText(dom.data[1]);
+  static #renderElement(dom, context, slots, defaultTarget, parentTagName) {
+    const currentTagName = Bitstring.toText(dom.data[1]);
 
-    if (tagName === "slot") {
-      return Renderer.#renderSlotElement(slots, context, defaultTarget);
+    if (currentTagName === "slot") {
+      return Renderer.#renderSlotElement(
+        slots,
+        context,
+        defaultTarget,
+        parentTagName,
+      );
     }
 
     const attrsDom = dom.data[2];
@@ -642,6 +771,7 @@ export default class Renderer {
       context,
       slots,
       defaultTarget,
+      currentTagName,
     );
 
     const data = {attrs: attrsVdom, on: eventListenersVdom};
@@ -670,23 +800,23 @@ export default class Renderer {
     }
 
     if (
-      tagName === "link" &&
+      currentTagName === "link" &&
       typeof attrsVdom.href === "string" &&
       attrsVdom.href
     ) {
       data.key = `__hologramLink__:${attrsVdom.href}`;
     } else if (
-      tagName === "script" &&
+      currentTagName === "script" &&
       typeof attrsVdom.src === "string" &&
       attrsVdom.src
     ) {
       data.key = `__hologramScript__:${attrsVdom.src}`;
-    } else if (tagName === "script" && childrenVdom[0]) {
+    } else if (currentTagName === "script" && childrenVdom[0]) {
       // Make sure the script is executed if the code changes.
       data.key = `__hologramScript__:${childrenVdom[0]}`;
     }
 
-    return vnode(tagName, data, childrenVdom);
+    return vnode(currentTagName, data, childrenVdom);
   }
 
   static #renderEventListeners(attrsDom, tagName, attrsVdom, defaultTarget) {
@@ -723,12 +853,20 @@ export default class Renderer {
   }
 
   // Based on render_dom/3 (list case)
-  static #renderNodes(nodes, context, slots, defaultTarget) {
+  static #renderNodes(nodes, context, slots, defaultTarget, parentTagName) {
     return Renderer.#mergeNeighbouringTextNodes(
       nodes.data
         // There may be nil DOM nodes resulting from "if" blocks, e.g. {%if false}abc{/if} or DOCTYPE
         .filter((node) => !Type.isNil(node))
-        .map((node) => Renderer.renderDom(node, context, slots, defaultTarget))
+        .map((node) =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          ),
+        )
         .flat(),
     );
   }
@@ -774,11 +912,18 @@ export default class Renderer {
       pageEmittedContext,
       Type.keywordList(),
       Type.bitstring("layout"),
+      null,
     );
   }
 
   // Based on render_dom/3 (public comment case)
-  static #renderPublicComment(dom, context, slots, defaultTarget) {
+  static #renderPublicComment(
+    dom,
+    context,
+    slots,
+    defaultTarget,
+    parentTagName,
+  ) {
     const childrenDom = dom.data[1];
 
     let childrenVdom = Renderer.renderDom(
@@ -786,6 +931,7 @@ export default class Renderer {
       context,
       slots,
       defaultTarget,
+      parentTagName,
     );
 
     const commentContent = childrenVdom
@@ -796,7 +942,7 @@ export default class Renderer {
   }
 
   // Based on render_dom/3 (slot case)
-  static #renderSlotElement(slots, context, defaultTarget) {
+  static #renderSlotElement(slots, context, defaultTarget, parentTagName) {
     const slotDom = Interpreter.accessKeywordListElement(
       slots,
       Type.atom("default"),
@@ -807,12 +953,19 @@ export default class Renderer {
       context,
       Type.keywordList(),
       defaultTarget,
+      parentTagName,
     );
   }
 
   // Based on render_stateful_component/4
   // Deps: [:maps.get/2, :maps.merge/2]
-  static #renderStatefulComponent(moduleProxy, props, childrenDom, context) {
+  static #renderStatefulComponent(
+    moduleProxy,
+    props,
+    childrenDom,
+    context,
+    parentTagName,
+  ) {
     const cid = Erlang_Maps["get/2"](Type.atom("cid"), props);
 
     const [componentState, componentEmittedContext] =
@@ -830,6 +983,7 @@ export default class Renderer {
       childrenDom,
       mergedContext,
       cid,
+      parentTagName,
     );
   }
 
@@ -840,11 +994,18 @@ export default class Renderer {
     childrenDom,
     context,
     defaultTarget,
+    parentTagName,
   ) {
     const dom = Renderer.#evaluateTemplate(moduleProxy, vars);
     const slots = Type.keywordList([[Type.atom("default"), childrenDom]]);
 
-    return Renderer.renderDom(dom, context, slots, defaultTarget);
+    return Renderer.renderDom(
+      dom,
+      context,
+      slots,
+      defaultTarget,
+      parentTagName,
+    );
   }
 
   static #valueDomToText(valueDom) {

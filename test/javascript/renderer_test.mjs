@@ -6,6 +6,7 @@ import {
   assert,
   assertBoxedError,
   componentRegistryEntryFixture,
+  contextFixture,
   defineGlobalErlangAndElixirModules,
   initComponentRegistryEntry,
   sinon,
@@ -152,11 +153,19 @@ describe("Renderer", () => {
   const cid = Type.bitstring("my_component");
   const context = Type.map();
   const defaultTarget = Type.bitstring("my_default_target");
+  const parentTagName = "div";
   const slots = Type.keywordList();
 
   it("text node", () => {
     const node = Type.tuple([Type.atom("text"), Type.bitstring("abc")]);
-    const result = Renderer.renderDom(node, context, slots, defaultTarget);
+
+    const result = Renderer.renderDom(
+      node,
+      context,
+      slots,
+      defaultTarget,
+      parentTagName,
+    );
 
     assert.equal(result, "abc");
   });
@@ -166,7 +175,14 @@ describe("Renderer", () => {
       // <!---->
       const node = Type.tuple([Type.atom("public_comment"), Type.list()]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = vnode("!", "");
 
       assert.deepStrictEqual(result, expected);
@@ -186,7 +202,14 @@ describe("Renderer", () => {
         ]),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = vnode("!", "<div></div>");
 
       assert.deepStrictEqual(result, expected);
@@ -207,7 +230,14 @@ describe("Renderer", () => {
         ]),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = vnode("!", "abc<div></div>");
 
       assert.deepStrictEqual(result, expected);
@@ -278,7 +308,13 @@ describe("Renderer", () => {
 
       ComponentRegistry.putEntry(cid7, entry7);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       const expected = vnode(
         "!",
@@ -291,7 +327,14 @@ describe("Renderer", () => {
 
   it("DOCTYPE node", () => {
     const node = Type.tuple([Type.atom("doctype"), Type.bitstring("html")]);
-    const result = Renderer.renderDom(node, context, slots, defaultTarget);
+
+    const result = Renderer.renderDom(
+      node,
+      context,
+      slots,
+      defaultTarget,
+      null,
+    );
 
     assert.deepStrictEqual(result, Type.nil());
   });
@@ -302,7 +345,13 @@ describe("Renderer", () => {
       Type.tuple([Type.integer(123)]),
     ]);
 
-    const result = Renderer.renderDom(node, context, slots, defaultTarget);
+    const result = Renderer.renderDom(
+      node,
+      context,
+      slots,
+      defaultTarget,
+      parentTagName,
+    );
 
     assert.equal(result, "123");
   });
@@ -316,7 +365,14 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = vnode("div", {attrs: {}, on: {}}, []);
 
       assert.deepStrictEqual(result, expected);
@@ -349,7 +405,13 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       const expected = vnode(
         "div",
@@ -376,7 +438,13 @@ describe("Renderer", () => {
         ]),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       const expected = vnode("div", {attrs: {}, on: {}}, [
         vnode("span", {attrs: {}, on: {}}, ["abc"]),
@@ -394,7 +462,14 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = vnode("img", {attrs: {}, on: {}}, []);
 
       assert.deepStrictEqual(result, expected);
@@ -427,7 +502,13 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       const expected = vnode(
         "img",
@@ -452,7 +533,13 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       const expected = vnode(
         "img",
@@ -488,7 +575,13 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       const expected = vnode("img", {attrs: {attr_2: "value_2"}, on: {}}, []);
 
@@ -580,7 +673,13 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result.data.attrs, {
         attr_1: "aaa",
@@ -647,7 +746,13 @@ describe("Renderer", () => {
 
       ComponentRegistry.putEntry(cid7, entry7);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(
         result,
@@ -685,7 +790,13 @@ describe("Renderer", () => {
             ]),
           ]);
 
-          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
 
           assert.deepStrictEqual(Object.keys(vdom.data.on), ["click"]);
 
@@ -737,7 +848,13 @@ describe("Renderer", () => {
             Type.list(),
           ]);
 
-          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
 
           assert.deepStrictEqual(Object.keys(vdom.data.on), ["click", "focus"]);
 
@@ -794,7 +911,13 @@ describe("Renderer", () => {
             Type.list(),
           ]);
 
-          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            null,
+          );
 
           assert.deepStrictEqual(Object.keys(vdom.data.on), ["mousemove"]);
         });
@@ -1060,7 +1183,13 @@ describe("Renderer", () => {
 
           initComponentRegistryEntry(cid);
 
-          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
 
           const stub = sinon
             .stub(Hologram, "handleUiEvent")
@@ -1093,7 +1222,13 @@ describe("Renderer", () => {
             Type.list(),
           ]);
 
-          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
 
           const stub = sinon
             .stub(Hologram, "handleUiEvent")
@@ -1216,7 +1351,13 @@ describe("Renderer", () => {
           initComponentRegistryEntry(Type.bitstring("component_60"));
           initComponentRegistryEntry(Type.bitstring("component_61"));
 
-          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
 
           const stub = sinon
             .stub(Hologram, "handleUiEvent")
@@ -1280,7 +1421,9 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
+
           const expected = vnode("a", {attrs: {href: "my_href"}, on: {}}, []);
 
           assert.deepStrictEqual(result, expected);
@@ -1306,7 +1449,9 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
+
           const expected = vnode(
             "link",
             {attrs: {rel: "stylesheet"}, on: {}},
@@ -1334,7 +1479,9 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
+
           const expected = vnode("link", {attrs: {href: true}, on: {}}, []);
 
           assert.deepStrictEqual(result, expected);
@@ -1355,7 +1502,9 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
+
           const expected = vnode("link", {attrs: {href: true}, on: {}}, []);
 
           assert.deepStrictEqual(result, expected);
@@ -1381,7 +1530,9 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
+
           const expected = vnode(
             "link",
             {
@@ -1417,7 +1568,9 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
+
           const expected = vnode("img", {attrs: {src: "my_src"}, on: {}}, []);
 
           assert.deepStrictEqual(result, expected);
@@ -1443,7 +1596,9 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
+
           const expected = vnode(
             "script",
             {attrs: {type: "text/javascript"}, on: {}},
@@ -1471,7 +1626,9 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
+
           const expected = vnode("script", {attrs: {src: true}, on: {}}, []);
 
           assert.deepStrictEqual(result, expected);
@@ -1492,6 +1649,7 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
 
           const expected = vnode("script", {attrs: {src: true}, on: {}}, []);
@@ -1519,6 +1677,7 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
 
           const expected = vnode(
@@ -1549,6 +1708,7 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
 
           const expected = vnode(
@@ -1577,6 +1737,7 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
 
           const expected = vnode("script", {attrs: {}, on: {}}, []);
@@ -1994,7 +2155,14 @@ describe("Renderer", () => {
         Type.tuple([Type.atom("text"), Type.bitstring("bbb")]),
       ]);
 
-      const result = Renderer.renderDom(nodes, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        nodes,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = ["aaa", vnode("div", {attrs: {}, on: {}}, []), "bbb"];
 
       assert.deepStrictEqual(result, expected);
@@ -2008,7 +2176,13 @@ describe("Renderer", () => {
         Type.tuple([Type.atom("expression"), Type.tuple([Type.integer(222)])]),
       ]);
 
-      const result = Renderer.renderDom(nodes, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        nodes,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, ["aaa111bbb222"]);
     });
@@ -2021,7 +2195,13 @@ describe("Renderer", () => {
         Type.nil(),
       ]);
 
-      const result = Renderer.renderDom(nodes, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        nodes,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, ["aaabbb"]);
     });
@@ -2075,7 +2255,13 @@ describe("Renderer", () => {
 
       ComponentRegistry.putEntry(cid7, entry7);
 
-      const result = Renderer.renderDom(nodes, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        nodes,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, [
         "abc",
@@ -2142,7 +2328,13 @@ describe("Renderer", () => {
 
       ComponentRegistry.putEntry(cid52, entry52);
 
-      const result = Renderer.renderDom(nodes, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        nodes,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, [
         "abc",
@@ -2179,7 +2371,14 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = ["my_prop = 123"];
 
       assert.deepStrictEqual(result, expected);
@@ -2203,7 +2402,14 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = ["my_prop = {1, 2, 3}"];
 
       assert.deepStrictEqual(result, expected);
@@ -2224,7 +2430,14 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = [
         'component vars = %{prop_1: "abc", prop_2: :xyz, prop_3: 123}',
       ];
@@ -2247,7 +2460,14 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = ["component vars = %{prop_2: :xyz}"];
 
       assert.deepStrictEqual(result, expected);
@@ -2340,7 +2560,14 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = [vnode("div", {attrs: {}, on: {}}, ["abc"])];
 
       assert.deepStrictEqual(result, expected);
@@ -2375,7 +2602,13 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       const expected = [
         vnode("div", {attrs: {}, on: {}}, [
@@ -2406,7 +2639,14 @@ describe("Renderer", () => {
       ]);
 
       assertBoxedError(
-        () => Renderer.renderDom(node, context, slots, defaultTarget),
+        () =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          ),
         "KeyError",
         Interpreter.buildKeyErrorMsg(
           Type.atom("b"),
@@ -2438,7 +2678,9 @@ describe("Renderer", () => {
         context,
         slots,
         defaultTarget,
+        parentTagName,
       );
+
       const expectedVdom = [vnode("div", {attrs: {}, on: {}}, ["abc"])];
       assert.deepStrictEqual(resultVDom, expectedVdom);
 
@@ -2490,6 +2732,7 @@ describe("Renderer", () => {
         context,
         slots,
         defaultTarget,
+        parentTagName,
       );
 
       const expectedVdom = [
@@ -2537,6 +2780,7 @@ describe("Renderer", () => {
         context,
         slots,
         defaultTarget,
+        parentTagName,
       );
 
       const expectedVdom = [
@@ -2572,6 +2816,7 @@ describe("Renderer", () => {
         context,
         slots,
         defaultTarget,
+        parentTagName,
       );
 
       const expectedVdom = [
@@ -2632,6 +2877,7 @@ describe("Renderer", () => {
         context,
         slots,
         defaultTarget,
+        parentTagName,
       );
 
       const expectedVdom = [
@@ -2685,7 +2931,13 @@ describe("Renderer", () => {
 
       initComponentRegistryEntry(cid);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.equal(
         result,
@@ -2730,7 +2982,14 @@ describe("Renderer", () => {
       );
 
       assertBoxedError(
-        () => Renderer.renderDom(node, context, slots, defaultTarget),
+        () =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          ),
         "KeyError",
         expectedMessage,
       );
@@ -2746,7 +3005,13 @@ describe("Renderer", () => {
         Type.keywordList([[Type.atom("text"), Type.bitstring("123")]]),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, ["abc123xyz"]);
     });
@@ -2762,7 +3027,13 @@ describe("Renderer", () => {
         ]),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, ["abc123456xyz"]);
     });
@@ -2782,7 +3053,13 @@ describe("Renderer", () => {
         ]),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, ["abcdef789uvwxyz"]);
     });
@@ -2822,7 +3099,14 @@ describe("Renderer", () => {
 
       ComponentRegistry.putEntry(cid12, entry12);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       assert.deepStrictEqual(result, ["10,11,10,12,10"]);
 
       assert.deepStrictEqual(
@@ -2843,7 +3127,13 @@ describe("Renderer", () => {
         Type.keywordList([[Type.atom("text"), Type.bitstring("abc")]]),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, [
         "31a,32a,31b,33a,31c,abc,31x,33z,31y,32z,31z",
@@ -2905,7 +3195,13 @@ describe("Renderer", () => {
 
       ComponentRegistry.putEntry(cid36, entry36);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, [
         "34a_prop,35a_prop,34b_state,36a_prop,34c_state,abc,34x_state,36z_state,34y_state,35z_state,34z_state",
@@ -2929,7 +3225,13 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, ["\n  \n"]);
     });
@@ -3092,7 +3394,13 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       assert.deepStrictEqual(result, ["prop_aaa = 123"]);
     });
@@ -3255,6 +3563,488 @@ describe("Renderer", () => {
     });
   });
 
+  // IMPORTANT!
+  // Keep client-side Renderer "escaping" and server-side Renderer "escaping" unit tests consistent.
+  describe("escaping", () => {
+    const context = Type.map();
+    const defaultTarget = Type.bitstring("my_target");
+    const parentTagName = "div";
+    const slots = Type.keywordList();
+
+    it("text inside non-script elements", () => {
+      // <div>abc < xyz</div>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list(),
+        Type.list([
+          Type.tuple([Type.atom("text"), Type.bitstring("abc < xyz")]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode("div", {attrs: {}, on: {}}, ["abc &lt; xyz"]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("text inside script elements", () => {
+      // <script>abc < xyz</script>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("script"),
+        Type.list(),
+        Type.list([
+          Type.tuple([Type.atom("text"), Type.bitstring("abc < xyz")]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode(
+        "script",
+        {attrs: {}, key: "__hologramScript__:abc < xyz", on: {}},
+        ["abc < xyz"],
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    // TODO: shouldn't escape
+    it("text inside public comments", () => {
+      // <!-- abc < xyz -->
+      const node = Type.tuple([
+        Type.atom("public_comment"),
+        Type.list([
+          Type.tuple([Type.atom("text"), Type.bitstring(" abc < xyz ")]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode("!", " abc &lt; xyz ");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("text inside attribute", () => {
+      // <div class="abc < xyz"></div>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("class"),
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("abc < xyz")]),
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode(
+        "div",
+        {attrs: {class: "abc &lt; xyz"}, on: {}},
+        [],
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("expression inside non-script elements", () => {
+      // <div>{"abc < xyz"}</div>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list(),
+        Type.list([
+          Type.tuple([
+            Type.atom("expression"),
+            Type.tuple([Type.bitstring("abc < xyz")]),
+          ]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode("div", {attrs: {}, on: {}}, ["abc &lt; xyz"]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("expression inside script elements", () => {
+      // <script>{"abc < xyz"}</script>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("script"),
+        Type.list(),
+        Type.list([
+          Type.tuple([
+            Type.atom("expression"),
+            Type.tuple([Type.bitstring("abc < xyz")]),
+          ]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode(
+        "script",
+        {attrs: {}, key: "__hologramScript__:abc < xyz", on: {}},
+        ["abc < xyz"],
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    // TODO: shouldn't escape
+    it("expression inside public comments", () => {
+      // <!-- {"abc < xyz"} -->
+      const node = Type.tuple([
+        Type.atom("public_comment"),
+        Type.list([
+          Type.tuple([Type.atom("text"), Type.bitstring(" ")]),
+          Type.tuple([
+            Type.atom("expression"),
+            Type.tuple([Type.bitstring("abc < xyz")]),
+          ]),
+          Type.tuple([Type.atom("text"), Type.bitstring(" ")]),
+        ]),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode("!", " abc &lt; xyz ");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("expression inside attribute", () => {
+      // <div class={"abc < xyz"}></div>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("class"),
+            Type.list([
+              Type.tuple([
+                Type.atom("expression"),
+                Type.tuple([Type.bitstring("abc < xyz")]),
+              ]),
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode(
+        "div",
+        {attrs: {class: "abc &lt; xyz"}, on: {}},
+        [],
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("escapeHtml()", () => {
+    const escapeHtml = Renderer.escapeHtml;
+
+    it("returns text unchanged when no special characters", () => {
+      const result = escapeHtml("abc");
+      assert.deepStrictEqual(result, "abc");
+    });
+
+    it("escapes double quotes", () => {
+      assert.deepStrictEqual(escapeHtml('"'), "&quot;");
+      assert.deepStrictEqual(escapeHtml('"bar'), "&quot;bar");
+      assert.deepStrictEqual(escapeHtml('foo"'), "foo&quot;");
+      assert.deepStrictEqual(escapeHtml('foo"bar'), "foo&quot;bar");
+      assert.deepStrictEqual(escapeHtml('foo""bar'), "foo&quot;&quot;bar");
+    });
+
+    it("escapes ampersands", () => {
+      assert.deepStrictEqual(escapeHtml("&"), "&amp;");
+      assert.deepStrictEqual(escapeHtml("&bar"), "&amp;bar");
+      assert.deepStrictEqual(escapeHtml("foo&"), "foo&amp;");
+      assert.deepStrictEqual(escapeHtml("foo&bar"), "foo&amp;bar");
+      assert.deepStrictEqual(escapeHtml("foo&&bar"), "foo&amp;&amp;bar");
+    });
+
+    it("escapes single quotes", () => {
+      assert.deepStrictEqual(escapeHtml("'"), "&#39;");
+      assert.deepStrictEqual(escapeHtml("'bar"), "&#39;bar");
+      assert.deepStrictEqual(escapeHtml("foo'"), "foo&#39;");
+      assert.deepStrictEqual(escapeHtml("foo'bar"), "foo&#39;bar");
+      assert.deepStrictEqual(escapeHtml("foo''bar"), "foo&#39;&#39;bar");
+    });
+
+    it("escapes less than signs", () => {
+      assert.deepStrictEqual(escapeHtml("<"), "&lt;");
+      assert.deepStrictEqual(escapeHtml("<bar"), "&lt;bar");
+      assert.deepStrictEqual(escapeHtml("foo<"), "foo&lt;");
+      assert.deepStrictEqual(escapeHtml("foo<bar"), "foo&lt;bar");
+      assert.deepStrictEqual(escapeHtml("foo<<bar"), "foo&lt;&lt;bar");
+    });
+
+    it("escapes greater than signs", () => {
+      assert.deepStrictEqual(escapeHtml(">"), "&gt;");
+      assert.deepStrictEqual(escapeHtml(">bar"), "&gt;bar");
+      assert.deepStrictEqual(escapeHtml("foo>"), "foo&gt;");
+      assert.deepStrictEqual(escapeHtml("foo>bar"), "foo&gt;bar");
+      assert.deepStrictEqual(escapeHtml("foo>>bar"), "foo&gt;&gt;bar");
+    });
+
+    it("escapes multiple special characters in mixed text", () => {
+      const result = escapeHtml('&foo <> bar "fizz" l\'a');
+
+      assert.deepStrictEqual(
+        result,
+        "&amp;foo &lt;&gt; bar &quot;fizz&quot; l&#39;a",
+      );
+    });
+
+    it("handles empty string", () => {
+      const result = escapeHtml("");
+      assert.deepStrictEqual(result, "");
+    });
+
+    it("handles string with only special characters", () => {
+      const result = escapeHtml("&<>\"'");
+      assert.deepStrictEqual(result, "&amp;&lt;&gt;&quot;&#39;");
+    });
+
+    it("handles string with special characters at boundaries", () => {
+      const result = escapeHtml("<div>content</div>");
+      assert.deepStrictEqual(result, "&lt;div&gt;content&lt;/div&gt;");
+    });
+  });
+
+  // IMPORTANT!
+  // Keep client-side Renderer.stringifyForInterpolation() and server-side Renderer.stringify_for_interpolation/2 unit tests consistent.
+  describe("stringifyForInterpolation()", () => {
+    const stringifyForInterpolation = Renderer.stringifyForInterpolation;
+
+    describe("atom", () => {
+      it("non-boolean and non-nil", () => {
+        const term = Type.atom("abc");
+        const result = stringifyForInterpolation(term);
+
+        assert.equal(result, "abc");
+      });
+
+      it("true", () => {
+        const term = Type.boolean(true);
+        const result = stringifyForInterpolation(term);
+
+        assert.equal(result, "true");
+      });
+
+      it("false", () => {
+        const term = Type.boolean(false);
+        const result = stringifyForInterpolation(term);
+
+        assert.equal(result, "false");
+      });
+
+      it("nil", () => {
+        const term = Type.nil();
+        const result = stringifyForInterpolation(term);
+
+        assert.equal(result, "");
+      });
+    });
+
+    describe("bitstring", () => {
+      it("binary", () => {
+        const term = Bitstring.fromBytes([97, 98, 99]);
+        const result = stringifyForInterpolation(term);
+
+        assert.equal(result, "abc");
+      });
+
+      it("non-binary", () => {
+        const segment1 = Type.bitstringSegment(Type.integer(97), {
+          type: "integer",
+          size: Type.integer(6),
+          unit: 1n,
+        });
+
+        const segment2 = Type.bitstringSegment(Type.integer(98), {
+          type: "integer",
+          size: Type.integer(4),
+          unit: 1n,
+        });
+
+        const term = Bitstring.fromSegments([segment1, segment2]);
+        const result = stringifyForInterpolation(term);
+
+        assert.equal(result, "&lt;&lt;132, 2::size(2)&gt;&gt;");
+      });
+    });
+
+    it("float", () => {
+      const term = Type.float(1.23);
+      const result = stringifyForInterpolation(term);
+
+      assert.equal(result, "1.23");
+    });
+
+    describe("function", () => {
+      it("anonymous", () => {
+        const clauses = ["dummy_clause_1", "dummy_clause_2"];
+        const context = contextFixture();
+        const term = Type.anonymousFunction(2, clauses, context);
+        const result = stringifyForInterpolation(term);
+
+        assert.equal(result, "anonymous function fn/2");
+      });
+
+      it("captured", () => {
+        const clauses = ["dummy_clause_1", "dummy_clause_2", "dummy_clause_3"];
+        const context = contextFixture({module: "Map"});
+        const term = Type.functionCapture("Map", "put", 3, clauses, context);
+        const result = stringifyForInterpolation(term);
+
+        assert.equal(result, "&amp;Map.put/3");
+      });
+    });
+
+    it("integer", () => {
+      const term = Type.integer(123);
+      const result = stringifyForInterpolation(term);
+
+      assert.equal(result, "123");
+    });
+
+    it("list", () => {
+      const term = Type.list([Type.integer(1), Type.nil(), Type.integer(2)]);
+      const result = stringifyForInterpolation(term);
+
+      assert.equal(result, "[1, nil, 2]");
+    });
+
+    describe("map", () => {
+      it("atom keys", () => {
+        const term = Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.atom("b"), Type.integer(2)],
+        ]);
+
+        const result = stringifyForInterpolation(term);
+
+        assert.equal(result, "%{a: 1, b: 2}");
+      });
+
+      it("mixed keys", () => {
+        const term = Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.bitstring("b"), Type.nil()],
+          [Type.integer(2), Type.integer(3)],
+        ]);
+
+        const result = stringifyForInterpolation(term);
+
+        assert.equal(
+          result,
+          "%{2 =&gt; 3, :a =&gt; 1, &quot;b&quot; =&gt; nil}",
+        );
+      });
+    });
+
+    it("pid", () => {
+      const term = Type.pid("my_node", [0, 11, 222], "server");
+      const result = stringifyForInterpolation(term);
+
+      assert.equal(result, "#PID&lt;0.11.222&gt;");
+    });
+
+    it("port", () => {
+      const term = Type.port("my_node", [0, 11], "server");
+      const result = stringifyForInterpolation(term);
+
+      assert.equal(result, "#Port&lt;0.11&gt;");
+    });
+
+    it("reference", () => {
+      const term = Type.reference("my_node", [0, 1, 2, 3], "server");
+      const result = stringifyForInterpolation(term);
+
+      assert.equal(result, "#Reference&lt;0.1.2.3&gt;");
+    });
+
+    it("tuple", () => {
+      const term = Type.tuple([Type.integer(1), Type.nil(), Type.integer(2)]);
+      const result = stringifyForInterpolation(term);
+
+      assert.equal(result, "{1, nil, 2}");
+    });
+
+    it("when the escape param is false HTML entities are not escaped", () => {
+      const clauses = ["dummy_clause_1", "dummy_clause_2", "dummy_clause_3"];
+      const context = contextFixture({module: "Map"});
+      const term = Type.functionCapture("Map", "put", 3, clauses, context);
+      const result = stringifyForInterpolation(term, false);
+
+      assert.equal(result, "&Map.put/3");
+    });
+  });
+
   describe("toBitstring()", () => {
     const toBitstring = Renderer.toBitstring;
 
@@ -3272,60 +4062,161 @@ describe("Renderer", () => {
   describe("toText()", () => {
     const toText = Renderer.toText;
 
-    it("atom", () => {
-      const term = Type.atom("abc");
-      const result = toText(term);
+    describe("supported types", () => {
+      describe("atom", () => {
+        it("non-boolean and non-nil", () => {
+          const term = Type.atom("abc");
+          const result = toText(term);
 
-      assert.deepStrictEqual(result, "abc");
+          assert.equal(result, "abc");
+        });
+
+        it("true", () => {
+          const term = Type.boolean(true);
+          const result = toText(term);
+
+          assert.equal(result, "true");
+        });
+
+        it("false", () => {
+          const term = Type.boolean(false);
+          const result = toText(term);
+
+          assert.equal(result, "false");
+        });
+
+        it("nil", () => {
+          const term = Type.nil();
+          const result = toText(term);
+
+          assert.equal(result, "");
+        });
+      });
+
+      describe("bitstring", () => {
+        it("binary", () => {
+          const term = Bitstring.fromBytes([97, 98, 99]);
+          const result = toText(term);
+
+          assert.equal(result, "abc");
+        });
+      });
+
+      it("float", () => {
+        const term = Type.float(1.23);
+        const result = toText(term);
+
+        assert.equal(result, "1.23");
+      });
+
+      it("integer", () => {
+        const term = Type.integer(123);
+        const result = toText(term);
+
+        assert.equal(result, "123");
+      });
+
+      it("list", () => {
+        const term = Type.list([Type.integer(1), Type.integer(2)]);
+        const result = toText(term);
+
+        assert.equal(
+          result,
+          "Test String.Chars protocol implementation for List type",
+        );
+      });
+
+      it("map", () => {
+        const term = Type.map([
+          [Type.atom("a"), Type.integer(1)],
+          [Type.atom("b"), Type.integer(2)],
+        ]);
+
+        const result = toText(term);
+
+        assert.equal(
+          result,
+          "Test String.Chars protocol implementation for Map type",
+        );
+      });
     });
 
-    it("bitstring", () => {
-      const term = Bitstring.fromBytes([97, 98, 99]);
-      const result = toText(term);
+    describe("unsupported types", () => {
+      it("anonymous function", () => {
+        const clauses = ["dummy_clause_1", "dummy_clause_2"];
+        const context = contextFixture();
+        const term = Type.anonymousFunction(2, clauses, context);
 
-      assert.deepStrictEqual(result, "abc");
-    });
+        assertBoxedError(
+          () => toText(term),
+          "Protocol.UndefinedError",
+          Interpreter.buildProtocolUndefinedErrorMsg("String.Chars", term),
+        );
+      });
 
-    it("float", () => {
-      const term = Type.float(1.23);
-      const result = toText(term);
+      describe("bistring", () => {
+        it("non-binary", () => {
+          const segment1 = Type.bitstringSegment(Type.integer(97), {
+            type: "integer",
+            size: Type.integer(6),
+            unit: 1n,
+          });
 
-      assert.deepStrictEqual(result, "1.23");
-    });
+          const segment2 = Type.bitstringSegment(Type.integer(98), {
+            type: "integer",
+            size: Type.integer(4),
+            unit: 1n,
+          });
 
-    it("integer", () => {
-      const term = Type.integer(123);
-      const result = toText(term);
+          const term = Bitstring.fromSegments([segment1, segment2]);
 
-      assert.deepStrictEqual(result, "123");
-    });
+          assertBoxedError(
+            () => toText(term),
+            "Protocol.UndefinedError",
+            Interpreter.buildProtocolUndefinedErrorMsg("String.Chars", term),
+          );
+        });
+      });
 
-    it("PID", () => {
-      const term = Type.pid("my_node", [0, 11, 222], "server");
-      const result = toText(term);
+      it("PID", () => {
+        const term = Type.pid("my_node", [0, 11, 222], "server");
 
-      assert.deepStrictEqual(result, "#PID<0.11.222>");
-    });
+        assertBoxedError(
+          () => toText(term),
+          "Protocol.UndefinedError",
+          Interpreter.buildProtocolUndefinedErrorMsg("String.Chars", term),
+        );
+      });
 
-    it("port", () => {
-      const term = Type.port("my_node", [0, 11], "server");
-      const result = toText(term);
+      it("port", () => {
+        const term = Type.port("my_node", [0, 11], "server");
 
-      assert.deepStrictEqual(result, "#Port<0.11>");
-    });
+        assertBoxedError(
+          () => toText(term),
+          "Protocol.UndefinedError",
+          Interpreter.buildProtocolUndefinedErrorMsg("String.Chars", term),
+        );
+      });
 
-    it("reference", () => {
-      const term = Type.reference("my_node", [0, 1, 2, 3], "server");
-      const result = toText(term);
+      it("reference", () => {
+        const term = Type.reference("my_node", [0, 1, 2, 3], "server");
 
-      assert.deepStrictEqual(result, "#Reference<0.1.2.3>");
-    });
+        assertBoxedError(
+          () => toText(term),
+          "Protocol.UndefinedError",
+          Interpreter.buildProtocolUndefinedErrorMsg("String.Chars", term),
+        );
+      });
 
-    it("delegates to String.Chars.to_string/1 for cases that it can't handle by itself", () => {
-      const term = {type: "dummy_type"};
-      const result = toText(term);
+      it("tuple", () => {
+        const term = Type.tuple([Type.integer(1), Type.integer(2)]);
 
-      assert.deepStrictEqual(result, "dummy_value");
+        assertBoxedError(
+          () => toText(term),
+          "Protocol.UndefinedError",
+          Interpreter.buildProtocolUndefinedErrorMsg("String.Chars", term),
+        );
+      });
     });
   });
 

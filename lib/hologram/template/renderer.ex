@@ -2,6 +2,7 @@ defmodule Hologram.Template.Renderer do
   @moduledoc false
 
   alias Hologram.Assets.PageDigestRegistry
+  alias Hologram.Commons.KernelUtils
   alias Hologram.Commons.StringUtils
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.Encoder
@@ -90,16 +91,11 @@ defmodule Hologram.Template.Renderer do
         %Env{node_type: :element, tag_name: "script"},
         server_struct
       ) do
-    {to_string(value), %{}, server_struct}
+    {stringify_for_interpolation(value, false), %{}, server_struct}
   end
 
   def render_dom({:expression, {value}}, _env, server_struct) do
-    html =
-      value
-      |> to_string()
-      |> HtmlEntities.encode()
-
-    {html, %{}, server_struct}
+    {stringify_for_interpolation(value), %{}, server_struct}
   end
 
   def render_dom({:public_comment, children_dom}, env, server_struct) do
@@ -197,6 +193,47 @@ defmodule Hologram.Template.Renderer do
       |> interpolate_page_params_js(params)
 
     {html_with_interpolated_js, component_registry_with_page_struct, final_server_struct}
+  end
+
+  @doc """
+  Converts a value to a string for safe interpolation in HTML templates.
+
+  This function is specifically designed for converting Elixir values into strings
+  that can be safely interpolated into HTML templates. It handles different data
+  types appropriately and can optionally HTML-escape the output to prevent XSS.
+
+  ## Parameters
+
+    * `value` - The Elixir value to convert for template interpolation
+    * `escape?` - Whether to HTML-escape the result to prevent XSS (default: true)
+
+  ## Examples
+
+      iex> stringify_for_interpolation("hello")
+      "hello"
+      
+      iex> stringify_for_interpolation("<script>", true)
+      "&lt;script&gt;"
+      
+      iex> stringify_for_interpolation("<script>", false)
+      "<script>"
+  """
+  @spec stringify_for_interpolation(any, boolean) :: String.t()
+  def stringify_for_interpolation(value, escape? \\ true)
+
+  def stringify_for_interpolation(value, true) do
+    value
+    |> stringify_for_interpolation(false)
+    |> HtmlEntities.encode()
+  end
+
+  def stringify_for_interpolation(value, false)
+      when is_atom(value) or is_binary(value) or is_number(value) do
+    to_string(value)
+  end
+
+  def stringify_for_interpolation(value, false) do
+    KernelUtils.inspect(value)
   end
 
   defp build_layout_props_dom(page_module, page_state) do

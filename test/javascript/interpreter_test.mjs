@@ -124,7 +124,7 @@ describe("Interpreter", () => {
 
       const expected = "no function clause matching in MyModule.my_fun/2";
 
-      assert.deepStrictEqual(result, expected);
+      assert.equal(result, expected);
     });
 
     it("0 args", () => {
@@ -135,7 +135,7 @@ describe("Interpreter", () => {
 
       const expected = "no function clause matching in MyModule.my_fun/2";
 
-      assert.deepStrictEqual(result, expected);
+      assert.equal(result, expected);
     });
 
     it("1 arg", () => {
@@ -147,7 +147,7 @@ describe("Interpreter", () => {
       const expected =
         "no function clause matching in MyModule.my_fun/2\n\nThe following arguments were given to MyModule.my_fun/2:\n\n    # 1\n    123\n";
 
-      assert.deepStrictEqual(result, expected);
+      assert.equal(result, expected);
     });
 
     it("2 args", () => {
@@ -159,7 +159,7 @@ describe("Interpreter", () => {
       const expected =
         "no function clause matching in MyModule.my_fun/2\n\nThe following arguments were given to MyModule.my_fun/2:\n\n    # 1\n    123\n\n    # 2\n    :abc\n";
 
-      assert.deepStrictEqual(result, expected);
+      assert.equal(result, expected);
     });
   });
 
@@ -181,7 +181,19 @@ describe("Interpreter", () => {
     const result = Interpreter.buildMatchErrorMsg(Type.atom("abc"));
     const expected = "no match of right hand side value: :abc";
 
-    assert.deepStrictEqual(result, expected);
+    assert.equal(result, expected);
+  });
+
+  it("buildProtocolUndefinedErrorMsg()", () => {
+    const result = Interpreter.buildProtocolUndefinedErrorMsg(
+      "String.Chars",
+      Type.tuple([Type.integer(1), Type.integer(2)]),
+    );
+
+    const expected =
+      "protocol String.Chars not implemented for type Tuple\n\nGot value:\n\n    {1, 2}";
+
+    assert.equal(result, expected);
   });
 
   it("buildTooBigOutputErrorMsg()", () => {
@@ -193,7 +205,7 @@ describe("Interpreter", () => {
       "{MyModule, :my_fun, 3} can't be transpiled automatically to JavaScript, because its output is too big.\n" +
       "See what to do here: https://www.hologram.page/TODO";
 
-    assert.deepStrictEqual(result, expected);
+    assert.equal(result, expected);
   });
 
   describe("buildUndefinedFunctionErrorMsg", () => {
@@ -322,6 +334,15 @@ describe("Interpreter", () => {
 
         assert.equal(result, 1);
       });
+    });
+
+    it("bitstring type", () => {
+      const result = Interpreter.compareTerms(
+        Type.bitstring("aaa"),
+        Type.bitstring("bbb"),
+      );
+
+      assert.equal(result, -1);
     });
 
     describe("number types (float or integer)", () => {
@@ -1849,12 +1870,17 @@ describe("Interpreter", () => {
           assert.equal(result, '""');
         });
 
-        it("non-empty, printable", () => {
+        it("ASCII", () => {
           const result = Interpreter.inspect(Type.bitstring("abc"));
           assert.equal(result, '"abc"');
         });
 
-        it("non-empty, non-printable", () => {
+        it("Unicode", () => {
+          const result = Interpreter.inspect(Type.bitstring("全息图"));
+          assert.equal(result, '"全息图"');
+        });
+
+        it("non-printable", () => {
           const result = Interpreter.inspect(Type.bitstring("a\x01b"));
           assert.equal(result, "<<97, 1, 98>>");
         });
@@ -1914,34 +1940,13 @@ describe("Interpreter", () => {
       assert.equal(result, "123");
     });
 
-    describe("keyword list", () => {
-      it("single item", () => {
-        const term = Type.keywordList([[Type.atom("a"), Type.integer(1)]]);
-
-        const result = Interpreter.inspect(term);
-
-        assert.equal(result, "[a: 1]");
-      });
-
-      it("multiple items", () => {
-        const term = Type.keywordList([
-          [Type.atom("a"), Type.integer(1)],
-          [Type.atom("b"), Type.integer(2)],
-        ]);
-
-        const result = Interpreter.inspect(term);
-
-        assert.equal(result, "[a: 1, b: 2]");
-      });
-    });
-
     describe("list", () => {
       it("empty", () => {
         const result = Interpreter.inspect(Type.list());
         assert.equal(result, "[]");
       });
 
-      it("non-empty, proper", () => {
+      it("proper", () => {
         const result = Interpreter.inspect(
           Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
         );
@@ -1949,7 +1954,7 @@ describe("Interpreter", () => {
         assert.equal(result, "[1, 2, 3]");
       });
 
-      it("non-empty, improper", () => {
+      it("improper", () => {
         const result = Interpreter.inspect(
           Type.improperList([
             Type.integer(1),
@@ -1959,6 +1964,27 @@ describe("Interpreter", () => {
         );
 
         assert.equal(result, "[1, 2 | 3]");
+      });
+
+      describe("keyword list", () => {
+        it("single item", () => {
+          const term = Type.keywordList([[Type.atom("a"), Type.integer(1)]]);
+
+          const result = Interpreter.inspect(term);
+
+          assert.equal(result, "[a: 1]");
+        });
+
+        it("multiple items", () => {
+          const term = Type.keywordList([
+            [Type.atom("a"), Type.integer(1)],
+            [Type.atom("b"), Type.integer(2)],
+          ]);
+
+          const result = Interpreter.inspect(term);
+
+          assert.equal(result, "[a: 1, b: 2]");
+        });
       });
     });
 
@@ -1973,7 +1999,7 @@ describe("Interpreter", () => {
         assert.equal(result, "%{}");
       });
 
-      it("non-empty, with atom keys", () => {
+      it("with atom keys", () => {
         const map = Type.map([
           [Type.atom("a"), Type.integer(1)],
           [Type.atom("b"), Type.bitstring("xyz")],
@@ -1984,7 +2010,7 @@ describe("Interpreter", () => {
         assert.equal(result, '%{a: 1, b: "xyz"}');
       });
 
-      it("non-empty, with non-atom keys", () => {
+      it("with non-atom keys", () => {
         const map = Type.map([
           [Type.integer(9), Type.bitstring("xyz")],
           [Type.bitstring("abc"), Type.float(2.3)],
@@ -2026,42 +2052,41 @@ describe("Interpreter", () => {
 
         assert.equal(result, "%{b: 2, a: 1}");
       });
+
+      describe("structs", () => {
+        describe("range", () => {
+          it("step == 1", () => {
+            const result = Interpreter.inspect(Type.range(123, 234, 1));
+            assert.equal(result, "123..234");
+          });
+
+          it("step > 1", () => {
+            const result = Interpreter.inspect(Type.range(123, 234, 345));
+            assert.equal(result, "123..234//345");
+          });
+        });
+      });
     });
 
-    it("pid", () => {
+    it("PID", () => {
       const term = Type.pid("my_node@my_host", [0, 11, 222], "client");
       const result = Interpreter.inspect(term);
 
       assert.equal(result, "#PID<0.11.222>");
     });
 
-    describe("range", () => {
-      it("step == 1", () => {
-        const result = Interpreter.inspect(Type.range(123, 234, 1));
-        assert.equal(result, "123..234");
-      });
+    it("port", () => {
+      const term = Type.port("my_node", [0, 11], "server");
+      const result = Interpreter.inspect(term);
 
-      it("step > 1", () => {
-        const result = Interpreter.inspect(Type.range(123, 234, 345));
-        assert.equal(result, "123..234//345");
-      });
+      assert.equal(result, "#Port<0.11>");
     });
 
-    describe("string", () => {
-      it("empty text", () => {
-        const result = Interpreter.inspect(Type.string(""));
-        assert.equal(result, '""');
-      });
+    it("reference", () => {
+      const term = Type.reference("my_node", [0, 1, 2, 3], "server");
+      const result = Interpreter.inspect(term);
 
-      it("ASCII text", () => {
-        const result = Interpreter.inspect(Type.string("abc"));
-        assert.equal(result, '"abc"');
-      });
-
-      it("Unicode text", () => {
-        const result = Interpreter.inspect(Type.string("全息图"));
-        assert.equal(result, '"全息图"');
-      });
+      assert.equal(result, "#Reference<0.1.2.3>");
     });
 
     describe("tuple", () => {
@@ -2077,12 +2102,6 @@ describe("Interpreter", () => {
 
         assert.equal(result, "{1, 2, 3}");
       });
-    });
-
-    // TODO: remove when all types are supported
-    it("default", () => {
-      const result = Interpreter.inspect({type: "x"});
-      assert.equal(result, '[2,{"type":"sx"}]');
     });
   });
 
@@ -6027,6 +6046,16 @@ describe("Interpreter", () => {
       () => Interpreter.raiseMatchError("my_message"),
       "MatchError",
       "my_message",
+    );
+  });
+
+  it("raiseProtocolUndefinedError()", () => {
+    const term = Type.tuple([Type.integer(1), Type.integer(2)]);
+
+    assertBoxedError(
+      () => Interpreter.raiseProtocolUndefinedError("String.Chars", term),
+      "Protocol.UndefinedError",
+      Interpreter.buildProtocolUndefinedErrorMsg("String.Chars", term),
     );
   });
 

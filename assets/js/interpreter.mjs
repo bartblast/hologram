@@ -3,7 +3,6 @@
 import Bitstring from "./bitstring.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
-import Serializer from "./serializer.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
 
@@ -27,12 +26,13 @@ export default class Interpreter {
   static assertStructuralComparisonSupportedType(term) {
     if (
       !Type.isAtom(term) &&
+      !Type.isBitstring(term) &&
       !Type.isFloat(term) &&
       !Type.isInteger(term) &&
       !Type.isPid(term) &&
       !Type.isTuple(term)
     ) {
-      const message = `Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: ${Interpreter.inspect(
+      const message = `Structural comparison currently supports only atoms, bitstrings, floats, integers, pids and tuples, got: ${Interpreter.inspect(
         term,
       )}`;
 
@@ -93,6 +93,15 @@ export default class Interpreter {
 
   static buildMatchErrorMsg(right) {
     return "no match of right hand side value: " + Interpreter.inspect(right);
+  }
+
+  static buildProtocolUndefinedErrorMsg(protocol, term) {
+    return (
+      `protocol ${protocol} not implemented for type ` +
+      `${term.type.charAt(0).toUpperCase() + term.type.slice(1)}\n\n` +
+      "Got value:\n\n" +
+      `    ${$.inspect(term)}`
+    );
   }
 
   static buildTooBigOutputErrorMsg(mfa) {
@@ -241,6 +250,9 @@ export default class Interpreter {
           : term1.value < term2.value
             ? -1
             : 1;
+
+      case "bitstring":
+        return Bitstring.compare(term1, term2);
 
       case "pid":
         return Interpreter.#comparePids(term1, term2);
@@ -502,43 +514,43 @@ export default class Interpreter {
     }
   }
 
-  // TODO: implement other types (e.g. ports, structs)
+  // TODO: use String.Chars (to_string/1) protocol for structs
   // TODO: implement opts param
   static inspect(term, opts = Type.keywordList()) {
+    // Cases ordered by expected frequency (most common first)
     switch (term.type) {
-      case "anonymous_function":
-        return Interpreter.#inspectAnonymousFunction(term, opts);
-
       case "atom":
         return Interpreter.#inspectAtom(term, opts);
-
-      case "bitstring":
-        return Interpreter.#inspectBitstring(term, opts);
-
-      case "float":
-        return Interpreter.#inspectFloat(term, opts);
-
-      case "integer":
-        return term.value.toString();
-
-      case "list":
-        return Interpreter.#inspectList(term, opts);
 
       case "map":
         return Interpreter.#inspectMap(term, opts);
 
-      case "pid":
-        return `#PID<${term.segments.join(".")}>`;
+      case "bitstring":
+        return Interpreter.#inspectBitstring(term, opts);
 
-      case "string":
-        return `"${term.value}"`;
+      case "list":
+        return Interpreter.#inspectList(term, opts);
+
+      case "integer":
+        return term.value.toString();
 
       case "tuple":
         return Interpreter.#inspectTuple(term, opts);
 
-      // TODO: remove when all types are supported
-      default:
-        return Serializer.serialize(term, "client");
+      case "anonymous_function":
+        return Interpreter.#inspectAnonymousFunction(term, opts);
+
+      case "float":
+        return Interpreter.#inspectFloat(term, opts);
+
+      case "pid":
+        return `#PID<${term.segments.join(".")}>`;
+
+      case "reference":
+        return `#Reference<${term.segments.join(".")}>`;
+
+      case "port":
+        return `#Port<${term.segments.join(".")}>`;
     }
   }
 
@@ -814,6 +826,17 @@ export default class Interpreter {
 
   static raiseMatchError(message) {
     Interpreter.raiseError("MatchError", message);
+  }
+
+  // TODO: make the client-side error message consistent with the server-side error message
+  static raiseProtocolUndefinedError(protocol, term) {
+    const message =
+      `protocol ${protocol} not implemented for type ` +
+      `${term.type.charAt(0).toUpperCase() + term.type.slice(1)}\n\n` +
+      "Got value:\n\n" +
+      `    ${Interpreter.inspect(term)}`;
+
+    $.raiseError("Protocol.UndefinedError", message);
   }
 
   static raiseUndefinedFunctionError(message) {

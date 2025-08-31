@@ -87,6 +87,263 @@ describe("Bitstring", () => {
     assert.equal(Bitstring.calculateTextByteCount("全息图"), 9);
   });
 
+  describe("compare()", () => {
+    describe("text-based comparison fast path", () => {
+      it("returns 0 for identical text with no leftover bits", () => {
+        const bitstring1 = Type.bitstring("hello");
+        const bitstring2 = Type.bitstring("hello");
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, 0);
+      });
+
+      it("falls through to byte comparison for different text", () => {
+        const bitstring1 = Type.bitstring("abc");
+        const bitstring2 = Type.bitstring("abd");
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, -1);
+      });
+
+      it("falls through when one bitstring is not text-based", () => {
+        const bitstring1 = Type.bitstring("abc");
+        const bitstring2 = Bitstring.fromBytes([97, 98, 99]); // "abc" in bytes
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, 0);
+      });
+
+      it("handles Unicode text comparison", () => {
+        const bitstring1 = Type.bitstring("全"); // Unicode character
+        const bitstring2 = Type.bitstring("息"); // Different Unicode character
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, -1);
+      });
+    });
+
+    describe("byte-aligned comparison (no leftover bits)", () => {
+      it("returns 0 for equal byte arrays", () => {
+        const bitstring1 = Bitstring.fromBytes([1, 2, 3]);
+        const bitstring2 = Bitstring.fromBytes([1, 2, 3]);
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, 0);
+      });
+
+      it("returns -1 when first byte is smaller", () => {
+        const bitstring1 = Bitstring.fromBytes([1, 2, 3]);
+        const bitstring2 = Bitstring.fromBytes([2, 2, 3]);
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, -1);
+      });
+
+      it("returns 1 when first byte is larger", () => {
+        const bitstring1 = Bitstring.fromBytes([2, 2, 3]);
+        const bitstring2 = Bitstring.fromBytes([1, 2, 3]);
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, 1);
+      });
+
+      it("returns -1 when second byte is smaller", () => {
+        const bitstring1 = Bitstring.fromBytes([1, 1, 3]);
+        const bitstring2 = Bitstring.fromBytes([1, 2, 3]);
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, -1);
+      });
+
+      it("returns 1 when second byte is larger", () => {
+        const bitstring1 = Bitstring.fromBytes([1, 3, 3]);
+        const bitstring2 = Bitstring.fromBytes([1, 2, 3]);
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, 1);
+      });
+
+      it("returns -1 when first bitstring is shorter", () => {
+        const bitstring1 = Bitstring.fromBytes([1, 2]);
+        const bitstring2 = Bitstring.fromBytes([1, 2, 3]);
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, -1);
+      });
+
+      it("returns 1 when first bitstring is longer", () => {
+        const bitstring1 = Bitstring.fromBytes([1, 2, 3]);
+        const bitstring2 = Bitstring.fromBytes([1, 2]);
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, 1);
+      });
+
+      it("handles empty bitstrings", () => {
+        const bitstring1 = Bitstring.fromBytes([]);
+        const bitstring2 = Bitstring.fromBytes([]);
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, 0);
+      });
+
+      it("handles empty vs non-empty", () => {
+        const bitstring1 = Bitstring.fromBytes([]);
+        const bitstring2 = Bitstring.fromBytes([1]);
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, -1);
+      });
+
+      it("optimizes comparison with unrolled loop for longer arrays", () => {
+        // Test with array longer than 4 bytes to trigger unrolled loop
+        const bitstring1 = Bitstring.fromBytes([1, 2, 3, 4, 5, 6, 7, 8]);
+        const bitstring2 = Bitstring.fromBytes([1, 2, 3, 4, 5, 6, 7, 9]);
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, -1);
+      });
+
+      it("compares byte arrays with unrolled loop optimization - first chunk differs", () => {
+        const bitstring1 = Bitstring.fromBytes([1, 2, 3, 4, 5]);
+        const bitstring2 = Bitstring.fromBytes([1, 2, 2, 4, 5]); // third byte differs
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, 1);
+      });
+    });
+
+    describe("leftover bits comparison", () => {
+      it("compares bitstrings where first has no leftover bits, second has leftover bits", () => {
+        const bitstring1 = Bitstring.fromBytes([1, 2]); // 2 complete bytes, no leftover
+
+        const bitstring2 = Type.bitstring([
+          1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+        ]); // 2 complete bytes + 2 leftover bits
+
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, -1);
+      });
+
+      it("compares bitstrings where first has leftover bits, second has no leftover bits", () => {
+        const bitstring1 = Type.bitstring([
+          1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+        ]); // 2 complete bytes + 2 leftover bits
+
+        const bitstring2 = Bitstring.fromBytes([1, 2]); // 2 complete bytes, no leftover
+
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, 1);
+      });
+
+      it("compares bitstrings with same number of complete bytes and different leftover bits", () => {
+        const bitstring1 = Type.bitstring([1, 0, 0, 0, 0, 0, 0, 0, 1, 1]); // 1 complete byte + 2 leftover bits (11xx xxxx)
+        const bitstring2 = Type.bitstring([1, 0, 0, 0, 0, 0, 0, 0, 1, 0]); // 1 complete byte + 2 leftover bits (10xx xxxx)
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, 1);
+      });
+
+      it("compares bitstrings with same leftover bit values but different counts", () => {
+        const bitstring1 = Type.bitstring([1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1]); // 1 complete byte + 3 leftover bits
+        const bitstring2 = Type.bitstring([1, 0, 0, 0, 0, 0, 0, 0, 1, 0]); // 1 complete byte + 2 leftover bits
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, 1);
+      });
+
+      it("returns 0 for bitstrings with identical leftover bits", () => {
+        const bitstring1 = Type.bitstring([1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1]); // 1 complete byte + 3 leftover bits
+        const bitstring2 = Type.bitstring([1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1]); // 1 complete byte + 3 leftover bits
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, 0);
+      });
+    });
+
+    describe("different complete byte counts with leftover bits", () => {
+      it("compares when first has more complete bytes and second has leftover bits", () => {
+        const bitstring1 = Bitstring.fromBytes([1, 2, 3]); // 3 complete bytes
+
+        const bitstring2 = Type.bitstring([
+          1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+        ]); // 2 complete bytes + leftover
+
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        // Should compare byte 3 (value 3) with leftover bits of second bitstring
+        // Second bitstring's leftover bits: 10 (which is 128 when left-aligned)
+        assert.equal(result, -1); // 3 < 128
+      });
+
+      it("compares when second has more complete bytes and first has leftover bits", () => {
+        const bitstring1 = Type.bitstring([
+          1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+        ]); // 2 complete bytes + leftover
+
+        const bitstring2 = Bitstring.fromBytes([1, 2, 3]); // 3 complete bytes
+
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        // Should compare leftover bits of first bitstring with byte 3 (value 3)
+        // First bitstring's leftover bits: 10 (which is 128 when left-aligned)
+        assert.equal(result, 1); // 128 > 3
+      });
+
+      it("handles case where longer bitstring byte equals shorter leftover bits", () => {
+        // Create a bitstring where the next byte from longer equals the leftover masked bits from shorter
+        const bitstring1 = Type.bitstring([
+          1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0,
+        ]); // bytes: [1, 192], leftover: 0
+
+        const bitstring2 = Type.bitstring([1, 0, 0, 0, 0, 0, 0, 0, 1, 1]); // bytes: [1, 192], leftover: 2
+
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        // First has more complete bytes, second has leftover
+        // Next byte from first (192) should equal leftover masked bits from second (11xx xxxx = 192)
+        // Since they're equal up to leftover bits, longer one wins
+        assert.equal(result, 1);
+      });
+
+      it("compares when shorter has no leftover bits", () => {
+        const bitstring1 = Bitstring.fromBytes([1, 2]); // 2 complete bytes, no leftover
+        const bitstring2 = Bitstring.fromBytes([1, 2, 3]); // 3 complete bytes
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, -1);
+      });
+    });
+
+    describe("edge cases", () => {
+      it("handles single bit comparison", () => {
+        const bitstring1 = Type.bitstring([1]); // single bit: 1
+        const bitstring2 = Type.bitstring([0]); // single bit: 0
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, 1);
+      });
+
+      it("handles comparison with large byte values", () => {
+        const bitstring1 = Bitstring.fromBytes([255, 254]);
+        const bitstring2 = Bitstring.fromBytes([255, 255]);
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, -1);
+      });
+
+      it("handles text vs bytes comparison", () => {
+        const bitstring1 = Type.bitstring("A"); // ASCII 65
+        const bitstring2 = Bitstring.fromBytes([66]); // ASCII 66 ("B")
+        const result = Bitstring.compare(bitstring1, bitstring2);
+
+        assert.equal(result, -1);
+      });
+    });
+  });
+
   describe("concat()", () => {
     it("handles empty array of bitstrings", () => {
       const result = Bitstring.concat([]);

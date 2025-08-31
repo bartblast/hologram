@@ -196,22 +196,23 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
       assert Kernel.inspect(:abc, []) == ":abc"
     end
 
-    test "bitstring, empty text" do
+    test "bitstring, text, empty" do
       assert Kernel.inspect("", []) == ~s'""'
     end
 
-    test "bitstring, ASCII text" do
+    test "bitstring, text, ASCII" do
       assert Kernel.inspect("abc", []) == ~s'"abc"'
     end
 
-    test "bitstring, Unicode text" do
+    test "bitstring, text, Unicode" do
       assert Kernel.inspect("全息图", []) == ~s'"全息图"'
     end
 
-    test "bitstring, not text" do
-      assert Kernel.inspect(<<0b11001100, 0b10101010, 0b11::size(2)>>) ==
-               "<<204, 170, 3::size(2)>>"
+    test "bitstring, text, non-printable" do
+      assert Kernel.inspect("a\x01b") == "<<97, 1, 98>>"
     end
+
+    # TODO: bitstring / bytes (see client-side Interpreter.inspect() tests)
 
     test "float, integer-representable" do
       assert Kernel.inspect(123.0, []) == "123.0"
@@ -229,31 +230,46 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
       assert Kernel.inspect([], []) == "[]"
     end
 
-    test "list, non-empty, proper" do
+    test "list, proper" do
       assert Kernel.inspect([1, 2, 3], []) == "[1, 2, 3]"
     end
 
-    test "list, non-empty, improper" do
+    test "list, improper" do
       assert Kernel.inspect([1, 2 | 3], []) == "[1, 2 | 3]"
     end
+
+    # TODO: lits / keyword list (see client-side Interpreter.inspect() tests)
 
     test "map, empty" do
       assert Kernel.inspect(%{}, []) == "%{}"
     end
 
-    test "map, non-empty, with atom keys" do
+    test "map, with atom keys" do
       assert Kernel.inspect(%{a: 1, b: "xyz"}, []) in [
                ~s'%{a: 1, b: "xyz"}',
                ~s'%{b: "xyz", a: 1}'
              ]
     end
 
-    test "map, non-empty, with non-atom keys" do
+    test "map, with non-atom keys" do
       assert Kernel.inspect(%{9 => "xyz", "abc" => 2.3}, []) == ~s'%{9 => "xyz", "abc" => 2.3}'
     end
 
-    # Same as "bitstring".
-    # test "string"
+    # TODO: maps / sort_maps opt (see client-side Interpreter.inspect() tests)
+
+    # TODO: maps / structs
+
+    assert "PID" do
+      assert Kernel.inspect(pid("0.11.222")) == "#PID<0.11.222>"
+    end
+
+    assert "port" do
+      assert Kernel.inspect(port("0.11")) == "#Port<0.11>"
+    end
+
+    assert "reference" do
+      assert Kernel.inspect(ref("0.1.2.3")) == "#Reference<0.1.2.3>"
+    end
 
     test "tuple, empty" do
       assert Kernel.inspect({}, []) == "{}"
