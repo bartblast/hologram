@@ -1106,6 +1106,8 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
+  # IMPORTANT!
+  # Keep client-side Renderer.stringifyForInterpolation() and server-side Renderer.stringify_for_interpolation/2 unit tests consistent.  
   describe "stringify_for_interpolation/1" do
     test "atom, non-boolean and non-nil" do
       assert stringify_for_interpolation(:abc) == "abc"

@@ -204,7 +204,7 @@ defmodule Hologram.Template.Renderer do
   ## Parameters
 
     * `value` - The Elixir value to convert for template interpolation
-    * `escape` - Whether to HTML-escape the result to prevent XSS (default: true)
+    * `escape?` - Whether to HTML-escape the result to prevent XSS (default: true)
 
   ## Examples
 
@@ -218,7 +218,7 @@ defmodule Hologram.Template.Renderer do
       "<script>"
   """
   @spec stringify_for_interpolation(any, boolean) :: String.t()
-  def stringify_for_interpolation(value, escape \\ true)
+  def stringify_for_interpolation(value, escape? \\ true)
 
   def stringify_for_interpolation(value, true) do
     value

@@ -119,7 +119,7 @@ export default class Renderer {
         );
 
       case "expression":
-        return $.toText(dom.data[1].data[0]);
+        return $.stringifyForInterpolation(dom.data[1].data[0]);
 
       case "page":
         return Renderer.renderDom(
@@ -166,6 +166,32 @@ export default class Renderer {
     }
 
     return htmlVnode;
+  }
+
+  // Based on stringify_for_interpolation/2
+  static stringifyForInterpolation(value, escape = true) {
+    let text;
+
+    if (Type.isAtom(value) || Type.isBinary(value) || Type.isNumber(value)) {
+      text = $.toText(value);
+    } else {
+      let opts;
+
+      if (Type.isMap(value)) {
+        opts = Type.keywordList([
+          [
+            Type.atom("custom_options"),
+            Type.keywordList([[Type.atom("sort_maps"), Type.boolean(true)]]),
+          ],
+        ]);
+      } else {
+        opts = Type.list();
+      }
+
+      text = Interpreter.inspect(value, opts);
+    }
+
+    return escape ? $.escapeHtml(text) : text;
   }
 
   static toBitstring(term) {
