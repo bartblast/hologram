@@ -155,13 +155,6 @@ defmodule Hologram.Template.RendererTest do
                   }
                 }}
     end
-
-    test "HTML entities inside public comments are not escaped" do
-      # <!-- abc < xyz -->
-      node = {:public_comment, [text: " abc < xyz "]}
-
-      assert render_dom(node, @env, @server) == {"<!-- abc < xyz -->", %{}, @server}
-    end
   end
 
   test "DOCTYPE node" do
@@ -169,27 +162,11 @@ defmodule Hologram.Template.RendererTest do
     assert render_dom(node, @env, @server) == {"<!DOCTYPE html>", %{}, @server}
   end
 
-  describe "expression node" do
-    test "expression value is converted to string" do
-      # {123}
-      node = {:expression, {123}}
+  test "expression node" do
+    # {123}
+    node = {:expression, {123}}
 
-      assert render_dom(node, @env, @server) == {"123", %{}, @server}
-    end
-
-    test "HTML entities inside script elements are not escaped" do
-      # <script>{"abc < xyz"}</script>
-      node = {:element, "script", [], [expression: {"abc < xyz"}]}
-
-      assert render_dom(node, @env, @server) == {"<script>abc < xyz</script>", %{}, @server}
-    end
-
-    test "HTML entities inside non-script elements are escaped" do
-      # <div>{"abc < xyz"}</div>
-      node = {:element, "div", [], [expression: {"abc < xyz"}]}
-
-      assert render_dom(node, @env, @server) == {"<div>abc &lt; xyz</div>", %{}, @server}
-    end
+    assert render_dom(node, @env, @server) == {"123", %{}, @server}
   end
 
   describe "element node" do
@@ -329,13 +306,6 @@ defmodule Hologram.Template.RendererTest do
                     }
                   }
                 }}
-    end
-
-    test "HTML entities inside script tags are not escaped" do
-      # <script>abc < xyz</script>
-      node = {:element, "script", [], [text: "abc < xyz"]}
-
-      assert render_dom(node, @env, @server) == {"<script>abc < xyz</script>", %{}, @server}
     end
   end
 
@@ -1103,6 +1073,51 @@ defmodule Hologram.Template.RendererTest do
                </body>
              </html>\
              """
+    end
+  end
+
+  describe "escaping" do
+    test "text inside non-script elements" do
+      # <div>abc < xyz</div>
+      node = {:element, "div", [], [text: "abc < xyz"]}
+
+      assert render_dom(node, @env, @server) == {"<div>abc &lt; xyz</div>", %{}, @server}
+    end
+
+    test "text inside script elements" do
+      # <script>abc < xyz</script>
+      node = {:element, "script", [], [text: "abc < xyz"]}
+
+      assert render_dom(node, @env, @server) == {"<script>abc < xyz</script>", %{}, @server}
+    end
+
+    test "text inside public comments" do
+      # <!-- abc < xyz -->
+      node = {:public_comment, [text: " abc < xyz "]}
+
+      assert render_dom(node, @env, @server) == {"<!-- abc < xyz -->", %{}, @server}
+    end
+
+    test "expression inside non-script elements" do
+      # <div>{"abc < xyz"}</div>
+      node = {:element, "div", [], [expression: {"abc < xyz"}]}
+
+      assert render_dom(node, @env, @server) == {"<div>abc &lt; xyz</div>", %{}, @server}
+    end
+
+    test "expression inside script elements" do
+      # <script>{"abc < xyz"}</script>
+      node = {:element, "script", [], [expression: {"abc < xyz"}]}
+
+      assert render_dom(node, @env, @server) == {"<script>abc < xyz</script>", %{}, @server}
+    end
+
+    # TODO: shouldn't escape
+    test "expression inside public comments" do
+      # <!-- {"abc < xyz"} -->
+      node = {:public_comment, [text: " ", expression: {"abc < xyz"}, text: " "]}
+
+      assert render_dom(node, @env, @server) == {"<!-- abc &lt; xyz -->", %{}, @server}
     end
   end
 
