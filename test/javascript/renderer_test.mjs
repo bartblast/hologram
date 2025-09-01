@@ -1794,7 +1794,7 @@ describe("Renderer", () => {
         });
       });
 
-      describe("form element value handling", () => {
+      describe("input element value handling", () => {
         it("input element with value attribute sets up hooks", () => {
           const node = Type.tuple([
             Type.atom("element"),
