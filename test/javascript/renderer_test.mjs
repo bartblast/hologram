@@ -613,7 +613,13 @@ describe("Renderer", () => {
         Type.list(),
       ]);
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
 
       const expected = vnode("img", {attrs: {attr_2: "value_2"}, on: {}}, []);
 
@@ -941,7 +947,14 @@ describe("Renderer", () => {
             Type.list(),
           ]);
 
-          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
           assert.deepStrictEqual(Object.keys(vdom.data.on), ["input"]);
 
           const stub = sinon
@@ -984,7 +997,14 @@ describe("Renderer", () => {
             Type.list(),
           ]);
 
-          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
           assert.deepStrictEqual(Object.keys(vdom.data.on), ["change"]);
 
           const stub = sinon
@@ -1021,7 +1041,14 @@ describe("Renderer", () => {
             Type.list(),
           ]);
 
-          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
           assert.deepStrictEqual(Object.keys(vdom.data.on), ["input"]);
 
           const stub = sinon
@@ -1058,7 +1085,14 @@ describe("Renderer", () => {
             Type.list(),
           ]);
 
-          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
           assert.deepStrictEqual(Object.keys(vdom.data.on), ["input"]);
 
           const stub = sinon
@@ -1099,7 +1133,14 @@ describe("Renderer", () => {
             Type.list(),
           ]);
 
-          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
           assert.deepStrictEqual(Object.keys(vdom.data.on), ["input"]);
 
           const stub = sinon
@@ -1142,7 +1183,14 @@ describe("Renderer", () => {
             Type.list(),
           ]);
 
-          const vdom = Renderer.renderDom(node, context, slots, defaultTarget);
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
           assert.deepStrictEqual(Object.keys(vdom.data.on), ["change"]);
 
           const stub = sinon
@@ -1767,6 +1815,7 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
 
           // Should not have the value as an attribute
@@ -1799,6 +1848,7 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
 
           // Should have the type attribute
@@ -1828,6 +1878,7 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
 
           // Should have the value as a normal attribute for non-input elements
@@ -1855,6 +1906,7 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
 
           // Should not have the value as an attribute
@@ -1890,6 +1942,7 @@ describe("Renderer", () => {
             context,
             slots,
             defaultTarget,
+            parentTagName,
           );
 
           // Should not have the value as an attribute
@@ -1932,6 +1985,7 @@ describe("Renderer", () => {
               context,
               slots,
               defaultTarget,
+              parentTagName,
             );
 
             // Call the create hook with mock vnode
@@ -1962,6 +2016,7 @@ describe("Renderer", () => {
               context,
               slots,
               defaultTarget,
+              parentTagName,
             );
 
             // Simulate that we previously set a value
@@ -2001,6 +2056,7 @@ describe("Renderer", () => {
               context,
               slots,
               defaultTarget,
+              parentTagName,
             );
 
             // Simulate that user has typed something different
@@ -2037,6 +2093,7 @@ describe("Renderer", () => {
               context,
               slots,
               defaultTarget,
+              parentTagName,
             );
 
             // Simulate that current value is something else
@@ -2073,6 +2130,7 @@ describe("Renderer", () => {
               context,
               slots,
               defaultTarget,
+              parentTagName,
             );
 
             // Simulate input with any current value
@@ -2109,6 +2167,7 @@ describe("Renderer", () => {
               context,
               slots,
               defaultTarget,
+              parentTagName,
             );
 
             // Set input to the same value as what will be set
@@ -2497,7 +2556,14 @@ describe("Renderer", () => {
 
       initComponentRegistryEntry(Type.bitstring("component_37"));
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = ["prop_aaa = 123"];
 
       assert.deepStrictEqual(result, expected);
@@ -2521,7 +2587,14 @@ describe("Renderer", () => {
       initComponentRegistryEntry(Type.bitstring("component_76"));
 
       assertBoxedError(
-        () => Renderer.renderDom(node, context, slots, defaultTarget),
+        () =>
+          Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          ),
         "KeyError",
         Interpreter.buildKeyErrorMsg(Type.atom("aaa"), Type.map()),
       );
@@ -2544,7 +2617,14 @@ describe("Renderer", () => {
 
       initComponentRegistryEntry(Type.bitstring("component_77"));
 
-      const result = Renderer.renderDom(node, context, slots, defaultTarget);
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
       const expected = ["prop_aaa = 987"];
 
       assert.deepStrictEqual(result, expected);
@@ -4308,7 +4388,7 @@ describe("Renderer", () => {
       ]);
 
       // Render the component - should trigger init/2 without next_action
-      Renderer.renderDom(node, context, slots, defaultTarget);
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
 
       // Check that no action was queued
       assert.strictEqual(InitActionQueue.queue.length, 0);
@@ -4341,7 +4421,7 @@ describe("Renderer", () => {
       ]);
 
       // Render the component - should not trigger init/2 since already initialized
-      Renderer.renderDom(node, context, slots, defaultTarget);
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
 
       // Check that no action was queued
       assert.strictEqual(InitActionQueue.queue.length, 0);
@@ -4365,7 +4445,7 @@ describe("Renderer", () => {
       ]);
 
       // Render the component - should trigger init/2 and queue the action
-      Renderer.renderDom(node, context, slots, defaultTarget);
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
 
       // Check that action was queued with original target preserved
 
@@ -4402,7 +4482,7 @@ describe("Renderer", () => {
       ]);
 
       // Render the component - should trigger init/2 and queue the action
-      Renderer.renderDom(node, context, slots, defaultTarget);
+      Renderer.renderDom(node, context, slots, defaultTarget, parentTagName);
 
       // Check that action was queued with target added
 
