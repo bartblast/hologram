@@ -2498,7 +2498,7 @@ describe("Renderer", () => {
       );
 
       const expected = [
-        'component vars = %{prop_1: "abc", prop_2: :xyz, prop_3: 123}',
+        "component vars = %{prop_1: &quot;abc&quot;, prop_2: :xyz, prop_3: 123}",
       ];
 
       assert.deepStrictEqual(result, expected);
@@ -3019,10 +3019,10 @@ describe("Renderer", () => {
         parentTagName,
       );
 
-      assert.equal(
-        result,
-        'component vars = %{cid: "my_component", prop_1: "value_1", prop_2: 2, prop_3: "aaa2bbb"}',
-      );
+      const expected =
+        "component vars = %{cid: &quot;my_component&quot;, prop_1: &quot;value_1&quot;, prop_2: 2, prop_3: &quot;aaa2bbb&quot;}";
+
+      assert.equal(result, expected);
     });
 
     it("with unregistered var used", () => {
@@ -3519,7 +3519,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          'layout vars = %{cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}',
+          "layout vars = %{cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;}",
         ]),
       ]);
 
@@ -3546,7 +3546,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          'layout vars = %{cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}',
+          "layout vars = %{cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;}",
         ]),
       ]);
 
@@ -3575,7 +3575,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          'page vars = %{key_1: "param_value_1", key_2: "state_value_2", key_3: "state_value_3"}',
+          "page vars = %{key_1: &quot;param_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;}",
         ]),
       ]);
 
@@ -3601,7 +3601,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          'layout vars = %{cid: "layout", key_1: "prop_value_1", key_2: "state_value_2", key_3: "state_value_3"}',
+          "layout vars = %{cid: &quot;layout&quot;, key_1: &quot;prop_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;}",
         ]),
       ]);
 
