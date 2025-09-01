@@ -755,11 +755,11 @@ export default class Renderer {
     const attrsDom = dom.data[2];
 
     const {attrs: attrsVdom, props: propsVdom} =
-      Renderer.#renderAttributesAndProps(attrsDom, tagName);
+      Renderer.#renderAttributesAndProps(attrsDom, currentTagName);
 
     const eventListenersVdom = Renderer.#renderEventListeners(
       attrsDom,
-      tagName,
+      currentTagName,
       attrsVdom,
       defaultTarget,
     );
@@ -780,7 +780,10 @@ export default class Renderer {
       data.props = propsVdom;
     }
 
-    if (tagName === "input" && attrsVdom["data-hologram-value"] !== undefined) {
+    if (
+      currentTagName === "input" &&
+      attrsVdom["data-hologram-value"] !== undefined
+    ) {
       const hologramValue = attrsVdom["data-hologram-value"];
 
       // Remove the temporary attribute
