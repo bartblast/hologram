@@ -214,11 +214,18 @@ defmodule Mix.Tasks.Compile.HologramTest do
       lock_path = Path.join(opts[:build_dir], @compiler_lock_file_name)
       refute File.exists?(lock_path)
 
-      # Create invalid opts that will cause compilation to fail early
-      invalid_opts = Keyword.put(opts, :assets_dir, "/nonexistent/assets/dir")
+      # Create a valid directory but with invalid package.json that will cause npm install to fail
+      assets_dir = Path.join(@test_dir, "assets")
+      File.mkdir_p!(assets_dir)
+
+      # Create an invalid package.json that will cause npm install to fail
+      invalid_package_json_path = Path.join(assets_dir, "package.json")
+      File.write!(invalid_package_json_path, "{ invalid json content")
+
+      opts = Keyword.put(opts, :assets_dir, assets_dir)
 
       assert_raise RuntimeError, "npm install command failed", fn ->
-        run(invalid_opts)
+        run(opts)
       end
 
       refute File.exists?(lock_path)
