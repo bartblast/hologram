@@ -27,6 +27,7 @@ const integer1 = Type.integer(1);
 const integer2 = Type.integer(2);
 const integer3 = Type.integer(3);
 const integer6 = Type.integer(6);
+const list1 = Type.list([integer1, integer2]);
 const pid1 = Type.pid("my_node@my_host", [0, 11, 111]);
 const pid2 = Type.pid("my_node@my_host", [0, 11, 112]);
 const tuple2 = Type.tuple([Type.integer(1), Type.integer(2)]);
@@ -641,8 +642,7 @@ describe("Erlang", () => {
         "Structural comparison currently supports only atoms, bitstrings, floats, integers, pids and tuples, got: [1, 2]";
 
       assert.throw(
-        () =>
-          testedFun(Type.list([Type.integer(1), Type.integer(2)]), integer1),
+        () => testedFun(list1, integer1),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -650,10 +650,10 @@ describe("Erlang", () => {
 
     it("throws a not yet implemented error when the right argument type is not yet supported", () => {
       const expectedMessage =
-        'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
+        "Structural comparison currently supports only atoms, bitstrings, floats, integers, pids and tuples, got: [1, 2]";
 
       assert.throw(
-        () => testedFun(integer1, Type.bitstring("abc")),
+        () => testedFun(integer1, list1),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -967,10 +967,10 @@ describe("Erlang", () => {
 
     it("throws a not yet implemented error when the left argument type is not yet supported", () => {
       const expectedMessage =
-        'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
+        "Structural comparison currently supports only atoms, bitstrings, floats, integers, pids and tuples, got: [1, 2]";
 
       assert.throw(
-        () => testedFun(Type.bitstring("abc"), integer1),
+        () => testedFun(list1, integer1),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -978,10 +978,10 @@ describe("Erlang", () => {
 
     it("throws a not yet implemented error when the right argument type is not yet supported", () => {
       const expectedMessage =
-        'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
+        "Structural comparison currently supports only atoms, bitstrings, floats, integers, pids and tuples, got: [1, 2]";
 
       assert.throw(
-        () => testedFun(integer1, Type.bitstring("abc")),
+        () => testedFun(integer1, list1),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -1193,10 +1193,10 @@ describe("Erlang", () => {
 
     it("throws a not yet implemented error when the left argument type is not yet supported", () => {
       const expectedMessage =
-        'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
+        "Structural comparison currently supports only atoms, bitstrings, floats, integers, pids and tuples, got: [1, 2]";
 
       assert.throw(
-        () => testedFun(Type.bitstring("abc"), integer1),
+        () => testedFun(list1, integer1),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -1204,10 +1204,10 @@ describe("Erlang", () => {
 
     it("throws a not yet implemented error when the right argument type is not yet supported", () => {
       const expectedMessage =
-        'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
+        "Structural comparison currently supports only atoms, bitstrings, floats, integers, pids and tuples, got: [1, 2]";
 
       assert.throw(
-        () => testedFun(integer1, Type.bitstring("abc")),
+        () => testedFun(integer1, list1),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -1317,10 +1317,10 @@ describe("Erlang", () => {
 
     it("throws a not yet implemented error when the left argument type is not yet supported", () => {
       const expectedMessage =
-        'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
+        "Structural comparison currently supports only atoms, bitstrings, floats, integers, pids and tuples, got: [1, 2]";
 
       assert.throw(
-        () => testedFun(Type.bitstring("abc"), integer1),
+        () => testedFun(list1, integer1),
         HologramInterpreterError,
         expectedMessage,
       );
@@ -1328,10 +1328,10 @@ describe("Erlang", () => {
 
     it("throws a not yet implemented error when the right argument type is not yet supported", () => {
       const expectedMessage =
-        'Structural comparison currently supports only atoms, floats, integers, pids and tuples, got: "abc"';
+        "Structural comparison currently supports only atoms, bitstrings, floats, integers, pids and tuples, got: [1, 2]";
 
       assert.throw(
-        () => testedFun(integer1, Type.bitstring("abc")),
+        () => testedFun(integer1, list1),
         HologramInterpreterError,
         expectedMessage,
       );
