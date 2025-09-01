@@ -260,15 +260,30 @@ defmodule Hologram.ExJsConsistency.InterpreterTest do
     # TODO: maps / structs
 
     assert "PID" do
-      assert Kernel.inspect(pid("0.11.222")) == "#PID<0.11.222>"
+      result =
+        "0.11.222"
+        |> pid()
+        |> Kernel.inspect()
+
+      assert result == "#PID<0.11.222>"
     end
 
     assert "port" do
-      assert Kernel.inspect(port("0.11")) == "#Port<0.11>"
+      result =
+        "0.11"
+        |> port()
+        |> Kernel.inspect()
+
+      assert result == "#Port<0.11>"
     end
 
     assert "reference" do
-      assert Kernel.inspect(ref("0.1.2.3")) == "#Reference<0.1.2.3>"
+      result =
+        "0.1.2.3"
+        |> ref()
+        |> Kernel.inspect()
+
+      assert result == "#Reference<0.1.2.3>"
     end
 
     test "tuple, empty" do

@@ -3,16 +3,16 @@ defmodule Hologram.LiveReload do
 
   use GenServer
 
-  @doc """
-  Reloads the given file path using the given endpoint.
-  """
-  @callback reload(String.t(), any) :: :ok
-
   alias Hologram.Assets.ManifestCache
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Assets.PathRegistry
   alias Hologram.Reflection
   alias Hologram.Router.PageModuleResolver
+
+  @doc """
+  Reloads the given file path using the given endpoint.
+  """
+  @callback reload(String.t(), any) :: :ok
 
   # in milliseconds
   @debounce_delay 1_000

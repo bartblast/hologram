@@ -1190,7 +1190,7 @@ defmodule Hologram.Template.RendererTest do
   end
 
   # IMPORTANT!
-  # Keep client-side Renderer "escaping" and server-side Renderer "escaping" unit tests consistent.  
+  # Keep client-side Renderer "escaping" and server-side Renderer "escaping" unit tests consistent.
   describe "escaping" do
     test "text inside non-script elements" do
       # <div>abc < xyz</div>
@@ -1253,7 +1253,8 @@ defmodule Hologram.Template.RendererTest do
   end
 
   # IMPORTANT!
-  # Keep client-side Renderer.stringifyForInterpolation() and server-side Renderer.stringify_for_interpolation/2 unit tests consistent.  
+  # Keep client-side Renderer.stringifyForInterpolation()
+  # and server-side Renderer.stringify_for_interpolation/2 unit tests consistent.
   describe "stringify_for_interpolation/1" do
     test "atom, non-boolean and non-nil" do
       assert stringify_for_interpolation(:abc) == "abc"

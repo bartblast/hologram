@@ -191,8 +191,7 @@ defmodule Hologram.LiveReloadTest do
       import Mox, only: [expect: 3]
 
       # Mock the reload function to be called (but can raise an error to simulate real behavior)
-      LiveReloadMock
-      |> expect(:reload, fn @file_path, :dummy_endpoint ->
+      expect(LiveReloadMock, :reload, fn @file_path, :dummy_endpoint ->
         # Simulate Phoenix.CodeReloader failure
         raise "expected test error"
       end)
@@ -208,8 +207,7 @@ defmodule Hologram.LiveReloadTest do
       timer_ref = make_ref()
       state_with_timer = %{state | timer_ref: timer_ref}
 
-      LiveReloadMock
-      |> expect(:reload, fn @file_path, :dummy_endpoint -> :ok end)
+      expect(LiveReloadMock, :reload, fn @file_path, :dummy_endpoint -> :ok end)
 
       result = LiveReload.handle_info({:debounced_reload, @file_path}, state_with_timer)
 

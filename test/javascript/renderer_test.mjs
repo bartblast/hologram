@@ -3956,7 +3956,8 @@ describe("Renderer", () => {
   });
 
   // IMPORTANT!
-  // Keep client-side Renderer.stringifyForInterpolation() and server-side Renderer.stringify_for_interpolation/2 unit tests consistent.
+  // Keep client-side Renderer.stringifyForInterpolation()
+  // and server-side Renderer.stringify_for_interpolation/2 unit tests consistent.
   describe("stringifyForInterpolation()", () => {
     const stringifyForInterpolation = Renderer.stringifyForInterpolation;
 
