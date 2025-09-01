@@ -1794,7 +1794,7 @@ describe("Renderer", () => {
         });
       });
 
-      describe("input value handling", () => {
+      describe("form element value handling", () => {
         it("input element with value attribute sets up hooks", () => {
           const node = Type.tuple([
             Type.atom("element"),
@@ -1821,8 +1821,10 @@ describe("Renderer", () => {
           // Should not have the value as an attribute
           assert.isUndefined(result.data.attrs.value);
 
-          // Should not have the temporary data-hologram-value attribute
-          assert.isUndefined(result.data.attrs["data-hologram-value"]);
+          // Should not have the temporary data-hologram-form-value attribute
+          assert.isUndefined(
+            result.data.attrs["data-hologram-form-input-value"],
+          );
 
           // Should have hooks for handling the value property
           assert.strictEqual(typeof result.data.hook, "object");
@@ -1912,8 +1914,10 @@ describe("Renderer", () => {
           // Should not have the value as an attribute
           assert.isUndefined(result.data.attrs.value);
 
-          // Should not have the temporary data-hologram-value attribute (it gets removed after creating hooks)
-          assert.isUndefined(result.data.attrs["data-hologram-value"]);
+          // Should not have the temporary data-hologram-form-value attribute (it gets removed after creating hooks)
+          assert.isUndefined(
+            result.data.attrs["data-hologram-form-input-value"],
+          );
 
           // Should have hooks for handling the value property (empty string is still a valid value)
           assert.strictEqual(typeof result.data.hook, "object");
@@ -1948,8 +1952,10 @@ describe("Renderer", () => {
           // Should not have the value as an attribute
           assert.isUndefined(result.data.attrs.value);
 
-          // Should not have the temporary data-hologram-value attribute
-          assert.isUndefined(result.data.attrs["data-hologram-value"]);
+          // Should not have the temporary data-hologram-form-value attribute
+          assert.isUndefined(
+            result.data.attrs["data-hologram-form-input-value"],
+          );
 
           // Should not have hooks
           assert.isUndefined(result.data.hook);
@@ -2025,7 +2031,7 @@ describe("Renderer", () => {
             // Call the update hook
             const mockVnode = {
               elm: mockInput,
-              data: {hologramValue: "new_value"},
+              data: {hologramFormInputValue: "new_value"},
             };
             result.data.hook.update(null, mockVnode);
 
@@ -2065,7 +2071,7 @@ describe("Renderer", () => {
             // Call the update hook with a new programmatic value
             const mockVnode = {
               elm: mockInput,
-              data: {hologramValue: "new_programmatic_value"},
+              data: {hologramFormInputValue: "new_programmatic_value"},
             };
             result.data.hook.update(null, mockVnode);
 
@@ -2102,7 +2108,7 @@ describe("Renderer", () => {
             // Call the update hook
             const mockVnode = {
               elm: mockInput,
-              data: {hologramValue: "new_value"},
+              data: {hologramFormInputValue: "new_value"},
             };
             result.data.hook.update(null, mockVnode);
 
@@ -2139,7 +2145,7 @@ describe("Renderer", () => {
             // Call the update hook
             const mockVnode = {
               elm: mockInput,
-              data: {hologramValue: "first_value"},
+              data: {hologramFormInputValue: "first_value"},
             };
             result.data.hook.update(null, mockVnode);
 
@@ -2185,10 +2191,420 @@ describe("Renderer", () => {
             });
 
             // Call the update hook with same value (to test no change)
-            const oldVnode = {data: {hologramValue: "same_value"}};
+            const oldVnode = {data: {hologramFormInputValue: "same_value"}};
             const mockVnode = {
               elm: mockInput,
-              data: {hologramValue: "same_value"},
+              data: {hologramFormInputValue: "same_value"},
+            };
+            result.data.hook.update(oldVnode, mockVnode);
+
+            // Should not have called the setter since value didn't change
+            assert.strictEqual(setterCallCount, 0);
+          });
+        });
+      });
+
+      describe("textarea value handling", () => {
+        it("textarea element with value attribute sets up hooks", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("textarea"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("value"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("test_value")],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          // Should not have the value as an attribute
+          assert.isUndefined(result.data.attrs.value);
+
+          // Should not have the temporary data-hologram-form-value attribute
+          assert.isUndefined(
+            result.data.attrs["data-hologram-form-input-value"],
+          );
+
+          // Should have hooks for handling the value property
+          assert.strictEqual(typeof result.data.hook, "object");
+          assert.strictEqual(typeof result.data.hook.create, "function");
+          assert.strictEqual(typeof result.data.hook.update, "function");
+        });
+
+        it("textarea element without value attribute does not set up value hooks", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("textarea"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("rows"),
+                Type.keywordList([[Type.atom("text"), Type.bitstring("10")]]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          // Should have the rows attribute
+          assert.strictEqual(result.data.attrs.rows, "10");
+
+          // Should not have hooks since there's no value attribute
+          assert.isUndefined(result.data.hook);
+        });
+
+        it("non-textarea element with value attribute treats value as regular attribute", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("div"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("value"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("test_value")],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          // Should have the value as a normal attribute for non-textarea elements
+          assert.strictEqual(result.data.attrs.value, "test_value");
+
+          // Should not have hooks since it's not a textarea
+          assert.isUndefined(result.data.hook);
+        });
+
+        it("textarea element with empty string value attribute preserves empty string", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("textarea"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("value"),
+                Type.keywordList([[Type.atom("text"), Type.bitstring("")]]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          // Should not have the value as an attribute
+          assert.isUndefined(result.data.attrs.value);
+
+          // Should not have the temporary data-hologram-form-value attribute (it gets removed after creating hooks)
+          assert.isUndefined(
+            result.data.attrs["data-hologram-form-input-value"],
+          );
+
+          // Should have hooks for handling the value property (empty string is still a valid value)
+          assert.strictEqual(typeof result.data.hook, "object");
+          assert.strictEqual(typeof result.data.hook.create, "function");
+          assert.strictEqual(typeof result.data.hook.update, "function");
+        });
+
+        // nil or false value or attribute not present
+        it("textarea element with undefined value does not set up hooks", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("textarea"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("value"),
+                Type.keywordList([
+                  [Type.atom("expression"), Type.tuple([Type.nil()])],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          // Should not have the value as an attribute
+          assert.isUndefined(result.data.attrs.value);
+
+          // Should not have the temporary data-hologram-form-value attribute
+          assert.isUndefined(
+            result.data.attrs["data-hologram-form-input-value"],
+          );
+
+          // Should not have hooks
+          assert.isUndefined(result.data.hook);
+        });
+
+        describe("textarea value handling during updates", () => {
+          let mockTextarea;
+
+          beforeEach(() => {
+            mockTextarea = {
+              tagName: "TEXTAREA",
+              value: "",
+            };
+          });
+
+          it("sets initial value on create hook", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("textarea"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("initial_value")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            // Call the create hook with mock vnode
+            const mockVnode = {elm: mockTextarea};
+            result.data.hook.create(null, mockVnode);
+
+            // Should set the value
+            assert.strictEqual(mockTextarea.value, "initial_value");
+          });
+
+          it("always updates value on update hook", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("textarea"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("new_value")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            // Simulate that we previously set a value
+            mockTextarea.value = "old_value";
+
+            // Call the update hook
+            const mockVnode = {
+              elm: mockTextarea,
+              data: {hologramFormInputValue: "new_value"},
+            };
+            result.data.hook.update(null, mockVnode);
+
+            // Should always update the value
+            assert.strictEqual(mockTextarea.value, "new_value");
+          });
+
+          it("always overrides user input when value changes", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("textarea"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [
+                      Type.atom("text"),
+                      Type.bitstring("new_programmatic_value"),
+                    ],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            // Simulate that user has typed something different
+            mockTextarea.value = "user_typed_text";
+
+            // Call the update hook with a new programmatic value
+            const mockVnode = {
+              elm: mockTextarea,
+              data: {hologramFormInputValue: "new_programmatic_value"},
+            };
+            result.data.hook.update(null, mockVnode);
+
+            // Should always update the value
+            assert.strictEqual(mockTextarea.value, "new_programmatic_value");
+          });
+
+          it("updates value regardless of current textarea value", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("textarea"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("new_value")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            // Simulate that current value is something else
+            mockTextarea.value = "current_value";
+
+            // Call the update hook
+            const mockVnode = {
+              elm: mockTextarea,
+              data: {hologramFormInputValue: "new_value"},
+            };
+            result.data.hook.update(null, mockVnode);
+
+            // Should always update the value
+            assert.strictEqual(mockTextarea.value, "new_value");
+          });
+
+          it("sets value on any textarea element", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("textarea"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("first_value")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            // Simulate textarea with any current value
+            mockTextarea.value = "whatever";
+
+            // Call the update hook
+            const mockVnode = {
+              elm: mockTextarea,
+              data: {hologramFormInputValue: "first_value"},
+            };
+            result.data.hook.update(null, mockVnode);
+
+            // Should always update the value
+            assert.strictEqual(mockTextarea.value, "first_value");
+          });
+
+          it("does not update value when it hasn't changed", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("textarea"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("same_value")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            // Set textarea to the same value as what will be set
+            mockTextarea.value = "same_value";
+
+            // Spy on the value setter to verify it's not called
+            let setterCallCount = 0;
+            const originalValue = mockTextarea.value;
+            Object.defineProperty(mockTextarea, "value", {
+              get: () => originalValue,
+              set: () => {
+                setterCallCount++;
+              },
+              configurable: true,
+            });
+
+            // Call the update hook with same value (to test no change)
+            const oldVnode = {data: {hologramFormInputValue: "same_value"}};
+            const mockVnode = {
+              elm: mockTextarea,
+              data: {hologramFormInputValue: "same_value"},
             };
             result.data.hook.update(oldVnode, mockVnode);
 

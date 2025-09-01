@@ -419,15 +419,6 @@ export default class Renderer {
     return moduleProxy.__props__;
   }
 
-  static #handleInputValueUpdate(element, newValue) {
-    // Skip redundant DOM writes
-    if (newValue === element.value) {
-      return;
-    }
-
-    element.value = newValue;
-  }
-
   // Based on has_cid_prop?/1
   static #hasCidProp(props) {
     return "atom(cid)" in props.data;
@@ -619,7 +610,7 @@ export default class Renderer {
   }
 
   // Based on render_attribute/2
-  static #renderAttribute(name, valueDom, isInputValue) {
+  static #renderAttribute(name, valueDom, isFormInputValue) {
     const nameText = Bitstring.toText(name);
 
     // []
@@ -643,7 +634,7 @@ export default class Renderer {
     // For input value attributes, preserve empty strings instead of converting to true
     // Input values are passed to the element's value property (via Snabbdom hooks) and expect strings,
     // while for other elements, empty strings represent boolean attributes that should be set to true
-    if (isInputValue) {
+    if (isFormInputValue) {
       return [nameText, valueText];
     }
 
@@ -665,28 +656,28 @@ export default class Renderer {
       (attrDom) => !Bitstring.toText(attrDom.data[0]).startsWith("$"),
     );
 
-    // Check if this is an input element - they have special treatment related to value patching
-    const isInputElement = tagName === "input";
+    // Check if this is a form element with special value handling
+    const isFormInput = tagName === "input" || tagName === "textarea";
 
     for (const attrDom of regularAttrs) {
       const nameText = Bitstring.toText(attrDom.data[0]);
-      const isInputValue = isInputElement && nameText === "value";
+      const isFormInputValue = isFormInput && nameText === "value";
 
       const [, valueText] = Renderer.#renderAttribute(
         attrDom.data[0],
         attrDom.data[1],
-        isInputValue,
+        isFormInputValue,
       );
 
       if (valueText !== null) {
-        // For input value: only set the property, never the attribute to maintain proper form behavior
+        // For form element values: only set the property, never the attribute to maintain proper form behavior
         // - Preserves the browser's dirty flag tracking
         // - Ensures correct form reset behavior (resets to original defaultValue)
         // - Maintains proper autocomplete/autofill behavior
         // See: https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#concept-fe-dirty
-        if (isInputValue) {
+        if (isFormInputValue) {
           // Store the value for later use in hooks
-          attrs["data-hologram-value"] = valueText;
+          attrs["data-hologram-form-input-value"] = valueText;
         } else {
           attrs[nameText] = valueText;
         }
@@ -781,23 +772,24 @@ export default class Renderer {
     }
 
     if (
-      currentTagName === "input" &&
-      attrsVdom["data-hologram-value"] !== undefined
+      (currentTagName === "input" || currentTagName === "textarea") &&
+      attrsVdom["data-hologram-form-input-value"] !== undefined
     ) {
-      const hologramValue = attrsVdom["data-hologram-value"];
+      const hologramFormInputValue =
+        attrsVdom["data-hologram-form-input-value"];
 
       // Remove the temporary attribute
-      delete attrsVdom["data-hologram-value"];
+      delete attrsVdom["data-hologram-form-input-value"];
 
-      data.hologramValue = hologramValue;
+      data.hologramFormInputValue = hologramFormInputValue;
 
       data.hook = {
         update: (_oldVnode, newVnode) => {
-          const newValue = newVnode.data.hologramValue;
-          Renderer.#handleInputValueUpdate(newVnode.elm, newValue);
+          const newValue = newVnode.data.hologramFormInputValue;
+          Renderer.#updateFormInputValue(newVnode.elm, newValue);
         },
         create: (_emptyVnode, newVnode) => {
-          Renderer.#handleInputValueUpdate(newVnode.elm, hologramValue);
+          Renderer.#updateFormInputValue(newVnode.elm, hologramFormInputValue);
         },
       };
     }
@@ -1009,6 +1001,15 @@ export default class Renderer {
       defaultTarget,
       parentTagName,
     );
+  }
+
+  static #updateFormInputValue(element, newValue) {
+    // Skip redundant DOM writes
+    if (newValue === element.value) {
+      return;
+    }
+
+    element.value = newValue;
   }
 
   static #valueDomToText(valueDom) {
