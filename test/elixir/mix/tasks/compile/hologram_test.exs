@@ -215,7 +215,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       refute File.exists?(lock_path)
 
       # Create a valid directory but with invalid package.json that will cause npm install to fail
-      assets_dir = Path.join(@test_dir, "assets")
+      assets_dir = Path.join(@test_dir, "assets_with_invalid_package_json")
       File.mkdir_p!(assets_dir)
 
       # Create an invalid package.json that will cause npm install to fail
