@@ -120,7 +120,6 @@ defmodule HologramFeatureTests.PatchingTest do
     # 7) change manually to an empty value when the last programmatic value was also empty
     # 8) change manually to an empty value when the last programmatic value was not empty
 
-    @tag timeout: 120_000
     feature "text input value patching", %{session: session} do
       session
       |> visit(Page5)
@@ -180,7 +179,6 @@ defmodule HologramFeatureTests.PatchingTest do
       |> refute_has(css("#text_input[value]"))
     end
 
-    @tag timeout: 120_000
     feature "email input value patching", %{session: session} do
       session
       |> visit(Page5)
@@ -238,6 +236,65 @@ defmodule HologramFeatureTests.PatchingTest do
       |> fill_in(css("#email_input"), with: "")
       |> assert_input_value("#email_input", "")
       |> refute_has(css("#email_input[value]"))
+    end
+
+    feature "textarea value patching", %{session: session} do
+      session
+      |> visit(Page5)
+      |> assert_input_value("#textarea", "initial textarea")
+      |> refute_has(css("#textarea[value]"))
+      # --- Setup A: establish baseline programmatic value
+      |> click(button("Update Textarea 1"))
+      |> assert_input_value("#textarea", "programmatic 1")
+      |> refute_has(css("#textarea[value]"))
+      # --- Group 1 (Cond 6): manual non-empty, different from last prog
+      |> fill_in(css("#textarea"), with: "manual 1")
+      |> assert_input_value("#textarea", "manual 1")
+      |> refute_has(css("#textarea[value]"))
+      # --- Group 2 (Cond 1): prog non-empty, same as last prog
+      |> click(button("Update Textarea 1"))
+      |> assert_input_value("#textarea", "programmatic 1")
+      |> refute_has(css("#textarea[value]"))
+      # --- Group 3 (Cond 2): prog non-empty, different from last prog
+      |> click(button("Update Textarea 2"))
+      |> assert_input_value("#textarea", "programmatic 2")
+      |> refute_has(css("#textarea[value]"))
+      # --- Setup B: switch to a different manual value
+      |> fill_in(css("#textarea"), with: "manual 2")
+      |> assert_input_value("#textarea", "manual 2")
+      |> refute_has(css("#textarea[value]"))
+      # --- Group 4 (Cond 5): manual non-empty, same as last prog
+      |> fill_in(css("#textarea"), with: "programmatic 2")
+      |> assert_input_value("#textarea", "programmatic 2")
+      |> refute_has(css("#textarea[value]"))
+      # --- Group 5 (Cond 4): prog empty, last prog was not empty
+      |> click(button("Clear State"))
+      |> assert_input_value("#textarea", "")
+      |> refute_has(css("#textarea[value]"))
+      # --- Setup C: switch to a different manual value
+      |> fill_in(css("#textarea"), with: "manual 3")
+      |> assert_input_value("#textarea", "manual 3")
+      |> refute_has(css("#textarea[value]"))
+      # --- Group 6 (Cond 7): manual empty, last prog was also empty
+      |> fill_in(css("#textarea"), with: "")
+      |> assert_input_value("#textarea", "")
+      |> refute_has(css("#textarea[value]"))
+      # --- Setup D: switch to a different manual value
+      |> fill_in(css("#textarea"), with: "manual 4")
+      |> assert_input_value("#textarea", "manual 4")
+      |> refute_has(css("#textarea[value]"))
+      # --- Group 7 (Cond 3): prog empty, last prog was also empty
+      |> click(button("Clear State"))
+      |> assert_input_value("#textarea", "")
+      |> refute_has(css("#textarea[value]"))
+      # --- Setup E: set non-empty programmatic value
+      |> click(button("Update Textarea 1"))
+      |> assert_input_value("#textarea", "programmatic 1")
+      |> refute_has(css("#textarea[value]"))
+      # --- Group 8 (Cond 8): manual empty, last prog was not empty
+      |> fill_in(css("#textarea"), with: "")
+      |> assert_input_value("#textarea", "")
+      |> refute_has(css("#textarea[value]"))
     end
   end
 end

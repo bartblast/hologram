@@ -9,7 +9,11 @@ defmodule HologramFeatureTests.Patching.Page5 do
   layout HologramFeatureTests.Components.EmptyLayout
 
   def init(_params, component, _server) do
-    put_state(component, email: "initial email", text: "initial text")
+    put_state(component,
+      email: "initial email",
+      text: "initial text",
+      textarea: "initial textarea"
+    )
   end
 
   def template do
@@ -38,6 +42,12 @@ defmodule HologramFeatureTests.Patching.Page5 do
             <input type="email" id="email_input" value={@email} />
             <button type="button" $click="update_email_1">Update Email 1</button>
             <button type="button" $click="update_email_2">Update Email 2</button>            
+            <br /><br />  
+            
+            <label for="textarea">Textarea:</label>
+            <textarea id="textarea" value={@textarea} />
+            <button type="button" $click="update_textarea_1">Update Textarea 1</button>
+            <button type="button" $click="update_textarea_2">Update Textarea 2</button>            
             <br /><br />            
           </form>
         </p>
@@ -62,7 +72,15 @@ defmodule HologramFeatureTests.Patching.Page5 do
     put_state(component, :text, "programmatic 2")
   end
 
+  def action(:update_textarea_1, _params, component) do
+    put_state(component, :textarea, "programmatic 1")
+  end
+
+  def action(:update_textarea_2, _params, component) do
+    put_state(component, :textarea, "programmatic 2")
+  end
+
   def action(:clear_state, _params, component) do
-    put_state(component, email: "", text: "")
+    put_state(component, email: "", text: "", textarea: "")
   end
 end
