@@ -6,9 +6,17 @@ Website: https://hologram.page
 
 ## Sponsors
 
+### Framework Visionary Tier
+
+* [@absowoot](https://github.com/absowoot)
+
+### Early Adopter Tier
+
 * Calancea Daniel, [@D4no0](https://github.com/D4no0)
 * Darren Black, [@totaltrash](https://github.com/totaltrash)
 * Lucas Sifoni, [@Lucassifoni](https://github.com/Lucassifoni)
+
+Thank you to all other sponsors for supporting the project!
 
 If you find Hologram useful and would like to support its development, consider becoming a sponsor! Your contributions help improve the project and keep it alive.
 
