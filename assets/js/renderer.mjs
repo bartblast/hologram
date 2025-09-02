@@ -120,10 +120,7 @@ export default class Renderer {
         );
 
       case "expression":
-        return $.stringifyForInterpolation(
-          dom.data[1].data[0],
-          parentTagName !== "script",
-        );
+        return $.stringifyForInterpolation(dom.data[1].data[0]);
 
       case "page":
         return Renderer.renderDom(
@@ -172,8 +169,8 @@ export default class Renderer {
     return htmlVnode;
   }
 
-  // Based on stringify_for_interpolation/2
-  static stringifyForInterpolation(value, escape = true) {
+  // Based on stringify_for_interpolation/1
+  static stringifyForInterpolation(value) {
     let text;
 
     if (Type.isAtom(value) || Type.isBinary(value) || Type.isNumber(value)) {
@@ -195,7 +192,7 @@ export default class Renderer {
       text = Interpreter.inspect(value, opts);
     }
 
-    return escape ? $.escapeHtml(text) : text;
+    return $.escapeHtml(text);
   }
 
   static toBitstring(term) {

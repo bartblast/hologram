@@ -4221,14 +4221,13 @@ describe("Renderer", () => {
 
       const expected = vnode(
         "script",
-        {attrs: {}, key: "__hologramScript__:abc < xyz", on: {}},
-        ["abc < xyz"],
+        {attrs: {}, key: "__hologramScript__:abc &lt; xyz", on: {}},
+        ["abc &lt; xyz"],
       );
 
       assert.deepStrictEqual(result, expected);
     });
 
-    // TODO: shouldn't escape
     it("expression inside public comments", () => {
       // <!-- {"abc < xyz"} -->
       const node = Type.tuple([
@@ -4368,7 +4367,7 @@ describe("Renderer", () => {
 
   // IMPORTANT!
   // Keep client-side Renderer.stringifyForInterpolation()
-  // and server-side Renderer.stringify_for_interpolation/2 unit tests consistent.
+  // and server-side Renderer.stringify_for_interpolation/1 unit tests consistent.
   describe("stringifyForInterpolation()", () => {
     const stringifyForInterpolation = Renderer.stringifyForInterpolation;
 
@@ -4525,15 +4524,6 @@ describe("Renderer", () => {
       const result = stringifyForInterpolation(term);
 
       assert.equal(result, "{1, nil, 2}");
-    });
-
-    it("when the escape param is false HTML entities are not escaped", () => {
-      const clauses = ["dummy_clause_1", "dummy_clause_2", "dummy_clause_3"];
-      const context = contextFixture({module: "Map"});
-      const term = Type.functionCapture("Map", "put", 3, clauses, context);
-      const result = stringifyForInterpolation(term, false);
-
-      assert.equal(result, "&Map.put/3");
     });
   });
 

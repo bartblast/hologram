@@ -89,8 +89,8 @@ defmodule Hologram.Template.RendererTest do
   setup :set_mox_global
 
   test "text node" do
-    node = {:text, "Tom & Jerry"}
-    assert render_dom(node, @env, @server) == {"Tom & Jerry", %{}, @server}
+    node = {:text, "Hologram"}
+    assert render_dom(node, @env, @server) == {"Hologram", %{}, @server}
   end
 
   describe "public comment node" do
@@ -1232,10 +1232,9 @@ defmodule Hologram.Template.RendererTest do
       # <script>{"abc < xyz"}</script>
       node = {:element, "script", [], [expression: {"abc < xyz"}]}
 
-      assert render_dom(node, @env, @server) == {"<script>abc < xyz</script>", %{}, @server}
+      assert render_dom(node, @env, @server) == {"<script>abc &lt; xyz</script>", %{}, @server}
     end
 
-    # TODO: shouldn't escape
     test "expression inside public comments" do
       # <!-- {"abc < xyz"} -->
       node = {:public_comment, [text: " ", expression: {"abc < xyz"}, text: " "]}
@@ -1254,7 +1253,7 @@ defmodule Hologram.Template.RendererTest do
 
   # IMPORTANT!
   # Keep client-side Renderer.stringifyForInterpolation()
-  # and server-side Renderer.stringify_for_interpolation/2 unit tests consistent.
+  # and server-side Renderer.stringify_for_interpolation/1 unit tests consistent.
   describe "stringify_for_interpolation/1" do
     test "atom, non-boolean and non-nil" do
       assert stringify_for_interpolation(:abc) == "abc"
@@ -1330,10 +1329,6 @@ defmodule Hologram.Template.RendererTest do
 
     test "tuple" do
       assert stringify_for_interpolation({1, nil, 2}) == "{1, nil, 2}"
-    end
-
-    test "when the escape param is false HTML entities are not escaped" do
-      assert stringify_for_interpolation(&Map.put/3, false) == "&Map.put/3"
     end
   end
 end
