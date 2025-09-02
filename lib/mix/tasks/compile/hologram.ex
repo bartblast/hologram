@@ -156,18 +156,74 @@ defmodule Mix.Tasks.Compile.Hologram do
     String.contains?(opts[:build_dir], "/.elixir_ls/")
   end
 
+  defp maybe_remove_file(lock_path) do
+    if File.exists?(lock_path) do
+      File.rm(lock_path)
+    end
+  end
+
+  defp maybe_remove_stale_lock(lock_path) do
+    if File.exists?(lock_path) do
+      case File.read(lock_path) do
+        {:ok, os_pid_str} ->
+          case Integer.parse(os_pid_str) do
+            {os_pid, _remainder} ->
+              if not os_process_alive?(os_pid) do
+                Logger.info(
+                  "Hologram: removing stale lock file (OS-level process #{os_pid} no longer exists)"
+                )
+
+                File.rm(lock_path)
+              end
+
+            :error ->
+              # Invalid OS-level PID format, assume stale
+              Logger.info("Hologram: removing lock file with invalid OS-level PID format")
+              File.rm(lock_path)
+          end
+
+        {:error, _reason} ->
+          # Can't read lock file, assume stale
+          Logger.info("Hologram: removing unreadable lock file")
+          File.rm(lock_path)
+      end
+    end
+  end
+
+  defp os_process_alive?(os_pid) do
+    try do
+      case System.cmd("ps", ["-p", to_string(os_pid)]) do
+        {_output, 0} -> true
+        {_output, _status} -> false
+      end
+    rescue
+      _error -> false
+    catch
+      _error -> false
+    end
+  end
+
   defp with_lock(lock_path, fun) do
     lock_path
     |> Path.dirname()
     |> File.mkdir_p!()
 
+    maybe_remove_stale_lock(lock_path)
+
     case File.open(lock_path, [:write, :exclusive]) do
       {:ok, file} ->
+        # Write OS-level PID to lock file for stale lock detection
+        IO.write(file, "#{System.pid()}")
+        File.close(file)
+
         try do
           fun.()
+        catch
+          kind, reason ->
+            maybe_remove_file(lock_path)
+            :erlang.raise(kind, reason, __STACKTRACE__)
         after
-          File.close(file)
-          File.rm!(lock_path)
+          maybe_remove_file(lock_path)
         end
 
       {:error, :eexist} ->

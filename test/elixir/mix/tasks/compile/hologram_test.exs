@@ -137,6 +137,29 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert num_runtime_source_maps == 1
   end
 
+  # Helper function to wait for lock file to appear and return its content
+  defp wait_for_lock_file(lock_path, timeout_ms, end_time \\ nil) do
+    end_time = end_time || System.system_time(:millisecond) + timeout_ms
+
+    if System.system_time(:millisecond) > end_time do
+      flunk("Lock file did not appear within timeout")
+    end
+
+    if File.exists?(lock_path) do
+      case File.read(lock_path) do
+        {:ok, content} ->
+          content
+
+        {:error, _reason} ->
+          Process.sleep(10)
+          wait_for_lock_file(lock_path, timeout_ms, end_time)
+      end
+    else
+      Process.sleep(10)
+      wait_for_lock_file(lock_path, timeout_ms, end_time)
+    end
+  end
+
   setup_all do
     clean_dir(@test_dir)
     File.mkdir!(@assets_dir)
@@ -242,6 +265,138 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert File.exists?(opts[:build_dir])
 
       refute File.exists?(lock_path)
+    end
+
+    test "stale lock file is automatically detected and removed", %{opts: opts} do
+      File.mkdir_p!(opts[:build_dir])
+      lock_path = Path.join(opts[:build_dir], @compiler_lock_file_name)
+
+      # Create a stale lock file with a non-existent OS-level PID
+      # Use a very high OS-level PID that's unlikely to exist
+      # Default max PIDs are:
+      # Linux = 32,768, see: https://stackoverflow.com/a/6294196/13040586
+      # macOs = 99,998, see: https://apple.stackexchange.com/a/260798
+      # Windows = 4,294,967,295, see: https://learn.microsoft.com/en-us/answers/questions/70930/maximum-value-of-process-id
+      stale_os_pid = 32_768
+      File.write!(lock_path, "#{stale_os_pid}")
+
+      assert File.exists?(lock_path)
+
+      run(opts)
+
+      # Lock should be cleaned up after successful compilation
+      refute File.exists?(lock_path)
+    end
+
+    test "valid lock file with running OS-level process is respected", %{opts: opts} do
+      File.mkdir_p!(opts[:build_dir])
+      lock_path = Path.join(opts[:build_dir], @compiler_lock_file_name)
+
+      # Create a lock file with the current process PID (which is definitely running)
+      current_os_pid = System.pid()
+      File.write!(lock_path, "#{current_os_pid}")
+
+      assert File.exists?(lock_path)
+
+      # Start a task that will try to run compilation
+      task =
+        Task.async(fn ->
+          start_time = System.system_time(:millisecond)
+          run(opts)
+          end_time = System.system_time(:millisecond)
+          end_time - start_time
+        end)
+
+      # Remove the lock file after a short delay to simulate the "running" process finishing
+      Process.sleep(2_000)
+      File.rm!(lock_path)
+
+      # The task should eventually complete after waiting for the lock
+      duration = Task.await(task, :infinity)
+
+      # Should have waited at least 2 seconds (our sleep above)
+      assert duration >= 2_000
+
+      # Lock should be cleaned up after successful compilation
+      refute File.exists?(lock_path)
+    end
+
+    test "lock file with invalid OS-level PID format is removed", %{opts: opts} do
+      File.mkdir_p!(opts[:build_dir])
+      lock_path = Path.join(opts[:build_dir], @compiler_lock_file_name)
+
+      # Create a lock file with invalid OS-level PID format
+      File.write!(lock_path, "invalid_pid_format")
+
+      assert File.exists?(lock_path)
+
+      run(opts)
+
+      # Lock should be cleaned up after successful compilation
+      refute File.exists?(lock_path)
+    end
+
+    test "unreadable lock file is removed", %{opts: opts} do
+      File.mkdir_p!(opts[:build_dir])
+      lock_path = Path.join(opts[:build_dir], @compiler_lock_file_name)
+
+      # Create a lock file and make it unreadable (if supported by OS)
+      File.write!(lock_path, "12345")
+      File.chmod!(lock_path, 0o000)
+
+      assert File.exists?(lock_path)
+
+      run(opts)
+
+      # Lock should be cleaned up after successful compilation
+      refute File.exists?(lock_path)
+    end
+
+    test "lock file contains current OS-level process PID during compilation", %{opts: opts} do
+      File.mkdir_p!(opts[:build_dir])
+      lock_path = Path.join(opts[:build_dir], @compiler_lock_file_name)
+
+      # Start compilation in a background task
+      compilation_task =
+        Task.async(fn ->
+          run(opts)
+        end)
+
+      # Wait for lock file to appear and read its content
+      lock_content = wait_for_lock_file(lock_path, 5_000)
+
+      # Verify the OS-level PID format
+      assert is_binary(lock_content)
+      assert {parsed_os_pid, ""} = Integer.parse(lock_content)
+      assert parsed_os_pid > 0
+
+      # The OS-level PID should correspond to a running OS process
+      assert System.cmd("ps", ["-p", lock_content]) |> elem(1) == 0
+
+      # Clean up: kill the background compilation task
+      Task.shutdown(compilation_task, :brutal_kill)
+    end
+  end
+
+  describe "edge cases and error conditions" do
+    @tag :skip_on_windows
+    test "handles file system errors gracefully", %{opts: opts} do
+      build_dir = Path.join([Reflection.tmp_dir(), "readonly_build_dir"])
+      File.mkdir_p!(build_dir)
+
+      # Make build dir read-only
+      File.chmod!(build_dir, 0o444)
+
+      opts = Keyword.put(opts, :build_dir, build_dir)
+
+      # Should raise a permission error when trying to create lock file in read-only directory
+      assert_raise RuntimeError, ~r/failed to acquire compiler lock.*eacces/i, fn ->
+        run(opts)
+      end
+
+      # Reset permissions for cleanup
+      File.chmod!(build_dir, 0o755)
+      File.rm_rf!(build_dir)
     end
   end
 end
