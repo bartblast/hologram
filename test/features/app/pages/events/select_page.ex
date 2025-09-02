@@ -16,9 +16,9 @@ defmodule HologramFeatureTests.Events.SelectPage do
     ~HOLO"""
     <p>
       <form>
-        <input $select="selected_in_text_input" type="text" id="text_input_elem" value="Hologram 1 Hologram" />
+        <input $select="selected_in_text_input" type="text" id="text_input" value="Hologram 1 Hologram" />
         <br /><br >
-        <textarea $select="selected_in_text_area" id="text_area_elem">Hologram 2 Hologram</textarea>
+        <textarea $select="selected_in_textarea" id="textarea">Hologram 2 Hologram</textarea>
       </form>
     </p>
     <p>
@@ -28,10 +28,10 @@ defmodule HologramFeatureTests.Events.SelectPage do
   end
 
   def action(:selected_in_text_input, params, component) do
-    put_state(component, :result, {"text input", params})
+    put_state(component, :result, {:text_input, params})
   end
 
-  def action(:selected_in_text_area, params, component) do
-    put_state(component, :result, {"text area", params})
+  def action(:selected_in_textarea, params, component) do
+    put_state(component, :result, {:textarea, params})
   end
 end
