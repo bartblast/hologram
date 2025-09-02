@@ -191,16 +191,14 @@ defmodule Mix.Tasks.Compile.Hologram do
   end
 
   defp os_process_alive?(os_pid) do
-    try do
-      case System.cmd("ps", ["-p", to_string(os_pid)]) do
-        {_output, 0} -> true
-        {_output, _status} -> false
-      end
-    rescue
-      _error -> false
-    catch
-      _error -> false
+    case System.cmd("ps", ["-p", to_string(os_pid)]) do
+      {_output, 0} -> true
+      {_output, _status} -> false
     end
+  rescue
+    _error -> false
+  catch
+    _error -> false
   end
 
   defp with_lock(lock_path, fun) do
