@@ -12,9 +12,14 @@ defmodule HologramFeatureTests.RoutingTest do
   end
 
   feature "route with params", %{session: session} do
+    expected =
+      %{a: "abc", b: 123}
+      |> inspect()
+      |> HtmlEntities.encode()
+
     session
     |> visit(RouteWithParamsPage, a: "abc", b: 123)
     |> assert_text(css("#page_module"), inspect(RouteWithParamsPage))
-    |> assert_text(css("#page_params"), inspect(%{a: "abc", b: 123}))
+    |> assert_text(css("#page_params"), expected)
   end
 end
