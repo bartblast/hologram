@@ -320,7 +320,7 @@ defmodule Hologram.Template.Renderer do
 
   defp interpolate_asset_manifest_js(html) do
     asset_manifest_js = AssetManifestCache.get_manifest_js()
-    String.replace(html, "$ASSET_MANIFEST_JS", asset_manifest_js)
+    String.replace(html, "$ASSET_MANIFEST_JS_PLACEHOLDER", asset_manifest_js)
   end
 
   defp interpolate_component_registry_js(html, component_registry) do
