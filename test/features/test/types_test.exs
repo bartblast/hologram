@@ -13,17 +13,27 @@ defmodule HologramFeatureTests.TypesTest do
 
   describe "bitstring" do
     feature "binary", %{session: session} do
+      expected =
+        "abc"
+        |> inspect()
+        |> HtmlEntities.encode()
+
       session
       |> visit(TypesPage)
       |> click(css("button[id='bitstring (binary)']"))
-      |> assert_text(css("#result"), inspect("abc"))
+      |> assert_text(css("#result"), expected)
     end
 
     feature "non-binary", %{session: session} do
+      expected =
+        <<1::1, 0::1, 1::1, 0::1>>
+        |> inspect()
+        |> HtmlEntities.encode()
+
       session
       |> visit(TypesPage)
       |> click(css("button[id='bitstring (non-binary)']"))
-      |> assert_text(css("#result"), inspect(<<1::1, 0::1, 1::1, 0::1>>))
+      |> assert_text(css("#result"), expected)
     end
   end
 
@@ -145,10 +155,15 @@ defmodule HologramFeatureTests.TypesTest do
   end
 
   feature "map", %{session: session} do
+    expected =
+      %{a: 123, b: "abc"}
+      |> inspect()
+      |> HtmlEntities.encode()
+
     session
     |> visit(TypesPage)
     |> click(css("button[id='map']"))
-    |> assert_text(css("#result"), inspect(%{a: 123, b: "abc"}))
+    |> assert_text(css("#result"), expected)
   end
 
   describe "PID" do
@@ -163,10 +178,16 @@ defmodule HologramFeatureTests.TypesTest do
     end
 
     feature "server origin", %{session: session} do
+      expected =
+        "0.11.222"
+        |> pid()
+        |> inspect()
+        |> HtmlEntities.encode()
+
       session
       |> visit(TypesPage)
       |> click(css("button[id='pid (server origin)']"))
-      |> assert_text(css("#result"), inspect(pid("0.11.222")))
+      |> assert_text(css("#result"), expected)
     end
   end
 
