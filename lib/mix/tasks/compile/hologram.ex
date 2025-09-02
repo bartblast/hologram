@@ -166,26 +166,10 @@ defmodule Mix.Tasks.Compile.Hologram do
     if File.exists?(lock_path) do
       case File.read(lock_path) do
         {:ok, os_pid_str} ->
-          case Integer.parse(os_pid_str) do
-            {os_pid, _remainder} ->
-              if not os_process_alive?(os_pid) do
-                Logger.info(
-                  "Hologram: removing stale lock file (OS-level process #{os_pid} no longer exists)"
-                )
-
-                File.rm(lock_path)
-              end
-
-            :error ->
-              # Invalid OS-level PID format, assume stale
-              Logger.info("Hologram: removing lock file with invalid OS-level PID format")
-              File.rm(lock_path)
-          end
+          validate_lock_file_and_proceed_accordingly(lock_path, os_pid_str)
 
         {:error, _reason} ->
-          # Can't read lock file, assume stale
-          Logger.info("Hologram: removing unreadable lock file")
-          File.rm(lock_path)
+          remove_unreadable_lock_file(lock_path)
       end
     end
   end
@@ -199,6 +183,36 @@ defmodule Mix.Tasks.Compile.Hologram do
     _error -> false
   catch
     _error -> false
+  end
+
+  defp remove_lock_file_with_invalid_os_pid(lock_path) do
+    Logger.info("Hologram: removing lock file with invalid OS-level PID format")
+    File.rm(lock_path)
+  end
+
+  defp remove_lock_for_dead_process(lock_path, os_pid) do
+    Logger.info(
+      "Hologram: removing stale lock file (OS-level process #{os_pid} no longer exists)"
+    )
+
+    File.rm(lock_path)
+  end
+
+  defp remove_unreadable_lock_file(lock_path) do
+    Logger.info("Hologram: removing unreadable lock file")
+    File.rm(lock_path)
+  end
+
+  defp validate_lock_file_and_proceed_accordingly(lock_path, os_pid_str) do
+    case Integer.parse(os_pid_str) do
+      {os_pid, _remainder} ->
+        if not os_process_alive?(os_pid) do
+          remove_lock_for_dead_process(lock_path, os_pid)
+        end
+
+      :error ->
+        remove_lock_file_with_invalid_os_pid(lock_path)
+    end
   end
 
   defp with_lock(lock_path, fun) do
