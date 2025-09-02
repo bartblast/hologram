@@ -131,7 +131,9 @@ defmodule HologramFeatureTests.CookiesTest do
       |> Browser.set_cookie("string_encoded_cookie_key", "string_encoded_cookie_value")
       |> visit(Page6)
       |> click(button("Read string-encoded cookie"))
-      |> assert_text(~s'command_executed? = true, cookie_value = "string_encoded_cookie_value"')
+      |> assert_text(
+        ~s'command_executed? = true, cookie_value = &quot;string_encoded_cookie_value&quot;'
+      )
     end
 
     feature "read Hologram-encoded cookie", %{session: session} do
