@@ -1047,7 +1047,10 @@ defmodule Hologram.Template.RendererTest do
       assert {html, _component_registry, _server_struct} =
                render_page(Module53, @params, @server, opts)
 
-      assert String.contains?(html, "globalThis.hologram.assetManifest = {")
+      assert String.contains?(
+               html,
+               ~s'globalThis.hologram.assetManifest = {\n"hologram/runtime.js": "/hologram/runtime-1234567890abcdef.js"'
+             )
     end
 
     test "doesn't inject asset manifest when the initial_page? opt is set to false" do
