@@ -1,6 +1,7 @@
 defmodule Hologram.Template.Renderer do
   @moduledoc false
 
+  alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Assets.PageDigestRegistry
   alias Hologram.Commons.KernelUtils
   alias Hologram.Commons.StringUtils
@@ -172,6 +173,7 @@ defmodule Hologram.Template.Renderer do
 
     html_with_interpolated_js =
       initial_html
+      |> interpolate_asset_manifest_js()
       |> interpolate_component_registry_js(component_registry_with_page_struct)
       |> interpolate_page_module_js(page_module)
       |> interpolate_page_params_js(params)
@@ -314,6 +316,11 @@ defmodule Hologram.Template.Renderer do
       |> Enum.into(%{})
 
     Map.merge(props, props_from_context)
+  end
+
+  defp interpolate_asset_manifest_js(html) do
+    asset_manifest_js = AssetManifestCache.get_manifest_js()
+    String.replace(html, "$ASSET_MANIFEST_JS", asset_manifest_js)
   end
 
   defp interpolate_component_registry_js(html, component_registry) do

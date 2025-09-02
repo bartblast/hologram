@@ -743,6 +743,10 @@ defmodule Hologram.Template.RendererTest do
   describe "context" do
     setup do
       setup_asset_path_registry(AssetPathRegistryStub)
+      AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
+
+      setup_asset_manifest_cache(AssetManifestCacheStub)
+
       setup_page_digest_registry(PageDigestRegistryStub)
     end
 
@@ -1035,7 +1039,7 @@ defmodule Hologram.Template.RendererTest do
              }
     end
 
-    test "injects asset manifest when the initial_page? opt is set to true" do
+    test "injects (interpolated) asset manifest when the initial_page? opt is set to true" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module53, :dummy_module_53_digest)
 
       opts = [csrf_token: @csrf_token, initial_page?: true]
@@ -1043,7 +1047,7 @@ defmodule Hologram.Template.RendererTest do
       assert {html, _component_registry, _server_struct} =
                render_page(Module53, @params, @server, opts)
 
-      assert String.contains?(html, "globalThis.hologram.assetManifest")
+      assert String.contains?(html, "globalThis.hologram.assetManifest = {")
     end
 
     test "doesn't inject asset manifest when the initial_page? opt is set to false" do
