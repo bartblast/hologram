@@ -7,7 +7,6 @@ defmodule Hologram.UI.RuntimeTest do
   alias Hologram.Assets.PathRegistry, as: AssetPathRegistry
   alias Hologram.UI.Runtime
 
-  use_module_stub :asset_manifest_cache
   use_module_stub :asset_path_registry
 
   setup :set_mox_global
@@ -15,8 +14,6 @@ defmodule Hologram.UI.RuntimeTest do
   setup do
     setup_asset_path_registry(AssetPathRegistryStub)
     AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
-
-    setup_asset_manifest_cache(AssetManifestCacheStub)
 
     [
       context: %{

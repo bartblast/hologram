@@ -1,7 +1,5 @@
 defmodule Hologram.UI.Runtime do
   use Hologram.Component
-
-  alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Router.Helpers, as: RouterHelpers
 
   prop :csrf_token, :string, from_context: {Hologram.Runtime, :csrf_token}
@@ -16,7 +14,7 @@ defmodule Hologram.UI.Runtime do
       <script>
         globalThis.hologram ??= \{\};
         globalThis.hologram.csrfToken = "{@csrf_token}";
-        {AssetManifestCache.get_manifest_js()}
+        globalThis.hologram.assetManifest = $ASSET_MANIFEST_JS_PLACEHOLDER
       </script>
     {/if}
 
