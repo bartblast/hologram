@@ -37,15 +37,15 @@ defmodule HologramFeatureTests.Components.CommandsLayout do
   end
 
   def action(:layout_action_1, params, component) do
-    put_state(component, :result, {"layout_command_1", params})
+    put_state(component, :result, {:layout_command_1, params})
   end
 
   def action(:layout_action_2, params, component) do
-    put_state(component, :result, {"layout_command_2", params})
+    put_state(component, :result, {:layout_command_2, params})
   end
 
   def action(:layout_action_3, params, component) do
-    put_state(component, :result, {"layout_command_3", params})
+    put_state(component, :result, {:layout_command_3, params})
   end
 
   def command(:layout_command_1, params, server) do

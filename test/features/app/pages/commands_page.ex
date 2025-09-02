@@ -30,15 +30,15 @@ defmodule HologramFeatureTests.CommandsPage do
   end
 
   def action(:page_action_1, params, component) do
-    put_state(component, :result, {"page_command_1", params})
+    put_state(component, :result, {:page_command_1, params})
   end
 
   def action(:page_action_2, params, component) do
-    put_state(component, :result, {"page_command_2", params})
+    put_state(component, :result, {:page_command_2, params})
   end
 
   def action(:page_action_3, params, component) do
-    put_state(component, :result, {"page_command_3", params})
+    put_state(component, :result, {:page_command_3, params})
   end
 
   def command(:page_command_1, params, server) do
