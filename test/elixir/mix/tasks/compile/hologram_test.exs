@@ -1,5 +1,5 @@
 defmodule Mix.Tasks.Compile.HologramTest do
-  use Hologram.Test.BasicCase, async: true
+  use Hologram.Test.BasicCase, async: false
   import Mix.Tasks.Compile.Hologram
 
   alias Hologram.Commons.PLT
@@ -182,6 +182,12 @@ defmodule Mix.Tasks.Compile.HologramTest do
     File.cp!(lib_package_json_path, test_package_json_path)
 
     [opts: opts]
+  end
+
+  setup do
+    clean_dir(@build_dir)
+    clean_dir(@static_dir)
+    clean_dir(@tmp_dir)
   end
 
   test "run/1", %{opts: opts} do
