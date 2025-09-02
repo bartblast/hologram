@@ -25,6 +25,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
   @static_dir Path.join(@test_dir, "static")
   @tmp_dir Path.join(@test_dir, "tmp")
 
+  @lock_path Path.join(@build_dir, @compiler_lock_file_name)
+
   defp generate_old_bundle(name) do
     @static_dir
     |> Path.join("#{name}.js")
@@ -161,6 +163,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   setup_all do
+    clean_dir(@build_dir)
     clean_dir(@test_dir)
     File.mkdir!(@assets_dir)
 
@@ -185,7 +188,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   setup do
-    clean_dir(@build_dir)
+    File.rm(@lock_path)
     clean_dir(@static_dir)
     clean_dir(@tmp_dir)
   end
@@ -231,17 +234,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
 
     test "lock file is cleaned up after successful compilation", %{opts: opts} do
-      lock_path = Path.join(opts[:build_dir], @compiler_lock_file_name)
-      refute File.exists?(lock_path)
+      refute File.exists?(@lock_path)
 
       run(opts)
 
-      refute File.exists?(lock_path)
+      refute File.exists?(@lock_path)
     end
 
     test "lock file is cleaned up after compilation error", %{opts: opts} do
-      lock_path = Path.join(opts[:build_dir], @compiler_lock_file_name)
-      refute File.exists?(lock_path)
+      refute File.exists?(@lock_path)
 
       # Create a valid directory but with invalid package.json that will cause npm install to fail
       assets_dir = Path.join(@test_dir, "assets_with_invalid_package_json")
@@ -257,26 +258,26 @@ defmodule Mix.Tasks.Compile.HologramTest do
         run(opts)
       end
 
-      refute File.exists?(lock_path)
+      refute File.exists?(@lock_path)
     end
 
-    test "lock directory is created if it doesn't exist", %{opts: opts} do
-      File.rm_rf!(opts[:build_dir])
-      refute File.exists?(opts[:build_dir])
+    test "lock directory is created if it doesn't exist", %{opts: initial_opts} do
+      build_dir = Path.join(@test_dir, "nonexistent_build_dir")
+      File.rm_rf!(build_dir)
+      refute File.exists?(build_dir)
 
-      lock_path = Path.join(opts[:build_dir], @compiler_lock_file_name)
+      lock_path = Path.join(build_dir, @compiler_lock_file_name)
+
+      opts = Keyword.put(initial_opts, :build_dir, build_dir)
 
       run(opts)
 
-      assert File.exists?(opts[:build_dir])
+      assert File.exists?(build_dir)
 
       refute File.exists?(lock_path)
     end
 
     test "stale lock file is automatically detected and removed", %{opts: opts} do
-      File.mkdir_p!(opts[:build_dir])
-      lock_path = Path.join(opts[:build_dir], @compiler_lock_file_name)
-
       # Create a stale lock file with a non-existent OS-level PID
       # Use a very high OS-level PID that's unlikely to exist
       # Default max PIDs are:
@@ -284,25 +285,24 @@ defmodule Mix.Tasks.Compile.HologramTest do
       # macOs = 99,998, see: https://apple.stackexchange.com/a/260798
       # Windows = 4,294,967,295, see: https://learn.microsoft.com/en-us/answers/questions/70930/maximum-value-of-process-id
       stale_os_pid = 32_768
-      File.write!(lock_path, "#{stale_os_pid}")
+      File.write!(@lock_path, "#{stale_os_pid}")
 
-      assert File.exists?(lock_path)
+      assert File.exists?(@lock_path)
 
       run(opts)
 
       # Lock should be cleaned up after successful compilation
-      refute File.exists?(lock_path)
+      refute File.exists?(@lock_path)
     end
 
     test "valid lock file with running OS-level process is respected", %{opts: opts} do
       File.mkdir_p!(opts[:build_dir])
-      lock_path = Path.join(opts[:build_dir], @compiler_lock_file_name)
 
       # Create a lock file with the current process PID (which is definitely running)
       current_os_pid = System.pid()
-      File.write!(lock_path, "#{current_os_pid}")
+      File.write!(@lock_path, "#{current_os_pid}")
 
-      assert File.exists?(lock_path)
+      assert File.exists?(@lock_path)
 
       # Start a task that will try to run compilation
       task =
@@ -315,7 +315,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       # Remove the lock file after a short delay to simulate the "running" process finishing
       Process.sleep(2_000)
-      File.rm!(lock_path)
+      File.rm!(@lock_path)
 
       # The task should eventually complete after waiting for the lock
       duration = Task.await(task, :infinity)
@@ -324,44 +324,39 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert duration >= 2_000
 
       # Lock should be cleaned up after successful compilation
-      refute File.exists?(lock_path)
+      refute File.exists?(@lock_path)
     end
 
     test "lock file with invalid OS-level PID format is removed", %{opts: opts} do
       File.mkdir_p!(opts[:build_dir])
-      lock_path = Path.join(opts[:build_dir], @compiler_lock_file_name)
 
       # Create a lock file with invalid OS-level PID format
-      File.write!(lock_path, "invalid_pid_format")
+      File.write!(@lock_path, "invalid_pid_format")
 
-      assert File.exists?(lock_path)
+      assert File.exists?(@lock_path)
 
       run(opts)
 
       # Lock should be cleaned up after successful compilation
-      refute File.exists?(lock_path)
+      refute File.exists?(@lock_path)
     end
 
     test "unreadable lock file is removed", %{opts: opts} do
       File.mkdir_p!(opts[:build_dir])
-      lock_path = Path.join(opts[:build_dir], @compiler_lock_file_name)
 
       # Create a lock file and make it unreadable (if supported by OS)
-      File.write!(lock_path, "12345")
-      File.chmod!(lock_path, 0o000)
+      File.write!(@lock_path, "12345")
+      File.chmod!(@lock_path, 0o000)
 
-      assert File.exists?(lock_path)
+      assert File.exists?(@lock_path)
 
       run(opts)
 
       # Lock should be cleaned up after successful compilation
-      refute File.exists?(lock_path)
+      refute File.exists?(@lock_path)
     end
 
     test "lock file contains current OS-level process PID during compilation", %{opts: opts} do
-      File.mkdir_p!(opts[:build_dir])
-      lock_path = Path.join(opts[:build_dir], @compiler_lock_file_name)
-
       # Start compilation in a background task
       compilation_task =
         Task.async(fn ->
@@ -369,7 +364,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
         end)
 
       # Wait for lock file to appear and read its content
-      lock_content = wait_for_lock_file(lock_path, 5_000)
+      lock_content = wait_for_lock_file(@lock_path, 5_000)
 
       # Verify the OS-level PID format
       assert is_binary(lock_content)
@@ -391,14 +386,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   describe "edge cases and error conditions" do
     @tag :skip_on_windows
-    test "handles file system errors gracefully", %{opts: opts} do
-      build_dir = Path.join([Reflection.tmp_dir(), "readonly_build_dir"])
+    test "handles file system errors gracefully", %{opts: initial_opts} do
+      build_dir = Path.join([@tmp_dir, "readonly_build_dir"])
       File.mkdir_p!(build_dir)
 
       # Make build dir read-only
       File.chmod!(build_dir, 0o444)
 
-      opts = Keyword.put(opts, :build_dir, build_dir)
+      opts = Keyword.put(initial_opts, :build_dir, build_dir)
 
       # Should raise a permission error when trying to create lock file in read-only directory
       assert_raise RuntimeError, ~r/failed to acquire compiler lock.*eacces/i, fn ->
