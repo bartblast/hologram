@@ -6,7 +6,7 @@ defmodule HologramFeatureTests.Components.Actions.Component3 do
     put_action(component,
       name: :component_4_action,
       target: "component_4",
-      params: %{queued_from: "component_3"}
+      params: %{queued_from: :component_3}
     )
   end
 

@@ -40,31 +40,31 @@ defmodule HologramFeatureTests.Actions.Page1 do
   end
 
   def action(:page_action_1, params, component) do
-    put_state(component, :result, {"page_action_1", params})
+    put_state(component, :result, {:page_action_1, params})
   end
 
   def action(:page_action_2, params, component) do
-    put_state(component, :result, {"page_action_2", params})
+    put_state(component, :result, {:page_action_2, params})
   end
 
   def action(:page_action_3, params, component) do
-    put_state(component, :result, {"page_action_3", params})
+    put_state(component, :result, {:page_action_3, params})
   end
 
   def action(:page_action_4, params, component) do
-    put_state(component, :result, {"page_action_4", params})
+    put_state(component, :result, {:page_action_4, params})
   end
 
   def action(:page_action_5, params, component) do
-    put_state(component, :result, {"page_action_5", params})
+    put_state(component, :result, {:page_action_5, params})
   end
 
   def action(:page_action_6, params, component) do
-    put_state(component, :result, {"page_action_6", params})
+    put_state(component, :result, {:page_action_6, params})
   end
 
   def action(:page_action_7, params, component) do
-    put_state(component, :result, {"page_action_7", params})
+    put_state(component, :result, {:page_action_7, params})
   end
 
   def action(:page_action_8, _params, component) do
@@ -73,22 +73,22 @@ defmodule HologramFeatureTests.Actions.Page1 do
 
   def action(:page_action_9, params, component) do
     component
-    |> put_state(:result, {"page_action_9", params})
+    |> put_state(:result, {:page_action_9, params})
     |> put_action(:page_action_10, x: 10, y: 20)
   end
 
   def action(:page_action_10, params, component) do
-    put_state(component, :result, {"page_action_10", params})
+    put_state(component, :result, {:page_action_10, params})
   end
 
   def action(:page_action_11, params, component) do
     component
-    |> put_state(:result, {"page_action_11", params})
+    |> put_state(:result, {:page_action_11, params})
     |> put_command(:page_command_1, x: 10, y: 20)
   end
 
   def action(:page_action_12, params, component) do
-    put_state(component, :result, {"page_action_12", params})
+    put_state(component, :result, {:page_action_12, params})
   end
 
   def command(:page_command_1, params, server) do

@@ -24,7 +24,7 @@ defmodule HologramFeatureTests.ActionsTest do
       |> click(css("button[id='page_action_1']"))
       |> assert_text(
         css("#page_result"),
-        ~r/\{"page_action_1", %\{event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
+        ~r/\{:page_action_1, %\{event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
       )
     end
 
@@ -34,7 +34,7 @@ defmodule HologramFeatureTests.ActionsTest do
       |> click(css("button[id='page_action_2']"))
       |> assert_text(
         css("#page_result"),
-        ~r/\{"page_action_2", %\{event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
+        ~r/\{:page_action_2, %\{event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
       )
     end
 
@@ -44,7 +44,7 @@ defmodule HologramFeatureTests.ActionsTest do
       |> click(css("button[id='page_action_3']"))
       |> assert_text(
         css("#page_result"),
-        ~r/\{"page_action_3", %\{a: 1, b: 2, event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
+        ~r/\{:page_action_3, %\{a: 1, b: 2, event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
       )
     end
 
@@ -54,7 +54,7 @@ defmodule HologramFeatureTests.ActionsTest do
       |> click(css("button[id='page_action_4']"))
       |> assert_text(
         css("#page_result"),
-        ~r/\{"page_action_4", %\{a: 1, b: 2, event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
+        ~r/\{:page_action_4, %\{a: 1, b: 2, event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
       )
     end
 
@@ -64,7 +64,7 @@ defmodule HologramFeatureTests.ActionsTest do
       |> click(css("button[id='page_action_5']"))
       |> assert_text(
         css("#page_result"),
-        ~r/\{"page_action_5", %\{event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
+        ~r/\{:page_action_5, %\{event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
       )
     end
   end
@@ -76,7 +76,7 @@ defmodule HologramFeatureTests.ActionsTest do
       |> click(css("button[id='layout_action_1']"))
       |> assert_text(
         css("#layout_result"),
-        ~r/\{"layout_action_1", %\{event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
+        ~r/\{:layout_action_1, %\{event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
       )
     end
 
@@ -86,7 +86,7 @@ defmodule HologramFeatureTests.ActionsTest do
       |> click(css("button[id='layout_action_2']"))
       |> assert_text(
         css("#layout_result"),
-        ~r/\{"layout_action_2", %\{a: 1, b: 2, event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
+        ~r/\{:layout_action_2, %\{a: 1, b: 2, event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
       )
     end
 
@@ -96,7 +96,7 @@ defmodule HologramFeatureTests.ActionsTest do
       |> click(css("button[id='layout_action_3']"))
       |> assert_text(
         css("#layout_result"),
-        ~r/\{"layout_action_3", %\{a: 1, b: 2, event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
+        ~r/\{:layout_action_3, %\{a: 1, b: 2, event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
       )
     end
   end
@@ -111,7 +111,7 @@ defmodule HologramFeatureTests.ActionsTest do
       |> click(css("button[id='page_action_6']"))
       |> assert_text(
         css("#page_result"),
-        ~r/\{"page_action_6", %\{a: 1, b: 2, event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
+        ~r/\{:page_action_6, %\{a: 1, b: 2, event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
       )
     end
 
@@ -121,7 +121,7 @@ defmodule HologramFeatureTests.ActionsTest do
       |> click(css("button[id='page_action_7']"))
       |> assert_text(
         css("#page_result"),
-        ~r/\{"page_action_7", %\{a: 1, b: 2, event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
+        ~r/\{:page_action_7, %\{a: 1, b: 2, event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
       )
     end
   end
@@ -133,7 +133,7 @@ defmodule HologramFeatureTests.ActionsTest do
       |> click(css("button[id='component_1_action_3']"))
       |> assert_text(
         css("#component_1_result"),
-        ~r/\{"component_1_action_3", %\{a: 1, b: 2, event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
+        ~r/\{:component_1_action_3, %\{a: 1, b: 2, event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
       )
     end
 
@@ -143,7 +143,7 @@ defmodule HologramFeatureTests.ActionsTest do
       |> click(css("button[id='component_1_action_2']"))
       |> assert_text(
         css("#component_1_result"),
-        ~r/\{"component_1_action_2", %\{a: 1, b: 2, event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
+        ~r/\{:component_1_action_2, %\{a: 1, b: 2, event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
       )
     end
 
@@ -153,7 +153,7 @@ defmodule HologramFeatureTests.ActionsTest do
       |> click(css("button[id='component_1_action_1']"))
       |> assert_text(
         css("#component_1_result"),
-        ~r/\{"component_1_action_1", %\{event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
+        ~r/\{:component_1_action_1, %\{event: %\{.*page_x: [0-9]+\.[0-9]+.*\}\}\}/
       )
     end
   end
@@ -170,14 +170,14 @@ defmodule HologramFeatureTests.ActionsTest do
       session
       |> visit(Page1)
       |> click(css("button[id='page_action_9']"))
-      |> assert_text(css("#page_result"), ~s/{"page_action_10", %{x: 10, y: 20}}/)
+      |> assert_text(css("#page_result"), ~s/{:page_action_10, %{x: 10, y: 20}}/)
     end
 
     feature "next command", %{session: session} do
       session
       |> visit(Page1)
       |> click(css("button[id='page_action_11']"))
-      |> assert_text(css("#page_result"), ~s/{"page_action_12", %{x: 10, y: 20}}/)
+      |> assert_text(css("#page_result"), ~s/{:page_action_12, %{x: 10, y: 20}}/)
     end
 
     # Covered in navigation test suite
@@ -191,7 +191,7 @@ defmodule HologramFeatureTests.ActionsTest do
     feature "page init/3, target not specified", %{session: session} do
       session
       |> visit(Page2)
-      |> assert_text(css("#page_result"), ~s'{:page_action_result, %{queued_from: "page"}}')
+      |> assert_text(css("#page_result"), ~s'{:page_action_result, %{queued_from: :page}}')
     end
 
     feature "page init/3, target is specified", %{session: session} do
@@ -199,7 +199,7 @@ defmodule HologramFeatureTests.ActionsTest do
       |> visit(Page3)
       |> assert_text(
         css("#component_1_result"),
-        ~s'{:component_1_action_result, %{queued_from: "page"}}'
+        ~s'{:component_1_action_result, %{queued_from: :page}}'
       )
     end
 
@@ -208,7 +208,7 @@ defmodule HologramFeatureTests.ActionsTest do
       |> visit(Page4)
       |> assert_text(
         css("#component_2_result"),
-        ~s'{:component_2_action_result, %{queued_from: "component_2"}}'
+        ~s'{:component_2_action_result, %{queued_from: :component_2}}'
       )
     end
 
@@ -217,7 +217,7 @@ defmodule HologramFeatureTests.ActionsTest do
       |> visit(Page5)
       |> assert_text(
         css("#component_4_result"),
-        ~s'{:component_4_action_result, %{queued_from: "component_3"}}'
+        ~s'{:component_4_action_result, %{queued_from: :component_3}}'
       )
     end
 
@@ -243,7 +243,7 @@ defmodule HologramFeatureTests.ActionsTest do
       |> click(button("Show component"))
       |> assert_text(
         css("#component_11_result"),
-        ~s'{:component_11_action_result, %{queued_from: "component_11"}}'
+        ~s'{:component_11_action_result, %{queued_from: :component_11}}'
       )
     end
 
@@ -255,7 +255,7 @@ defmodule HologramFeatureTests.ActionsTest do
       |> click(button("Show component"))
       |> assert_text(
         css("#page_result"),
-        ~s'{:page_action_result, %{queued_from: "component_10"}}'
+        ~s'{:page_action_result, %{queued_from: :component_10}}'
       )
     end
 

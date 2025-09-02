@@ -15,7 +15,7 @@ defmodule HologramFeatureTests.Actions.Page3 do
     |> put_state(:result, nil)
     |> put_action(
       name: :component_1_action,
-      params: %{queued_from: "page"},
+      params: %{queued_from: :page},
       target: "component_1"
     )
   end

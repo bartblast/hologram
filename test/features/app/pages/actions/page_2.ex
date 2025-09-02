@@ -11,7 +11,7 @@ defmodule HologramFeatureTests.Actions.Page2 do
   def init(_params, component, _server) do
     component
     |> put_state(:result, nil)
-    |> put_action(:page_action, queued_from: "page")
+    |> put_action(:page_action, queued_from: :page)
   end
 
   def template do

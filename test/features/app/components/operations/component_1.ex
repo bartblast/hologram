@@ -27,14 +27,14 @@ defmodule HologramFeatureTests.Components.Operations.Component1 do
   end
 
   def action(:component_1_action_1, params, component) do
-    put_state(component, :result, {"component_1_action_1", params})
+    put_state(component, :result, {:component_1_action_1, params})
   end
 
   def action(:component_1_action_2, params, component) do
-    put_state(component, :result, {"component_1_action_2", params})
+    put_state(component, :result, {:component_1_action_2, params})
   end
 
   def action(:component_1_action_3, params, component) do
-    put_state(component, :result, {"component_1_action_3", params})
+    put_state(component, :result, {:component_1_action_3, params})
   end
 end
