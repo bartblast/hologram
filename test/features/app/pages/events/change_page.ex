@@ -74,42 +74,42 @@ defmodule HologramFeatureTests.Events.ChangePage do
   def action(:handle_checkbox_change, params, component) do
     component
     |> put_state(:checkbox, params.event.value)
-    |> put_state(:result, {"checkbox", params})
+    |> put_state(:result, {:checkbox, params})
   end
 
   def action(:handle_email_input_change, params, component) do
     component
     |> put_state(:email, params.event.value)
-    |> put_state(:result, {"email input", params})
+    |> put_state(:result, {:email_input, params})
   end
 
   def action(:handle_multiple_select_change, params, component) do
     component
     |> put_state(:multiple_select, params.event.value)
-    |> put_state(:result, {"multiple select", params})
+    |> put_state(:result, {:multiple_select, params})
   end
 
   def action(:handle_radio_change, params, component) do
     component
     |> put_state(:radio, params.event.value)
-    |> put_state(:result, {"radio", params})
+    |> put_state(:result, {:radio, params})
   end
 
   def action(:handle_single_select_change, params, component) do
     component
     |> put_state(:single_select, params.event.value)
-    |> put_state(:result, {"single select", params})
+    |> put_state(:result, {:single_select, params})
   end
 
   def action(:handle_text_input_change, params, component) do
     component
     |> put_state(:text, params.event.value)
-    |> put_state(:result, {"text input", params})
+    |> put_state(:result, {:text_input, params})
   end
 
   def action(:handle_textarea_change, params, component) do
     component
     |> put_state(:textarea, params.event.value)
-    |> put_state(:result, {"textarea", params})
+    |> put_state(:result, {:textarea, params})
   end
 end

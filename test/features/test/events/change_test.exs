@@ -8,13 +8,13 @@ defmodule HologramFeatureTests.Events.ChangeTest do
     |> fill_in(css("#text_input_elem"), with: "abc text")
     |> assert_text(
       css("#result"),
-      ~r/\{"text input", %\{event: %\{value: "abc text"\}\}\}/
+      ~r/\{:text_input, %\{event: %\{value: &quot;abc text&quot;\}\}\}/
     )
     |> fill_in(css("#text_input_elem"), with: "xyz text")
     |> click(button("Blur"))
     |> assert_text(
       css("#result"),
-      ~r/\{"text input", %\{event: %\{value: "xyz text"\}\}\}/
+      ~r/\{:text_input, %\{event: %\{value: &quot;xyz text&quot;\}\}\}/
     )
   end
 
@@ -24,13 +24,13 @@ defmodule HologramFeatureTests.Events.ChangeTest do
     |> fill_in(css("#email_input_elem"), with: "abc email")
     |> assert_text(
       css("#result"),
-      ~r/\{"email input", %\{event: %\{value: "abc email"\}\}\}/
+      ~r/\{:email_input, %\{event: %\{value: &quot;abc email&quot;\}\}\}/
     )
     |> fill_in(css("#email_input_elem"), with: "xyz email")
     |> click(button("Blur"))
     |> assert_text(
       css("#result"),
-      ~r/\{"email input", %\{event: %\{value: "xyz email"\}\}\}/
+      ~r/\{:email_input, %\{event: %\{value: &quot;xyz email&quot;\}\}\}/
     )
   end
 
@@ -40,13 +40,13 @@ defmodule HologramFeatureTests.Events.ChangeTest do
     |> fill_in(css("#textarea_elem"), with: "abc textarea")
     |> assert_text(
       css("#result"),
-      ~r/\{"textarea", %\{event: %\{value: "abc textarea"\}\}\}/
+      ~r/\{:textarea, %\{event: %\{value: &quot;abc textarea&quot;\}\}\}/
     )
     |> fill_in(css("#textarea_elem"), with: "xyz textarea")
     |> click(button("Blur"))
     |> assert_text(
       css("#result"),
-      ~r/\{"textarea", %\{event: %\{value: "xyz textarea"\}\}\}/
+      ~r/\{:textarea, %\{event: %\{value: &quot;xyz textarea&quot;\}\}\}/
     )
   end
 
@@ -57,7 +57,7 @@ defmodule HologramFeatureTests.Events.ChangeTest do
     |> click(css("#checkbox_elem"))
     |> assert_text(
       css("#result"),
-      ~r/\{"checkbox", %\{event: %\{value: false\}\}\}/
+      ~r/\{:checkbox, %\{event: %\{value: false\}\}\}/
     )
   end
 
@@ -70,7 +70,7 @@ defmodule HologramFeatureTests.Events.ChangeTest do
     |> click(css("#checkbox_elem"))
     |> assert_text(
       css("#result"),
-      ~r/\{"checkbox", %\{event: %\{value: true\}\}\}/
+      ~r/\{:checkbox, %\{event: %\{value: true\}\}\}/
     )
   end
 
@@ -81,7 +81,7 @@ defmodule HologramFeatureTests.Events.ChangeTest do
     |> click(css("#radio_elem_1"))
     |> assert_text(
       css("#result"),
-      ~r/\{"radio", %\{event: %\{value: true\}\}\}/
+      ~r/\{:radio, %\{event: %\{value: true\}\}\}/
     )
   end
 
@@ -95,7 +95,7 @@ defmodule HologramFeatureTests.Events.ChangeTest do
     |> click(css("#radio_elem_2"))
     |> assert_text(
       css("#result"),
-      ~r/\{"radio", %\{event: %\{value: true\}\}\}/
+      ~r/\{:radio, %\{event: %\{value: true\}\}\}/
     )
   end
 
@@ -108,7 +108,7 @@ defmodule HologramFeatureTests.Events.ChangeTest do
     |> click(css("#single_select_elem option[value='option_3']"))
     |> assert_text(
       css("#result"),
-      ~r/\{"single select", %\{event: %\{value: "option_3"\}\}\}/
+      ~r/\{:single_select, %\{event: %\{value: &quot;option_3&quot;\}\}\}/
     )
   end
 
@@ -127,7 +127,7 @@ defmodule HologramFeatureTests.Events.ChangeTest do
     """)
     |> assert_text(
       css("#result"),
-      ~r/\{"multiple select", %\{event: %\{value: \["option_1", "option_2", "option_3"\]\}\}\}/
+      ~r/\{:multiple_select, %\{event: %\{value: \[&quot;option_1&quot;, &quot;option_2&quot;, &quot;option_3&quot;\]\}\}\}/
     )
   end
 
@@ -146,7 +146,7 @@ defmodule HologramFeatureTests.Events.ChangeTest do
     """)
     |> assert_text(
       css("#result"),
-      ~r/\{"multiple select", %\{event: %\{value: \["option_3"\]\}\}\}/
+      ~r/\{:multiple_select, %\{event: %\{value: \[&quot;option_3&quot;\]\}\}\}/
     )
   end
 end
