@@ -4086,7 +4086,7 @@ describe("Renderer", () => {
         parentTagName,
       );
 
-      const expected = vnode("div", {attrs: {}, on: {}}, ["abc &lt; xyz"]);
+      const expected = vnode("div", {attrs: {}, on: {}}, ["abc < xyz"]);
 
       assert.deepStrictEqual(result, expected);
     });
@@ -4119,7 +4119,6 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    // TODO: shouldn't escape
     it("text inside public comments", () => {
       // <!-- abc < xyz -->
       const node = Type.tuple([
@@ -4137,7 +4136,7 @@ describe("Renderer", () => {
         parentTagName,
       );
 
-      const expected = vnode("!", " abc &lt; xyz ");
+      const expected = vnode("!", " abc < xyz ");
 
       assert.deepStrictEqual(result, expected);
     });
@@ -4166,11 +4165,7 @@ describe("Renderer", () => {
         parentTagName,
       );
 
-      const expected = vnode(
-        "div",
-        {attrs: {class: "abc &lt; xyz"}, on: {}},
-        [],
-      );
+      const expected = vnode("div", {attrs: {class: "abc < xyz"}, on: {}}, []);
 
       assert.deepStrictEqual(result, expected);
     });

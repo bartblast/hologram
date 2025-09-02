@@ -90,7 +90,7 @@ defmodule Hologram.Template.RendererTest do
 
   test "text node" do
     node = {:text, "Tom & Jerry"}
-    assert render_dom(node, @env, @server) == {"Tom &amp; Jerry", %{}, @server}
+    assert render_dom(node, @env, @server) == {"Tom & Jerry", %{}, @server}
   end
 
   describe "public comment node" do
@@ -1196,7 +1196,7 @@ defmodule Hologram.Template.RendererTest do
       # <div>abc < xyz</div>
       node = {:element, "div", [], [text: "abc < xyz"]}
 
-      assert render_dom(node, @env, @server) == {"<div>abc &lt; xyz</div>", %{}, @server}
+      assert render_dom(node, @env, @server) == {"<div>abc < xyz</div>", %{}, @server}
     end
 
     test "text inside script elements" do
@@ -1218,7 +1218,7 @@ defmodule Hologram.Template.RendererTest do
       node = {:element, "div", [{"class", [text: "abc < xyz"]}], []}
 
       assert render_dom(node, @env, @server) ==
-               {~s'<div class="abc &lt; xyz"></div>', %{}, @server}
+               {~s'<div class="abc < xyz"></div>', %{}, @server}
     end
 
     test "expression inside non-script elements" do

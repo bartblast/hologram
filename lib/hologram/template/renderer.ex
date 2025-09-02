@@ -109,16 +109,8 @@ defmodule Hologram.Template.Renderer do
     {html, component_registry, mutated_server_struct}
   end
 
-  def render_dom({:text, text}, %Env{node_type: :element, tag_name: "script"}, server_struct) do
-    {text, %{}, server_struct}
-  end
-
-  def render_dom({:text, text}, %Env{node_type: :public_comment}, server_struct) do
-    {text, %{}, server_struct}
-  end
-
   def render_dom({:text, text}, _env, server_struct) do
-    {HtmlEntities.encode(text), %{}, server_struct}
+    {text, %{}, server_struct}
   end
 
   def render_dom(nodes, env, server_struct) when is_list(nodes) do

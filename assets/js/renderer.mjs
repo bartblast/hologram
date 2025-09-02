@@ -95,13 +95,11 @@ export default class Renderer {
     }
 
     const nodeType = dom.data[0].value;
-    let text;
 
     // Cases ordered by expected frequency (most common first)
     switch (nodeType) {
       case "text":
-        text = Bitstring.toText(dom.data[1]);
-        return parentTagName === "script" ? text : $.escapeHtml(text);
+        return Bitstring.toText(dom.data[1]);
 
       case "element":
         return Renderer.#renderElement(
@@ -257,7 +255,10 @@ export default class Renderer {
       if (valuePartData[0].value === "text") {
         bitstringChunks[i] = valuePartData[1];
       } else {
-        bitstringChunks[i] = $.toBitstring(valuePartData[1].data[0]);
+        // expression
+        bitstringChunks[i] = Type.bitstring(
+          $.escapeHtml($.toText(valuePartData[1].data[0])),
+        );
       }
     }
 
@@ -639,7 +640,7 @@ export default class Renderer {
       return [nameText, valueText];
     }
 
-    return [nameText, valueText === "" ? true : $.escapeHtml(valueText)];
+    return [nameText, valueText === "" ? true : valueText];
   }
 
   // Based on render_attributes/1
