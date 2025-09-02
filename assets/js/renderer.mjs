@@ -95,11 +95,12 @@ export default class Renderer {
     }
 
     const nodeType = dom.data[0].value;
+    let text;
 
     // Cases ordered by expected frequency (most common first)
     switch (nodeType) {
       case "text":
-        const text = Bitstring.toText(dom.data[1]);
+        text = Bitstring.toText(dom.data[1]);
         return parentTagName === "script" ? text : $.escapeHtml(text);
 
       case "element":
