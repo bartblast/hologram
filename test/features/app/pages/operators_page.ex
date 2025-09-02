@@ -46,7 +46,7 @@ defmodule HologramFeatureTests.OperatorsPage do
       <button id="++" $click="++"> ++ </button>
       <button id="--" $click="--"> -- </button>
       <button id="and" $click="and"> and </button>
-      <button id="&amp;&amp;" $click="&&"> &amp;&amp; </button>
+      <button id="&&" $click="&&"> &amp;&amp; </button>
       <button id="or" $click="or"> or </button>
       <button id="||" $click="||"> || </button>
       <button id="not" $click="not"> not </button>
@@ -70,9 +70,9 @@ defmodule HologramFeatureTests.OperatorsPage do
       <button id=". (anonymous function call)" $click=". (anonymous function call)"> . (anonymous function call) </button>
       <button id=". (map access)" $click=". (map access)"> . (map access) </button>
       <button id="=" $click="="> = </button>
-      <button id="& (remote function)" $click="& (remote function)"> & (remote function) </button>
-      <button id="& (local function)" $click="& (local function)"> & (local function) </button>
-      <button id="& (anonymous function)" $click="& (anonymous function)"> & (anonymous function) </button>
+      <button id="& (remote function)" $click="& (remote function)"> &amp; (remote function) </button>
+      <button id="& (local function)" $click="& (local function)"> &amp; (local function) </button>
+      <button id="& (anonymous function)" $click="& (anonymous function)"> &amp; (anonymous function) </button>
       <button id="::" $click="::"> :: </button>
     </p>
     <p>
