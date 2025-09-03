@@ -81,4 +81,16 @@ defmodule Hologram.Commons.FileUtils do
       end
     end)
   end
+
+  @doc """
+  Writes content to a file, creating parent directories as needed.
+  """
+  @spec write_p!(T.file_path(), iodata()) :: :ok
+  def write_p!(file_path, content) do
+    file_path
+    |> Path.dirname()
+    |> File.mkdir_p!()
+
+    File.write!(file_path, content)
+  end
 end

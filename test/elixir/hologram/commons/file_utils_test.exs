@@ -170,4 +170,50 @@ defmodule Hologram.Commons.FileUtilsTest do
       end
     end
   end
+
+  describe "write_p!/2" do
+    setup do
+      test_dir =
+        Path.join([
+          Reflection.tmp_dir(),
+          "tests",
+          "commons",
+          "file_utils",
+          "write_p!_2"
+        ])
+
+      clean_dir(test_dir)
+
+      file_dir = Path.join(test_dir, "nested")
+      file_path = Path.join(file_dir, "file.txt")
+
+      [file_dir: file_dir, file_path: file_path]
+    end
+
+    test "writes content to file, creating parent directories when they don't exist", %{
+      file_dir: file_dir,
+      file_path: file_path
+    } do
+      refute File.exists?(file_dir)
+      refute File.exists?(file_path)
+
+      content = "test"
+      assert write_p!(file_path, content) == :ok
+      assert File.read!(file_path) == content
+    end
+
+    test "writes content to file when parent directories already exist", %{
+      file_dir: file_dir,
+      file_path: file_path
+    } do
+      clean_dir(file_dir)
+
+      assert File.exists?(file_dir)
+      refute File.exists?(file_path)
+
+      content = "test"
+      assert write_p!(file_path, content) == :ok
+      assert File.read!(file_path) == content
+    end
+  end
 end
