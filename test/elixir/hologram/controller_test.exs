@@ -93,6 +93,15 @@ defmodule Hologram.ControllerTest do
     Jason.encode!([2, %{"t" => "m", "d" => serialized_map_data}])
   end
 
+  setup do
+    setup_asset_path_registry(AssetPathRegistryStub)
+    AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
+
+    setup_asset_manifest_cache(AssetManifestCacheStub)
+
+    setup_page_digest_registry(PageDigestRegistryStub)
+  end
+
   test "extract_params/2" do
     url_path = "/hologram-test-fixtures-runtime-controller-module1/111/ccc/222"
 
@@ -722,10 +731,6 @@ defmodule Hologram.ControllerTest do
   end
 
   describe "handle_initial_page_request/2" do
-    setup do
-      setup_page_digest_registry(PageDigestRegistryStub)
-    end
-
     test "updates Plug.Conn fields related to HTTP response and halts the pipeline" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
 
@@ -790,11 +795,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "passes to renderer the initial_page? opt set to true" do
-      setup_asset_path_registry(AssetPathRegistryStub)
-      AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
-
-      setup_asset_manifest_cache(AssetManifestCacheStub)
-
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
 
       conn =
@@ -864,10 +864,6 @@ defmodule Hologram.ControllerTest do
   end
 
   describe "handle_subsequent_page_request/3" do
-    setup do
-      setup_page_digest_registry(PageDigestRegistryStub)
-    end
-
     test "updates Plug.Conn fields related to HTTP response and halts the pipeline" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module4, :dummy_module_4_digest)
 
@@ -934,11 +930,6 @@ defmodule Hologram.ControllerTest do
     end
 
     test "passes to renderer the initial_page? opt set to false" do
-      setup_asset_path_registry(AssetPathRegistryStub)
-      AssetPathRegistry.register("hologram/runtime.js", "/hologram/runtime-1234567890abcdef.js")
-
-      setup_asset_manifest_cache(AssetManifestCacheStub)
-
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module5, :dummy_module_5_digest)
 
       conn =
