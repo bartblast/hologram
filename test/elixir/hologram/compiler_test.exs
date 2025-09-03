@@ -353,7 +353,7 @@ defmodule Hologram.CompilerTest do
       assert File.ls!(opts[:static_dir]) == []
     end
 
-    test "raises when generated bundle exceeds :max_bundle_size and does not write static files" do
+    test "raises when the generated bundle exceeds the specified :max_bundle_size (and does not copy the bundle to the static dir in such case) " do
       tmp_dir =
         Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_exceeds_max_size"])
 
@@ -369,15 +369,10 @@ defmodule Hologram.CompilerTest do
       entry_file_path = Path.join(tmp_dir, "MyPage.entry.js")
       File.write!(entry_file_path, "export const myVar = 123;\n")
 
-      original_max = Application.get_env(:hologram, :max_bundle_size)
-      Application.put_env(:hologram, :max_bundle_size, 1)
+      Application.put_env(:hologram, :max_bundle_size, 10)
 
       on_exit(fn ->
-        if is_nil(original_max) do
-          Application.delete_env(:hologram, :max_bundle_size)
-        else
-          Application.put_env(:hologram, :max_bundle_size, original_max)
-        end
+        Application.delete_env(:hologram, :max_bundle_size)
       end)
 
       exception =

@@ -240,7 +240,7 @@ defmodule Hologram.Compiler do
           "esbuild bundler failed for entry file: #{entry_file_path} (probably there were JavaScript syntax errors)"
     end
 
-    ensure_bundle_within_size_limit!(entry_name, output_bundle_path)
+    maybe_ensure_bundle_within_size_limit!(entry_name, output_bundle_path)
 
     digest =
       output_bundle_path
@@ -539,26 +539,6 @@ defmodule Hologram.Compiler do
     entry_file_path
   end
 
-  defp ensure_bundle_within_size_limit!(entry_name, bundle_path) do
-    max_bundle_size = Application.get_env(:hologram, :max_bundle_size, 1024 * 1024)
-    bundle_size = File.stat!(bundle_path).size
-
-    if bundle_size > max_bundle_size do
-      raise RuntimeError,
-        message: """
-        Generated JavaScript bundle '#{entry_name}' is #{bundle_size} bytes, which exceeds the configured maximum of #{max_bundle_size} bytes.
-
-        This limit acts as an early warning system to surface abnormally large bundles before they reach your app (e.g., accidentally pulling in too many modules or dependencies).
-
-        You can temporarily increase this limit by setting the [:hologram, :max_bundle_size] config value (bytes). For example, in your config file add:
-
-            config :hologram, max_bundle_size: 2 * 1024 * 1024
-
-        Please report this by opening a GitHub issue (https://github.com/bartblast/hologram/issues) and include a minimal public repository that reproduces the problem so we can investigate.\
-        """
-    end
-  end
-
   defp filter_elixir_mfas(mfas) do
     Enum.filter(mfas, fn {module, _function, _arity} -> Reflection.elixir_module?(module) end)
   end
@@ -572,6 +552,27 @@ defmodule Hologram.Compiler do
     |> Path.join("package.json")
     |> File.read!()
     |> CryptographicUtils.digest(:sha256, :binary)
+  end
+
+  defp maybe_ensure_bundle_within_size_limit!(entry_name, bundle_path) do
+    max_bundle_size = Application.get_env(:hologram, :max_bundle_size)
+
+    if max_bundle_size do
+      bundle_size = File.stat!(bundle_path).size
+
+      if bundle_size > max_bundle_size do
+        raise RuntimeError,
+          message: """
+          Generated JavaScript bundle '#{entry_name}' is #{bundle_size} bytes, which exceeds the configured maximum of #{max_bundle_size} bytes.
+
+          This limit acts as an early warning system to surface abnormally large bundles before they reach your app (e.g., accidentally pulling in too many modules or dependencies).
+
+          You can change this limit by setting the [:hologram, :max_bundle_size] config value (in bytes). For example:
+
+              config :hologram, max_bundle_size: 2 * 1024 * 1024\
+          """
+      end
+    end
   end
 
   defp rebuild_ir_plt_entry!(ir_plt, module) do
