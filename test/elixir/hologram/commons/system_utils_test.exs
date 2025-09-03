@@ -76,13 +76,26 @@ defmodule Hologram.Commons.SystemUtilsTest do
       refute os_process_alive?(non_existent_pid)
     end
 
+    test "handles PID 0 with platform-specific behavior" do
+      # PID 0 has different behavior depending on the OS:
+      # - Unix systems: scheduler/swapper, not a regular process (returns false)
+      # - Windows: System Idle Process, visible to tasklist (returns true)
+      windows? = match?({:win32, _name}, :os.type())
+
+      case windows? do
+        true ->
+          # On Windows, PID 0 is System Idle Process and is visible to tasklist
+          assert os_process_alive?(0)
+
+        false ->
+          # On Unix, PID 0 is kernel scheduler/swapper, not a regular process
+          refute os_process_alive?(0)
+      end
+    end
+
     test "handles edge cases and invalid inputs gracefully" do
       # Negative PID (invalid)
       refute os_process_alive?(-1)
-
-      # PID 0 has special meaning on Unix systems (scheduler/swapper)
-      # and doesn't exist as a regular process
-      refute os_process_alive?(0)
 
       # Test with 1 (usually init process on Unix, but the test is defensive)
       # This might be true on Unix systems, so we just verify it doesn't crash
