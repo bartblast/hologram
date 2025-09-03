@@ -68,33 +68,22 @@ export default class Vdom {
 
     // Then patch head and body separately to preserve JavaScript/CSS handling
 
-    const oldHead = oldVirtualDocument.children.find(
-      (child) => child.sel === "head",
-    );
+    const oldHead = oldVirtualDocument.children.find($.#isHeadVnode);
 
-    const newHead = newVirtualDocument.children.find(
-      (child) => child.sel === "head",
-    );
+    const newHead = newVirtualDocument.children.find($.#isHeadVnode);
 
-    const oldBody = oldVirtualDocument.children.find(
-      (child) => child.sel === "body",
-    );
+    const oldBody = oldVirtualDocument.children.find($.#isBodyVnode);
 
-    const newBody = newVirtualDocument.children.find(
-      (child) => child.sel === "body",
-    );
+    const newBody = newVirtualDocument.children.find($.#isBodyVnode);
 
     patchedVirtualDocument.children = oldVirtualDocument.children.map(
       (child) => {
-        switch (child.sel) {
-          case "body":
-            return patch(oldBody, newBody);
-
-          case "head":
-            return patch(oldHead, newHead);
-
-          default:
-            return child;
+        if ($.#isHeadVnode(child)) {
+          return patch(oldHead, newHead);
+        } else if ($.#isBodyVnode(child)) {
+          return patch(oldBody, newBody);
+        } else {
+          return child;
         }
       },
     );
@@ -139,4 +128,18 @@ export default class Vdom {
 
     return vnode(tagName, data, children);
   }
+
+  // We're checking html element children,
+  // so the nodes are either: head element, body element or text (whitespace) nodes
+  static #isBodyVnode(vnode) {
+    return vnode.sel?.[0] === "b";
+  }
+
+  // We're checking html element children,
+  // so the nodes are either: head element, body element or text (whitespace) nodes
+  static #isHeadVnode(vnode) {
+    return vnode.sel?.[0] === "h";
+  }
 }
+
+const $ = Vdom;
