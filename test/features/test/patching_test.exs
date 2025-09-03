@@ -8,6 +8,8 @@ defmodule HologramFeatureTests.PatchingTest do
   alias HologramFeatureTests.Patching.Page3
   alias HologramFeatureTests.Patching.Page4
   alias HologramFeatureTests.Patching.Page5
+  alias HologramFeatureTests.Patching.Page6
+  alias HologramFeatureTests.Patching.Page7
 
   setup do
     current_max_wait_time = Application.fetch_env!(:wallaby, :max_wait_time)
@@ -56,6 +58,47 @@ defmodule HologramFeatureTests.PatchingTest do
       |> refute_has(css("html[attr_1]"))
       |> refute_has(css("html[attr_2]"))
       |> assert_has(css("html[attr_3='value_3']"))
+    end
+  end
+
+  describe "body element attributes patching" do
+    feature "after action", %{session: session} do
+      session
+      |> visit(Page6)
+      |> refute_has(css("body[attr_1]"))
+      |> refute_has(css("body[attr_2]"))
+      |> click(button("Add body elem attr 2"))
+      |> refute_has(css("body[attr_1]"))
+      |> assert_has(css("body[attr_2='value_2a']"))
+      |> click(button("Add body elem attr 1"))
+      |> assert_has(css("body[attr_1='value_1a']"))
+      |> assert_has(css("body[attr_2='value_2a']"))
+      |> click(button("Change body elem attr 2"))
+      |> assert_has(css("body[attr_1='value_1a']"))
+      |> assert_has(css("body[attr_2='value_2b']"))
+      |> click(button("Change body elem attr 1"))
+      |> assert_has(css("body[attr_1='value_1b']"))
+      |> assert_has(css("body[attr_2='value_2b']"))
+      |> click(button("Remove body elem attr 2"))
+      |> assert_has(css("body[attr_1='value_1b']"))
+      |> refute_has(css("body[attr_2]"))
+      |> click(button("Remove body elem attr 1"))
+      |> refute_has(css("body[attr_1]"))
+      |> refute_has(css("body[attr_2]"))
+    end
+
+    feature "after navigation", %{session: session} do
+      session
+      |> visit(Page6)
+      |> click(button("Add body elem attr 1"))
+      |> click(button("Add body elem attr 2"))
+      |> assert_has(css("body[attr_1='value_1a']"))
+      |> assert_has(css("body[attr_2='value_2a']"))
+      |> click(link("Page 7 link"))
+      |> assert_page(Page7)
+      |> refute_has(css("body[attr_1]"))
+      |> refute_has(css("body[attr_2]"))
+      |> assert_has(css("body[attr_3='value_3']"))
     end
   end
 
