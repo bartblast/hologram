@@ -4,6 +4,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
+  alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler.CallGraph
   alias Hologram.Reflection
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
@@ -370,7 +371,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       # The OS-level PID should correspond to a running OS process
       status =
         "ps"
-        |> system_cmd_cross_platform(["-p", lock_content])
+        |> SystemUtils.cmd_cross_platform(["-p", lock_content], [])
         |> elem(1)
 
       assert status == 0

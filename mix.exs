@@ -4,7 +4,7 @@ defmodule Hologram.MixProject do
 
   @version "0.5.1"
 
-  # Copied from Hologram.Compiler
+  # Copied from Hologram.Commons.SystemUtils
   @windows_exec_suffixes [".bat", ".cmd", ".exe"]
 
   defp aliases do
@@ -153,14 +153,14 @@ defmodule Hologram.MixProject do
     ]
   end
 
-  # Copied from Hologram.Compiler
+  # Copied from Hologram.Commons.SystemUtils
   defp find_windows_wrapper(explicit_command_path) do
     @windows_exec_suffixes
     |> Enum.map(&(explicit_command_path <> &1))
     |> Enum.find(&File.exists?/1)
   end
 
-  # Copied from Hologram.Compiler
+  # Copied from Hologram.Commons.SystemUtils
   defp has_windows_exec_ext?(path) do
     ext =
       path
@@ -170,7 +170,7 @@ defmodule Hologram.MixProject do
     ext in @windows_exec_suffixes
   end
 
-  # Copied from Hologram.Compiler
+  # Copied from Hologram.Commons.SystemUtils
   defp resolve_command_path!(command_name_or_path, windows?) do
     has_separator? = String.contains?(command_name_or_path, ["/", "\\"])
 
@@ -188,7 +188,7 @@ defmodule Hologram.MixProject do
     end
   end
 
-  # Copied from Hologram.Compiler
+  # Copied from Hologram.Commons.SystemUtils
   defp resolve_explicit_command_path!(explicit_command_path, true) do
     if has_windows_exec_ext?(explicit_command_path) and File.exists?(explicit_command_path) do
       explicit_command_path
@@ -197,7 +197,7 @@ defmodule Hologram.MixProject do
     end
   end
 
-  # Copied from Hologram.Compiler
+  # Copied from Hologram.Commons.SystemUtils
   defp resolve_explicit_command_path!(explicit_command_path, false) do
     if File.exists?(explicit_command_path) do
       explicit_command_path
@@ -206,7 +206,7 @@ defmodule Hologram.MixProject do
     end
   end
 
-  # Copied from Hologram.Compiler
+  # Copied from Hologram.Commons.SystemUtils
   defp resolve_windows_executable_path!(explicit_command_path) do
     if resolved_path = find_windows_wrapper(explicit_command_path) do
       resolved_path
@@ -219,13 +219,13 @@ defmodule Hologram.MixProject do
     end
   end
 
-  # Copied from Hologram.Compiler
+  # Copied from Hologram.Commons.SystemUtils
   # Executes the given command cross-platform.
   # Accepts either a bare command name (resolved via PATH) or an executable file path.
   # On Windows, .cmd/.bat wrappers must be executed via "cmd /c".
   # sobelow_skip ["CI.System"]
   # credo:disable-for-lines:11 Credo.Check.Design.DuplicatedCode
-  defp system_cmd_cross_platform(command_name_or_path, args, opts) do
+  defp cmd_cross_platform(command_name_or_path, args, opts) do
     windows? = match?({:win32, _name}, :os.type())
 
     resolved_command_path = resolve_command_path!(command_name_or_path, windows?)
@@ -247,9 +247,9 @@ defmodule Hologram.MixProject do
 
     opts = [cd: "assets", into: IO.stream(:stdio, :line)]
 
-    system_cmd_cross_platform("npm", ["install"], opts)
+    cmd_cross_platform("npm", ["install"], opts)
 
-    {_exit_msg, exit_status} = system_cmd_cross_platform("npm", cmd, opts)
+    {_exit_msg, exit_status} = cmd_cross_platform("npm", cmd, opts)
 
     if exit_status > 0 do
       Mix.raise("JavaScript tests failed!")

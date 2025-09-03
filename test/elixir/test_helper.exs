@@ -13,11 +13,11 @@ System.put_env(
   "test_secret_key_base_that_is_long_enough_for_testing_purposes_in_hologram"
 )
 
-# Skip tests that don't work reliably on Windows
+# Skip tests that don't work reliably on either OS type
 exclude_opts =
   case :os.type() do
+    {:unix, _name} -> [:skip_on_unix]
     {:win32, _name} -> [:skip_on_windows]
-    _fallback -> []
   end
 
 ExUnit.start(exclude: exclude_opts)
