@@ -1047,7 +1047,7 @@ defmodule Hologram.Template.RendererTest do
       assert {html, _component_registry, _server_struct} =
                render_page(Module53, @params, @server, opts)
 
-      assert html =~
+      assert normalize_newlines(html) =~
                ~r'globalThis.hologram.assetManifest = \{\n"hologram/runtime\.js": "/hologram/runtime\-1234567890abcdef\.js"[^\}]+\n\};'
     end
 
