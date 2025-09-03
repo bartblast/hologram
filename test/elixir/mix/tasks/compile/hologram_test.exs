@@ -370,7 +370,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       # The OS-level PID should correspond to a running OS process
       status =
         "ps"
-        |> System.cmd(["-p", lock_content])
+        |> system_cmd_cross_platform(["-p", lock_content])
         |> elem(1)
 
       assert status == 0
