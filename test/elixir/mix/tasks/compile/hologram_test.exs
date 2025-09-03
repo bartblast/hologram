@@ -2,6 +2,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   use Hologram.Test.BasicCase, async: false
   import Mix.Tasks.Compile.Hologram
 
+  alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
   alias Hologram.Compiler.CallGraph
   alias Hologram.Reflection
@@ -163,9 +164,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
   end
 
   setup_all do
-    clean_dir(@build_dir)
     clean_dir(@test_dir)
-    File.mkdir!(@assets_dir)
+    clean_dir(@assets_dir)
 
     lib_assets_dir = Path.join(Reflection.root_dir(), "assets")
     test_node_modules_path = Path.join(@assets_dir, "node_modules")
@@ -189,11 +189,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   setup do
     File.rm(@lock_path)
+
+    clean_dir(@build_dir)
     clean_dir(@static_dir)
     clean_dir(@tmp_dir)
   end
 
   test "run/1", %{opts: opts} do
+    FileUtils.rm_rf_with_retries!(@build_dir, 5, 10)
+
     # Test case 1: when there are no previous build artifacts
     run(opts)
     test_build_artifacts()
@@ -241,7 +245,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       refute File.exists?(@lock_path)
     end
 
-    test "lock file is cleaned up after compilation error", %{opts: opts} do
+    test "lock file is cleaned up after compilation error", %{opts: initial_opts} do
       refute File.exists?(@lock_path)
 
       # Create a valid directory but with invalid package.json that will cause npm install to fail
@@ -252,7 +256,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       invalid_package_json_path = Path.join(assets_dir, "package.json")
       File.write!(invalid_package_json_path, "{ invalid json content")
 
-      opts = Keyword.put(opts, :assets_dir, assets_dir)
+      opts = Keyword.put(initial_opts, :assets_dir, assets_dir)
 
       assert_raise RuntimeError, "npm install command failed", fn ->
         run(opts)
@@ -296,8 +300,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
 
     test "valid lock file with running OS-level process is respected", %{opts: opts} do
-      File.mkdir_p!(opts[:build_dir])
-
       # Create a lock file with the current process PID (which is definitely running)
       current_os_pid = System.pid()
       File.write!(@lock_path, "#{current_os_pid}")
@@ -328,8 +330,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
 
     test "lock file with invalid OS-level PID format is removed", %{opts: opts} do
-      File.mkdir_p!(opts[:build_dir])
-
       # Create a lock file with invalid OS-level PID format
       File.write!(@lock_path, "invalid_pid_format")
 
@@ -342,8 +342,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
 
     test "unreadable lock file is removed", %{opts: opts} do
-      File.mkdir_p!(opts[:build_dir])
-
       # Create a lock file and make it unreadable (if supported by OS)
       File.write!(@lock_path, "12345")
       File.chmod!(@lock_path, 0o000)
