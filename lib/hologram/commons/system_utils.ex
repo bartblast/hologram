@@ -47,6 +47,45 @@ defmodule Hologram.Commons.SystemUtils do
   end
 
   @doc """
+  Checks if an OS process with the given PID is currently running.
+
+  This function works cross-platform:
+  - On Unix/Linux: Uses `ps -p <pid>`
+  - On Windows: Uses `tasklist /FI "PID eq <pid>" /NH`
+
+  ## Parameters
+
+    * `os_pid` - The OS-level process ID to check
+
+  ## Returns
+
+  Returns `true` if the process is running, `false` otherwise.
+
+  ## Examples
+
+      iex> SystemUtils.os_process_alive?(System.pid())
+      true
+
+      iex> SystemUtils.os_process_alive?(32_768)
+      false
+
+  """
+  @spec os_process_alive?(non_neg_integer()) :: boolean()
+  def os_process_alive?(os_pid) do
+    windows? = match?({:win32, _name}, :os.type())
+
+    if windows? do
+      os_process_alive_windows?(os_pid)
+    else
+      os_process_alive_unix?(os_pid)
+    end
+  rescue
+    _error -> false
+  catch
+    _error -> false
+  end
+
+  @doc """
   Returns the OTP major version.
   """
   @spec otp_version :: integer
@@ -67,6 +106,30 @@ defmodule Hologram.Commons.SystemUtils do
       |> String.downcase()
 
     ext in @windows_exec_suffixes
+  end
+
+  defp os_process_alive_unix?(os_pid) do
+    case cmd_cross_platform("ps", ["-p", to_string(os_pid)], []) do
+      {_output, 0} -> true
+      {_output, _status} -> false
+    end
+  end
+
+  defp os_process_alive_windows?(os_pid) do
+    # Use tasklist with filter to check if PID exists
+    # /FI "PID eq <pid>" filters for the specific process ID
+    # /NH removes headers from output
+    case cmd_cross_platform("tasklist", ["/FI", "PID eq #{os_pid}", "/NH"], []) do
+      {output, 0} ->
+        # If the process exists, tasklist will output a line with process info
+        # If it doesn't exist, output will be empty or contain "No tasks are running..."
+        output
+        |> String.trim()
+        |> String.contains?(to_string(os_pid))
+
+      {_output, _status} ->
+        false
+    end
   end
 
   defp resolve_command_path!(command_name_or_path, windows?) do

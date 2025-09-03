@@ -10,6 +10,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   require Logger
 
   alias Hologram.Commons.PLT
+  alias Hologram.Commons.SystemUtils
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Reflection
@@ -174,17 +175,6 @@ defmodule Mix.Tasks.Compile.Hologram do
     end
   end
 
-  defp os_process_alive?(os_pid) do
-    case System.cmd("ps", ["-p", to_string(os_pid)]) do
-      {_output, 0} -> true
-      {_output, _status} -> false
-    end
-  rescue
-    _error -> false
-  catch
-    _error -> false
-  end
-
   defp remove_lock_file_with_invalid_os_pid(lock_path) do
     Logger.info("Hologram: removing lock file with invalid OS-level PID format")
     File.rm(lock_path)
@@ -206,7 +196,7 @@ defmodule Mix.Tasks.Compile.Hologram do
   defp validate_lock_file_and_proceed_accordingly(lock_path, os_pid_str) do
     case Integer.parse(os_pid_str) do
       {os_pid, _remainder} ->
-        if not os_process_alive?(os_pid) do
+        if not SystemUtils.os_process_alive?(os_pid) do
           remove_lock_for_dead_process(lock_path, os_pid)
         end
 

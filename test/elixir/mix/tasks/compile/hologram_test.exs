@@ -369,12 +369,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       assert parsed_os_pid > 0
 
       # The OS-level PID should correspond to a running OS process
-      status =
-        "ps"
-        |> SystemUtils.cmd_cross_platform(["-p", lock_content], [])
-        |> elem(1)
-
-      assert status == 0
+      assert SystemUtils.os_process_alive?(parsed_os_pid)
 
       # Clean up: kill the background compilation task
       Task.shutdown(compilation_task, :brutal_kill)
