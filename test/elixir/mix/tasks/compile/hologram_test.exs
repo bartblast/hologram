@@ -165,7 +165,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   setup_all do
     clean_dir(@test_dir)
-    clean_dir(@assets_dir)
 
     lib_assets_dir = Path.join(Reflection.root_dir(), "assets")
     test_node_modules_path = Path.join(@assets_dir, "node_modules")
@@ -182,7 +181,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     lib_package_json_path = Path.join([lib_assets_dir, "package.json"])
     test_package_json_path = Path.join(@assets_dir, "package.json")
-    File.cp!(lib_package_json_path, test_package_json_path)
+    FileUtils.cp_p!(lib_package_json_path, test_package_json_path)
 
     [opts: opts]
   end
@@ -190,7 +189,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
   setup do
     File.rm(@lock_path)
 
-    clean_dir(@build_dir)
     clean_dir(@static_dir)
     clean_dir(@tmp_dir)
   end
@@ -289,7 +287,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
       # macOs = 99,998, see: https://apple.stackexchange.com/a/260798
       # Windows = 4,294,967,295, see: https://learn.microsoft.com/en-us/answers/questions/70930/maximum-value-of-process-id
       stale_os_pid = 32_768
-      File.write!(@lock_path, "#{stale_os_pid}")
+      FileUtils.write_p!(@lock_path, "#{stale_os_pid}")
 
       assert File.exists?(@lock_path)
 
@@ -302,7 +300,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     test "valid lock file with running OS-level process is respected", %{opts: opts} do
       # Create a lock file with the current process PID (which is definitely running)
       current_os_pid = System.pid()
-      File.write!(@lock_path, "#{current_os_pid}")
+      FileUtils.write_p!(@lock_path, "#{current_os_pid}")
 
       assert File.exists?(@lock_path)
 
@@ -331,7 +329,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "lock file with invalid OS-level PID format is removed", %{opts: opts} do
       # Create a lock file with invalid OS-level PID format
-      File.write!(@lock_path, "invalid_pid_format")
+      FileUtils.write_p!(@lock_path, "invalid_pid_format")
 
       assert File.exists?(@lock_path)
 
@@ -343,7 +341,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
     test "unreadable lock file is removed", %{opts: opts} do
       # Create a lock file and make it unreadable (if supported by OS)
-      File.write!(@lock_path, "12345")
+      FileUtils.write_p!(@lock_path, "12345")
       File.chmod!(@lock_path, 0o000)
 
       assert File.exists?(@lock_path)
