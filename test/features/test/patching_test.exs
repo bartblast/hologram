@@ -10,6 +10,8 @@ defmodule HologramFeatureTests.PatchingTest do
   alias HologramFeatureTests.Patching.Page5
   alias HologramFeatureTests.Patching.Page6
   alias HologramFeatureTests.Patching.Page7
+  alias HologramFeatureTests.Patching.Page8
+  alias HologramFeatureTests.Patching.Page9
 
   setup do
     current_max_wait_time = Application.fetch_env!(:wallaby, :max_wait_time)
@@ -149,6 +151,56 @@ defmodule HologramFeatureTests.PatchingTest do
       |> refute_has(css("html[class]"))
       |> click(button("Change to class 2"))
       |> assert_has(css("html[class='my_class_2']"))
+    end
+  end
+
+  describe "class attribute in body element patching" do
+    feature "has class initially, changes to different class", %{session: session} do
+      session
+      |> visit(Page8)
+      |> click(button("Change to class 2"))
+      |> assert_has(css("body[class='my_class_2']"))
+    end
+
+    feature "has class initially, class is removed", %{session: session} do
+      session
+      |> visit(Page8)
+      |> click(button("Remove class"))
+      |> refute_has(css("body[class]"))
+    end
+
+    feature "no class initially, class is added", %{session: session} do
+      session
+      |> visit(Page9)
+      |> click(button("Add class"))
+      |> assert_has(css("body[class='my_class']"))
+    end
+
+    feature "has class after update, changes to different class", %{session: session} do
+      session
+      |> visit(Page8)
+      |> click(button("Change to class 2"))
+      |> assert_has(css("body[class='my_class_2']"))
+      |> click(button("Change to class 3"))
+      |> assert_has(css("body[class='my_class_3']"))
+    end
+
+    feature "has class after update, class is removed", %{session: session} do
+      session
+      |> visit(Page8)
+      |> click(button("Change to class 2"))
+      |> assert_has(css("body[class='my_class_2']"))
+      |> click(button("Remove class"))
+      |> refute_has(css("body[class]"))
+    end
+
+    feature "no class after update, class is added", %{session: session} do
+      session
+      |> visit(Page8)
+      |> click(button("Remove class"))
+      |> refute_has(css("body[class]"))
+      |> click(button("Change to class 2"))
+      |> assert_has(css("body[class='my_class_2']"))
     end
   end
 
