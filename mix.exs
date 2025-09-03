@@ -7,7 +7,7 @@ defmodule Hologram.MixProject do
   # Copied from Hologram.Commons.SystemUtils
   @windows_exec_suffixes [".bat", ".cmd", ".exe"]
 
-  defp aliases do
+  def aliases do
     [
       eslint:
         "cmd assets/node_modules/.bin/eslint --color --config assets/eslint.config.mjs assets/js/** benchmarks/javascript/** test/javascript/** --no-error-on-unmatched-pattern",
@@ -32,13 +32,7 @@ defmodule Hologram.MixProject do
     end
   end
 
-  def dep? do
-    __MODULE__.module_info()[:compile][:source]
-    |> to_string()
-    |> String.ends_with?("/deps/hologram/mix.exs")
-  end
-
-  defp deps do
+  def deps do
     [
       {:beam_file, "0.6.2"},
       {:benchee, "~> 1.0", only: :dev, runtime: false},
@@ -66,9 +60,9 @@ defmodule Hologram.MixProject do
     ]
   end
 
-  defp elixirc_paths(:dev), do: ["benchmarks/elixir/support", "lib"]
-  defp elixirc_paths(:test), do: ["lib", "test/elixir/fixtures", "test/elixir/support"]
-  defp elixirc_paths(_env), do: ["lib"]
+  def elixirc_paths(:dev), do: ["benchmarks/elixir/support", "lib"]
+  def elixirc_paths(:test), do: ["lib", "test/elixir/fixtures", "test/elixir/support"]
+  def elixirc_paths(_env), do: ["lib"]
 
   def package do
     [
@@ -91,7 +85,7 @@ defmodule Hologram.MixProject do
     ]
   end
 
-  defp preferred_cli_env do
+  def preferred_cli_env do
     [
       t: :test,
       "test.js": :test
@@ -151,6 +145,30 @@ defmodule Hologram.MixProject do
         ]
       ]
     ]
+  end
+
+  # Copied from Hologram.Commons.SystemUtils
+  # Executes the given command cross-platform.
+  # Accepts either a bare command name (resolved via PATH) or an executable file path.
+  # On Windows, .cmd/.bat wrappers must be executed via "cmd /c".
+  # sobelow_skip ["CI.System"]
+  # credo:disable-for-lines:11 Credo.Check.Design.DuplicatedCode
+  defp cmd_cross_platform(command_name_or_path, args, opts) do
+    windows? = match?({:win32, _name}, :os.type())
+
+    resolved_command_path = resolve_command_path!(command_name_or_path, windows?)
+
+    if windows? and String.match?(resolved_command_path, ~r/\.(cmd|bat)$/i) do
+      System.cmd("cmd", ["/c", resolved_command_path | args], opts)
+    else
+      System.cmd(resolved_command_path, args, opts)
+    end
+  end
+
+  defp dep? do
+    __MODULE__.module_info()[:compile][:source]
+    |> to_string()
+    |> String.ends_with?("/deps/hologram/mix.exs")
   end
 
   # Copied from Hologram.Commons.SystemUtils
@@ -216,24 +234,6 @@ defmodule Hologram.MixProject do
       else
         raise RuntimeError, message: "executable not found at #{explicit_command_path}"
       end
-    end
-  end
-
-  # Copied from Hologram.Commons.SystemUtils
-  # Executes the given command cross-platform.
-  # Accepts either a bare command name (resolved via PATH) or an executable file path.
-  # On Windows, .cmd/.bat wrappers must be executed via "cmd /c".
-  # sobelow_skip ["CI.System"]
-  # credo:disable-for-lines:11 Credo.Check.Design.DuplicatedCode
-  defp cmd_cross_platform(command_name_or_path, args, opts) do
-    windows? = match?({:win32, _name}, :os.type())
-
-    resolved_command_path = resolve_command_path!(command_name_or_path, windows?)
-
-    if windows? and String.match?(resolved_command_path, ~r/\.(cmd|bat)$/i) do
-      System.cmd("cmd", ["/c", resolved_command_path | args], opts)
-    else
-      System.cmd(resolved_command_path, args, opts)
     end
   end
 
