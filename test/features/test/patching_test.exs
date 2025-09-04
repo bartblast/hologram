@@ -391,5 +391,68 @@ defmodule HologramFeatureTests.PatchingTest do
       |> assert_input_value("#textarea", "")
       |> refute_has(css("#textarea[value]"))
     end
+
+    feature "checkbox checked patching", %{session: session} do
+      # We're testing different combinations of specific user operations for checkboxes:
+      # 1) change programmatically to checked when the last programmatic value was also checked
+      # 2) change programmatically to checked when the last programmatic value was unchecked
+      # 3) change programmatically to unchecked when the last programmatic value was also unchecked
+      # 4) change programmatically to unchecked when the last programmatic value was checked
+      # 5) change manually to checked when the last programmatic value was also checked
+      # 6) change manually to checked when the last programmatic value was unchecked
+      # 7) change manually to unchecked when the last programmatic value was also unchecked
+      # 8) change manually to unchecked when the last programmatic value was checked      
+
+      session
+      |> visit(Page5)
+      |> assert_has(css("#checkbox:checked"))
+      |> refute_has(css("#checkbox[checked]"))
+      # --- Setup A: establish baseline programmatic state (unchecked)
+      |> click(button("Uncheck Checkbox"))
+      |> refute_has(css("#checkbox:checked"))
+      |> refute_has(css("#checkbox[checked]"))
+      # --- Group 1 (Cond 6): manual checked, different from last prog (unchecked)
+      |> click(css("#checkbox"))
+      |> assert_has(css("#checkbox:checked"))
+      |> refute_has(css("#checkbox[checked]"))
+      # --- Group 2 (Cond 3): prog unchecked, same as last prog (unchecked)
+      |> click(button("Uncheck Checkbox"))
+      |> refute_has(css("#checkbox:checked"))
+      |> refute_has(css("#checkbox[checked]"))
+      # --- Group 3 (Cond 2): prog checked, different from last prog (unchecked)
+      |> click(button("Check Checkbox"))
+      |> assert_has(css("#checkbox:checked"))
+      |> refute_has(css("#checkbox[checked]"))
+      # --- Setup B: manual change to different state (unchecked)
+      |> click(css("#checkbox"))
+      |> refute_has(css("#checkbox:checked"))
+      |> refute_has(css("#checkbox[checked]"))
+      # --- Group 4 (Cond 5): manual checked, same as last prog (checked)
+      |> click(css("#checkbox"))
+      |> assert_has(css("#checkbox:checked"))
+      |> refute_has(css("#checkbox[checked]"))
+      # --- Group 5 (Cond 1): prog checked, same as last prog (checked)
+      |> click(button("Check Checkbox"))
+      |> assert_has(css("#checkbox:checked"))
+      |> refute_has(css("#checkbox[checked]"))
+      # --- Setup C: switch to unchecked programmatically
+      |> click(button("Uncheck Checkbox"))
+      |> refute_has(css("#checkbox:checked"))
+      |> refute_has(css("#checkbox[checked]"))
+      # --- Group 6 (Cond 7): manual unchecked, same as last prog (unchecked)
+      |> click(css("#checkbox"))
+      |> assert_has(css("#checkbox:checked"))
+      |> click(css("#checkbox"))
+      |> refute_has(css("#checkbox:checked"))
+      |> refute_has(css("#checkbox[checked]"))
+      # --- Group 7 (Cond 4): prog checked, different from last prog (unchecked)
+      |> click(button("Check Checkbox"))
+      |> assert_has(css("#checkbox:checked"))
+      |> refute_has(css("#checkbox[checked]"))
+      # --- Group 8 (Cond 8): manual unchecked, different from last prog (checked)
+      |> click(css("#checkbox"))
+      |> refute_has(css("#checkbox:checked"))
+      |> refute_has(css("#checkbox[checked]"))
+    end
   end
 end

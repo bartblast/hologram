@@ -10,6 +10,7 @@ defmodule HologramFeatureTests.Patching.Page5 do
 
   def init(_params, component, _server) do
     put_state(component,
+      checkbox: true,
       email: "initial email",
       text: "initial text",
       textarea: "initial textarea"
@@ -48,6 +49,12 @@ defmodule HologramFeatureTests.Patching.Page5 do
             <textarea id="textarea" value={@textarea} />
             <button type="button" $click="update_textarea_1">Update Textarea 1</button>
             <button type="button" $click="update_textarea_2">Update Textarea 2</button>            
+            <br /><br />
+            
+            <input type="checkbox" id="checkbox" checked={@checkbox} />
+            <label for="checkbox">Checkbox</label>
+            <button type="button" $click="check_checkbox">Check Checkbox</button>
+            <button type="button" $click="uncheck_checkbox">Uncheck Checkbox</button>            
             <br /><br />            
           </form>
         </p>
@@ -81,6 +88,14 @@ defmodule HologramFeatureTests.Patching.Page5 do
   end
 
   def action(:clear_state, _params, component) do
-    put_state(component, email: "", text: "", textarea: "")
+    put_state(component, checkbox: false, email: "", text: "", textarea: "")
+  end
+
+  def action(:check_checkbox, _params, component) do
+    put_state(component, :checkbox, true)
+  end
+
+  def action(:uncheck_checkbox, _params, component) do
+    put_state(component, :checkbox, false)
   end
 end
