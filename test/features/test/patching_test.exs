@@ -401,8 +401,9 @@ defmodule HologramFeatureTests.PatchingTest do
       # 5) change manually to checked when the last programmatic value was also checked
       # 6) change manually to checked when the last programmatic value was unchecked
       # 7) change manually to unchecked when the last programmatic value was also unchecked
-      # 8) change manually to unchecked when the last programmatic value was checked      
+      # 8) change manually to unchecked when the last programmatic value was checked
 
+      # credo:disable-for-lines:58 Credo.Check.Design.DuplicatedCode
       session
       |> visit(Page5)
       |> assert_has(css("#checkbox:checked"))
@@ -445,7 +446,15 @@ defmodule HologramFeatureTests.PatchingTest do
       |> click(css("#checkbox"))
       |> refute_has(css("#checkbox:checked"))
       |> refute_has(css("#checkbox[checked]"))
-      # --- Group 7 (Cond 4): prog checked, different from last prog (unchecked)
+      # --- Setup D: set programmatic state to checked for next test
+      |> click(button("Check Checkbox"))
+      |> assert_has(css("#checkbox:checked"))
+      |> refute_has(css("#checkbox[checked]"))
+      # --- Group 7 (Cond 4): prog unchecked, different from last prog (checked)
+      |> click(button("Uncheck Checkbox"))
+      |> refute_has(css("#checkbox:checked"))
+      |> refute_has(css("#checkbox[checked]"))
+      # --- Setup E: set programmatic state to checked for condition 8
       |> click(button("Check Checkbox"))
       |> assert_has(css("#checkbox:checked"))
       |> refute_has(css("#checkbox[checked]"))
