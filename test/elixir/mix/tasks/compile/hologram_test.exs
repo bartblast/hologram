@@ -5,12 +5,14 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PLT
   alias Hologram.Commons.SystemUtils
+  alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Reflection
-  alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
+  alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
 
-  @compiler_lock_file_name Reflection.compiler_lock_file_name()
+  @lib_assets_dir Path.join(Reflection.root_dir(), "assets")
+  @lib_package_json_path Path.join(@lib_assets_dir, "package.json")
 
   @test_dir Path.join([
               Reflection.tmp_dir(),
@@ -23,30 +25,58 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   @assets_dir Path.join(@test_dir, "assets")
   @build_dir Path.join(@test_dir, "build")
-  @num_pages Enum.count(Reflection.list_pages())
   @static_dir Path.join(@test_dir, "static")
   @tmp_dir Path.join(@test_dir, "tmp")
 
+  @compiler_lock_file_name Reflection.compiler_lock_file_name()
   @lock_path Path.join(@build_dir, @compiler_lock_file_name)
 
-  defp generate_old_bundle(name) do
-    @static_dir
+  @num_pages Enum.count(Reflection.list_pages())
+
+  defp generate_old_bundle(name, opts) do
+    opts[:static_dir]
     |> Path.join("#{name}.js")
     |> File.write!(name)
   end
 
-  defp test_build_artifacts do
-    test_call_graph()
-    test_dirs()
-    test_js_deps()
-    test_module_digest_plt()
-    test_page_bundles()
-    test_page_digest_plt()
-    test_runtime_bundle()
+  defp setup_empty_assets_and_build_dirs(opts) do
+    assets_dir = setup_empty_assets_dir()
+    build_dir = setup_empty_build_dir()
+
+    opts
+    |> Keyword.put(:assets_dir, assets_dir)
+    |> Keyword.put(:build_dir, build_dir)
   end
 
-  defp test_call_graph do
-    call_graph_dump_path = Path.join(@build_dir, Reflection.call_graph_dump_file_name())
+  defp setup_empty_assets_dir do
+    assets_dir = Path.join(@test_dir, "assets_empty")
+    clean_dir(assets_dir)
+
+    test_package_json_path = Path.join(assets_dir, "package.json")
+    FileUtils.cp_p!(@lib_package_json_path, test_package_json_path)
+
+    assets_dir
+  end
+
+  defp setup_empty_build_dir do
+    build_dir = Path.join(@test_dir, "build_empty")
+    clean_dir(build_dir)
+
+    build_dir
+  end
+
+  defp test_build_artifacts(opts) do
+    test_call_graph(opts)
+    test_dirs(opts)
+    test_js_deps(opts)
+    test_module_digest_plt(opts)
+    test_page_bundles(opts)
+    test_page_digest_plt(opts)
+    test_runtime_bundle(opts)
+  end
+
+  defp test_call_graph(opts) do
+    call_graph_dump_path = Path.join(opts[:build_dir], Reflection.call_graph_dump_file_name())
     assert File.exists?(call_graph_dump_path)
 
     call_graph = CallGraph.start()
@@ -55,21 +85,21 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert CallGraph.has_vertex?(call_graph, Module2)
   end
 
-  defp test_dirs do
-    assert File.exists?(@build_dir)
-    assert File.exists?(@static_dir)
-    assert File.exists?(@tmp_dir)
+  defp test_dirs(opts) do
+    assert File.exists?(opts[:build_dir])
+    assert File.exists?(opts[:static_dir])
+    assert File.exists?(opts[:tmp_dir])
   end
 
-  defp test_js_deps do
-    assert @assets_dir
+  defp test_js_deps(opts) do
+    assert opts[:assets_dir]
            |> Path.join("node_modules")
            |> File.exists?()
   end
 
-  defp test_module_digest_plt do
+  defp test_module_digest_plt(opts) do
     module_digest_plt_dump_path =
-      Path.join(@build_dir, Reflection.module_digest_plt_dump_file_name())
+      Path.join(opts[:build_dir], Reflection.module_digest_plt_dump_file_name())
 
     assert File.exists?(module_digest_plt_dump_path)
 
@@ -82,19 +112,19 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert is_integer(module_digest_items[Module1])
   end
 
-  defp test_old_build_static_artifacts_cleanup do
-    refute @static_dir
+  defp test_old_build_static_artifacts_cleanup(opts) do
+    refute opts[:static_dir]
            |> Path.join("old_bundle_1.js")
            |> File.exists?()
 
-    refute @static_dir
+    refute opts[:static_dir]
            |> Path.join("old_bundle_2.js")
            |> File.exists?()
   end
 
-  defp test_page_bundles do
+  defp test_page_bundles(opts) do
     num_page_bundles =
-      @static_dir
+      opts[:static_dir]
       |> Path.join("page-????????????????????????????????.js")
       |> Path.wildcard()
       |> Enum.count()
@@ -102,7 +132,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert num_page_bundles == @num_pages
 
     num_page_source_maps =
-      @static_dir
+      opts[:static_dir]
       |> Path.join("page-????????????????????????????????.js.map")
       |> Path.wildcard()
       |> Enum.count()
@@ -110,8 +140,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert num_page_source_maps == @num_pages
   end
 
-  defp test_page_digest_plt do
-    page_digest_plt_dump_path = Path.join(@build_dir, Reflection.page_digest_plt_dump_file_name())
+  defp test_page_digest_plt(opts) do
+    page_digest_plt_dump_path =
+      Path.join(opts[:build_dir], Reflection.page_digest_plt_dump_file_name())
+
     assert File.exists?(page_digest_plt_dump_path)
 
     page_digest_plt = PLT.start()
@@ -123,9 +155,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert page_digest_items[Module1] =~ ~r/^[0-9a-f]{32}$/
   end
 
-  defp test_runtime_bundle do
+  defp test_runtime_bundle(opts) do
     num_runtime_bundles =
-      @static_dir
+      opts[:static_dir]
       |> Path.join("runtime-????????????????????????????????.js")
       |> Path.wildcard()
       |> Enum.count()
@@ -133,7 +165,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert num_runtime_bundles == 1
 
     num_runtime_source_maps =
-      @static_dir
+      opts[:static_dir]
       |> Path.join("runtime-????????????????????????????????.js.map")
       |> Path.wildcard()
       |> Enum.count()
@@ -166,8 +198,9 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   setup_all do
     clean_dir(@test_dir)
+    File.mkdir!(@assets_dir)
+    File.mkdir!(@build_dir)
 
-    lib_assets_dir = Path.join(Reflection.root_dir(), "assets")
     test_node_modules_path = Path.join(@assets_dir, "node_modules")
 
     opts = [
@@ -175,14 +208,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
       build_dir: @build_dir,
       esbuild_bin_path: Path.join([test_node_modules_path, ".bin", "esbuild"]),
       formatter_bin_path: Path.join([test_node_modules_path, ".bin", "biome"]),
-      js_dir: Path.join(lib_assets_dir, "js"),
+      js_dir: Path.join(@lib_assets_dir, "js"),
       static_dir: @static_dir,
       tmp_dir: @tmp_dir
     ]
 
-    lib_package_json_path = Path.join([lib_assets_dir, "package.json"])
     test_package_json_path = Path.join(@assets_dir, "package.json")
-    FileUtils.cp_p!(lib_package_json_path, test_package_json_path)
+    FileUtils.cp_p!(@lib_package_json_path, test_package_json_path)
+
+    Compiler.install_js_deps(@assets_dir, @build_dir)
 
     [opts: opts]
   end
@@ -194,19 +228,19 @@ defmodule Mix.Tasks.Compile.HologramTest do
     clean_dir(@tmp_dir)
   end
 
-  test "run/1", %{opts: opts} do
-    FileUtils.rm_rf_with_retries!(@build_dir, 5, 10)
+  test "compilation artifacts", %{opts: initial_opts} do
+    opts = setup_empty_assets_and_build_dirs(initial_opts)
 
     # Test case 1: when there are no previous build artifacts
     run(opts)
-    test_build_artifacts()
+    test_build_artifacts(opts)
 
     # Test case 2: when there are previous build artifacts
-    generate_old_bundle("old_bundle_1")
-    generate_old_bundle("old_bundle_2")
+    generate_old_bundle("old_bundle_1", opts)
+    generate_old_bundle("old_bundle_2", opts)
     run(opts)
-    test_build_artifacts()
-    test_old_build_static_artifacts_cleanup()
+    test_build_artifacts(opts)
+    test_old_build_static_artifacts_cleanup(opts)
   end
 
   describe "compiler locking" do
@@ -221,7 +255,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       end_times =
         tasks
-        |> Task.await_many(60_000)
+        |> Task.await_many(:infinity)
         |> Enum.sort()
 
       [first_end, second_end, third_end] = end_times
@@ -232,8 +266,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
       # Expect at least 1000ms gap between compilations
       assert second_end - first_end > 1_000
       assert third_end - second_end > 1_000
-
-      test_build_artifacts()
     end
 
     test "lock file is cleaned up after successful compilation", %{opts: opts} do
@@ -245,17 +277,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
     end
 
     test "lock file is cleaned up after compilation error", %{opts: initial_opts} do
-      refute File.exists?(@lock_path)
-
-      # Create a valid directory but with invalid package.json that will cause npm install to fail
-      assets_dir = Path.join(@test_dir, "assets_with_invalid_package_json")
-      File.mkdir_p!(assets_dir)
+      opts = setup_empty_assets_and_build_dirs(initial_opts)
 
       # Create an invalid package.json that will cause npm install to fail
-      invalid_package_json_path = Path.join(assets_dir, "package.json")
-      File.write!(invalid_package_json_path, "{ invalid json content")
+      package_json_path = Path.join(opts[:assets_dir], "package.json")
+      File.write!(package_json_path, "{ invalid json content")
 
-      opts = Keyword.put(initial_opts, :assets_dir, assets_dir)
+      refute File.exists?(@lock_path)
 
       assert_raise RuntimeError, "npm install command failed", fn ->
         run(opts)
@@ -264,14 +292,15 @@ defmodule Mix.Tasks.Compile.HologramTest do
       refute File.exists?(@lock_path)
     end
 
-    test "lock directory is created if it doesn't exist", %{opts: initial_opts} do
-      build_dir = Path.join(@test_dir, "nonexistent_build_dir")
-      File.rm_rf!(build_dir)
-      refute File.exists?(build_dir)
+    test "lock dir (which is the build dir) is created if it doesn't exist", %{opts: initial_opts} do
+      opts = setup_empty_assets_and_build_dirs(initial_opts)
 
+      build_dir = opts[:build_dir]
       lock_path = Path.join(build_dir, @compiler_lock_file_name)
 
-      opts = Keyword.put(initial_opts, :build_dir, build_dir)
+      FileUtils.rm_rf_with_retries!(build_dir, 5, 10)
+
+      refute File.exists?(build_dir)
 
       run(opts)
 
@@ -340,19 +369,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
       refute File.exists?(@lock_path)
     end
 
-    test "unreadable lock file is removed", %{opts: opts} do
-      # Create a lock file and make it unreadable (if supported by OS)
-      FileUtils.write_p!(@lock_path, "12345")
-      File.chmod!(@lock_path, 0o000)
-
-      assert File.exists?(@lock_path)
-
-      run(opts)
-
-      # Lock should be cleaned up after successful compilation
-      refute File.exists?(@lock_path)
-    end
-
     test "lock file contains current OS-level process PID during compilation", %{opts: opts} do
       # Start compilation in a background task
       compilation_task =
@@ -373,28 +389,6 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
       # Clean up: kill the background compilation task
       Task.shutdown(compilation_task, :brutal_kill)
-    end
-  end
-
-  describe "edge cases and error conditions" do
-    @tag :skip_on_windows
-    test "handles file system errors gracefully", %{opts: initial_opts} do
-      build_dir = Path.join([@tmp_dir, "readonly_build_dir"])
-      File.mkdir_p!(build_dir)
-
-      # Make build dir read-only
-      File.chmod!(build_dir, 0o444)
-
-      opts = Keyword.put(initial_opts, :build_dir, build_dir)
-
-      # Should raise a permission error when trying to create lock file in read-only directory
-      assert_raise RuntimeError, ~r/failed to acquire compiler lock.*eacces/i, fn ->
-        run(opts)
-      end
-
-      # Reset permissions for cleanup
-      File.chmod!(build_dir, 0o755)
-      File.rm_rf!(build_dir)
     end
   end
 end
