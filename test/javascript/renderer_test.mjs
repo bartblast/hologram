@@ -2613,6 +2613,385 @@ describe("Renderer", () => {
           });
         });
       });
+
+      describe("checkbox element checked handling", () => {
+        it("checkbox element with checked attribute sets up hooks", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("type"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("checkbox")],
+                ]),
+              ]),
+              Type.tuple([
+                Type.bitstring("checked"),
+                Type.keywordList([
+                  [Type.atom("expression"), Type.tuple([Type.boolean(true)])],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          // Should not have the checked as an attribute
+          assert.isUndefined(result.data.attrs.checked);
+
+          // Should not have the temporary data-hologram-form-input-checked attribute
+          assert.isUndefined(
+            result.data.attrs["data-hologram-form-input-checked"],
+          );
+
+          // Should have the type attribute as a regular attribute
+          assert.strictEqual(result.data.attrs.type, "checkbox");
+          assert.deepStrictEqual(result.data.on, {});
+
+          // Should have hooks set up
+          assert.isObject(result.data.hook);
+          assert.isFunction(result.data.hook.create);
+          assert.isFunction(result.data.hook.update);
+
+          // Should have hologramFormInputChecked data
+          assert.strictEqual(result.data.hologramFormInputChecked, true);
+        });
+
+        it("checkbox element without checked attribute does not set up checked hooks", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("type"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("checkbox")],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          // Should not have hooks
+          assert.isUndefined(result.data.hook);
+          assert.isUndefined(result.data.hologramFormInputChecked);
+        });
+
+        it("checkbox with true checked value", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("type"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("checkbox")],
+                ]),
+              ]),
+              Type.tuple([
+                Type.bitstring("checked"),
+                Type.keywordList([
+                  [Type.atom("expression"), Type.tuple([Type.boolean(true)])],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          // Should have hologramFormInputChecked data set to false
+          assert.strictEqual(result.data.hologramFormInputChecked, true);
+        });
+
+        it("checkbox with false checked value", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("type"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("checkbox")],
+                ]),
+              ]),
+              Type.tuple([
+                Type.bitstring("checked"),
+                Type.keywordList([
+                  [Type.atom("expression"), Type.tuple([Type.boolean(false)])],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          // Should have hologramFormInputChecked data set to false
+          assert.strictEqual(result.data.hologramFormInputChecked, false);
+        });
+
+        it("checkbox with nil checked value", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("type"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("checkbox")],
+                ]),
+              ]),
+              Type.tuple([
+                Type.bitstring("checked"),
+                Type.keywordList([
+                  [Type.atom("expression"), Type.tuple([Type.nil()])],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          // Should have hologramFormInputChecked data set to false for nil
+          assert.strictEqual(result.data.hologramFormInputChecked, false);
+        });
+
+        it("checkbox with non-empty string checked value", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("checked"),
+                Type.keywordList([[Type.atom("text"), Type.bitstring("abc")]]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          // Should convert string "true" to boolean true
+          assert.strictEqual(result.data.hologramFormInputChecked, true);
+        });
+
+        it("checkbox with empty string checked value", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("checked"),
+                Type.keywordList([[Type.atom("text"), Type.bitstring("")]]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          // Should convert string "true" to boolean true
+          assert.strictEqual(result.data.hologramFormInputChecked, true);
+        });
+
+        describe("checkbox checked handling during updates", () => {
+          let mockInput;
+
+          beforeEach(() => {
+            mockInput = {
+              tagName: "INPUT",
+              type: "checkbox",
+              checked: false,
+            };
+          });
+
+          it("sets initial checked state on create hook", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("type"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("checkbox")],
+                  ]),
+                ]),
+                Type.tuple([
+                  Type.bitstring("checked"),
+                  Type.keywordList([
+                    [Type.atom("expression"), Type.tuple([Type.boolean(true)])],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            // Call the create hook
+            const mockVnode = {
+              elm: mockInput,
+              data: {hologramFormInputChecked: true},
+            };
+            result.data.hook.create(null, mockVnode);
+
+            // Should set the checked property
+            assert.strictEqual(mockInput.checked, true);
+          });
+
+          it("always updates checked when checked changes", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("type"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("checkbox")],
+                  ]),
+                ]),
+                Type.tuple([
+                  Type.bitstring("checked"),
+                  Type.keywordList([
+                    [Type.atom("expression"), Type.tuple([Type.boolean(true)])],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            // Simulate input with any current checked state
+            mockInput.checked = false;
+
+            // Call the update hook
+            const mockVnode = {
+              elm: mockInput,
+              data: {hologramFormInputChecked: true},
+            };
+            result.data.hook.update(null, mockVnode);
+
+            // Should always update the checked state
+            assert.strictEqual(mockInput.checked, true);
+          });
+
+          it("does not update checked when it hasn't changed", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("input"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("type"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("checkbox")],
+                  ]),
+                ]),
+                Type.tuple([
+                  Type.bitstring("checked"),
+                  Type.keywordList([
+                    [Type.atom("expression"), Type.tuple([Type.boolean(true)])],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            // Set input to the same checked state as what will be set
+            mockInput.checked = true;
+
+            // Spy on the checked setter to verify it's not called
+            let setterCallCount = 0;
+            const originalChecked = mockInput.checked;
+            Object.defineProperty(mockInput, "checked", {
+              get: () => originalChecked,
+              set: () => {
+                setterCallCount++;
+              },
+              configurable: true,
+            });
+
+            // Call the update hook with same checked state (to test no change)
+            const oldVnode = {data: {hologramFormInputChecked: true}};
+            const mockVnode = {
+              elm: mockInput,
+              data: {hologramFormInputChecked: true},
+            };
+            result.data.hook.update(oldVnode, mockVnode);
+
+            // Should not have called the setter since checked didn't change
+            assert.strictEqual(setterCallCount, 0);
+          });
+        });
+      });
     });
   });
 

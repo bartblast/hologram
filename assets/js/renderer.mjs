@@ -609,34 +609,52 @@ export default class Renderer {
   }
 
   // Based on render_attribute/2
-  static #renderAttribute(name, valueDom, isFormInputValue) {
+  static #renderAttribute(
+    name,
+    valueDom,
+    isFormInputValue,
+    isFormInputChecked,
+  ) {
     const nameText = Bitstring.toText(name);
 
-    // []
+    // Handle empty attribute: []
     if (valueDom.data.length === 0) {
       return [nameText, true];
     }
 
-    // [expression: {nil}] or [expression: {false}]
+    // Handle single expressions: [expression: {value}]
     if (
       valueDom.data.length === 1 &&
       Type.isTuple(valueDom.data[0].data[1]) &&
-      valueDom.data[0].data[1].data.length === 1 &&
-      (Type.isNil(valueDom.data[0].data[1].data[0]) ||
-        Type.isFalse(valueDom.data[0].data[1].data[0]))
+      valueDom.data[0].data[1].data.length === 1
     ) {
-      return [nameText, null];
+      const expressionValue = valueDom.data[0].data[1].data[0];
+
+      // Checkbox checked attributes: preserve boolean semantics
+      if (isFormInputChecked) {
+        return [nameText, Type.isTruthy(expressionValue)];
+      }
+
+      // Other attributes: nil/false removes the attribute
+      if (Type.isFalsy(expressionValue)) {
+        return [nameText, null];
+      }
     }
 
+    // Convert to text for remaining cases
     const valueText = Renderer.#valueDomToText(valueDom);
 
-    // For input value attributes, preserve empty strings instead of converting to true
-    // Input values are passed to the element's value property (via Snabbdom hooks) and expect strings,
-    // while for other elements, empty strings represent boolean attributes that should be set to true
+    // Form input value: preserve strings (including empty strings)
     if (isFormInputValue) {
       return [nameText, valueText];
     }
 
+    // Checkbox checked: everything else is truthy (HTML-like behavior)
+    if (isFormInputChecked) {
+      return [nameText, true];
+    }
+
+    // Other attributes: empty string becomes boolean true
     return [nameText, valueText === "" ? true : valueText];
   }
 
@@ -661,11 +679,13 @@ export default class Renderer {
     for (const attrDom of regularAttrs) {
       const nameText = Bitstring.toText(attrDom.data[0]);
       const isFormInputValue = isFormInput && nameText === "value";
+      const isFormInputChecked = tagName === "input" && nameText === "checked";
 
       const [, valueText] = Renderer.#renderAttribute(
         attrDom.data[0],
         attrDom.data[1],
         isFormInputValue,
+        isFormInputChecked,
       );
 
       if (valueText !== null) {
@@ -677,6 +697,9 @@ export default class Renderer {
         if (isFormInputValue) {
           // Store the value for later use in hooks
           attrs["data-hologram-form-input-value"] = valueText;
+        } else if (isFormInputChecked) {
+          // Store the checked state for later use in hooks
+          attrs["data-hologram-form-input-checked"] = valueText;
         } else {
           attrs[nameText] = valueText;
         }
@@ -763,25 +786,46 @@ export default class Renderer {
       data.props = propsVdom;
     }
 
+    // Handle controlled form inputs (value for text inputs/textareas, checked for checkboxes/radios)
+    // An element has either controlled value OR controlled checked, never both
+
     if (
       (currentTagName === "input" || currentTagName === "textarea") &&
       attrsVdom["data-hologram-form-input-value"] !== undefined
     ) {
       const hologramFormInputValue =
         attrsVdom["data-hologram-form-input-value"];
-
-      // Remove the temporary attribute
       delete attrsVdom["data-hologram-form-input-value"];
-
       data.hologramFormInputValue = hologramFormInputValue;
 
       data.hook = {
+        create: (_emptyVnode, newVnode) => {
+          Renderer.#updateFormInputValue(newVnode.elm, hologramFormInputValue);
+        },
         update: (_oldVnode, newVnode) => {
           const newValue = newVnode.data.hologramFormInputValue;
           Renderer.#updateFormInputValue(newVnode.elm, newValue);
         },
+      };
+    } else if (
+      currentTagName === "input" &&
+      attrsVdom["data-hologram-form-input-checked"] !== undefined
+    ) {
+      const hologramFormInputChecked =
+        attrsVdom["data-hologram-form-input-checked"];
+      delete attrsVdom["data-hologram-form-input-checked"];
+      data.hologramFormInputChecked = hologramFormInputChecked;
+
+      data.hook = {
         create: (_emptyVnode, newVnode) => {
-          Renderer.#updateFormInputValue(newVnode.elm, hologramFormInputValue);
+          Renderer.#updateFormInputChecked(
+            newVnode.elm,
+            hologramFormInputChecked,
+          );
+        },
+        update: (_oldVnode, newVnode) => {
+          const newChecked = newVnode.data.hologramFormInputChecked;
+          Renderer.#updateFormInputChecked(newVnode.elm, newChecked);
         },
       };
     }
@@ -993,6 +1037,15 @@ export default class Renderer {
       defaultTarget,
       parentTagName,
     );
+  }
+
+  static #updateFormInputChecked(element, newChecked) {
+    // Skip redundant DOM writes
+    if (newChecked === element.checked) {
+      return;
+    }
+
+    element.checked = newChecked;
   }
 
   static #updateFormInputValue(element, newValue) {
