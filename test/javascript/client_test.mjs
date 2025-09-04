@@ -526,7 +526,6 @@ describe("Client", () => {
 
       await Client.sendCommand(command);
 
-      // Wait for async actions to complete
       await waitForEventLoop();
 
       sinon.assert.calledOnceWithExactly(
