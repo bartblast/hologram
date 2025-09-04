@@ -8,8 +8,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Reflection
-  alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
   alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module1
+  alias Hologram.Test.Fixtures.Mix.Tasks.Compile.Hologram.Module2
 
   @lib_assets_dir Path.join(Reflection.root_dir(), "assets")
   @lib_package_json_path Path.join(@lib_assets_dir, "package.json")
