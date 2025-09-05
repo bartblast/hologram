@@ -504,10 +504,7 @@ export default class Renderer {
       }
 
       if (tagName === "input") {
-        const inputType =
-          typeof attrsVdom?.type === "string"
-            ? attrsVdom.type.toLowerCase()
-            : "text";
+        const inputType = attrsVdom?.type || "text";
 
         if (inputType !== "checkbox" && inputType !== "radio") {
           return "input";
