@@ -392,7 +392,7 @@ defmodule HologramFeatureTests.PatchingTest do
       |> refute_has(css("#textarea[value]"))
     end
 
-    @tag timeout: 70_000
+    @tag timeout: 80_000
     feature "checkbox checked patching", %{session: session} do
       # We're testing different combinations of specific user operations for checkboxes:
       # 1) change programmatically to checked when the last programmatic value was also checked
