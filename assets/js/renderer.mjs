@@ -311,6 +311,9 @@ export default class Renderer {
         typeAttr = attrs.find(([name, _valueDom]) => name === "type");
         return typeAttr ? Renderer.#valueDomToText(typeAttr[1]) : "text";
 
+      case "select":
+        return "select";
+
       case "textarea":
         return "textarea";
     }
@@ -500,22 +503,23 @@ export default class Renderer {
   static #isControlledValueInputType(inputType) {
     // Control value for all input types except radio and checkbox
     // Radios and checkboxes use value attribute for submit value, not display value
+    // Also control value for textarea and select elements
     return inputType !== "checkbox" && inputType !== "radio";
   }
 
   static #mapEventName(eventName, tagName, attrsVdom) {
     if (eventName === "change") {
-      if (tagName === "textarea") {
-        return "input";
-      }
-
       if (tagName === "input") {
         const inputType = attrsVdom?.type || "text";
 
         if (inputType !== "checkbox" && inputType !== "radio") {
           return "input";
         }
+      } else if (tagName === "textarea") {
+        return "input";
       }
+
+      // Select elements keep the original change event (no mapping needed)
     }
 
     return eventName;
@@ -696,7 +700,8 @@ export default class Renderer {
     }, []);
 
     // Check if this is a form element with special handling of checked and value attributes
-    const isFormInput = tagName === "input" || tagName === "textarea";
+    const isFormInput =
+      tagName === "input" || tagName === "textarea" || tagName === "select";
 
     let inputType;
     if (isFormInput) {
@@ -821,12 +826,14 @@ export default class Renderer {
       data.props = propsVdom;
     }
 
-    // Handle controlled form inputs (value for text inputs/textareas, checked for checkboxes/radios)
-    // Radio inputs use regular value attributes and controlled checked attributes
+    // Handle controlled form inputs (value for text inputs/textareas/selects, checked for checkboxes/radios)
+    // Radio/checkbox inputs use regular value attributes and controlled checked attributes
     // An element has either controlled value OR controlled checked, never both
 
     if (
-      (currentTagName === "input" || currentTagName === "textarea") &&
+      (currentTagName === "input" ||
+        currentTagName === "textarea" ||
+        currentTagName === "select") &&
       attrsVdom["data-hologram-form-input-value"] !== undefined
     ) {
       const hologramFormInputValue =

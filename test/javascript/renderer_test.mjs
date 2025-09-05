@@ -3170,6 +3170,268 @@ describe("Renderer", () => {
           Hologram.handleUiEvent.restore();
         });
       });
+
+      describe("select element value handling", () => {
+        it("select element with value attribute sets up hooks", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("select"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("value"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("option2")],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          // Should not have the value as an attribute
+          assert.isUndefined(result.data.attrs.value);
+
+          // Should not have the temporary data-hologram-form-input-value attribute
+          assert.isUndefined(
+            result.data.attrs["data-hologram-form-input-value"],
+          );
+
+          // Should have hooks for handling the value property
+          assert.strictEqual(typeof result.data.hook, "object");
+          assert.strictEqual(typeof result.data.hook.create, "function");
+          assert.strictEqual(typeof result.data.hook.update, "function");
+        });
+
+        it("select element without value attribute does not set up value hooks", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("select"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("name"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("choices")],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          // Should have the name attribute
+          assert.strictEqual(result.data.attrs.name, "choices");
+
+          // Should not have hooks since there's no value attribute
+          assert.isUndefined(result.data.hook);
+        });
+
+        it("select element with empty string value attribute preserves empty string", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("select"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("value"),
+                Type.keywordList([[Type.atom("text"), Type.bitstring("")]]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          // Should not have the value as an attribute
+          assert.isUndefined(result.data.attrs.value);
+
+          // Should not have the temporary data-hologram-form-input-value attribute
+          assert.isUndefined(
+            result.data.attrs["data-hologram-form-input-value"],
+          );
+
+          // Should have hooks for handling the value property
+          assert.strictEqual(typeof result.data.hook, "object");
+          assert.strictEqual(typeof result.data.hook.create, "function");
+          assert.strictEqual(typeof result.data.hook.update, "function");
+        });
+
+        it("select element with undefined value does not set up hooks", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("select"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("value"),
+                Type.keywordList([
+                  [Type.atom("expression"), Type.tuple([Type.nil()])],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          // Should not have the value as an attribute
+          assert.isUndefined(result.data.attrs.value);
+
+          // Should not have the temporary data-hologram-form-input-value attribute
+          assert.isUndefined(
+            result.data.attrs["data-hologram-form-input-value"],
+          );
+
+          // Should not have hooks
+          assert.isUndefined(result.data.hook);
+        });
+
+        describe("select value handling during updates", () => {
+          let mockSelect;
+
+          beforeEach(() => {
+            mockSelect = {
+              tagName: "SELECT",
+              value: "",
+            };
+          });
+
+          it("sets initial value on create hook", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("select"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("option1")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            // Call the create hook with mock vnode
+            const mockVnode = {elm: mockSelect};
+            result.data.hook.create(null, mockVnode);
+
+            // Should set the value
+            assert.strictEqual(mockSelect.value, "option1");
+          });
+
+          it("always updates value on update hook", () => {
+            const node = Type.tuple([
+              Type.atom("element"),
+              Type.bitstring("select"),
+              Type.list([
+                Type.tuple([
+                  Type.bitstring("value"),
+                  Type.keywordList([
+                    [Type.atom("text"), Type.bitstring("option2")],
+                  ]),
+                ]),
+              ]),
+              Type.list(),
+            ]);
+
+            const result = Renderer.renderDom(
+              node,
+              context,
+              slots,
+              defaultTarget,
+              parentTagName,
+            );
+
+            // Simulate that we previously set a value
+            mockSelect.value = "option1";
+
+            // Call the update hook
+            const mockVnode = {
+              elm: mockSelect,
+              data: {hologramFormInputValue: "option2"},
+            };
+            result.data.hook.update(null, mockVnode);
+
+            // Should always update the value
+            assert.strictEqual(mockSelect.value, "option2");
+          });
+        });
+
+        it("keeps $change event for select element", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("select"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("$change"),
+                Type.list([
+                  Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          assert.deepStrictEqual(Object.keys(vdom.data.on), ["change"]);
+
+          const stub = sinon
+            .stub(Hologram, "handleUiEvent")
+            .callsFake((..._args) => null);
+
+          vdom.data.on.change("dummyEvent");
+
+          sinon.assert.calledWith(
+            stub,
+            "dummyEvent",
+            "change",
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+            ]),
+            defaultTarget,
+          );
+
+          Hologram.handleUiEvent.restore();
+        });
+      });
     });
   });
 
