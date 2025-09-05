@@ -392,7 +392,7 @@ defmodule HologramFeatureTests.PatchingTest do
       |> refute_has(css("#textarea[value]"))
     end
 
-    @tag timeout: 80_000
+    @tag timeout: 70_000
     feature "checkbox checked patching", %{session: session} do
       # We're testing different combinations of specific user operations for checkboxes:
       # 1) change programmatically to checked when the last programmatic value was also checked
@@ -463,6 +463,133 @@ defmodule HologramFeatureTests.PatchingTest do
       |> click(css("#checkbox"))
       |> refute_has(css("#checkbox:checked"))
       |> refute_has(css("#checkbox[checked]"))
+    end
+
+    feature "radio button checked patching", %{session: session} do
+      # We're testing different combinations of specific user operations for radio buttons:
+      # 1) change programmatically to an option when the last programmatic value was the same option
+      # 2) change programmatically to an option when the last programmatic value was a different option
+      # 3) change programmatically to an option when the last programmatic value was the same option
+      # 4) change programmatically to an option when the last programmatic value was a different option
+      # 5) change manually to an option when the last programmatic value was the same option
+      # 6) change manually to an option when the last programmatic value was a different option
+      # 7) change manually to an option when the last programmatic value was the same option
+      # 8) change manually to an option when the last programmatic value was a different option
+
+      # credo:disable-for-lines:113 Credo.Check.Design.DuplicatedCode
+      session
+      |> visit(Page5)
+      |> refute_has(css("#radio_option_1:checked"))
+      |> assert_has(css("#radio_option_2:checked"))
+      |> refute_has(css("#radio_option_3:checked"))
+      |> refute_has(css("#radio_option_1[checked]"))
+      |> refute_has(css("#radio_option_2[checked]"))
+      |> refute_has(css("#radio_option_3[checked]"))
+      # --- Setup A: establish baseline programmatic state (option_1)
+      |> click(button("Select Option 1"))
+      |> assert_has(css("#radio_option_1:checked"))
+      |> refute_has(css("#radio_option_2:checked"))
+      |> refute_has(css("#radio_option_3:checked"))
+      |> refute_has(css("#radio_option_1[checked]"))
+      |> refute_has(css("#radio_option_2[checked]"))
+      |> refute_has(css("#radio_option_3[checked]"))
+      # --- Group 1 (Cond 6): manual option_3, different from last prog (option_1)
+      |> click(css("#radio_option_3"))
+      |> refute_has(css("#radio_option_1:checked"))
+      |> refute_has(css("#radio_option_2:checked"))
+      |> assert_has(css("#radio_option_3:checked"))
+      |> refute_has(css("#radio_option_1[checked]"))
+      |> refute_has(css("#radio_option_2[checked]"))
+      |> refute_has(css("#radio_option_3[checked]"))
+      # --- Group 2 (Cond 1): prog option_1, same as last prog (option_1)
+      |> click(button("Select Option 1"))
+      |> assert_has(css("#radio_option_1:checked"))
+      |> refute_has(css("#radio_option_2:checked"))
+      |> refute_has(css("#radio_option_3:checked"))
+      |> refute_has(css("#radio_option_1[checked]"))
+      |> refute_has(css("#radio_option_2[checked]"))
+      |> refute_has(css("#radio_option_3[checked]"))
+      # --- Group 3 (Cond 2): prog option_2, different from last prog (option_1)
+      |> click(button("Select Option 2"))
+      |> refute_has(css("#radio_option_1:checked"))
+      |> assert_has(css("#radio_option_2:checked"))
+      |> refute_has(css("#radio_option_3:checked"))
+      |> refute_has(css("#radio_option_1[checked]"))
+      |> refute_has(css("#radio_option_2[checked]"))
+      |> refute_has(css("#radio_option_3[checked]"))
+      # --- Setup B: manual change to different option (option_3)
+      |> click(css("#radio_option_3"))
+      |> refute_has(css("#radio_option_1:checked"))
+      |> refute_has(css("#radio_option_2:checked"))
+      |> assert_has(css("#radio_option_3:checked"))
+      |> refute_has(css("#radio_option_1[checked]"))
+      |> refute_has(css("#radio_option_2[checked]"))
+      |> refute_has(css("#radio_option_3[checked]"))
+      # --- Group 4 (Cond 5): manual option_2, same as last prog (option_2)
+      |> click(css("#radio_option_2"))
+      |> refute_has(css("#radio_option_1:checked"))
+      |> assert_has(css("#radio_option_2:checked"))
+      |> refute_has(css("#radio_option_3:checked"))
+      |> refute_has(css("#radio_option_1[checked]"))
+      |> refute_has(css("#radio_option_2[checked]"))
+      |> refute_has(css("#radio_option_3[checked]"))
+      # --- Group 5 (Cond 3): prog option_2, same as last prog (option_2)
+      |> click(button("Select Option 2"))
+      |> refute_has(css("#radio_option_1:checked"))
+      |> assert_has(css("#radio_option_2:checked"))
+      |> refute_has(css("#radio_option_3:checked"))
+      |> refute_has(css("#radio_option_1[checked]"))
+      |> refute_has(css("#radio_option_2[checked]"))
+      |> refute_has(css("#radio_option_3[checked]"))
+      # --- Setup C: switch to option_3 programmatically
+      |> click(button("Select Option 3"))
+      |> refute_has(css("#radio_option_1:checked"))
+      |> refute_has(css("#radio_option_2:checked"))
+      |> assert_has(css("#radio_option_3:checked"))
+      |> refute_has(css("#radio_option_1[checked]"))
+      |> refute_has(css("#radio_option_2[checked]"))
+      |> refute_has(css("#radio_option_3[checked]"))
+      # --- Group 6 (Cond 7): manual option_3, same as last prog (option_3)
+      |> click(css("#radio_option_1"))
+      |> click(css("#radio_option_3"))
+      |> refute_has(css("#radio_option_1:checked"))
+      |> refute_has(css("#radio_option_2:checked"))
+      |> assert_has(css("#radio_option_3:checked"))
+      |> refute_has(css("#radio_option_1[checked]"))
+      |> refute_has(css("#radio_option_2[checked]"))
+      |> refute_has(css("#radio_option_3[checked]"))
+      # --- Setup D: set programmatic state to option_1 for next test
+      |> click(button("Select Option 1"))
+      |> assert_has(css("#radio_option_1:checked"))
+      |> refute_has(css("#radio_option_2:checked"))
+      |> refute_has(css("#radio_option_3:checked"))
+      |> refute_has(css("#radio_option_1[checked]"))
+      |> refute_has(css("#radio_option_2[checked]"))
+      |> refute_has(css("#radio_option_3[checked]"))
+      # --- Group 7 (Cond 4): prog option_3, different from last prog (option_1)
+      |> click(button("Select Option 3"))
+      |> refute_has(css("#radio_option_1:checked"))
+      |> refute_has(css("#radio_option_2:checked"))
+      |> assert_has(css("#radio_option_3:checked"))
+      |> refute_has(css("#radio_option_1[checked]"))
+      |> refute_has(css("#radio_option_2[checked]"))
+      |> refute_has(css("#radio_option_3[checked]"))
+      # --- Setup E: set programmatic state to option_2 for condition 8
+      |> click(button("Select Option 2"))
+      |> refute_has(css("#radio_option_1:checked"))
+      |> assert_has(css("#radio_option_2:checked"))
+      |> refute_has(css("#radio_option_3:checked"))
+      |> refute_has(css("#radio_option_1[checked]"))
+      |> refute_has(css("#radio_option_2[checked]"))
+      |> refute_has(css("#radio_option_3[checked]"))
+      # --- Group 8 (Cond 8): manual option_1, different from last prog (option_2)
+      |> click(css("#radio_option_1"))
+      |> assert_has(css("#radio_option_1:checked"))
+      |> refute_has(css("#radio_option_2:checked"))
+      |> refute_has(css("#radio_option_3:checked"))
+      |> refute_has(css("#radio_option_1[checked]"))
+      |> refute_has(css("#radio_option_2[checked]"))
+      |> refute_has(css("#radio_option_3[checked]"))
     end
   end
 end
