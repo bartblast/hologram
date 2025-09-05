@@ -497,6 +497,12 @@ export default class Renderer {
     return Erlang_Maps["merge/2"](propsFromTemplate, propsFromContext);
   }
 
+  static #isControlledValueInputType(inputType) {
+    // Control value for all input types except radio and checkbox
+    // Radios and checkboxes use value attribute for submit value, not display value
+    return inputType !== "checkbox" && inputType !== "radio";
+  }
+
   static #mapEventName(eventName, tagName, attrsVdom) {
     if (eventName === "change") {
       if (tagName === "textarea") {
@@ -698,15 +704,12 @@ export default class Renderer {
     }
 
     for (const [name, valueDom] of regularAttrs) {
-      // Only text-based inputs should have controlled value behavior
+      // Text-based inputs should have controlled value behavior
       // Radio and checkbox inputs use their value attribute as a regular HTML attribute
       let isControlledCheckedAttr, isControlledValueAttr;
 
       if (isFormInput) {
-        if (
-          name === "value" &&
-          (inputType === "text" || inputType === "textarea")
-        ) {
+        if (name === "value" && $.#isControlledValueInputType(inputType)) {
           isControlledValueAttr = true;
         } else if (name === "checked" && tagName === "input") {
           isControlledCheckedAttr = true;

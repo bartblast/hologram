@@ -1697,7 +1697,7 @@ describe("Renderer", () => {
       });
 
       describe("input element value handling", () => {
-        it("input element with value attribute sets up hooks", () => {
+        it("text input element with value attribute sets up hooks", () => {
           const node = Type.tuple([
             Type.atom("element"),
             Type.bitstring("input"),
@@ -1727,6 +1727,47 @@ describe("Renderer", () => {
           assert.isUndefined(
             result.data.attrs["data-hologram-form-input-value"],
           );
+
+          // Should have hooks for handling the value property
+          assert.strictEqual(typeof result.data.hook, "object");
+          assert.strictEqual(typeof result.data.hook.create, "function");
+          assert.strictEqual(typeof result.data.hook.update, "function");
+        });
+
+        it("non-text (but text-based) input element with value attribute sets up hooks", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("type"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("email")],
+                ]),
+              ]),
+              Type.tuple([
+                Type.bitstring("value"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("test@example.com")],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          // Should not have the value as an attribute (controlled)
+          assert.isUndefined(result.data.attrs.value);
+
+          // Should have the type attribute as a regular attribute
+          assert.strictEqual(result.data.attrs.type, "email");
 
           // Should have hooks for handling the value property
           assert.strictEqual(typeof result.data.hook, "object");
