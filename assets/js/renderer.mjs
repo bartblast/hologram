@@ -303,6 +303,21 @@ export default class Renderer {
     );
   }
 
+  static #determineInputType(tagName, attrs) {
+    let typeAttr;
+
+    switch (tagName) {
+      case "input":
+        typeAttr = attrs.find(([name, _valueDom]) => name === "type");
+        return typeAttr ? Renderer.#valueDomToText(typeAttr[1]) : "text";
+
+      case "textarea":
+        return "textarea";
+    }
+
+    return null;
+  }
+
   // Based on expand_slots/2 (including fallback case)
   static #expandSlots(dom, slots) {
     if (Type.isList(dom)) {
@@ -612,14 +627,12 @@ export default class Renderer {
   static #renderAttribute(
     name,
     valueDom,
-    isFormInputValue,
-    isFormInputChecked,
+    isControlledValueAttr,
+    isControlledCheckedAttr,
   ) {
-    const nameText = Bitstring.toText(name);
-
     // Handle empty attribute: []
     if (valueDom.data.length === 0) {
-      return [nameText, true];
+      return [name, true];
     }
 
     // Handle single expressions: [expression: {value}]
@@ -630,32 +643,32 @@ export default class Renderer {
     ) {
       const expressionValue = valueDom.data[0].data[1].data[0];
 
-      // Checkbox checked attributes: preserve boolean semantics
-      if (isFormInputChecked) {
-        return [nameText, Type.isTruthy(expressionValue)];
+      // Checkbox & radio checked attribute: preserve boolean semantics
+      if (isControlledCheckedAttr) {
+        return [name, Type.isTruthy(expressionValue)];
       }
 
       // Other attributes: nil/false removes the attribute
       if (Type.isFalsy(expressionValue)) {
-        return [nameText, null];
+        return [name, null];
       }
     }
 
     // Convert to text for remaining cases
     const valueText = Renderer.#valueDomToText(valueDom);
 
-    // Form input value: preserve strings (including empty strings)
-    if (isFormInputValue) {
-      return [nameText, valueText];
+    // Input value attribute: preserve strings (including empty strings)
+    if (isControlledValueAttr) {
+      return [name, valueText];
     }
 
-    // Checkbox checked: everything else is truthy (HTML-like behavior)
-    if (isFormInputChecked) {
-      return [nameText, true];
+    // Checkbox & radio checked attribute: everything else is truthy (HTML-like behavior)
+    if (isControlledCheckedAttr) {
+      return [name, true];
     }
 
     // Other attributes: empty string becomes boolean true
-    return [nameText, valueText === "" ? true : valueText];
+    return [name, valueText === "" ? true : valueText];
   }
 
   // Based on render_attributes/1
@@ -668,24 +681,46 @@ export default class Renderer {
       return {attrs, props};
     }
 
-    // Filter out event attributes (starting with $)
-    const regularAttrs = attrsDom.data.filter(
-      (attrDom) => !Bitstring.toText(attrDom.data[0]).startsWith("$"),
-    );
+    // Unbox name and filter out event attributes (starting with $) in single loop pass
+    const regularAttrs = attrsDom.data.reduce((acc, attrDom) => {
+      const name = Bitstring.toText(attrDom.data[0]);
 
-    // Check if this is a form element with special value handling
+      if (!name.startsWith("$")) {
+        acc.push([name, attrDom.data[1]]);
+      }
+
+      return acc;
+    }, []);
+
+    // Check if this is a form element with special handling of checked and value attributes
     const isFormInput = tagName === "input" || tagName === "textarea";
 
-    for (const attrDom of regularAttrs) {
-      const nameText = Bitstring.toText(attrDom.data[0]);
-      const isFormInputValue = isFormInput && nameText === "value";
-      const isFormInputChecked = tagName === "input" && nameText === "checked";
+    let inputType;
+    if (isFormInput) {
+      inputType = $.#determineInputType(tagName, regularAttrs);
+    }
+
+    for (const [name, valueDom] of regularAttrs) {
+      // Only text-based inputs should have controlled value behavior
+      // Radio and checkbox inputs use their value attribute as a regular HTML attribute
+      let isControlledCheckedAttr, isControlledValueAttr;
+
+      if (isFormInput) {
+        if (
+          name === "value" &&
+          (inputType === "text" || inputType === "textarea")
+        ) {
+          isControlledValueAttr = true;
+        } else if (name === "checked" && tagName === "input") {
+          isControlledCheckedAttr = true;
+        }
+      }
 
       const [, valueText] = Renderer.#renderAttribute(
-        attrDom.data[0],
-        attrDom.data[1],
-        isFormInputValue,
-        isFormInputChecked,
+        name,
+        valueDom,
+        isControlledValueAttr,
+        isControlledCheckedAttr,
       );
 
       if (valueText !== null) {
@@ -694,14 +729,14 @@ export default class Renderer {
         // - Ensures correct form reset behavior (resets to original defaultValue)
         // - Maintains proper autocomplete/autofill behavior
         // See: https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#concept-fe-dirty
-        if (isFormInputValue) {
+        if (isControlledValueAttr) {
           // Store the value for later use in hooks
           attrs["data-hologram-form-input-value"] = valueText;
-        } else if (isFormInputChecked) {
+        } else if (isControlledCheckedAttr) {
           // Store the checked state for later use in hooks
           attrs["data-hologram-form-input-checked"] = valueText;
         } else {
-          attrs[nameText] = valueText;
+          attrs[name] = valueText;
         }
       }
     }
@@ -787,6 +822,7 @@ export default class Renderer {
     }
 
     // Handle controlled form inputs (value for text inputs/textareas, checked for checkboxes/radios)
+    // Radio inputs use regular value attributes and controlled checked attributes
     // An element has either controlled value OR controlled checked, never both
 
     if (

@@ -2992,6 +2992,241 @@ describe("Renderer", () => {
           });
         });
       });
+
+      describe("radio element handling", () => {
+        it("radio element with value attribute treats value as regular attribute", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("type"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("radio")],
+                ]),
+              ]),
+              Type.tuple([
+                Type.bitstring("value"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("option1")],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          // Should have the value as a regular attribute (not controlled)
+          assert.strictEqual(result.data.attrs.value, "option1");
+
+          // Should have the type attribute as a regular attribute
+          assert.strictEqual(result.data.attrs.type, "radio");
+
+          // Should not have hooks for value (since value is not controlled for radio)
+          assert.isUndefined(result.data.hook);
+          assert.isUndefined(result.data.hologramFormInputValue);
+        });
+
+        it("radio element with checked attribute sets up hooks", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("type"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("radio")],
+                ]),
+              ]),
+              Type.tuple([
+                Type.bitstring("checked"),
+                Type.keywordList([
+                  [Type.atom("expression"), Type.tuple([Type.boolean(true)])],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          // Should not have the checked as an attribute
+          assert.isUndefined(result.data.attrs.checked);
+
+          // Should not have the temporary data-hologram-form-input-checked attribute
+          assert.isUndefined(
+            result.data.attrs["data-hologram-form-input-checked"],
+          );
+
+          // Should have the type attribute as a regular attribute
+          assert.strictEqual(result.data.attrs.type, "radio");
+          assert.deepStrictEqual(result.data.on, {});
+
+          // Should have hooks set up
+          assert.isObject(result.data.hook);
+          assert.isFunction(result.data.hook.create);
+          assert.isFunction(result.data.hook.update);
+
+          // Should have hologramFormInputChecked data
+          assert.strictEqual(result.data.hologramFormInputChecked, true);
+        });
+
+        it("radio element with both value and checked attributes handles them correctly", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("type"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("radio")],
+                ]),
+              ]),
+              Type.tuple([
+                Type.bitstring("value"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("option2")],
+                ]),
+              ]),
+              Type.tuple([
+                Type.bitstring("checked"),
+                Type.keywordList([
+                  [Type.atom("expression"), Type.tuple([Type.boolean(false)])],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          // Should have the value as a regular attribute (not controlled)
+          assert.strictEqual(result.data.attrs.value, "option2");
+
+          // Should have the type attribute as a regular attribute
+          assert.strictEqual(result.data.attrs.type, "radio");
+
+          // Should not have the checked as an attribute (controlled)
+          assert.isUndefined(result.data.attrs.checked);
+
+          // Should have hooks set up for checked handling
+          assert.isObject(result.data.hook);
+          assert.isFunction(result.data.hook.create);
+          assert.isFunction(result.data.hook.update);
+
+          // Should have hologramFormInputChecked data set to false
+          assert.strictEqual(result.data.hologramFormInputChecked, false);
+        });
+
+        it("radio element without checked attribute does not set up checked hooks", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("type"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("radio")],
+                ]),
+              ]),
+              Type.tuple([
+                Type.bitstring("value"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("option3")],
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          // Should have the value as a regular attribute
+          assert.strictEqual(result.data.attrs.value, "option3");
+
+          // Should have the type attribute as a regular attribute
+          assert.strictEqual(result.data.attrs.type, "radio");
+
+          // Should not have hooks
+          assert.isUndefined(result.data.hook);
+          assert.isUndefined(result.data.hologramFormInputChecked);
+        });
+
+        it("keeps $change event for radio element", () => {
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.list([
+              Type.tuple([
+                Type.bitstring("type"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("radio")],
+                ]),
+              ]),
+              Type.tuple([
+                Type.bitstring("$change"),
+                Type.list([
+                  Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+                ]),
+              ]),
+            ]),
+            Type.list(),
+          ]);
+
+          const vdom = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          assert.deepStrictEqual(Object.keys(vdom.data.on), ["change"]);
+
+          const stub = sinon
+            .stub(Hologram, "handleUiEvent")
+            .callsFake((..._args) => null);
+
+          vdom.data.on.change("dummyEvent");
+
+          sinon.assert.calledWith(
+            stub,
+            "dummyEvent",
+            "change",
+            Type.list([
+              Type.tuple([Type.atom("text"), Type.bitstring("my_action")]),
+            ]),
+            defaultTarget,
+          );
+
+          Hologram.handleUiEvent.restore();
+        });
+      });
     });
   });
 
