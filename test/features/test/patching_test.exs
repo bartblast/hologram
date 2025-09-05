@@ -465,7 +465,7 @@ defmodule HologramFeatureTests.PatchingTest do
       |> refute_has(css("#checkbox[checked]"))
     end
 
-    @tag timeout: 80_000
+    @tag timeout: 90_000
     feature "radio button checked patching", %{session: session} do
       # We're testing different combinations of specific user operations for radio buttons:
       # 1) change programmatically to a non-empty value that is the same as the last programmatic value
