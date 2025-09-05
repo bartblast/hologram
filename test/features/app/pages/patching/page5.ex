@@ -63,12 +63,10 @@ defmodule HologramFeatureTests.Patching.Page5 do
               <input type="radio" id="radio_option_1" name="radio_group" value="option_1" checked={@radio == "option_1"} />
               <label for="radio_option_1">Option 1</label><br />
               <input type="radio" id="radio_option_2" name="radio_group" value="option_2" checked={@radio == "option_2"} />
-              <label for="radio_option_2">Option 2</label><br />
-              <input type="radio" id="radio_option_3" name="radio_group" value="option_3" checked={@radio == "option_3"} />
-              <label for="radio_option_3">Option 3</label><br />              
+              <label for="radio_option_2">Option 2</label><br />          
               <button type="button" $click={:select_radio, option: "option_1"}>Select Option 1</button>
               <button type="button" $click={:select_radio, option: "option_2"}>Select Option 2</button>
-              <button type="button" $click={:select_radio, option: "option_3"}>Select Option 3</button>
+              <button type="button" $click="reset_radio">Reset Radio</button>
             </fieldset>
           </form>
         </p>
@@ -115,5 +113,9 @@ defmodule HologramFeatureTests.Patching.Page5 do
 
   def action(:select_radio, params, component) do
     put_state(component, :radio, params.option)
+  end
+
+  def action(:reset_radio, _params, component) do
+    put_state(component, :radio, nil)
   end
 end
