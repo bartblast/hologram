@@ -43,7 +43,14 @@ defmodule Hologram.Template.Formatter do
   # Keep the base case separate.
   # It's important and has the external function signature
   defp format_parse([], %State{output: out}) do
-    ["\n" | out] |> Enum.reverse() |> List.flatten()
+    out |> Enum.reverse() |> List.flatten()
+  end
+
+  # Special case trailing text
+  defp format_parse([{:text, t}], state) do
+    # This might just be whitespace to make the quoting correct
+    # Regardless, it passes untouched.
+    format_parse([], add_output(state, t, :raw))
   end
 
   defp format_parse([item | rest], state) do
