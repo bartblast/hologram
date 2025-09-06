@@ -69,7 +69,16 @@ defmodule HologramFeatureTests.Patching.Page5 do
               <button type="button" $click={:select_radio_option, option: "option_2"}>Select Radio Option 2</button>
               <button type="button" $click="clear_radio">Clear Radio</button>
             </fieldset>
-            <br /><br />                       
+            <br /><br />  
+            
+            <label for="select">Select</label>
+            <select id="select" value={@select}>
+              <option id="select_option_1" value="option_1">Option 1</option>
+              <option id="select_option_2" value="option_2">Option 2</option>
+            </select>
+            <button type="button" $click={:select_select_option, option: "option_1"}>Select Select Option 1</button>
+            <button type="button" $click={:select_select_option, option: "option_2"}>Select Select Option 2</button>
+            <button type="button" $click="clear_select">Clear Select</button>               
           </form>
         </p>
       </body>
@@ -133,6 +142,6 @@ defmodule HologramFeatureTests.Patching.Page5 do
   end
 
   def action(:clear_select, _params, component) do
-    put_state(component, :select, nil)
+    put_state(component, :select, "")
   end
 end

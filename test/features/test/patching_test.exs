@@ -466,7 +466,7 @@ defmodule HologramFeatureTests.PatchingTest do
     end
 
     @tag timeout: 100_000
-    feature "radio button checked patching", %{session: session} do
+    feature "radio checked patching", %{session: session} do
       # We're testing different combinations of specific user operations for radio buttons:
       # 1) change programmatically to a non-empty value that is the same as the last programmatic value
       # 2) change programmatically to a non-empty value that is different than the last programmatic value
@@ -536,6 +536,69 @@ defmodule HologramFeatureTests.PatchingTest do
       |> refute_has(css("#radio_option_2:checked"))
       |> refute_has(css("#radio_option_1[checked]"))
       |> refute_has(css("#radio_option_2[checked]"))
+    end
+
+    @tag timeout: 100_000
+    feature "select selected patching", %{session: session} do
+      # We're testing different combinations of specific user operations for selects:
+      # 1) change programmatically to a non-empty value that is the same as the last programmatic value
+      # 2) change programmatically to a non-empty value that is different than the last programmatic value
+      # 3) change programmatically to an empty value when the last programmatic value was also empty
+      # 4) change programmatically to an empty value when the last programmatic value was not empty
+      # 5) change manually to a non-empty value that is the same as the last programmatic value
+      # 6) change manually to a non-empty value that is different than the last programmatic value
+
+      # credo:disable-for-lines:60 Credo.Check.Design.DuplicatedCode
+      session
+      |> visit(Page5)
+      |> assert_input_value("#select", "option_2")
+      |> refute_has(css("#select_option_1[selected]"))
+      |> refute_has(css("#select_option_2[selected]"))
+      # --- Setup A: establish baseline programmatic value
+      |> click(button("Select Select Option 1"))
+      |> assert_input_value("#select", "option_1")
+      |> refute_has(css("#select_option_1[selected]"))
+      |> refute_has(css("#select_option_2[selected]"))
+      # --- Group 1 (Cond 6): manual non-empty, different from last prog
+      |> click(css("#select_option_2"))
+      |> assert_input_value("#select", "option_2")
+      |> refute_has(css("#select_option_1[selected]"))
+      |> refute_has(css("#select_option_2[selected]"))
+      # --- Group 2 (Cond 1): prog non-empty, same as last prog (option_1)
+      |> click(button("Select Select Option 1"))
+      |> assert_input_value("#select", "option_1")
+      |> refute_has(css("#select_option_1[selected]"))
+      |> refute_has(css("#select_option_2[selected]"))
+      # --- Group 3 (Cond 2): prog non-empty, different from last prog
+      |> click(button("Select Select Option 2"))
+      |> assert_input_value("#select", "option_2")
+      |> refute_has(css("#select_option_1[selected]"))
+      |> refute_has(css("#select_option_2[selected]"))
+      # --- Setup B: switch to a different manual value
+      |> click(css("#select_option_1"))
+      |> assert_input_value("#select", "option_1")
+      |> refute_has(css("#select_option_1[selected]"))
+      |> refute_has(css("#select_option_2[selected]"))
+      # --- Group 4 (Cond 5): manual non-empty, same as last prog
+      |> click(css("#select_option_2"))
+      |> assert_input_value("#select", "option_2")
+      |> refute_has(css("#select_option_1[selected]"))
+      |> refute_has(css("#select_option_2[selected]"))
+      # --- Group 5 (Cond 4): prog empty, last prog was not empty
+      |> click(button("Clear Select"))
+      |> assert_input_value("#select", "")
+      |> refute_has(css("#select_option_1[selected]"))
+      |> refute_has(css("#select_option_2[selected]"))
+      # --- Setup C: switch to a different manual value
+      |> click(css("#select_option_1"))
+      |> assert_input_value("#select", "option_1")
+      |> refute_has(css("#select_option_1[selected]"))
+      |> refute_has(css("#select_option_2[selected]"))
+      # --- Group 6 (Cond 3): prog empty, last prog was also empty
+      |> click(button("Clear Select"))
+      |> assert_input_value("#select", "")
+      |> refute_has(css("#select_option_1[selected]"))
+      |> refute_has(css("#select_option_2[selected]"))
     end
   end
 end
