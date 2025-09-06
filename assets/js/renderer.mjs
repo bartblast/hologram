@@ -234,7 +234,7 @@ export default class Renderer {
     Interpreter.raiseProtocolUndefinedError("String.Chars", term);
   }
 
-  static valueDomToBitstring(valueDom) {
+  static valueDomToBitstring(valueDom, shouldEscapeExpressions) {
     // Cache the property access
     const valueParts = valueDom.data;
 
@@ -253,8 +253,12 @@ export default class Renderer {
         bitstringChunks[i] = valuePartData[1];
       } else {
         // expression
+        const expressionText = $.toText(valuePartData[1].data[0]);
+
         bitstringChunks[i] = Type.bitstring(
-          $.escapeHtml($.toText(valuePartData[1].data[0])),
+          shouldEscapeExpressions
+            ? $.escapeHtml(expressionText)
+            : expressionText,
         );
       }
     }
@@ -309,7 +313,7 @@ export default class Renderer {
     switch (tagName) {
       case "input":
         typeAttr = attrs.find(([name, _valueDom]) => name === "type");
-        return typeAttr ? Renderer.#valueDomToText(typeAttr[1]) : "text";
+        return typeAttr ? Renderer.#valueDomToText(typeAttr[1], true) : "text";
 
       case "select":
         return "select";
@@ -401,7 +405,7 @@ export default class Renderer {
         evaluatedValue = valueDom.data[0].data[1];
       }
     } else {
-      evaluatedValue = Renderer.valueDomToBitstring(valueDom);
+      evaluatedValue = Renderer.valueDomToBitstring(valueDom, false);
     }
 
     return Type.tuple([name, evaluatedValue]);
@@ -662,7 +666,12 @@ export default class Renderer {
     }
 
     // Convert to text for remaining cases
-    const valueText = Renderer.#valueDomToText(valueDom);
+    const shouldEscapeExpressions =
+      !isControlledValueAttr && !isControlledCheckedAttr;
+    const valueText = Renderer.#valueDomToText(
+      valueDom,
+      shouldEscapeExpressions,
+    );
 
     // Input value attribute: preserve strings (including empty strings)
     if (isControlledValueAttr) {
@@ -1100,8 +1109,10 @@ export default class Renderer {
     element.value = newValue;
   }
 
-  static #valueDomToText(valueDom) {
-    return Bitstring.toText(Renderer.valueDomToBitstring(valueDom));
+  static #valueDomToText(valueDom, shouldEscapeExpressions) {
+    return Bitstring.toText(
+      Renderer.valueDomToBitstring(valueDom, shouldEscapeExpressions),
+    );
   }
 }
 

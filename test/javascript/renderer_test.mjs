@@ -5074,7 +5074,7 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("expression inside attribute", () => {
+    it("expression inside non-input attribute", () => {
       // <div class={"abc < xyz"}></div>
       const node = Type.tuple([
         Type.atom("element"),
@@ -5108,6 +5108,212 @@ describe("Renderer", () => {
       );
 
       assert.deepStrictEqual(result, expected);
+    });
+
+    it("expression inside input non-controlled attribute", () => {
+      // <input type="text" class={"abc < xyz"} />
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("input"),
+        Type.keywordList([
+          [
+            Type.bitstring("type"),
+            Type.keywordList([[Type.atom("text"), Type.bitstring("text")]]),
+          ],
+          [
+            Type.bitstring("class"),
+            Type.keywordList([
+              [
+                Type.atom("expression"),
+                Type.tuple([Type.bitstring("abc < xyz")]),
+              ],
+            ]),
+          ],
+        ]),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode(
+        "input",
+        {attrs: {class: "abc &lt; xyz", type: "text"}, on: {}},
+        [],
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    describe("client-side only", () => {
+      describe("form inputs", () => {
+        it("does not escape expressions in text input value attribute", () => {
+          // <input type="text" value={"abc < xyz"} />
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.keywordList([
+              [
+                Type.bitstring("type"),
+                Type.keywordList([[Type.atom("text"), Type.bitstring("text")]]),
+              ],
+              [
+                Type.bitstring("value"),
+                Type.keywordList([
+                  [
+                    Type.atom("expression"),
+                    Type.tuple([Type.bitstring("abc < xyz")]),
+                  ],
+                ]),
+              ],
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          assert.deepStrictEqual(
+            result.data.hologramFormInputValue,
+            "abc < xyz",
+          );
+
+          assert.deepStrictEqual(
+            result.data.attrs["data-hologram-form-input-value"],
+            undefined,
+          );
+        });
+
+        it("does not escape expressions in email input value attribute", () => {
+          // <input type="email" value={"abc < xyz"} />
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("input"),
+            Type.keywordList([
+              [
+                Type.bitstring("type"),
+                Type.keywordList([
+                  [Type.atom("text"), Type.bitstring("email")],
+                ]),
+              ],
+              [
+                Type.bitstring("value"),
+                Type.keywordList([
+                  [
+                    Type.atom("expression"),
+                    Type.tuple([Type.bitstring("abc < xyz")]),
+                  ],
+                ]),
+              ],
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          assert.deepStrictEqual(
+            result.data.hologramFormInputValue,
+            "abc < xyz",
+          );
+
+          assert.deepStrictEqual(
+            result.data.attrs["data-hologram-form-input-value"],
+            undefined,
+          );
+        });
+
+        it("does not escape expressions in textarea value attribute", () => {
+          // <textarea value={"abc < xyz"}></textarea>
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("textarea"),
+            Type.keywordList([
+              [
+                Type.bitstring("value"),
+                Type.keywordList([
+                  [
+                    Type.atom("expression"),
+                    Type.tuple([Type.bitstring("abc < xyz")]),
+                  ],
+                ]),
+              ],
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          assert.deepStrictEqual(
+            result.data.hologramFormInputValue,
+            "abc < xyz",
+          );
+
+          assert.deepStrictEqual(
+            result.data.attrs["data-hologram-form-input-value"],
+            undefined,
+          );
+        });
+
+        it("does not escape expressions in select value attribute", () => {
+          // <select value={"abc < xyz"}></select>
+          const node = Type.tuple([
+            Type.atom("element"),
+            Type.bitstring("select"),
+            Type.keywordList([
+              [
+                Type.bitstring("value"),
+                Type.keywordList([
+                  [
+                    Type.atom("expression"),
+                    Type.tuple([Type.bitstring("abc < xyz")]),
+                  ],
+                ]),
+              ],
+            ]),
+            Type.list(),
+          ]);
+
+          const result = Renderer.renderDom(
+            node,
+            context,
+            slots,
+            defaultTarget,
+            parentTagName,
+          );
+
+          assert.deepStrictEqual(
+            result.data.hologramFormInputValue,
+            "abc < xyz",
+          );
+
+          assert.deepStrictEqual(
+            result.data.attrs["data-hologram-form-input-value"],
+            undefined,
+          );
+        });
+      });
     });
   });
 
@@ -5526,7 +5732,8 @@ describe("Renderer", () => {
       const dom = Type.keywordList([
         [Type.atom("text"), Type.bitstring("aaa")],
       ]);
-      const result = Renderer.valueDomToBitstring(dom);
+
+      const result = Renderer.valueDomToBitstring(dom, false);
 
       assert.deepStrictEqual(result, Type.bitstring("aaa"));
     });
@@ -5536,7 +5743,7 @@ describe("Renderer", () => {
         [Type.atom("expression"), Type.tuple([Type.integer(123)])],
       ]);
 
-      const result = Renderer.valueDomToBitstring(dom);
+      const result = Renderer.valueDomToBitstring(dom, false);
 
       assert.deepStrictEqual(result, Type.bitstring("123"));
     });
@@ -5547,7 +5754,7 @@ describe("Renderer", () => {
         [Type.atom("expression"), Type.tuple([Type.integer(123)])],
       ]);
 
-      const result = Renderer.valueDomToBitstring(dom);
+      const result = Renderer.valueDomToBitstring(dom, false);
 
       assert.deepStrictEqual(result, Type.bitstring("aaa123"));
     });
@@ -5558,7 +5765,7 @@ describe("Renderer", () => {
         [Type.atom("text"), Type.bitstring("aaa")],
       ]);
 
-      const result = Renderer.valueDomToBitstring(dom);
+      const result = Renderer.valueDomToBitstring(dom, false);
 
       assert.deepStrictEqual(result, Type.bitstring("123aaa"));
     });
@@ -5570,7 +5777,7 @@ describe("Renderer", () => {
         [Type.atom("text"), Type.bitstring("bbb")],
       ]);
 
-      const result = Renderer.valueDomToBitstring(dom);
+      const result = Renderer.valueDomToBitstring(dom, false);
 
       assert.deepStrictEqual(result, Type.bitstring("aaa123bbb"));
     });
@@ -5582,9 +5789,80 @@ describe("Renderer", () => {
         [Type.atom("expression"), Type.tuple([Type.integer(987)])],
       ]);
 
-      const result = Renderer.valueDomToBitstring(dom);
+      const result = Renderer.valueDomToBitstring(dom, false);
 
       assert.deepStrictEqual(result, Type.bitstring("123aaa987"));
+    });
+
+    describe("with escaping enabled", () => {
+      it("text", () => {
+        const dom = Type.keywordList([
+          [Type.atom("text"), Type.bitstring("abc < xyz")],
+        ]);
+
+        const result = Renderer.valueDomToBitstring(dom, true);
+
+        assert.deepStrictEqual(result, Type.bitstring("abc < xyz"));
+      });
+
+      it("expression", () => {
+        const dom = Type.keywordList([
+          [Type.atom("expression"), Type.tuple([Type.bitstring("abc < xyz")])],
+        ]);
+
+        const result = Renderer.valueDomToBitstring(dom, true);
+
+        assert.deepStrictEqual(result, Type.bitstring("abc &lt; xyz"));
+      });
+
+      it("mixed text and expression", () => {
+        const dom = Type.keywordList([
+          [Type.atom("text"), Type.bitstring("a < b")],
+          [Type.atom("expression"), Type.tuple([Type.bitstring(" < c < ")])],
+          [Type.atom("text"), Type.bitstring("d < e")],
+        ]);
+
+        const result = Renderer.valueDomToBitstring(dom, true);
+
+        assert.deepStrictEqual(
+          result,
+          Type.bitstring("a < b &lt; c &lt; d < e"),
+        );
+      });
+    });
+
+    describe("with escaping disabled", () => {
+      it("text", () => {
+        const dom = Type.keywordList([
+          [Type.atom("text"), Type.bitstring("abc < xyz")],
+        ]);
+
+        const result = Renderer.valueDomToBitstring(dom, false);
+
+        assert.deepStrictEqual(result, Type.bitstring("abc < xyz"));
+      });
+
+      it("expression", () => {
+        const dom = Type.keywordList([
+          [Type.atom("expression"), Type.tuple([Type.bitstring("abc < xyz")])],
+        ]);
+
+        const result = Renderer.valueDomToBitstring(dom, false);
+
+        assert.deepStrictEqual(result, Type.bitstring("abc < xyz"));
+      });
+
+      it("mixed text and expression", () => {
+        const dom = Type.keywordList([
+          [Type.atom("text"), Type.bitstring("a < b")],
+          [Type.atom("expression"), Type.tuple([Type.bitstring(" < c < ")])],
+          [Type.atom("text"), Type.bitstring("d < e")],
+        ]);
+
+        const result = Renderer.valueDomToBitstring(dom, false);
+
+        assert.deepStrictEqual(result, Type.bitstring("a < b < c < d < e"));
+      });
     });
   });
 
