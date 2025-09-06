@@ -13,6 +13,7 @@ defmodule HologramFeatureTests.Patching.Page5 do
       checkbox: true,
       email: "initial email",
       radio: "option_2",
+      select: "option_2",
       text: "initial text",
       textarea: "initial textarea"
     )
@@ -31,7 +32,7 @@ defmodule HologramFeatureTests.Patching.Page5 do
       <body>
         <p>
           <form>
-            <button type="button" $click="clear_state">Clear State</button>
+            <button type="button" $click="clear_all_state">Clear All State</button>
             <br /><br />
 
             <label for="text_input">Text Input:</label>
@@ -64,10 +65,11 @@ defmodule HologramFeatureTests.Patching.Page5 do
               <label for="radio_option_1">Option 1</label><br />
               <input type="radio" id="radio_option_2" name="radio_group" value="option_2" checked={@radio == "option_2"} />
               <label for="radio_option_2">Option 2</label><br />          
-              <button type="button" $click={:select_radio, option: "option_1"}>Select Option 1</button>
-              <button type="button" $click={:select_radio, option: "option_2"}>Select Option 2</button>
-              <button type="button" $click="reset_radio">Reset Radio</button>
+              <button type="button" $click={:select_radio_option, option: "option_1"}>Select Radio Option 1</button>
+              <button type="button" $click={:select_radio_option, option: "option_2"}>Select Radio Option 2</button>
+              <button type="button" $click="clear_radio">Clear Radio</button>
             </fieldset>
+            <br /><br />                       
           </form>
         </p>
       </body>
@@ -99,8 +101,15 @@ defmodule HologramFeatureTests.Patching.Page5 do
     put_state(component, :textarea, "programmatic 2")
   end
 
-  def action(:clear_state, _params, component) do
-    put_state(component, checkbox: false, email: "", radio: "initial", text: "", textarea: "")
+  def action(:clear_all_state, _params, component) do
+    put_state(component,
+      checkbox: false,
+      email: "",
+      radio: nil,
+      select: nil,
+      text: "",
+      textarea: ""
+    )
   end
 
   def action(:check_checkbox, _params, component) do
@@ -111,11 +120,19 @@ defmodule HologramFeatureTests.Patching.Page5 do
     put_state(component, :checkbox, false)
   end
 
-  def action(:select_radio, params, component) do
+  def action(:select_radio_option, params, component) do
     put_state(component, :radio, params.option)
   end
 
-  def action(:reset_radio, _params, component) do
+  def action(:clear_radio, _params, component) do
     put_state(component, :radio, nil)
+  end
+
+  def action(:select_select_option, params, component) do
+    put_state(component, :select, params.option)
+  end
+
+  def action(:clear_select, _params, component) do
+    put_state(component, :select, nil)
   end
 end

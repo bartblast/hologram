@@ -245,7 +245,7 @@ defmodule HologramFeatureTests.PatchingTest do
       |> assert_input_value("#text_input", "programmatic 2")
       |> refute_has(css("#text_input[value]"))
       # --- Group 5 (Cond 4): prog empty, last prog was not empty
-      |> click(button("Clear State"))
+      |> click(button("Clear All State"))
       |> assert_input_value("#text_input", "")
       |> refute_has(css("#text_input[value]"))
       # --- Setup C: switch to a different manual value
@@ -261,7 +261,7 @@ defmodule HologramFeatureTests.PatchingTest do
       |> assert_input_value("#text_input", "manual 4")
       |> refute_has(css("#text_input[value]"))
       # --- Group 7 (Cond 3): prog empty, last prog was also empty
-      |> click(button("Clear State"))
+      |> click(button("Clear All State"))
       |> assert_input_value("#text_input", "")
       |> refute_has(css("#text_input[value]"))
       # --- Setup E: set non-empty programmatic value
@@ -304,7 +304,7 @@ defmodule HologramFeatureTests.PatchingTest do
       |> assert_input_value("#email_input", "programmatic 2")
       |> refute_has(css("#email_input[value]"))
       # --- Group 5 (Cond 4): prog empty, last prog was not empty
-      |> click(button("Clear State"))
+      |> click(button("Clear All State"))
       |> assert_input_value("#email_input", "")
       |> refute_has(css("#email_input[value]"))
       # --- Setup C: switch to a different manual value
@@ -320,7 +320,7 @@ defmodule HologramFeatureTests.PatchingTest do
       |> assert_input_value("#email_input", "manual 4")
       |> refute_has(css("#email_input[value]"))
       # --- Group 7 (Cond 3): prog empty, last prog was also empty
-      |> click(button("Clear State"))
+      |> click(button("Clear All State"))
       |> assert_input_value("#email_input", "")
       |> refute_has(css("#email_input[value]"))
       # --- Setup E: set non-empty programmatic value
@@ -363,7 +363,7 @@ defmodule HologramFeatureTests.PatchingTest do
       |> assert_input_value("#textarea", "programmatic 2")
       |> refute_has(css("#textarea[value]"))
       # --- Group 5 (Cond 4): prog empty, last prog was not empty
-      |> click(button("Clear State"))
+      |> click(button("Clear All State"))
       |> assert_input_value("#textarea", "")
       |> refute_has(css("#textarea[value]"))
       # --- Setup C: switch to a different manual value
@@ -379,7 +379,7 @@ defmodule HologramFeatureTests.PatchingTest do
       |> assert_input_value("#textarea", "manual 4")
       |> refute_has(css("#textarea[value]"))
       # --- Group 7 (Cond 3): prog empty, last prog was also empty
-      |> click(button("Clear State"))
+      |> click(button("Clear All State"))
       |> assert_input_value("#textarea", "")
       |> refute_has(css("#textarea[value]"))
       # --- Setup E: set non-empty programmatic value
@@ -483,7 +483,7 @@ defmodule HologramFeatureTests.PatchingTest do
       |> refute_has(css("#radio_option_1[checked]"))
       |> refute_has(css("#radio_option_2[checked]"))
       # --- Setup A: establish baseline programmatic value
-      |> click(button("Select Option 1"))
+      |> click(button("Select Radio Option 1"))
       |> assert_has(css("#radio_option_1:checked"))
       |> refute_has(css("#radio_option_2:checked"))
       |> refute_has(css("#radio_option_1[checked]"))
@@ -495,13 +495,13 @@ defmodule HologramFeatureTests.PatchingTest do
       |> refute_has(css("#radio_option_1[checked]"))
       |> refute_has(css("#radio_option_2[checked]"))
       # --- Group 2 (Cond 1): prog non-empty, same as last prog (option_1)
-      |> click(button("Select Option 1"))
+      |> click(button("Select Radio Option 1"))
       |> assert_has(css("#radio_option_1:checked"))
       |> refute_has(css("#radio_option_2:checked"))
       |> refute_has(css("#radio_option_1[checked]"))
       |> refute_has(css("#radio_option_2[checked]"))
       # --- Group 3 (Cond 2): prog non-empty, different from last prog
-      |> click(button("Select Option 2"))
+      |> click(button("Select Radio Option 2"))
       |> refute_has(css("#radio_option_1:checked"))
       |> assert_has(css("#radio_option_2:checked"))
       |> refute_has(css("#radio_option_1[checked]"))
@@ -519,7 +519,7 @@ defmodule HologramFeatureTests.PatchingTest do
       |> refute_has(css("#radio_option_1[checked]"))
       |> refute_has(css("#radio_option_2[checked]"))
       # --- Group 5 (Cond 4): prog empty, last prog was not empty
-      |> click(button("Reset Radio"))
+      |> click(button("Clear Radio"))
       |> refute_has(css("#radio_option_1:checked"))
       |> refute_has(css("#radio_option_2:checked"))
       |> refute_has(css("#radio_option_1[checked]"))
@@ -531,7 +531,7 @@ defmodule HologramFeatureTests.PatchingTest do
       |> refute_has(css("#radio_option_1[checked]"))
       |> refute_has(css("#radio_option_2[checked]"))
       # --- Group 6 (Cond 3): prog empty, last prog was also empty
-      |> click(button("Reset Radio"))
+      |> click(button("Clear Radio"))
       |> refute_has(css("#radio_option_1:checked"))
       |> refute_has(css("#radio_option_2:checked"))
       |> refute_has(css("#radio_option_1[checked]"))
