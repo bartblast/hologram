@@ -5115,12 +5115,12 @@ describe("Renderer", () => {
       const node = Type.tuple([
         Type.atom("element"),
         Type.bitstring("input"),
-        Type.keywordList([
-          [
+        Type.list([
+          Type.tuple([
             Type.bitstring("type"),
             Type.keywordList([[Type.atom("text"), Type.bitstring("text")]]),
-          ],
-          [
+          ]),
+          Type.tuple([
             Type.bitstring("class"),
             Type.keywordList([
               [
@@ -5128,7 +5128,7 @@ describe("Renderer", () => {
                 Type.tuple([Type.bitstring("abc < xyz")]),
               ],
             ]),
-          ],
+          ]),
         ]),
         Type.list(),
       ]);
@@ -5144,6 +5144,41 @@ describe("Renderer", () => {
       const expected = vnode(
         "input",
         {attrs: {class: "abc &lt; xyz", type: "text"}, on: {}},
+        [],
+      );
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("multi-part attribute", () => {
+      // <div class="a < b {"< c <"} d < e"></div>
+      const node = Type.tuple([
+        Type.atom("element"),
+        Type.bitstring("div"),
+        Type.list([
+          Type.tuple([
+            Type.bitstring("class"),
+            Type.keywordList([
+              [Type.atom("text"), Type.bitstring("a < b ")],
+              [Type.atom("expression"), Type.tuple([Type.bitstring("< c <")])],
+              [Type.atom("text"), Type.bitstring(" d < e")],
+            ]),
+          ]),
+        ]),
+        Type.list(),
+      ]);
+
+      const result = Renderer.renderDom(
+        node,
+        context,
+        slots,
+        defaultTarget,
+        parentTagName,
+      );
+
+      const expected = vnode(
+        "div",
+        {attrs: {class: "a < b &lt; c &lt; d < e"}, on: {}},
         [],
       );
 

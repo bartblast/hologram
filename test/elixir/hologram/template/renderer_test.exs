@@ -1247,12 +1247,32 @@ defmodule Hologram.Template.RendererTest do
       assert render_dom(node, @env, @server) == {"<!-- abc &lt; xyz -->", %{}, @server}
     end
 
-    test "expression inside attribute" do
+    test "expression inside non-input attribute" do
       # <div class={"abc < xyz"}></div>
       node = {:element, "div", [{"class", [expression: {"abc < xyz"}]}], []}
 
       assert render_dom(node, @env, @server) ==
                {~s'<div class="abc &lt; xyz"></div>', %{}, @server}
+    end
+
+    test "expression inside input non-controlled attribute" do
+      # <input type="text" class={"abc < xyz"} />
+      node =
+        {:element, "input", [{"type", [text: "text"]}, {"class", [expression: {"abc < xyz"}]}],
+         []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s'<input type="text" class="abc &lt; xyz" />', %{}, @server}
+    end
+
+    test "multi-part attribute" do
+      # <div class="a < b {"< c <"} d < e"></div>
+      node =
+        {:element, "div", [{"class", [text: "a < b ", expression: {"< c <"}, text: " d < e"]}],
+         []}
+
+      assert render_dom(node, @env, @server) ==
+               {~s'<div class="a < b &lt; c &lt; d < e"></div>', %{}, @server}
     end
   end
 
