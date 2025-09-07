@@ -238,10 +238,6 @@ defmodule Hologram.Template.Formatter do
   # Nothing recently opened, so we're not deeper in
   defp embed(state, :add), do: state
 
-  defp indent_mode(%State{embed: []}), do: :indent
-  defp indent_mode(%State{last_tag_action: :close}), do: :indent
-  defp indent_mode(_), do: :raw
-
   # If we're not noted as embedded, we can go on happy
   defp embed(%State{embed: []} = state, _, :drop), do: state
   # This closing tag matches as expected, we can drop it and continue
@@ -254,6 +250,10 @@ defmodule Hologram.Template.Formatter do
 
     state
   end
+
+  defp indent_mode(%State{embed: []}), do: :indent
+  defp indent_mode(%State{last_tag_action: :close}), do: :indent
+  defp indent_mode(_), do: :raw
 
   @block_tags MapSet.new([
                 "div",
