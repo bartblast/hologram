@@ -7,7 +7,6 @@ defmodule Hologram.Template.Formatter do
   """
 
   alias Hologram.Template.Parser
-  require Logger
 
   @behaviour Mix.Tasks.Format
 
@@ -219,14 +218,8 @@ defmodule Hologram.Template.Formatter do
   defp embed(%State{embed: []} = state, _, :drop), do: state
   # This closing tag matches as expected, we can drop it and continue
   defp embed(%State{embed: [tag | ged]} = state, tag, :drop), do: %{state | embed: ged}
-  # This is mismatched so we warn and do nothing
-  defp embed(%State{embed: e} = state, tag, :drop) do
-    Logger.warning(
-      "unexpected text closing tag. expected: '#{inspect(tag)}' saw: '#{inspect(e)}'"
-    )
-
-    state
-  end
+  # This is mismatched so we do nothing
+  defp embed(state, _tag, :drop), do: state
 
   @raw {:raw, :noop}
 
