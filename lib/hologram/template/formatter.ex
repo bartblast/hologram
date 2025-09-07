@@ -4,14 +4,16 @@ defmodule Hologram.Template.Formatter do
 
     Enable it by adding `Hologram.Template.Formatter` to the `plugins:` list
     in `.formatter.exs`
-  """
 
-  alias Hologram.Template.Parser
+    You may also configure the line indentation by adding
+    `holo_indent: " "` (or whichever string you prefer) to the options list.
+    It defaults to two spaces (`"  "`).
+  """
 
   @behaviour Mix.Tasks.Format
 
   defmodule State do
-    defstruct indent_by: "  ",
+    defstruct holo_indent: "  ",
               current_indent: "",
               last_tag_action: :none,
               embed: [],
@@ -19,7 +21,7 @@ defmodule Hologram.Template.Formatter do
               in_tree: []
   end
 
-  @default_opts indent_by: "  "
+  @default_opts holo_indent: "  "
   defp ensure_opts(inc) do
     Keyword.merge(@default_opts, inc)
   end
@@ -35,8 +37,8 @@ defmodule Hologram.Template.Formatter do
     options = ensure_opts(opts)
 
     contents
-    |> Parser.parse_markup()
-    |> format_parse(%State{indent_by: options[:indent_by]})
+    |> Hologram.Template.Parser.parse_markup()
+    |> format_parse(%State{holo_indent: options[:holo_indent]})
   end
 
   # Keep the base case separate.
@@ -80,12 +82,15 @@ defmodule Hologram.Template.Formatter do
   defp adj_indent(state, :inc) do
     %{
       state
-      | current_indent: state.indent_by <> state.current_indent
+      | current_indent: state.holo_indent <> state.current_indent
     }
   end
 
   defp adj_indent(state, :dec) do
-    %{state | current_indent: String.slice(state.current_indent, byte_size(state.indent_by)..100)}
+    %{
+      state
+      | current_indent: String.slice(state.current_indent, byte_size(state.holo_indent)..100)
+    }
   end
 
   # In the case of the first output, we'll continue to respect it they want a
