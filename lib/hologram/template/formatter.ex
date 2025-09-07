@@ -103,11 +103,22 @@ defmodule Hologram.Template.Formatter do
     %{state | output: [output | state.output]}
   end
 
-  defp add_literal(state, text, :text) do
+  defp add_literal(%State{embed: e, in_tree: it, last_tag_action: lta} = state, text, :text) do
     case String.match?(text, ~r/^\s*$/) do
       # We're a formatter we'll handle the whitespace
-      true -> state
-      false -> state |> embed(:add) |> add_output(text, :raw)
+      true ->
+        state
+
+      false ->
+        # When a `block` tag has just now opened and we are not otherwise embedded
+        # we indent this text despite appearances otherwise
+        outmode =
+          case length(e) == 0 and lta == :open and is_block?(List.first(it)) do
+            true -> :indent
+            false -> :raw
+          end
+
+        state |> embed(:add) |> add_output(text, outmode)
     end
   end
 
@@ -115,6 +126,8 @@ defmodule Hologram.Template.Formatter do
   defp add_literal(state, exp, :expression) do
     state |> embed(:add) |> add_output(exp, :raw)
   end
+
+  defp add_literal(state, lit, atom), do: IO.inspect({state, lit, atom})
 
   defp last_tag_action(state, which), do: %{state | last_tag_action: which}
 
@@ -163,67 +176,31 @@ defmodule Hologram.Template.Formatter do
     # Despite its name, this won't actually add to the stack
     # It might be worth moving the atom parameter to the function name and
     # breaking these apart
-    like_close =
-      case state.in_tree do
-        [{t, _} | _] ->
-          case is_block?(t) do
-            true -> :ident
-            false -> :raw
-          end
-
-        _ ->
-          :raw
-      end
-
-    like_open = indent_mode(state)
-
-    for_self = if like_close == :raw or like_open == :raw, do: :raw, else: :indent
+    {mode, _} = indent_mode(state, tag, :self)
 
     state
     |> last_tag_action(:self)
-    |> add_output(tag_string(tag, :self), for_self)
+    |> add_output(tag_string(tag, :self), mode)
   end
 
   defp stack_tag(state, tag, :open) do
-    adj =
-      case is_block?(tag) do
-        true -> :inc
-        false -> :noop
-      end
+    {mode, adj} = indent_mode(state, tag, :open)
 
     state
     |> last_tag_action(:open)
-    |> add_output(tag_string(tag, :open), indent_mode(state))
+    |> add_output(tag_string(tag, :open), mode)
     |> push_tag(tag)
     |> adj_indent(adj)
   end
 
   defp stack_tag(state, {t, _} = tag_info, :close) do
-    {pt, ns} = pop_tag(state)
+    {mode, adj} = indent_mode(state, tag_info, :close)
 
-    id =
-      case pt do
-        {^t, _} ->
-          case is_block?(t) do
-            true -> :indent
-            false -> :raw
-          end
-
-        nomatch ->
-          Logger.warning("Close #{t} does not match open #{inspect(nomatch)}")
-          :raw
-      end
-
-    ic =
-      case id do
-        :raw -> :noop
-        :indent -> :dec
-      end
-
-    ns
+    state
+    |> pop_tag()
     |> last_tag_action(:close)
-    |> adj_indent(ic)
-    |> add_output(tag_string(tag_info, :close), id)
+    |> adj_indent(adj)
+    |> add_output(tag_string(tag_info, :close), mode)
     |> embed(t, :drop)
   end
 
@@ -251,9 +228,32 @@ defmodule Hologram.Template.Formatter do
     state
   end
 
-  defp indent_mode(%State{embed: []}), do: :indent
-  defp indent_mode(%State{last_tag_action: :close}), do: :indent
-  defp indent_mode(_), do: :raw
+  @raw {:raw, :noop}
+
+  # If either is raw then so is this
+  defp indent_mode(state, tag, :self) do
+    case indent_mode(state, tag, :open) do
+      @raw -> @raw
+      _ -> indent_mode(state, tag, :close)
+    end
+  end
+
+  defp indent_mode(%State{in_tree: [pt | _]}, _tag, :close) do
+    case is_block?(pt) do
+      true -> {:indent, :dec}
+      false -> @raw
+    end
+  end
+
+  defp indent_mode(%State{embed: e, last_tag_action: lta}, tag, :open)
+       when e == [] or lta == :close do
+    case is_block?(tag) do
+      true -> {:indent, :inc}
+      false -> {:indent, :noop}
+    end
+  end
+
+  defp indent_mode(_, _, _), do: @raw
 
   @block_tags MapSet.new([
                 "div",
@@ -270,14 +270,15 @@ defmodule Hologram.Template.Formatter do
 
   defp is_block?({tn, _ta}), do: is_block?(tn)
   defp is_block?(tn) when is_binary(tn), do: MapSet.member?(@block_tags, tn)
+  defp is_block?(nil), do: false
   defp is_block?(_), do: :error
 
   defp push_tag(state, tag) do
     %{state | in_tree: [tag | state.in_tree]}
   end
 
-  defp pop_tag(%State{in_tree: [pop | tart]} = state), do: {pop, %{state | in_tree: tart}}
-  defp pop_tag(%State{in_tree: []} = state), do: {:error, state}
+  defp pop_tag(%State{in_tree: [_ | tart]} = state), do: %{state | in_tree: tart}
+  defp pop_tag(%State{in_tree: []} = state), do: state
 
   # Utility string functions follow
   defp tag_string({t, a}, :open), do: "<#{t}#{attrs_string(a)}>"
