@@ -255,10 +255,21 @@ defmodule Hologram.Template.Formatter do
     state
   end
 
-  @block_tags ["div", "head", "body", "html", "main", "nav", "table", "tr", "tbody", "thead"]
+  @block_tags MapSet.new([
+                "div",
+                "head",
+                "body",
+                "html",
+                "main",
+                "nav",
+                "table",
+                "tr",
+                "tbody",
+                "thead"
+              ])
 
   defp is_block?({tn, _ta}), do: is_block?(tn)
-  defp is_block?(tn) when is_binary(tn), do: tn in @block_tags
+  defp is_block?(tn) when is_binary(tn), do: MapSet.member?(@block_tags, tn)
   defp is_block?(_), do: :error
 
   defp push_tag(state, tag) do
