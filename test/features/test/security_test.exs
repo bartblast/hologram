@@ -3,8 +3,9 @@ defmodule HologramFeatureTests.SecurityTest do
 
   alias HologramFeatureTests.Security.Page1
   alias HologramFeatureTests.Security.Page2
+  alias HologramFeatureTests.Security.Page3
 
-  describe "CSRF Protection" do
+  describe "CSRF protection" do
     feature "initial page request is successful", %{session: session} do
       session
       |> visit(Page1)
@@ -50,6 +51,16 @@ defmodule HologramFeatureTests.SecurityTest do
                         |> execute_script("delete globalThis.hologram.csrfToken;")
                         |> click(button("Test Command"))
                       end
+    end
+  end
+
+  describe "XSS protection" do
+    feature "static content is not escaped", %{session: session} do
+      session
+      |> visit(Page3)
+      |> assert_text(css("#my_div"), "a & b")
+      |> assert_has(css("#my_div[class='c < d']"))
+      |> assert_inline_script("#my_script", "window.myVar = 1 < 2;")
     end
   end
 end
