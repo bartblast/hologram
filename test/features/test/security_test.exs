@@ -4,6 +4,7 @@ defmodule HologramFeatureTests.SecurityTest do
   alias HologramFeatureTests.Security.Page1
   alias HologramFeatureTests.Security.Page2
   alias HologramFeatureTests.Security.Page3
+  alias HologramFeatureTests.Security.Page4
 
   describe "CSRF protection" do
     feature "initial page request is successful", %{session: session} do
@@ -61,6 +62,14 @@ defmodule HologramFeatureTests.SecurityTest do
       |> assert_text(css("#my_div"), "a & b")
       |> assert_has(css("#my_div[class='c < d']"))
       |> assert_inline_script("#my_script", "window.myVar = 1 < 2;")
+    end
+
+    feature "dynamic content is escaped", %{session: session} do
+      session
+      |> visit(Page4)
+      |> assert_text(css("#my_div"), "a &amp; b")
+      |> assert_has(css("#my_div[class='c &lt; d']"))
+      |> assert_inline_script("#my_script", "window.myVar = `1 &lt; 2`;")
     end
   end
 end
