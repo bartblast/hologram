@@ -5,6 +5,7 @@ defmodule HologramFeatureTests.SecurityTest do
   alias HologramFeatureTests.Security.Page2
   alias HologramFeatureTests.Security.Page3
   alias HologramFeatureTests.Security.Page4
+  alias HologramFeatureTests.Security.Page5
 
   describe "CSRF protection" do
     feature "initial page request is successful", %{session: session} do
@@ -70,6 +71,20 @@ defmodule HologramFeatureTests.SecurityTest do
       |> assert_text(css("#my_div"), "a &amp; b")
       |> assert_has(css("#my_div[class='c &lt; d']"))
       |> assert_inline_script("#my_script", "window.myVar = `1 &lt; 2`;")
+    end
+
+    feature "form inputs controlled attributes are not escaped", %{session: session} do
+      session
+      |> visit(Page5)
+      |> click(button("Set values"))
+      |> assert_text(css("#text_result"), "a &lt; b")
+      |> assert_input_value("#text_input", "a < b")
+      |> assert_text(css("#email_result"), "c &lt; d")
+      |> assert_input_value("#email_input", "c < d")
+      |> assert_text(css("#textarea_result"), "d &lt; e")
+      |> assert_input_value("#textarea_input", "d < e")
+      |> assert_text(css("#select_result"), "b &lt; c")
+      |> assert_input_value("#select_input", "b < c")
     end
   end
 end
