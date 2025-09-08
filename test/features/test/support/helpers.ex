@@ -45,6 +45,18 @@ defmodule HologramFeatureTests.Helpers do
     session
   end
 
+  def assert_inline_script(session, css_selector, expected_value) do
+    Browser.execute_script(
+      session,
+      "return document.querySelector('#{css_selector}').textContent;",
+      [],
+      fn actual_value ->
+        assert String.contains?(actual_value, expected_value),
+               "Expected inline script to contain '#{expected_value}' but got '#{actual_value}'"
+      end
+    )
+  end
+
   def assert_input_value(session, css_selector, expected_value) do
     Browser.execute_script(
       session,
