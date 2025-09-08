@@ -27,7 +27,8 @@ jobs:
       # Specify the Elixir and OTP versions to use when building
       # and running the workflow steps.
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # TODO: change back to windows-latest when erlef/setup-beam supports win25
+        os: [ubuntu-latest, windows-2022]
         elixir:
           # Multi-letter uppercase sigils (~HOLO) were introduced in Elixir 1.15.0
           # - "1.13.4"
