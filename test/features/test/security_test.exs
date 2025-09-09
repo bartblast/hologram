@@ -6,6 +6,7 @@ defmodule HologramFeatureTests.SecurityTest do
   alias HologramFeatureTests.Security.Page3
   alias HologramFeatureTests.Security.Page4
   alias HologramFeatureTests.Security.Page5
+  alias HologramFeatureTests.Security.Page6
 
   describe "CSRF protection" do
     feature "initial page request is successful", %{session: session} do
@@ -85,6 +86,13 @@ defmodule HologramFeatureTests.SecurityTest do
       |> assert_input_value("#textarea_input", "d < e")
       |> assert_text(css("#select_result"), "b &lt; c")
       |> assert_input_value("#select_input", "b < c")
+    end
+
+    feature "component props are not escaped", %{session: session} do
+      session
+      |> visit(Page6)
+      |> click(button("Set prop value"))
+      |> assert_input_value("#text_input", "a < b")
     end
   end
 end
