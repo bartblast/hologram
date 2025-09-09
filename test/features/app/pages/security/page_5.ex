@@ -20,7 +20,7 @@ defmodule HologramFeatureTests.Security.Page5 do
       <div id="email_result">{@email}</div>
       <br /><br />
       
-      <input type="textarea" id="textarea_input" value={@textarea} />
+      <textarea type="textarea" id="textarea_input" value={@textarea} />
       <div id="textarea_result">{@textarea}</div>
       <br /><br />
       
