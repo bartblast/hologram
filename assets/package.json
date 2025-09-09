@@ -9,7 +9,6 @@
   "devDependencies": {
     "chai": "^6",
     "eslint": "^9",
-    "fake-indexeddb": "^6",
     "jsdom": "^26",
     "jsdom-global": "^3",
     "mocha": "^11",
