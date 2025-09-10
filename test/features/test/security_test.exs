@@ -62,11 +62,13 @@ defmodule HologramFeatureTests.SecurityTest do
       |> visit(Page3)
       # no escaping
       |> assert_script_result("return window.xss1", true)
-      # server-side escaping
+      # HTML entities
       |> assert_script_result("return window.xss2", nil)
-      |> click(button("Show script #3"))
-      # client-side escaping
+      # server-side escaping
       |> assert_script_result("return window.xss3", nil)
+      |> click(button("Show script #4"))
+      # client-side escaping
+      |> assert_script_result("return window.xss4", nil)
     end
 
     feature "attributes escaping", %{session: session} do

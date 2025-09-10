@@ -6,7 +6,7 @@ defmodule HologramFeatureTests.Security.Page3 do
   layout HologramFeatureTests.Components.DefaultLayout
 
   def init(_params, component, _server) do
-    put_state(component, :show_script_3?, false)
+    put_state(component, :show_script_4?, false)
   end
 
   def template do
@@ -18,23 +18,28 @@ defmodule HologramFeatureTests.Security.Page3 do
 
     <p>
       Script #2 (rendered server-side) shouldn't be executed:<br />
-      {~s'<script id="script_2">window.xss2 = true</script>'}
+      &lt;script id=&quot;script_2&quot;&gt;window.xss2 = true&lt;/script&gt;
+    </p>    
+
+    <p>
+      Script #3 (rendered server-side) shouldn't be executed:<br />
+      {~s'<script id="script_3">window.xss3 = true</script>'}
     </p>
 
-    {%if @show_script_3?}
+    {%if @show_script_4?}
       <p>
-        Script #3 (rendered client-side) shouldn't be executed:<br />
-        {~s'<script id="script_3">window.xss3 = true</script>'}
+        Script #4 (rendered client-side) shouldn't be executed:<br />
+        {~s'<script id="script_4">window.xss4 = true</script>'}
       </p>
     {/if}
 
     <p>
-      <button $click="show_script_3">Show script #3</button>
+      <button $click="show_script_4">Show script #4</button>
     </p>
     """
   end
 
-  def action(:show_script_3, _params, component) do
-    put_state(component, :show_script_3?, true)
+  def action(:show_script_4, _params, component) do
+    put_state(component, :show_script_4?, true)
   end
 end
