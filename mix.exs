@@ -78,6 +78,11 @@ defmodule Hologram.MixProject do
       ],
       licenses: ["Apache-2.0"],
       links: %{
+        "Website" => "https://hologram.page",
+        "Forum" => "https://elixirforum.com/hologram",
+        "Slack" => "https://elixir-lang.slack.com/channels/hologram",
+        "Newsletter" => "https://hologram.page/newsletter",
+        "Courses" => "https://hologram.page/courses",
         "GitHub" => "https://github.com/bartblast/hologram",
         "Sponsor" => "https://github.com/sponsors/bartblast"
       },
