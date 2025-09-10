@@ -395,6 +395,32 @@ const Erlang = {
   // End byte_size/1
   // Deps: []
 
+  // Start div/2
+  "div/2": (integer1, integer2) => {
+    if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
+      const arg1 = Interpreter.inspect(integer1);
+      const arg2 = Interpreter.inspect(integer2);
+
+      Interpreter.raiseArgumentError(
+        `bad argument in arithmetic expression: div(${arg1}, ${arg2})`,
+      );
+    }
+
+    if (integer2.value === 0n) {
+      const arg1 = Interpreter.inspect(integer1);
+      const arg2 = Interpreter.inspect(integer2);
+
+      Interpreter.raiseArithmeticError(`div(${arg1}, ${arg2})`);
+    }
+
+    // TODO: support integers outside Number range
+    return Type.integer(
+      Math.trunc(Number(integer1.value) / Number(integer2.value)),
+    );
+  },
+  // End div/2
+  // Deps: []
+
   // Start element/2
   "element/2": (index, tuple) => {
     if (!Type.isInteger(index)) {

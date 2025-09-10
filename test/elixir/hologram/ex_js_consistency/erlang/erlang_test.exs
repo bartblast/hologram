@@ -1434,6 +1434,78 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "div/2" do
+    test "divides positive integers" do
+      assert :erlang.div(10, 3) === 3
+    end
+
+    test "divides negative dividend by positive divisor" do
+      assert :erlang.div(-10, 3) === -3
+    end
+
+    test "divides positive dividend by negative divisor" do
+      assert :erlang.div(10, -3) === -3
+    end
+
+    test "divides negative integers" do
+      assert :erlang.div(-10, -3) === 3
+    end
+
+    test "divides evenly" do
+      assert :erlang.div(12, 4) === 3
+    end
+
+    test "truncates toward zero for positive result" do
+      assert :erlang.div(7, 2) === 3
+    end
+
+    test "truncates toward zero for negative result" do
+      assert :erlang.div(-7, 2) === -3
+    end
+
+    test "divides by 1" do
+      assert :erlang.div(42, 1) === 42
+    end
+
+    test "divides by -1" do
+      assert :erlang.div(42, -1) === -42
+    end
+
+    test "divides 0 by non-zero" do
+      assert :erlang.div(0, 5) === 0
+    end
+
+    test "raises ArithmeticError when dividing by zero" do
+      assert_error ArithmeticError, "bad argument in arithmetic expression: div(5, 0)", fn ->
+        assert :erlang.div(5, 0)
+      end
+    end
+
+    test "raises ArgumentError if the first argument is a float" do
+      assert_error ArithmeticError, "bad argument in arithmetic expression: div(5.5, 2)", fn ->
+        assert :erlang.div(5.5, 2)
+      end
+    end
+
+    test "raises ArgumentError if the second argument is a float" do
+      assert_error ArithmeticError, "bad argument in arithmetic expression: div(5, 2.5)", fn ->
+        assert :erlang.div(5, 2.5)
+      end
+    end
+
+    test "raises ArgumentError if the first argument is not a number" do
+      assert_error ArithmeticError, "bad argument in arithmetic expression: div(:abc, 2)", fn ->
+        assert :erlang.div(:abc, 2)
+      end
+    end
+
+    test "raises ArgumentError if the second argument is not a number" do
+      assert_error ArithmeticError, "bad argument in arithmetic expression: div(5, :abc)", fn ->
+        assert :erlang.div(5, :abc)
+      end
+    end
+  end
+
   describe "element/2" do
     test "returns the element at the one-based index in the tuple" do
       assert :erlang.element(2, {5, 6, 7}) == 6
