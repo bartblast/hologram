@@ -121,6 +121,19 @@ defmodule HologramFeatureTests.Helpers do
     Browser.execute_script(session, script, [], callback)
   end
 
+  def assert_script_result(session, script, expected_result) do
+    callback = fn actual_result ->
+      if actual_result == expected_result do
+        session
+      else
+        raise Wallaby.ExpectationNotMetError,
+              "Expected script result to be #{inspect(expected_result)}, but got #{inspect(actual_result)}"
+      end
+    end
+
+    Browser.execute_script(session, script, [], callback)
+  end
+
   def assert_text(parent, text) when is_binary(text) do
     Browser.assert_text(parent, text)
   end
