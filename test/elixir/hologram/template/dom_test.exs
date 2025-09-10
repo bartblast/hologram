@@ -12,7 +12,7 @@ defmodule Hologram.Template.DOMTest do
     end
 
     test "with HTML entities" do
-      assert build_ast([{:text, "Tom &amp; Jerry"}]) == [{:text, "Tom & Jerry"}]
+      assert build_ast([{:text, "Tom &amp; Jerry"}]) == [{:text, "Tom &amp; Jerry"}]
     end
   end
 

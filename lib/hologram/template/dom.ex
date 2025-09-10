@@ -140,11 +140,7 @@ defmodule Hologram.Template.DOM do
   end
 
   defp render_code({:text, str}) do
-    escaped_str =
-      str
-      |> HtmlEntities.decode()
-      |> String.replace(~s("), ~s(\\"))
-
+    escaped_str = String.replace(str, ~s("), ~s(\\"))
     ~s({:text, "#{escaped_str}"})
   end
 
