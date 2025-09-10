@@ -13,10 +13,7 @@ defmodule HologramFeatureTests.TypesTest do
 
   describe "bitstring" do
     feature "binary", %{session: session} do
-      expected =
-        "abc"
-        |> inspect()
-        |> HtmlEntities.encode()
+      expected = inspect("abc")
 
       session
       |> visit(TypesPage)
@@ -25,10 +22,7 @@ defmodule HologramFeatureTests.TypesTest do
     end
 
     feature "non-binary", %{session: session} do
-      expected =
-        <<1::1, 0::1, 1::1, 0::1>>
-        |> inspect()
-        |> HtmlEntities.encode()
+      expected = inspect(<<1::1, 0::1, 1::1, 0::1>>)
 
       session
       |> visit(TypesPage)
@@ -155,10 +149,7 @@ defmodule HologramFeatureTests.TypesTest do
   end
 
   feature "map", %{session: session} do
-    expected =
-      %{a: 123, b: "abc"}
-      |> inspect()
-      |> HtmlEntities.encode()
+    expected = inspect(%{a: 123, b: "abc"})
 
     session
     |> visit(TypesPage)
@@ -182,7 +173,6 @@ defmodule HologramFeatureTests.TypesTest do
         "0.11.222"
         |> pid()
         |> inspect()
-        |> HtmlEntities.encode()
 
       session
       |> visit(TypesPage)

@@ -184,10 +184,7 @@ defmodule HologramFeatureTests.OperatorsTest do
     end
 
     feature "<>", %{session: session} do
-      expected =
-        (@string_a <> @string_b)
-        |> inspect()
-        |> HtmlEntities.encode()
+      expected = inspect(@string_a <> @string_b)
 
       session
       |> visit(OperatorsPage)
@@ -266,10 +263,7 @@ defmodule HologramFeatureTests.OperatorsTest do
     end
 
     feature "::", %{session: session} do
-      expected =
-        <<@float_a::float>>
-        |> inspect()
-        |> HtmlEntities.encode()
+      expected = inspect(<<@float_a::float>>)
 
       session
       |> visit(OperatorsPage)
