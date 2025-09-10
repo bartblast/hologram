@@ -15,73 +15,6 @@ import {h as vnode} from "snabbdom";
 import vnodeToHtml from "snabbdom-to-html";
 
 export default class Renderer {
-  // Based on: https://github.com/SukkaW/fast-escape-html (941dab1ec4b1ad7ba5f1899adcd121563ab10dab)
-  static escapeHtml(text) {
-    const regexEscapedChars = /["&'<>]/;
-    const match = regexEscapedChars.exec(text);
-
-    // Faster than !match since there is no type conversion
-    if (match === null) {
-      return text;
-    }
-
-    let entity = "";
-    let escaped = "";
-
-    let index = match.index;
-    let lastIndex = 0;
-
-    const len = text.length;
-
-    // Switch cases ordered by frequency of occurrence in typical HTML content:
-    // Based on analysis of the ECMAScript specification (https://tc39.es/ecma262):
-    //  <  Most common, used in tags and comparisons
-    //  >  Often paired with <, but slightly less frequent
-    //  "  Preferred over ' in HTML attributes
-    //  '  Less common, mainly in attribute values
-    //  &  Used in entity references and logical operations
-
-    for (; index < len; index++) {
-      switch (text.charCodeAt(index)) {
-        case 60: // <
-          entity = "&lt;";
-          break;
-
-        case 62: // >
-          entity = "&gt;";
-          break;
-
-        case 34: // "
-          entity = "&quot;";
-          break;
-
-        case 39: // '
-          entity = "&#39;";
-          break;
-
-        case 38: // &
-          entity = "&amp;";
-          break;
-
-        default:
-          continue;
-      }
-
-      if (lastIndex !== index) {
-        escaped += text.slice(lastIndex, index);
-      }
-
-      escaped += entity;
-      lastIndex = index + 1;
-    }
-
-    if (lastIndex !== index) {
-      escaped += text.slice(lastIndex, index);
-    }
-
-    return escaped;
-  }
-
   // Based on render_dom/3
   static renderDom(dom, context, slots, defaultTarget, parentTagName) {
     if (Type.isList(dom)) {
@@ -192,7 +125,7 @@ export default class Renderer {
       text = Interpreter.inspect(value, opts);
     }
 
-    return $.escapeHtml(text);
+    return text;
   }
 
   static toBitstring(term) {
@@ -234,7 +167,7 @@ export default class Renderer {
     Interpreter.raiseProtocolUndefinedError("String.Chars", term);
   }
 
-  static valueDomToBitstring(valueDom, shouldEscapeExpressions) {
+  static valueDomToBitstring(valueDom) {
     // Cache the property access
     const valueParts = valueDom.data;
 
@@ -255,11 +188,7 @@ export default class Renderer {
         // expression
         const expressionText = $.toText(valuePartData[1].data[0]);
 
-        bitstringChunks[i] = Type.bitstring(
-          shouldEscapeExpressions
-            ? $.escapeHtml(expressionText)
-            : expressionText,
-        );
+        bitstringChunks[i] = Type.bitstring(expressionText);
       }
     }
 
@@ -313,7 +242,7 @@ export default class Renderer {
     switch (tagName) {
       case "input":
         typeAttr = attrs.find(([name, _valueDom]) => name === "type");
-        return typeAttr ? Renderer.#valueDomToText(typeAttr[1], true) : "text";
+        return typeAttr ? Renderer.#valueDomToText(typeAttr[1]) : "text";
 
       case "select":
         return "select";
@@ -405,7 +334,7 @@ export default class Renderer {
         evaluatedValue = valueDom.data[0].data[1];
       }
     } else {
-      evaluatedValue = Renderer.valueDomToBitstring(valueDom, false);
+      evaluatedValue = Renderer.valueDomToBitstring(valueDom);
     }
 
     return Type.tuple([name, evaluatedValue]);
@@ -666,12 +595,7 @@ export default class Renderer {
     }
 
     // Convert to text for remaining cases
-    const shouldEscapeExpressions =
-      !isControlledValueAttr && !isControlledCheckedAttr;
-    const valueText = Renderer.#valueDomToText(
-      valueDom,
-      shouldEscapeExpressions,
-    );
+    const valueText = Renderer.#valueDomToText(valueDom);
 
     // Input value attribute: preserve strings (including empty strings)
     if (isControlledValueAttr) {
@@ -1109,10 +1033,8 @@ export default class Renderer {
     element.value = newValue;
   }
 
-  static #valueDomToText(valueDom, shouldEscapeExpressions) {
-    return Bitstring.toText(
-      Renderer.valueDomToBitstring(valueDom, shouldEscapeExpressions),
-    );
+  static #valueDomToText(valueDom) {
+    return Bitstring.toText(Renderer.valueDomToBitstring(valueDom));
   }
 }
 

@@ -3733,7 +3733,7 @@ describe("Renderer", () => {
       );
 
       const expected = [
-        "component vars = %{prop_1: &quot;abc&quot;, prop_2: :xyz, prop_3: 123}",
+        'component vars = %{prop_1: "abc", prop_2: :xyz, prop_3: 123}',
       ];
 
       assert.deepStrictEqual(result, expected);
@@ -4255,7 +4255,7 @@ describe("Renderer", () => {
       );
 
       const expected =
-        "component vars = %{cid: &quot;my_component&quot;, prop_1: &quot;value_1&quot;, prop_2: 2, prop_3: &quot;aaa2bbb&quot;}";
+        'component vars = %{cid: "my_component", prop_1: "value_1", prop_2: 2, prop_3: "aaa2bbb"}';
 
       assert.equal(result, expected);
     });
@@ -4754,7 +4754,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          "layout vars = %{cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;}",
+          'layout vars = %{cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}',
         ]),
       ]);
 
@@ -4781,7 +4781,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          "layout vars = %{cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;}",
+          'layout vars = %{cid: "layout", prop_1: "prop_value_1", prop_3: "prop_value_3"}',
         ]),
       ]);
 
@@ -4810,7 +4810,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          "page vars = %{key_1: &quot;param_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;}",
+          'page vars = %{key_1: "param_value_1", key_2: "state_value_2", key_3: "state_value_3"}',
         ]),
       ]);
 
@@ -4836,7 +4836,7 @@ describe("Renderer", () => {
 
       const expected = vnode("html", {attrs: {}, on: {}}, [
         vnode("body", {attrs: {}, on: {}}, [
-          "layout vars = %{cid: &quot;layout&quot;, key_1: &quot;prop_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;}",
+          'layout vars = %{cid: "layout", key_1: "prop_value_1", key_2: "state_value_2", key_3: "state_value_3"}',
         ]),
       ]);
 
@@ -4880,6 +4880,7 @@ describe("Renderer", () => {
 
   // IMPORTANT!
   // Keep client-side Renderer "escaping" and server-side Renderer "escaping" unit tests consistent.
+  // Note: client-side escaping is delegated to Snabbdom
   describe("escaping", () => {
     const context = Type.map();
     const defaultTarget = Type.bitstring("my_target");
@@ -4989,6 +4990,7 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    // Note: server-side version escapes
     it("expression inside non-script elements", () => {
       // <div>{"abc < xyz"}</div>
       const node = Type.tuple([
@@ -5011,11 +5013,12 @@ describe("Renderer", () => {
         parentTagName,
       );
 
-      const expected = vnode("div", {attrs: {}, on: {}}, ["abc &lt; xyz"]);
+      const expected = vnode("div", {attrs: {}, on: {}}, ["abc < xyz"]);
 
       assert.deepStrictEqual(result, expected);
     });
 
+    // Note: server-side version escapes
     it("expression inside script elements", () => {
       // <script>{"abc < xyz"}</script>
       const node = Type.tuple([
@@ -5040,13 +5043,14 @@ describe("Renderer", () => {
 
       const expected = vnode(
         "script",
-        {attrs: {}, key: "__hologramScript__:abc &lt; xyz", on: {}},
-        ["abc &lt; xyz"],
+        {attrs: {}, key: "__hologramScript__:abc < xyz", on: {}},
+        ["abc < xyz"],
       );
 
       assert.deepStrictEqual(result, expected);
     });
 
+    // Note: server-side version escapes
     it("expression inside public comments", () => {
       // <!-- {"abc < xyz"} -->
       const node = Type.tuple([
@@ -5069,11 +5073,12 @@ describe("Renderer", () => {
         parentTagName,
       );
 
-      const expected = vnode("!", " abc &lt; xyz ");
+      const expected = vnode("!", " abc < xyz ");
 
       assert.deepStrictEqual(result, expected);
     });
 
+    // Note: server-side version escapes
     it("expression inside non-input attribute", () => {
       // <div class={"abc < xyz"}></div>
       const node = Type.tuple([
@@ -5101,15 +5106,12 @@ describe("Renderer", () => {
         parentTagName,
       );
 
-      const expected = vnode(
-        "div",
-        {attrs: {class: "abc &lt; xyz"}, on: {}},
-        [],
-      );
+      const expected = vnode("div", {attrs: {class: "abc < xyz"}, on: {}}, []);
 
       assert.deepStrictEqual(result, expected);
     });
 
+    // Note: server-side version escapes
     it("expression inside input non-controlled attribute", () => {
       // <input type="text" class={"abc < xyz"} />
       const node = Type.tuple([
@@ -5143,7 +5145,7 @@ describe("Renderer", () => {
 
       const expected = vnode(
         "input",
-        {attrs: {class: "abc &lt; xyz", type: "text"}, on: {}},
+        {attrs: {class: "abc < xyz", type: "text"}, on: {}},
         [],
       );
 
@@ -5178,7 +5180,7 @@ describe("Renderer", () => {
 
       const expected = vnode(
         "div",
-        {attrs: {class: "a < b &lt; c &lt; d < e"}, on: {}},
+        {attrs: {class: "a < b < c < d < e"}, on: {}},
         [],
       );
 
@@ -5352,82 +5354,10 @@ describe("Renderer", () => {
     });
   });
 
-  describe("escapeHtml()", () => {
-    const escapeHtml = Renderer.escapeHtml;
-
-    it("returns text unchanged when no special characters", () => {
-      const result = escapeHtml("abc");
-      assert.deepStrictEqual(result, "abc");
-    });
-
-    it("escapes double quotes", () => {
-      assert.deepStrictEqual(escapeHtml('"'), "&quot;");
-      assert.deepStrictEqual(escapeHtml('"bar'), "&quot;bar");
-      assert.deepStrictEqual(escapeHtml('foo"'), "foo&quot;");
-      assert.deepStrictEqual(escapeHtml('foo"bar'), "foo&quot;bar");
-      assert.deepStrictEqual(escapeHtml('foo""bar'), "foo&quot;&quot;bar");
-    });
-
-    it("escapes ampersands", () => {
-      assert.deepStrictEqual(escapeHtml("&"), "&amp;");
-      assert.deepStrictEqual(escapeHtml("&bar"), "&amp;bar");
-      assert.deepStrictEqual(escapeHtml("foo&"), "foo&amp;");
-      assert.deepStrictEqual(escapeHtml("foo&bar"), "foo&amp;bar");
-      assert.deepStrictEqual(escapeHtml("foo&&bar"), "foo&amp;&amp;bar");
-    });
-
-    it("escapes single quotes", () => {
-      assert.deepStrictEqual(escapeHtml("'"), "&#39;");
-      assert.deepStrictEqual(escapeHtml("'bar"), "&#39;bar");
-      assert.deepStrictEqual(escapeHtml("foo'"), "foo&#39;");
-      assert.deepStrictEqual(escapeHtml("foo'bar"), "foo&#39;bar");
-      assert.deepStrictEqual(escapeHtml("foo''bar"), "foo&#39;&#39;bar");
-    });
-
-    it("escapes less than signs", () => {
-      assert.deepStrictEqual(escapeHtml("<"), "&lt;");
-      assert.deepStrictEqual(escapeHtml("<bar"), "&lt;bar");
-      assert.deepStrictEqual(escapeHtml("foo<"), "foo&lt;");
-      assert.deepStrictEqual(escapeHtml("foo<bar"), "foo&lt;bar");
-      assert.deepStrictEqual(escapeHtml("foo<<bar"), "foo&lt;&lt;bar");
-    });
-
-    it("escapes greater than signs", () => {
-      assert.deepStrictEqual(escapeHtml(">"), "&gt;");
-      assert.deepStrictEqual(escapeHtml(">bar"), "&gt;bar");
-      assert.deepStrictEqual(escapeHtml("foo>"), "foo&gt;");
-      assert.deepStrictEqual(escapeHtml("foo>bar"), "foo&gt;bar");
-      assert.deepStrictEqual(escapeHtml("foo>>bar"), "foo&gt;&gt;bar");
-    });
-
-    it("escapes multiple special characters in mixed text", () => {
-      const result = escapeHtml('&foo <> bar "fizz" l\'a');
-
-      assert.deepStrictEqual(
-        result,
-        "&amp;foo &lt;&gt; bar &quot;fizz&quot; l&#39;a",
-      );
-    });
-
-    it("handles empty string", () => {
-      const result = escapeHtml("");
-      assert.deepStrictEqual(result, "");
-    });
-
-    it("handles string with only special characters", () => {
-      const result = escapeHtml("&<>\"'");
-      assert.deepStrictEqual(result, "&amp;&lt;&gt;&quot;&#39;");
-    });
-
-    it("handles string with special characters at boundaries", () => {
-      const result = escapeHtml("<div>content</div>");
-      assert.deepStrictEqual(result, "&lt;div&gt;content&lt;/div&gt;");
-    });
-  });
-
   // IMPORTANT!
   // Keep client-side Renderer.stringifyForInterpolation()
   // and server-side Renderer.stringify_for_interpolation/1 unit tests consistent.
+  // Note: client-side escaping is delegated to Snabbdom
   describe("stringifyForInterpolation()", () => {
     const stringifyForInterpolation = Renderer.stringifyForInterpolation;
 
@@ -5485,7 +5415,7 @@ describe("Renderer", () => {
         const term = Bitstring.fromSegments([segment1, segment2]);
         const result = stringifyForInterpolation(term);
 
-        assert.equal(result, "&lt;&lt;132, 2::size(2)&gt;&gt;");
+        assert.equal(result, "<<132, 2::size(2)>>");
       });
     });
 
@@ -5512,7 +5442,7 @@ describe("Renderer", () => {
         const term = Type.functionCapture("Map", "put", 3, clauses, context);
         const result = stringifyForInterpolation(term);
 
-        assert.equal(result, "&amp;Map.put/3");
+        assert.equal(result, "&Map.put/3");
       });
     });
 
@@ -5551,10 +5481,7 @@ describe("Renderer", () => {
 
         const result = stringifyForInterpolation(term);
 
-        assert.equal(
-          result,
-          "%{2 =&gt; 3, :a =&gt; 1, &quot;b&quot; =&gt; nil}",
-        );
+        assert.equal(result, '%{2 => 3, :a => 1, "b" => nil}');
       });
     });
 
@@ -5562,21 +5489,21 @@ describe("Renderer", () => {
       const term = Type.pid("my_node", [0, 11, 222], "server");
       const result = stringifyForInterpolation(term);
 
-      assert.equal(result, "#PID&lt;0.11.222&gt;");
+      assert.equal(result, "#PID<0.11.222>");
     });
 
     it("port", () => {
       const term = Type.port("my_node", [0, 11], "server");
       const result = stringifyForInterpolation(term);
 
-      assert.equal(result, "#Port&lt;0.11&gt;");
+      assert.equal(result, "#Port<0.11>");
     });
 
     it("reference", () => {
       const term = Type.reference("my_node", [0, 1, 2, 3], "server");
       const result = stringifyForInterpolation(term);
 
-      assert.equal(result, "#Reference&lt;0.1.2.3&gt;");
+      assert.equal(result, "#Reference<0.1.2.3>");
     });
 
     it("tuple", () => {
@@ -5768,7 +5695,7 @@ describe("Renderer", () => {
         [Type.atom("text"), Type.bitstring("aaa")],
       ]);
 
-      const result = Renderer.valueDomToBitstring(dom, false);
+      const result = Renderer.valueDomToBitstring(dom);
 
       assert.deepStrictEqual(result, Type.bitstring("aaa"));
     });
@@ -5778,7 +5705,7 @@ describe("Renderer", () => {
         [Type.atom("expression"), Type.tuple([Type.integer(123)])],
       ]);
 
-      const result = Renderer.valueDomToBitstring(dom, false);
+      const result = Renderer.valueDomToBitstring(dom);
 
       assert.deepStrictEqual(result, Type.bitstring("123"));
     });
@@ -5789,7 +5716,7 @@ describe("Renderer", () => {
         [Type.atom("expression"), Type.tuple([Type.integer(123)])],
       ]);
 
-      const result = Renderer.valueDomToBitstring(dom, false);
+      const result = Renderer.valueDomToBitstring(dom);
 
       assert.deepStrictEqual(result, Type.bitstring("aaa123"));
     });
@@ -5800,7 +5727,7 @@ describe("Renderer", () => {
         [Type.atom("text"), Type.bitstring("aaa")],
       ]);
 
-      const result = Renderer.valueDomToBitstring(dom, false);
+      const result = Renderer.valueDomToBitstring(dom);
 
       assert.deepStrictEqual(result, Type.bitstring("123aaa"));
     });
@@ -5812,7 +5739,7 @@ describe("Renderer", () => {
         [Type.atom("text"), Type.bitstring("bbb")],
       ]);
 
-      const result = Renderer.valueDomToBitstring(dom, false);
+      const result = Renderer.valueDomToBitstring(dom);
 
       assert.deepStrictEqual(result, Type.bitstring("aaa123bbb"));
     });
@@ -5824,18 +5751,18 @@ describe("Renderer", () => {
         [Type.atom("expression"), Type.tuple([Type.integer(987)])],
       ]);
 
-      const result = Renderer.valueDomToBitstring(dom, false);
+      const result = Renderer.valueDomToBitstring(dom);
 
       assert.deepStrictEqual(result, Type.bitstring("123aaa987"));
     });
 
-    describe("with escaping enabled", () => {
+    describe("is not escaped (client-side escaping is delegated to Snabbdom)", () => {
       it("text", () => {
         const dom = Type.keywordList([
           [Type.atom("text"), Type.bitstring("abc < xyz")],
         ]);
 
-        const result = Renderer.valueDomToBitstring(dom, true);
+        const result = Renderer.valueDomToBitstring(dom);
 
         assert.deepStrictEqual(result, Type.bitstring("abc < xyz"));
       });
@@ -5845,44 +5772,7 @@ describe("Renderer", () => {
           [Type.atom("expression"), Type.tuple([Type.bitstring("abc < xyz")])],
         ]);
 
-        const result = Renderer.valueDomToBitstring(dom, true);
-
-        assert.deepStrictEqual(result, Type.bitstring("abc &lt; xyz"));
-      });
-
-      it("mixed text and expression", () => {
-        const dom = Type.keywordList([
-          [Type.atom("text"), Type.bitstring("a < b")],
-          [Type.atom("expression"), Type.tuple([Type.bitstring(" < c < ")])],
-          [Type.atom("text"), Type.bitstring("d < e")],
-        ]);
-
-        const result = Renderer.valueDomToBitstring(dom, true);
-
-        assert.deepStrictEqual(
-          result,
-          Type.bitstring("a < b &lt; c &lt; d < e"),
-        );
-      });
-    });
-
-    describe("with escaping disabled", () => {
-      it("text", () => {
-        const dom = Type.keywordList([
-          [Type.atom("text"), Type.bitstring("abc < xyz")],
-        ]);
-
-        const result = Renderer.valueDomToBitstring(dom, false);
-
-        assert.deepStrictEqual(result, Type.bitstring("abc < xyz"));
-      });
-
-      it("expression", () => {
-        const dom = Type.keywordList([
-          [Type.atom("expression"), Type.tuple([Type.bitstring("abc < xyz")])],
-        ]);
-
-        const result = Renderer.valueDomToBitstring(dom, false);
+        const result = Renderer.valueDomToBitstring(dom);
 
         assert.deepStrictEqual(result, Type.bitstring("abc < xyz"));
       });
@@ -5894,7 +5784,7 @@ describe("Renderer", () => {
           [Type.atom("text"), Type.bitstring("d < e")],
         ]);
 
-        const result = Renderer.valueDomToBitstring(dom, false);
+        const result = Renderer.valueDomToBitstring(dom);
 
         assert.deepStrictEqual(result, Type.bitstring("a < b < c < d < e"));
       });
