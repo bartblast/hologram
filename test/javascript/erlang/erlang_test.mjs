@@ -1340,6 +1340,56 @@ describe("Erlang", () => {
     // TODO: reference, function, port, map, list, bitstring
   });
 
+  describe("abs/1", () => {
+    const testedFun = Erlang["abs/1"];
+
+    it("positive float", () => {
+      assert.deepStrictEqual(testedFun(Type.float(1.23)), Type.float(1.23));
+    });
+
+    it("negative float", () => {
+      assert.deepStrictEqual(testedFun(Type.float(-1.23)), Type.float(1.23));
+    });
+
+    it("zero float", () => {
+      assert.deepStrictEqual(testedFun(Type.float(0.0)), Type.float(0.0));
+    });
+
+    it("positive integer", () => {
+      assert.deepStrictEqual(testedFun(Type.integer(123)), Type.integer(123));
+    });
+
+    it("negative integer", () => {
+      assert.deepStrictEqual(testedFun(Type.integer(-123)), Type.integer(123));
+    });
+
+    it("zero integer", () => {
+      assert.deepStrictEqual(testedFun(Type.integer(0)), Type.integer(0));
+    });
+
+    it("large positive integer", () => {
+      assert.deepStrictEqual(
+        testedFun(Type.integer(123456789012345678901234567890n)),
+        Type.integer(123456789012345678901234567890n),
+      );
+    });
+
+    it("large negative integer", () => {
+      assert.deepStrictEqual(
+        testedFun(Type.integer(-123456789012345678901234567890n)),
+        Type.integer(123456789012345678901234567890n),
+      );
+    });
+
+    it("raises ArgumentError if the argument is not a number", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    });
+  });
+
   describe("andalso/2", () => {
     const andalso = Erlang["andalso/2"];
 

@@ -236,6 +236,22 @@ const Erlang = {
   // End >=/2
   // Deps: [:erlang.==/2, :erlang.>/2]
 
+  // Start abs/1
+  "abs/1": (number) => {
+    if (Type.isFloat(number)) {
+      return Type.float(Math.abs(number.value));
+    } else if (Type.isInteger(number)) {
+      const value = number.value;
+      return Type.integer(value < 0n ? -value : value);
+    }
+
+    Interpreter.raiseArgumentError(
+      Interpreter.buildArgumentErrorMsg(1, "not a number"),
+    );
+  },
+  // End abs/1
+  // Deps: []
+
   // Start andalso/2
   "andalso/2": (leftFun, rightFun, context) => {
     const left = leftFun(context);

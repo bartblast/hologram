@@ -1213,6 +1213,48 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     # // TODO: reference, function, port, map, list, bitstring
   end
 
+  describe "abs/1" do
+    test "positive float" do
+      assert :erlang.abs(1.23) == 1.23
+    end
+
+    test "negative float" do
+      assert :erlang.abs(-1.23) == 1.23
+    end
+
+    test "zero float" do
+      assert :erlang.abs(0.0) == 0.0
+    end
+
+    test "positive integer" do
+      assert :erlang.abs(123) == 123
+    end
+
+    test "negative integer" do
+      assert :erlang.abs(-123) == 123
+    end
+
+    test "zero integer" do
+      assert :erlang.abs(0) == 0
+    end
+
+    test "large positive integer" do
+      assert :erlang.abs(123_456_789_012_345_678_901_234_567_890) ==
+               123_456_789_012_345_678_901_234_567_890
+    end
+
+    test "large negative integer" do
+      assert :erlang.abs(-123_456_789_012_345_678_901_234_567_890) ==
+               123_456_789_012_345_678_901_234_567_890
+    end
+
+    test "raises ArgumentError if the argument is not a number" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a number"),
+                   {:erlang, :abs, [:abc]}
+    end
+  end
+
   describe "andalso/2" do
     test "returns false if the first argument is false" do
       assert :erlang.andalso(false, :abc) == false
