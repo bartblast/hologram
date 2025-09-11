@@ -4880,13 +4880,16 @@ describe("Renderer", () => {
 
   // IMPORTANT!
   // Keep client-side Renderer "escaping" and server-side Renderer "escaping" unit tests consistent.
-  // Note: client-side escaping is delegated to Snabbdom
+  //
+  // Note: the behaviour is different on client-side vs server-side
+  // because client-side escaping is delegated to Snabbdom
   describe("escaping", () => {
     const context = Type.map();
     const defaultTarget = Type.bitstring("my_target");
     const parentTagName = "div";
     const slots = Type.keywordList();
 
+    // Note: server-side version escapes
     it("text inside non-script elements", () => {
       // <div>abc < xyz</div>
       const node = Type.tuple([
@@ -4939,6 +4942,7 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    // Note: server-side version escapes
     it("text inside public comments", () => {
       // <!-- abc < xyz -->
       const node = Type.tuple([
@@ -4961,6 +4965,7 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    // Note: server-side version escapes
     it("text inside attribute", () => {
       // <div class="abc < xyz"></div>
       const node = Type.tuple([
@@ -5152,6 +5157,7 @@ describe("Renderer", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    // Note: server-side version escapes
     it("multi-part attribute", () => {
       // <div class="a < b {"< c <"} d < e"></div>
       const node = Type.tuple([
@@ -5357,7 +5363,9 @@ describe("Renderer", () => {
   // IMPORTANT!
   // Keep client-side Renderer.stringifyForInterpolation()
   // and server-side Renderer.stringify_for_interpolation/1 unit tests consistent.
-  // Note: client-side escaping is delegated to Snabbdom
+  //
+  // Note: the behaviour is different on client-side vs server-side
+  // because client-side escaping is delegated to Snabbdom
   describe("stringifyForInterpolation()", () => {
     const stringifyForInterpolation = Renderer.stringifyForInterpolation;
 
@@ -5399,6 +5407,7 @@ describe("Renderer", () => {
         assert.equal(result, "abc");
       });
 
+      // Note: server-side version escapes
       it("non-binary", () => {
         const segment1 = Type.bitstringSegment(Type.integer(97), {
           type: "integer",
@@ -5436,6 +5445,7 @@ describe("Renderer", () => {
         assert.equal(result, "anonymous function fn/2");
       });
 
+      // Note: server-side version escapes
       it("captured", () => {
         const clauses = ["dummy_clause_1", "dummy_clause_2", "dummy_clause_3"];
         const context = contextFixture({module: "Map"});
@@ -5472,6 +5482,7 @@ describe("Renderer", () => {
         assert.equal(result, "%{a: 1, b: 2}");
       });
 
+      // Note: server-side version escapes
       it("mixed keys", () => {
         const term = Type.map([
           [Type.atom("a"), Type.integer(1)],
@@ -5485,6 +5496,7 @@ describe("Renderer", () => {
       });
     });
 
+    // Note: server-side version escapes
     it("pid", () => {
       const term = Type.pid("my_node", [0, 11, 222], "server");
       const result = stringifyForInterpolation(term);
@@ -5492,6 +5504,7 @@ describe("Renderer", () => {
       assert.equal(result, "#PID<0.11.222>");
     });
 
+    // Note: server-side version escapes
     it("port", () => {
       const term = Type.port("my_node", [0, 11], "server");
       const result = stringifyForInterpolation(term);
@@ -5499,6 +5512,7 @@ describe("Renderer", () => {
       assert.equal(result, "#Port<0.11>");
     });
 
+    // Note: server-side version escapes
     it("reference", () => {
       const term = Type.reference("my_node", [0, 1, 2, 3], "server");
       const result = stringifyForInterpolation(term);

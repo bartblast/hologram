@@ -1196,12 +1196,15 @@ defmodule Hologram.Template.RendererTest do
 
   # IMPORTANT!
   # Keep client-side Renderer "escaping" and server-side Renderer "escaping" unit tests consistent.
+  #
+  # Note: the behaviour is different on client-side vs server-side
+  # because client-side escaping is delegated to Snabbdom
   describe "escaping" do
     test "text inside non-script elements" do
       # <div>abc < xyz</div>
       node = {:element, "div", [], [text: "abc < xyz"]}
 
-      assert render_dom(node, @env, @server) == {"<div>abc < xyz</div>", %{}, @server}
+      assert render_dom(node, @env, @server) == {"<div>abc &lt; xyz</div>", %{}, @server}
     end
 
     test "text inside script elements" do
@@ -1215,7 +1218,7 @@ defmodule Hologram.Template.RendererTest do
       # <!-- abc < xyz -->
       node = {:public_comment, [text: " abc < xyz "]}
 
-      assert render_dom(node, @env, @server) == {"<!-- abc < xyz -->", %{}, @server}
+      assert render_dom(node, @env, @server) == {"<!-- abc &lt; xyz -->", %{}, @server}
     end
 
     test "text inside attribute" do
@@ -1223,7 +1226,7 @@ defmodule Hologram.Template.RendererTest do
       node = {:element, "div", [{"class", [text: "abc < xyz"]}], []}
 
       assert render_dom(node, @env, @server) ==
-               {~s'<div class="abc < xyz"></div>', %{}, @server}
+               {~s'<div class="abc &lt; xyz"></div>', %{}, @server}
     end
 
     test "expression inside non-script elements" do
@@ -1272,13 +1275,16 @@ defmodule Hologram.Template.RendererTest do
          []}
 
       assert render_dom(node, @env, @server) ==
-               {~s'<div class="a < b &lt; c &lt; d < e"></div>', %{}, @server}
+               {~s'<div class="a &lt; b &lt; c &lt; d &lt; e"></div>', %{}, @server}
     end
   end
 
   # IMPORTANT!
   # Keep client-side Renderer.stringifyForInterpolation()
   # and server-side Renderer.stringify_for_interpolation/1 unit tests consistent.
+  #
+  # Note: the behaviour is different on client-side vs server-side
+  # because client-side escaping is delegated to Snabbdom  
   describe "stringify_for_interpolation/1" do
     test "atom, non-boolean and non-nil" do
       assert stringify_for_interpolation(:abc) == "abc"
