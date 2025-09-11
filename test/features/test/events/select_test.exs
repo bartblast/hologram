@@ -21,10 +21,7 @@ defmodule HologramFeatureTests.Events.SelectTest do
     session
     |> visit(SelectPage)
     |> execute_script(script)
-    |> assert_text(
-      css("#result"),
-      ~r/\{:text_input, %\{event: %\{value: &quot;am 1 Holo&quot;\}\}\}/
-    )
+    |> assert_text(css("#result"), ~r/\{:text_input, %\{event: %\{value: "am 1 Holo"\}\}\}/)
   end
 
   feature "textarea", %{session: session} do
@@ -33,9 +30,6 @@ defmodule HologramFeatureTests.Events.SelectTest do
     session
     |> visit(SelectPage)
     |> execute_script(script)
-    |> assert_text(
-      css("#result"),
-      ~r/\{:textarea, %\{event: %\{value: &quot;am 2 Holo&quot;\}\}\}/
-    )
+    |> assert_text(css("#result"), ~r/\{:textarea, %\{event: %\{value: "am 2 Holo"\}\}\}/)
   end
 end

@@ -23,7 +23,7 @@ defmodule HologramFeatureTests.NavigationTest do
       |> click(link("Page 3 link"))
       |> assert_page(Page3, s: "abc", i: "123")
       |> assert_text("Page 3 title")
-      |> assert_text(~s/%{i: 123, s: &quot;abc&quot;}/)
+      |> assert_text(~s'%{i: 123, s: "abc"}')
       |> click(button("Put page 3 result"))
       |> assert_text("Page 3 result")
     end
