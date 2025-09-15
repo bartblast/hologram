@@ -9,7 +9,7 @@
   "devDependencies": {
     "chai": "^6",
     "eslint": "^9",
-    "jsdom": "^26",
+    "jsdom": "^27",
     "jsdom-global": "^3",
     "mocha": "^11",
     "prettier": "^3",
