@@ -12,8 +12,9 @@ Website: https://hologram.page
 
 ### Early Adopter Tier
 
-* Calancea Daniel, [@D4no0](https://github.com/D4no0)
+* Daniel Calancea, [@D4no0](https://github.com/D4no0)
 * Darren Black, [@totaltrash](https://github.com/totaltrash)
+* [@jzimmek](https://github.com/jzimmek)
 * Lucas Sifoni, [@Lucassifoni](https://github.com/Lucassifoni)
 
 Thank you to all other sponsors for supporting the project!
