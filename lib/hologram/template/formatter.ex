@@ -254,16 +254,36 @@ defmodule Hologram.Template.Formatter do
   defp indent_mode(_, _, _), do: @raw
 
   @block_tags MapSet.new([
-                "div",
-                "head",
+                "article",
+                "aside",
                 "body",
+                "blockquote",
+                "canvas",
+                "dd",
+                "div",
+                "dl",
+                "dt",
+                "fieldset",
+                "figure",
+                "footer",
+                "form",
+                "head",
+                "header",
                 "html",
+                "hr",
                 "main",
                 "nav",
+                "noscript",
+                "ol",
+                "p",
+                "pre",
+                "section",
                 "table",
-                "tr",
                 "tbody",
-                "thead"
+                "tfoot",
+                "thead",
+                "tr",
+                "ul"
               ])
 
   defp is_block?({tn, _ta}), do: is_block?(tn)
