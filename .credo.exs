@@ -6,7 +6,14 @@
         # You can give explicit globs or simply directories.
         # In the latter case `**/*.{ex,exs}` will be used.
         included: ["*.{ex,exs}", "benchmarks/", "config/", "lib/", "priv/", "test/"],
-        excluded: [~r"/_build/", ~r"/deps/", ~r"/node_modules/", "test/features/"]
+        excluded: [
+          ~r"/_build/",
+          ~r"/deps/",
+          ~r"/node_modules/",
+          "test/features/",
+          "test/elixir/support/fixtures/compiler/normalizer/module_7.ex",
+          "test/elixir/support/fixtures/compiler/normalizer/module_8.ex"
+        ]
       },
       strict: true,
       checks: %{
