@@ -12,6 +12,20 @@ defmodule Hologram.Compiler.NormalizerTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Compiler.Normalizer
 
+  alias Hologram.Test.Fixtures.Compiler.Normalizer.Module1
+  alias Hologram.Test.Fixtures.Compiler.Normalizer.Module2
+  alias Hologram.Test.Fixtures.Compiler.Normalizer.Module3
+  alias Hologram.Test.Fixtures.Compiler.Normalizer.Module4
+  alias Hologram.Test.Fixtures.Compiler.Normalizer.Module5
+  alias Hologram.Test.Fixtures.Compiler.Normalizer.Module6
+
+  defp fetch_unnormalized_def_ast(module) do
+    {:defmodule, _meta_1, [{:__aliases__, _meta_2, _args}, [do: {:__block__, [], [ast]}]]} =
+      unnormalized_ast(module)
+
+    ast
+  end
+
   describe "alias (__aliases__)" do
     test "3rd tuple elem is a list of atoms" do
       # Aaa.Bbb
@@ -2437,6 +2451,78 @@ defmodule Hologram.Compiler.NormalizerTest do
                         {:__aliases__, [alias: false], [:Ccc]}
                       ]}
                    ]}
+                ]}
+    end
+  end
+
+  describe "special cases" do
+    test "def try/0 with block body" do
+      ast = fetch_unnormalized_def_ast(Module1)
+
+      assert {:def, meta, [{:try, [], Elixir}, [do: :ok]]} = ast
+
+      assert normalize(ast) == {:def, meta, [{:try, [], Elixir}, [do: {:__block__, [], [:ok]}]]}
+    end
+
+    test "def try/0 with expression body" do
+      ast = fetch_unnormalized_def_ast(Module2)
+
+      assert {:def, meta, [{:try, [], Elixir}, [do: :ok]]} = ast
+
+      assert normalize(ast) == {:def, meta, [{:try, [], Elixir}, [do: {:__block__, [], [:ok]}]]}
+    end
+
+    test "def try/1 with block body" do
+      ast = fetch_unnormalized_def_ast(Module3)
+
+      assert {:def, meta_1, [{:try, [], [{:x, meta_2, nil}]}, [do: {:x, meta_3, nil}]]} = ast
+
+      assert normalize(ast) ==
+               {:def, meta_1,
+                [{:try, [], [{:x, meta_2, nil}]}, [do: {:__block__, [], [{:x, meta_3, nil}]}]]}
+    end
+
+    test "def try/1 with expression body" do
+      ast = fetch_unnormalized_def_ast(Module4)
+
+      assert {:def, meta_1, [{:try, [], [{:x, meta_2, nil}]}, [do: {:x, meta_3, nil}]]} = ast
+
+      assert normalize(ast) ==
+               {:def, meta_1,
+                [{:try, [], [{:x, meta_2, nil}]}, [do: {:__block__, [], [{:x, meta_3, nil}]}]]}
+    end
+
+    test "def try/2 with block body" do
+      ast = fetch_unnormalized_def_ast(Module5)
+
+      assert {:def, meta_1,
+              [
+                {:try, [], [{:x, meta_2, nil}, {:y, meta_3, nil}]},
+                [do: {{:x, meta_4, nil}, {:y, meta_5, nil}}]
+              ]} = ast
+
+      assert normalize(ast) ==
+               {:def, meta_1,
+                [
+                  {:try, [], [{:x, meta_2, nil}, {:y, meta_3, nil}]},
+                  [do: {:__block__, [], [{{:x, meta_4, nil}, {:y, meta_5, nil}}]}]
+                ]}
+    end
+
+    test "def try/2 with expression body" do
+      ast = fetch_unnormalized_def_ast(Module6)
+
+      assert {:def, meta_1,
+              [
+                {:try, [], [{:x, meta_2, nil}, {:y, meta_3, nil}]},
+                [do: {{:x, meta_4, nil}, {:y, meta_5, nil}}]
+              ]} = ast
+
+      assert normalize(ast) ==
+               {:def, meta_1,
+                [
+                  {:try, [], [{:x, meta_2, nil}, {:y, meta_3, nil}]},
+                  [do: {:__block__, [], [{{:x, meta_4, nil}, {:y, meta_5, nil}}]}]
                 ]}
     end
   end
