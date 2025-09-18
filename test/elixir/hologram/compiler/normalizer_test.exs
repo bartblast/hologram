@@ -16,6 +16,10 @@ defmodule Hologram.Compiler.NormalizerTest do
   alias Hologram.Test.Fixtures.Compiler.Normalizer.Module10
   alias Hologram.Test.Fixtures.Compiler.Normalizer.Module11
   alias Hologram.Test.Fixtures.Compiler.Normalizer.Module12
+  alias Hologram.Test.Fixtures.Compiler.Normalizer.Module13
+  alias Hologram.Test.Fixtures.Compiler.Normalizer.Module14
+  alias Hologram.Test.Fixtures.Compiler.Normalizer.Module15
+  alias Hologram.Test.Fixtures.Compiler.Normalizer.Module16
   alias Hologram.Test.Fixtures.Compiler.Normalizer.Module2
   alias Hologram.Test.Fixtures.Compiler.Normalizer.Module3
   alias Hologram.Test.Fixtures.Compiler.Normalizer.Module4
@@ -2608,6 +2612,64 @@ defmodule Hologram.Compiler.NormalizerTest do
                {:def, meta_1,
                 [
                   {:try, [], [{:x, meta_2, nil}, {:y, meta_3, nil}]},
+                  [do: {:__block__, [], [{{:x, meta_4, nil}, {:y, meta_5, nil}}]}]
+                ]}
+    end
+
+    test "def unquote/0 with block body" do
+      ast = fetch_unnormalized_def_ast(Module13)
+
+      assert {:def, meta, [{:unquote, [], Elixir}, [do: :ok]]} = ast
+
+      assert normalize(ast) ==
+               {:def, meta, [{:unquote, [], Elixir}, [do: {:__block__, [], [:ok]}]]}
+    end
+
+    test "def unquote/0 with expression body" do
+      ast = fetch_unnormalized_def_ast(Module14)
+
+      assert {:def, meta, [{:unquote, [], Elixir}, [do: :ok]]} = ast
+
+      assert normalize(ast) ==
+               {:def, meta, [{:unquote, [], Elixir}, [do: {:__block__, [], [:ok]}]]}
+    end
+
+    # Won't compile
+    # test "def unquote/1 with block body" do
+
+    # Won't compile
+    # test "def unquote/1 with expression body" do
+
+    test "def unquote/2 with block body" do
+      ast = fetch_unnormalized_def_ast(Module15)
+
+      assert {:def, meta_1,
+              [
+                {:unquote, [], [{:x, meta_2, nil}, {:y, meta_3, nil}]},
+                [do: {{:x, meta_4, nil}, {:y, meta_5, nil}}]
+              ]} = ast
+
+      assert normalize(ast) ==
+               {:def, meta_1,
+                [
+                  {:unquote, [], [{:x, meta_2, nil}, {:y, meta_3, nil}]},
+                  [do: {:__block__, [], [{{:x, meta_4, nil}, {:y, meta_5, nil}}]}]
+                ]}
+    end
+
+    test "def unquote/2 with expression body" do
+      ast = fetch_unnormalized_def_ast(Module16)
+
+      assert {:def, meta_1,
+              [
+                {:unquote, [], [{:x, meta_2, nil}, {:y, meta_3, nil}]},
+                [do: {{:x, meta_4, nil}, {:y, meta_5, nil}}]
+              ]} = ast
+
+      assert normalize(ast) ==
+               {:def, meta_1,
+                [
+                  {:unquote, [], [{:x, meta_2, nil}, {:y, meta_3, nil}]},
                   [do: {:__block__, [], [{{:x, meta_4, nil}, {:y, meta_5, nil}}]}]
                 ]}
     end
