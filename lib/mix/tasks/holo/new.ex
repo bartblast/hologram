@@ -63,6 +63,10 @@ defmodule Mix.Tasks.Holo.New do
     ]
   """
 
+  @prod_exs_template """
+  import Config
+  """
+
   @doc false
   @impl Mix.Task
   def run([project_name]) when is_binary(project_name) do
@@ -110,7 +114,7 @@ defmodule Mix.Tasks.Holo.New do
     config_exs_content = replace_placeholders(@config_exs_template, project_name)
     File.write!(config_exs_path, config_exs_content)
 
-    print_info("* creating #{project_name}/config/config.exs")
+    print_info("* creating #{project_name}/config/dev.exs")
 
     dev_exs_path = Path.join(config_dir, "dev.exs")
 
@@ -118,6 +122,12 @@ defmodule Mix.Tasks.Holo.New do
       replace_placeholders(@dev_exs_template, project_name, secret_key_base: true)
 
     File.write!(dev_exs_path, dev_exs_content)
+
+    print_info("* creating #{project_name}/config/prod.exs")
+
+    prod_exs_path = Path.join(config_dir, "prod.exs")
+    prod_exs_content = replace_placeholders(@prod_exs_template, project_name)
+    File.write!(prod_exs_path, prod_exs_content)
   end
 
   defp create_project_dir(project_name) do
