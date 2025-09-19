@@ -40,6 +40,29 @@ defmodule Mix.Tasks.Holo.New do
   import_config "\#{config_env()}.exs"
   """
 
+  @dev_exs_template """
+  import Config
+
+  config :my_app, MyApp.Repo,
+    username: "postgres",
+    password: "postgres",
+    hostname: "localhost",
+    database: "my_app_dev",
+    stacktrace: true,
+    show_sensitive_data_on_connection_error: true,
+    pool_size: 10
+
+  config :my_app, Hologram.Endpoint,
+    http: [ip: {127, 0, 0, 1}, port: String.to_integer(System.get_env("PORT") || "4000")],
+    check_origin: false,
+    code_reloader: true,
+    debug_errors: true,
+    secret_key_base: "$SECRET_KEY_BASE",
+    watchers: [
+      tailwind: {Tailwind, :install_and_run, [:my_app, ~w(--watch)]}
+    ]
+  """
+
   @doc false
   @impl Mix.Task
   def run([project_name]) when is_binary(project_name) do
@@ -84,7 +107,17 @@ defmodule Mix.Tasks.Holo.New do
     File.mkdir_p!(config_dir)
 
     config_exs_path = Path.join(config_dir, "config.exs")
-    File.write!(config_exs_path, replace_placeholders(project_name, @config_exs_template))
+    config_exs_content = replace_placeholders(@config_exs_template, project_name)
+    File.write!(config_exs_path, config_exs_content)
+
+    print_info("* creating #{project_name}/config/config.exs")
+
+    dev_exs_path = Path.join(config_dir, "dev.exs")
+
+    dev_exs_content =
+      replace_placeholders(@dev_exs_template, project_name, secret_key_base: true)
+
+    File.write!(dev_exs_path, dev_exs_content)
   end
 
   defp create_project_dir(project_name) do
@@ -106,9 +139,23 @@ defmodule Mix.Tasks.Holo.New do
     Mix.shell().info(info)
   end
 
-  defp replace_placeholders(project_name, template) do
-    template
-    |> String.replace("my_app", project_name)
-    |> String.replace("MyApp", Macro.camelize(project_name))
+  defp random_string(length) do
+    length
+    |> :crypto.strong_rand_bytes()
+    |> Base.encode64(padding: false)
+    |> binary_part(0, length)
+  end
+
+  defp replace_placeholders(template, project_name, opts \\ []) do
+    output =
+      template
+      |> String.replace("my_app", project_name)
+      |> String.replace("MyApp", Macro.camelize(project_name))
+
+    if opts[:secret_key_base] do
+      String.replace(output, "$SECRET_KEY_BASE", random_string(64))
+    else
+      output
+    end
   end
 end
