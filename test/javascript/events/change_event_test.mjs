@@ -3,9 +3,11 @@
 import {
   assert,
   defineGlobalErlangAndElixirModules,
+  JSDOM,
 } from "../support/helpers.mjs";
 
 import ChangeEvent from "../../../assets/js/events/change_event.mjs";
+import SubmitEvent from "../../../assets/js/events/submit_event.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
@@ -89,6 +91,30 @@ describe("ChangeEvent", () => {
       assert.deepStrictEqual(
         result,
         Type.map([[Type.atom("value"), Type.bitstring("test@example.com")]]),
+      );
+    });
+
+    it("handles form elements", () => {
+      const dom = new JSDOM(`
+        <html>
+          <body>
+            <form id="my_form">
+              <input name="username" value="john_doe">
+              <input name="email" value="john@example.com">
+            </form>
+          </body>
+        </html>
+      `);
+
+      const event = {target: dom.window.document.getElementById("my_form")};
+      const result = ChangeEvent.buildOperationParam(event);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.bitstring("username"), Type.bitstring("john_doe")],
+          [Type.bitstring("email"), Type.bitstring("john@example.com")],
+        ]),
       );
     });
   });
