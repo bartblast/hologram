@@ -2393,20 +2393,6 @@ defmodule Hologram.Compiler.NormalizerTest do
     assert normalize(ast) == [do: {:__aliases__, [alias: false], [:Aaa]}]
   end
 
-  test "for variable" do
-    # for
-    ast = {:for, [line: 1], nil}
-
-    assert normalize(ast) == ast
-  end
-
-  test "try variable" do
-    # try
-    ast = {:try, [line: 1], nil}
-
-    assert normalize(ast) == ast
-  end
-
   describe "block" do
     test "with empty meta" do
       # fn Aaa ->
@@ -2466,6 +2452,34 @@ defmodule Hologram.Compiler.NormalizerTest do
   end
 
   describe "special cases" do
+    test "variable defmodule" do
+      # defmodule
+      ast = {:defmodule, [line: 1], nil}
+
+      assert normalize(ast) == ast
+    end
+
+    test "variable for" do
+      # for
+      ast = {:for, [line: 1], nil}
+
+      assert normalize(ast) == ast
+    end
+
+    test "variable try" do
+      # try
+      ast = {:try, [line: 1], nil}
+
+      assert normalize(ast) == ast
+    end
+
+    test "variable unquote" do
+      # unquote
+      ast = {:unquote, [line: 1], nil}
+
+      assert normalize(ast) == ast
+    end
+
     test "def defmodule/0 with block body" do
       ast = fetch_unnormalized_def_ast(Module7)
 
