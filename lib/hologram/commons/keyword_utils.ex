@@ -16,6 +16,7 @@ defmodule Hologram.Commons.KeywordUtils do
       iex> deep_merge([a: [b: 1]], [a: [c: 2]])
       [a: [b: 1, c: 2]]
   """
+  @spec deep_merge(keyword, keyword) :: keyword
   def deep_merge(keyword_1, keyword_2) when is_list(keyword_1) and is_list(keyword_2) do
     Keyword.merge(keyword_1, keyword_2, fn _key, value_1, value_2 ->
       if Keyword.keyword?(value_1) and Keyword.keyword?(value_2) do
