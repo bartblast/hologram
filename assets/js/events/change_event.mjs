@@ -8,8 +8,10 @@ export default class ChangeEvent {
     const target = event.target;
     const tagName = target.tagName;
 
-    if (tagName === "FORM") {
-      return SubmitEvent.buildOperationParam(event);
+    // Check if this is a form-level change event by examining currentTarget
+    if (event.currentTarget.tagName === "FORM") {
+      const formEvent = {target: event.currentTarget};
+      return SubmitEvent.buildOperationParam(formEvent);
     }
 
     const type = target.type;
