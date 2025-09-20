@@ -14,7 +14,7 @@ defmodule Hologram.ConfigTest do
         end
       end)
 
-      init(:test_app, :test_env)
+      assert init(:test_app, :test_env) == :ok
 
       assert Application.get_env(:hologram, :mode) == :standalone
     end
