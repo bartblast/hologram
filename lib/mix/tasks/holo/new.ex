@@ -73,6 +73,40 @@ defmodule Mix.Tasks.Holo.New do
   # prod.exs runs at compile-time. For loading env vars use runtime.exs instead.
   """
 
+  @runtime_exs_template """
+  import Config
+
+  # runtime.exs runs at app startup. Use it for loading env vars.
+
+  if System.get_env("HOLOGRAM_SERVER") do
+    config :my_app, Hologram.Endpoint, server: true
+  end
+
+  if config_env() == :prod do
+    pool_size = String.to_integer(System.get_env("POOL_SIZE") || "10")
+    maybe_ipv6 = if System.get_env("ECTO_IPV6") in ~w(true 1), do: [:inet6], else: []
+
+    config :my_app, MyApp.Repo,
+      url: System.fetch_env!("DATABASE_URL"),
+      pool_size: pool_size,
+      socket_options: maybe_ipv6
+
+    host = System.get_env("HOLOGRAM_HOST") || "example.com"
+    port = String.to_integer(System.get_env("PORT") || "4000")
+
+    config :my_app, Hologram.Endpoint,
+      url: [host: host, port: 443, scheme: "https"],
+      # See the docs: https://hexdocs.pm/bandit/Bandit.html#t:options/0
+      http: [
+        ip: {0, 0, 0, 0, 0, 0, 0, 0},
+        port: port
+      ],
+      secret_key_base: System.fetch_env!("SECRET_KEY_BASE")
+
+    config :my_app, :dns_cluster_query, System.get_env("DNS_CLUSTER_QUERY")
+  end
+  """
+
   @test_exs_template """
   import Config
 
@@ -137,6 +171,7 @@ defmodule Mix.Tasks.Holo.New do
     create_config_dev_exs(project_name, config_dir)
     create_config_prod_exs(project_name, config_dir)
     create_config_test_exs(project_name, config_dir)
+    create_config_runtime_exs(project_name, config_dir)
   end
 
   defp create_config_dev_exs(project_name, config_dir) do
@@ -164,6 +199,14 @@ defmodule Mix.Tasks.Holo.New do
     prod_exs_path = Path.join(config_dir, "prod.exs")
     prod_exs_content = replace_placeholders(@prod_exs_template, project_name)
     File.write!(prod_exs_path, prod_exs_content)
+  end
+
+  defp create_config_runtime_exs(project_name, config_dir) do
+    print_info("* creating #{project_name}/config/runtime.exs")
+
+    runtime_exs_path = Path.join(config_dir, "runtime.exs")
+    runtime_exs_content = replace_placeholders(@runtime_exs_template, project_name)
+    File.write!(runtime_exs_path, runtime_exs_content)
   end
 
   defp create_config_test_exs(project_name, config_dir) do
