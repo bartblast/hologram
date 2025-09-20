@@ -1,12 +1,20 @@
 "use strict";
 
+import SubmitEvent from "./submit_event.mjs";
 import Type from "../type.mjs";
 
 export default class ChangeEvent {
   static buildOperationParam(event) {
     const target = event.target;
-    const type = target.type;
     const tagName = target.tagName;
+
+    // Check if this is a form-level change event by examining currentTarget
+    if (event.currentTarget.tagName === "FORM") {
+      const formEvent = {target: event.currentTarget};
+      return SubmitEvent.buildOperationParam(formEvent);
+    }
+
+    const type = target.type;
     let value;
 
     if (tagName === "INPUT" && (type === "checkbox" || type === "radio")) {
