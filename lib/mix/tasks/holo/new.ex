@@ -19,6 +19,8 @@ defmodule Mix.Tasks.Holo.New do
   @config_exs_template """
   import Config
 
+  # config.exs runs at compile-time. For loading env vars use runtime.exs instead.
+
   config :my_app,
     ecto_repos: [MyApp.Repo],
     generators: [timestamp_type: :utc_datetime]
@@ -43,6 +45,8 @@ defmodule Mix.Tasks.Holo.New do
   @dev_exs_template """
   import Config
 
+  # dev.exs runs at compile-time. For loading env vars use runtime.exs instead.
+
   config :my_app, MyApp.Repo,
     username: "postgres",
     password: "postgres",
@@ -65,10 +69,14 @@ defmodule Mix.Tasks.Holo.New do
 
   @prod_exs_template """
   import Config
+
+  # prod.exs runs at compile-time. For loading env vars use runtime.exs instead.
   """
 
   @test_exs_template """
   import Config
+
+  # test.exs runs at compile-time. For loading env vars use runtime.exs instead.
 
   config :my_app, MyApp.Repo,
     username: "postgres",
