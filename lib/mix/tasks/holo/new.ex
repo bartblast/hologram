@@ -122,15 +122,16 @@ defmodule Mix.Tasks.Holo.New do
   end
 
   defp create_config(project_name) do
-    print_info("* creating #{project_name}/config/config.exs")
-
     config_dir = Path.join(project_name, "config")
     File.mkdir_p!(config_dir)
 
-    config_exs_path = Path.join(config_dir, "config.exs")
-    config_exs_content = replace_placeholders(@config_exs_template, project_name)
-    File.write!(config_exs_path, config_exs_content)
+    create_config_exs(project_name, config_dir)
+    create_config_dev_exs(project_name, config_dir)
+    create_config_prod_exs(project_name, config_dir)
+    create_config_test_exs(project_name, config_dir)
+  end
 
+  defp create_config_dev_exs(project_name, config_dir) do
     print_info("* creating #{project_name}/config/dev.exs")
 
     dev_exs_path = Path.join(config_dir, "dev.exs")
@@ -139,14 +140,22 @@ defmodule Mix.Tasks.Holo.New do
       replace_placeholders(@dev_exs_template, project_name, secret_key_base: true)
 
     File.write!(dev_exs_path, dev_exs_content)
+  end
 
+  defp create_config_exs(project_name, config_dir) do
+    print_info("* creating #{project_name}/config/config.exs")
+
+    config_exs_path = Path.join(config_dir, "config.exs")
+    config_exs_content = replace_placeholders(@config_exs_template, project_name)
+    File.write!(config_exs_path, config_exs_content)
+  end
+
+  defp create_config_prod_exs(project_name, config_dir) do
     print_info("* creating #{project_name}/config/prod.exs")
 
     prod_exs_path = Path.join(config_dir, "prod.exs")
     prod_exs_content = replace_placeholders(@prod_exs_template, project_name)
     File.write!(prod_exs_path, prod_exs_content)
-
-    create_config_test_exs(project_name, config_dir)
   end
 
   defp create_config_test_exs(project_name, config_dir) do
