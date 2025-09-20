@@ -67,6 +67,23 @@ defmodule Mix.Tasks.Holo.New do
   import Config
   """
 
+  @test_exs_template """
+  import Config
+
+  config :my_app, MyApp.Repo,
+    username: "postgres",
+    password: "postgres",
+    hostname: "localhost",
+    database: "my_app_test_\#{System.get_env("MIX_TEST_PARTITION")}",
+    pool: Ecto.Adapters.SQL.Sandbox,
+    pool_size: System.schedulers_online() * 2
+
+  config :my_app, Hologram.Endpoint,
+    http: [ip: {127, 0, 0, 1}, port: 4002],
+    secret_key_base: "$SECRET_KEY_BASE",
+    server: false
+  """
+
   @doc false
   @impl Mix.Task
   def run([project_name]) when is_binary(project_name) do
@@ -128,6 +145,19 @@ defmodule Mix.Tasks.Holo.New do
     prod_exs_path = Path.join(config_dir, "prod.exs")
     prod_exs_content = replace_placeholders(@prod_exs_template, project_name)
     File.write!(prod_exs_path, prod_exs_content)
+
+    create_config_test_exs(project_name, config_dir)
+  end
+
+  defp create_config_test_exs(project_name, config_dir) do
+    print_info("* creating #{project_name}/config/test.exs")
+
+    test_exs_path = Path.join(config_dir, "test.exs")
+
+    test_exs_content =
+      replace_placeholders(@test_exs_template, project_name, secret_key_base: true)
+
+    File.write!(test_exs_path, test_exs_content)
   end
 
   defp create_project_dir(project_name) do
