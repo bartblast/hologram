@@ -76,6 +76,8 @@ defmodule Mix.Tasks.Holo.New do
   @runtime_exs_template """
   import Config
 
+  Hologram.Config.init(:my_app, config_env())
+
   # runtime.exs runs at app startup. Use it for loading env vars.
 
   if System.get_env("HOLOGRAM_SERVER") do
