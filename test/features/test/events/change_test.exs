@@ -1,6 +1,8 @@
 defmodule HologramFeatureTests.Events.ChangeTest do
   use HologramFeatureTests.TestCase, async: true
+
   alias HologramFeatureTests.Events.ChangePage
+  alias HologramFeatureTests.Events.Change.Page2
 
   feature "text input", %{session: session} do
     session
@@ -114,6 +116,17 @@ defmodule HologramFeatureTests.Events.ChangeTest do
     |> assert_text(
       css("#result"),
       ~r/\{:multiple_select, %\{event: %\{value: \["option_3"\]\}\}\}/
+    )
+  end
+
+  feature "form level change event", %{session: session} do
+    session
+    |> visit(Page2)
+    |> fill_in(css("form input[name='non_empty_text']"), with: "my_text")
+    |> click(button("Blur"))
+    |> assert_text(
+      css("#result"),
+      ~s'{:form, %{event: %{"checked_checkbox" => true, "empty_email" => "", "empty_text" => "", "empty_textarea" => "", "non_empty_email" => "my_email", "non_empty_text" => "my_text", "non_empty_textarea" => "my_textarea", "radio_group" => "option_2", "single_select" => "option_3"}}}'
     )
   end
 end
