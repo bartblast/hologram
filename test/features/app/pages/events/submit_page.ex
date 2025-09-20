@@ -62,7 +62,6 @@ defmodule HologramFeatureTests.Events.SubmitPage do
   end
 
   def action(:handle_form_submit, params, component) do
-    IO.inspect("got submit event")
     put_state(component, :result, {:form, params})
   end
 end
