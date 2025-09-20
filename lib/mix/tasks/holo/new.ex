@@ -34,7 +34,7 @@ defmodule Mix.Tasks.Holo.New do
     my_app: [
       args: ~w(
         --input=assets/css/app.css
-        --output=priv/static/assets/css/app.css
+        --output=priv/dist/css/app.css
       ),
       cd: Path.expand("..", __DIR__)
     ]
