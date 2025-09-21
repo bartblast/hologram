@@ -51,8 +51,8 @@ defmodule Hologram.Assets.ManifestCache do
     entries_js =
       AssetPathRegistry.get_mapping()
       |> Enum.sort()
-      |> Enum.map_join(",\n", fn {static_path, asset_path} ->
-        ~s("#{static_path}": "#{asset_path}")
+      |> Enum.map_join(",\n", fn {source_asset_path, dist_asset_path} ->
+        ~s("#{source_asset_path}": "#{dist_asset_path}")
       end)
 
     """
