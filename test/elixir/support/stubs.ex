@@ -167,17 +167,17 @@ defmodule Hologram.Test.Stubs do
   end
 
   # credo:disable-for-lines:71 Credo.Check.Refactor.ABCSize
-  defp setup_asset_fixtures(static_dir) do
-    FileUtils.recreate_dir(static_dir)
+  defp setup_asset_fixtures(dist_dir) do
+    FileUtils.recreate_dir(dist_dir)
 
-    dir_2 = static_dir <> "/test_dir_1/test_dir_2"
+    dir_2 = dist_dir <> "/test_dir_1/test_dir_2"
     file_2a_path = dir_2 <> "/test_file_1-11111111111111111111111111111111.css"
     file_2b_path = dir_2 <> "/test_file_2-22222222222222222222222222222222.css"
     file_2c_path = dir_2 <> "/page-33333333333333333333333333333333.js"
     file_2d_path = dir_2 <> "/page-33333333333333333333333333333333.js.map"
     file_2e_path = dir_2 <> "/test_file_1.css"
 
-    dir_3 = static_dir <> "/test_dir_3"
+    dir_3 = dist_dir <> "/test_dir_3"
     file_3a_path = dir_3 <> "/test_file_5.css"
     file_3b_path = dir_3 <> "/test_file_4-44444444444444444444444444444444.css"
     file_3c_path = dir_3 <> "/test_file_5-55555555555555555555555555555555.css"
@@ -185,7 +185,7 @@ defmodule Hologram.Test.Stubs do
     file_3e_path = dir_3 <> "/page-66666666666666666666666666666666.js.map"
     file_3f_path = dir_3 <> "/test_file_10.css"
 
-    dir_4 = static_dir <> "/hologram"
+    dir_4 = dist_dir <> "/hologram"
     file_4a_path = dir_4 <> "/page-77777777777777777777777777777777.js"
     file_4b_path = dir_4 <> "/page-77777777777777777777777777777777.js.map"
     file_4c_path = dir_4 <> "/page-88888888888888888888888888888888.js"
