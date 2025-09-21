@@ -456,7 +456,10 @@ defmodule Hologram.ReflectionTest do
   end
 
   test "release_priv_dir/0" do
-    assert release_priv_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv"
+    expected_path =
+      Path.join([File.cwd!(), "_build", "test", "lib", "hologram", "priv"])
+
+    assert release_priv_dir() == expected_path
   end
 
   describe "protocol?/1" do
