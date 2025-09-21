@@ -22,6 +22,18 @@ defmodule Hologram.CompilerTest do
   @js_dir Path.join(@assets_dir, "js")
   @tmp_dir Reflection.tmp_dir()
 
+  defp ensure_dist_hologram_dir(opts) do
+    opts[:dist_dir]
+    |> Path.join("hologram")
+    |> File.mkdir_p!()
+  end
+
+  defp list_bundle_files(opts) do
+    opts[:dist_dir]
+    |> Path.join("hologram")
+    |> File.ls!()
+  end
+
   defp setup_js_deps_test(test_subdir) do
     test_tmp_dir = Path.join([@tmp_dir, "tests", "compiler", test_subdir])
     assets_dir = Path.join(test_tmp_dir, "assets")
@@ -193,10 +205,7 @@ defmodule Hologram.CompilerTest do
     ]
 
     clean_dir(tmp_dir)
-
-    opts[:dist_dir]
-    |> Path.join("hologram")
-    |> File.mkdir_p!()
+    ensure_dist_hologram_dir(opts)
 
     entry_file_path_1 = Path.join(tmp_dir, "MyPage.entry.js")
     File.write(entry_file_path_1, "export const myVar = 111;\n")
@@ -291,10 +300,7 @@ defmodule Hologram.CompilerTest do
       ]
 
       clean_dir(tmp_dir)
-
-      opts[:dist_dir]
-      |> Path.join("hologram")
-      |> File.mkdir_p!()
+      ensure_dist_hologram_dir(opts)
 
       entry_file_path = Path.join(tmp_dir, "MyPage.entry.js")
       File.write(entry_file_path, "export const myVar = 123;\n")
@@ -349,10 +355,7 @@ defmodule Hologram.CompilerTest do
       ]
 
       clean_dir(tmp_dir)
-
-      opts[:dist_dir]
-      |> Path.join("hologram")
-      |> File.mkdir_p!()
+      ensure_dist_hologram_dir(opts)
 
       entry_file_path = Path.join(tmp_dir, "MyPage.entry.js")
       File.write(entry_file_path, "export const myVar 123;\n")
@@ -363,12 +366,7 @@ defmodule Hologram.CompilerTest do
                      bundle(MyPage, entry_file_path, "my_bundle_name", opts)
                    end
 
-      bundle_file_list =
-        opts[:dist_dir]
-        |> Path.join("hologram")
-        |> File.ls!()
-
-      assert bundle_file_list == []
+      assert list_bundle_files(opts) == []
     end
 
     test "raises when the generated bundle exceeds the specified :max_bundle_size (and does not copy the bundle to the static dir in such case) " do
@@ -382,10 +380,7 @@ defmodule Hologram.CompilerTest do
       ]
 
       clean_dir(tmp_dir)
-
-      opts[:dist_dir]
-      |> Path.join("hologram")
-      |> File.mkdir_p!()
+      ensure_dist_hologram_dir(opts)
 
       entry_file_path = Path.join(tmp_dir, "MyPage.entry.js")
       File.write!(entry_file_path, "export const myVar = 123;\n")
@@ -403,12 +398,7 @@ defmodule Hologram.CompilerTest do
 
       assert exception.message =~ "early warning system"
 
-      bundle_file_list =
-        opts[:dist_dir]
-        |> Path.join("hologram")
-        |> File.ls!()
-
-      assert bundle_file_list == []
+      assert list_bundle_files(opts) == []
     end
   end
 
