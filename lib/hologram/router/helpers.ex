@@ -3,17 +3,17 @@ defmodule Hologram.Router.Helpers do
   alias Hologram.Reflection
 
   @doc """
-  Retrieves the asset path, including the digest, for the specified static file within the static directory.
-  If there's no corresponding entry for the provided static file, the static file path itself will be returned.
+  Returns the relative path to the asset file in the dist directory (including digest) for the given source asset path.
+  Raises Hologram.AssetNotFoundError if the asset is not found.
   """
   @spec asset_path(String.t()) :: String.t()
-  def asset_path(static_path) do
-    case AssetPathRegistry.lookup(static_path) do
-      {:ok, asset_path} ->
-        asset_path
+  def asset_path(source_asset_path) do
+    case AssetPathRegistry.lookup(source_asset_path) do
+      {:ok, dist_asset_path} ->
+        dist_asset_path
 
       :error ->
-        raise Hologram.AssetNotFoundError, "there is no such asset: \"#{static_path}\""
+        raise Hologram.AssetNotFoundError, "there is no such asset: \"#{source_asset_path}\""
     end
   end
 
