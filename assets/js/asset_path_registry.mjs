@@ -6,9 +6,9 @@ export default class AssetPathRegistry {
   static entries = null;
 
   // Deps: [:maps.get/3]
-  static lookup(staticPath) {
+  static lookup(sourceAssetPath) {
     return Erlang_Maps["get/3"](
-      staticPath,
+      sourceAssetPath,
       AssetPathRegistry.entries,
       Type.nil(),
     );
@@ -18,9 +18,11 @@ export default class AssetPathRegistry {
   static populate(assetManifest) {
     AssetPathRegistry.entries = Type.map();
 
-    for (const [staticPath, assetPath] of Object.entries(assetManifest)) {
-      const key = Type.bitstring(staticPath);
-      const value = Type.bitstring(assetPath);
+    for (const [sourceAssetPath, distAssetPath] of Object.entries(
+      assetManifest,
+    )) {
+      const key = Type.bitstring(sourceAssetPath);
+      const value = Type.bitstring(distAssetPath);
 
       AssetPathRegistry.entries = Erlang_Maps["put/3"](
         key,
