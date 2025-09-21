@@ -75,11 +75,11 @@ defmodule Hologram.Assets.PathRegistry do
   end
 
   @doc """
-  Looks up the distribution path for a given source asset path.
+  Looks up the distribution asset path for a given source asset path.
   """
   @spec lookup(String.t()) :: {:ok, String.t()} | :error
-  def lookup(asset_path) do
-    ETS.get(impl().ets_table_name(), asset_path)
+  def lookup(source_asset_path) do
+    ETS.get(impl().ets_table_name(), source_asset_path)
   end
 
   @doc """
@@ -91,11 +91,11 @@ defmodule Hologram.Assets.PathRegistry do
   end
 
   @doc """
-  Registers the given asset path under the given distribution path key in the registry.
+  Registers the given distribution asset path under the given source asset path key in the registry.
   """
   @spec register(String.t(), String.t()) :: true
-  def register(dist_path, asset_path) do
-    ETS.put(impl().ets_table_name(), dist_path, asset_path)
+  def register(source_asset_path, dist_asset_path) do
+    ETS.put(impl().ets_table_name(), source_asset_path, dist_asset_path)
   end
 
   @doc """

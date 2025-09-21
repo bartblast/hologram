@@ -61,9 +61,9 @@ defmodule Hologram.Assets.PathRegistryTest do
 
   test "register/2" do
     AssetPathRegistry.start_link([])
-    AssetPathRegistry.register("my_dist_path", "/my_asset_path")
+    AssetPathRegistry.register("my_source_asset_path", "/my_dist_asset_path")
 
-    assert lookup("my_dist_path") == {:ok, "/my_asset_path"}
+    assert lookup("my_source_asset_path") == {:ok, "/my_dist_asset_path"}
   end
 
   test "reload/0", %{mapping: mapping} do
