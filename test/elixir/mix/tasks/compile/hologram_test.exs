@@ -25,7 +25,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   @assets_dir Path.join(@test_dir, "assets")
   @build_dir Path.join(@test_dir, "build")
-  @static_dir Path.join(@test_dir, "static")
+  @dist_dir Path.join(@test_dir, "dist")
   @tmp_dir Path.join(@test_dir, "tmp")
 
   @compiler_lock_file_name Reflection.compiler_lock_file_name()
@@ -33,8 +33,13 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   @num_pages Enum.count(Reflection.list_pages())
 
+  defp dist_hologram_dir(opts) do
+    Path.join(opts[:dist_dir], "hologram")
+  end
+
   defp generate_old_bundle(name, opts) do
-    opts[:static_dir]
+    opts
+    |> dist_hologram_dir()
     |> Path.join("#{name}.js")
     |> File.write!(name)
   end
@@ -87,7 +92,11 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   defp test_dirs(opts) do
     assert File.exists?(opts[:build_dir])
-    assert File.exists?(opts[:static_dir])
+
+    assert opts
+           |> dist_hologram_dir()
+           |> File.exists?()
+
     assert File.exists?(opts[:tmp_dir])
   end
 
@@ -112,19 +121,22 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert is_integer(module_digest_items[Module1])
   end
 
-  defp test_old_build_static_artifacts_cleanup(opts) do
-    refute opts[:static_dir]
+  defp test_old_dist_hologram_artifacts_cleanup(opts) do
+    refute opts
+           |> dist_hologram_dir()
            |> Path.join("old_bundle_1.js")
            |> File.exists?()
 
-    refute opts[:static_dir]
+    refute opts
+           |> dist_hologram_dir()
            |> Path.join("old_bundle_2.js")
            |> File.exists?()
   end
 
   defp test_page_bundles(opts) do
     num_page_bundles =
-      opts[:static_dir]
+      opts
+      |> dist_hologram_dir()
       |> Path.join("page-????????????????????????????????.js")
       |> Path.wildcard()
       |> Enum.count()
@@ -132,7 +144,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert num_page_bundles == @num_pages
 
     num_page_source_maps =
-      opts[:static_dir]
+      opts
+      |> dist_hologram_dir()
       |> Path.join("page-????????????????????????????????.js.map")
       |> Path.wildcard()
       |> Enum.count()
@@ -157,7 +170,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
 
   defp test_runtime_bundle(opts) do
     num_runtime_bundles =
-      opts[:static_dir]
+      opts
+      |> dist_hologram_dir()
       |> Path.join("runtime-????????????????????????????????.js")
       |> Path.wildcard()
       |> Enum.count()
@@ -165,7 +179,8 @@ defmodule Mix.Tasks.Compile.HologramTest do
     assert num_runtime_bundles == 1
 
     num_runtime_source_maps =
-      opts[:static_dir]
+      opts
+      |> dist_hologram_dir()
       |> Path.join("runtime-????????????????????????????????.js.map")
       |> Path.wildcard()
       |> Enum.count()
@@ -206,10 +221,10 @@ defmodule Mix.Tasks.Compile.HologramTest do
     opts = [
       assets_dir: @assets_dir,
       build_dir: @build_dir,
+      dist_dir: @dist_dir,
       esbuild_bin_path: Path.join([test_node_modules_path, ".bin", "esbuild"]),
       formatter_bin_path: Path.join([test_node_modules_path, ".bin", "biome"]),
       js_dir: Path.join(@lib_assets_dir, "js"),
-      static_dir: @static_dir,
       tmp_dir: @tmp_dir
     ]
 
@@ -224,7 +239,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
   setup do
     File.rm(@lock_path)
 
-    clean_dir(@static_dir)
+    clean_dir(@dist_dir)
     clean_dir(@tmp_dir)
   end
 
@@ -240,7 +255,7 @@ defmodule Mix.Tasks.Compile.HologramTest do
     generate_old_bundle("old_bundle_2", opts)
     run(opts)
     test_build_artifacts(opts)
-    test_old_build_static_artifacts_cleanup(opts)
+    test_old_dist_hologram_artifacts_cleanup(opts)
   end
 
   describe "compiler locking" do

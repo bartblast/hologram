@@ -49,9 +49,11 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     assets_dir = opts[:assets_dir]
     build_dir = opts[:build_dir]
+    dist_dir = opts[:dist_dir]
+    dist_hologram_dir = Path.join(dist_dir, "hologram")
 
     File.mkdir_p!(build_dir)
-    File.mkdir_p!(opts[:static_dir])
+    File.mkdir_p!(dist_hologram_dir)
     File.mkdir_p!(opts[:tmp_dir])
 
     Compiler.maybe_install_js_deps(assets_dir, build_dir)
@@ -109,16 +111,16 @@ defmodule Mix.Tasks.Compile.Hologram do
 
     entry_files_info = [{"runtime", runtime_entry_file_path, "runtime"} | page_entry_files_info]
 
-    old_build_static_artifacts =
-      opts[:static_dir]
+    old_dist_hologram_artifacts =
+      dist_hologram_dir
       |> File.ls!()
-      |> Enum.map(fn file_name -> Path.join(opts[:static_dir], file_name) end)
+      |> Enum.map(fn file_name -> Path.join(dist_hologram_dir, file_name) end)
 
     bundles_info = Compiler.bundle(entry_files_info, opts)
 
-    new_build_static_artifacts =
+    new_dist_hologram_artifacts =
       Enum.reduce(bundles_info, [], fn bundle_info, acc ->
-        [bundle_info.static_bundle_path, bundle_info.static_source_map_path | acc]
+        [bundle_info.dist_bundle_path, bundle_info.dist_source_map_path | acc]
       end)
 
     {page_digest_plt, page_digest_plt_dump_path} =
@@ -128,7 +130,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     CallGraph.dump(call_graph, call_graph_dump_path)
     PLT.dump(new_module_digest_plt, module_digest_plt_dump_path)
 
-    Enum.each(old_build_static_artifacts -- new_build_static_artifacts, &File.rm!/1)
+    Enum.each(old_dist_hologram_artifacts -- new_dist_hologram_artifacts, &File.rm!/1)
 
     Logger.info("Hologram: compiler finished")
 
@@ -144,11 +146,11 @@ defmodule Mix.Tasks.Compile.Hologram do
     [
       assets_dir: assets_dir,
       build_dir: build_dir,
+      dist_dir: Path.join([root_dir, "priv", "dist"]),
       esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
       # Biome is almost x20 faster than Prettier in Hologram benchmarks
       formatter_bin_path: Path.join([node_modules_path, ".bin", "biome"]),
       js_dir: Path.join(assets_dir, "js"),
-      static_dir: Path.join([root_dir, "priv", "static", "hologram"]),
       tmp_dir: Path.join(build_dir, "tmp")
     ]
   end
