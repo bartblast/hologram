@@ -146,7 +146,7 @@ defmodule Mix.Tasks.Compile.Hologram do
     [
       assets_dir: assets_dir,
       build_dir: build_dir,
-      dist_dir: Path.join([root_dir, "priv", "dist"]),
+      dist_dir: Path.join([root_dir, "priv", Reflection.dist_dir_name()]),
       esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
       # Biome is almost x20 faster than Prettier in Hologram benchmarks
       formatter_bin_path: Path.join([node_modules_path, ".bin", "biome"]),
