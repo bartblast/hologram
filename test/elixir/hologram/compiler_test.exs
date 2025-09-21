@@ -343,13 +343,16 @@ defmodule Hologram.CompilerTest do
         Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_invalid_entry_file"])
 
       opts = [
+        dist_dir: Path.join(tmp_dir, "dist"),
         esbuild_bin_path: Path.join([@root_dir, "assets", "node_modules", ".bin", "esbuild"]),
-        static_dir: Path.join(tmp_dir, "static"),
         tmp_dir: tmp_dir
       ]
 
       clean_dir(tmp_dir)
-      File.mkdir!(opts[:static_dir])
+
+      opts[:dist_dir]
+      |> Path.join("hologram")
+      |> File.mkdir_p!()
 
       entry_file_path = Path.join(tmp_dir, "MyPage.entry.js")
       File.write(entry_file_path, "export const myVar 123;\n")
@@ -360,7 +363,12 @@ defmodule Hologram.CompilerTest do
                      bundle(MyPage, entry_file_path, "my_bundle_name", opts)
                    end
 
-      assert File.ls!(opts[:static_dir]) == []
+      bundle_file_list =
+        opts[:dist_dir]
+        |> Path.join("hologram")
+        |> File.ls!()
+
+      assert bundle_file_list == []
     end
 
     test "raises when the generated bundle exceeds the specified :max_bundle_size (and does not copy the bundle to the static dir in such case) " do
@@ -368,13 +376,16 @@ defmodule Hologram.CompilerTest do
         Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_exceeds_max_size"])
 
       opts = [
+        dist_dir: Path.join(tmp_dir, "dist"),
         esbuild_bin_path: Path.join([@root_dir, "assets", "node_modules", ".bin", "esbuild"]),
-        static_dir: Path.join(tmp_dir, "static"),
         tmp_dir: tmp_dir
       ]
 
       clean_dir(tmp_dir)
-      File.mkdir!(opts[:static_dir])
+
+      opts[:dist_dir]
+      |> Path.join("hologram")
+      |> File.mkdir_p!()
 
       entry_file_path = Path.join(tmp_dir, "MyPage.entry.js")
       File.write!(entry_file_path, "export const myVar = 123;\n")
@@ -391,7 +402,13 @@ defmodule Hologram.CompilerTest do
         end
 
       assert exception.message =~ "early warning system"
-      assert File.ls!(opts[:static_dir]) == []
+
+      bundle_file_list =
+        opts[:dist_dir]
+        |> Path.join("hologram")
+        |> File.ls!()
+
+      assert bundle_file_list == []
     end
   end
 
