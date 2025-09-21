@@ -369,7 +369,7 @@ defmodule Hologram.CompilerTest do
       assert list_bundle_files(opts) == []
     end
 
-    test "raises when the generated bundle exceeds the specified :max_bundle_size (and does not copy the bundle to the static dir in such case) " do
+    test "raises when the generated bundle exceeds the specified :max_bundle_size (and does not copy the bundle to the dist dir in such case) " do
       tmp_dir =
         Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_exceeds_max_size"])
 
