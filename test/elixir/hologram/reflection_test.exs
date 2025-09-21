@@ -72,6 +72,56 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
+  describe "dist_dir_name/0" do
+    test "returns 'dist' when in standalone mode" do
+      original_mode = Application.get_env(:hologram, :mode)
+
+      on_exit(fn ->
+        if original_mode do
+          Application.put_env(:hologram, :mode, original_mode)
+        else
+          Application.delete_env(:hologram, :mode)
+        end
+      end)
+
+      Application.put_env(:hologram, :mode, :standalone)
+
+      assert dist_dir_name() == "dist"
+    end
+
+    test "returns 'static' when in non-standalone mode" do
+      original_mode = Application.get_env(:hologram, :mode)
+
+      on_exit(fn ->
+        if original_mode do
+          Application.put_env(:hologram, :mode, original_mode)
+        else
+          Application.delete_env(:hologram, :mode)
+        end
+      end)
+
+      Application.put_env(:hologram, :mode, :some_other_mode)
+
+      assert dist_dir_name() == "static"
+    end
+
+    test "returns 'static' when mode is not set" do
+      original_mode = Application.get_env(:hologram, :mode)
+
+      on_exit(fn ->
+        if original_mode do
+          Application.put_env(:hologram, :mode, original_mode)
+        else
+          Application.delete_env(:hologram, :mode)
+        end
+      end)
+
+      Application.delete_env(:hologram, :mode)
+
+      assert dist_dir_name() == "static"
+    end
+  end
+
   describe "ecto_schema?/1" do
     test "module which is an Ecto schema" do
       assert ecto_schema?(Module8)
@@ -398,54 +448,11 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  describe "release_dist_dir/0" do
-    test "returns 'dist' directory when in standalone mode" do
-      original_mode = Application.get_env(:hologram, :mode)
+  test "release_dist_dir/0" do
+    expected_path =
+      Path.join([File.cwd!(), "_build", "test", "lib", "hologram", "priv", "static"])
 
-      on_exit(fn ->
-        if original_mode do
-          Application.put_env(:hologram, :mode, original_mode)
-        else
-          Application.delete_env(:hologram, :mode)
-        end
-      end)
-
-      Application.put_env(:hologram, :mode, :standalone)
-
-      assert release_dist_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv/dist"
-    end
-
-    test "returns 'static' directory when not in standalone mode" do
-      original_mode = Application.get_env(:hologram, :mode)
-
-      on_exit(fn ->
-        if original_mode do
-          Application.put_env(:hologram, :mode, original_mode)
-        else
-          Application.delete_env(:hologram, :mode)
-        end
-      end)
-
-      Application.put_env(:hologram, :mode, :phoenix)
-
-      assert release_dist_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv/static"
-    end
-
-    test "returns 'static' directory when mode is not set" do
-      original_mode = Application.get_env(:hologram, :mode)
-
-      on_exit(fn ->
-        if original_mode do
-          Application.put_env(:hologram, :mode, original_mode)
-        else
-          Application.delete_env(:hologram, :mode)
-        end
-      end)
-
-      Application.delete_env(:hologram, :mode)
-
-      assert release_dist_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv/static"
-    end
+    assert release_dist_dir() == expected_path
   end
 
   test "release_priv_dir/0" do

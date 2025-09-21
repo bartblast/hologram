@@ -109,6 +109,35 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Returns the distribution directory name based on the Hologram mode.
+
+  Returns "dist" when Hologram is running in standalone mode,
+  otherwise returns "static" for Phoenix integration mode.
+
+  ## Examples
+
+      iex> Application.put_env(:hologram, :mode, :standalone)
+      iex> dist_dir_name()
+      "dist"
+
+      iex> Application.put_env(:hologram, :mode, :phoenix)
+      iex> dist_dir_name()
+      "static"
+
+      iex> Application.delete_env(:hologram, :mode)
+      iex> dist_dir_name()
+      "static"
+  """
+  @spec dist_dir_name :: String.t()
+  def dist_dir_name do
+    if Application.get_env(:hologram, :mode) == :standalone do
+      "dist"
+    else
+      "static"
+    end
+  end
+
+  @doc """
   Returns true if the given term is an Ecto schema module, or false otherwise.
   """
   @spec ecto_schema?(any) :: boolean
@@ -478,14 +507,7 @@ defmodule Hologram.Reflection do
   """
   @spec release_dist_dir() :: String.t()
   def release_dist_dir do
-    dir_name =
-      if Application.get_env(:hologram, :mode) == :standalone do
-        "dist"
-      else
-        "static"
-      end
-
-    Path.join(release_priv_dir(), dir_name)
+    Path.join(release_priv_dir(), dist_dir_name())
   end
 
   @doc """
