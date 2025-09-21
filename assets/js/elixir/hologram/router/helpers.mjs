@@ -6,18 +6,18 @@ import Interpreter from "../../../interpreter.mjs";
 import Type from "../../../type.mjs";
 
 const Elixir_Hologram_Router_Helpers = {
-  "asset_path/1": (staticPath) => {
-    const assetPath = AssetPathRegistry.lookup(staticPath);
+  "asset_path/1": (sourceAssetPath) => {
+    const distAssetPath = AssetPathRegistry.lookup(sourceAssetPath);
 
-    if (Type.isNil(assetPath)) {
+    if (Type.isNil(distAssetPath)) {
       const message = `there is no such asset: "${Bitstring.toText(
-        staticPath,
+        sourceAssetPath,
       )}"`;
 
       Interpreter.raiseError("Hologram.AssetNotFoundError", message);
     }
 
-    return assetPath;
+    return distAssetPath;
   },
 };
 
