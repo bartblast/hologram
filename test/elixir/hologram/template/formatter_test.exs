@@ -75,6 +75,26 @@ defmodule Hologram.Template.FormatterTest do
 
       assert format_as_binary(malformed) == proper
     end
+
+    test "dual purpose attribute" do
+      malformed = """
+      <div class="first {@second}     carriage">
+      <p>Please enjoy the <a href="#bottom">silence</a>.
+
+      </p>
+      </div>
+      """
+
+      proper = """
+      <div class="first {@second}" carriage"">
+        <p>
+          Please enjoy the <a href="#bottom">silence</a>.
+        </p>
+      </div>
+      """
+
+      assert format_as_binary(malformed) == proper
+    end
   end
 
   # The parser is tested elsewhere.

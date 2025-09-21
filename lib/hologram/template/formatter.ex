@@ -99,8 +99,14 @@ defmodule Hologram.Template.Formatter do
     %{state | output: [output, state.current_indent]}
   end
 
-  defp add_output(%State{output: out} = state, output, :indent) do
-    %{state | output: [output | [state.current_indent | ["\n" | out]]]}
+  defp add_output(%State{output: cout} = state, output, :indent) do
+    # This may have been `near_trim/1`ed but we want to
+    # completely trim the end before the upcoming newline
+    # I don't like this any more than you do at this point.
+    [prev | r] = cout
+    curr = [String.trim_trailing(prev) | r]
+
+    %{state | output: [output | [state.current_indent | ["\n" | curr]]]}
   end
 
   defp add_output(state, output, :raw) do
@@ -108,12 +114,12 @@ defmodule Hologram.Template.Formatter do
   end
 
   defp add_literal(%State{embed: e, in_tree: it, last_tag_action: lta} = state, text, :text) do
-    case String.match?(text, ~r/^\s*$/) do
-      # We're a formatter we'll handle the whitespace
-      true ->
+    # We're a formatter we'll handle the whitespace
+    case near_trim(text) do
+      " " ->
         state
 
-      false ->
+      trimmed ->
         # When a `block` tag has just now opened and we are not otherwise embedded
         # we indent this text despite appearances otherwise
         outmode =
@@ -122,7 +128,7 @@ defmodule Hologram.Template.Formatter do
             false -> :raw
           end
 
-        state |> embed(:add) |> add_output(text, outmode)
+        state |> embed(:add) |> add_output(trimmed, outmode)
     end
   end
 
@@ -291,6 +297,32 @@ defmodule Hologram.Template.Formatter do
   defp is_block?(nil), do: false
   defp is_block?(_), do: :error
 
+  # We will only concern ourselves with ASCII whitespace
+  # If they've brought us some other kind, we'll assume that
+  # it has significance to them
+  @whitespace [9, 10, 11, 12, 13, 32]
+
+  # We want to collapse leading and trailing whitespace to
+  # a single ASCII space.  For matching convenience we treat an empty
+  # string as a single space.
+  # This is wholly unsuitable outside of this module.
+  def near_trim(<<>>), do: " "
+
+  def near_trim(binary) do
+    binary
+    |> to_charlist
+    |> close_shave()
+    |> Enum.reverse()
+    |> close_shave()
+    |> Enum.reverse()
+    |> to_string
+  end
+
+  defp close_shave(chars, give_space \\ false)
+  defp close_shave([h | t], _) when h in @whitespace, do: close_shave(t, true)
+  defp close_shave(despaced, true), do: [32 | despaced]
+  defp close_shave(despaced, false), do: despaced
+
   defp push_tag(state, tag) do
     %{state | in_tree: [tag | state.in_tree]}
   end
@@ -304,15 +336,28 @@ defmodule Hologram.Template.Formatter do
   # The space is a stylistic choice.  Should maybe be configurable.
   defp tag_string({t, a}, :self), do: "<#{t}#{attrs_string(a)} />"
 
-  # This basically a reduce that I didn't want to inline
+  # This would have sucked as an originally intended reduce
   defp attrs_string(attrs, acc \\ [])
   defp attrs_string([], []), do: ""
   defp attrs_string([], acc), do: " #{acc |> Enum.reverse() |> Enum.join(" ")}"
-  defp attrs_string([attr | rest], acc), do: attrs_string(rest, [attr_string(attr) | acc])
+  defp attrs_string([attr | rest], acc), do: attrs_string(rest, [single_attr(attr) | acc])
 
-  # For formatting purposes, expressions are unquoted text
-  defp attr_string({k, [expression: v]}), do: "#{k}=#{v}"
-  defp attr_string({k, [text: v]}), do: "#{k}=\"#{v}\""
-  # Unary attribute parse result
-  defp attr_string({k, []}), do: "#{k}"
+  # Special case unary to leave out the `=`
+  defp single_attr({k, []}), do: k
+  defp single_attr({k, abits}), do: "#{k}=#{gather_abits(abits)}"
+
+  defp gather_abits([]), do: ""
+
+  defp gather_abits([{:text, t} | rest]) do
+    # Skip "blank" and "all whitespace" text
+    # We cannot just trim, because the whitespace is significant inside
+    # these quotes.  We also don't want to just add it.
+    case near_trim(t) do
+      " " -> gather_abits(rest)
+      tt -> "\"#{tt}#{gather_abits(rest)}\""
+    end
+  end
+
+  # Pass-thru unmangled and unquoted
+  defp gather_abits([{:expression, e} | rest]), do: "#{e}#{gather_abits(rest)}"
 end
