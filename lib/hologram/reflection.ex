@@ -474,6 +474,21 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Returns the release distribution dir path.
+  """
+  @spec release_dist_dir() :: String.t()
+  def release_dist_dir do
+    dir_name =
+      if Application.get_env(:hologram, :mode) == :standalone do
+        "dist"
+      else
+        "static"
+      end
+
+    Path.join(release_priv_dir(), dir_name)
+  end
+
+  @doc """
   Returns the release priv dir path.
   """
   @spec release_priv_dir() :: String.t()
@@ -481,14 +496,6 @@ defmodule Hologram.Reflection do
     otp_app()
     |> :code.priv_dir()
     |> to_string()
-  end
-
-  @doc """
-  Returns the release static dir path.
-  """
-  @spec release_static_dir() :: String.t()
-  def release_static_dir do
-    Path.join(release_priv_dir(), "static")
   end
 
   @doc """

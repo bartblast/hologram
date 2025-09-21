@@ -107,7 +107,7 @@ defmodule Hologram.Assets.PathRegistry do
   """
   @spec static_dir() :: String.t()
   def static_dir do
-    Reflection.release_static_dir()
+    Reflection.release_dist_dir()
   end
 
   defp find_assets(static_dir) do

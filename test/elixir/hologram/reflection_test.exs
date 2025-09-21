@@ -402,8 +402,54 @@ defmodule Hologram.ReflectionTest do
     assert release_priv_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv"
   end
 
-  test "release_static_dir/0" do
-    assert release_static_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv/static"
+  describe "release_dist_dir/0" do
+    test "returns 'dist' directory when in standalone mode" do
+      original_mode = Application.get_env(:hologram, :mode)
+
+      on_exit(fn ->
+        if original_mode do
+          Application.put_env(:hologram, :mode, original_mode)
+        else
+          Application.delete_env(:hologram, :mode)
+        end
+      end)
+
+      Application.put_env(:hologram, :mode, :standalone)
+
+      assert release_dist_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv/dist"
+    end
+
+    test "returns 'static' directory when not in standalone mode" do
+      original_mode = Application.get_env(:hologram, :mode)
+
+      on_exit(fn ->
+        if original_mode do
+          Application.put_env(:hologram, :mode, original_mode)
+        else
+          Application.delete_env(:hologram, :mode)
+        end
+      end)
+
+      Application.put_env(:hologram, :mode, :phoenix)
+
+      assert release_dist_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv/static"
+    end
+
+    test "returns 'static' directory when mode is not set" do
+      original_mode = Application.get_env(:hologram, :mode)
+
+      on_exit(fn ->
+        if original_mode do
+          Application.put_env(:hologram, :mode, original_mode)
+        else
+          Application.delete_env(:hologram, :mode)
+        end
+      end)
+
+      Application.delete_env(:hologram, :mode)
+
+      assert release_dist_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv/static"
+    end
   end
 
   describe "protocol?/1" do
