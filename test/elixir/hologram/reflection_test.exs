@@ -398,10 +398,6 @@ defmodule Hologram.ReflectionTest do
     end
   end
 
-  test "release_priv_dir/0" do
-    assert release_priv_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv"
-  end
-
   describe "release_dist_dir/0" do
     test "returns 'dist' directory when in standalone mode" do
       original_mode = Application.get_env(:hologram, :mode)
@@ -450,6 +446,10 @@ defmodule Hologram.ReflectionTest do
 
       assert release_dist_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv/static"
     end
+  end
+
+  test "release_priv_dir/0" do
+    assert release_priv_dir() == File.cwd!() <> "/_build/test/lib/hologram/priv"
   end
 
   describe "protocol?/1" do
