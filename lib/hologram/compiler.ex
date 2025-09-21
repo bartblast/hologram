@@ -247,30 +247,31 @@ defmodule Hologram.Compiler do
       |> File.read!()
       |> CryptographicUtils.digest(:md5, :hex)
 
-    static_bundle_path_with_digest = Path.join(opts[:static_dir], "#{bundle_name}-#{digest}.js")
+    dist_bundle_path_with_digest =
+      Path.join([opts[:dist_dir], "hologram", "#{bundle_name}-#{digest}.js"])
 
     output_source_map_path = output_bundle_path <> ".map"
-    static_source_map_path_with_digest = static_bundle_path_with_digest <> ".map"
+    dist_source_map_path_with_digest = dist_bundle_path_with_digest <> ".map"
 
-    File.rename!(output_bundle_path, static_bundle_path_with_digest)
-    File.rename!(output_source_map_path, static_source_map_path_with_digest)
+    File.rename!(output_bundle_path, dist_bundle_path_with_digest)
+    File.rename!(output_source_map_path, dist_source_map_path_with_digest)
 
     js_with_replaced_source_map_url =
-      static_bundle_path_with_digest
+      dist_bundle_path_with_digest
       |> File.read!()
       |> String.replace(
         "//# sourceMappingURL=#{entry_name}.output.js.map",
         "//# sourceMappingURL=#{bundle_name}-#{digest}.js.map"
       )
 
-    File.write!(static_bundle_path_with_digest, js_with_replaced_source_map_url)
+    File.write!(dist_bundle_path_with_digest, js_with_replaced_source_map_url)
 
     %{
       bundle_name: bundle_name,
       digest: digest,
-      entry_name: entry_name,
-      static_bundle_path: static_bundle_path_with_digest,
-      static_source_map_path: static_source_map_path_with_digest
+      dist_bundle_path: dist_bundle_path_with_digest,
+      dist_source_map_path: dist_source_map_path_with_digest,
+      entry_name: entry_name
     }
   end
 

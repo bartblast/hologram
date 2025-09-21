@@ -187,13 +187,16 @@ defmodule Hologram.CompilerTest do
     tmp_dir = Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_2"])
 
     opts = [
+      dist_dir: Path.join(tmp_dir, "dist"),
       esbuild_bin_path: Path.join([@root_dir, "assets", "node_modules", ".bin", "esbuild"]),
-      static_dir: Path.join(tmp_dir, "static"),
       tmp_dir: tmp_dir
     ]
 
     clean_dir(tmp_dir)
-    File.mkdir!(opts[:static_dir])
+
+    opts[:dist_dir]
+    |> Path.join("hologram")
+    |> File.mkdir_p!()
 
     entry_file_path_1 = Path.join(tmp_dir, "MyPage.entry.js")
     File.write(entry_file_path_1, "export const myVar = 111;\n")
@@ -206,30 +209,30 @@ defmodule Hologram.CompilerTest do
       {"runtime", entry_file_path_2, "runtime"}
     ]
 
-    expected_static_bundle_path_1 =
-      Path.join(opts[:static_dir], "page-936cdd48d87d4ecd5720ad33b7fb4b7c.js")
+    expected_dist_bundle_path_1 =
+      Path.join([opts[:dist_dir], "hologram", "page-936cdd48d87d4ecd5720ad33b7fb4b7c.js"])
 
-    expected_static_source_map_path_1 = "#{expected_static_bundle_path_1}.map"
+    expected_dist_source_map_path_1 = "#{expected_dist_bundle_path_1}.map"
 
-    expected_static_bundle_path_2 =
-      Path.join(opts[:static_dir], "runtime-52169d07278b312ea39145c3b94c0203.js")
+    expected_dist_bundle_path_2 =
+      Path.join([opts[:dist_dir], "hologram", "runtime-52169d07278b312ea39145c3b94c0203.js"])
 
-    expected_static_source_map_path_2 = "#{expected_static_bundle_path_2}.map"
+    expected_dist_source_map_path_2 = "#{expected_dist_bundle_path_2}.map"
 
     assert bundle(entry_files_info, opts) == [
              %{
                digest: "936cdd48d87d4ecd5720ad33b7fb4b7c",
+               dist_bundle_path: expected_dist_bundle_path_1,
+               dist_source_map_path: expected_dist_source_map_path_1,
                entry_name: MyPage,
-               bundle_name: "page",
-               static_bundle_path: expected_static_bundle_path_1,
-               static_source_map_path: expected_static_source_map_path_1
+               bundle_name: "page"
              },
              %{
                digest: "52169d07278b312ea39145c3b94c0203",
+               dist_bundle_path: expected_dist_bundle_path_2,
+               dist_source_map_path: expected_dist_source_map_path_2,
                entry_name: "runtime",
-               bundle_name: "runtime",
-               static_bundle_path: expected_static_bundle_path_2,
-               static_source_map_path: expected_static_source_map_path_2
+               bundle_name: "runtime"
              }
            ]
 
@@ -239,7 +242,7 @@ defmodule Hologram.CompilerTest do
       //# sourceMappingURL=page-936cdd48d87d4ecd5720ad33b7fb4b7c.js.map
       """)
 
-    assert File.read!(expected_static_bundle_path_1) == expected_bundle_js_1
+    assert File.read!(expected_dist_bundle_path_1) == expected_bundle_js_1
 
     expected_bundle_js_2 =
       normalize_newlines("""
@@ -247,7 +250,7 @@ defmodule Hologram.CompilerTest do
       //# sourceMappingURL=runtime-52169d07278b312ea39145c3b94c0203.js.map
       """)
 
-    assert File.read!(expected_static_bundle_path_2) == expected_bundle_js_2
+    assert File.read!(expected_dist_bundle_path_2) == expected_bundle_js_2
 
     expected_source_map_js_1 =
       normalize_newlines("""
@@ -260,7 +263,7 @@ defmodule Hologram.CompilerTest do
       }
       """)
 
-    assert File.read!(expected_static_source_map_path_1) == expected_source_map_js_1
+    assert File.read!(expected_dist_source_map_path_1) == expected_source_map_js_1
 
     expected_source_map_js_2 =
       normalize_newlines("""
@@ -273,7 +276,7 @@ defmodule Hologram.CompilerTest do
       }
       """)
 
-    assert File.read!(expected_static_source_map_path_2) == expected_source_map_js_2
+    assert File.read!(expected_dist_source_map_path_2) == expected_source_map_js_2
   end
 
   describe "bundle/4" do
@@ -282,28 +285,35 @@ defmodule Hologram.CompilerTest do
         Path.join([Reflection.tmp_dir(), "tests", "compiler", "bundle_4_valid_entry_file"])
 
       opts = [
+        dist_dir: Path.join(tmp_dir, "dist"),
         esbuild_bin_path: Path.join([@root_dir, "assets", "node_modules", ".bin", "esbuild"]),
-        static_dir: Path.join(tmp_dir, "static"),
         tmp_dir: tmp_dir
       ]
 
       clean_dir(tmp_dir)
-      File.mkdir!(opts[:static_dir])
+
+      opts[:dist_dir]
+      |> Path.join("hologram")
+      |> File.mkdir_p!()
 
       entry_file_path = Path.join(tmp_dir, "MyPage.entry.js")
       File.write(entry_file_path, "export const myVar = 123;\n")
 
-      expected_static_bundle_path =
-        Path.join(opts[:static_dir], "my_bundle_name-76f1f092f95a34da067e35caad5e3317.js")
+      expected_dist_bundle_path =
+        Path.join([
+          opts[:dist_dir],
+          "hologram",
+          "my_bundle_name-76f1f092f95a34da067e35caad5e3317.js"
+        ])
 
-      expected_static_source_map_path = "#{expected_static_bundle_path}.map"
+      expected_dist_source_map_path = "#{expected_dist_bundle_path}.map"
 
       assert bundle(MyPage, entry_file_path, "my_bundle_name", opts) == %{
                bundle_name: "my_bundle_name",
                digest: "76f1f092f95a34da067e35caad5e3317",
-               entry_name: MyPage,
-               static_bundle_path: expected_static_bundle_path,
-               static_source_map_path: expected_static_source_map_path
+               dist_bundle_path: expected_dist_bundle_path,
+               dist_source_map_path: expected_dist_source_map_path,
+               entry_name: MyPage
              }
 
       expected_bundle_js =
@@ -312,7 +322,7 @@ defmodule Hologram.CompilerTest do
         //# sourceMappingURL=my_bundle_name-76f1f092f95a34da067e35caad5e3317.js.map
         """)
 
-      assert File.read!(expected_static_bundle_path) == expected_bundle_js
+      assert File.read!(expected_dist_bundle_path) == expected_bundle_js
 
       expected_source_map_js =
         normalize_newlines("""
@@ -325,7 +335,7 @@ defmodule Hologram.CompilerTest do
         }
         """)
 
-      assert File.read!(expected_static_source_map_path) == expected_source_map_js
+      assert File.read!(expected_dist_source_map_path) == expected_source_map_js
     end
 
     test "invalid entry file" do
