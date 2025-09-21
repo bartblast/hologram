@@ -8,6 +8,11 @@ defmodule Hologram.Assets.PathRegistry do
   alias Hologram.Reflection
 
   @doc """
+  Returns the path of the distribution dir used by the asset path registry registered process.
+  """
+  @callback dist_dir() :: String.t()
+
+  @doc """
   Returns the name of the ETS table used by the asset path registry registered process.
   """
   @callback ets_table_name() :: atom
@@ -16,11 +21,6 @@ defmodule Hologram.Assets.PathRegistry do
   Returns the process name registered for the the asset path registry.
   """
   @callback process_name() :: atom
-
-  @doc """
-  Returns the path of the static dir used by the asset path registry registered process.
-  """
-  @callback static_dir() :: String.t()
 
   @doc """
   Starts asset path registry process.
@@ -51,6 +51,14 @@ defmodule Hologram.Assets.PathRegistry do
   end
 
   @doc """
+  Returns the implementation of the asset path registry's distribution dir.
+  """
+  @spec dist_dir() :: String.t()
+  def dist_dir do
+    Reflection.release_dist_dir()
+  end
+
+  @doc """
   Returns the implementation of the asset path registry's ETS table name.
   """
   @spec ets_table_name() :: atom
@@ -67,12 +75,11 @@ defmodule Hologram.Assets.PathRegistry do
   end
 
   @doc """
-  Looks up the asset path (that includes the digest) of the given static file located in static dir.
-  If there is no matching entry for the given static file then :error atom is returned.
+  Looks up the distribution path for a given source asset path.
   """
   @spec lookup(String.t()) :: {:ok, String.t()} | :error
-  def lookup(static_path) do
-    ETS.get(impl().ets_table_name(), static_path)
+  def lookup(asset_path) do
+    ETS.get(impl().ets_table_name(), asset_path)
   end
 
   @doc """
@@ -84,11 +91,11 @@ defmodule Hologram.Assets.PathRegistry do
   end
 
   @doc """
-  Registers the given asset path under the given static path key in the registry.
+  Registers the given asset path under the given distribution path key in the registry.
   """
   @spec register(String.t(), String.t()) :: true
-  def register(static_path, asset_path) do
-    ETS.put(impl().ets_table_name(), static_path, asset_path)
+  def register(dist_path, asset_path) do
+    ETS.put(impl().ets_table_name(), dist_path, asset_path)
   end
 
   @doc """
@@ -102,49 +109,45 @@ defmodule Hologram.Assets.PathRegistry do
     populate(ets_table_name)
   end
 
-  @doc """
-  Returns the implementation of the asset path registry's static dir path.
-  """
-  @spec static_dir() :: String.t()
-  def static_dir do
-    Reflection.release_dist_dir()
+  defp dist_file_path_with_digest_suffix_regex(dist_dir) do
+    ~r"#{Regex.escape(dist_dir)}/(.+)\-([0-9a-f]{32})(.+)$"
   end
 
-  defp find_assets(static_dir) do
-    static_files = FileUtils.list_files_recursively(static_dir)
+  defp find_assets(dist_dir) do
+    dist_files = FileUtils.list_files_recursively(dist_dir)
 
-    assets_with_digest_suffix = find_assets_with_digest_suffix(static_dir, static_files)
+    assets_with_digest_suffix = find_assets_with_digest_suffix(dist_dir, dist_files)
 
     already_used_registry_keys = Enum.map(assets_with_digest_suffix, &elem(&1, 0))
 
     assets_without_digest_suffix =
-      static_dir
-      |> find_assets_without_digest_suffix(static_files)
+      dist_dir
+      |> find_assets_without_digest_suffix(dist_files)
       |> Enum.reject(fn {key, _path} -> key in already_used_registry_keys end)
 
     assets_with_digest_suffix ++ assets_without_digest_suffix
   end
 
-  defp find_assets_with_digest_suffix(static_dir, static_files) do
-    regex = static_file_path_with_digest_suffix_regex(static_dir)
+  defp find_assets_with_digest_suffix(dist_dir, dist_files) do
+    regex = dist_file_path_with_digest_suffix_regex(dist_dir)
 
-    static_files
+    dist_files
     |> Stream.map(&Regex.run(regex, &1))
     |> Stream.filter(& &1)
     |> Stream.map(&List.to_tuple/1)
     |> stream_reject_page_bundles()
     |> stream_reject_source_maps()
-    |> stream_build_asset_entries()
+    |> stream_dist_asset_entries()
     |> Enum.to_list()
   end
 
-  defp find_assets_without_digest_suffix(static_dir, static_files) do
-    regex = static_file_path_with_digest_suffix_regex(static_dir)
+  defp find_assets_without_digest_suffix(dist_dir, dist_files) do
+    regex = dist_file_path_with_digest_suffix_regex(dist_dir)
 
-    static_files
+    dist_files
     |> Enum.reject(&Regex.run(regex, &1))
     |> Enum.map(fn absolute_file_path ->
-      relative_file_path = String.replace_prefix(absolute_file_path, "#{static_dir}/", "")
+      relative_file_path = String.replace_prefix(absolute_file_path, "#{dist_dir}/", "")
       {relative_file_path, "/#{relative_file_path}"}
     end)
   end
@@ -154,16 +157,12 @@ defmodule Hologram.Assets.PathRegistry do
   end
 
   defp populate(ets_table_name) do
-    impl().static_dir()
+    impl().dist_dir()
     |> find_assets()
     |> Enum.each(fn {key, value} -> ETS.put(ets_table_name, key, value) end)
   end
 
-  defp static_file_path_with_digest_suffix_regex(static_dir) do
-    ~r"#{Regex.escape(static_dir)}/(.+)\-([0-9a-f]{32})(.+)$"
-  end
-
-  defp stream_build_asset_entries(file_infos) do
+  defp stream_dist_asset_entries(file_infos) do
     Stream.map(file_infos, fn {_file_path, prefix, digest, suffix} ->
       {prefix <> suffix, "/#{prefix}-#{digest}#{suffix}"}
     end)

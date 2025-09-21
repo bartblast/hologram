@@ -42,7 +42,7 @@ defmodule Hologram.Test.Stubs do
       ETS.delete(ets_table_name)
     end
 
-    mapping = setup_asset_fixtures(stub.static_dir())
+    mapping = setup_asset_fixtures(stub.dist_dir())
 
     if start_link do
       AssetPathRegistry.start_link([])
@@ -107,13 +107,13 @@ defmodule Hologram.Test.Stubs do
       defmodule alias!(unquote(random_module).AssetPathRegistryStub) do
         @behaviour AssetPathRegistry
 
-        def static_dir do
+        def dist_dir do
           Path.join([
             Reflection.tmp_dir(),
             "tests",
             "stubs",
             "asset_path_registry",
-            "static_dir_0",
+            "dist_dir_0",
             unquote(random_string())
           ])
         end
