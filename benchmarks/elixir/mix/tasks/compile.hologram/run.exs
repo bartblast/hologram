@@ -44,10 +44,10 @@ Benchee.run(
     opts = [
       assets_dir: benchmark_assets_dir,
       build_dir: Path.join(benchmark_tmp_dir, "build"),
+      dist_dir: Path.join(benchmark_tmp_dir, "dist"),
       esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
       formatter_bin_path: Path.join([node_modules_path, ".bin", "biome"]),
       js_dir: Path.join(lib_assets_dir, "js"),
-      static_dir: Path.join(benchmark_tmp_dir, "static"),
       tmp_dir: Path.join(benchmark_tmp_dir, "tmp")
     ]
 

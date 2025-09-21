@@ -16,15 +16,15 @@ Benchee.run(
 
     opts = [
       assets_dir: assets_dir,
+      dist_dir: Path.join(tmp_dir, "dist"),
       esbuild_bin_path: Path.join([node_modules_path, ".bin", "esbuild"]),
       formatter_bin_path: Path.join([node_modules_path, ".bin", "biome"]),
       js_dir: Path.join([assets_dir, "js"]),
-      tmp_dir: tmp_dir,
-      static_dir: Path.join(tmp_dir, "static")
+      tmp_dir: tmp_dir
     ]
 
     FileUtils.recreate_dir(opts[:tmp_dir])
-    File.mkdir!(opts[:static_dir])
+    File.mkdir!(opts[:dist_dir])
 
     ir_plt = Compiler.build_ir_plt()
 
