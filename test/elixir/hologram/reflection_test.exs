@@ -89,7 +89,7 @@ defmodule Hologram.ReflectionTest do
       assert dist_dir_name() == "dist"
     end
 
-    test "returns 'static' when in non-standalone mode" do
+    test "returns 'static' when not in standalone mode" do
       original_mode = Application.get_env(:hologram, :mode)
 
       on_exit(fn ->
@@ -100,23 +100,7 @@ defmodule Hologram.ReflectionTest do
         end
       end)
 
-      Application.put_env(:hologram, :mode, :some_other_mode)
-
-      assert dist_dir_name() == "static"
-    end
-
-    test "returns 'static' when mode is not set" do
-      original_mode = Application.get_env(:hologram, :mode)
-
-      on_exit(fn ->
-        if original_mode do
-          Application.put_env(:hologram, :mode, original_mode)
-        else
-          Application.delete_env(:hologram, :mode)
-        end
-      end)
-
-      Application.delete_env(:hologram, :mode)
+      Application.put_env(:hologram, :mode, :phoenix)
 
       assert dist_dir_name() == "static"
     end

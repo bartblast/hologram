@@ -130,7 +130,7 @@ defmodule Hologram.Reflection do
   """
   @spec dist_dir_name :: String.t()
   def dist_dir_name do
-    if Application.get_env(:hologram, :mode) == :standalone do
+    if standalone_mode?() do
       "dist"
     else
       "static"
