@@ -488,6 +488,56 @@ defmodule Hologram.ReflectionTest do
     assert source_path(__MODULE__) == __ENV__.file
   end
 
+  describe "standalone_mode?/0" do
+    test "returns true when in standalone mode" do
+      original_mode = Application.get_env(:hologram, :mode)
+
+      on_exit(fn ->
+        if original_mode do
+          Application.put_env(:hologram, :mode, original_mode)
+        else
+          Application.delete_env(:hologram, :mode)
+        end
+      end)
+
+      Application.put_env(:hologram, :mode, :standalone)
+
+      assert standalone_mode?()
+    end
+
+    test "returns false when in non-standalone mode" do
+      original_mode = Application.get_env(:hologram, :mode)
+
+      on_exit(fn ->
+        if original_mode do
+          Application.put_env(:hologram, :mode, original_mode)
+        else
+          Application.delete_env(:hologram, :mode)
+        end
+      end)
+
+      Application.put_env(:hologram, :mode, :phoenix)
+
+      refute standalone_mode?()
+    end
+
+    test "returns false when mode is not set" do
+      original_mode = Application.get_env(:hologram, :mode)
+
+      on_exit(fn ->
+        if original_mode do
+          Application.put_env(:hologram, :mode, original_mode)
+        else
+          Application.delete_env(:hologram, :mode)
+        end
+      end)
+
+      Application.delete_env(:hologram, :mode)
+
+      refute standalone_mode?()
+    end
+  end
+
   describe "templatable?" do
     test "is a component module" do
       assert templatable?(Module3)

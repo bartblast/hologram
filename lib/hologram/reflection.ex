@@ -555,6 +555,28 @@ defmodule Hologram.Reflection do
   end
 
   @doc """
+  Returns true if Hologram is running in standalone mode, false otherwise.
+
+  ## Examples
+
+      iex> Application.put_env(:hologram, :mode, :standalone)
+      iex> standalone_mode?()
+      true
+
+      iex> Application.put_env(:hologram, :mode, :phoenix)
+      iex> standalone_mode?()
+      false
+
+      iex> Application.delete_env(:hologram, :mode)
+      iex> standalone_mode?()
+      false
+  """
+  @spec standalone_mode? :: boolean
+  def standalone_mode? do
+    Application.get_env(:hologram, :mode) == :standalone
+  end
+
+  @doc """
   Returns true if the given term is a component (a module that has a "use Hologram.Component" directive)
   or a page (a module that has a "use Hologram.Page" directive).
   Otherwise false is returned.
