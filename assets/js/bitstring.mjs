@@ -23,7 +23,10 @@ export default class Bitstring {
 
   static calculateSegmentBitCount(segment) {
     const size = $.resolveSegmentSize(segment);
+    if (size === null) return null;
+
     const unit = $.resolveSegmentUnit(segment);
+    if (unit === null) return null;
 
     return size * unit;
   }

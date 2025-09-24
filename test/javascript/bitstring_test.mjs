@@ -81,6 +81,29 @@ describe("Bitstring", () => {
 
       assert.equal(Bitstring.calculateSegmentBitCount(segment), 8);
     });
+
+    it("returns null when segment size can't be determined", () => {
+      const value = Type.bitstring("hello");
+
+      // This will cause resolveSegmentSize() to return null
+      const segment = Type.bitstringSegment(value, {
+        type: "bitstring",
+      });
+
+      assert.equal(Bitstring.calculateSegmentBitCount(segment), null);
+    });
+
+    it("returns null when unit can't be determined", () => {
+      const value = Type.bitstring("hello");
+
+      // This will cause resolveSegmentUnit() to return null
+      const segment = Type.bitstringSegment(value, {
+        type: "bitstring",
+        size: Type.integer(4),
+      });
+
+      assert.equal(Bitstring.calculateSegmentBitCount(segment), null);
+    });
   });
 
   it("calculateTextByteCount()", () => {
