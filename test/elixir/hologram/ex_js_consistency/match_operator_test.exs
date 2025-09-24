@@ -137,6 +137,114 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
         <<1, 2::size(9)>> = <<1, 2>>
       end
     end
+
+    test "last binary segment without size consumes all remaining bits" do
+      <<prefix::size(8), rest::binary>> = "hello"
+
+      assert prefix == 104
+      assert rest == "ello"
+    end
+
+    test "last bitstring segment without size consumes all remaining bits" do
+      <<prefix::size(8), rest::bitstring>> = "hello"
+
+      assert prefix == 104
+      assert rest == "ello"
+    end
+
+    test "last bitstring segment without size consumes remaining bits even when not byte-aligned" do
+      <<prefix::size(12), rest::bitstring>> = <<1, 2, 3>>
+
+      assert prefix == 16
+      assert rest == <<32, 3::size(4)>>
+    end
+
+    test "last binary segment without size handles empty remaining bits" do
+      <<prefix::size(8), rest::binary>> = "h"
+
+      assert prefix == 104
+      assert rest == ""
+    end
+
+    test "last bitstring segment without size handles empty remaining bits" do
+      <<prefix::size(8), rest::bitstring>> = "h"
+
+      assert prefix == 104
+      assert rest == ""
+    end
+
+    test "single last binary segment without size consumes entire bitstring" do
+      <<rest::binary>> = "hello"
+
+      assert rest == "hello"
+    end
+
+    test "single last bitstring segment without size consumes entire bitstring" do
+      <<rest::bitstring>> = "hello"
+
+      assert rest == "hello"
+    end
+
+    test "single last bitstring segment without size consumes entire non-byte-aligned bitstring" do
+      <<rest::bitstring>> = <<1::1, 0::1, 1::1>>
+
+      assert rest == <<1::1, 0::1, 1::1>>
+    end
+
+    test "single last binary segment without size consumes empty bitstring" do
+      <<rest::binary>> = ""
+
+      assert rest == ""
+    end
+
+    test "single last bitstring segment without size consumes empty bitstring" do
+      <<rest::bitstring>> = ""
+
+      assert rest == ""
+    end
+
+    # This won't compile
+    # <<first::binary, second::size(8)>> = "hello"
+    # test "non-last binary segment without size fails normally"
+
+    # This won't compile
+    # <<first::bitstring, second::size(8)>> = "hello"
+    # test "non-last bitstring segment without size fails normally"    
+
+    test "last binary segment with explicit size uses normal size calculation" do
+      <<prefix::size(8), rest::binary-size(4)>> = "hello"
+
+      assert prefix == 104
+      assert rest == "ello"
+    end
+
+    test "last bitstring segment with explicit size uses normal size calculation" do
+      <<prefix::size(8), rest::bitstring-size(4 * 8)>> = "hello"
+
+      assert prefix == 104
+      assert rest == "ello"
+    end
+
+    test "last binary segment with size larger than remaining bits fails" do
+      assert_error MatchError, ~s'no match of right hand side value: "hello"', fn ->
+        <<prefix::size(8), rest::binary-size(40)>> = "hello"
+        {prefix, rest}
+      end
+    end
+
+    test "last bitstring segment with size larger than remaining bits fails" do
+      assert_error MatchError, ~s'no match of right hand side value: "hello"', fn ->
+        <<prefix::size(8), rest::bitstring-size(40)>> = "hello"
+        {prefix, rest}
+      end
+    end
+
+    test "last integer segment without size uses normal size calculation and fails due to leftover bits" do
+      assert_error MatchError, ~s'no match of right hand side value: "hello"', fn ->
+        <<prefix::size(8), rest::integer>> = "hello"
+        {prefix, rest}
+      end
+    end
   end
 
   describe "bitstring segment decoding, signed modifier" do
