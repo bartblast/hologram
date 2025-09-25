@@ -16,6 +16,7 @@ Website: https://hologram.page
 * Darren Black, [@totaltrash](https://github.com/totaltrash)
 * [@jzimmek](https://github.com/jzimmek)
 * Lucas Sifoni, [@Lucassifoni](https://github.com/Lucassifoni)
+* Nicholas Moen, [@arcanemachine](https://github.com/arcanemachine)
 
 Thank you to all other sponsors for supporting the project!
 
