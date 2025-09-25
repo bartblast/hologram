@@ -1370,6 +1370,9 @@ export default class Interpreter {
           context,
           raiseMatchError,
         );
+      } else if (segment.value.type === "match_placeholder") {
+        // Match placeholder in bitstring patterns just consumes the chunk without binding
+        // This is equivalent to _ in Elixir bitstring patterns
       } else {
         const segmentBitstring = Bitstring.fromSegments([segment]);
 

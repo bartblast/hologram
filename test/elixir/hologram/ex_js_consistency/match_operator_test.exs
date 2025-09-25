@@ -568,10 +568,29 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
   end
 
-  # _var = 2
-  test "match placeholder" do
-    result = _var = 2
-    assert result == 2
+  describe "match placeholder" do
+    # _var = 2
+    test "integer" do
+      result = _var = 2
+
+      assert result == 2
+    end
+
+    # <<prefix::size(8), _rest::binary>> = "hello"
+    test "last bitstring segment" do
+      result = <<prefix::size(8), _rest::binary>> = "hello"
+
+      assert result == "hello"
+      assert prefix == 104
+    end
+
+    # <<_prefix::size(8), rest::binary>> = "hello"
+    test "non-last bitstring segment" do
+      result = <<_prefix::size(8), rest::binary>> = "hello"
+
+      assert result == "hello"
+      assert rest == "ello"
+    end
   end
 
   describe "nested match operators" do
