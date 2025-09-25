@@ -1923,6 +1923,76 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "split_binary/2" do
+    test "splits binary at position 0" do
+      binary = "0123456789"
+
+      assert :erlang.split_binary(binary, 0) == {"", "0123456789"}
+    end
+
+    test "splits binary at middle position" do
+      binary = "0123456789"
+
+      assert :erlang.split_binary(binary, 3) == {"012", "3456789"}
+    end
+
+    test "splits binary at end position" do
+      binary = "0123456789"
+
+      assert :erlang.split_binary(binary, 10) == {"0123456789", ""}
+    end
+
+    test "splits empty binary" do
+      binary = ""
+
+      assert :erlang.split_binary(binary, 0) == {"", ""}
+    end
+
+    test "splits single character binary" do
+      binary = "a"
+
+      assert :erlang.split_binary(binary, 1) == {"a", ""}
+    end
+
+    test "splits Unicode binary" do
+      binary = "全息图全息图"
+
+      assert :erlang.split_binary(binary, 4) ==
+               {<<229, 133, 168, 230>>,
+                <<129, 175, 229, 155, 190, 229, 133, 168, 230, 129, 175, 229, 155, 190>>}
+    end
+
+    test "raises ArgumentError if the first argument is not a binary" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :split_binary, [:abc, 1]}
+    end
+
+    test "raises ArgumentError if the first argument is a non-binary bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :split_binary, [<<1::1, 0::1, 1::1>>, 1]}
+    end
+
+    test "raises ArgumentError if the second argument is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer"),
+                   {:erlang, :split_binary, ["abc", :invalid]}
+    end
+
+    test "raises ArgumentError if the second argument is a negative integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "out of range"),
+                   {:erlang, :split_binary, ["abc", -1]}
+    end
+
+    test "raises ArgumentError if position is greater than binary size" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "out of range"),
+                   {:erlang, :split_binary, ["abc", 4]}
+    end
+  end
+
   describe "tl/1" do
     test "proper list, 1 item" do
       assert :erlang.tl([1]) == []

@@ -4,11 +4,13 @@ import {
   assert,
   assertBoxedError,
   assertBoxedFalse,
+  assertBoxedStrictEqual,
   assertBoxedTrue,
   contextFixture,
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
+import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
@@ -2596,6 +2598,121 @@ describe("Erlang", () => {
           ),
         "ArgumentError",
         "argument error: nil",
+      );
+    });
+  });
+
+  describe("split_binary/2", () => {
+    const split_binary = Erlang["split_binary/2"];
+
+    const emptyBitstring = Type.bitstring("");
+
+    it("splits binary at position 0", () => {
+      const binary = Type.bitstring("0123456789");
+      const position = Type.integer(0);
+
+      const result = split_binary(binary, position);
+      const expected = Type.tuple([emptyBitstring, binary]);
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("splits binary at middle position", () => {
+      const binary = Type.bitstring("0123456789");
+      const position = Type.integer(3);
+
+      const result = split_binary(binary, position);
+      const expected = Type.tuple([
+        Type.bitstring("012"),
+        Type.bitstring("3456789"),
+      ]);
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("splits binary at end position", () => {
+      const binary = Type.bitstring("0123456789");
+      const position = Type.integer(10);
+
+      const result = split_binary(binary, position);
+      const expected = Type.tuple([binary, emptyBitstring]);
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("splits empty binary", () => {
+      const binary = emptyBitstring;
+      const position = Type.integer(0);
+
+      const result = split_binary(binary, position);
+      const expected = Type.tuple([emptyBitstring, emptyBitstring]);
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("splits single character binary", () => {
+      const binary = Type.bitstring("a");
+      const position = Type.integer(1);
+
+      const result = split_binary(binary, position);
+      const expected = Type.tuple([binary, emptyBitstring]);
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("splits Unicode binary", () => {
+      const binary = Type.bitstring("全息图全息图");
+      const position = Type.integer(4);
+
+      const result = split_binary(binary, position);
+
+      const expected = Type.tuple([
+        Bitstring.fromBytes([229, 133, 168, 230]),
+        Bitstring.fromBytes([
+          129, 175, 229, 155, 190, 229, 133, 168, 230, 129, 175, 229, 155, 190,
+        ]),
+      ]);
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if the first argument is not a binary", () => {
+      assertBoxedError(
+        () => split_binary(Type.atom("abc"), Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("raises ArgumentError if the first argument is a non-binary bitstring", () => {
+      assertBoxedError(
+        () => split_binary(Type.bitstring([1, 0, 1]), Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not an integer", () => {
+      assertBoxedError(
+        () => split_binary(Type.bitstring("abc"), Type.atom("invalid")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is a negative integer", () => {
+      assertBoxedError(
+        () => split_binary(Type.bitstring("abc"), Type.integer(-1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if position is greater than binary size", () => {
+      assertBoxedError(
+        () => split_binary(Type.bitstring("abc"), Type.integer(4)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
       );
     });
   });

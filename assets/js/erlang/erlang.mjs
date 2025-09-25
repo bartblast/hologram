@@ -828,6 +828,61 @@ const Erlang = {
   // End orelse/2
   // Deps: []
 
+  // Start split_binary/2
+  "split_binary/2": (binary, position) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    if (!Type.isInteger(position)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (position.value < 0n) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    }
+
+    const pos = Number(position.value);
+    const totalBytes = Number(Erlang["byte_size/1"](binary).value);
+
+    if (pos > totalBytes) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    }
+
+    // If position is 0, first part is empty binary
+    if (pos === 0) {
+      return Type.tuple([Type.bitstring(""), binary]);
+    }
+
+    // If position equals total size, second part is empty binary
+    if (pos === totalBytes) {
+      return Type.tuple([binary, Type.bitstring("")]);
+    }
+
+    // Split the binary using takeChunk
+    // First part: from start to position (pos bytes)
+    const firstPart = Bitstring.takeChunk(binary, 0, pos * 8);
+
+    // Second part: from position to end
+    const secondPart = Bitstring.takeChunk(
+      binary,
+      pos * 8,
+      (totalBytes - pos) * 8,
+    );
+
+    return Type.tuple([firstPart, secondPart]);
+  },
+  // End split_binary/2
+  // Deps: [:erlang.byte_size/1]
+
   // Start tl/1
   "tl/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
