@@ -1412,15 +1412,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "lowercase letters" do
-      assert :erlang.binary_to_integer("abcd", 16) == 43981
+      assert :erlang.binary_to_integer("abcd", 16) == 43_981
     end
 
     test "uppercase letters" do
-      assert :erlang.binary_to_integer("ABCD", 16) == 43981
+      assert :erlang.binary_to_integer("ABCD", 16) == 43_981
     end
 
     test "mixed case letters" do
-      assert :erlang.binary_to_integer("aBcD", 16) == 43981
+      assert :erlang.binary_to_integer("aBcD", 16) == 43_981
     end
 
     test "raises ArgumentError if the first argument is not a binary" do

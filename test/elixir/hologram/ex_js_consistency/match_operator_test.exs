@@ -219,7 +219,7 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
 
     # This won't compile
     # <<first::bitstring, second::size(8)>> = "hello"
-    # test "non-last bitstring segment without size fails normally"    
+    # test "non-last bitstring segment without size fails normally"
 
     test "last binary segment with explicit size uses normal size calculation" do
       result = <<prefix::size(8), rest::binary-size(4)>> = "hello"
