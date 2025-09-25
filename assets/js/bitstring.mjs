@@ -23,7 +23,10 @@ export default class Bitstring {
 
   static calculateSegmentBitCount(segment) {
     const size = $.resolveSegmentSize(segment);
+    if (size === null) return null;
+
     const unit = $.resolveSegmentUnit(segment);
+    if (unit === null) return null;
 
     return size * unit;
   }
@@ -619,21 +622,11 @@ export default class Bitstring {
   }
 
   static resolveSegmentUnit(segment) {
-    if (segment.unit !== null && segment.size !== null) {
+    if (segment.unit !== null) {
       return Number(segment.unit);
     }
 
-    switch (segment.type) {
-      case "binary":
-        return 8;
-
-      case "float":
-      case "integer":
-        return 1;
-
-      default:
-        return null;
-    }
+    return segment.type === "binary" ? 8 : 1;
   }
 
   static serialize(bitstring) {

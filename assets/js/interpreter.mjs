@@ -1313,8 +1313,10 @@ export default class Interpreter {
     let chunkOffset = 0;
     const rightBitCount = Bitstring.calculateBitCount(right);
 
-    for (const segment of left.segments) {
+    for (let i = 0; i < left.segments.length; i++) {
+      const segment = left.segments[i];
       const segmentType = segment.type;
+      const isLastSegment = i === left.segments.length - 1;
 
       if (
         segmentType === "utf8" ||
@@ -1327,7 +1329,23 @@ export default class Interpreter {
         throw new HologramInterpreterError(message);
       }
 
-      const chunkBitCount = Bitstring.calculateSegmentBitCount(segment);
+      let chunkBitCount;
+
+      // Special case: last segment with binary or bitstring type and no explicit size
+      // should consume all remaining bits
+      if (
+        isLastSegment &&
+        (segmentType === "binary" || segmentType === "bitstring") &&
+        segment.size === null
+      ) {
+        chunkBitCount = rightBitCount - chunkOffset;
+      } else {
+        chunkBitCount = Bitstring.calculateSegmentBitCount(segment);
+
+        if (chunkBitCount === null) {
+          return $.#handleMatchFail(right, raiseMatchError);
+        }
+      }
 
       if (
         segment.type === "float" &&
@@ -1352,6 +1370,9 @@ export default class Interpreter {
           context,
           raiseMatchError,
         );
+      } else if (segment.value.type === "match_placeholder") {
+        // Match placeholder in bitstring patterns just consumes the chunk without binding
+        // This is equivalent to _ in Elixir bitstring patterns
       } else {
         const segmentBitstring = Bitstring.fromSegments([segment]);
 
