@@ -139,67 +139,77 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     end
 
     test "last binary segment without size consumes all remaining bits" do
-      <<prefix::size(8), rest::binary>> = "hello"
+      result = <<prefix::size(8), rest::binary>> = "hello"
 
+      assert result == "hello"
       assert prefix == 104
       assert rest == "ello"
     end
 
     test "last bitstring segment without size consumes all remaining bits" do
-      <<prefix::size(8), rest::bitstring>> = "hello"
+      result = <<prefix::size(8), rest::bitstring>> = "hello"
 
+      assert result == "hello"
       assert prefix == 104
       assert rest == "ello"
     end
 
     test "last bitstring segment without size consumes remaining bits even when not byte-aligned" do
-      <<prefix::size(12), rest::bitstring>> = <<1, 2, 3>>
+      result = <<prefix::size(12), rest::bitstring>> = <<1, 2, 3>>
 
+      assert result == <<1, 2, 3>>
       assert prefix == 16
       assert rest == <<32, 3::size(4)>>
     end
 
     test "last binary segment without size handles empty remaining bits" do
-      <<prefix::size(8), rest::binary>> = "h"
+      result = <<prefix::size(8), rest::binary>> = "h"
 
+      assert result == "h"
       assert prefix == 104
       assert rest == ""
     end
 
     test "last bitstring segment without size handles empty remaining bits" do
-      <<prefix::size(8), rest::bitstring>> = "h"
+      result = <<prefix::size(8), rest::bitstring>> = "h"
 
+      assert result == "h"
       assert prefix == 104
       assert rest == ""
     end
 
     test "single last binary segment without size consumes entire bitstring" do
-      <<rest::binary>> = "hello"
+      result = <<rest::binary>> = "hello"
 
+      assert result == "hello"
       assert rest == "hello"
     end
 
     test "single last bitstring segment without size consumes entire bitstring" do
-      <<rest::bitstring>> = "hello"
+      result = <<rest::bitstring>> = "hello"
 
+      assert result == "hello"
       assert rest == "hello"
     end
 
     test "single last bitstring segment without size consumes entire non-byte-aligned bitstring" do
-      <<rest::bitstring>> = <<1::1, 0::1, 1::1>>
+      result = <<rest::bitstring>> = <<1::1, 0::1, 1::1>>
 
+      assert result == <<1::1, 0::1, 1::1>>
       assert rest == <<1::1, 0::1, 1::1>>
     end
 
     test "single last binary segment without size consumes empty bitstring" do
-      <<rest::binary>> = ""
+      result = <<rest::binary>> = ""
 
+      assert result == ""
       assert rest == ""
     end
 
     test "single last bitstring segment without size consumes empty bitstring" do
-      <<rest::bitstring>> = ""
+      result = <<rest::bitstring>> = ""
 
+      assert result == ""
       assert rest == ""
     end
 
@@ -212,15 +222,17 @@ defmodule Hologram.ExJsConsistency.MatchOperatorTest do
     # test "non-last bitstring segment without size fails normally"    
 
     test "last binary segment with explicit size uses normal size calculation" do
-      <<prefix::size(8), rest::binary-size(4)>> = "hello"
+      result = <<prefix::size(8), rest::binary-size(4)>> = "hello"
 
+      assert result == "hello"
       assert prefix == 104
       assert rest == "ello"
     end
 
     test "last bitstring segment with explicit size uses normal size calculation" do
-      <<prefix::size(8), rest::bitstring-size(4 * 8)>> = "hello"
+      result = <<prefix::size(8), rest::bitstring-size(4 * 8)>> = "hello"
 
+      assert result == "hello"
       assert prefix == 104
       assert rest == "ello"
     end
