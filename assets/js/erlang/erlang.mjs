@@ -30,7 +30,6 @@ MFAs for sorting:
   {:erlang, :==, 2},
   {:erlang, :>, 2},
   {:erlang, :>=, 2},
-  {:erlang, :binary_to_integer, 2},
 ]
 |> Enum.sort()
 */
@@ -387,8 +386,9 @@ const Erlang = {
     const text = Bitstring.toText(binary);
     const baseNum = Number(base.value);
 
-    // Validate the text representation based on the base
     let validPattern;
+
+    // Validate the text representation based on the base
     if (baseNum <= 10) {
       const maxDigit = String(baseNum - 1);
       validPattern = new RegExp(`^[+-]?[0-${maxDigit}]+$`);
@@ -410,6 +410,7 @@ const Erlang = {
     // For other bases, use parseInt which handles the base conversion
     const result =
       baseNum === 10 ? BigInt(text) : BigInt(parseInt(text, baseNum));
+
     return Type.integer(result);
   },
   // End binary_to_integer/2
