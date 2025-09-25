@@ -7,9 +7,11 @@ defmodule Hologram.Assets.Pipeline do
   def run(opts) do
     _assets_dir = opts[:assets_dir]
     dist_dir = opts[:dist_dir]
-    _tmp_dir = opts[:tmp_dir]
+    tmp_dist_dir = Path.join(opts[:tmp_dir], "dist")
 
     _old_dist_files = list_old_dist_files(dist_dir)
+
+    FileUtils.recreate_dir(tmp_dist_dir)
   end
 
   defp list_old_dist_files(dist_dir) do
