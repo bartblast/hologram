@@ -1,6 +1,7 @@
 defmodule Hologram.Assets.Pipeline do
   @moduledoc false
 
+  alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PathUtils
 
@@ -10,9 +11,15 @@ defmodule Hologram.Assets.Pipeline do
     tmp_dist_dir = Path.join(opts[:tmp_dir], "dist")
 
     _old_dist_files = list_old_dist_files(dist_dir)
-    copy_assets(assets_dir, tmp_dist_dir)
 
     FileUtils.recreate_dir(tmp_dist_dir)
+
+    copy_assets(assets_dir, tmp_dist_dir)
+
+    tmp_dist_dir
+    |> FileUtils.list_files_recursively()
+    |> Stream.map(&{&1, File.read!(&1)})
+    |> stream_digest()
   end
 
   defp copy_assets(assets_dir, tmp_dist_dir) do
@@ -34,5 +41,20 @@ defmodule Hologram.Assets.Pipeline do
       images_target_path = Path.join(tmp_dist_dir, "images")
       File.cp_r!(images_source_path, images_target_path)
     end
+  end
+
+  defp stream_digest(file_infos) do
+    Stream.each(file_infos, fn {file_path, file_content} ->
+      file_extension = Path.extname(file_path)
+      file_name = Path.basename(file_path, file_extension)
+      file_dir = Path.dirname(file_path)
+
+      digest = CryptographicUtils.digest(file_content, :md5, :hex)
+
+      new_file_name = "#{file_name}-#{digest}#{file_extension}"
+      new_file_path = Path.join(file_dir, new_file_name)
+
+      File.write!(new_file_path, file_content)
+    end)
   end
 end
