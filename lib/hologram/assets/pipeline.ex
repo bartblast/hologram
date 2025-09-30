@@ -42,16 +42,27 @@ defmodule Hologram.Assets.Pipeline do
     |> Enum.reject(&String.starts_with?(&1, hologram_dir_prefix))
   end
 
-  defp stream_compress_assets(_todo), do: :todo
+  defp stream_compress_assets(assets) do
+    Stream.map(assets, fn asset ->
+      compressed_asset_content = :zlib.gzip(asset.content)
+      compressed_asset_path = asset.digested_asset_path <> ".gz"
+
+      File.write!(compressed_asset_path, compressed_asset_content)
+
+      Map.put(asset, :compressed_asset_path, compressed_asset_path)
+    end)
+  end
 
   defp stream_digest_assets(assets, dist_dir) do
-    Stream.each(assets, fn asset ->
+    Stream.map(assets, fn asset ->
       digest = CryptographicUtils.digest(asset.content, :md5, :hex)
 
-      digested_asset_name = "#{asset.name}-#{digest}#{asset.extension}"
+      digested_asset_name = "#{asset.basename}-#{digest}#{asset.extension}"
       digested_asset_path = Path.join([dist_dir, asset.relative_dir, digested_asset_name])
 
       FileUtils.write_p!(digested_asset_path, asset.content)
+
+      Map.put(asset, :digested_asset_path, digested_asset_path)
     end)
   end
 
@@ -65,8 +76,8 @@ defmodule Hologram.Assets.Pipeline do
         |> Path.relative_to(assets_dir)
 
       %{
+        basename: Path.basename(asset_path, extension),
         extension: extension,
-        name: Path.basename(asset_path, extension),
         path: asset_path,
         relative_dir: relative_dir
       }
