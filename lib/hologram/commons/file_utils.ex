@@ -4,6 +4,18 @@ defmodule Hologram.Commons.FileUtils do
   alias Hologram.Commons.Types, as: T
 
   @doc """
+  Copies a file to a destination, creating parent directories as needed.
+  """
+  @spec cp_p!(T.file_path(), T.file_path()) :: :ok
+  def cp_p!(source_path, dest_path) do
+    dest_path
+    |> Path.dirname()
+    |> File.mkdir_p!()
+
+    File.cp!(source_path, dest_path)
+  end
+
+  @doc """
   Lists files nested in the given path or paths. The results are sorted in ascending order.
   The result doesn't include directories.
 
@@ -92,17 +104,5 @@ defmodule Hologram.Commons.FileUtils do
     |> File.mkdir_p!()
 
     File.write!(file_path, content)
-  end
-
-  @doc """
-  Copies a file to a destination, creating parent directories as needed.
-  """
-  @spec cp_p!(T.file_path(), T.file_path()) :: :ok
-  def cp_p!(source_path, dest_path) do
-    dest_path
-    |> Path.dirname()
-    |> File.mkdir_p!()
-
-    File.cp!(source_path, dest_path)
   end
 end

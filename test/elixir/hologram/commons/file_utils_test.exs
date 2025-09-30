@@ -3,6 +3,55 @@ defmodule Hologram.Commons.FileUtilsTest do
   import Hologram.Commons.FileUtils
   alias Hologram.Reflection
 
+  describe "cp_p!/2" do
+    setup do
+      test_dir =
+        Path.join([
+          Reflection.tmp_dir(),
+          "tests",
+          "commons",
+          "file_utils",
+          "cp_p!_2"
+        ])
+
+      clean_dir(test_dir)
+
+      source_path = Path.join(test_dir, "source.txt")
+      File.write!(source_path, "source content")
+
+      dest_dir = Path.join(test_dir, "nested")
+      dest_path = Path.join(dest_dir, "dest.txt")
+
+      [source_path: source_path, dest_dir: dest_dir, dest_path: dest_path]
+    end
+
+    test "copies file to destination, creating parent directories when they don't exist", %{
+      dest_dir: dest_dir,
+      dest_path: dest_path,
+      source_path: source_path
+    } do
+      refute File.exists?(dest_dir)
+      refute File.exists?(dest_path)
+
+      assert cp_p!(source_path, dest_path) == :ok
+      assert File.read!(dest_path) == "source content"
+    end
+
+    test "copies file to destination when parent directories already exist", %{
+      dest_dir: dest_dir,
+      dest_path: dest_path,
+      source_path: source_path
+    } do
+      clean_dir(dest_dir)
+
+      assert File.exists?(dest_dir)
+      refute File.exists?(dest_path)
+
+      assert cp_p!(source_path, dest_path) == :ok
+      assert File.read!(dest_path) == "source content"
+    end
+  end
+
   describe "list_files_recursively/1" do
     @base_dir "test/elixir/support/fixtures/commons/file_utils/list_files_recursively"
 
@@ -214,55 +263,6 @@ defmodule Hologram.Commons.FileUtilsTest do
       content = "test content"
       assert write_p!(file_path, content) == :ok
       assert File.read!(file_path) == content
-    end
-  end
-
-  describe "cp_p!/2" do
-    setup do
-      test_dir =
-        Path.join([
-          Reflection.tmp_dir(),
-          "tests",
-          "commons",
-          "file_utils",
-          "cp_p!_2"
-        ])
-
-      clean_dir(test_dir)
-
-      source_path = Path.join(test_dir, "source.txt")
-      File.write!(source_path, "source content")
-
-      dest_dir = Path.join(test_dir, "nested")
-      dest_path = Path.join(dest_dir, "dest.txt")
-
-      [source_path: source_path, dest_dir: dest_dir, dest_path: dest_path]
-    end
-
-    test "copies file to destination, creating parent directories when they don't exist", %{
-      dest_dir: dest_dir,
-      dest_path: dest_path,
-      source_path: source_path
-    } do
-      refute File.exists?(dest_dir)
-      refute File.exists?(dest_path)
-
-      assert cp_p!(source_path, dest_path) == :ok
-      assert File.read!(dest_path) == "source content"
-    end
-
-    test "copies file to destination when parent directories already exist", %{
-      dest_dir: dest_dir,
-      dest_path: dest_path,
-      source_path: source_path
-    } do
-      clean_dir(dest_dir)
-
-      assert File.exists?(dest_dir)
-      refute File.exists?(dest_path)
-
-      assert cp_p!(source_path, dest_path) == :ok
-      assert File.read!(dest_path) == "source content"
     end
   end
 end
