@@ -14,16 +14,27 @@ defmodule Hologram.Assets.Pipeline do
 
     FileUtils.recreate_dir(tmp_dist_dir)
 
-    copy_assets(assets_dir, tmp_dist_dir)
-
-    tmp_dist_dir
-    |> FileUtils.list_files_recursively()
-    |> Stream.map(&{&1, File.read!(&1)})
-    |> stream_digest()
+    assets_dir
+    |> list_assets()
+    |> stream_extract_asset_infos(assets_dir)
+    |> stream_read_assets()
+    |> stream_digest_assets(tmp_dist_dir)
+    |> stream_compress_assets()
+    |> Stream.run()
   end
 
-  defp copy_assets(assets_dir, tmp_dist_dir) do
-    maybe_copy_images(assets_dir, tmp_dist_dir)
+  defp list_assets(assets_dir) do
+    list_fonts(assets_dir) ++ list_images(assets_dir)
+  end
+
+  defp list_fonts(assets_dir) do
+    fonts_dir = Path.join(assets_dir, "fonts")
+    FileUtils.list_files_recursively(fonts_dir)
+  end
+
+  defp list_images(assets_dir) do
+    images_dir = Path.join(assets_dir, "images")
+    FileUtils.list_files_recursively(images_dir)
   end
 
   defp list_old_dist_files(dist_dir) do
@@ -34,25 +45,41 @@ defmodule Hologram.Assets.Pipeline do
     |> Enum.reject(&String.starts_with?(&1, hologram_dir_prefix))
   end
 
-  defp maybe_copy_images(assets_dir, tmp_dist_dir) do
-    images_source_path = Path.join(assets_dir, "images")
+  defp stream_compress_assets(_todo), do: :todo
 
-    if File.exists?(images_source_path) do
-      images_target_path = Path.join(tmp_dist_dir, "images")
-      File.cp_r!(images_source_path, images_target_path)
-    end
+  defp stream_digest_assets(assets, tmp_dist_dir) do
+    Stream.each(assets, fn asset ->
+      digest = CryptographicUtils.digest(asset.content, :md5, :hex)
+
+      digested_asset_name = "#{asset.name}-#{digest}#{asset.extension}"
+      digested_asset_path = Path.join([tmp_dist_dir, asset.relative_dir, digested_asset_name])
+
+      FileUtils.write_p!(digested_asset_path, asset.content)
+    end)
   end
 
-  defp stream_digest(file_infos) do
-    Stream.each(file_infos, fn {file_path, file_content} ->
-      file_extension = Path.extname(file_path)
-      file_name = Path.basename(file_path, file_extension)
-      file_dir = Path.dirname(file_path)
+  defp stream_extract_asset_infos(asset_paths, assets_dir) do
+    Stream.map(asset_paths, fn asset_path ->
+      extension = Path.extname(asset_path)
 
-      digest = CryptographicUtils.digest(file_content, :md5, :hex)
-      digested_file_name = "#{file_name}-#{digest}#{file_extension}"
-      digested_file_path = Path.join(file_dir, digested_file_name)
-      File.write!(digested_file_path, file_content)
+      relative_dir =
+        asset_path
+        |> Path.dirname()
+        |> Path.relative_to(assets_dir)
+
+      %{
+        extension: extension,
+        name: Path.basename(asset_path, extension),
+        path: asset_path,
+        relative_dir: relative_dir
+      }
+    end)
+  end
+
+  defp stream_read_assets(assets) do
+    Stream.map(assets, fn asset ->
+      content = File.read!(asset.path)
+      Map.put(asset, :content, content)
     end)
   end
 end
