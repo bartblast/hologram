@@ -50,11 +50,9 @@ defmodule Hologram.Assets.Pipeline do
       file_dir = Path.dirname(file_path)
 
       digest = CryptographicUtils.digest(file_content, :md5, :hex)
-
-      new_file_name = "#{file_name}-#{digest}#{file_extension}"
-      new_file_path = Path.join(file_dir, new_file_name)
-
-      File.write!(new_file_path, file_content)
+      digested_file_name = "#{file_name}-#{digest}#{file_extension}"
+      digested_file_path = Path.join(file_dir, digested_file_name)
+      File.write!(digested_file_path, file_content)
     end)
   end
 end
