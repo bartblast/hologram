@@ -8,17 +8,14 @@ defmodule Hologram.Assets.Pipeline do
   def run(opts) do
     assets_dir = opts[:assets_dir]
     dist_dir = opts[:dist_dir]
-    tmp_dist_dir = Path.join(opts[:tmp_dir], "dist")
 
     _old_dist_files = list_old_dist_files(dist_dir)
-
-    FileUtils.recreate_dir(tmp_dist_dir)
 
     assets_dir
     |> list_assets()
     |> stream_extract_asset_infos(assets_dir)
     |> stream_read_assets()
-    |> stream_digest_assets(tmp_dist_dir)
+    |> stream_digest_assets(dist_dir)
     |> stream_compress_assets()
     |> Stream.run()
   end
@@ -47,12 +44,12 @@ defmodule Hologram.Assets.Pipeline do
 
   defp stream_compress_assets(_todo), do: :todo
 
-  defp stream_digest_assets(assets, tmp_dist_dir) do
+  defp stream_digest_assets(assets, dist_dir) do
     Stream.each(assets, fn asset ->
       digest = CryptographicUtils.digest(asset.content, :md5, :hex)
 
       digested_asset_name = "#{asset.name}-#{digest}#{asset.extension}"
-      digested_asset_path = Path.join([tmp_dist_dir, asset.relative_dir, digested_asset_name])
+      digested_asset_path = Path.join([dist_dir, asset.relative_dir, digested_asset_name])
 
       FileUtils.write_p!(digested_asset_path, asset.content)
     end)
