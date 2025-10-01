@@ -5,6 +5,7 @@ defmodule Hologram.Assets.Pipeline do
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PathUtils
+  alias Hologram.Commons.SystemUtils
 
   # Supported asset types for processing (used for validation)
   @asset_types [:css, :font, :image]
@@ -57,9 +58,13 @@ defmodule Hologram.Assets.Pipeline do
   def run(opts) do
     context = %{
       assets_dir: opts[:assets_dir],
+      css_bundler: determine_css_bundler(),
+      css_dist_dir: Path.join(opts[:dist_dir], "css"),
       dist_dir: opts[:dist_dir],
-      css_bundler: determine_css_bundler()
+      esbuild_bin_path: opts[:esbuild_bin_path]
     }
+
+    File.mkdir_p!(context.css_dist_dir)
 
     old_dist_paths = list_old_dist_paths(context.dist_dir)
 
@@ -74,9 +79,32 @@ defmodule Hologram.Assets.Pipeline do
     :ok
   end
 
+  defp bundle_css(asset, %{css_bundler: :esbuild} = context) do
+    bundle_path = Path.join(context.css_dist_dir, "#{asset.basename}.css")
+
+    esbuild_cmd = [
+      asset.path,
+      "--bundle",
+      "--log-level=warning",
+      "--minify",
+      "--outfile=#{bundle_path}"
+    ]
+
+    {_exit_msg, exit_status} =
+      SystemUtils.cmd_cross_platform(context.esbuild_bin_path, esbuild_cmd, parallelism: true)
+
+    if exit_status != 0 do
+      raise RuntimeError,
+        message:
+          "CSS bundler failed for file: #{asset.path} (probably there were CSS syntax errors)"
+    end
+
+    Map.put(asset, :bundle_path, bundle_path)
+  end
+
   defp collect_new_dist_paths(assets) do
     Enum.flat_map(assets, fn asset ->
-      [asset.digested_asset_path, asset.compressed_asset_path]
+      [asset.bundle_path, asset.digested_asset_path, asset.compressed_asset_path]
     end)
   end
 
@@ -114,6 +142,9 @@ defmodule Hologram.Assets.Pipeline do
 
     Enum.reduce(pipeline_steps, asset, fn step, acc ->
       case step do
+        :bundle_css ->
+          bundle_css(acc, context)
+
         :compress ->
           compress_and_write_asset(acc)
 
@@ -157,7 +188,10 @@ defmodule Hologram.Assets.Pipeline do
     css_dir
     |> File.ls!()
     |> Enum.filter(&String.ends_with?(&1, ".css"))
-    |> Enum.map(&%{path: Path.join(css_dir, &1), type: :css})
+    |> Enum.map(fn file ->
+      path = Path.join(css_dir, file)
+      %{source_path: path, type: :css}
+    end)
   end
 
   defp list_fonts(assets_dir) do
@@ -165,7 +199,7 @@ defmodule Hologram.Assets.Pipeline do
 
     fonts_dir
     |> FileUtils.list_files_recursively()
-    |> Enum.map(&%{path: &1, type: :font})
+    |> Enum.map(&%{source_path: &1, type: :font})
   end
 
   defp list_images(assets_dir) do
@@ -173,7 +207,7 @@ defmodule Hologram.Assets.Pipeline do
 
     images_dir
     |> FileUtils.list_files_recursively()
-    |> Enum.map(&%{path: &1, type: :image})
+    |> Enum.map(&%{source_path: &1, type: :image})
   end
 
   defp list_old_dist_paths(dist_dir) do
