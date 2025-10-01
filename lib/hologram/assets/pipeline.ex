@@ -1,6 +1,7 @@
 defmodule Hologram.Assets.Pipeline do
   @moduledoc false
 
+  alias Hologram.Assets.Pipeline.Tailwind
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PathUtils
@@ -71,6 +72,14 @@ defmodule Hologram.Assets.Pipeline do
     File.write!(compressed_asset_path, compressed_content)
 
     Map.put(asset, :compressed_asset_path, compressed_asset_path)
+  end
+
+  defp determine_css_bundler do
+    if Tailwind.installed?() do
+      :tailwind
+    else
+      :esbuild
+    end
   end
 
   defp digest_and_write_asset(asset, dist_dir) do
