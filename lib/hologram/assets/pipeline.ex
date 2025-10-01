@@ -6,10 +6,11 @@ defmodule Hologram.Assets.Pipeline do
   alias Hologram.Commons.PathUtils
 
   # Supported asset types for processing (used for validation)
-  @asset_types [:font, :image]
+  @asset_types [:css, :font, :image]
 
   # Processing pipeline steps for each asset type
   @pipeline_steps %{
+    css: :TODO,
     font: [
       :info,
       :read,
@@ -127,7 +128,16 @@ defmodule Hologram.Assets.Pipeline do
   end
 
   defp list_assets(assets_dir) do
-    list_fonts(assets_dir) ++ list_images(assets_dir)
+    list_css(assets_dir) ++ list_fonts(assets_dir) ++ list_images(assets_dir)
+  end
+
+  defp list_css(assets_dir) do
+    css_dir = Path.join(assets_dir, "css")
+
+    css_dir
+    |> File.ls!()
+    |> Enum.filter(&String.ends_with?(&1, ".css"))
+    |> Enum.map(&{Path.join(css_dir, &1), :css})
   end
 
   defp list_fonts(assets_dir) do
