@@ -5,6 +5,9 @@ defmodule Hologram.Assets.Pipeline do
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PathUtils
 
+  # Supported asset types for processing
+  @asset_types [:font, :image]
+
   @doc """
   Bundles and processes assets (CSS, JS, images, fonts, etc.) for distribution.
   """
@@ -51,7 +54,7 @@ defmodule Hologram.Assets.Pipeline do
     Map.put(asset, :digested_asset_path, digested_asset_path)
   end
 
-  defp extract_asset_info(asset_path, assets_dir) do
+  defp extract_asset_info(asset_path, assets_dir, asset_type) do
     extension = Path.extname(asset_path)
 
     relative_dir =
@@ -63,7 +66,8 @@ defmodule Hologram.Assets.Pipeline do
       basename: Path.basename(asset_path, extension),
       extension: extension,
       path: asset_path,
-      relative_dir: relative_dir
+      relative_dir: relative_dir,
+      type: asset_type
     }
   end
 
@@ -73,12 +77,18 @@ defmodule Hologram.Assets.Pipeline do
 
   defp list_fonts(assets_dir) do
     fonts_dir = Path.join(assets_dir, "fonts")
-    FileUtils.list_files_recursively(fonts_dir)
+
+    fonts_dir
+    |> FileUtils.list_files_recursively()
+    |> Enum.map(&{&1, :font})
   end
 
   defp list_images(assets_dir) do
     images_dir = Path.join(assets_dir, "images")
-    FileUtils.list_files_recursively(images_dir)
+
+    images_dir
+    |> FileUtils.list_files_recursively()
+    |> Enum.map(&{&1, :image})
   end
 
   defp list_old_dist_paths(dist_dir) do
@@ -90,12 +100,12 @@ defmodule Hologram.Assets.Pipeline do
   end
 
   # Process all static assets concurrently for better I/O and CPU utilization
-  defp process_static_assets(asset_paths, assets_dir, dist_dir) do
-    asset_paths
+  defp process_static_assets(asset_infos, assets_dir, dist_dir) do
+    asset_infos
     |> Task.async_stream(
-      fn asset_path ->
+      fn {asset_path, asset_type} ->
         asset_path
-        |> extract_asset_info(assets_dir)
+        |> extract_asset_info(assets_dir, asset_type)
         |> read_asset_content()
         |> digest_and_write_asset(dist_dir)
         |> compress_and_write_asset()
