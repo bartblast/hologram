@@ -48,6 +48,7 @@ defmodule Hologram.MixProject do
       {:html_entities, "~> 0.5"},
       {:interceptor, "~> 0.5"},
       {:jason, "~> 1.0"},
+      {:tailwind, "~> 0.4", only: [:test], runtime: false},
       {:mix_audit, "~> 2.0", only: [:dev, :test], runtime: false},
       {:mox, "~> 1.0", only: :test},
       {:phoenix, "~> 1.7"},
