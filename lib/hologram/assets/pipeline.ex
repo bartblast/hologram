@@ -18,11 +18,7 @@ defmodule Hologram.Assets.Pipeline do
     new_dist_paths =
       assets_dir
       |> list_assets()
-      |> stream_extract_asset_infos(assets_dir)
-      |> stream_read_assets()
-      |> stream_digest_assets(dist_dir)
-      |> stream_compress_assets()
-      |> Enum.to_list()
+      |> process_assets_async(assets_dir, dist_dir)
       |> collect_new_dist_paths()
 
     remove_old_dist_files(old_dist_paths, new_dist_paths)
@@ -34,6 +30,41 @@ defmodule Hologram.Assets.Pipeline do
     Enum.flat_map(assets, fn asset ->
       [asset.digested_asset_path, asset.compressed_asset_path]
     end)
+  end
+
+  defp compress_and_write_asset(asset) do
+    compressed_content = :zlib.gzip(asset.content)
+    compressed_asset_path = asset.digested_asset_path <> ".gz"
+
+    File.write!(compressed_asset_path, compressed_content)
+
+    Map.put(asset, :compressed_asset_path, compressed_asset_path)
+  end
+
+  defp digest_and_write_asset(asset, dist_dir) do
+    digest = CryptographicUtils.digest(asset.content, :md5, :hex)
+    digested_asset_name = "#{asset.basename}-#{digest}#{asset.extension}"
+    digested_asset_path = Path.join([dist_dir, asset.relative_dir, digested_asset_name])
+
+    FileUtils.write_p!(digested_asset_path, asset.content)
+
+    Map.put(asset, :digested_asset_path, digested_asset_path)
+  end
+
+  defp extract_asset_info(asset_path, assets_dir) do
+    extension = Path.extname(asset_path)
+
+    relative_dir =
+      asset_path
+      |> Path.dirname()
+      |> Path.relative_to(assets_dir)
+
+    %{
+      basename: Path.basename(asset_path, extension),
+      extension: extension,
+      path: asset_path,
+      relative_dir: relative_dir
+    }
   end
 
   defp list_assets(assets_dir) do
@@ -58,6 +89,29 @@ defmodule Hologram.Assets.Pipeline do
     |> Enum.reject(&String.starts_with?(&1, hologram_dir_prefix))
   end
 
+  # Process all assets concurrently for better I/O and CPU utilization
+  defp process_assets_async(asset_paths, assets_dir, dist_dir) do
+    asset_paths
+    |> Task.async_stream(
+      fn asset_path ->
+        asset_path
+        |> extract_asset_info(assets_dir)
+        |> read_asset_content()
+        |> digest_and_write_asset(dist_dir)
+        |> compress_and_write_asset()
+      end,
+      # Good concurrency for I/O
+      max_concurrency: System.schedulers_online() * 2,
+      timeout: :infinity
+    )
+    |> Enum.map(fn {:ok, result} -> result end)
+  end
+
+  defp read_asset_content(asset) do
+    content = File.read!(asset.path)
+    Map.put(asset, :content, content)
+  end
+
   defp remove_old_dist_files(old_dist_paths, new_dist_paths) do
     # Kernel.--/2 can be more performant for small lists due to lower overhead,
     # but MapSet.difference/2 becomes faster as size grows.
@@ -65,55 +119,6 @@ defmodule Hologram.Assets.Pipeline do
 
     Enum.each(files_to_remove, fn file_path ->
       File.rm!(file_path)
-    end)
-  end
-
-  defp stream_compress_assets(assets) do
-    Stream.map(assets, fn asset ->
-      compressed_asset_content = :zlib.gzip(asset.content)
-      compressed_asset_path = asset.digested_asset_path <> ".gz"
-
-      File.write!(compressed_asset_path, compressed_asset_content)
-
-      Map.put(asset, :compressed_asset_path, compressed_asset_path)
-    end)
-  end
-
-  defp stream_digest_assets(assets, dist_dir) do
-    Stream.map(assets, fn asset ->
-      digest = CryptographicUtils.digest(asset.content, :md5, :hex)
-
-      digested_asset_name = "#{asset.basename}-#{digest}#{asset.extension}"
-      digested_asset_path = Path.join([dist_dir, asset.relative_dir, digested_asset_name])
-
-      FileUtils.write_p!(digested_asset_path, asset.content)
-
-      Map.put(asset, :digested_asset_path, digested_asset_path)
-    end)
-  end
-
-  defp stream_extract_asset_infos(asset_paths, assets_dir) do
-    Stream.map(asset_paths, fn asset_path ->
-      extension = Path.extname(asset_path)
-
-      relative_dir =
-        asset_path
-        |> Path.dirname()
-        |> Path.relative_to(assets_dir)
-
-      %{
-        basename: Path.basename(asset_path, extension),
-        extension: extension,
-        path: asset_path,
-        relative_dir: relative_dir
-      }
-    end)
-  end
-
-  defp stream_read_assets(assets) do
-    Stream.map(assets, fn asset ->
-      content = File.read!(asset.path)
-      Map.put(asset, :content, content)
     end)
   end
 end
