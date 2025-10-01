@@ -14,7 +14,7 @@ defmodule Hologram.Assets.Pipeline do
   @pipeline_steps %{
     css: [
       :bundle_css,
-      :read,
+      {:read, :bundle_path},
       :digest,
       :write,
       :compress,
@@ -22,14 +22,14 @@ defmodule Hologram.Assets.Pipeline do
     ],
     font: [
       :info,
-      :read,
+      {:read, :source_path},
       :digest,
       :write,
       :compress
     ],
     image: [
       :info,
-      :read,
+      {:read, :source_path},
       :digest,
       :write,
       :compress
@@ -157,8 +157,8 @@ defmodule Hologram.Assets.Pipeline do
         :info ->
           extract_asset_info(acc, context)
 
-        :read ->
-          read_asset_content(acc)
+        {:read, path_key} ->
+          read_asset_content(acc, path_key)
       end
     end)
   end
@@ -230,8 +230,8 @@ defmodule Hologram.Assets.Pipeline do
     |> Enum.map(fn {:ok, result} -> result end)
   end
 
-  defp read_asset_content(asset) do
-    content = File.read!(asset.path)
+  defp read_asset_content(asset, path_key) do
+    content = File.read!(asset[path_key])
     Map.put(asset, :content, content)
   end
 
