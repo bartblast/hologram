@@ -101,30 +101,27 @@ defmodule Hologram.Assets.Pipeline do
     Map.put(asset, :digested_asset_name, digested_asset_name)
   end
 
-  defp execute_pipeline({asset_path, asset_type}, assets_dir, dist_dir) do
-    if asset_type not in @asset_types do
+  defp execute_pipeline(asset, assets_dir, dist_dir) do
+    if asset.type not in @asset_types do
       raise ArgumentError,
-            "Unsupported asset type: #{asset_type}. Supported types: #{inspect(@asset_types)}"
+            "Unsupported asset type: #{asset.type}. Supported types: #{inspect(@asset_types)}"
     end
 
-    pipeline_steps = Map.get(@pipeline_steps, asset_type, @pipeline_steps.font)
+    pipeline_steps = Map.get(@pipeline_steps, asset.type, @pipeline_steps.font)
 
-    Enum.reduce(pipeline_steps, {asset_path, assets_dir, dist_dir}, fn step, acc ->
+    Enum.reduce(pipeline_steps, asset, fn step, acc ->
       case step do
         :compress ->
           compress_and_write_asset(acc)
 
         :digest ->
-          {asset, _dist_dir} = acc
-          digest_asset(asset)
+          digest_asset(acc)
 
         :write ->
-          {asset, _dist_dir} = acc
-          write_asset(asset, dist_dir)
+          write_asset(acc, dist_dir)
 
         :info ->
-          {path, assets_dir, _dist_dir} = acc
-          extract_asset_info(path, assets_dir, asset_type)
+          extract_asset_info(acc, assets_dir)
 
         :read ->
           read_asset_content(acc)
@@ -132,21 +129,19 @@ defmodule Hologram.Assets.Pipeline do
     end)
   end
 
-  defp extract_asset_info(asset_path, assets_dir, asset_type) do
-    extension = Path.extname(asset_path)
+  defp extract_asset_info(asset, assets_dir) do
+    extension = Path.extname(asset.path)
 
     relative_dir =
-      asset_path
+      asset.path
       |> Path.dirname()
       |> Path.relative_to(assets_dir)
 
-    %{
-      basename: Path.basename(asset_path, extension),
+    Map.merge(asset, %{
+      basename: Path.basename(asset.path, extension),
       extension: extension,
-      path: asset_path,
-      relative_dir: relative_dir,
-      type: asset_type
-    }
+      relative_dir: relative_dir
+    })
   end
 
   defp list_assets(assets_dir) do
@@ -159,7 +154,7 @@ defmodule Hologram.Assets.Pipeline do
     css_dir
     |> File.ls!()
     |> Enum.filter(&String.ends_with?(&1, ".css"))
-    |> Enum.map(&{Path.join(css_dir, &1), :css})
+    |> Enum.map(&%{path: Path.join(css_dir, &1), type: :css})
   end
 
   defp list_fonts(assets_dir) do
@@ -167,7 +162,7 @@ defmodule Hologram.Assets.Pipeline do
 
     fonts_dir
     |> FileUtils.list_files_recursively()
-    |> Enum.map(&{&1, :font})
+    |> Enum.map(&%{path: &1, type: :font})
   end
 
   defp list_images(assets_dir) do
@@ -175,7 +170,7 @@ defmodule Hologram.Assets.Pipeline do
 
     images_dir
     |> FileUtils.list_files_recursively()
-    |> Enum.map(&{&1, :image})
+    |> Enum.map(&%{path: &1, type: :image})
   end
 
   defp list_old_dist_paths(dist_dir) do
@@ -190,7 +185,7 @@ defmodule Hologram.Assets.Pipeline do
   defp process_static_assets(assets, assets_dir, dist_dir) do
     assets
     |> Task.async_stream(
-      &execute_pipeline(&1, assets_dir, dist_dir),
+      fn asset -> execute_pipeline(asset, assets_dir, dist_dir) end,
       # Good concurrency for I/O
       max_concurrency: System.schedulers_online() * 2,
       timeout: :infinity
