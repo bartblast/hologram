@@ -11,7 +11,14 @@ defmodule Hologram.Assets.Pipeline do
 
   # Processing pipeline steps for each asset type
   @pipeline_steps %{
-    css: :TODO,
+    css: [
+      :bundle_css,
+      :read,
+      :digest,
+      :write,
+      :compress,
+      :cleanup
+    ],
     font: [
       :info,
       :read,
@@ -35,8 +42,10 @@ defmodule Hologram.Assets.Pipeline do
   module attribute. Each asset type can have a different sequence of processing steps.
 
   Available pipeline steps:
+  - :bundle_css - Bundle CSS files using Tailwind or esbuild
+  - :cleanup - Remove temporary files created during processing
   - :compress - Create gzipped version of the asset  
-  - :digest - Generate content hash and digested filename
+  - :digest - Generate content hash and digested file name
   - :info - Extract file metadata and type information
   - :read - Read file content into memory
   - :write - Write asset content to digested file path
