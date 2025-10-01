@@ -55,15 +55,18 @@ defmodule Hologram.Assets.Pipeline do
   """
   @spec run(keyword()) :: :ok
   def run(opts) do
-    assets_dir = opts[:assets_dir]
-    dist_dir = opts[:dist_dir]
+    context = %{
+      assets_dir: opts[:assets_dir],
+      dist_dir: opts[:dist_dir],
+      css_bundler: determine_css_bundler()
+    }
 
-    old_dist_paths = list_old_dist_paths(dist_dir)
+    old_dist_paths = list_old_dist_paths(context.dist_dir)
 
     new_dist_paths =
-      assets_dir
+      context.assets_dir
       |> list_assets()
-      |> process_static_assets(assets_dir, dist_dir)
+      |> process_static_assets(context)
       |> collect_new_dist_paths()
 
     remove_old_dist_files(old_dist_paths, new_dist_paths)
@@ -101,7 +104,7 @@ defmodule Hologram.Assets.Pipeline do
     Map.put(asset, :digested_asset_name, digested_asset_name)
   end
 
-  defp execute_pipeline(asset, assets_dir, dist_dir) do
+  defp execute_pipeline(asset, context) do
     if asset.type not in @asset_types do
       raise ArgumentError,
             "Unsupported asset type: #{asset.type}. Supported types: #{inspect(@asset_types)}"
@@ -118,10 +121,10 @@ defmodule Hologram.Assets.Pipeline do
           digest_asset(acc)
 
         :write ->
-          write_asset(acc, dist_dir)
+          write_asset(acc, context)
 
         :info ->
-          extract_asset_info(acc, assets_dir)
+          extract_asset_info(acc, context)
 
         :read ->
           read_asset_content(acc)
@@ -129,13 +132,13 @@ defmodule Hologram.Assets.Pipeline do
     end)
   end
 
-  defp extract_asset_info(asset, assets_dir) do
+  defp extract_asset_info(asset, context) do
     extension = Path.extname(asset.path)
 
     relative_dir =
       asset.path
       |> Path.dirname()
-      |> Path.relative_to(assets_dir)
+      |> Path.relative_to(context.assets_dir)
 
     Map.merge(asset, %{
       basename: Path.basename(asset.path, extension),
@@ -182,10 +185,10 @@ defmodule Hologram.Assets.Pipeline do
   end
 
   # Process all static assets concurrently for better I/O and CPU utilization
-  defp process_static_assets(assets, assets_dir, dist_dir) do
+  defp process_static_assets(assets, context) do
     assets
     |> Task.async_stream(
-      fn asset -> execute_pipeline(asset, assets_dir, dist_dir) end,
+      fn asset -> execute_pipeline(asset, context) end,
       # Good concurrency for I/O
       max_concurrency: System.schedulers_online() * 2,
       timeout: :infinity
@@ -208,8 +211,9 @@ defmodule Hologram.Assets.Pipeline do
     end)
   end
 
-  defp write_asset(asset, dist_dir) do
-    digested_asset_path = Path.join([dist_dir, asset.relative_dir, asset.digested_asset_name])
+  defp write_asset(asset, context) do
+    digested_asset_path =
+      Path.join([context.dist_dir, asset.relative_dir, asset.digested_asset_name])
 
     FileUtils.write_p!(digested_asset_path, asset.content)
 
