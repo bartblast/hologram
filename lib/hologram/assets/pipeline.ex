@@ -16,12 +16,14 @@ defmodule Hologram.Assets.Pipeline do
       :info,
       :read,
       :digest,
+      :write,
       :compress
     ],
     image: [
       :info,
       :read,
       :digest,
+      :write,
       :compress
     ]
   }
@@ -34,9 +36,10 @@ defmodule Hologram.Assets.Pipeline do
 
   Available pipeline steps:
   - :compress - Create gzipped version of the asset  
-  - :digest - Generate content hash and write digested file  
+  - :digest - Generate content hash and digested filename
   - :info - Extract file metadata and type information
   - :read - Read file content into memory
+  - :write - Write asset content to digested file path
 
   To add a new asset type or modify processing steps, update the @pipeline_steps
   module attribute with the desired configuration.
@@ -82,14 +85,11 @@ defmodule Hologram.Assets.Pipeline do
     end
   end
 
-  defp digest_and_write_asset(asset, dist_dir) do
+  defp digest_asset(asset) do
     digest = CryptographicUtils.digest(asset.content, :md5, :hex)
     digested_asset_name = "#{asset.basename}-#{digest}#{asset.extension}"
-    digested_asset_path = Path.join([dist_dir, asset.relative_dir, digested_asset_name])
 
-    FileUtils.write_p!(digested_asset_path, asset.content)
-
-    Map.put(asset, :digested_asset_path, digested_asset_path)
+    Map.put(asset, :digested_asset_name, digested_asset_name)
   end
 
   defp execute_pipeline({asset_path, asset_type}, assets_dir, dist_dir) do
@@ -107,7 +107,11 @@ defmodule Hologram.Assets.Pipeline do
 
         :digest ->
           {asset, _dist_dir} = acc
-          digest_and_write_asset(asset, dist_dir)
+          digest_asset(asset)
+
+        :write ->
+          {asset, _dist_dir} = acc
+          write_asset(asset, dist_dir)
 
         :info ->
           {path, assets_dir, _dist_dir} = acc
@@ -198,5 +202,13 @@ defmodule Hologram.Assets.Pipeline do
     Enum.each(files_to_remove, fn file_path ->
       File.rm!(file_path)
     end)
+  end
+
+  defp write_asset(asset, dist_dir) do
+    digested_asset_path = Path.join([dist_dir, asset.relative_dir, asset.digested_asset_name])
+
+    FileUtils.write_p!(digested_asset_path, asset.content)
+
+    Map.put(asset, :digested_asset_path, digested_asset_path)
   end
 end
