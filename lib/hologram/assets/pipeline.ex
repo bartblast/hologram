@@ -18,7 +18,7 @@ defmodule Hologram.Assets.Pipeline do
     new_dist_paths =
       assets_dir
       |> list_assets()
-      |> process_assets_async(assets_dir, dist_dir)
+      |> process_static_assets(assets_dir, dist_dir)
       |> collect_new_dist_paths()
 
     remove_old_dist_files(old_dist_paths, new_dist_paths)
@@ -89,8 +89,8 @@ defmodule Hologram.Assets.Pipeline do
     |> Enum.reject(&String.starts_with?(&1, hologram_dir_prefix))
   end
 
-  # Process all assets concurrently for better I/O and CPU utilization
-  defp process_assets_async(asset_paths, assets_dir, dist_dir) do
+  # Process all static assets concurrently for better I/O and CPU utilization
+  defp process_static_assets(asset_paths, assets_dir, dist_dir) do
     asset_paths
     |> Task.async_stream(
       fn asset_path ->
