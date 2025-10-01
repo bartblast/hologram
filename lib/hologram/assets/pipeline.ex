@@ -5,6 +5,10 @@ defmodule Hologram.Assets.Pipeline do
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PathUtils
 
+  @doc """
+  Bundles and processes assets (CSS, JS, images, fonts, etc.) for distribution.
+  """
+  @spec run(keyword()) :: :ok
   def run(opts) do
     assets_dir = opts[:assets_dir]
     dist_dir = opts[:dist_dir]
@@ -22,6 +26,8 @@ defmodule Hologram.Assets.Pipeline do
       |> collect_new_dist_paths()
 
     remove_old_dist_files(old_dist_paths, new_dist_paths)
+
+    :ok
   end
 
   defp collect_new_dist_paths(assets) do
