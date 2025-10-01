@@ -5,11 +5,39 @@ defmodule Hologram.Assets.Pipeline do
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PathUtils
 
-  # Supported asset types for processing
+  # Supported asset types for processing (used for validation)
   @asset_types [:font, :image]
+
+  # Processing pipeline steps for each asset type
+  @pipeline_steps %{
+    font: [
+      :info,
+      :read,
+      :digest,
+      :compress
+    ],
+    image: [
+      :info,
+      :read,
+      :digest,
+      :compress
+    ]
+  }
 
   @doc """
   Bundles and processes assets (CSS, JS, images, fonts, etc.) for distribution.
+
+  The processing pipeline is configurable per asset type through the @pipeline_steps
+  module attribute. Each asset type can have a different sequence of processing steps.
+
+  Available pipeline steps:
+  - :compress - Create gzipped version of the asset  
+  - :digest - Generate content hash and write digested file  
+  - :info - Extract file metadata and type information
+  - :read - Read file content into memory
+
+  To add a new asset type or modify processing steps, update the @pipeline_steps
+  module attribute with the desired configuration.
   """
   @spec run(keyword()) :: :ok
   def run(opts) do
@@ -52,6 +80,33 @@ defmodule Hologram.Assets.Pipeline do
     FileUtils.write_p!(digested_asset_path, asset.content)
 
     Map.put(asset, :digested_asset_path, digested_asset_path)
+  end
+
+  defp execute_pipeline({asset_path, asset_type}, assets_dir, dist_dir) do
+    if asset_type not in @asset_types do
+      raise ArgumentError,
+            "Unsupported asset type: #{asset_type}. Supported types: #{inspect(@asset_types)}"
+    end
+
+    pipeline_steps = Map.get(@pipeline_steps, asset_type, @pipeline_steps.font)
+
+    Enum.reduce(pipeline_steps, {asset_path, assets_dir, dist_dir}, fn step, acc ->
+      case step do
+        :compress ->
+          compress_and_write_asset(acc)
+
+        :digest ->
+          {asset, _dist_dir} = acc
+          digest_and_write_asset(asset, dist_dir)
+
+        :info ->
+          {path, assets_dir, _dist_dir} = acc
+          extract_asset_info(path, assets_dir, asset_type)
+
+        :read ->
+          read_asset_content(acc)
+      end
+    end)
   end
 
   defp extract_asset_info(asset_path, assets_dir, asset_type) do
@@ -100,16 +155,10 @@ defmodule Hologram.Assets.Pipeline do
   end
 
   # Process all static assets concurrently for better I/O and CPU utilization
-  defp process_static_assets(asset_infos, assets_dir, dist_dir) do
-    asset_infos
+  defp process_static_assets(assets, assets_dir, dist_dir) do
+    assets
     |> Task.async_stream(
-      fn {asset_path, asset_type} ->
-        asset_path
-        |> extract_asset_info(assets_dir, asset_type)
-        |> read_asset_content()
-        |> digest_and_write_asset(dist_dir)
-        |> compress_and_write_asset()
-      end,
+      &execute_pipeline(&1, assets_dir, dist_dir),
       # Good concurrency for I/O
       max_concurrency: System.schedulers_online() * 2,
       timeout: :infinity
