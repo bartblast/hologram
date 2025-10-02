@@ -112,7 +112,7 @@ defmodule Hologram.Template.Formatter do
     %{state | output: [output | state.output]}
   end
 
-  defp add_literal(%State{embed: e, in_tree: it} = state, text, :text) do
+  defp add_literal(state, text, :text) do
     # We're a formatter we'll handle the whitespace
     case near_trim(text) do
       " " ->
@@ -122,7 +122,7 @@ defmodule Hologram.Template.Formatter do
         # When a `block` tag is open and we are not otherwise embedded
         # we indent this text despite appearances otherwise
         outmode =
-          case e == [] and is_block?(List.first(it)) do
+          case in_block?(state) do
             true -> :indent
             false -> :raw
           end
@@ -236,8 +236,8 @@ defmodule Hologram.Template.Formatter do
     end
   end
 
-  defp indent_mode(%State{in_tree: [pt | _]}, _tag, :close) do
-    case is_block?(pt) do
+  defp indent_mode(%State{in_tree: [{_t, it} | _]}, _tag, :close) do
+    case it do
       true -> {:indent, :dec}
       false -> @raw
     end
@@ -291,6 +291,9 @@ defmodule Hologram.Template.Formatter do
   defp is_block?(nil), do: false
   defp is_block?(_), do: :error
 
+  defp in_block?(%State{embed: [], in_tree: [{_t, true} | _]}), do: true
+  defp in_block?(_), do: false
+
   # We will only concern ourselves with ASCII whitespace
   # If they've brought us some other kind, we'll assume that
   # it has significance to them
@@ -318,7 +321,7 @@ defmodule Hologram.Template.Formatter do
   defp close_shave(despaced, false), do: despaced
 
   defp push_tag(state, tag) do
-    %{state | in_tree: [tag | state.in_tree]}
+    %{state | in_tree: [{tag, is_block?(tag)} | state.in_tree]}
   end
 
   defp pop_tag(%State{in_tree: [_ | tart]} = state), do: %{state | in_tree: tart}
