@@ -15,7 +15,6 @@ defmodule Hologram.Template.Formatter do
   defmodule State do
     defstruct holo_indent: "  ",
               current_indent: "",
-              last_tag_action: :none,
               embed: [],
               output: [],
               in_tree: []
@@ -113,17 +112,17 @@ defmodule Hologram.Template.Formatter do
     %{state | output: [output | state.output]}
   end
 
-  defp add_literal(%State{embed: e, in_tree: it, last_tag_action: lta} = state, text, :text) do
+  defp add_literal(%State{embed: e, in_tree: it} = state, text, :text) do
     # We're a formatter we'll handle the whitespace
     case near_trim(text) do
       " " ->
         state
 
       trimmed ->
-        # When a `block` tag has just now opened and we are not otherwise embedded
+        # When a `block` tag is open and we are not otherwise embedded
         # we indent this text despite appearances otherwise
         outmode =
-          case length(e) == 0 and lta == :open and is_block?(List.first(it)) do
+          case e == [] and is_block?(List.first(it)) do
             true -> :indent
             false -> :raw
           end
@@ -138,8 +137,6 @@ defmodule Hologram.Template.Formatter do
   end
 
   defp add_literal(state, lit, atom), do: IO.inspect({state, lit, atom})
-
-  defp last_tag_action(state, which), do: %{state | last_tag_action: which}
 
   defp begin_comment(state) do
     state
@@ -189,7 +186,6 @@ defmodule Hologram.Template.Formatter do
     {mode, _} = indent_mode(state, tag, :self)
 
     state
-    |> last_tag_action(:self)
     |> add_output(tag_string(tag, :self), mode)
   end
 
@@ -197,7 +193,6 @@ defmodule Hologram.Template.Formatter do
     {mode, adj} = indent_mode(state, tag, :open)
 
     state
-    |> last_tag_action(:open)
     |> add_output(tag_string(tag, :open), mode)
     |> push_tag(tag)
     |> adj_indent(adj)
@@ -208,7 +203,6 @@ defmodule Hologram.Template.Formatter do
 
     state
     |> pop_tag()
-    |> last_tag_action(:close)
     |> adj_indent(adj)
     |> add_output(tag_string(tag_info, :close), mode)
     |> embed(t, :drop)
@@ -219,7 +213,7 @@ defmodule Hologram.Template.Formatter do
   defp embed(%State{embed: e, in_tree: []} = state, :add), do: %{state | embed: ["" | e]}
   # Otherwise when the latest previous tag closes we're "free"
   # Note that this can have different level of depth as we go
-  defp embed(%State{embed: e, last_tag_action: :open, in_tree: [{t, _} | _]} = state, :add),
+  defp embed(%State{embed: e, in_tree: [{t, _} | _]} = state, :add),
     do: %{state | embed: [t | e]}
 
   # Nothing recently opened, so we're not deeper in
@@ -249,8 +243,8 @@ defmodule Hologram.Template.Formatter do
     end
   end
 
-  defp indent_mode(%State{embed: e, last_tag_action: lta}, tag, :open)
-       when e == [] or lta == :close do
+  defp indent_mode(%State{embed: e}, tag, :open)
+       when e == [] do
     case is_block?(tag) do
       true -> {:indent, :inc}
       false -> {:indent, :noop}
