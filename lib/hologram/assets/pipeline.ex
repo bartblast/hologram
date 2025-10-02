@@ -7,10 +7,8 @@ defmodule Hologram.Assets.Pipeline do
   alias Hologram.Commons.PathUtils
   alias Hologram.Commons.SystemUtils
 
-  # Supported asset types for processing (used for validation)
   @asset_types [:css, :font, :image]
 
-  # Processing pipeline steps for each asset type
   @pipeline_steps %{
     css: [
       :bundle_css,
@@ -18,7 +16,7 @@ defmodule Hologram.Assets.Pipeline do
       :digest,
       :write,
       :compress,
-      :cleanup
+      {:remove, :bundle_path}
     ],
     font: [
       :info,
@@ -44,11 +42,11 @@ defmodule Hologram.Assets.Pipeline do
 
   Available pipeline steps:
   - :bundle_css - Bundle CSS files using Tailwind or esbuild
-  - :cleanup - Remove temporary files created during processing
   - :compress - Create gzipped version of the asset  
   - :digest - Generate content hash and digested file name
   - :info - Extract file metadata and type information
   - :read - Read file content into memory
+  - :remove - Remove temporary files created during processing  
   - :write - Write asset content to digested file path
 
   To add a new asset type or modify processing steps, update the @pipeline_steps
@@ -159,6 +157,9 @@ defmodule Hologram.Assets.Pipeline do
 
         {:read, path_key} ->
           read_asset_content(acc, path_key)
+
+        {:remove, path_key} ->
+          remove_file(acc, path_key)
       end
     end)
   end
@@ -233,6 +234,11 @@ defmodule Hologram.Assets.Pipeline do
   defp read_asset_content(asset, path_key) do
     content = File.read!(asset[path_key])
     Map.put(asset, :content, content)
+  end
+
+  defp remove_file(asset, path_key) do
+    File.rm!(asset[path_key])
+    asset
   end
 
   defp remove_old_dist_files(old_dist_paths, new_dist_paths) do
