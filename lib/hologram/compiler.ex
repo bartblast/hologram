@@ -228,6 +228,7 @@ defmodule Hologram.Compiler do
       "--minify",
       "--outfile=#{output_bundle_path}",
       "--sourcemap",
+      "--sources-content=true",
       "--target=es2021"
     ]
 
