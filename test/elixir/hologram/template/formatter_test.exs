@@ -96,6 +96,77 @@ defmodule Hologram.Template.FormatterTest do
     end
   end
 
+  describe "intent matching" do
+    test "single line block HOLO" do
+      single = "<div>{ 1 + 2 }</div>"
+      proper = "<div>{1 + 2}</div>"
+
+      assert format_as_binary(single) == proper
+    end
+
+    test "multi line block HOLO" do
+      triple = """
+      <div>{ 1 + 2 }</div>
+      """
+
+      proper = """
+      <div>
+        {1 + 2}
+      </div>
+      """
+
+      assert format_as_binary(triple) == proper
+    end
+
+    test "single line inline HOLO" do
+      single = "<a href=\"{ @contact.email }\">Email me</a>"
+      proper = "<a href={@contact.email}>Email me</a>"
+      assert format_as_binary(single) == proper
+    end
+
+    test "multi line inline HOLO" do
+      triple = """
+       <a href=\"{ @contact.email }\">Email me</a>
+      """
+
+      proper = """
+      <a href={@contact.email}>Email me</a>
+      """
+
+      assert format_as_binary(triple) == proper
+    end
+
+    test "inline inline tags" do
+      malformed = """
+        <p><button $click="doit">Do it</button> <button $click="dontit"> or not</button></p>
+      """
+
+      proper = """
+      <p>
+        <button $click="doit">Do it</button><button $click="dontit"> or not</button>
+      </p>
+      """
+
+      assert format_as_binary(malformed) == proper
+    end
+
+    test "an outline inline tag" do
+      malformed = """
+        <p><button $click="doit">Do it</button>
+        <button $click="dontit"> or not </button><button $click="doit">but do</button></p>
+      """
+
+      proper = """
+      <p>
+        <button $click="doit">Do it</button>
+        <button $click="dontit"> or not </button><button $click="doit">but do</button>
+      </p>
+      """
+
+      assert format_as_binary(malformed) == proper
+    end
+  end
+
   # The parser is tested elsewhere.
   # Popping back the syntax error and bailing feels like the best
   # course of action for a formatter.
