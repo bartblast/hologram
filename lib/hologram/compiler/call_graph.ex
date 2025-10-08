@@ -621,7 +621,7 @@ defmodule Hologram.Compiler.CallGraph do
 
   @doc """
   Lists MFAs that are reachable from the given call graph vertices.
-  Unimplemented protocol implentations are excluded.
+  Unimplemented protocol implementations are excluded.
   The MFAs returned are sorted.
   """
   @spec sorted_reachable_mfas(Digraph.t(), [vertex]) :: [mfa]
