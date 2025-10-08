@@ -13,6 +13,8 @@ defmodule Hologram.Template.Formatter do
   defmodule State do
     defstruct current_indent: 0,
               pending_indent: "",
+              final_newline: false,
+              just_closed: false,
               output: []
   end
 
@@ -26,20 +28,26 @@ defmodule Hologram.Template.Formatter do
   def format(contents, _opts) do
     contents
     |> Hologram.Template.Parser.parse_markup()
-    |> format_parse(%State{})
+    |> format_parse(%State{final_newline: String.match?(contents, ~r/\n\s*/)})
   end
 
   # Keep the base case separate.
   # It's important and has the external function signature
-  defp format_parse([], %State{pending_indent: pi, output: out}) do
-    [pi | out] |> Enum.reverse() |> List.flatten()
+  defp format_parse([], %State{output: out, final_newline: nl}) do
+    really_out =
+      case nl do
+        true -> ["\n" | out]
+        false -> out
+      end
+
+    really_out |> Enum.reverse() |> List.flatten()
   end
 
   defp format_parse([item | rest], state) do
     next_state =
       case item do
         # Looks like a tag, is decidedly not
-        {:doctype, t} -> add_output(state, "<!DOCTYPE #{t}>")
+        {:doctype, t} -> add_output(state, "<!DOCTYPE #{t}>", true)
         {:start_tag, t} -> insert_tag(state, t, :open)
         # This guard should be unneeded, but I've been surprised
         # by parses before
@@ -50,7 +58,7 @@ defmodule Hologram.Template.Formatter do
         :public_comment_end -> end_comment(state)
         {:self_closing_tag, t} -> insert_tag(state, t, :self)
         {:text, t} -> add_trimmed_text(state, t)
-        {:expression, e} -> add_output(state, e)
+        {:expression, e} -> add_expression(state, e)
       end
 
     format_parse(rest, next_state)
@@ -77,14 +85,37 @@ defmodule Hologram.Template.Formatter do
     }
   end
 
-  defp add_output(%State{pending_indent: pi, output: curr} = state, to_add),
-    do: %{state | pending_indent: "", output: [to_add | [pi | curr]]}
+  defp add_output(state, to_add, is_closing \\ false)
+
+  defp add_output(
+         %State{pending_indent: pi, final_newline: nl, output: curr} = state,
+         to_add,
+         is_closing
+       ) do
+    really_add =
+      case {pi, nl} do
+        {nd, true} when nd != "" -> pi <> to_add
+        _ -> to_add
+      end
+
+    %{state | just_closed: is_closing, pending_indent: "", output: [really_add | curr]}
+  end
+
+  defp add_expression(state, expr) do
+    state |> add_output("{#{block_exp(expr)}}")
+  end
 
   defp add_trimmed_text(state, text) do
     # We're a formatter we'll handle the whitespace
-    case near_trim(text) do
-      :skip -> state
-      trimmed -> state |> add_output(trimmed)
+    case near_trim(text, state) do
+      :skip ->
+        state
+
+      :indent ->
+        state |> indent_next()
+
+      trimmed ->
+        state |> add_output(trimmed)
     end
   end
 
@@ -129,11 +160,11 @@ defmodule Hologram.Template.Formatter do
         state
         |> adj_indent(:dec)
         |> indent_next()
-        |> add_output(tag_string(tag, how))
+        |> add_output(tag_string(tag, how), true)
         |> indent_next()
 
       _ ->
-        state |> add_output(tag_string(tag, how))
+        state |> add_output(tag_string(tag, how), true)
     end
   end
 
@@ -184,9 +215,16 @@ defmodule Hologram.Template.Formatter do
   # a single ASCII space.  For matching convenience we treat an empty
   # string as a single space.
   # This is wholly unsuitable outside of this module.
-  def near_trim(<<>>), do: " "
+  def near_trim(text, state \\ %State{})
 
-  def near_trim(binary) do
+  def near_trim(<<>>, %State{just_closed: jc}) do
+    case jc do
+      false -> :skip
+      true -> :indent
+    end
+  end
+
+  def near_trim(binary, %State{just_closed: jc}) do
     potential =
       binary
       |> to_charlist
@@ -196,10 +234,18 @@ defmodule Hologram.Template.Formatter do
       |> Enum.reverse()
       |> to_string
 
-    case potential do
-      " " -> :skip
-      "" -> :skip
-      _ -> potential
+    case {potential, jc} do
+      {t, false} when t in ["", " "] ->
+        :skip
+
+      {t, true} when t in ["", " "] ->
+        case String.match?(binary, ~r/\n/) do
+          false -> :skip
+          true -> :indent
+        end
+
+      _ ->
+        potential
     end
   end
 
@@ -235,6 +281,7 @@ defmodule Hologram.Template.Formatter do
     # these quotes.  We also don't want to just add it.
     case near_trim(t) do
       :skip -> gather_abits(rest)
+      :indent -> gather_abits(rest)
       tt -> "\"#{tt}#{gather_abits(rest)}\""
     end
   end
