@@ -214,7 +214,7 @@ defmodule Hologram.ReflectionTest do
     end
 
     test "OTP app doesn't have ebin dir" do
-      assert list_ebin_modules(:ssl) == []
+      assert list_ebin_modules(:odbc) == []
     end
   end
 
