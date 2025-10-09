@@ -1,8 +1,6 @@
 name: CI
 
-# Define workflow that runs when changes are pushed to the
-# `dev` or `master` branch or pushed to a PR branch that targets the `dev`
-# or `master` branch.
+# Run the workflow when changes are pushed to any branch
 on:
   push:
     branches:
