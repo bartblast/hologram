@@ -5,27 +5,26 @@ defmodule Hologram.Application do
 
   @impl Application
   def start(_type, _args) do
+    env = Hologram.env()
+    mode = Application.get_env(:hologram, :mode, :embedded)
     opts = [strategy: :one_for_one, name: Hologram.Supervisor]
 
-    Hologram.env()
-    |> children()
+    mode
+    |> children(env)
     |> Supervisor.start_link(opts)
   end
 
-  defp all_envs_children do
+  # credo:disable-for-lines:13 Credo.Check.Readability.SinglePipe
+  defp children(mode, env) do
     [
+      if(mode == :standalone, do: {Bandit, plug: Hologram.Router}),
       {Phoenix.PubSub, name: Hologram.PubSub},
       Hologram.Router.PageModuleResolver,
       Hologram.Assets.PathRegistry,
       Hologram.Assets.ManifestCache,
-      Hologram.Assets.PageDigestRegistry
+      Hologram.Assets.PageDigestRegistry,
+      if(env == :dev, do: Hologram.LiveReload)
     ]
+    |> Enum.filter(& &1)
   end
-
-  defp children(:dev) do
-    # credo:disable-for-next-line Credo.Check.Refactor.AppendSingleItem
-    all_envs_children() ++ [Hologram.LiveReload]
-  end
-
-  defp children(_env), do: all_envs_children()
 end
