@@ -439,14 +439,7 @@ defmodule Hologram.Reflection do
     if Code.ensure_loaded?(Mix.Project) do
       Mix.Project.config()[:app]
     else
-      [project_app] =
-        for {app, _description, _vsn} <- Application.loaded_applications(),
-            deps = Application.spec(app)[:applications],
-            :hologram in deps do
-          app
-        end
-
-      project_app
+      find_app_using_hologram_that_is_not_dependency()
     end
   end
 
@@ -608,6 +601,24 @@ defmodule Hologram.Reflection do
   @spec tmp_dir() :: String.t()
   def tmp_dir do
     Path.join(root_dir(), "tmp")
+  end
+
+  defp find_app_using_hologram_that_is_not_dependency do
+    apps_with_deps =
+      for {app, _description, _vsn} <- Application.loaded_applications() do
+        {app, Application.spec(app)[:applications]}
+      end
+
+    all_deps =
+      apps_with_deps
+      |> Enum.flat_map(fn {_app, deps} -> deps end)
+      |> MapSet.new()
+
+    Enum.find_value(apps_with_deps, fn {app, deps} ->
+      if :hologram in deps && !MapSet.member?(all_deps, app) do
+        app
+      end
+    end)
   end
 
   defp include_app_elixir_modules(app, modules) do
