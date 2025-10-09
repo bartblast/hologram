@@ -1,10 +1,10 @@
-defmodule HologramFeatureTests.Events.ChangePage do
+defmodule HologramFeatureTests.Events.Change.Page1 do
   use Hologram.Page
 
   import Hologram.Commons.KernelUtils, only: [inspect: 1]
   import Kernel, except: [inspect: 1]
 
-  route "/events/change"
+  route "/events/change/1"
 
   layout HologramFeatureTests.Components.DefaultLayout
 
@@ -31,13 +31,13 @@ defmodule HologramFeatureTests.Events.ChangePage do
         <input $change="handle_email_input_change" type="email" id="email_input_elem" value={@email} />
         <br /><br />
         
-        <textarea $change="handle_textarea_change" id="textarea_elem">{@textarea}</textarea>
+        <textarea $change="handle_textarea_change" id="textarea_elem" value={@textarea} />
         <br /><br />
         
         <input $change="handle_checkbox_change" type="checkbox" id="checkbox_elem" checked={@checkbox} />
         <label for="checkbox_elem">Checkbox</label>
         <br /><br />
-        
+
         <input $change="handle_radio_change" type="radio" name="radio_group" id="radio_elem_1" value="option_1" checked={@radio == "option_1"} />
         <label for="radio_elem_1">Radio Option 1</label>
         <br />

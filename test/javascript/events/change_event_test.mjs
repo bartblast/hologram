@@ -3,6 +3,7 @@
 import {
   assert,
   defineGlobalErlangAndElixirModules,
+  JSDOM,
 } from "../support/helpers.mjs";
 
 import ChangeEvent from "../../../assets/js/events/change_event.mjs";
@@ -13,8 +14,11 @@ defineGlobalErlangAndElixirModules();
 describe("ChangeEvent", () => {
   describe("buildOperationParam()", () => {
     it("handles checkbox inputs", () => {
+      const target = {tagName: "INPUT", type: "checkbox", checked: true};
+
       const event = {
-        target: {tagName: "INPUT", type: "checkbox", checked: true},
+        target: target,
+        currentTarget: target, // For individual field events, currentTarget == target
       };
 
       const result = ChangeEvent.buildOperationParam(event);
@@ -26,7 +30,13 @@ describe("ChangeEvent", () => {
     });
 
     it("handles radio inputs", () => {
-      const event = {target: {tagName: "INPUT", type: "radio", checked: false}};
+      const target = {tagName: "INPUT", type: "radio", checked: false};
+
+      const event = {
+        target: target,
+        currentTarget: target, // For individual field events, currentTarget = target
+      };
+
       const result = ChangeEvent.buildOperationParam(event);
 
       assert.deepStrictEqual(
@@ -36,7 +46,13 @@ describe("ChangeEvent", () => {
     });
 
     it("handles single select elements", () => {
-      const event = {target: {tagName: "SELECT", value: "option_2"}};
+      const target = {tagName: "SELECT", value: "option_2"};
+
+      const event = {
+        target: target,
+        currentTarget: target, // For individual field events, currentTarget = target
+      };
+
       const result = ChangeEvent.buildOperationParam(event);
 
       assert.deepStrictEqual(
@@ -48,12 +64,15 @@ describe("ChangeEvent", () => {
     it("handles multiple select elements", () => {
       const selectedOptions = [{value: "option_1"}, {value: "option_3"}];
 
+      const target = {
+        tagName: "SELECT",
+        multiple: true,
+        selectedOptions: selectedOptions,
+      };
+
       const event = {
-        target: {
-          tagName: "SELECT",
-          multiple: true,
-          selectedOptions: selectedOptions,
-        },
+        target: target,
+        currentTarget: target, // For individual field events, currentTarget = target
       };
 
       const result = ChangeEvent.buildOperationParam(event);
@@ -70,7 +89,13 @@ describe("ChangeEvent", () => {
     });
 
     it("handles textarea elements", () => {
-      const event = {target: {tagName: "TEXTAREA", value: "Some text content"}};
+      const target = {tagName: "TEXTAREA", value: "Some text content"};
+
+      const event = {
+        target: target,
+        currentTarget: target, // For individual field events, currentTarget = target
+      };
+
       const result = ChangeEvent.buildOperationParam(event);
 
       assert.deepStrictEqual(
@@ -80,8 +105,15 @@ describe("ChangeEvent", () => {
     });
 
     it("handles other input types as text", () => {
+      const target = {
+        tagName: "INPUT",
+        type: "email",
+        value: "test@example.com",
+      };
+
       const event = {
-        target: {tagName: "INPUT", type: "email", value: "test@example.com"},
+        target: target,
+        currentTarget: target, // For individual field events, currentTarget = target
       };
 
       const result = ChangeEvent.buildOperationParam(event);
@@ -91,10 +123,49 @@ describe("ChangeEvent", () => {
         Type.map([[Type.atom("value"), Type.bitstring("test@example.com")]]),
       );
     });
+
+    it("handles form-level change events", () => {
+      const dom = new JSDOM(`
+        <html>
+          <body>
+            <form id="my_form">
+              <input name="username" value="john_doe">
+              <input name="email" value="john@example.com">
+            </form>
+          </body>
+        </html>
+      `);
+
+      const form = dom.window.document.getElementById("my_form");
+      const input = form.querySelector('input[name="username"]');
+
+      // For form-level events: target is the input, currentTarget is the form
+      const event = {
+        target: input,
+        currentTarget: form,
+      };
+
+      const result = ChangeEvent.buildOperationParam(event);
+
+      // Should delegate to SubmitEvent and collect all form data
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [Type.bitstring("username"), Type.bitstring("john_doe")],
+          [Type.bitstring("email"), Type.bitstring("john@example.com")],
+        ]),
+      );
+    });
   });
 
   it("isEventIgnored()", () => {
-    const event = {target: {value: "my_value"}};
+    const target = {value: "my_value"};
+
+    const event = {
+      target: target,
+      currentTarget: target,
+    };
+
     assert.isFalse(ChangeEvent.isEventIgnored(event));
   });
 });

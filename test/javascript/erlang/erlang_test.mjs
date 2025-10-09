@@ -4,11 +4,13 @@ import {
   assert,
   assertBoxedError,
   assertBoxedFalse,
+  assertBoxedStrictEqual,
   assertBoxedTrue,
   contextFixture,
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
+import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
@@ -1603,148 +1605,221 @@ describe("Erlang", () => {
   describe("binary_to_integer/1", () => {
     const binary_to_integer = Erlang["binary_to_integer/1"];
 
-    it("positive integer, without plus sign", () => {
+    it("delegates to binary_to_integer/2 with base 10", () => {
       const binary = Type.bitstring("123");
       const result = binary_to_integer(binary);
-      const expected = Type.integer(123);
+      const expected = Erlang["binary_to_integer/2"](binary, Type.integer(10));
 
       assert.deepStrictEqual(result, expected);
     });
+  });
 
-    it("positive integer, with plus sign", () => {
-      const binary = Type.bitstring("+123");
-      const result = binary_to_integer(binary);
-      const expected = Type.integer(123);
+  describe("binary_to_integer/2", () => {
+    const binary_to_integer = Erlang["binary_to_integer/2"];
 
-      assert.deepStrictEqual(result, expected);
+    describe("different bases", () => {
+      it("base 2", () => {
+        const binary = Type.bitstring("1111");
+        const base = Type.integer(2);
+        const result = binary_to_integer(binary, base);
+        const expected = Type.integer(15);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("base 8", () => {
+        const binary = Type.bitstring("177");
+        const base = Type.integer(8);
+        const result = binary_to_integer(binary, base);
+        const expected = Type.integer(127);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("base 10", () => {
+        const binary = Type.bitstring("123");
+        const base = Type.integer(10);
+        const result = binary_to_integer(binary, base);
+        const expected = Type.integer(123);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("base 16", () => {
+        const binary = Type.bitstring("3FF");
+        const base = Type.integer(16);
+        const result = binary_to_integer(binary, base);
+        const expected = Type.integer(1023);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("base 36", () => {
+        const binary = Type.bitstring("ZZ");
+        const base = Type.integer(36);
+        const result = binary_to_integer(binary, base);
+        const expected = Type.integer(1295);
+
+        assert.deepStrictEqual(result, expected);
+      });
     });
 
-    it("negative integer", () => {
-      const binary = Type.bitstring("-456");
-      const result = binary_to_integer(binary);
-      const expected = Type.integer(-456);
+    describe("sign handling", () => {
+      it("positive integer without sign", () => {
+        const binary = Type.bitstring("123");
+        const base = Type.integer(10);
+        const result = binary_to_integer(binary, base);
+        const expected = Type.integer(123);
 
-      assert.deepStrictEqual(result, expected);
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("positive integer with plus sign", () => {
+        const binary = Type.bitstring("+123");
+        const base = Type.integer(10);
+        const result = binary_to_integer(binary, base);
+        const expected = Type.integer(123);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("negative integer", () => {
+        const binary = Type.bitstring("-123");
+        const base = Type.integer(10);
+        const result = binary_to_integer(binary, base);
+        const expected = Type.integer(-123);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("zero", () => {
+        const binary = Type.bitstring("0");
+        const base = Type.integer(10);
+        const result = binary_to_integer(binary, base);
+        const expected = Type.integer(0);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("positive zero", () => {
+        const binary = Type.bitstring("+0");
+        const base = Type.integer(10);
+        const result = binary_to_integer(binary, base);
+        const expected = Type.integer(0);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("negative zero", () => {
+        const binary = Type.bitstring("-0");
+        const base = Type.integer(10);
+        const result = binary_to_integer(binary, base);
+        const expected = Type.integer(0);
+
+        assert.deepStrictEqual(result, expected);
+      });
     });
 
-    it("zero", () => {
-      const binary = Type.bitstring("0");
-      const result = binary_to_integer(binary);
-      const expected = Type.integer(0);
+    describe("case sensitivity", () => {
+      it("lowercase letters", () => {
+        const binary = Type.bitstring("abcd");
+        const base = Type.integer(16);
+        const result = binary_to_integer(binary, base);
+        const expected = Type.integer(43981);
 
-      assert.deepStrictEqual(result, expected);
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("uppercase letters", () => {
+        const binary = Type.bitstring("ABCD");
+        const base = Type.integer(16);
+        const result = binary_to_integer(binary, base);
+        const expected = Type.integer(43981);
+
+        assert.deepStrictEqual(result, expected);
+      });
+
+      it("mixed case letters", () => {
+        const binary = Type.bitstring("aBcD");
+        const base = Type.integer(16);
+        const result = binary_to_integer(binary, base);
+        const expected = Type.integer(43981);
+
+        assert.deepStrictEqual(result, expected);
+      });
     });
 
-    it("large integer", () => {
-      const binary = Type.bitstring("90071992547409919007199254740991");
-      const result = binary_to_integer(binary);
-      const expected = Type.integer(90071992547409919007199254740991n);
+    describe("error cases", () => {
+      it("raises ArgumentError if the first argument is not a binary", () => {
+        assertBoxedError(
+          () => binary_to_integer(Type.atom("abc"), Type.integer(10)),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        );
+      });
 
-      assert.deepStrictEqual(result, expected);
-    });
+      it("raises ArgumentError if the first argument is a non-binary bitstring", () => {
+        assertBoxedError(
+          () => binary_to_integer(Type.bitstring([1, 0, 1]), Type.integer(10)),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        );
+      });
 
-    it("raises ArgumentError with leading whitespace", () => {
-      assertBoxedError(
-        () => binary_to_integer(Type.bitstring("  123")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
-      );
-    });
+      it("raises ArgumentError if binary is empty", () => {
+        assertBoxedError(
+          () => binary_to_integer(Type.bitstring(""), Type.integer(10)),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "not a textual representation of an integer",
+          ),
+        );
+      });
 
-    it("raises ArgumentError with trailing whitespace", () => {
-      assertBoxedError(
-        () => binary_to_integer(Type.bitstring("123  ")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
-      );
-    });
+      it("raises ArgumentError if binary contains characters outside of the alphabet", () => {
+        assertBoxedError(
+          () => binary_to_integer(Type.bitstring("123"), Type.integer(2)),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "not a textual representation of an integer",
+          ),
+        );
+      });
 
-    it("raises ArgumentError with surrounding whitespace", () => {
-      assertBoxedError(
-        () => binary_to_integer(Type.bitstring("  789  ")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
-      );
-    });
+      it("raises ArgumentError if the second argument is not an integer", () => {
+        assertBoxedError(
+          () => binary_to_integer(Type.bitstring("123"), Type.atom("abc")),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            2,
+            "not an integer in the range 2 through 36",
+          ),
+        );
+      });
 
-    it("raises ArgumentError if the argument is not a bitstring", () => {
-      assertBoxedError(
-        () => binary_to_integer(Type.atom("abc")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
-      );
-    });
+      it("raises ArgumentError if base is less than 2", () => {
+        assertBoxedError(
+          () => binary_to_integer(Type.bitstring("123"), Type.integer(1)),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            2,
+            "not an integer in the range 2 through 36",
+          ),
+        );
+      });
 
-    it("raises ArgumentError if the argument is a non-binary bitstring", () => {
-      assertBoxedError(
-        () => binary_to_integer(Type.bitstring([1, 0, 1])),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
-      );
-    });
-
-    it("raises ArgumentError if the binary contains non-numeric text", () => {
-      assertBoxedError(
-        () => binary_to_integer(Type.bitstring("abc")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
-      );
-    });
-
-    it("raises ArgumentError if the binary contains decimal point", () => {
-      assertBoxedError(
-        () => binary_to_integer(Type.bitstring("123.45")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
-      );
-    });
-
-    it("raises ArgumentError if the binary is empty", () => {
-      assertBoxedError(
-        () => binary_to_integer(Type.bitstring("")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
-      );
-    });
-
-    it("raises ArgumentError if the binary contains only whitespace", () => {
-      assertBoxedError(
-        () => binary_to_integer(Type.bitstring("   ")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
-      );
-    });
-
-    it("raises ArgumentError if the binary contains mixed text and numbers", () => {
-      assertBoxedError(
-        () => binary_to_integer(Type.bitstring("123abc")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "not a textual representation of an integer",
-        ),
-      );
+      it("raises ArgumentError if base is greater than 36", () => {
+        assertBoxedError(
+          () => binary_to_integer(Type.bitstring("123"), Type.integer(37)),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            2,
+            "not an integer in the range 2 through 36",
+          ),
+        );
+      });
     });
   });
 
@@ -2596,6 +2671,121 @@ describe("Erlang", () => {
           ),
         "ArgumentError",
         "argument error: nil",
+      );
+    });
+  });
+
+  describe("split_binary/2", () => {
+    const split_binary = Erlang["split_binary/2"];
+
+    const emptyBitstring = Type.bitstring("");
+
+    it("splits binary at position 0", () => {
+      const binary = Type.bitstring("0123456789");
+      const position = Type.integer(0);
+
+      const result = split_binary(binary, position);
+      const expected = Type.tuple([emptyBitstring, binary]);
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("splits binary at middle position", () => {
+      const binary = Type.bitstring("0123456789");
+      const position = Type.integer(3);
+
+      const result = split_binary(binary, position);
+      const expected = Type.tuple([
+        Type.bitstring("012"),
+        Type.bitstring("3456789"),
+      ]);
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("splits binary at end position", () => {
+      const binary = Type.bitstring("0123456789");
+      const position = Type.integer(10);
+
+      const result = split_binary(binary, position);
+      const expected = Type.tuple([binary, emptyBitstring]);
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("splits empty binary", () => {
+      const binary = emptyBitstring;
+      const position = Type.integer(0);
+
+      const result = split_binary(binary, position);
+      const expected = Type.tuple([emptyBitstring, emptyBitstring]);
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("splits single character binary", () => {
+      const binary = Type.bitstring("a");
+      const position = Type.integer(1);
+
+      const result = split_binary(binary, position);
+      const expected = Type.tuple([binary, emptyBitstring]);
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("splits Unicode binary", () => {
+      const binary = Type.bitstring("全息图全息图");
+      const position = Type.integer(4);
+
+      const result = split_binary(binary, position);
+
+      const expected = Type.tuple([
+        Bitstring.fromBytes([229, 133, 168, 230]),
+        Bitstring.fromBytes([
+          129, 175, 229, 155, 190, 229, 133, 168, 230, 129, 175, 229, 155, 190,
+        ]),
+      ]);
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if the first argument is not a binary", () => {
+      assertBoxedError(
+        () => split_binary(Type.atom("abc"), Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("raises ArgumentError if the first argument is a non-binary bitstring", () => {
+      assertBoxedError(
+        () => split_binary(Type.bitstring([1, 0, 1]), Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not an integer", () => {
+      assertBoxedError(
+        () => split_binary(Type.bitstring("abc"), Type.atom("invalid")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is a negative integer", () => {
+      assertBoxedError(
+        () => split_binary(Type.bitstring("abc"), Type.integer(-1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if position is greater than binary size", () => {
+      assertBoxedError(
+        () => split_binary(Type.bitstring("abc"), Type.integer(4)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
       );
     });
   });

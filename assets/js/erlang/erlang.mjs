@@ -361,15 +361,43 @@ const Erlang = {
 
   // Start binary_to_integer/1
   "binary_to_integer/1": (binary) => {
+    return Erlang["binary_to_integer/2"](binary, Type.integer(10));
+  },
+  // End binary_to_integer/1
+  // Deps: [:erlang.binary_to_integer/2]
+
+  // Start binary_to_integer/2
+  "binary_to_integer/2": (binary, base) => {
     if (!Type.isBinary(binary)) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
     }
 
-    const text = Bitstring.toText(binary);
+    if (!Type.isInteger(base) || base.value < 2n || base.value > 36n) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    }
 
-    if (!/^[+-]?\d+$/.test(text)) {
+    const text = Bitstring.toText(binary);
+    const baseNum = Number(base.value);
+
+    let validPattern;
+
+    // Validate the text representation based on the base
+    if (baseNum <= 10) {
+      const maxDigit = String(baseNum - 1);
+      validPattern = new RegExp(`^[+-]?[0-${maxDigit}]+$`);
+    } else {
+      const maxLetter = String.fromCharCode(65 + baseNum - 11); // A=10, B=11, etc.
+      validPattern = new RegExp(`^[+-]?[0-9A-${maxLetter}]+$`, "i");
+    }
+
+    if (!validPattern.test(text)) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(
           1,
@@ -378,9 +406,14 @@ const Erlang = {
       );
     }
 
-    return Type.integer(BigInt(text));
+    // For base 10, use BigInt directly to avoid precision loss
+    // For other bases, use parseInt which handles the base conversion
+    const result =
+      baseNum === 10 ? BigInt(text) : BigInt(parseInt(text, baseNum));
+
+    return Type.integer(result);
   },
-  // End binary_to_integer/1
+  // End binary_to_integer/2
   // Deps: []
 
   // Start bit_size/1
@@ -827,6 +860,61 @@ const Erlang = {
   },
   // End orelse/2
   // Deps: []
+
+  // Start split_binary/2
+  "split_binary/2": (binary, position) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    if (!Type.isInteger(position)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (position.value < 0n) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    }
+
+    const pos = Number(position.value);
+    const totalBytes = Number(Erlang["byte_size/1"](binary).value);
+
+    if (pos > totalBytes) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    }
+
+    // If position is 0, first part is empty binary
+    if (pos === 0) {
+      return Type.tuple([Type.bitstring(""), binary]);
+    }
+
+    // If position equals total size, second part is empty binary
+    if (pos === totalBytes) {
+      return Type.tuple([binary, Type.bitstring("")]);
+    }
+
+    // Split the binary using takeChunk
+    // First part: from start to position (pos bytes)
+    const firstPart = Bitstring.takeChunk(binary, 0, pos * 8);
+
+    // Second part: from position to end
+    const secondPart = Bitstring.takeChunk(
+      binary,
+      pos * 8,
+      (totalBytes - pos) * 8,
+    );
+
+    return Type.tuple([firstPart, secondPart]);
+  },
+  // End split_binary/2
+  // Deps: [:erlang.byte_size/1]
 
   // Start tl/1
   "tl/1": (list) => {

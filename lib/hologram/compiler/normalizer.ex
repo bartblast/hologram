@@ -41,7 +41,7 @@ defmodule Hologram.Compiler.Normalizer do
     {:for, meta, Enum.map(parts, &normalize_comprehension_part/1)}
   end
 
-  def normalize({:try, meta, [opts]}) do
+  def normalize({:try, meta, [opts]}) when is_list(opts) do
     {:try, meta, [Enum.map(opts, &normalize_try_opt/1)]}
   end
 

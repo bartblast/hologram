@@ -81,6 +81,17 @@ describe("Bitstring", () => {
 
       assert.equal(Bitstring.calculateSegmentBitCount(segment), 8);
     });
+
+    it("returns null when segment size can't be determined", () => {
+      const value = Type.bitstring("hello");
+
+      // This will cause resolveSegmentSize() to return null
+      const segment = Type.bitstringSegment(value, {
+        type: "bitstring",
+      });
+
+      assert.equal(Bitstring.calculateSegmentBitCount(segment), null);
+    });
   });
 
   it("calculateTextByteCount()", () => {
@@ -5372,23 +5383,13 @@ describe("Bitstring", () => {
   });
 
   describe("resolveSegmentUnit()", () => {
-    it("returns explicit unit when both unit and size are specified", () => {
+    it("returns explicit unit when it is specified", () => {
       const segment = Type.bitstringSegment(Type.integer(123), {
         type: "integer",
-        size: Type.integer(1),
         unit: 16n,
       });
 
       assert.equal(Bitstring.resolveSegmentUnit(segment), 16);
-    });
-
-    it("returns default unit when unit is specified but size is not", () => {
-      const segment = Type.bitstringSegment(Type.integer(123), {
-        type: "integer",
-        unit: 16n,
-      });
-
-      assert.equal(Bitstring.resolveSegmentUnit(segment), 1);
     });
 
     it("returns 8 for binary segments by default", () => {
@@ -5397,6 +5398,14 @@ describe("Bitstring", () => {
       });
 
       assert.equal(Bitstring.resolveSegmentUnit(segment), 8);
+    });
+
+    it("returns 1 for bitstring segments by default", () => {
+      const segment = Type.bitstringSegment(Type.bitstring("abc"), {
+        type: "bitstring",
+      });
+
+      assert.equal(Bitstring.resolveSegmentUnit(segment), 1);
     });
 
     it("returns 1 for float segments by default", () => {
@@ -5413,14 +5422,6 @@ describe("Bitstring", () => {
       });
 
       assert.equal(Bitstring.resolveSegmentUnit(segment), 1);
-    });
-
-    it("returns null for segments of type that don't have default unit", () => {
-      const segment = Type.bitstringSegment(Type.bitstring("abc"), {
-        type: "bitstring",
-      });
-
-      assert.isNull(Bitstring.resolveSegmentUnit(segment));
     });
   });
 

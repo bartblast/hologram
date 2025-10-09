@@ -16,6 +16,7 @@ defmodule Hologram.Compiler.CallGraph do
   @type edge :: {vertex, vertex}
   @type vertex :: module | mfa
 
+  # TODO: Determine automatically based on deps annotations next to function implementations
   @erlang_mfa_edges [
     {{:erlang, :"=<", 2}, {:erlang, :<, 2}},
     {{:erlang, :"=<", 2}, {:erlang, :==, 2}},
@@ -25,9 +26,11 @@ defmodule Hologram.Compiler.CallGraph do
     {{:erlang, :binary_to_atom, 1}, {:erlang, :binary_to_atom, 2}},
     {{:erlang, :binary_to_existing_atom, 1}, {:erlang, :binary_to_atom, 1}},
     {{:erlang, :binary_to_existing_atom, 2}, {:erlang, :binary_to_atom, 2}},
+    {{:erlang, :binary_to_integer, 1}, {:erlang, :binary_to_integer, 2}},
     {{:erlang, :error, 1}, {:erlang, :error, 2}},
     {{:erlang, :integer_to_binary, 1}, {:erlang, :integer_to_binary, 2}},
     {{:erlang, :iolist_to_binary, 1}, {:lists, :flatten, 1}},
+    {{:erlang, :split_binary, 2}, {:erlang, :byte_size, 1}},
     {{:lists, :keymember, 3}, {:lists, :keyfind, 3}},
     {{:maps, :get, 2}, {:maps, :get, 3}},
     {{:maps, :update, 3}, {:maps, :is_key, 2}},

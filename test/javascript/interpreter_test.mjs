@@ -3034,6 +3034,482 @@ describe("Interpreter", () => {
           "no match of right hand side value: <<1, 2>>",
         );
       });
+
+      describe("last segment matching", () => {
+        // <<prefix::size(8), rest::binary>> = "hello"
+        it("last binary segment without size consumes all remaining bits", () => {
+          const myBitstring = Type.bitstring("hello");
+
+          const result = Interpreter.matchOperator(
+            myBitstring,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("prefix"), {
+                type: "integer",
+                size: Type.integer(8),
+              }),
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "binary",
+              }),
+            ]),
+            context,
+          );
+
+          assertBoxedStrictEqual(result, myBitstring);
+
+          assertBoxedStrictEqual(
+            context.vars.__matched__.rest,
+            Type.bitstring("ello"),
+          );
+
+          assert.deepStrictEqual(context.vars, {
+            a: Type.integer(9),
+            __matched__: {
+              prefix: Type.integer(104),
+              rest: context.vars.__matched__.rest,
+            },
+          });
+        });
+
+        // <<prefix::size(8), rest::bitstring>> = "hello"
+        it("last bitstring segment without size consumes all remaining bits", () => {
+          const myBitstring = Type.bitstring("hello");
+
+          const result = Interpreter.matchOperator(
+            myBitstring,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("prefix"), {
+                type: "integer",
+                size: Type.integer(8),
+              }),
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "bitstring",
+              }),
+            ]),
+            context,
+          );
+
+          assertBoxedStrictEqual(result, myBitstring);
+
+          assertBoxedStrictEqual(
+            context.vars.__matched__.rest,
+            Type.bitstring("ello"),
+          );
+
+          assert.deepStrictEqual(context.vars, {
+            a: Type.integer(9),
+            __matched__: {
+              prefix: Type.integer(104),
+              rest: context.vars.__matched__.rest,
+            },
+          });
+        });
+
+        // <<prefix::size(12), rest::bitstring>> = <<1, 2, 3>>
+        it("last bitstring segment without size consumes remaining bits even when not byte-aligned", () => {
+          const myBitstring = Type.bitstring([
+            Type.bitstringSegment(Type.integer(1), {type: "integer"}),
+            Type.bitstringSegment(Type.integer(2), {type: "integer"}),
+            Type.bitstringSegment(Type.integer(3), {type: "integer"}),
+          ]);
+
+          const result = Interpreter.matchOperator(
+            myBitstring,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("prefix"), {
+                type: "integer",
+                size: Type.integer(12),
+              }),
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "bitstring",
+              }),
+            ]),
+            context,
+          );
+
+          assertBoxedStrictEqual(result, myBitstring);
+
+          assertBoxedStrictEqual(
+            context.vars.__matched__.rest,
+            Type.bitstring([
+              Type.bitstringSegment(Type.integer(32), {type: "integer"}),
+              Type.bitstringSegment(Type.integer(3), {
+                type: "integer",
+                size: Type.integer(4),
+              }),
+            ]),
+          );
+
+          assert.deepStrictEqual(context.vars, {
+            a: Type.integer(9),
+            __matched__: {
+              prefix: Type.integer(16),
+              rest: context.vars.__matched__.rest,
+            },
+          });
+        });
+
+        // <<prefix::size(8), rest::binary>> = "h"
+        it("last binary segment without size handles empty remaining bits", () => {
+          const myBitstring = Type.bitstring("h");
+
+          const result = Interpreter.matchOperator(
+            myBitstring,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("prefix"), {
+                type: "integer",
+                size: Type.integer(8),
+              }),
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "binary",
+              }),
+            ]),
+            context,
+          );
+
+          assertBoxedStrictEqual(result, myBitstring);
+
+          assertBoxedStrictEqual(
+            context.vars.__matched__.rest,
+            Type.bitstring(""),
+          );
+
+          assert.deepStrictEqual(context.vars, {
+            a: Type.integer(9),
+            __matched__: {
+              prefix: Type.integer(104),
+              rest: context.vars.__matched__.rest,
+            },
+          });
+        });
+
+        // <<prefix::size(8), rest::bitstring>> = "h"
+        it("last bitstring segment without size handles empty remaining bits", () => {
+          const myBitstring = Type.bitstring("h");
+
+          const result = Interpreter.matchOperator(
+            myBitstring,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("prefix"), {
+                type: "integer",
+                size: Type.integer(8),
+              }),
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "bitstring",
+              }),
+            ]),
+            context,
+          );
+
+          assertBoxedStrictEqual(result, myBitstring);
+
+          assertBoxedStrictEqual(
+            context.vars.__matched__.rest,
+            Type.bitstring(""),
+          );
+
+          assert.deepStrictEqual(context.vars, {
+            a: Type.integer(9),
+            __matched__: {
+              prefix: Type.integer(104),
+              rest: context.vars.__matched__.rest,
+            },
+          });
+        });
+
+        // <<rest::binary>> = "hello"
+        it("single last binary segment without size consumes entire bitstring", () => {
+          const myBitstring = Type.bitstring("hello");
+
+          const result = Interpreter.matchOperator(
+            myBitstring,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "binary",
+              }),
+            ]),
+            context,
+          );
+
+          assertBoxedStrictEqual(result, myBitstring);
+
+          assertBoxedStrictEqual(
+            context.vars.__matched__.rest,
+            Type.bitstring("hello"),
+          );
+
+          assert.deepStrictEqual(context.vars, {
+            a: Type.integer(9),
+            __matched__: {
+              rest: context.vars.__matched__.rest,
+            },
+          });
+        });
+
+        // <<rest::bitstring>> = "hello"
+        it("single last bitstring segment without size consumes entire bitstring", () => {
+          const myBitstring = Type.bitstring("hello");
+
+          const result = Interpreter.matchOperator(
+            myBitstring,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "bitstring",
+              }),
+            ]),
+            context,
+          );
+
+          assertBoxedStrictEqual(result, myBitstring);
+
+          assertBoxedStrictEqual(
+            context.vars.__matched__.rest,
+            Type.bitstring("hello"),
+          );
+
+          assert.deepStrictEqual(context.vars, {
+            a: Type.integer(9),
+            __matched__: {
+              rest: context.vars.__matched__.rest,
+            },
+          });
+        });
+
+        // <<rest::bitstring>> = <<1::1, 0::1, 1::1>>
+        it("single last bitstring segment without size consumes entire non-byte-aligned bitstring", () => {
+          const myBitstring = Type.bitstring([1, 0, 1]);
+
+          const result = Interpreter.matchOperator(
+            myBitstring,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "bitstring",
+              }),
+            ]),
+            context,
+          );
+
+          assertBoxedStrictEqual(result, myBitstring);
+
+          assertBoxedStrictEqual(context.vars.__matched__.rest, myBitstring);
+
+          assert.deepStrictEqual(context.vars, {
+            a: Type.integer(9),
+            __matched__: {
+              rest: context.vars.__matched__.rest,
+            },
+          });
+        });
+
+        // <<rest::binary>> = ""
+        it("single last binary segment without size consumes empty bitstring", () => {
+          const myBitstring = Type.bitstring("");
+
+          const result = Interpreter.matchOperator(
+            myBitstring,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "binary",
+              }),
+            ]),
+            context,
+          );
+
+          assertBoxedStrictEqual(result, myBitstring);
+
+          assertBoxedStrictEqual(
+            context.vars.__matched__.rest,
+            Type.bitstring(""),
+          );
+
+          assert.deepStrictEqual(context.vars, {
+            a: Type.integer(9),
+            __matched__: {
+              rest: context.vars.__matched__.rest,
+            },
+          });
+        });
+
+        // <<rest::bitstring>> = ""
+        it("single last bitstring segment without size consumes empty bitstring", () => {
+          const myBitstring = Type.bitstring("");
+
+          const result = Interpreter.matchOperator(
+            myBitstring,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "bitstring",
+              }),
+            ]),
+            context,
+          );
+
+          assertBoxedStrictEqual(result, myBitstring);
+
+          assertBoxedStrictEqual(
+            context.vars.__matched__.rest,
+            Type.bitstring(""),
+          );
+
+          assert.deepStrictEqual(context.vars, {
+            a: Type.integer(9),
+            __matched__: {
+              rest: context.vars.__matched__.rest,
+            },
+          });
+        });
+
+        // This won't compile
+        // <<first::binary, second::size(8)>> = "hello"
+        // it("non-last binary segment without size fails normally")
+
+        // This won't compile
+        // <<first::bitstring, second::size(8)>> = "hello"
+        // it("non-last bitstring segment without size fails normally")
+
+        // <<prefix::size(8), rest::binary-size(4)>> = "hello"
+        it("last binary segment with explicit size uses normal size calculation", () => {
+          const myBitstring = Type.bitstring("hello");
+
+          const result = Interpreter.matchOperator(
+            myBitstring,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("prefix"), {
+                type: "integer",
+                size: Type.integer(8),
+              }),
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "binary",
+                size: Type.integer(4),
+              }),
+            ]),
+            context,
+          );
+
+          assertBoxedStrictEqual(result, myBitstring);
+
+          assertBoxedStrictEqual(
+            context.vars.__matched__.rest,
+            Type.bitstring("ello"),
+          );
+
+          assert.deepStrictEqual(context.vars, {
+            a: Type.integer(9),
+            __matched__: {
+              prefix: Type.integer(104),
+              rest: context.vars.__matched__.rest,
+            },
+          });
+        });
+
+        // <<prefix::size(8), rest::bitstring-size(4 * 8)>> = "hello"
+        it("last bitstring segment with explicit size uses normal size calculation", () => {
+          const myBitstring = Type.bitstring("hello");
+
+          const result = Interpreter.matchOperator(
+            myBitstring,
+            Type.bitstringPattern([
+              Type.bitstringSegment(Type.variablePattern("prefix"), {
+                type: "integer",
+                size: Type.integer(8),
+              }),
+              Type.bitstringSegment(Type.variablePattern("rest"), {
+                type: "bitstring",
+                size: Type.integer(4 * 8),
+              }),
+            ]),
+            context,
+          );
+
+          assertBoxedStrictEqual(result, myBitstring);
+
+          assertBoxedStrictEqual(
+            context.vars.__matched__.rest,
+            Type.bitstring("ello"),
+          );
+
+          assert.deepStrictEqual(context.vars, {
+            a: Type.integer(9),
+            __matched__: {
+              prefix: Type.integer(104),
+              rest: context.vars.__matched__.rest,
+            },
+          });
+        });
+
+        // <<prefix::size(8), rest::binary-size(40)>> = "hello"
+        it("last binary segment with size larger than remaining bits fails", () => {
+          const myBitstring = Type.bitstring("hello");
+
+          assertBoxedError(
+            () =>
+              Interpreter.matchOperator(
+                myBitstring,
+                Type.bitstringPattern([
+                  Type.bitstringSegment(Type.variablePattern("prefix"), {
+                    type: "integer",
+                    size: Type.integer(8),
+                  }),
+                  Type.bitstringSegment(Type.variablePattern("rest"), {
+                    type: "binary",
+                    size: Type.integer(40),
+                  }),
+                ]),
+                context,
+              ),
+            "MatchError",
+            'no match of right hand side value: "hello"',
+          );
+        });
+
+        // <<prefix::size(8), rest::bitstring-size(40)>> = "hello"
+        it("last bitstring segment with size larger than remaining bits fails", () => {
+          const myBitstring = Type.bitstring("hello");
+
+          assertBoxedError(
+            () =>
+              Interpreter.matchOperator(
+                myBitstring,
+                Type.bitstringPattern([
+                  Type.bitstringSegment(Type.variablePattern("prefix"), {
+                    type: "integer",
+                    size: Type.integer(8),
+                  }),
+                  Type.bitstringSegment(Type.variablePattern("rest"), {
+                    type: "bitstring",
+                    size: Type.integer(40),
+                  }),
+                ]),
+                context,
+              ),
+            "MatchError",
+            'no match of right hand side value: "hello"',
+          );
+        });
+
+        // <<prefix::size(8), rest::integer>> = "hello"
+        it("last integer segment without size uses normal size calculation and fails due to leftover bits", () => {
+          const myBitstring = Type.bitstring("hello");
+
+          assertBoxedError(
+            () =>
+              Interpreter.matchOperator(
+                myBitstring,
+                Type.bitstringPattern([
+                  Type.bitstringSegment(Type.variablePattern("prefix"), {
+                    type: "integer",
+                    size: Type.integer(8),
+                  }),
+                  Type.bitstringSegment(Type.variablePattern("rest"), {
+                    type: "integer",
+                  }),
+                ]),
+                context,
+              ),
+            "MatchError",
+            'no match of right hand side value: "hello"',
+          );
+        });
+      });
     });
 
     describe("bitstring segment decoding, signed modifier", () => {
@@ -4408,17 +4884,82 @@ describe("Interpreter", () => {
       });
     });
 
-    // _var = 2
-    it("match placeholder", () => {
-      const result = Interpreter.matchOperator(
-        Type.integer(2),
-        Type.matchPlaceholder(),
-        context,
-      );
+    describe("match placeholder", () => {
+      // _var = 2
+      it("integer", () => {
+        const result = Interpreter.matchOperator(
+          Type.integer(2),
+          Type.matchPlaceholder(),
+          context,
+        );
 
-      assert.deepStrictEqual(result, Type.integer(2));
+        assert.deepStrictEqual(result, Type.integer(2));
 
-      assert.deepStrictEqual(context.vars, varsWithEmptyMatchedValues);
+        assert.deepStrictEqual(context.vars, varsWithEmptyMatchedValues);
+      });
+
+      // <<prefix::size(8), _rest::binary>> = "hello"
+      it("last bitstring segment", () => {
+        const myBitstring = Type.bitstring("hello");
+
+        const result = Interpreter.matchOperator(
+          myBitstring,
+          Type.bitstringPattern([
+            Type.bitstringSegment(Type.variablePattern("prefix"), {
+              type: "integer",
+              size: Type.integer(8),
+            }),
+            Type.bitstringSegment(Type.matchPlaceholder(), {
+              type: "binary",
+            }),
+          ]),
+          context,
+        );
+
+        assertBoxedStrictEqual(result, myBitstring);
+
+        // Match placeholder doesn't bind to variables, so prefix should be the only variable
+        assert.deepStrictEqual(context.vars, {
+          a: Type.integer(9),
+          __matched__: {
+            prefix: Type.integer(104),
+          },
+        });
+      });
+
+      // <<_prefix::size(8), rest::binary>> = "hello"
+      it("non-last bitstring segment", () => {
+        const myBitstring = Type.bitstring("hello");
+
+        const result = Interpreter.matchOperator(
+          myBitstring,
+          Type.bitstringPattern([
+            Type.bitstringSegment(Type.matchPlaceholder(), {
+              type: "integer",
+              size: Type.integer(8),
+            }),
+            Type.bitstringSegment(Type.variablePattern("rest"), {
+              type: "binary",
+            }),
+          ]),
+          context,
+        );
+
+        assertBoxedStrictEqual(result, myBitstring);
+
+        assertBoxedStrictEqual(
+          context.vars.__matched__.rest,
+          Type.bitstring("ello"),
+        );
+
+        // Match placeholder doesn't bind to variables, so only rest should be bound
+        assert.deepStrictEqual(context.vars, {
+          a: Type.integer(9),
+          __matched__: {
+            rest: context.vars.__matched__.rest,
+          },
+        });
+      });
     });
 
     describe("nested match operators", () => {

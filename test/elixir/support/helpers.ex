@@ -243,6 +243,14 @@ defmodule Hologram.Test.Helpers do
   end
 
   @doc """
+  Returns unnormalized (pre-normalization) AST of the given module.
+  """
+  @spec unnormalized_ast(module) :: AST.t()
+  def unnormalized_ast(module) do
+    BeamFile.elixir_quoted!(module)
+  end
+
+  @doc """
   Waits until the specified process is no longer running.
 
   ## Examples
