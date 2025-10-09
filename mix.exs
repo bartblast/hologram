@@ -54,6 +54,7 @@ defmodule Hologram.MixProject do
       {:mox, "~> 1.0", only: :test},
       {:phoenix, "~> 1.7"},
       {:phoenix_pubsub, "~> 2.0"},
+      {:plug, "~> 1.0"},
       {:plug_crypto, "~> 2.0"},
       {:recode, "~> 0.7", only: :dev, runtime: false},
       {:sobelow, "~> 0.12", only: [:dev, :test], runtime: false},
