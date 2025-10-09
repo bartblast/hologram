@@ -17,7 +17,7 @@ defmodule Hologram.Application do
   # credo:disable-for-lines:13 Credo.Check.Readability.SinglePipe
   defp children(mode, env) do
     [
-      if(mode == :standalone, do: {Bandit, plug: Hologram.Router}),
+      if(mode == :standalone, do: {Bandit, plug: Hologram.HTTP}),
       {Phoenix.PubSub, name: Hologram.PubSub},
       Hologram.Router.PageModuleResolver,
       Hologram.Assets.PathRegistry,
