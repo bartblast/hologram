@@ -74,6 +74,7 @@ defmodule Mix.Tasks.Holo.New do
     def project do
       [
         app: :my_app,
+        compilers: Mix.compilers() ++ [:hologram],
         deps: deps(),
         elixirc_paths: ["app"],
         start_permanent: Mix.env() == :prod
