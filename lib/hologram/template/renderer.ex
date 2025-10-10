@@ -3,7 +3,6 @@ defmodule Hologram.Template.Renderer do
 
   alias Hologram.Assets.ManifestCache, as: AssetManifestCache
   alias Hologram.Assets.PageDigestRegistry
-  alias Hologram.Commons.KernelUtils
   alias Hologram.Commons.StringUtils
   alias Hologram.Commons.Types, as: T
   alias Hologram.Compiler.Encoder
@@ -198,18 +197,9 @@ defmodule Hologram.Template.Renderer do
       "&lt;script&gt;"
   """
   @spec stringify_for_interpolation(any) :: String.t()
-  def stringify_for_interpolation(value)
-
-  def stringify_for_interpolation(value)
-      when is_atom(value) or is_binary(value) or is_number(value) do
-    value
-    |> to_string()
-    |> HtmlEntities.encode()
-  end
-
   def stringify_for_interpolation(value) do
     value
-    |> KernelUtils.inspect()
+    |> to_string()
     |> HtmlEntities.encode()
   end
 

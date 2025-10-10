@@ -1307,7 +1307,11 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "bitstring, non-binary" do
-      assert stringify_for_interpolation(<<97::6, 98::4>>) == "&lt;&lt;132, 2::size(2)&gt;&gt;"
+      assert_error Protocol.UndefinedError,
+                   ~r/protocol String.Chars not implemented for type BitString/,
+                   fn ->
+                     stringify_for_interpolation(<<97::6, 98::4>>)
+                   end
     end
 
     test "float" do
@@ -1315,51 +1319,99 @@ defmodule Hologram.Template.RendererTest do
     end
 
     test "function, anonymous" do
-      value = fn x, y -> x + y end
-      assert stringify_for_interpolation(value) =~ ~r'#Function&lt;.+&gt;'
+      assert_error Protocol.UndefinedError,
+                   ~r/protocol String.Chars not implemented for type Function/,
+                   fn ->
+                     stringify_for_interpolation(fn x, y -> x + y end)
+                   end
     end
 
     test "function, captured" do
-      assert stringify_for_interpolation(&Map.put/3) == "&amp;Map.put/3"
+      assert_error Protocol.UndefinedError,
+                   ~r/protocol String.Chars not implemented for type Function/,
+                   fn ->
+                     stringify_for_interpolation(&Map.put/3)
+                   end
     end
 
     test "integer" do
       assert stringify_for_interpolation(123) == "123"
     end
 
-    test "list" do
-      assert stringify_for_interpolation([1, nil, 2]) == "[1, nil, 2]"
+    test "list, strings" do
+      assert stringify_for_interpolation(["ab", "cd"]) == "abcd"
+    end
+
+    test "list, Unicode code points" do
+      assert stringify_for_interpolation([97, 98, 99]) == "abc"
+    end
+
+    test "list, not stringifiable" do
+      assert_error ArgumentError, ~r/cannot convert the given list to a string/, fn ->
+        stringify_for_interpolation([1, nil, 2])
+      end
     end
 
     test "map, atom keys" do
-      value = %{a: 1, b: 2}
-      assert stringify_for_interpolation(value) == "%{a: 1, b: 2}"
+      assert_error Protocol.UndefinedError,
+                   ~r/protocol String.Chars not implemented for type Map/,
+                   fn ->
+                     stringify_for_interpolation(%{a: 1, b: 2})
+                   end
     end
 
     test "map, mixed keys" do
-      value = %{:a => 1, "b" => nil, 2 => 3}
-
-      assert stringify_for_interpolation(value) ==
-               ~s'%{2 =&gt; 3, :a =&gt; 1, &quot;b&quot; =&gt; nil}'
+      assert_error Protocol.UndefinedError,
+                   ~r/protocol String.Chars not implemented for type Map/,
+                   fn ->
+                     stringify_for_interpolation(%{:a => 1, "b" => nil, 2 => 3})
+                   end
     end
 
-    test "pid" do
-      value = pid("0.11.222")
-      assert stringify_for_interpolation(value) == "#PID&lt;0.11.222&gt;"
+    test "PID" do
+      assert_error Protocol.UndefinedError,
+                   ~r/protocol String.Chars not implemented for type PID/,
+                   fn ->
+                     stringify_for_interpolation(pid("0.11.222"))
+                   end
     end
 
     test "port" do
-      value = port("0.11")
-      assert stringify_for_interpolation(value) == "#Port&lt;0.11&gt;"
+      assert_error Protocol.UndefinedError,
+                   ~r/protocol String.Chars not implemented for type Port/,
+                   fn ->
+                     stringify_for_interpolation(port("0.11"))
+                   end
     end
 
     test "reference" do
-      value = ref("0.1.2.3")
-      assert stringify_for_interpolation(value) == "#Reference&lt;0.1.2.3&gt;"
+      assert_error Protocol.UndefinedError,
+                   ~r/protocol String.Chars not implemented for type Reference/,
+                   fn ->
+                     stringify_for_interpolation(ref("0.1.2.3"))
+                   end
+    end
+
+    test "struct, having String.Chars protocol implementation" do
+      value = %Version{major: 1, minor: 2, patch: 3}
+
+      assert stringify_for_interpolation(value) == "1.2.3"
+    end
+
+    test "struct, not having String.Chars protocol implementation" do
+      assert_error Protocol.UndefinedError,
+                   ~r/protocol String.Chars not implemented for type MapSet \(a struct\)/,
+                   fn ->
+                     stringify_for_interpolation(MapSet.new([1, 2, 3]))
+                   end
     end
 
     test "tuple" do
-      assert stringify_for_interpolation({1, nil, 2}) == "{1, nil, 2}"
+      assert_error Protocol.UndefinedError,
+                   ~r/protocol String.Chars not implemented for type Tuple/,
+                   fn ->
+                     stringify_for_interpolation({97, 98, 99})
+                   end
     end
   end
 end
