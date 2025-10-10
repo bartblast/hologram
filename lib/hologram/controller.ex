@@ -13,7 +13,6 @@ defmodule Hologram.Controller do
   alias Hologram.Runtime.Session
   alias Hologram.Server
   alias Hologram.Template.Renderer
-  alias Phoenix.Controller
 
   @typedoc """
   A connection with parsed JSON body_params containing Hologram command data.
@@ -258,7 +257,7 @@ defmodule Hologram.Controller do
     conn
     |> apply_session_ops(updated_server_struct.__meta__.session_ops)
     |> apply_cookie_ops(updated_server_struct.__meta__.cookie_ops)
-    |> Controller.html(html)
+    |> put_html_response(200, html)
     |> Plug.Conn.halt()
   end
 
@@ -273,6 +272,12 @@ defmodule Hologram.Controller do
       _fallback ->
         {server_struct, nil}
     end
+  end
+
+  defp put_html_response(conn, status, html) do
+    conn
+    |> Plug.Conn.send_resp(status, html)
+    |> Plug.Conn.put_resp_header("content-type", "text/html; charset=utf-8")
   end
 
   defp put_json_response(conn, status, data) do
