@@ -40,7 +40,6 @@ defmodule Hologram.MixProject do
       {:ex_check, "~> 0.15", only: [:dev, :test], runtime: false},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:file_system, "~> 1.0"},
-      {:gproc, "~> 1.0"},
       {:html_entities, "~> 0.5"},
       {:interceptor, "~> 0.5"},
       {:jason, "~> 1.0"},

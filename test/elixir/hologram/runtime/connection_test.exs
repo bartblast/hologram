@@ -38,19 +38,6 @@ defmodule Hologram.Runtime.ConnectionTest do
                ~r/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
              )
     end
-
-    # test "registers process with gproc using connection_id" do
-    #   {:ok, state} = init(@plug_conn)
-
-    #   process_name = {:hologram_connection, state.connection_id}
-
-    #   # Verify the process is registered with the expected key (local registration in tests)
-    #   assert :gproc.whereis_name({:n, :l, process_name}) == self()
-
-    #   # Verify we can look up the process by connection_id
-    #   registered_pids = :gproc.lookup_pids({:n, :l, process_name})
-    #   assert registered_pids == [self()]
-    # end
   end
 
   describe "init/1 environment-dependent behavior" do
@@ -152,37 +139,4 @@ defmodule Hologram.Runtime.ConnectionTest do
       assert handle_info(message, @state) == {:ok, @state}
     end
   end
-
-  # describe "terminate/2" do
-  #   test "returns :ok" do
-  #     {:ok, state} = init(@plug_conn)
-
-  #     assert terminate(:normal, state) == :ok
-  #   end
-
-  #   test "unregisters process from gproc" do
-  #     {:ok, state} = init(@plug_conn)
-
-  #     process_name = {:hologram_connection, state.connection_id}
-
-  #     # Verify the process is registered before termination
-  #     assert :gproc.whereis_name({:n, :l, process_name}) == self()
-
-  #     terminate(:normal, state)
-
-  #     # Verify the process is no longer registered after termination
-  #     assert :gproc.whereis_name({:n, :l, process_name}) == :undefined
-  #   end
-
-  #   test "handles different termination reasons" do
-  #     {:ok, state_1} = init(@plug_conn)
-  #     assert terminate(:normal, state_1) == :ok
-
-  #     {:ok, state_2} = init(@plug_conn)
-  #     assert terminate(:shutdown, state_2) == :ok
-
-  #     {:ok, state_3} = init(@plug_conn)
-  #     assert terminate({:error, :some_error}, state_3) == :ok
-  #   end
-  # end
 end
