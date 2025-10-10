@@ -67,6 +67,27 @@ defmodule Mix.Tasks.Holo.New do
     ]
   """
 
+  @mix_exs_template """
+  defmodule MyApp.MixProject do
+    use Mix.Project
+
+    def project do
+      [
+        app: :my_app,
+        deps: deps(),
+        elixirc_paths: ["app"],
+        start_permanent: Mix.env() == :prod
+      ]
+    end
+
+    defp deps do
+      [
+        {:hologram, "~> 0.6.3"}
+      ]
+    end
+  end
+  """
+
   @prod_exs_template """
   # prod.exs runs at compile-time. For loading env vars use runtime.exs instead.
 
@@ -134,6 +155,7 @@ defmodule Mix.Tasks.Holo.New do
     create_project_dir(project_name)
     create_assets(project_name)
     create_config(project_name)
+    create_mix_exs(project_name)
 
     print_info("")
     print_info("Your Hologram project was created successfully.")
@@ -220,6 +242,14 @@ defmodule Mix.Tasks.Holo.New do
       replace_placeholders(@test_exs_template, project_name, secret_key_base: true)
 
     File.write!(test_exs_path, test_exs_content)
+  end
+
+  defp create_mix_exs(project_name) do
+    print_info("* creating #{project_name}/mix.exs")
+
+    mix_exs_path = Path.join(project_name, "mix.exs")
+    mix_exs_content = replace_placeholders(@mix_exs_template, project_name)
+    File.write!(mix_exs_path, mix_exs_content)
   end
 
   defp create_project_dir(project_name) do
