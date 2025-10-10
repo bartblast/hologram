@@ -44,7 +44,6 @@ defmodule Hologram.MixProject do
       {:html_entities, "~> 0.5"},
       {:interceptor, "~> 0.5"},
       {:jason, "~> 1.0"},
-      {:tailwind, "~> 0.4", only: [:dev, :test], runtime: false},
       {:mix_audit, "~> 2.0", only: [:dev, :test], runtime: false},
       {:mox, "~> 1.0", only: :test},
       {:phoenix, "~> 1.7"},
@@ -53,6 +52,7 @@ defmodule Hologram.MixProject do
       {:plug_crypto, "~> 2.0"},
       {:recode, "~> 0.7", only: :dev, runtime: false},
       {:sobelow, "~> 0.12", only: [:dev, :test], runtime: false},
+      {:tailwind, "~> 0.4", only: [:dev, :test], runtime: false},
       {:uuid, "~> 1.0"},
       {:websock_adapter, "~> 0.5"}
     ]
