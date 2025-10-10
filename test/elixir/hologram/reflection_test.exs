@@ -89,7 +89,7 @@ defmodule Hologram.ReflectionTest do
       assert dist_dir_name() == "dist"
     end
 
-    test "returns 'static' when not in standalone mode" do
+    test "returns 'static' when in embedded mode" do
       original_mode = Application.get_env(:hologram, :mode)
 
       on_exit(fn ->
@@ -100,7 +100,7 @@ defmodule Hologram.ReflectionTest do
         end
       end)
 
-      Application.put_env(:hologram, :mode, :phoenix)
+      Application.put_env(:hologram, :mode, :embedded)
 
       assert dist_dir_name() == "static"
     end
@@ -360,6 +360,40 @@ defmodule Hologram.ReflectionTest do
 
     refute Enumerable.Atom in result
     refute Kernel.SpecialForms in result
+  end
+
+  describe "mode/0" do
+    test "returns the mode if it is set in the config" do
+      original_mode = Application.get_env(:hologram, :mode)
+
+      on_exit(fn ->
+        if original_mode do
+          Application.put_env(:hologram, :mode, original_mode)
+        else
+          Application.delete_env(:hologram, :mode)
+        end
+      end)
+
+      Application.put_env(:hologram, :mode, :my_mode)
+
+      assert mode() == :my_mode
+    end
+
+    test "returns :embedded if the mode is not set in the config" do
+      original_mode = Application.get_env(:hologram, :mode)
+
+      on_exit(fn ->
+        if original_mode do
+          Application.put_env(:hologram, :mode, original_mode)
+        else
+          Application.delete_env(:hologram, :mode)
+        end
+      end)
+
+      Application.delete_env(:hologram, :mode)
+
+      assert mode() == :embedded
+    end
   end
 
   describe "module?/1" do

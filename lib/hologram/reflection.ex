@@ -112,7 +112,7 @@ defmodule Hologram.Reflection do
   Returns the distribution directory name based on the Hologram mode.
 
   Returns "dist" when Hologram is running in standalone mode,
-  otherwise returns "static" for Phoenix integration mode.
+  otherwise returns "static" for embedded mode.
 
   ## Examples
 
@@ -120,7 +120,7 @@ defmodule Hologram.Reflection do
       iex> dist_dir_name()
       "dist"
 
-      iex> Application.put_env(:hologram, :mode, :phoenix)
+      iex> Application.put_env(:hologram, :mode, :embedded)
       iex> dist_dir_name()
       "static"
 
@@ -373,6 +373,12 @@ defmodule Hologram.Reflection do
     list_elixir_modules([:elixir])
   end
 
+  @doc "Returns the Hologram mode."
+  @spec mode :: :embedded | :standalone
+  def mode do
+    Application.get_env(:hologram, :mode, :embedded)
+  end
+
   @doc """
   Returns true if the given term is an existing (Elixir or Erlang) module, or false otherwise.
 
@@ -566,7 +572,7 @@ defmodule Hologram.Reflection do
   """
   @spec standalone_mode? :: boolean
   def standalone_mode? do
-    Application.get_env(:hologram, :mode) == :standalone
+    mode() == :standalone
   end
 
   @doc """
