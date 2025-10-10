@@ -23,6 +23,7 @@ defmodule Hologram.Assets.Pipeline.Tailwind do
       "--output=#{bundle_path}"
     ]
 
+    # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
     profile = String.to_atom(basename)
     previous_profile_config = Application.get_env(:tailwind, profile)
 
@@ -34,6 +35,7 @@ defmodule Hologram.Assets.Pipeline.Tailwind do
     try do
       # If Tailwind is not installed, the project will fail to compile
       # when the Tailwind module is explicitly called.
+      # credo:disable-for-next-line Credo.Check.Refactor.Apply
       apply(Tailwind, :install_and_run, [profile, []])
     after
       if previous_profile_config do
