@@ -21,14 +21,9 @@ defmodule Hologram.MixProject do
 
   def application do
     if dep?() do
-      [
-        mod: {Hologram.Application, []},
-        extra_applications: [:logger]
-      ]
+      [mod: {Hologram.Application, []}]
     else
-      [
-        extra_applications: [:logger]
-      ]
+      []
     end
   end
 
