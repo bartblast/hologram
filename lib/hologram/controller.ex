@@ -141,7 +141,7 @@ defmodule Hologram.Controller do
       conn
       |> apply_session_ops(updated_server_struct.__meta__.session_ops)
       |> apply_cookie_ops(updated_server_struct.__meta__.cookie_ops)
-      |> put_json_response([command_status, encoded_next_action])
+      |> put_json_response(200, [command_status, encoded_next_action])
       |> Plug.Conn.halt()
     else
       Logger.warning("CSRF token validation failed")
@@ -276,11 +276,11 @@ defmodule Hologram.Controller do
     end
   end
 
-  defp put_json_response(conn, data) do
+  defp put_json_response(conn, status, data) do
     json = Jason.encode!(data)
 
     conn
-    |> Plug.Conn.send_resp(200, json)
+    |> Plug.Conn.send_resp(status, json)
     |> Plug.Conn.put_resp_header("content-type", "application/json")
   end
 
