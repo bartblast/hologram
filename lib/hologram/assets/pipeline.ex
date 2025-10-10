@@ -100,10 +100,6 @@ defmodule Hologram.Assets.Pipeline do
     Map.put(asset, :bundle_path, bundle_path)
   end
 
-  defp bundle_css(asset, %{css_bundler: :tailwind} = context) do
-    Pipeline.Tailwind.bundle(asset, context)
-  end
-
   defp collect_new_dist_paths(assets) do
     Enum.flat_map(assets, fn asset ->
       [asset.bundle_path, asset.digested_asset_path, asset.compressed_asset_path]
@@ -120,11 +116,7 @@ defmodule Hologram.Assets.Pipeline do
   end
 
   defp determine_css_bundler do
-    if Pipeline.Tailwind.installed?() do
-      :tailwind
-    else
-      :esbuild
-    end
+    :esbuild
   end
 
   defp digest_asset(asset) do

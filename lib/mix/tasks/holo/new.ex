@@ -12,9 +12,7 @@ defmodule Mix.Tasks.Holo.New do
 
   use Mix.Task
 
-  @app_css_template """
-  @import "tailwindcss" source("../../app");
-  """
+  @app_css_template ""
 
   @config_exs_template """
   # config.exs runs at compile-time. For loading env vars use runtime.exs instead.
@@ -28,16 +26,6 @@ defmodule Mix.Tasks.Holo.New do
   config :my_app, Hologram.Endpoint,
     url: [host: "localhost"],
     adapter: Bandit.PhoenixAdapter
-
-  config :tailwind,
-    version: "4.1.7",
-    my_app: [
-      args: ~w(
-        --input=assets/css/app.css
-        --output=priv/dist/css/app.css
-      ),
-      cd: Path.expand("..", __DIR__)
-    ]
 
   import_config "\#{config_env()}.exs"
   """
@@ -61,10 +49,7 @@ defmodule Mix.Tasks.Holo.New do
     check_origin: false,
     code_reloader: true,
     debug_errors: true,
-    secret_key_base: "$SECRET_KEY_BASE",
-    watchers: [
-      tailwind: {Tailwind, :install_and_run, [:my_app, ~w(--watch)]}
-    ]
+    secret_key_base: "$SECRET_KEY_BASE"
   """
 
   @mix_exs_template """
