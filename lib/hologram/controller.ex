@@ -147,8 +147,7 @@ defmodule Hologram.Controller do
       Logger.warning("CSRF token validation failed")
 
       conn
-      |> Plug.Conn.put_status(403)
-      |> Controller.text("Forbidden")
+      |> put_text_response(403, "Forbidden")
       |> Plug.Conn.halt()
     end
   end
@@ -188,7 +187,7 @@ defmodule Hologram.Controller do
   @spec handle_ping_request(Plug.Conn.t()) :: Plug.Conn.t()
   def handle_ping_request(conn) do
     conn
-    |> Controller.text("pong")
+    |> put_text_response(200, "pong")
     |> Plug.Conn.halt()
   end
 
@@ -282,6 +281,12 @@ defmodule Hologram.Controller do
     conn
     |> Plug.Conn.send_resp(status, json)
     |> Plug.Conn.put_resp_header("content-type", "application/json")
+  end
+
+  defp put_text_response(conn, status, text) do
+    conn
+    |> Plug.Conn.send_resp(status, text)
+    |> Plug.Conn.put_resp_header("content-type", "text/plain; charset=utf-8")
   end
 
   defp same_site_to_string(:lax), do: "Lax"
