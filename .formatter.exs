@@ -18,7 +18,7 @@ test_locals_without_parens = [
 
 [
   export: [locals_without_parens: exported_locals_without_parens],
-  import_deps: [:phoenix],
+  import_deps: [:plug],
   inputs:
     Enum.flat_map(
       [
