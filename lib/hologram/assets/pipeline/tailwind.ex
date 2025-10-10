@@ -56,7 +56,7 @@ defmodule Hologram.Assets.Pipeline.Tailwind do
 
   Returns `true` if Tailwind module is loaded, `false` otherwise.
   """
-  @spec installed?() :: boolean()
+  @spec installed? :: boolean
   def installed? do
     case Code.ensure_loaded(Tailwind) do
       {:module, Tailwind} ->
