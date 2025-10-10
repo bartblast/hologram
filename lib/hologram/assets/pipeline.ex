@@ -1,7 +1,6 @@
 defmodule Hologram.Assets.Pipeline do
   @moduledoc false
 
-  alias Hologram.Assets.Pipeline
   alias Hologram.Commons.CryptographicUtils
   alias Hologram.Commons.FileUtils
   alias Hologram.Commons.PathUtils
