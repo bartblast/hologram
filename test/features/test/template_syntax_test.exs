@@ -78,6 +78,12 @@ defmodule HologramFeatureTests.TemplateSyntaxTest do
       |> visit(InterpolationPage)
       |> assert_has(css("span.node_2", text: "xyz"))
     end
+
+    feature "uses String.Chars protocol", %{session: session} do
+      session
+      |> visit(InterpolationPage)
+      |> assert_has(css("#string_chars_protocol", text: "1.2.3"))
+    end
   end
 
   feature "public comment", %{session: session} do
