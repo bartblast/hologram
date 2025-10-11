@@ -215,23 +215,11 @@ function defineElixirHologramRouterHelpersModule() {
 function defineElixirStringCharsModule() {
   return {
     "to_string/1": (term) => {
-      let text;
-
-      switch (term.type) {
-        case "list":
-          text = "Test String.Chars protocol implementation for List type";
-          break;
-
-        case "map":
-          text = "Test String.Chars protocol implementation for Map type";
-          break;
-
-        default:
-          text = Renderer.toText(term);
-          break;
+      if (Type.isAtom(term) || Type.isBinary(term) || Type.isNumber(term)) {
+        return Type.bitstring(Renderer.toText(term));
       }
 
-      return Type.bitstring(text);
+      return Type.bitstring("Test String.Chars protocol implementation");
     },
   };
 }

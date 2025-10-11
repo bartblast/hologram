@@ -1279,12 +1279,6 @@ defmodule Hologram.Template.RendererTest do
     end
   end
 
-  # IMPORTANT!
-  # Keep client-side Renderer.stringifyForInterpolation()
-  # and server-side Renderer.stringify_for_interpolation/1 unit tests consistent.
-  #
-  # Note: the behaviour is different on client-side vs server-side
-  # because client-side escaping is delegated to Snabbdom
   describe "stringify_for_interpolation/1" do
     test "atom, non-boolean and non-nil" do
       assert stringify_for_interpolation(:abc) == "abc"
