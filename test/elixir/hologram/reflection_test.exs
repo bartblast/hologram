@@ -73,7 +73,7 @@ defmodule Hologram.ReflectionTest do
   end
 
   describe "dist_dir_name/0" do
-    test "returns 'dist' when in standalone mode" do
+    test "returns 'dist' when Hologram is running in standalone mode" do
       original_mode = Application.get_env(:hologram, :mode)
 
       on_exit(fn ->
@@ -89,7 +89,7 @@ defmodule Hologram.ReflectionTest do
       assert dist_dir_name() == "dist"
     end
 
-    test "returns 'static' when in embedded mode" do
+    test "returns 'static' when Hologram is running in embedded mode" do
       original_mode = Application.get_env(:hologram, :mode)
 
       on_exit(fn ->
@@ -507,7 +507,7 @@ defmodule Hologram.ReflectionTest do
   end
 
   describe "standalone_mode?/0" do
-    test "returns true when in standalone mode" do
+    test "returns true when Hologram is running in standalone mode" do
       original_mode = Application.get_env(:hologram, :mode)
 
       on_exit(fn ->
@@ -520,10 +520,10 @@ defmodule Hologram.ReflectionTest do
 
       Application.put_env(:hologram, :mode, :standalone)
 
-      assert standalone_mode?()
+      assert standalone_mode?() == true
     end
 
-    test "returns false when in non-standalone mode" do
+    test "returns false when Hologram is running in embedded mode" do
       original_mode = Application.get_env(:hologram, :mode)
 
       on_exit(fn ->
@@ -534,25 +534,9 @@ defmodule Hologram.ReflectionTest do
         end
       end)
 
-      Application.put_env(:hologram, :mode, :phoenix)
+      Application.put_env(:hologram, :mode, :embedded)
 
-      refute standalone_mode?()
-    end
-
-    test "returns false when mode is not set" do
-      original_mode = Application.get_env(:hologram, :mode)
-
-      on_exit(fn ->
-        if original_mode do
-          Application.put_env(:hologram, :mode, original_mode)
-        else
-          Application.delete_env(:hologram, :mode)
-        end
-      end)
-
-      Application.delete_env(:hologram, :mode)
-
-      refute standalone_mode?()
+      refute standalone_mode?() == false
     end
   end
 

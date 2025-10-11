@@ -562,7 +562,7 @@ defmodule Hologram.Reflection do
       iex> standalone_mode?()
       true
 
-      iex> Application.put_env(:hologram, :mode, :phoenix)
+      iex> Application.put_env(:hologram, :mode, :embedded)
       iex> standalone_mode?()
       false
 
