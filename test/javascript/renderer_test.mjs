@@ -5375,9 +5375,7 @@ describe("Renderer", () => {
   });
 
   describe("toText()", () => {
-    const dummyStringCharsProtocolResult =
-      "Test String.Chars protocol implementation";
-
+    const dummyStringCharsProtocolResult = "Dummy String.Chars protocol result";
     const toText = Renderer.toText;
 
     it("anonymous function", () => {

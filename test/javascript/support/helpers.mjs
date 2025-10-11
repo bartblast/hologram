@@ -219,7 +219,7 @@ function defineElixirStringCharsModule() {
         return Type.bitstring(Renderer.toText(term));
       }
 
-      return Type.bitstring("Test String.Chars protocol implementation");
+      return Type.bitstring("Dummy String.Chars protocol result");
     },
   };
 }
