@@ -45,7 +45,6 @@ defmodule Hologram.MixProject do
       {:jason, "~> 1.0"},
       {:mix_audit, "~> 2.0", only: [:dev, :test], runtime: false},
       {:mox, "~> 1.0", only: :test},
-      {:phoenix, "~> 1.7"},
       {:phoenix_pubsub, "~> 2.0"},
       {:plug, "~> 1.0"},
       {:plug_crypto, "~> 2.0"},
@@ -100,7 +99,7 @@ defmodule Hologram.MixProject do
       app: :hologram,
       deps: deps(),
       description:
-        "Full stack isomorphic Elixir web framework that can be used on top of Phoenix.",
+        "Elixir web framework that intelligently transpiles Elixir client-side code to JavaScript. Can run in standalone mode as a full-stack framework or in embedded mode on top of Phoenix as a frontend layer.",
       dialyzer: [
         plt_add_apps: [:ex_unit, :iex, :mix],
         plt_core_path: Path.join(["priv", "plts", "core.plt"]),
