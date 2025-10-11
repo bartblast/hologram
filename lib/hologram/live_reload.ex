@@ -34,7 +34,7 @@ defmodule Hologram.LiveReload do
 
     FileSystem.subscribe(pid)
 
-    {:ok, %{endpoint: Reflection.phoenix_endpoint(), timer_ref: nil}}
+    {:ok, build_state()}
   end
 
   @impl GenServer
@@ -134,6 +134,14 @@ defmodule Hologram.LiveReload do
 
   defp broadcast_reload do
     Phoenix.PubSub.broadcast(Hologram.PubSub, "hologram_live_reload", :reload)
+  end
+
+  defp build_state do
+    if Reflection.standalone_mode?() do
+      %{timer_ref: nil}
+    else
+      %{endpoint: Reflection.phoenix_endpoint(), timer_ref: nil}
+    end
   end
 
   defp impl do
