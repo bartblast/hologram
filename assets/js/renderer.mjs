@@ -53,7 +53,8 @@ export default class Renderer {
         );
 
       case "expression":
-        return $.stringifyForInterpolation(dom.data[1].data[0]);
+        // HTML escaping is done by Snabbdom
+        return $.toText(dom.data[1].data[0]);
 
       case "page":
         return Renderer.renderDom(
@@ -102,39 +103,12 @@ export default class Renderer {
     return htmlVnode;
   }
 
-  // Based on stringify_for_interpolation/1
-  static stringifyForInterpolation(value) {
-    let text;
-
-    if (Type.isAtom(value) || Type.isBinary(value) || Type.isNumber(value)) {
-      text = $.toText(value);
-    } else {
-      let opts;
-
-      if (Type.isMap(value)) {
-        opts = Type.keywordList([
-          [
-            Type.atom("custom_options"),
-            Type.keywordList([[Type.atom("sort_maps"), Type.boolean(true)]]),
-          ],
-        ]);
-      } else {
-        opts = Type.list();
-      }
-
-      text = Interpreter.inspect(value, opts);
-    }
-
-    return text;
-  }
-
   static toBitstring(term) {
     return Type.isBitstring(term) ? term : Type.bitstring($.toText(term));
   }
 
   // Similar to Kernel.to_string/1
   // (it is supposed to be a fast alternative to Kernel.to_string/1 for the client-side renderer only)
-  // TODO: consider implementing consistency tests
   // Deps: [String.Chars.to_string/1]
   static toText(term) {
     // Cases ordered by expected frequency (most common first)
@@ -142,29 +116,18 @@ export default class Renderer {
       case "atom":
         return term.value === "nil" ? "" : term.value;
 
-      // Some structs (which are maps) may have their own implementation of String.Chars protocol
-      case "map":
-        return Bitstring.toText(Elixir_String_Chars["to_string/1"](term));
-
       case "bitstring":
-        if (!Type.isBinary(term)) {
-          Interpreter.raiseProtocolUndefinedError("String.Chars", term);
+        if (Type.isBinary(term)) {
+          return Bitstring.toText(term);
         }
-
-        return Bitstring.toText(term);
-
-      // String.Chars protocol has special behaviour for lists, e.g. to_string([97, 98]) -> "ab"
-      case "list":
-        return Bitstring.toText(Elixir_String_Chars["to_string/1"](term));
+        break;
 
       case "integer":
-        return term.value.toString();
-
       case "float":
         return term.value.toString();
     }
 
-    Interpreter.raiseProtocolUndefinedError("String.Chars", term);
+    return Bitstring.toText(Elixir_String_Chars["to_string/1"](term));
   }
 
   static valueDomToBitstring(valueDom) {

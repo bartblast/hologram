@@ -5360,174 +5360,6 @@ describe("Renderer", () => {
     });
   });
 
-  // IMPORTANT!
-  // Keep client-side Renderer.stringifyForInterpolation()
-  // and server-side Renderer.stringify_for_interpolation/1 unit tests consistent.
-  //
-  // Note: the behaviour is different on client-side vs server-side
-  // because client-side escaping is delegated to Snabbdom
-  describe("stringifyForInterpolation()", () => {
-    const stringifyForInterpolation = Renderer.stringifyForInterpolation;
-
-    describe("atom", () => {
-      it("non-boolean and non-nil", () => {
-        const term = Type.atom("abc");
-        const result = stringifyForInterpolation(term);
-
-        assert.equal(result, "abc");
-      });
-
-      it("true", () => {
-        const term = Type.boolean(true);
-        const result = stringifyForInterpolation(term);
-
-        assert.equal(result, "true");
-      });
-
-      it("false", () => {
-        const term = Type.boolean(false);
-        const result = stringifyForInterpolation(term);
-
-        assert.equal(result, "false");
-      });
-
-      it("nil", () => {
-        const term = Type.nil();
-        const result = stringifyForInterpolation(term);
-
-        assert.equal(result, "");
-      });
-    });
-
-    describe("bitstring", () => {
-      it("binary", () => {
-        const term = Bitstring.fromBytes([97, 98, 99]);
-        const result = stringifyForInterpolation(term);
-
-        assert.equal(result, "abc");
-      });
-
-      // Note: server-side version escapes
-      it("non-binary", () => {
-        const segment1 = Type.bitstringSegment(Type.integer(97), {
-          type: "integer",
-          size: Type.integer(6),
-          unit: 1n,
-        });
-
-        const segment2 = Type.bitstringSegment(Type.integer(98), {
-          type: "integer",
-          size: Type.integer(4),
-          unit: 1n,
-        });
-
-        const term = Bitstring.fromSegments([segment1, segment2]);
-        const result = stringifyForInterpolation(term);
-
-        assert.equal(result, "<<132, 2::size(2)>>");
-      });
-    });
-
-    it("float", () => {
-      const term = Type.float(1.23);
-      const result = stringifyForInterpolation(term);
-
-      assert.equal(result, "1.23");
-    });
-
-    describe("function", () => {
-      it("anonymous", () => {
-        const clauses = ["dummy_clause_1", "dummy_clause_2"];
-        const context = contextFixture();
-        const term = Type.anonymousFunction(2, clauses, context);
-        const result = stringifyForInterpolation(term);
-
-        assert.equal(result, "anonymous function fn/2");
-      });
-
-      // Note: server-side version escapes
-      it("captured", () => {
-        const clauses = ["dummy_clause_1", "dummy_clause_2", "dummy_clause_3"];
-        const context = contextFixture({module: "Map"});
-        const term = Type.functionCapture("Map", "put", 3, clauses, context);
-        const result = stringifyForInterpolation(term);
-
-        assert.equal(result, "&Map.put/3");
-      });
-    });
-
-    it("integer", () => {
-      const term = Type.integer(123);
-      const result = stringifyForInterpolation(term);
-
-      assert.equal(result, "123");
-    });
-
-    it("list", () => {
-      const term = Type.list([Type.integer(1), Type.nil(), Type.integer(2)]);
-      const result = stringifyForInterpolation(term);
-
-      assert.equal(result, "[1, nil, 2]");
-    });
-
-    describe("map", () => {
-      it("atom keys", () => {
-        const term = Type.map([
-          [Type.atom("a"), Type.integer(1)],
-          [Type.atom("b"), Type.integer(2)],
-        ]);
-
-        const result = stringifyForInterpolation(term);
-
-        assert.equal(result, "%{a: 1, b: 2}");
-      });
-
-      // Note: server-side version escapes
-      it("mixed keys", () => {
-        const term = Type.map([
-          [Type.atom("a"), Type.integer(1)],
-          [Type.bitstring("b"), Type.nil()],
-          [Type.integer(2), Type.integer(3)],
-        ]);
-
-        const result = stringifyForInterpolation(term);
-
-        assert.equal(result, '%{2 => 3, :a => 1, "b" => nil}');
-      });
-    });
-
-    // Note: server-side version escapes
-    it("pid", () => {
-      const term = Type.pid("my_node", [0, 11, 222], "server");
-      const result = stringifyForInterpolation(term);
-
-      assert.equal(result, "#PID<0.11.222>");
-    });
-
-    // Note: server-side version escapes
-    it("port", () => {
-      const term = Type.port("my_node", [0, 11], "server");
-      const result = stringifyForInterpolation(term);
-
-      assert.equal(result, "#Port<0.11>");
-    });
-
-    // Note: server-side version escapes
-    it("reference", () => {
-      const term = Type.reference("my_node", [0, 1, 2, 3], "server");
-      const result = stringifyForInterpolation(term);
-
-      assert.equal(result, "#Reference<0.1.2.3>");
-    });
-
-    it("tuple", () => {
-      const term = Type.tuple([Type.integer(1), Type.nil(), Type.integer(2)]);
-      const result = stringifyForInterpolation(term);
-
-      assert.equal(result, "{1, nil, 2}");
-    });
-  });
-
   describe("toBitstring()", () => {
     const toBitstring = Renderer.toBitstring;
 
@@ -5543,163 +5375,134 @@ describe("Renderer", () => {
   });
 
   describe("toText()", () => {
+    const dummyStringCharsProtocolResult = "Dummy String.Chars protocol result";
     const toText = Renderer.toText;
 
-    describe("supported types", () => {
-      describe("atom", () => {
-        it("non-boolean and non-nil", () => {
-          const term = Type.atom("abc");
-          const result = toText(term);
+    it("anonymous function", () => {
+      const clauses = ["dummy_clause_1", "dummy_clause_2"];
+      const context = contextFixture();
+      const term = Type.anonymousFunction(2, clauses, context);
+      const result = toText(term);
 
-          assert.equal(result, "abc");
-        });
+      assert.equal(result, dummyStringCharsProtocolResult);
+    });
 
-        it("true", () => {
-          const term = Type.boolean(true);
-          const result = toText(term);
-
-          assert.equal(result, "true");
-        });
-
-        it("false", () => {
-          const term = Type.boolean(false);
-          const result = toText(term);
-
-          assert.equal(result, "false");
-        });
-
-        it("nil", () => {
-          const term = Type.nil();
-          const result = toText(term);
-
-          assert.equal(result, "");
-        });
-      });
-
-      describe("bitstring", () => {
-        it("binary", () => {
-          const term = Bitstring.fromBytes([97, 98, 99]);
-          const result = toText(term);
-
-          assert.equal(result, "abc");
-        });
-      });
-
-      it("float", () => {
-        const term = Type.float(1.23);
+    describe("atom", () => {
+      it("non-boolean and non-nil", () => {
+        const term = Type.atom("abc");
         const result = toText(term);
 
-        assert.equal(result, "1.23");
+        assert.equal(result, "abc");
       });
 
-      it("integer", () => {
-        const term = Type.integer(123);
+      it("true", () => {
+        const term = Type.boolean(true);
         const result = toText(term);
 
-        assert.equal(result, "123");
+        assert.equal(result, "true");
       });
 
-      it("list", () => {
-        const term = Type.list([Type.integer(1), Type.integer(2)]);
+      it("false", () => {
+        const term = Type.boolean(false);
         const result = toText(term);
 
-        assert.equal(
-          result,
-          "Test String.Chars protocol implementation for List type",
-        );
+        assert.equal(result, "false");
       });
 
-      it("map", () => {
-        const term = Type.map([
-          [Type.atom("a"), Type.integer(1)],
-          [Type.atom("b"), Type.integer(2)],
-        ]);
-
+      it("nil", () => {
+        const term = Type.nil();
         const result = toText(term);
 
-        assert.equal(
-          result,
-          "Test String.Chars protocol implementation for Map type",
-        );
+        assert.equal(result, "");
       });
     });
 
-    describe("unsupported types", () => {
-      it("anonymous function", () => {
-        const clauses = ["dummy_clause_1", "dummy_clause_2"];
-        const context = contextFixture();
-        const term = Type.anonymousFunction(2, clauses, context);
+    describe("bitstring", () => {
+      it("binary", () => {
+        const term = Bitstring.fromBytes([97, 98, 99]);
+        const result = toText(term);
 
-        assertBoxedError(
-          () => toText(term),
-          "Protocol.UndefinedError",
-          Interpreter.buildProtocolUndefinedErrorMsg("String.Chars", term),
-        );
+        assert.equal(result, "abc");
       });
 
-      describe("bistring", () => {
-        it("non-binary", () => {
-          const segment1 = Type.bitstringSegment(Type.integer(97), {
-            type: "integer",
-            size: Type.integer(6),
-            unit: 1n,
-          });
-
-          const segment2 = Type.bitstringSegment(Type.integer(98), {
-            type: "integer",
-            size: Type.integer(4),
-            unit: 1n,
-          });
-
-          const term = Bitstring.fromSegments([segment1, segment2]);
-
-          assertBoxedError(
-            () => toText(term),
-            "Protocol.UndefinedError",
-            Interpreter.buildProtocolUndefinedErrorMsg("String.Chars", term),
-          );
+      it("non-binary", () => {
+        const segment1 = Type.bitstringSegment(Type.integer(97), {
+          type: "integer",
+          size: Type.integer(6),
+          unit: 1n,
         });
+
+        const segment2 = Type.bitstringSegment(Type.integer(98), {
+          type: "integer",
+          size: Type.integer(4),
+          unit: 1n,
+        });
+
+        const term = Bitstring.fromSegments([segment1, segment2]);
+        const result = toText(term);
+
+        assert.equal(result, dummyStringCharsProtocolResult);
       });
+    });
 
-      it("PID", () => {
-        const term = Type.pid("my_node", [0, 11, 222], "server");
+    it("float", () => {
+      const term = Type.float(1.23);
+      const result = toText(term);
 
-        assertBoxedError(
-          () => toText(term),
-          "Protocol.UndefinedError",
-          Interpreter.buildProtocolUndefinedErrorMsg("String.Chars", term),
-        );
-      });
+      assert.equal(result, "1.23");
+    });
 
-      it("port", () => {
-        const term = Type.port("my_node", [0, 11], "server");
+    it("integer", () => {
+      const term = Type.integer(123);
+      const result = toText(term);
 
-        assertBoxedError(
-          () => toText(term),
-          "Protocol.UndefinedError",
-          Interpreter.buildProtocolUndefinedErrorMsg("String.Chars", term),
-        );
-      });
+      assert.equal(result, "123");
+    });
 
-      it("reference", () => {
-        const term = Type.reference("my_node", [0, 1, 2, 3], "server");
+    it("list", () => {
+      const term = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = toText(term);
 
-        assertBoxedError(
-          () => toText(term),
-          "Protocol.UndefinedError",
-          Interpreter.buildProtocolUndefinedErrorMsg("String.Chars", term),
-        );
-      });
+      assert.equal(result, dummyStringCharsProtocolResult);
+    });
 
-      it("tuple", () => {
-        const term = Type.tuple([Type.integer(1), Type.integer(2)]);
+    it("map", () => {
+      const term = Type.map([
+        [Type.atom("a"), Type.integer(1)],
+        [Type.atom("b"), Type.integer(2)],
+      ]);
 
-        assertBoxedError(
-          () => toText(term),
-          "Protocol.UndefinedError",
-          Interpreter.buildProtocolUndefinedErrorMsg("String.Chars", term),
-        );
-      });
+      const result = toText(term);
+
+      assert.equal(result, dummyStringCharsProtocolResult);
+    });
+
+    it("PID", () => {
+      const term = Type.pid("my_node", [0, 11, 222], "server");
+      const result = toText(term);
+
+      assert.equal(result, dummyStringCharsProtocolResult);
+    });
+
+    it("port", () => {
+      const term = Type.port("my_node", [0, 11], "server");
+      const result = toText(term);
+
+      assert.equal(result, dummyStringCharsProtocolResult);
+    });
+
+    it("reference", () => {
+      const term = Type.reference("my_node", [0, 1, 2, 3], "server");
+      const result = toText(term);
+
+      assert.equal(result, dummyStringCharsProtocolResult);
+    });
+
+    it("tuple", () => {
+      const term = Type.tuple([Type.integer(1), Type.integer(2)]);
+      const result = toText(term);
+
+      assert.equal(result, dummyStringCharsProtocolResult);
     });
   });
 
