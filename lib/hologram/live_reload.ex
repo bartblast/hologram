@@ -154,7 +154,10 @@ defmodule Hologram.LiveReload do
   end
 
   defp reload_code(endpoint) do
-    Phoenix.CodeReloader.reload(endpoint)
+    # If Phoenix is not installed (standalone mode), the project will fail to compile
+    # when the Phoenix.CodeReloader module is called explicitly.
+    # credo:disable-for-next-line Credo.Check.Refactor.Apply
+    apply(Phoenix.CodeReloader, :reload, [endpoint])
 
     # TODO: this will be used in Hologram standalone version
     # Code.put_compiler_option(:ignore_module_conflict, true)
