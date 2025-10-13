@@ -9,8 +9,8 @@ defmodule Hologram.LiveReload.ReloaderTest do
   # test "reload_runtime/0"
   # The reload_runtime/0 function is a simple orchestration that calls reload/0 on multiple modules
   # with no additional logic. The actual reload logic is tested in each module's respective tests:
-  # - Hologram.Router.PageModuleResolverTest
-  # - Hologram.Assets.PathRegistryTest
-  # - Hologram.Assets.ManifestCacheTest
+  # - Hologram.Assets.ManifestCacheTest  
   # - Hologram.Assets.PageDigestRegistryTest
+  # - Hologram.Assets.PathRegistryTest
+  # - Hologram.Router.PageModuleResolverTest  
 end
