@@ -1,11 +1,6 @@
 defmodule Hologram.LiveReload.Reloader do
   @moduledoc false
   # Shared reloading logic for both standalone and embedded modes.
-
-  # This module contains only the logic that is common to both modes:
-  # - Hologram bundles compilation
-  # - Runtime registry and cache reloading
-
   # Mode-specific Elixir compilation and module reloading are handled by:
   # - `Hologram.LiveReload.Standalone.Reloader` for standalone mode
   # - `Hologram.LiveReload.Embedded.Reloader` for embedded mode
