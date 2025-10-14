@@ -508,6 +508,21 @@ defmodule Hologram.Compiler.CallGraph do
     call_graph
   end
 
+  @doc """
+  Lists MFAs that are reachable from the given call graph vertices.
+  Unimplemented protocol implementations are excluded.
+  """
+  @spec reachable_mfas(Digraph.t(), [vertex]) :: [mfa]
+  def reachable_mfas(graph, vertices) do
+    graph
+    |> Digraph.reachable(vertices)
+    |> Enum.filter(fn
+      # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
+      {module, _function, _arity} -> Reflection.module?(module)
+      _module -> false
+    end)
+  end
+
   defp reject_hex_mfas(mfas) do
     Enum.reject(mfas, fn {module, _function, _arity} ->
       module_str = to_string(module)
@@ -627,12 +642,7 @@ defmodule Hologram.Compiler.CallGraph do
   @spec sorted_reachable_mfas(Digraph.t(), [vertex]) :: [mfa]
   def sorted_reachable_mfas(graph, vertices) do
     graph
-    |> Digraph.reachable(vertices)
-    |> Enum.filter(fn
-      # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
-      {module, _function, _arity} -> Reflection.module?(module)
-      _module -> false
-    end)
+    |> reachable_mfas(vertices)
     |> Enum.sort()
   end
 
