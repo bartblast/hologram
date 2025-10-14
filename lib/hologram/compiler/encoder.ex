@@ -13,6 +13,7 @@ defmodule Hologram.Compiler.Encoder do
 
   alias Hologram.Commons.IntegerUtils
   alias Hologram.Commons.StringUtils
+  alias Hologram.Compiler
   alias Hologram.Compiler.Context
   alias Hologram.Compiler.IR
   alias Hologram.Reflection
@@ -70,28 +71,27 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   @doc """
-  Extracts JavaScript source code for the given ported Erlang function and generates interpreter function definition JavaScript statetement.
+  Generates interpreter function definition JavaScript statement for the given ported Erlang function.
+
+  If the function is implemented (has corresponding JavaScript code), wraps it in `Interpreter.defineErlangFunction`.
+  If the function is not implemented, generates `Interpreter.defineNotImplementedErlangFunction`.
+
+  ## Examples
+
+      iex> encode_erlang_function(:erlang, :+, 2, "/path/to/erlang")
+      "Interpreter.defineErlangFunction(\\"erlang\\", \\"+\\", 2, (left, right) => { ... });"
+
+      iex> encode_erlang_function(:erlang, :not_implemented, 2, "/path/to/erlang")
+      "Interpreter.defineNotImplementedErlangFunction(\\"erlang\\", \\"not_implemented\\", 2);"
   """
   @spec encode_erlang_function(module, atom, integer, String.t()) :: String.t()
-  def encode_erlang_function(module, function, arity, erlang_source_dir) do
-    file_path =
-      if module == :erlang do
-        "#{erlang_source_dir}/erlang.mjs"
-      else
-        "#{erlang_source_dir}/#{module}.mjs"
-      end
+  def encode_erlang_function(module, function, arity, erlang_js_dir) do
+    js_code = Compiler.get_erlang_function_js(module, function, arity, erlang_js_dir)
 
-    source_code =
-      if File.exists?(file_path) do
-        extract_erlang_function_source_code(file_path, function, arity)
-      else
-        nil
-      end
+    if js_code do
+      normalized_js_code = StringUtils.normalize_newlines(js_code)
 
-    if source_code do
-      normalized_source_code = StringUtils.normalize_newlines(source_code)
-
-      ~s/Interpreter.defineErlangFunction("#{module}", "#{function}", #{arity}, #{normalized_source_code});/
+      ~s/Interpreter.defineErlangFunction("#{module}", "#{function}", #{arity}, #{normalized_js_code});/
     else
       ~s/Interpreter.defineNotImplementedErlangFunction("#{module}", "#{function}", #{arity});/
     end
@@ -764,22 +764,6 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   defp escape_non_printable_and_special_chars(""), do: ""
-
-  defp extract_erlang_function_source_code(file_path, function, arity) do
-    key = "#{function}/#{arity}"
-    start_marker = "// Start #{key}"
-    end_marker = "// End #{key}"
-
-    regex =
-      ~r/#{Regex.escape(start_marker)}[[:space:]]+"#{Regex.escape(key)}":[[:space:]]+(.+),[[:space:]]+#{Regex.escape(end_marker)}/s
-
-    file_contents = File.read!(file_path)
-
-    case Regex.run(regex, file_contents) do
-      [_full_capture, source_code] -> source_code
-      nil -> nil
-    end
-  end
 
   defp has_match_operator?(ir)
 

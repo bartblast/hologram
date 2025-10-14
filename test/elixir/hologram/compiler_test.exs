@@ -20,6 +20,8 @@ defmodule Hologram.CompilerTest do
   @root_dir Reflection.root_dir()
   @assets_dir Path.join(@root_dir, "assets")
   @js_dir Path.join(@assets_dir, "js")
+  @erlang_js_dir Path.join(@js_dir, "erlang")
+
   @tmp_dir Reflection.tmp_dir()
 
   defp setup_js_deps_test(test_subdir) do
@@ -522,6 +524,67 @@ defmodule Hologram.CompilerTest do
 
       assert File.read!(file_path_1) == unformatted_invalid_js_code
       assert File.read!(file_path_2) == @formatted_valid_js_code
+    end
+  end
+
+  describe "get_erlang_function_js/4" do
+    test ":erlang module function that is implemented" do
+      result = get_erlang_function_js(:erlang, :+, 2, @erlang_js_dir)
+
+      expected =
+        normalize_newlines("""
+        (left, right) => {
+            if (!Type.isNumber(left) || !Type.isNumber(right)) {
+              const blame = `${Interpreter.inspect(left)} + ${Interpreter.inspect(right)}`;
+              Interpreter.raiseArithmeticError(blame);
+            }
+
+            const [type, leftValue, rightValue] = Type.maybeNormalizeNumberTerms(
+              left,
+              right,
+            );
+
+            const result = leftValue.value + rightValue.value;
+
+            return type === "float" ? Type.float(result) : Type.integer(result);
+          }\
+        """)
+
+      assert result == expected
+    end
+
+    test ":erlang module function that is not implemented" do
+      result = Compiler.get_erlang_function_js(:erlang, :not_implemented, 2, @erlang_js_dir)
+      assert result == nil
+    end
+
+    test ":maps module function that is implemented" do
+      result = Compiler.get_erlang_function_js(:maps, :get, 2, @erlang_js_dir)
+
+      expected =
+        normalize_newlines("""
+        (key, map) => {
+            const value = Erlang_Maps["get/3"](key, map, null);
+
+            if (value !== null) {
+              return value;
+            }
+
+            Interpreter.raiseKeyError(Interpreter.buildKeyErrorMsg(key, map));
+          }\
+        """)
+
+      assert result == expected
+    end
+
+    test ":maps module function that is not implemented" do
+      result = Compiler.get_erlang_function_js(:maps, :not_implemented, 2, @erlang_js_dir)
+      assert result == nil
+    end
+
+    test "module file doesn't exist" do
+      result = Compiler.get_erlang_function_js(:non_existing_module, :some_fun, 1, @erlang_js_dir)
+      assert result == nil
     end
   end
 

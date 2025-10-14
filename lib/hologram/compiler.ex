@@ -362,6 +362,39 @@ defmodule Hologram.Compiler do
   end
 
   @doc """
+  Extracts JavaScript source code for the given ported Erlang function.
+
+  Returns the JavaScript function code if it exists in the corresponding .mjs file,
+  or nil if the file or function doesn't exist.
+
+  ## Examples
+
+      iex> get_erlang_function_js(:erlang, :+, 2, "/path/to/erlang")
+      "(left, right) => { ... }"
+
+      iex> get_erlang_function_js(:maps, :get, 2, "/path/to/erlang")
+      "(key, map) => { ... }"
+
+      iex> get_erlang_function_js(:erlang, :not_implemented, 2, "/path/to/erlang")
+      nil
+  """
+  @spec get_erlang_function_js(module, atom, non_neg_integer, T.file_path()) :: String.t() | nil
+  def get_erlang_function_js(module, function, arity, erlang_js_dir) do
+    file_path =
+      if module == :erlang do
+        "#{erlang_js_dir}/erlang.mjs"
+      else
+        "#{erlang_js_dir}/#{module}.mjs"
+      end
+
+    if File.exists?(file_path) do
+      extract_erlang_function_js(file_path, function, arity)
+    else
+      nil
+    end
+  end
+
+  @doc """
   Groups the given MFAs by module.
   """
   @spec group_mfas_by_module(list(mfa)) :: %{module => mfa}
@@ -539,6 +572,22 @@ defmodule Hologram.Compiler do
     entry_file_path
   end
 
+  defp extract_erlang_function_js(file_path, function, arity) do
+    key = "#{function}/#{arity}"
+    start_marker = "// Start #{key}"
+    end_marker = "// End #{key}"
+
+    regex =
+      ~r/#{Regex.escape(start_marker)}[[:space:]]+"#{Regex.escape(key)}":[[:space:]]+(.+),[[:space:]]+#{Regex.escape(end_marker)}/s
+
+    file_contents = File.read!(file_path)
+
+    case Regex.run(regex, file_contents) do
+      [_full_capture, js] -> js
+      nil -> nil
+    end
+  end
+
   defp filter_elixir_mfas(mfas) do
     Enum.filter(mfas, fn {module, _function, _arity} -> Reflection.elixir_module?(module) end)
   end
@@ -619,11 +668,11 @@ defmodule Hologram.Compiler do
     |> Enum.join("\n\n")
   end
 
-  defp render_erlang_function_defs(mfas, erlang_source_dir) do
+  defp render_erlang_function_defs(mfas, erlang_js_dir) do
     mfas
     |> filter_erlang_mfas()
     |> TaskUtils.async_many(fn {module, function, arity} ->
-      Encoder.encode_erlang_function(module, function, arity, erlang_source_dir)
+      Encoder.encode_erlang_function(module, function, arity, erlang_js_dir)
     end)
     |> Task.await_many(:infinity)
     |> Enum.join("\n\n")

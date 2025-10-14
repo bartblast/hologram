@@ -9,7 +9,7 @@ defmodule Hologram.Compiler.EncoderTest do
 
   defdelegate encode_ir(ir, context \\ %Context{}), to: Hologram.Compiler.Encoder
 
-  @erlang_source_dir Path.join([Reflection.root_dir(), "assets", "js", "erlang"])
+  @erlang_js_dir Path.join([Reflection.root_dir(), "assets", "js", "erlang"])
 
   test "anonymous function call" do
     # my_fun.(1, 2)
@@ -976,8 +976,8 @@ defmodule Hologram.Compiler.EncoderTest do
   end
 
   describe "encode_erlang_function/4" do
-    test ":erlang module function that is implemented" do
-      result = encode_erlang_function(:erlang, :+, 2, @erlang_source_dir)
+    test "when function is implemented" do
+      result = encode_erlang_function(:erlang, :+, 2, @erlang_js_dir)
 
       expected =
         normalize_newlines("""
@@ -1001,37 +1001,11 @@ defmodule Hologram.Compiler.EncoderTest do
       assert result == expected
     end
 
-    test ":erlang module function that is not implemented" do
-      result = encode_erlang_function(:erlang, :not_implemented, 2, @erlang_source_dir)
+    test "when function is not implemented" do
+      result = encode_erlang_function(:erlang, :not_implemented, 2, @erlang_js_dir)
 
       assert result ==
                ~s/Interpreter.defineNotImplementedErlangFunction("erlang", "not_implemented", 2);/
-    end
-
-    test ":maps module function that is implemented" do
-      result = encode_erlang_function(:maps, :get, 2, @erlang_source_dir)
-
-      expected =
-        normalize_newlines("""
-        Interpreter.defineErlangFunction("maps", "get", 2, (key, map) => {
-            const value = Erlang_Maps["get/3"](key, map, null);
-
-            if (value !== null) {
-              return value;
-            }
-
-            Interpreter.raiseKeyError(Interpreter.buildKeyErrorMsg(key, map));
-          });\
-        """)
-
-      assert result == expected
-    end
-
-    test ":maps module function that is not implemented" do
-      result = encode_erlang_function(:maps, :not_implemented, 2, @erlang_source_dir)
-
-      assert result ==
-               ~s/Interpreter.defineNotImplementedErlangFunction("maps", "not_implemented", 2);/
     end
   end
 
