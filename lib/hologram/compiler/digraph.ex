@@ -363,6 +363,34 @@ defmodule Hologram.Compiler.Digraph do
   end
 
   @doc """
+  Returns the shortest path from source to target vertex as a list of vertices.
+  Returns nil if no path exists or if either vertex is not in the graph.
+  If source equals target, returns a single-element list [source].
+  """
+  @spec shortest_path(t, vertex, vertex) :: [vertex] | nil
+  def shortest_path(graph, source, target) do
+    %Digraph{vertices: vertices, outgoing_edges: outgoing_edges} = graph
+
+    cond do
+      not (Map.has_key?(vertices, source) and Map.has_key?(vertices, target)) ->
+        nil
+
+      source == target ->
+        [source]
+
+      true ->
+        queue = :queue.from_list([source])
+        visited = MapSet.new([source])
+        parents = %{}
+
+        case bfs_shortest_path(queue, visited, parents, target, outgoing_edges) do
+          nil -> nil
+          parents_map -> reconstruct_path(parents_map, source, target)
+        end
+    end
+  end
+
+  @doc """
   Returns all edges in the graph sorted in ascending order.
   """
   @spec sorted_edges(t) :: [edge]
@@ -390,7 +418,7 @@ defmodule Hologram.Compiler.Digraph do
     Map.keys(vertices)
   end
 
-  # BFS traversal
+  # BFS traversal for reachable vertices
   # credo:disable-for-lines:27 Credo.Check.Refactor.Nesting
   # The above Credo check is disabled because the function is optimised this way
   defp bfs_reachable(queue, visited, outgoing_edges) do
@@ -418,5 +446,61 @@ defmodule Hologram.Compiler.Digraph do
       {:empty, _queue} ->
         visited
     end
+  end
+
+  # BFS traversal for shortest path using parent tracking
+  defp bfs_shortest_path(queue, visited, parents, target, outgoing_edges) do
+    case :queue.out(queue) do
+      {{:value, current}, rest_queue} ->
+        neighbors = Map.get(outgoing_edges, current, %{})
+
+        case process_neighbors(neighbors, current, target, rest_queue, visited, parents) do
+          {:found, final_parents} ->
+            final_parents
+
+          {new_queue, new_visited, new_parents} ->
+            bfs_shortest_path(new_queue, new_visited, new_parents, target, outgoing_edges)
+        end
+
+      {:empty, _queue} ->
+        nil
+    end
+  end
+
+  # Process neighbors during BFS traversal
+  defp process_neighbors(neighbors, current, target, queue, visited, parents) do
+    Enum.reduce_while(neighbors, {queue, visited, parents}, fn {neighbor, _flag},
+                                                               {acc_queue, acc_visited,
+                                                                acc_parents} ->
+      cond do
+        neighbor == target ->
+          {:halt, {:found, Map.put(acc_parents, target, current)}}
+
+        MapSet.member?(acc_visited, neighbor) ->
+          {:cont, {acc_queue, acc_visited, acc_parents}}
+
+        true ->
+          {:cont,
+           {
+             :queue.in(neighbor, acc_queue),
+             MapSet.put(acc_visited, neighbor),
+             Map.put(acc_parents, neighbor, current)
+           }}
+      end
+    end)
+  end
+
+  # Reconstruct path from parent map
+  defp reconstruct_path(parents, source, target) do
+    reconstruct_path(parents, source, target, [target])
+  end
+
+  defp reconstruct_path(_parents, source, current, path) when current == source do
+    path
+  end
+
+  defp reconstruct_path(parents, source, current, path) do
+    parent = Map.fetch!(parents, current)
+    reconstruct_path(parents, source, parent, [parent | path])
   end
 end
