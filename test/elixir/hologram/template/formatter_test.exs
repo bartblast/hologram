@@ -138,12 +138,12 @@ defmodule Hologram.Template.FormatterTest do
 
     test "inline inline tags" do
       malformed = """
-        <p><button $click="doit">Do it</button> <button $click="dontit"> or not</button></p>
+        <p><button $click="doit">Do it</button> <button $click="dontit">or not</button></p>
       """
 
       proper = """
       <p>
-        <button $click="doit">Do it</button><button $click="dontit"> or not</button>
+        <button $click="doit">Do it</button> <button $click="dontit">or not</button>
       </p>
       """
 

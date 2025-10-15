@@ -94,7 +94,7 @@ defmodule Hologram.Template.Formatter do
        ) do
     really_add =
       case {pi, nl} do
-        {nd, true} when nd != "" -> pi <> to_add
+        {nd, true} when nd != "" -> nd <> String.trim_leading(to_add)
         _ -> to_add
       end
 
@@ -107,12 +107,21 @@ defmodule Hologram.Template.Formatter do
 
   defp add_trimmed_text(state, text) do
     # We're a formatter we'll handle the whitespace
-    case near_trim(text, state) do
-      :skip ->
+    case near_trim(text) do
+      "" ->
         state
 
-      :indent ->
-        state |> indent_next()
+      " " ->
+        case String.match?(text, ~r/\n/) do
+          true ->
+            state |> indent_next()
+
+          false ->
+            case state.output == [] do
+              true -> state
+              false -> state |> add_output(" ")
+            end
+        end
 
       trimmed ->
         state |> add_output(trimmed)
@@ -212,41 +221,20 @@ defmodule Hologram.Template.Formatter do
   @actual_space 32
 
   # We want to collapse leading and trailing whitespace to
-  # a single ASCII space.  For matching convenience we treat an empty
-  # string as a single space.
+  # a single ASCII space.
   # This is wholly unsuitable outside of this module.
-  def near_trim(text, state \\ %State{})
+  def near_trim(text)
 
-  def near_trim(<<>>, %State{just_closed: jc}) do
-    case jc do
-      false -> :skip
-      true -> :indent
-    end
-  end
+  def near_trim(<<>>), do: ""
 
-  def near_trim(binary, %State{just_closed: jc}) do
-    potential =
-      binary
-      |> to_charlist
-      |> close_shave()
-      |> Enum.reverse()
-      |> close_shave()
-      |> Enum.reverse()
-      |> to_string
-
-    case {potential, jc} do
-      {t, false} when t in ["", " "] ->
-        :skip
-
-      {t, true} when t in ["", " "] ->
-        case String.match?(binary, ~r/\n/) do
-          false -> :skip
-          true -> :indent
-        end
-
-      _ ->
-        potential
-    end
+  def near_trim(binary) do
+    binary
+    |> to_charlist
+    |> close_shave()
+    |> Enum.reverse()
+    |> close_shave()
+    |> Enum.reverse()
+    |> to_string
   end
 
   defp close_shave(chars, give_space \\ false)
@@ -280,8 +268,7 @@ defmodule Hologram.Template.Formatter do
     # We cannot just trim, because the whitespace is significant inside
     # these quotes.  We also don't want to just add it.
     case near_trim(t) do
-      :skip -> gather_abits(rest)
-      :indent -> gather_abits(rest)
+      empty when empty in ["", " "] -> gather_abits(rest)
       tt -> "\"#{tt}#{gather_abits(rest)}\""
     end
   end
