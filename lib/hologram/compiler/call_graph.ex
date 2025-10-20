@@ -140,7 +140,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec add_edge(t, vertex, vertex) :: t
   def add_edge(%{pid: pid} = call_graph, from_vertex, to_vertex) do
-    Agent.update(pid, &Digraph.add_edge(&1, from_vertex, to_vertex), :infinity)
+    Agent.cast(pid, &Digraph.add_edge(&1, from_vertex, to_vertex))
     call_graph
   end
 
@@ -150,7 +150,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec add_edges(t, [edge]) :: t
   def add_edges(%{pid: pid} = call_graph, edges) do
-    Agent.update(pid, &Digraph.add_edges(&1, edges), :infinity)
+    Agent.cast(pid, &Digraph.add_edges(&1, edges))
     call_graph
   end
 
@@ -159,7 +159,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec add_vertex(t, vertex) :: t
   def add_vertex(%{pid: pid} = call_graph, vertex) do
-    Agent.update(pid, &Digraph.add_vertex(&1, vertex), :infinity)
+    Agent.cast(pid, &Digraph.add_vertex(&1, vertex))
     call_graph
   end
 
@@ -504,7 +504,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec put_graph(t, Digraph.t()) :: t
   def put_graph(%{pid: pid} = call_graph, graph) do
-    Agent.update(pid, fn _state -> graph end, :infinity)
+    Agent.cast(pid, fn _state -> graph end)
     call_graph
   end
 
@@ -559,7 +559,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec remove_runtime_mfas!(t, [mfa]) :: t
   def remove_runtime_mfas!(%{pid: pid} = call_graph, runtime_mfas) do
-    Agent.update(
+    Agent.cast(
       pid,
       fn graph ->
         vertices = Digraph.vertices(graph)
@@ -584,8 +584,7 @@ defmodule Hologram.Compiler.CallGraph do
         Digraph.new()
         |> Digraph.add_vertices(new_vertices)
         |> Digraph.add_edges(new_outgoing_edges)
-      end,
-      :infinity
+      end
     )
 
     call_graph
@@ -596,7 +595,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec remove_vertex(t, vertex) :: t
   def remove_vertex(%{pid: pid} = call_graph, vertex) do
-    Agent.update(pid, &Digraph.remove_vertex(&1, vertex), :infinity)
+    Agent.cast(pid, &Digraph.remove_vertex(&1, vertex))
     call_graph
   end
 
@@ -607,7 +606,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec remove_vertices(t, [vertex]) :: t
   def remove_vertices(%{pid: pid} = call_graph, vertices) do
-    Agent.update(pid, &Digraph.remove_vertices(&1, vertices), :infinity)
+    Agent.cast(pid, &Digraph.remove_vertices(&1, vertices))
     call_graph
   end
 
