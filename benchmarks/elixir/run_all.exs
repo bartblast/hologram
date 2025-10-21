@@ -6,6 +6,8 @@
 defmodule BenchmarkRunner do
   @moduledoc false
 
+  alias Hologram.Commons.SystemUtils
+
   @benchmarks_dir "benchmarks/elixir"
 
   @doc """
@@ -133,7 +135,7 @@ defmodule BenchmarkRunner do
     result =
       try do
         {output, exit_code} =
-          System.cmd("mix", ["run", file_path],
+          SystemUtils.cmd_cross_platform("mix", ["run", file_path],
             stderr_to_stdout: true,
             env: [{"MIX_ENV", "dev"}]
           )
