@@ -63,56 +63,56 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">1 vertex</td>
-    <td style="white-space: nowrap; text-align: right">87.94 K</td>
-    <td style="white-space: nowrap; text-align: right">11.37 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;31.94%</td>
-    <td style="white-space: nowrap; text-align: right">10.38 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">27.39 &micro;s</td>
-  </tr>
-
-  <tr>
-    <td style="white-space: nowrap">2 vertices</td>
-    <td style="white-space: nowrap; text-align: right">49.28 K</td>
-    <td style="white-space: nowrap; text-align: right">20.29 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;148.42%</td>
-    <td style="white-space: nowrap; text-align: right">16.96 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">43.58 &micro;s</td>
-  </tr>
-
-  <tr>
-    <td style="white-space: nowrap">4 vertices</td>
-    <td style="white-space: nowrap; text-align: right">31.63 K</td>
-    <td style="white-space: nowrap; text-align: right">31.62 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;23.84%</td>
-    <td style="white-space: nowrap; text-align: right">29.88 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">61.66 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">1279.22 K</td>
+    <td style="white-space: nowrap; text-align: right">0.78 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;62.41%</td>
+    <td style="white-space: nowrap; text-align: right">0.63 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">2.62 &micro;s</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">8 vertices</td>
-    <td style="white-space: nowrap; text-align: right">16.39 K</td>
-    <td style="white-space: nowrap; text-align: right">61.00 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;15.95%</td>
-    <td style="white-space: nowrap; text-align: right">58.94 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">104.61 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">875.91 K</td>
+    <td style="white-space: nowrap; text-align: right">1.14 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;34.62%</td>
+    <td style="white-space: nowrap; text-align: right">1.04 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">2.58 &micro;s</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">4 vertices</td>
+    <td style="white-space: nowrap; text-align: right">710.20 K</td>
+    <td style="white-space: nowrap; text-align: right">1.41 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;36.67%</td>
+    <td style="white-space: nowrap; text-align: right">1.38 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">2.71 &micro;s</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">16 vertices</td>
-    <td style="white-space: nowrap; text-align: right">10.59 K</td>
-    <td style="white-space: nowrap; text-align: right">94.44 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;13.98%</td>
-    <td style="white-space: nowrap; text-align: right">91.15 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">145.47 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">574.71 K</td>
+    <td style="white-space: nowrap; text-align: right">1.74 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;35.35%</td>
+    <td style="white-space: nowrap; text-align: right">1.58 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">4.04 &micro;s</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">32 vertices</td>
-    <td style="white-space: nowrap; text-align: right">4.11 K</td>
-    <td style="white-space: nowrap; text-align: right">243.38 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;17.18%</td>
-    <td style="white-space: nowrap; text-align: right">234.96 &micro;s</td>
-    <td style="white-space: nowrap; text-align: right">385.65 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">421.21 K</td>
+    <td style="white-space: nowrap; text-align: right">2.37 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;27.59%</td>
+    <td style="white-space: nowrap; text-align: right">2.25 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">5.38 &micro;s</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">2 vertices</td>
+    <td style="white-space: nowrap; text-align: right">0.0474 K</td>
+    <td style="white-space: nowrap; text-align: right">21116.93 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;1.48%</td>
+    <td style="white-space: nowrap; text-align: right">21092.61 &micro;s</td>
+    <td style="white-space: nowrap; text-align: right">21842.14 &micro;s</td>
   </tr>
 
 </table>
@@ -127,38 +127,38 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">1 vertex</td>
-    <td style="white-space: nowrap;text-align: right">87.94 K</td>
+    <td style="white-space: nowrap;text-align: right">1279.22 K</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">2 vertices</td>
-    <td style="white-space: nowrap; text-align: right">49.28 K</td>
-    <td style="white-space: nowrap; text-align: right">1.78x</td>
+    <td style="white-space: nowrap">8 vertices</td>
+    <td style="white-space: nowrap; text-align: right">875.91 K</td>
+    <td style="white-space: nowrap; text-align: right">1.46x</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">4 vertices</td>
-    <td style="white-space: nowrap; text-align: right">31.63 K</td>
-    <td style="white-space: nowrap; text-align: right">2.78x</td>
-  </tr>
-
-  <tr>
-    <td style="white-space: nowrap">8 vertices</td>
-    <td style="white-space: nowrap; text-align: right">16.39 K</td>
-    <td style="white-space: nowrap; text-align: right">5.36x</td>
+    <td style="white-space: nowrap; text-align: right">710.20 K</td>
+    <td style="white-space: nowrap; text-align: right">1.8x</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">16 vertices</td>
-    <td style="white-space: nowrap; text-align: right">10.59 K</td>
-    <td style="white-space: nowrap; text-align: right">8.3x</td>
+    <td style="white-space: nowrap; text-align: right">574.71 K</td>
+    <td style="white-space: nowrap; text-align: right">2.23x</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">32 vertices</td>
-    <td style="white-space: nowrap; text-align: right">4.11 K</td>
-    <td style="white-space: nowrap; text-align: right">21.4x</td>
+    <td style="white-space: nowrap; text-align: right">421.21 K</td>
+    <td style="white-space: nowrap; text-align: right">3.04x</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">2 vertices</td>
+    <td style="white-space: nowrap; text-align: right">0.0474 K</td>
+    <td style="white-space: nowrap; text-align: right">27013.27x</td>
   </tr>
 
 </table>

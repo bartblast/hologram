@@ -64,10 +64,10 @@ Run Time
   <tr>
     <td style="white-space: nowrap">format_files/2</td>
     <td style="white-space: nowrap; text-align: right">1.20</td>
-    <td style="white-space: nowrap; text-align: right">831.81 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;1.28%</td>
-    <td style="white-space: nowrap; text-align: right">829.59 ms</td>
-    <td style="white-space: nowrap; text-align: right">849.20 ms</td>
+    <td style="white-space: nowrap; text-align: right">836.66 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;1.19%</td>
+    <td style="white-space: nowrap; text-align: right">841.64 ms</td>
+    <td style="white-space: nowrap; text-align: right">849.16 ms</td>
   </tr>
 
 </table>

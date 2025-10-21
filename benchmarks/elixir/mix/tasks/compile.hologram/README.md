@@ -63,19 +63,19 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">has cache</td>
-    <td style="white-space: nowrap; text-align: right">0.54</td>
-    <td style="white-space: nowrap; text-align: right">1.84 s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;1.91%</td>
-    <td style="white-space: nowrap; text-align: right">1.83 s</td>
-    <td style="white-space: nowrap; text-align: right">1.89 s</td>
+    <td style="white-space: nowrap; text-align: right">0.52</td>
+    <td style="white-space: nowrap; text-align: right">1.93 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;1.61%</td>
+    <td style="white-space: nowrap; text-align: right">1.94 s</td>
+    <td style="white-space: nowrap; text-align: right">1.96 s</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">no cache</td>
     <td style="white-space: nowrap; text-align: right">0.21</td>
-    <td style="white-space: nowrap; text-align: right">4.71 s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;0.08%</td>
-    <td style="white-space: nowrap; text-align: right">4.71 s</td>
+    <td style="white-space: nowrap; text-align: right">4.70 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;0.16%</td>
+    <td style="white-space: nowrap; text-align: right">4.70 s</td>
     <td style="white-space: nowrap; text-align: right">4.71 s</td>
   </tr>
 
@@ -91,14 +91,14 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">has cache</td>
-    <td style="white-space: nowrap;text-align: right">0.54</td>
+    <td style="white-space: nowrap;text-align: right">0.52</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">no cache</td>
     <td style="white-space: nowrap; text-align: right">0.21</td>
-    <td style="white-space: nowrap; text-align: right">2.56x</td>
+    <td style="white-space: nowrap; text-align: right">2.43x</td>
   </tr>
 
 </table>
