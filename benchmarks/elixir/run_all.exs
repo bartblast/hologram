@@ -59,7 +59,7 @@ defmodule BenchmarkRunner do
     |> Path.dirname()
     |> Path.relative_to("benchmarks/elixir")
     |> String.replace("/", " » ")
-    |> String.replace(".", "root")
+    |> String.replace(".", " » ")
   end
 
   defp format_result({:ok, name, stats}) do
