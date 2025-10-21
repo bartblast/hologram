@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">build_module_digest_plt!/0</td>
-    <td style="white-space: nowrap; text-align: right">6.17</td>
-    <td style="white-space: nowrap; text-align: right">162.04 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;3.90%</td>
-    <td style="white-space: nowrap; text-align: right">161.90 ms</td>
-    <td style="white-space: nowrap; text-align: right">177.93 ms</td>
+    <td style="white-space: nowrap; text-align: right">5.23</td>
+    <td style="white-space: nowrap; text-align: right">191.19 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;3.79%</td>
+    <td style="white-space: nowrap; text-align: right">190.65 ms</td>
+    <td style="white-space: nowrap; text-align: right">214.68 ms</td>
   </tr>
 
 </table>

@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">remove_runtime_mfas!/2</td>
-    <td style="white-space: nowrap; text-align: right">18.73</td>
-    <td style="white-space: nowrap; text-align: right">53.39 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;3.26%</td>
-    <td style="white-space: nowrap; text-align: right">52.78 ms</td>
-    <td style="white-space: nowrap; text-align: right">59.86 ms</td>
+    <td style="white-space: nowrap; text-align: right">17.92</td>
+    <td style="white-space: nowrap; text-align: right">55.82 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;2.66%</td>
+    <td style="white-space: nowrap; text-align: right">55.51 ms</td>
+    <td style="white-space: nowrap; text-align: right">60.85 ms</td>
   </tr>
 
 </table>
