@@ -89,32 +89,32 @@ defmodule BenchmarkRunner do
     """
   end
 
-  defp handle_benchmark_result(output, exit_code, benchmark_name) do
-    if exit_code == 0 do
-      IO.puts("✅ Benchmark completed successfully")
-      IO.puts("")
+  defp handle_benchmark_result(0, output, benchmark_name) do
+    IO.puts("✅ Benchmark completed successfully")
+    IO.puts("")
 
-      # Extract and show only the benchmark results after "Formatting results..."
-      benchmark_stats =
-        case String.split(output, "Formatting results...") do
-          [_before, stats] -> String.trim(stats)
-          _fallback -> nil
-        end
-
-      if benchmark_stats do
-        IO.puts("📊 Benchmark Results:")
-        IO.puts(benchmark_stats)
-        {:ok, benchmark_name, benchmark_stats}
-      else
-        IO.puts("⚠️  No benchmark results found (no 'Formatting results...' marker)")
-        {:warning, benchmark_name, "No benchmark results found"}
+    # Extract and show only the benchmark results after "Formatting results..."
+    benchmark_stats =
+      case String.split(output, "Formatting results...") do
+        [_before, stats] -> String.trim(stats)
+        _fallback -> nil
       end
+
+    if benchmark_stats do
+      IO.puts("📊 Benchmark Results:")
+      IO.puts(benchmark_stats)
+      {:ok, benchmark_name, benchmark_stats}
     else
-      IO.puts("❌ Benchmark failed with exit code: #{exit_code}")
-      IO.puts("📋 Error output:")
-      IO.puts(output)
-      {:error, benchmark_name, "Failed with exit code: #{exit_code}"}
+      IO.puts("⚠️  No benchmark results found")
+      {:warning, benchmark_name, "No benchmark results found"}
     end
+  end
+
+  defp handle_benchmark_result(exit_code, output, benchmark_name) do
+    IO.puts("❌ Benchmark failed with exit code: #{exit_code}")
+    IO.puts("📋 Error output:")
+    IO.puts(output)
+    {:error, benchmark_name, "Failed with exit code: #{exit_code}"}
   end
 
   defp print_divider do
@@ -138,7 +138,7 @@ defmodule BenchmarkRunner do
             env: [{"MIX_ENV", "dev"}]
           )
 
-        handle_benchmark_result(output, exit_code, benchmark_name)
+        handle_benchmark_result(exit_code, output, benchmark_name)
       rescue
         error ->
           error_msg = "Error running benchmark: #{inspect(error)}"
