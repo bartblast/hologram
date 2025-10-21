@@ -63,38 +63,38 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">is not atom</td>
-    <td style="white-space: nowrap; text-align: right">160.57 M</td>
-    <td style="white-space: nowrap; text-align: right">6.23 ns</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;34792.67%</td>
+    <td style="white-space: nowrap; text-align: right">168.60 M</td>
+    <td style="white-space: nowrap; text-align: right">5.93 ns</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;37056.96%</td>
     <td style="white-space: nowrap; text-align: right">4.20 ns</td>
     <td style="white-space: nowrap; text-align: right">16.60 ns</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">is Elixir module</td>
-    <td style="white-space: nowrap; text-align: right">8.96 M</td>
-    <td style="white-space: nowrap; text-align: right">111.66 ns</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;33153.22%</td>
+    <td style="white-space: nowrap; text-align: right">9.78 M</td>
+    <td style="white-space: nowrap; text-align: right">102.26 ns</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;36420.74%</td>
+    <td style="white-space: nowrap; text-align: right">42 ns</td>
+    <td style="white-space: nowrap; text-align: right">84 ns</td>
+  </tr>
+
+  <tr>
+    <td style="white-space: nowrap">is Erlang module</td>
+    <td style="white-space: nowrap; text-align: right">5.61 M</td>
+    <td style="white-space: nowrap; text-align: right">178.22 ns</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;30167.66%</td>
     <td style="white-space: nowrap; text-align: right">83 ns</td>
     <td style="white-space: nowrap; text-align: right">125 ns</td>
   </tr>
 
   <tr>
-    <td style="white-space: nowrap">is Erlang module</td>
-    <td style="white-space: nowrap; text-align: right">5.39 M</td>
-    <td style="white-space: nowrap; text-align: right">185.39 ns</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;28561.94%</td>
-    <td style="white-space: nowrap; text-align: right">83 ns</td>
-    <td style="white-space: nowrap; text-align: right">166 ns</td>
-  </tr>
-
-  <tr>
     <td style="white-space: nowrap">is atom</td>
-    <td style="white-space: nowrap; text-align: right">0.0369 M</td>
-    <td style="white-space: nowrap; text-align: right">27098.67 ns</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;47.69%</td>
-    <td style="white-space: nowrap; text-align: right">26833 ns</td>
-    <td style="white-space: nowrap; text-align: right">35833 ns</td>
+    <td style="white-space: nowrap; text-align: right">0.0753 M</td>
+    <td style="white-space: nowrap; text-align: right">13279.80 ns</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;53.88%</td>
+    <td style="white-space: nowrap; text-align: right">12958 ns</td>
+    <td style="white-space: nowrap; text-align: right">18083 ns</td>
   </tr>
 
 </table>
@@ -109,26 +109,26 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">is not atom</td>
-    <td style="white-space: nowrap;text-align: right">160.57 M</td>
+    <td style="white-space: nowrap;text-align: right">168.60 M</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">is Elixir module</td>
-    <td style="white-space: nowrap; text-align: right">8.96 M</td>
-    <td style="white-space: nowrap; text-align: right">17.93x</td>
+    <td style="white-space: nowrap; text-align: right">9.78 M</td>
+    <td style="white-space: nowrap; text-align: right">17.24x</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">is Erlang module</td>
-    <td style="white-space: nowrap; text-align: right">5.39 M</td>
-    <td style="white-space: nowrap; text-align: right">29.77x</td>
+    <td style="white-space: nowrap; text-align: right">5.61 M</td>
+    <td style="white-space: nowrap; text-align: right">30.05x</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">is atom</td>
-    <td style="white-space: nowrap; text-align: right">0.0369 M</td>
-    <td style="white-space: nowrap; text-align: right">4351.14x</td>
+    <td style="white-space: nowrap; text-align: right">0.0753 M</td>
+    <td style="white-space: nowrap; text-align: right">2239.0x</td>
   </tr>
 
 </table>

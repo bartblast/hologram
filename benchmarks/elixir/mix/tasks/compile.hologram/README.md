@@ -63,20 +63,20 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">has cache</td>
-    <td style="white-space: nowrap; text-align: right">0.53</td>
-    <td style="white-space: nowrap; text-align: right">1.87 s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;0.75%</td>
-    <td style="white-space: nowrap; text-align: right">1.87 s</td>
-    <td style="white-space: nowrap; text-align: right">1.90 s</td>
+    <td style="white-space: nowrap; text-align: right">0.54</td>
+    <td style="white-space: nowrap; text-align: right">1.84 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;1.91%</td>
+    <td style="white-space: nowrap; text-align: right">1.83 s</td>
+    <td style="white-space: nowrap; text-align: right">1.89 s</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">no cache</td>
     <td style="white-space: nowrap; text-align: right">0.21</td>
-    <td style="white-space: nowrap; text-align: right">4.87 s</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;0.83%</td>
-    <td style="white-space: nowrap; text-align: right">4.87 s</td>
-    <td style="white-space: nowrap; text-align: right">4.90 s</td>
+    <td style="white-space: nowrap; text-align: right">4.71 s</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;0.08%</td>
+    <td style="white-space: nowrap; text-align: right">4.71 s</td>
+    <td style="white-space: nowrap; text-align: right">4.71 s</td>
   </tr>
 
 </table>
@@ -91,14 +91,14 @@ Run Time Comparison
     <th style="text-align: right">Slower</th>
   <tr>
     <td style="white-space: nowrap">has cache</td>
-    <td style="white-space: nowrap;text-align: right">0.53</td>
+    <td style="white-space: nowrap;text-align: right">0.54</td>
     <td>&nbsp;</td>
   </tr>
 
   <tr>
     <td style="white-space: nowrap">no cache</td>
     <td style="white-space: nowrap; text-align: right">0.21</td>
-    <td style="white-space: nowrap; text-align: right">2.61x</td>
+    <td style="white-space: nowrap; text-align: right">2.56x</td>
   </tr>
 
 </table>

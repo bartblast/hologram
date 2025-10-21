@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">list_pages/0</td>
-    <td style="white-space: nowrap; text-align: right">56.25</td>
-    <td style="white-space: nowrap; text-align: right">17.78 ms</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;7.46%</td>
-    <td style="white-space: nowrap; text-align: right">18.02 ms</td>
-    <td style="white-space: nowrap; text-align: right">19.81 ms</td>
+    <td style="white-space: nowrap; text-align: right">53.90</td>
+    <td style="white-space: nowrap; text-align: right">18.55 ms</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;8.80%</td>
+    <td style="white-space: nowrap; text-align: right">18.95 ms</td>
+    <td style="white-space: nowrap; text-align: right">21.16 ms</td>
   </tr>
 
 </table>

@@ -63,11 +63,11 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">has_function?/3</td>
-    <td style="white-space: nowrap; text-align: right">14.20 M</td>
-    <td style="white-space: nowrap; text-align: right">70.42 ns</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;53749.12%</td>
+    <td style="white-space: nowrap; text-align: right">15.60 M</td>
+    <td style="white-space: nowrap; text-align: right">64.11 ns</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;55253.67%</td>
     <td style="white-space: nowrap; text-align: right">42 ns</td>
-    <td style="white-space: nowrap; text-align: right">84 ns</td>
+    <td style="white-space: nowrap; text-align: right">83 ns</td>
   </tr>
 
 </table>

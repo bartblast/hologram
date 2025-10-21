@@ -63,9 +63,9 @@ Run Time
 
   <tr>
     <td style="white-space: nowrap">has_struct?/1</td>
-    <td style="white-space: nowrap; text-align: right">12.57 M</td>
-    <td style="white-space: nowrap; text-align: right">79.52 ns</td>
-    <td style="white-space: nowrap; text-align: right">&plusmn;30869.45%</td>
+    <td style="white-space: nowrap; text-align: right">12.45 M</td>
+    <td style="white-space: nowrap; text-align: right">80.32 ns</td>
+    <td style="white-space: nowrap; text-align: right">&plusmn;43807.55%</td>
     <td style="white-space: nowrap; text-align: right">42 ns</td>
     <td style="white-space: nowrap; text-align: right">84 ns</td>
   </tr>
