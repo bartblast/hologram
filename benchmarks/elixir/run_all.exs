@@ -165,8 +165,9 @@ defmodule BenchmarkRunner do
     ## Summary
 
     Total benchmarks: #{length(results)}
-    Successful: #{count_by_status(results, :ok)}\
-    Warnings: #{count_by_status(results, :warning)}\
+
+    Successful: #{count_by_status(results, :ok)}\\
+    Warnings: #{count_by_status(results, :warning)}\\
     Failed: #{count_by_status(results, :error)}
 
     ## Results

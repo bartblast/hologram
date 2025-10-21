@@ -5,7 +5,10 @@ Last run: 2025-10-21 16:25:21 UTC
 ## Summary
 
 Total benchmarks: 31
-Successful: 31Warnings: 0Failed: 0
+
+Successful: 31\
+Warnings: 0\
+Failed: 0
 
 ## Results
 
