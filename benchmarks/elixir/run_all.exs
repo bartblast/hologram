@@ -56,7 +56,7 @@ defmodule BenchmarkRunner do
     file_path
     |> Path.dirname()
     |> Path.relative_to("benchmarks/elixir")
-    |> String.replace("/", " → ")
+    |> String.replace("/", " » ")
     |> String.replace(".", "root")
   end
 
