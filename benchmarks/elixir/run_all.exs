@@ -155,7 +155,7 @@ defmodule BenchmarkRunner do
   end
 
   defp write_readme(results) do
-    timestamp = DateTime.to_string(DateTime.utc_now())
+    timestamp = Calendar.strftime(DateTime.utc_now(), "%Y-%m-%d %H:%M:%S UTC")
 
     intro_content = """
     # Elixir Benchmarks
@@ -165,8 +165,8 @@ defmodule BenchmarkRunner do
     ## Summary
 
     Total benchmarks: #{length(results)}
-    Successful: #{count_by_status(results, :ok)}
-    Warnings: #{count_by_status(results, :warning)}
+    Successful: #{count_by_status(results, :ok)}\
+    Warnings: #{count_by_status(results, :warning)}\
     Failed: #{count_by_status(results, :error)}
 
     ## Results
