@@ -17,6 +17,7 @@ updates:
     ignore:
       - dependency-name: "eslint"
         update-types: ["version-update:semver-major"]
+      - dependency-name: "jsdom"
     groups:
       lib-javascript:
         patterns:
