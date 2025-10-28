@@ -17,6 +17,26 @@ defmodule Hologram.Framework do
      ]}
   ]
 
+  @doc """
+  Returns Erlang dependencies for Elixir standard library modules.
+
+  Analyzes the call graph of selected Elixir standard library modules and identifies
+  which Erlang functions they depend on. Manually ported functions are excluded.
+
+  ## Return Structure
+
+  Returns a three-level nested map:
+  - **Level 1**: Group name (string) -> modules in that group
+  - **Level 2**: Module (atom) -> functions in that module  
+  - **Level 3**: Function key `{name, arity}` -> list of reachable Erlang MFAs
+
+  ## Example
+
+      iex> deps = elixir_stdlib_erlang_deps()
+      iex> deps["Core"][Kernel][{:hd, 1}]
+      [{:erlang, :hd, 1}]
+  """
+  @spec elixir_stdlib_erlang_deps() :: %{String.t() => %{module => %{{fun, arity} => [mfa]}}}
   def elixir_stdlib_erlang_deps do
     graph =
       Compiler.build_call_graph()
