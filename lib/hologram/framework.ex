@@ -59,6 +59,51 @@ defmodule Hologram.Framework do
     end)
   end
 
+  @doc """
+  Lists all manually ported Erlang functions.
+
+  ## Parameters
+
+  - `erlang_js_dir` - Path to the directory containing manually ported Erlang functions JavaScript files in the Hologram library
+
+  ## Returns
+
+  A list of MFAs (module, function, arity tuples).
+
+  ## Example
+
+      iex> list_ported_erlang_funs("assets/js/erlang")
+      [{:erlang, :*, 2}, {:lists, :flatten, 1}, {:maps, :get, 2}, ...]
+  """
+  @spec list_ported_erlang_funs(Path.t()) :: [mfa]
+  def list_ported_erlang_funs(erlang_js_dir) do
+    erlang_js_dir
+    |> File.ls!()
+    |> Enum.flat_map(fn file ->
+      module = extract_module_name(file)
+      path = Path.join(erlang_js_dir, file)
+
+      path
+      |> File.read!()
+      |> extract_function_signatures()
+      |> Enum.map(fn {fun, arity} -> {module, fun, arity} end)
+    end)
+  end
+
+  defp extract_function_signatures(content) do
+    ~r/\/\/ Start (.+?)\/(\d+)/
+    |> Regex.scan(content)
+    |> Enum.map(fn [_full, fun, arity] ->
+      {String.to_existing_atom(fun), String.to_integer(arity)}
+    end)
+  end
+
+  defp extract_module_name(filename) do
+    filename
+    |> Path.basename(".mjs")
+    |> String.to_existing_atom()
+  end
+
   defp reachable_erlang_mfas(graph, mfa) do
     graph
     |> CallGraph.reachable_mfas([mfa])
