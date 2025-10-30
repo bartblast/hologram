@@ -267,4 +267,12 @@ defmodule Hologram.Test.Helpers do
       :ok
     end
   end
+
+  @doc """
+  Wraps previously expected keyword output in a `raw` block
+  """
+  @spec wrap_in_raw([term]) :: [term]
+  def wrap_in_raw(prev) do
+    [block_start: "raw"] ++ prev ++ [block_end: "raw"]
+  end
 end

@@ -32,6 +32,14 @@ defmodule Hologram.TemplateTest do
       assert template.(%{}) == [{:element, "div", [], [text: "abc"]}]
     end
 
+    test "template with raw section" do
+      template = ~HOLO"""
+      {%raw}<div>raw</div>{/raw}
+      """
+
+      assert template.(%{value: 123}) == [{:element, "div", [], [text: "raw"]}]
+    end
+
     test "alias" do
       alias Aaa.Bbb.Ccc
       template = ~HOLO"<Ccc />"
