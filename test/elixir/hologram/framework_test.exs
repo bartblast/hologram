@@ -260,4 +260,247 @@ defmodule Hologram.FrameworkTest do
       assert result == []
     end
   end
+
+  describe "aggregate_erlang_funs_info/2" do
+    test "returns correct structure with status, dependents, and dependents_count" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "aggregate_erlang_funs_info_2",
+          "basic_structure"
+        ])
+
+      clean_dir(test_dir)
+
+      erlang_content = """
+      const Erlang = {
+        // Start hd/1
+        "hd/1": (list) => list[0],
+        // End hd/1
+        // Deps: []
+        
+        // Start +/2
+        "+/2": (a, b) => a + b,
+        // End +/2
+        // Deps: []
+        
+        // Start */2
+        "*/2": (a, b) => a * b,
+        // End */2
+        // Deps: []
+      };
+      """
+
+      lists_content = """
+      const Erlang_Lists = {
+        // Start reverse/1
+        "reverse/1": (list) => list.reverse(),
+        // End reverse/1
+        // Deps: []
+      };
+      """
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!(erlang_content)
+
+      test_dir
+      |> Path.join("lists.mjs")
+      |> File.write!(lists_content)
+
+      in_progress = [{:erlang, :-, 2}, {:erlang, :/, 2}]
+      result = aggregate_erlang_funs_info(test_dir, in_progress)
+
+      assert is_map(result)
+      refute Enum.empty?(result)
+
+      # Verify we have examples of all three statuses
+      statuses =
+        result
+        |> Map.values()
+        |> Enum.map(& &1.status)
+        |> Enum.uniq()
+        |> Enum.sort()
+
+      assert :done in statuses, "Expected at least one :done status"
+      assert :todo in statuses, "Expected at least one :todo status"
+      assert :in_progress in statuses, "Expected at least one :in_progress status"
+
+      # Check that ALL entries have the correct structure
+      Enum.each(result, fn {erlang_mfa, info} ->
+        # Verify MFA structure
+        assert match?(
+                 {module, fun, arity} when is_atom(module) and is_atom(fun) and is_integer(arity),
+                 erlang_mfa
+               )
+
+        # Verify info map structure
+        assert is_map(info)
+        assert Map.has_key?(info, :status)
+        assert Map.has_key?(info, :dependents)
+        assert Map.has_key?(info, :dependents_count)
+
+        # Verify field types and constraints
+        assert info.status in [:todo, :in_progress, :done]
+        assert is_list(info.dependents)
+        assert is_integer(info.dependents_count)
+        assert info.dependents_count >= 0
+
+        # Verify dependents_count matches dependents list
+        assert info.dependents_count == length(info.dependents)
+      end)
+    end
+
+    test "marks ported functions as :done" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "aggregate_erlang_funs_info_2",
+          "ported_functions"
+        ])
+
+      clean_dir(test_dir)
+
+      erlang_content = """
+      const Erlang = {
+        // Start +/2
+        "+/2": (a, b) => a + b,
+        // End +/2
+        // Deps: []
+                
+        // Start hd/1
+        "hd/1": (list) => list[0],
+        // End hd/1
+        // Deps: []
+      };
+      """
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!(erlang_content)
+
+      result = aggregate_erlang_funs_info(test_dir, [])
+
+      assert result[{:erlang, :+, 2}].status == :done
+      assert result[{:erlang, :hd, 1}].status == :done
+    end
+
+    test "marks functions in in_progress_mfas as :in_progress" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "aggregate_erlang_funs_info_2",
+          "in_progress_functions"
+        ])
+
+      clean_dir(test_dir)
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!("const Erlang = {};")
+
+      in_progress = [{:erlang, :+, 2}, {:erlang, :hd, 1}]
+      result = aggregate_erlang_funs_info(test_dir, in_progress)
+
+      assert result[{:erlang, :+, 2}].status == :in_progress
+      assert result[{:erlang, :hd, 1}].status == :in_progress
+    end
+
+    test "marks unported functions not in progress as :todo" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "aggregate_erlang_funs_info_2",
+          "todo_functions"
+        ])
+
+      clean_dir(test_dir)
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!("const Erlang = {};")
+
+      result = aggregate_erlang_funs_info(test_dir, [{:erlang, :hd, 1}])
+
+      assert result[{:erlang, :+, 2}].status == :todo
+      assert result[{:erlang, :hd, 1}].status == :in_progress
+    end
+
+    test "correctly aggregates dependents and counts them" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "aggregate_erlang_funs_info_2",
+          "dependents_aggregation"
+        ])
+
+      clean_dir(test_dir)
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!("const Erlang = {};")
+
+      result = aggregate_erlang_funs_info(test_dir, [])
+
+      Enum.each(result, fn {_erlang_mfa, info} ->
+        # dependents_count should match the length of unique dependents
+        assert info.dependents_count == length(info.dependents),
+               "Expected dependents_count to equal length of dependents list"
+
+        # All dependents should be valid Elixir MFAs
+        Enum.each(info.dependents, fn dependent ->
+          assert match?(
+                   {module, fun, arity}
+                   when is_atom(module) and is_atom(fun) and is_integer(arity),
+                   dependent
+                 ),
+                 "Expected dependent to be a valid MFA tuple"
+        end)
+
+        # Dependents list should not have duplicates
+        assert length(info.dependents) == length(Enum.uniq(info.dependents)),
+               "Expected dependents list to contain only unique entries"
+      end)
+    end
+
+    test "prioritizes status in correct order: done > in_progress > todo" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "aggregate_erlang_funs_info_2",
+          "status_priority"
+        ])
+
+      clean_dir(test_dir)
+
+      erlang_content = """
+      const Erlang = {
+        // Start hd/1
+        "hd/1": (list) => list[0],
+        // End hd/1
+        // Deps: []
+      };
+      """
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!(erlang_content)
+
+      result = aggregate_erlang_funs_info(test_dir, [{:erlang, :hd, 1}])
+
+      assert result[{:erlang, :hd, 1}].status == :done
+    end
+  end
 end

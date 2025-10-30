@@ -143,6 +143,103 @@ defmodule Hologram.Framework do
   ]
 
   @doc """
+  Aggregates information about Erlang functions used by Elixir stdlib.
+
+  Returns comprehensive data including porting status and dependency information
+  for each Erlang function used by Elixir standard library modules.
+
+  ## Parameters
+
+  - `erlang_js_dir` - Path to the directory containing manually ported Erlang functions
+  - `in_progress_mfas` - List of MFA tuples currently being ported (optional, defaults to [])
+
+  ## Returns
+
+  A map where each key is an Erlang MFA tuple and the value is a map containing:
+  - `:status` - One of `:todo`, `:in_progress`, or `:done`
+  - `:dependents` - List of Elixir MFA tuples that depend on it  
+  - `:dependents_count` - Count of Elixir functions that depend on it
+
+  ## Example
+
+      iex> aggregate_erlang_funs_info("assets/js/erlang", [{:erlang, :-, 2}])
+      %{
+        {:erlang, :+, 2} => %{
+          status: :done,
+          dependents: [{Kernel, :+, 2}, {Integer, :parse, 2}, ...],
+          dependents_count: 15          
+        },
+        {:erlang, :-, 2} => %{
+          status: :in_progress,
+          dependents: [{Kernel, :-, 2}, ...],
+          dependents_count: 10          
+        },
+        {:erlang, :div, 2} => %{
+          status: :todo,
+          dependents: [{Integer, :floor_div, 2}, ...],          
+          dependents_count: 5
+        },
+        ...
+      }
+  """
+  @spec aggregate_erlang_funs_info(Path.t(), [mfa]) :: %{
+          mfa => %{
+            status: :todo | :in_progress | :done,
+            dependents: [mfa],
+            dependents_count: non_neg_integer()
+          }
+        }
+  def aggregate_erlang_funs_info(erlang_js_dir, in_progress_mfas \\ []) do
+    groups = elixir_stdlib_erlang_deps()
+
+    ported_erlang_funs =
+      erlang_js_dir
+      |> list_ported_erlang_funs()
+      |> MapSet.new()
+
+    in_progress_set = MapSet.new(in_progress_mfas)
+
+    # Build a map of erlang_mfa => list of elixir mfas that depend on it
+    dependents_by_erlang_mfa =
+      groups
+      |> Enum.flat_map(fn {_group, modules} ->
+        Enum.flat_map(modules, fn {module, funs} ->
+          Enum.flat_map(funs, fn {{fun, arity}, erlang_mfas} ->
+            Enum.map(erlang_mfas, fn erlang_mfa ->
+              {erlang_mfa, {module, fun, arity}}
+            end)
+          end)
+        end)
+      end)
+      |> Enum.reduce(%{}, fn {erlang_mfa, elixir_mfa}, acc ->
+        Map.update(acc, erlang_mfa, [elixir_mfa], fn existing ->
+          [elixir_mfa | existing]
+        end)
+      end)
+
+    # Build the final result with status and dependency counts
+    dependents_by_erlang_mfa
+    |> Enum.map(fn {erlang_mfa, dependents} ->
+      unique_dependents = Enum.uniq(dependents)
+
+      status =
+        cond do
+          MapSet.member?(ported_erlang_funs, erlang_mfa) -> :done
+          MapSet.member?(in_progress_set, erlang_mfa) -> :in_progress
+          true -> :todo
+        end
+
+      {erlang_mfa,
+       %{
+         status: status,
+         dependents: unique_dependents,
+         dependents_count: length(unique_dependents)
+       }}
+    end)
+    |> Enum.into(%{})
+  end
+
+  @doc """
   Returns Erlang dependencies for Elixir standard library modules.
 
   Analyzes the call graph of selected Elixir standard library modules and identifies
