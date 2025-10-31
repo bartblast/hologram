@@ -34,10 +34,10 @@ defmodule Hologram.TemplateTest do
 
     test "template with raw section" do
       template = ~HOLO"""
-      {%raw}<div>raw</div>{/raw}
+      {%raw}{%if true}Hologram{/if}{/raw}
       """
 
-      assert template.(%{value: 123}) == [{:element, "div", [], [text: "raw"]}]
+      assert template.(%{}) == [text: "{%if true}Hologram{/if}"]
     end
 
     test "alias" do

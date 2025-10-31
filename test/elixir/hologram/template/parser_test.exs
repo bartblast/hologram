@@ -347,62 +347,87 @@ defmodule Hologram.Template.ParserTest do
 
   describe "raw block" do
     test "empty" do
-      assert parse_markup("{%raw}{/raw}") == wrap_in_raw([])
+      assert parse_markup("{%raw}{/raw}") == [block_start: "raw", block_end: "raw"]
     end
 
     test "literal raw text" do
-      assert parse_markup("{%raw}raw{/raw}") == wrap_in_raw(text: "raw")
+      assert parse_markup("{%raw}raw{/raw}") == [
+               block_start: "raw",
+               text: "raw",
+               block_end: "raw"
+             ]
     end
 
     test "with whitespaces" do
       markup = " \n\r\t"
 
-      assert parse_markup("{%raw}#{markup}{/raw}") == wrap_in_raw(text: markup)
+      assert parse_markup("{%raw}#{markup}{/raw}") == [
+               block_start: "raw",
+               text: markup,
+               block_end: "raw"
+             ]
     end
 
     test "with symbols" do
       markup = "#$%"
 
-      assert parse_markup("{%raw}#{markup}{/raw}") == wrap_in_raw(text: markup)
+      assert parse_markup("{%raw}#{markup}{/raw}") == [
+               block_start: "raw",
+               text: markup,
+               block_end: "raw"
+             ]
     end
 
     test "with string" do
       markup = "abc"
-      assert parse_markup("{%raw}#{markup}{/raw}") == wrap_in_raw(text: markup)
+
+      assert parse_markup("{%raw}#{markup}{/raw}") == [
+               block_start: "raw",
+               text: markup,
+               block_end: "raw"
+             ]
     end
 
     test "with element having an attribute value with expression in double quotes" do
       assert parse_markup("{%raw}<div id=\"aaa{@test}bbb\"></div>{/raw}") ==
-               wrap_in_raw(
+               [
+                 block_start: "raw",
                  start_tag: {"div", [{"id", [text: "aaa{@test}bbb"]}]},
-                 end_tag: "div"
-               )
+                 end_tag: "div",
+                 block_end: "raw"
+               ]
     end
 
     test "with component having a property value with expression in double quotes" do
       assert parse_markup("{%raw}<Aaa.Bbb cid=\"aaa{@test}bbb\"></Aaa.Bbb>{/raw}") ==
-               wrap_in_raw(
+               [
+                 block_start: "raw",
                  start_tag: {"Aaa.Bbb", [{"cid", [text: "aaa{@test}bbb"]}]},
-                 end_tag: "Aaa.Bbb"
-               )
+                 end_tag: "Aaa.Bbb",
+                 block_end: "raw"
+               ]
     end
 
     test "with script, having expression" do
       assert parse_markup("{%raw}<script>{@abc}</script>{/raw}") ==
-               wrap_in_raw(
+               [
+                 block_start: "raw",
                  start_tag: {"script", []},
                  text: "{@abc}",
-                 end_tag: "script"
-               )
+                 end_tag: "script",
+                 block_end: "raw"
+               ]
     end
 
     test "with script, having javascript interpolation" do
       assert parse_markup("{%raw}<script>`abc${123}xyz`</script>{/raw}") ==
-               wrap_in_raw(
+               [
+                 block_start: "raw",
                  start_tag: {"script", []},
                  text: "`abc${123}xyz`",
-                 end_tag: "script"
-               )
+                 end_tag: "script",
+                 block_end: "raw"
+               ]
     end
 
     test "within script" do
@@ -418,20 +443,30 @@ defmodule Hologram.Template.ParserTest do
 
   describe "raw block with nested tag not using curly bracket" do
     tags = [
-      {"text", "abc", text: "abc"},
-      {"element start tag", "<div>", start_tag: {"div", []}},
-      {"element end tag", "</div>", end_tag: "div"},
-      {"component start tag", "<Aaa.Bbb>", start_tag: {"Aaa.Bbb", []}},
-      {"component end tag", "</Aaa.Bbb>", end_tag: "Aaa.Bbb"},
+      {"text", "abc", block_start: "raw", text: "abc", block_end: "raw"},
+      {"element start tag", "<div>",
+       block_start: "raw", start_tag: {"div", []}, block_end: "raw"},
+      {"element end tag", "</div>", block_start: "raw", end_tag: "div", block_end: "raw"},
+      {"component start tag", "<Aaa.Bbb>",
+       block_start: "raw", start_tag: {"Aaa.Bbb", []}, block_end: "raw"},
+      {"component end tag", "</Aaa.Bbb>",
+       block_start: "raw", end_tag: "Aaa.Bbb", block_end: "raw"},
       {"public comment", "<!--abc-->",
-       [:public_comment_start, {:text, "abc"}, :public_comment_end]},
-      {"DOCTYPE", "<!DOCTYPE html>", doctype: "html"}
+       [
+         {:block_start, "raw"},
+         :public_comment_start,
+         {:text, "abc"},
+         :public_comment_end,
+         {:block_end, "raw"}
+       ]},
+      {"DOCTYPE", "<!DOCTYPE html>", block_start: "raw", doctype: "html", block_end: "raw"}
     ]
 
     Enum.each(tags, fn {name, markup, expected} ->
       test "raw block start, #{name}, raw block end" do
         markup = "{%raw}#{unquote(markup)}{/raw}"
-        assert parse_markup(markup) == wrap_in_raw(unquote(expected))
+
+        assert parse_markup(markup) == unquote(expected)
       end
     end)
   end
@@ -449,7 +484,12 @@ defmodule Hologram.Template.ParserTest do
     Enum.each(tags, fn {name, markup} ->
       test "raw block start, #{name}, raw block end" do
         markup = "{%raw}#{unquote(markup)}{/raw}"
-        assert parse_markup(markup) == wrap_in_raw(text: unquote(markup))
+
+        assert parse_markup(markup) == [
+                 block_start: "raw",
+                 text: unquote(markup),
+                 block_end: "raw"
+               ]
       end
     end)
   end
@@ -521,12 +561,17 @@ defmodule Hologram.Template.ParserTest do
         markup = "#{unquote(markup)}{%raw}{@abc}{/raw}"
 
         # credo:disable-for-next-line Credo.Check.Refactor.AppendSingleItem
-        assert parse_markup(markup) == unquote(expected) ++ wrap_in_raw(text: "{@abc}")
+        assert parse_markup(markup) ==
+                 unquote(expected) ++ [block_start: "raw", text: "{@abc}", block_end: "raw"]
       end
     end)
 
     test "text" do
-      assert parse_markup("abc{%raw}{@abc}{/raw}") == wrap_in_raw(text: "abc{@abc}")
+      assert parse_markup("abc{%raw}{@abc}{/raw}") == [
+               block_start: "raw",
+               text: "abc{@abc}",
+               block_end: "raw"
+             ]
     end
   end
 
@@ -654,7 +699,11 @@ defmodule Hologram.Template.ParserTest do
       test "'#{char}' character in raw block content" do
         markup = "{%raw}#{unquote(char)}{/raw}"
 
-        assert parse_markup(markup) == wrap_in_raw(text: "#{unquote(char)}")
+        assert parse_markup(markup) == [
+                 block_start: "raw",
+                 text: "#{unquote(char)}",
+                 block_end: "raw"
+               ]
       end
 
       test "'#{char}' character in script" do
@@ -1294,7 +1343,11 @@ defmodule Hologram.Template.ParserTest do
     end
 
     test "in raw block" do
-      assert parse_markup("{%raw}\#{@abc}{/raw}") == wrap_in_raw(text: "\#{@abc}")
+      assert parse_markup("{%raw}\#{@abc}{/raw}") == [
+               block_start: "raw",
+               text: "\#{@abc}",
+               block_end: "raw"
+             ]
     end
 
     test "in script" do

@@ -1175,6 +1175,41 @@ defmodule Hologram.Template.DOMTest do
     end
   end
 
+  describe "build_ast/1, raw block" do
+    test "literal tag elided" do
+      parse = [
+        {:block_start, "raw"},
+        {:block_end, "raw"}
+      ]
+
+      assert build_ast(parse) == []
+    end
+
+    test "text sections unmerged" do
+      parse = [
+        {:text, "before"},
+        {:block_start, "raw"},
+        {:text, "during"},
+        {:block_end, "raw"},
+        {:text, "after"}
+      ]
+
+      assert build_ast(parse) == [{:text, "before"}, {:text, "during"}, {:text, "after"}]
+    end
+
+    test "literal \"raw\" text passes safely index or out" do
+      parse = [
+        {:text, "raw"},
+        {:block_start, "raw"},
+        {:text, "raw"},
+        {:block_end, "raw"},
+        {:text, "raw"}
+      ]
+
+      assert build_ast(parse) == [{:text, "raw"}, {:text, "raw"}, {:text, "raw"}]
+    end
+  end
+
   test "build_ast/1, nested AST" do
     tags = [{:expression, "{(fn x -> [x | @acc] end).(@value)}"}]
 
