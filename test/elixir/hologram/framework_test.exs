@@ -290,12 +290,13 @@ defmodule Hologram.FrameworkTest do
       |> File.write!(lists_content)
 
       in_progress = [{:erlang, :-, 2}, {:erlang, :/, 2}]
-      result = aggregate_erlang_funs_info(test_dir, in_progress)
+      blocked = [{:erlang, :div, 2}]
+      result = aggregate_erlang_funs_info(test_dir, in_progress: in_progress, blocked: blocked)
 
       assert is_map(result)
       refute Enum.empty?(result)
 
-      # Verify we have examples of all three statuses
+      # Verify we have examples of all four statuses
       statuses =
         result
         |> Map.values()
@@ -303,9 +304,10 @@ defmodule Hologram.FrameworkTest do
         |> Enum.uniq()
         |> Enum.sort()
 
-      assert :done in statuses, "Expected at least one :done status"
       assert :todo in statuses, "Expected at least one :todo status"
       assert :in_progress in statuses, "Expected at least one :in_progress status"
+      assert :blocked in statuses, "Expected at least one :blocked status"
+      assert :done in statuses, "Expected at least one :done status"
 
       # Check that ALL entries have the correct structure
       Enum.each(result, fn {erlang_mfa, info} ->
@@ -322,7 +324,7 @@ defmodule Hologram.FrameworkTest do
         assert Map.has_key?(info, :dependents_count)
 
         # Verify field types and constraints
-        assert info.status in [:todo, :in_progress, :done]
+        assert info.status in [:todo, :in_progress, :blocked, :done]
         assert is_list(info.dependents)
         assert is_integer(info.dependents_count)
         assert info.dependents_count >= 0
@@ -332,6 +334,74 @@ defmodule Hologram.FrameworkTest do
       end)
     end
 
+    test "marks unported functions as :todo" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "aggregate_erlang_funs_info_2",
+          "todo_functions"
+        ])
+
+      clean_dir(test_dir)
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!("const Erlang = {};")
+
+      result = aggregate_erlang_funs_info(test_dir)
+
+      assert result[{:erlang, :+, 2}].status == :todo
+      assert result[{:erlang, :hd, 1}].status == :todo
+    end
+
+    test "marks functions in in_progress list as :in_progress" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "aggregate_erlang_funs_info_2",
+          "in_progress_functions"
+        ])
+
+      clean_dir(test_dir)
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!("const Erlang = {};")
+
+      in_progress = [{:erlang, :+, 2}, {:erlang, :hd, 1}]
+      result = aggregate_erlang_funs_info(test_dir, in_progress: in_progress)
+
+      assert result[{:erlang, :+, 2}].status == :in_progress
+      assert result[{:erlang, :hd, 1}].status == :in_progress
+    end
+
+    test "marks functions in blocked list as :blocked" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "aggregate_erlang_funs_info_2",
+          "blocked_functions"
+        ])
+
+      clean_dir(test_dir)
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!("const Erlang = {};")
+
+      blocked = [{:erlang, :+, 2}, {:erlang, :hd, 1}]
+      result = aggregate_erlang_funs_info(test_dir, blocked: blocked)
+
+      assert result[{:erlang, :+, 2}].status == :blocked
+      assert result[{:erlang, :hd, 1}].status == :blocked
+    end
+
     test "marks ported functions as :done" do
       test_dir =
         Path.join([
@@ -339,7 +409,7 @@ defmodule Hologram.FrameworkTest do
           "tests",
           "framework",
           "aggregate_erlang_funs_info_2",
-          "ported_functions"
+          "done_functions"
         ])
 
       clean_dir(test_dir)
@@ -366,51 +436,6 @@ defmodule Hologram.FrameworkTest do
 
       assert result[{:erlang, :+, 2}].status == :done
       assert result[{:erlang, :hd, 1}].status == :done
-    end
-
-    test "marks functions in in_progress_mfas as :in_progress" do
-      test_dir =
-        Path.join([
-          @tmp_dir,
-          "tests",
-          "framework",
-          "aggregate_erlang_funs_info_2",
-          "in_progress_functions"
-        ])
-
-      clean_dir(test_dir)
-
-      test_dir
-      |> Path.join("erlang.mjs")
-      |> File.write!("const Erlang = {};")
-
-      in_progress = [{:erlang, :+, 2}, {:erlang, :hd, 1}]
-      result = aggregate_erlang_funs_info(test_dir, in_progress)
-
-      assert result[{:erlang, :+, 2}].status == :in_progress
-      assert result[{:erlang, :hd, 1}].status == :in_progress
-    end
-
-    test "marks unported functions not in progress as :todo" do
-      test_dir =
-        Path.join([
-          @tmp_dir,
-          "tests",
-          "framework",
-          "aggregate_erlang_funs_info_2",
-          "todo_functions"
-        ])
-
-      clean_dir(test_dir)
-
-      test_dir
-      |> Path.join("erlang.mjs")
-      |> File.write!("const Erlang = {};")
-
-      result = aggregate_erlang_funs_info(test_dir, [{:erlang, :hd, 1}])
-
-      assert result[{:erlang, :+, 2}].status == :todo
-      assert result[{:erlang, :hd, 1}].status == :in_progress
     end
 
     test "correctly aggregates dependents and counts them" do
@@ -452,7 +477,7 @@ defmodule Hologram.FrameworkTest do
       end)
     end
 
-    test "prioritizes status in correct order: done > in_progress > todo" do
+    test "prioritizes status in correct order: done > in_progress > blocked > todo" do
       test_dir =
         Path.join([
           @tmp_dir,
@@ -464,6 +489,7 @@ defmodule Hologram.FrameworkTest do
 
       clean_dir(test_dir)
 
+      # Port hd/1 to test that :done has highest priority
       erlang_content = """
       const Erlang = {
         // Start hd/1
@@ -477,9 +503,25 @@ defmodule Hologram.FrameworkTest do
       |> Path.join("erlang.mjs")
       |> File.write!(erlang_content)
 
-      result = aggregate_erlang_funs_info(test_dir, [{:erlang, :hd, 1}])
+      # Test all precedence levels:
+      # - hd/1 is ported AND in both in_progress and blocked -> should be :done
+      # - +/2 is in both in_progress and blocked -> should be :in_progress
+      # - -/2 is only in blocked -> should be :blocked
+      # - //2 is in none of the lists -> should be :todo
+      result =
+        aggregate_erlang_funs_info(test_dir,
+          in_progress: [{:erlang, :hd, 1}, {:erlang, :+, 2}],
+          blocked: [{:erlang, :hd, 1}, {:erlang, :+, 2}, {:erlang, :-, 2}]
+        )
 
+      # :done takes precedence over in_progress and blocked
       assert result[{:erlang, :hd, 1}].status == :done
+      # :in_progress takes precedence over blocked
+      assert result[{:erlang, :+, 2}].status == :in_progress
+      # :blocked when not ported or in_progress
+      assert result[{:erlang, :-, 2}].status == :blocked
+      # :todo when not in any special category
+      assert result[{:erlang, :/, 2}].status == :todo
     end
   end
 end

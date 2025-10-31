@@ -151,18 +151,22 @@ defmodule Hologram.Framework do
   ## Parameters
 
   - `erlang_js_dir` - Path to the directory containing manually ported Erlang functions
-  - `in_progress_mfas` - List of MFA tuples currently being ported (optional, defaults to [])
+  - `opts` - Keyword list with optional keys:
+    - `:in_progress` - List of MFA tuples currently being ported (defaults to [])
+    - `:blocked` - List of MFA tuples that are blocked (defaults to [])
+    
+    Note: `:in_progress` takes precedence over `:blocked` when determining status.
 
   ## Returns
 
   A map where each key is an Erlang MFA tuple and the value is a map containing:
-  - `:status` - One of `:todo`, `:in_progress`, or `:done`
+  - `:status` - One of `:todo`, `:in_progress`, `:blocked`, or `:done`
   - `:dependents` - List of Elixir MFA tuples that depend on it  
   - `:dependents_count` - Count of Elixir functions that depend on it
 
   ## Example
 
-      iex> aggregate_erlang_funs_info("assets/js/erlang", [{:erlang, :-, 2}])
+      iex> aggregate_erlang_funs_info("assets/js/erlang", in_progress: [{:erlang, :-, 2}], blocked: [{:erlang, :div, 2}])
       %{
         {:erlang, :+, 2} => %{
           status: :done,
@@ -175,21 +179,21 @@ defmodule Hologram.Framework do
           dependents_count: 10          
         },
         {:erlang, :div, 2} => %{
-          status: :todo,
+          status: :blocked,
           dependents: [{Integer, :floor_div, 2}, ...],          
           dependents_count: 5
         },
         ...
       }
   """
-  @spec aggregate_erlang_funs_info(Path.t(), [mfa]) :: %{
+  @spec aggregate_erlang_funs_info(Path.t(), keyword()) :: %{
           mfa => %{
-            status: :todo | :in_progress | :done,
+            status: :todo | :in_progress | :blocked | :done,
             dependents: [mfa],
             dependents_count: non_neg_integer()
           }
         }
-  def aggregate_erlang_funs_info(erlang_js_dir, in_progress_mfas \\ []) do
+  def aggregate_erlang_funs_info(erlang_js_dir, opts \\ []) do
     modules_map = elixir_stdlib_erlang_deps()
 
     ported_erlang_funs =
@@ -197,7 +201,11 @@ defmodule Hologram.Framework do
       |> list_ported_erlang_funs()
       |> MapSet.new()
 
+    in_progress_mfas = Keyword.get(opts, :in_progress, [])
+    blocked_mfas = Keyword.get(opts, :blocked, [])
+
     in_progress_set = MapSet.new(in_progress_mfas)
+    blocked_set = MapSet.new(blocked_mfas)
 
     # Build a map of erlang_mfa => list of elixir mfas that depend on it
     dependents_by_erlang_mfa =
@@ -224,6 +232,7 @@ defmodule Hologram.Framework do
         cond do
           MapSet.member?(ported_erlang_funs, erlang_mfa) -> :done
           MapSet.member?(in_progress_set, erlang_mfa) -> :in_progress
+          MapSet.member?(blocked_set, erlang_mfa) -> :blocked
           true -> :todo
         end
 
