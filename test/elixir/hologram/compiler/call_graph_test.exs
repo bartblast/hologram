@@ -973,6 +973,14 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert get_graph(call_graph_2) == get_graph(call_graph)
   end
 
+  test "manually_ported_elixir_mfas/0" do
+    result = manually_ported_elixir_mfas()
+
+    assert is_list(result)
+    assert {Kernel, :inspect, 1} in result
+    assert {String, :upcase, 1} in result
+  end
+
   describe "maybe_load/2" do
     setup do
       dump_dir = Path.join([@tmp_dir, "tests", "compiler", "call_graph", "maybe_load_2"])
