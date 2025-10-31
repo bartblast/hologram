@@ -190,7 +190,7 @@ defmodule Hologram.Framework do
           }
         }
   def aggregate_erlang_funs_info(erlang_js_dir, in_progress_mfas \\ []) do
-    groups = elixir_stdlib_erlang_deps()
+    modules_map = elixir_stdlib_erlang_deps()
 
     ported_erlang_funs =
       erlang_js_dir
@@ -201,13 +201,11 @@ defmodule Hologram.Framework do
 
     # Build a map of erlang_mfa => list of elixir mfas that depend on it
     dependents_by_erlang_mfa =
-      groups
-      |> Enum.flat_map(fn {_group, modules} ->
-        Enum.flat_map(modules, fn {module, funs} ->
-          Enum.flat_map(funs, fn {{fun, arity}, erlang_mfas} ->
-            Enum.map(erlang_mfas, fn erlang_mfa ->
-              {erlang_mfa, {module, fun, arity}}
-            end)
+      modules_map
+      |> Enum.flat_map(fn {module, funs} ->
+        Enum.flat_map(funs, fn {{fun, arity}, erlang_mfas} ->
+          Enum.map(erlang_mfas, fn erlang_mfa ->
+            {erlang_mfa, {module, fun, arity}}
           end)
         end)
       end)
@@ -247,37 +245,33 @@ defmodule Hologram.Framework do
 
   ## Return Structure
 
-  Returns a three-level nested map:
-  - **Level 1**: Group name (string) -> modules in that group
-  - **Level 2**: Module (atom) -> functions in that module  
-  - **Level 3**: Function key `{name, arity}` -> list of reachable Erlang MFAs
+  Returns a two-level nested map:
+  - **Level 1**: Module (atom) -> functions in that module  
+  - **Level 2**: Function key `{name, arity}` -> list of reachable Erlang MFAs
 
   ## Example
 
       iex> deps = elixir_stdlib_erlang_deps()
-      iex> deps["Core"][Kernel][{:hd, 1}]
+      iex> deps[Kernel][{:hd, 1}]
       [{:erlang, :hd, 1}]
   """
-  @spec elixir_stdlib_erlang_deps() :: %{String.t() => %{module => %{{fun, arity} => [mfa]}}}
+  @spec elixir_stdlib_erlang_deps() :: %{module => %{{fun, arity} => [mfa]}}
   def elixir_stdlib_erlang_deps do
     graph =
       Compiler.build_call_graph()
       |> CallGraph.remove_manually_ported_mfas()
       |> CallGraph.get_graph()
 
-    Enum.reduce(@elixir_stdlib_module_groups, %{}, fn {group, modules}, groups_acc ->
-      group_map =
-        Enum.reduce(modules, %{}, fn module, modules_acc ->
-          module_map =
-            Enum.reduce(module.__info__(:functions), %{}, fn {fun, arity}, funs_acc ->
-              reachable_erlang_mfas = reachable_erlang_mfas(graph, {module, fun, arity})
-              Map.put(funs_acc, {fun, arity}, reachable_erlang_mfas)
-            end)
-
-          Map.put(modules_acc, module, module_map)
+    @elixir_stdlib_module_groups
+    |> Enum.flat_map(fn {_group, modules} -> modules end)
+    |> Enum.reduce(%{}, fn module, modules_acc ->
+      module_map =
+        Enum.reduce(module.__info__(:functions), %{}, fn {fun, arity}, funs_acc ->
+          reachable_erlang_mfas = reachable_erlang_mfas(graph, {module, fun, arity})
+          Map.put(funs_acc, {fun, arity}, reachable_erlang_mfas)
         end)
 
-      Map.put(groups_acc, group, group_map)
+      Map.put(modules_acc, module, module_map)
     end)
   end
 
