@@ -140,8 +140,8 @@ defmodule Hologram.Template.Formatter do
     state |> add_output("{%#{bt} #{block_exp(be)}}")
   end
 
-  defp enter_block(state, "else") do
-    state |> add_output("{%else}")
+  defp enter_block(state, text) when is_binary(text) do
+    state |> add_output("{%#{text}}")
   end
 
   defp exit_block(state, bt) do
