@@ -59,6 +59,13 @@ defmodule Hologram.Framework do
        StringIO,
        System
      ]},
+    {"Calendar",
+     [
+       Calendar,
+       Calendar.ISO,
+       Calendar.TimeZoneDatabase,
+       Calendar.UTCOnlyTimeZoneDatabase
+     ]},
     {"Processes & Applications",
      [
        Agent,
