@@ -188,6 +188,67 @@ defmodule Hologram.Framework do
   end
 
   @doc """
+  Aggregates information about Elixir standard library functions.
+
+  ## Parameters
+
+  - `erlang_js_dir` - Path to the directory containing manually ported Erlang functions
+  - `opts` - Keyword list with optional keys:
+    - `:deferred_elixir` - List of Elixir MFA tuples that are deferred (defaults to [])
+    - `:in_progress_erlang` - List of Erlang MFA tuples currently being ported (defaults to [])
+    - `:deferred_erlang` - List of Erlang MFA tuples that are deferred (defaults to [])
+  """
+  @spec elixir_funs_info(Path.t(), keyword()) :: %{
+          mfa => %{
+            status: :done | :in_progress | :todo | :deferred,
+            progress: non_neg_integer(),
+            dependencies: [mfa],
+            dependencies_count: non_neg_integer()
+          }
+        }
+  def elixir_funs_info(erlang_js_dir, opts \\ []) do
+    deferred_elixir = Keyword.get(opts, :deferred_elixir, [])
+    in_progress_erlang = Keyword.get(opts, :in_progress_erlang, [])
+    deferred_erlang = Keyword.get(opts, :deferred_erlang, [])
+
+    deferred_elixir_set = MapSet.new(deferred_elixir)
+
+    elixir_deps = elixir_stdlib_erlang_deps()
+
+    erlang_funs_info =
+      erlang_funs_info(erlang_js_dir,
+        in_progress: in_progress_erlang,
+        deferred: deferred_erlang
+      )
+
+    elixir_deps
+    |> Enum.flat_map(fn {module, funs} ->
+      Enum.map(funs, fn {{fun, arity}, erlang_deps} ->
+        elixir_mfa = {module, fun, arity}
+
+        status =
+          calculate_elixir_fun_status(
+            elixir_mfa,
+            erlang_deps,
+            erlang_funs_info,
+            deferred_elixir_set
+          )
+
+        progress = calculate_elixir_fun_progress(erlang_deps, erlang_funs_info)
+
+        {elixir_mfa,
+         %{
+           status: status,
+           progress: progress,
+           dependencies: erlang_deps,
+           dependencies_count: length(erlang_deps)
+         }}
+      end)
+    end)
+    |> Enum.into(%{})
+  end
+
+  @doc """
   Aggregates information about Erlang functions used by Elixir stdlib.
 
   ## Parameters
@@ -287,6 +348,29 @@ defmodule Hologram.Framework do
       |> extract_function_signatures()
       |> Enum.map(fn {fun, arity} -> {module, fun, arity} end)
     end)
+  end
+
+  defp calculate_elixir_fun_status(elixir_mfa, erlang_deps, erlang_info, deferred_elixir_set) do
+    cond do
+      Enum.all?(erlang_deps, &(erlang_info[&1].status == :done)) ->
+        :done
+
+      MapSet.member?(deferred_elixir_set, elixir_mfa) ->
+        :deferred
+
+      Enum.any?(erlang_deps, &(erlang_info[&1].status == :in_progress)) ->
+        :in_progress
+
+      true ->
+        :todo
+    end
+  end
+
+  defp calculate_elixir_fun_progress([], _erlang_info), do: 100
+
+  defp calculate_elixir_fun_progress(erlang_deps, erlang_info) do
+    done_count = Enum.count(erlang_deps, &(erlang_info[&1].status == :done))
+    round(done_count * 100 / length(erlang_deps))
   end
 
   defp extract_function_signatures(content) do
