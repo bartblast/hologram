@@ -211,6 +211,77 @@ defmodule Hologram.Framework do
   end
 
   @doc """
+  Aggregates information about Elixir standard library modules.
+
+  ## Parameters
+
+  - `erlang_js_dir` - Path to the directory containing manually ported Erlang functions
+  - `opts` - Keyword list with optional keys:
+    - `:deferred_elixir_modules` - List of Elixir modules that are deferred (defaults to [])
+    - `:deferred_elixir_funs` - List of Elixir MFA tuples that are deferred (defaults to [])
+    - `:in_progress_erlang_funs` - List of Erlang MFA tuples currently being worked on (defaults to [])
+    - `:deferred_erlang_funs` - List of Erlang MFA tuples that are deferred (defaults to [])    
+  """
+  @spec elixir_modules_info(Path.t(), keyword()) :: %{
+          module => %{
+            group: String.t(),
+            status: :done | :in_progress | :todo | :deferred,
+            progress: non_neg_integer(),
+            functions: [{atom, arity}],
+            functions_count: non_neg_integer()
+          }
+        }
+  def elixir_modules_info(erlang_js_dir, opts \\ []) do
+    deferred_elixir_modules = Keyword.get(opts, :deferred_elixir_modules, [])
+    deferred_elixir_funs = Keyword.get(opts, :deferred_elixir_funs, [])
+    in_progress_erlang_funs = Keyword.get(opts, :in_progress_erlang_funs, [])
+    deferred_erlang_funs = Keyword.get(opts, :deferred_erlang_funs, [])
+
+    deferred_elixir_modules_set = MapSet.new(deferred_elixir_modules)
+
+    elixir_funs_info =
+      elixir_funs_info(erlang_js_dir,
+        deferred_elixir: deferred_elixir_funs,
+        in_progress_erlang: in_progress_erlang_funs,
+        deferred_erlang: deferred_erlang_funs
+      )
+
+    # Build a map of module => group
+    module_to_group =
+      @elixir_stdlib_module_groups
+      |> Enum.flat_map(fn {group, modules} ->
+        Enum.map(modules, fn module -> {module, group} end)
+      end)
+      |> Enum.into(%{})
+
+    @elixir_stdlib_module_groups
+    |> Enum.flat_map(fn {_group, modules} -> modules end)
+    |> Enum.map(fn module ->
+      group = module_to_group[module]
+      functions = module.__info__(:functions)
+      functions_count = length(functions)
+
+      fun_infos =
+        Enum.map(functions, fn {fun, arity} ->
+          elixir_funs_info[{module, fun, arity}]
+        end)
+
+      status = calculate_elixir_module_status(module, fun_infos, deferred_elixir_modules_set)
+      progress = calculate_elixir_module_progress(fun_infos)
+
+      {module,
+       %{
+         group: group,
+         status: status,
+         progress: progress,
+         functions: functions,
+         functions_count: functions_count
+       }}
+    end)
+    |> Enum.into(%{})
+  end
+
+  @doc """
   Returns Erlang dependencies for Elixir standard library modules.
 
   Analyzes the call graph of selected Elixir standard library modules and identifies
@@ -368,6 +439,41 @@ defmodule Hologram.Framework do
       Enum.any?(erlang_deps, &(erlang_info[&1].status == :in_progress)) ->
         :in_progress
 
+      true ->
+        :todo
+    end
+  end
+
+  defp calculate_elixir_module_progress(fun_infos) do
+    non_deferred_fun_infos = Enum.reject(fun_infos, &(&1.status == :deferred))
+
+    if non_deferred_fun_infos == [] do
+      # If all functions are deferred, return 0
+      0
+    else
+      # Calculate average progress of non-deferred functions
+      progress_sum =
+        Enum.reduce(non_deferred_fun_infos, 0, fn info, acc -> acc + info.progress end)
+
+      round(progress_sum / length(non_deferred_fun_infos))
+    end
+  end
+
+  defp calculate_elixir_module_status(module, fun_infos, deferred_modules_set) do
+    cond do
+      # Module is explicitly deferred
+      MapSet.member?(deferred_modules_set, module) ->
+        :deferred
+
+      # All functions are done
+      Enum.all?(fun_infos, fn info -> info.status == :done end) ->
+        :done
+
+      # Any function is in progress
+      Enum.any?(fun_infos, fn info -> info.status == :in_progress end) ->
+        :in_progress
+
+      # Otherwise, it's todo
       true ->
         :todo
     end
