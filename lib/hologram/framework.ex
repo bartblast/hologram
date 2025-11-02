@@ -150,44 +150,6 @@ defmodule Hologram.Framework do
   ]
 
   @doc """
-  Returns Erlang dependencies for Elixir standard library modules.
-
-  Analyzes the call graph of selected Elixir standard library modules and identifies
-  which Erlang functions they depend on. Manually ported functions are excluded.
-
-  ## Return Structure
-
-  Returns a two-level nested map:
-  - **Level 1**: Module (atom) -> functions in that module  
-  - **Level 2**: Function key `{name, arity}` -> list of reachable Erlang MFAs
-
-  ## Example
-
-      iex> deps = elixir_stdlib_erlang_deps()
-      iex> deps[Kernel][{:hd, 1}]
-      [{:erlang, :hd, 1}]
-  """
-  @spec elixir_stdlib_erlang_deps() :: %{module => %{{fun, arity} => [mfa]}}
-  def elixir_stdlib_erlang_deps do
-    graph =
-      Compiler.build_call_graph()
-      |> CallGraph.remove_manually_ported_mfas()
-      |> CallGraph.get_graph()
-
-    @elixir_stdlib_module_groups
-    |> Enum.flat_map(fn {_group, modules} -> modules end)
-    |> Enum.reduce(%{}, fn module, modules_acc ->
-      module_map =
-        Enum.reduce(module.__info__(:functions), %{}, fn {fun, arity}, funs_acc ->
-          reachable_erlang_mfas = reachable_erlang_mfas(graph, {module, fun, arity})
-          Map.put(funs_acc, {fun, arity}, reachable_erlang_mfas)
-        end)
-
-      Map.put(modules_acc, module, module_map)
-    end)
-  end
-
-  @doc """
   Aggregates information about Elixir standard library functions.
 
   ## Parameters
@@ -246,6 +208,44 @@ defmodule Hologram.Framework do
       end)
     end)
     |> Enum.into(%{})
+  end
+
+  @doc """
+  Returns Erlang dependencies for Elixir standard library modules.
+
+  Analyzes the call graph of selected Elixir standard library modules and identifies
+  which Erlang functions they depend on. Manually ported functions are excluded.
+
+  ## Return Structure
+
+  Returns a two-level nested map:
+  - **Level 1**: Module (atom) -> functions in that module  
+  - **Level 2**: Function key `{name, arity}` -> list of reachable Erlang MFAs
+
+  ## Example
+
+      iex> deps = elixir_stdlib_erlang_deps()
+      iex> deps[Kernel][{:hd, 1}]
+      [{:erlang, :hd, 1}]
+  """
+  @spec elixir_stdlib_erlang_deps() :: %{module => %{{fun, arity} => [mfa]}}
+  def elixir_stdlib_erlang_deps do
+    graph =
+      Compiler.build_call_graph()
+      |> CallGraph.remove_manually_ported_mfas()
+      |> CallGraph.get_graph()
+
+    @elixir_stdlib_module_groups
+    |> Enum.flat_map(fn {_group, modules} -> modules end)
+    |> Enum.reduce(%{}, fn module, modules_acc ->
+      module_map =
+        Enum.reduce(module.__info__(:functions), %{}, fn {fun, arity}, funs_acc ->
+          reachable_erlang_mfas = reachable_erlang_mfas(graph, {module, fun, arity})
+          Map.put(funs_acc, {fun, arity}, reachable_erlang_mfas)
+        end)
+
+      Map.put(modules_acc, module, module_map)
+    end)
   end
 
   @doc """
@@ -350,6 +350,13 @@ defmodule Hologram.Framework do
     end)
   end
 
+  defp calculate_elixir_fun_progress([], _erlang_info), do: 100
+
+  defp calculate_elixir_fun_progress(erlang_deps, erlang_info) do
+    done_count = Enum.count(erlang_deps, &(erlang_info[&1].status == :done))
+    round(done_count * 100 / length(erlang_deps))
+  end
+
   defp calculate_elixir_fun_status(elixir_mfa, erlang_deps, erlang_info, deferred_elixir_set) do
     cond do
       Enum.all?(erlang_deps, &(erlang_info[&1].status == :done)) ->
@@ -364,13 +371,6 @@ defmodule Hologram.Framework do
       true ->
         :todo
     end
-  end
-
-  defp calculate_elixir_fun_progress([], _erlang_info), do: 100
-
-  defp calculate_elixir_fun_progress(erlang_deps, erlang_info) do
-    done_count = Enum.count(erlang_deps, &(erlang_info[&1].status == :done))
-    round(done_count * 100 / length(erlang_deps))
   end
 
   defp extract_function_signatures(content) do

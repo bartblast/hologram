@@ -9,6 +9,243 @@ defmodule Hologram.FrameworkTest do
     [result: elixir_stdlib_erlang_deps()]
   end
 
+  describe "elixir_funs_info/2" do
+    test "returns correct structure with status, progress, dependencies, and dependencies_count" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "elixir_funs_info_2",
+          "basic_structure"
+        ])
+
+      clean_dir(test_dir)
+
+      erlang_content = """
+      const Erlang = {
+        // Start hd/1
+        "hd/1": (list) => list[0],
+        // End hd/1
+        // Deps: []
+      };
+      """
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!(erlang_content)
+
+      result = elixir_funs_info(test_dir)
+
+      assert is_map(result)
+      refute Enum.empty?(result)
+
+      # Check structure of each entry
+      Enum.each(result, fn {elixir_mfa, info} ->
+        # Verify MFA structure
+        assert match?(
+                 {module, fun, arity} when is_atom(module) and is_atom(fun) and is_integer(arity),
+                 elixir_mfa
+               )
+
+        # Verify info map has all required fields
+        assert is_map(info)
+        assert Map.has_key?(info, :status)
+        assert Map.has_key?(info, :progress)
+        assert Map.has_key?(info, :dependencies)
+        assert Map.has_key?(info, :dependencies_count)
+
+        # Verify field types and constraints
+        assert info.status in [:done, :in_progress, :todo, :deferred]
+        assert is_integer(info.progress)
+        assert info.progress >= 0 and info.progress <= 100
+        assert is_list(info.dependencies)
+        assert is_integer(info.dependencies_count)
+        assert info.dependencies_count >= 0
+
+        # Verify dependencies_count matches dependencies list length
+        assert info.dependencies_count == length(info.dependencies)
+      end)
+    end
+
+    test "calculates status with precedence: done > deferred > in_progress > todo" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "elixir_funs_info_2",
+          "status_calculation"
+        ])
+
+      clean_dir(test_dir)
+
+      erlang_content = """
+      const Erlang = {
+        // Start hd/1
+        "hd/1": (list) => list[0],
+        // End hd/1
+        // Deps: []
+      };
+      """
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!(erlang_content)
+
+      # Test all precedence scenarios:
+      # - Kernel.hd/1: all deps done + deferred + in_progress -> should be :done (highest priority)
+      # - Kernel.tl/1: unported + deferred + in_progress -> should be :deferred (2nd priority)
+      # - Kernel.length/1: unported + in_progress -> should be :in_progress (3rd priority)
+      # - Kernel.abs/1: unported -> should be :todo (lowest priority)
+      result =
+        elixir_funs_info(test_dir,
+          deferred_elixir: [{Kernel, :hd, 1}, {Kernel, :tl, 1}],
+          in_progress_erlang: [{:erlang, :hd, 1}, {:erlang, :tl, 1}, {:erlang, :length, 1}]
+        )
+
+      # :done takes precedence over everything (and progress should be 100%)
+      assert result[{Kernel, :hd, 1}].status == :done
+      assert result[{Kernel, :hd, 1}].progress == 100
+
+      # :deferred takes precedence over :in_progress and :todo
+      assert result[{Kernel, :tl, 1}].status == :deferred
+
+      # :in_progress takes precedence over :todo
+      assert result[{Kernel, :length, 1}].status == :in_progress
+
+      # :todo is the default when none of the above apply (and progress should be 0%))
+      assert result[{Kernel, :abs, 1}].status == :todo
+      assert result[{Kernel, :abs, 1}].progress == 0
+    end
+
+    test "calculates 0% progress when no dependencies are ported" do
+      deps_map = elixir_stdlib_erlang_deps()
+      assert deps_map[Kernel][{:elem, 2}] == [{:erlang, :+, 2}, {:erlang, :element, 2}]
+
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "elixir_funs_info_2",
+          "progress_0"
+        ])
+
+      clean_dir(test_dir)
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!("const Erlang = {};")
+
+      result = elixir_funs_info(test_dir)
+      kernel_elem = result[{Kernel, :elem, 2}]
+
+      assert kernel_elem.progress == 0
+      assert kernel_elem.dependencies_count == 2
+    end
+
+    test "calculates 50% progress when half of dependencies are ported" do
+      deps_map = elixir_stdlib_erlang_deps()
+      assert deps_map[Kernel][{:elem, 2}] == [{:erlang, :+, 2}, {:erlang, :element, 2}]
+
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "elixir_funs_info_2",
+          "progress_50"
+        ])
+
+      clean_dir(test_dir)
+
+      erlang_content = """
+      const Erlang = {
+        // Start +/2
+        "+/2": (a, b) => a + b,
+        // End +/2
+        // Deps: []
+      };
+      """
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!(erlang_content)
+
+      result = elixir_funs_info(test_dir)
+      kernel_elem = result[{Kernel, :elem, 2}]
+
+      assert kernel_elem.progress == 50
+      assert kernel_elem.dependencies_count == 2
+    end
+
+    test "calculates 100% progress when all dependencies are ported" do
+      deps_map = elixir_stdlib_erlang_deps()
+      assert deps_map[Kernel][{:elem, 2}] == [{:erlang, :+, 2}, {:erlang, :element, 2}]
+
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "elixir_funs_info_2",
+          "progress_100"
+        ])
+
+      clean_dir(test_dir)
+
+      erlang_content = """
+      const Erlang = {
+        // Start +/2
+        "+/2": (a, b) => a + b,
+        // End +/2
+        // Deps: []
+        
+        // Start element/2
+        "element/2": (n, tuple) => tuple[n - 1],
+        // End element/2
+        // Deps: []
+      };
+      """
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!(erlang_content)
+
+      result = elixir_funs_info(test_dir)
+      kernel_elem = result[{Kernel, :elem, 2}]
+
+      assert kernel_elem.progress == 100
+      assert kernel_elem.dependencies_count == 2
+    end
+
+    test "includes all Elixir stdlib functions" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "elixir_funs_info_2",
+          "all_functions"
+        ])
+
+      clean_dir(test_dir)
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!("const Erlang = {};")
+
+      result = elixir_funs_info(test_dir)
+
+      # Verify some known functions are present
+      assert Map.has_key?(result, {Kernel, :hd, 1})
+      assert Map.has_key?(result, {Kernel, :+, 2})
+      assert Map.has_key?(result, {Atom, :to_string, 1})
+      assert Map.has_key?(result, {String, :length, 1})
+    end
+  end
+
   describe "elixir_stdlib_erlang_deps/0" do
     test "returns expected modules", %{result: result} do
       assert is_map(result)
@@ -385,243 +622,6 @@ defmodule Hologram.FrameworkTest do
       assert result[{:erlang, :-, 2}].status == :deferred
       # :todo when not in any special category
       assert result[{:erlang, :/, 2}].status == :todo
-    end
-  end
-
-  describe "elixir_funs_info/2" do
-    test "returns correct structure with status, progress, dependencies, and dependencies_count" do
-      test_dir =
-        Path.join([
-          @tmp_dir,
-          "tests",
-          "framework",
-          "elixir_funs_info_2",
-          "basic_structure"
-        ])
-
-      clean_dir(test_dir)
-
-      erlang_content = """
-      const Erlang = {
-        // Start hd/1
-        "hd/1": (list) => list[0],
-        // End hd/1
-        // Deps: []
-      };
-      """
-
-      test_dir
-      |> Path.join("erlang.mjs")
-      |> File.write!(erlang_content)
-
-      result = elixir_funs_info(test_dir)
-
-      assert is_map(result)
-      refute Enum.empty?(result)
-
-      # Check structure of each entry
-      Enum.each(result, fn {elixir_mfa, info} ->
-        # Verify MFA structure
-        assert match?(
-                 {module, fun, arity} when is_atom(module) and is_atom(fun) and is_integer(arity),
-                 elixir_mfa
-               )
-
-        # Verify info map has all required fields
-        assert is_map(info)
-        assert Map.has_key?(info, :status)
-        assert Map.has_key?(info, :progress)
-        assert Map.has_key?(info, :dependencies)
-        assert Map.has_key?(info, :dependencies_count)
-
-        # Verify field types and constraints
-        assert info.status in [:done, :in_progress, :todo, :deferred]
-        assert is_integer(info.progress)
-        assert info.progress >= 0 and info.progress <= 100
-        assert is_list(info.dependencies)
-        assert is_integer(info.dependencies_count)
-        assert info.dependencies_count >= 0
-
-        # Verify dependencies_count matches dependencies list length
-        assert info.dependencies_count == length(info.dependencies)
-      end)
-    end
-
-    test "calculates status with precedence: done > deferred > in_progress > todo" do
-      test_dir =
-        Path.join([
-          @tmp_dir,
-          "tests",
-          "framework",
-          "elixir_funs_info_2",
-          "status_calculation"
-        ])
-
-      clean_dir(test_dir)
-
-      erlang_content = """
-      const Erlang = {
-        // Start hd/1
-        "hd/1": (list) => list[0],
-        // End hd/1
-        // Deps: []
-      };
-      """
-
-      test_dir
-      |> Path.join("erlang.mjs")
-      |> File.write!(erlang_content)
-
-      # Test all precedence scenarios:
-      # - Kernel.hd/1: all deps done + deferred + in_progress -> should be :done (highest priority)
-      # - Kernel.tl/1: unported + deferred + in_progress -> should be :deferred (2nd priority)
-      # - Kernel.length/1: unported + in_progress -> should be :in_progress (3rd priority)
-      # - Kernel.abs/1: unported -> should be :todo (lowest priority)
-      result =
-        elixir_funs_info(test_dir,
-          deferred_elixir: [{Kernel, :hd, 1}, {Kernel, :tl, 1}],
-          in_progress_erlang: [{:erlang, :hd, 1}, {:erlang, :tl, 1}, {:erlang, :length, 1}]
-        )
-
-      # :done takes precedence over everything (and progress should be 100%)
-      assert result[{Kernel, :hd, 1}].status == :done
-      assert result[{Kernel, :hd, 1}].progress == 100
-
-      # :deferred takes precedence over :in_progress and :todo
-      assert result[{Kernel, :tl, 1}].status == :deferred
-
-      # :in_progress takes precedence over :todo
-      assert result[{Kernel, :length, 1}].status == :in_progress
-
-      # :todo is the default when none of the above apply (and progress should be 0%))
-      assert result[{Kernel, :abs, 1}].status == :todo
-      assert result[{Kernel, :abs, 1}].progress == 0
-    end
-
-    test "calculates 0% progress when no dependencies are ported" do
-      deps_map = elixir_stdlib_erlang_deps()
-      assert deps_map[Kernel][{:elem, 2}] == [{:erlang, :+, 2}, {:erlang, :element, 2}]
-
-      test_dir =
-        Path.join([
-          @tmp_dir,
-          "tests",
-          "framework",
-          "elixir_funs_info_2",
-          "progress_0"
-        ])
-
-      clean_dir(test_dir)
-
-      test_dir
-      |> Path.join("erlang.mjs")
-      |> File.write!("const Erlang = {};")
-
-      result = elixir_funs_info(test_dir)
-      kernel_elem = result[{Kernel, :elem, 2}]
-
-      assert kernel_elem.progress == 0
-      assert kernel_elem.dependencies_count == 2
-    end
-
-    test "calculates 50% progress when half of dependencies are ported" do
-      deps_map = elixir_stdlib_erlang_deps()
-      assert deps_map[Kernel][{:elem, 2}] == [{:erlang, :+, 2}, {:erlang, :element, 2}]
-
-      test_dir =
-        Path.join([
-          @tmp_dir,
-          "tests",
-          "framework",
-          "elixir_funs_info_2",
-          "progress_50"
-        ])
-
-      clean_dir(test_dir)
-
-      erlang_content = """
-      const Erlang = {
-        // Start +/2
-        "+/2": (a, b) => a + b,
-        // End +/2
-        // Deps: []
-      };
-      """
-
-      test_dir
-      |> Path.join("erlang.mjs")
-      |> File.write!(erlang_content)
-
-      result = elixir_funs_info(test_dir)
-      kernel_elem = result[{Kernel, :elem, 2}]
-
-      assert kernel_elem.progress == 50
-      assert kernel_elem.dependencies_count == 2
-    end
-
-    test "calculates 100% progress when all dependencies are ported" do
-      deps_map = elixir_stdlib_erlang_deps()
-      assert deps_map[Kernel][{:elem, 2}] == [{:erlang, :+, 2}, {:erlang, :element, 2}]
-
-      test_dir =
-        Path.join([
-          @tmp_dir,
-          "tests",
-          "framework",
-          "elixir_funs_info_2",
-          "progress_100"
-        ])
-
-      clean_dir(test_dir)
-
-      erlang_content = """
-      const Erlang = {
-        // Start +/2
-        "+/2": (a, b) => a + b,
-        // End +/2
-        // Deps: []
-        
-        // Start element/2
-        "element/2": (n, tuple) => tuple[n - 1],
-        // End element/2
-        // Deps: []
-      };
-      """
-
-      test_dir
-      |> Path.join("erlang.mjs")
-      |> File.write!(erlang_content)
-
-      result = elixir_funs_info(test_dir)
-      kernel_elem = result[{Kernel, :elem, 2}]
-
-      assert kernel_elem.progress == 100
-      assert kernel_elem.dependencies_count == 2
-    end
-
-    test "includes all Elixir stdlib functions" do
-      test_dir =
-        Path.join([
-          @tmp_dir,
-          "tests",
-          "framework",
-          "elixir_funs_info_2",
-          "all_functions"
-        ])
-
-      clean_dir(test_dir)
-
-      test_dir
-      |> Path.join("erlang.mjs")
-      |> File.write!("const Erlang = {};")
-
-      result = elixir_funs_info(test_dir)
-
-      # Verify some known functions are present
-      assert Map.has_key?(result, {Kernel, :hd, 1})
-      assert Map.has_key?(result, {Kernel, :+, 2})
-      assert Map.has_key?(result, {Atom, :to_string, 1})
-      assert Map.has_key?(result, {String, :length, 1})
     end
   end
 
