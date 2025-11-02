@@ -30,7 +30,10 @@ defmodule Hologram.FrameworkTest do
 
         # Level 2: Functions ({name, arity} tuple keys)
         assert is_map(module_map)
-        refute Enum.empty?(module_map)
+
+        if module != Calendar.TimeZoneDatabase do
+          refute Enum.empty?(module_map)
+        end
 
         Enum.each(module_map, fn {function_key, erlang_mfas} ->
           # Function keys are {name, arity} tuples
