@@ -378,6 +378,15 @@ defmodule Hologram.Framework do
   end
 
   @doc """
+  Returns grouped Elixir standard library modules.
+
+  The return value is a list of pairs `{group_name, modules}` where
+  `group_name` is a string and `modules` is a list of Elixir module atoms.
+  """
+  @spec elixir_stdlib_module_groups() :: [{String.t(), [module]}]
+  def elixir_stdlib_module_groups, do: @elixir_stdlib_module_groups
+
+  @doc """
   Aggregates information about Erlang functions used by Elixir stdlib.
 
   ## Parameters

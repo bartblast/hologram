@@ -708,6 +708,44 @@ defmodule Hologram.FrameworkTest do
     end
   end
 
+  describe "elixir_stdlib_module_groups/0" do
+    test "returns list of {group_name, modules} with correct types" do
+      groups = elixir_stdlib_module_groups()
+
+      assert is_list(groups)
+      refute Enum.empty?(groups)
+
+      Enum.each(groups, fn {group_name, modules} ->
+        assert is_binary(group_name)
+        assert is_list(modules)
+        Enum.each(modules, &assert(is_atom(&1)))
+      end)
+    end
+
+    test "includes known modules in expected groups" do
+      groups = elixir_stdlib_module_groups()
+
+      core =
+        groups
+        |> Enum.find(fn {name, _} -> name == "Core" end)
+        |> elem(1)
+
+      data_types =
+        groups
+        |> Enum.find(fn {name, _} -> name == "Data Types" end)
+        |> elem(1)
+
+      collections =
+        groups
+        |> Enum.find(fn {name, _} -> name == "Collections & Enumerables" end)
+        |> elem(1)
+
+      assert Kernel in core
+      assert Atom in data_types
+      assert Enum in collections
+    end
+  end
+
   describe "erlang_funs_info/2" do
     test "returns correct structure with status, dependents, and dependents_count" do
       test_dir =
