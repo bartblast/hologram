@@ -445,18 +445,8 @@ defmodule Hologram.Framework do
   end
 
   defp calculate_elixir_module_progress(fun_infos) do
-    non_deferred_fun_infos = Enum.reject(fun_infos, &(&1.status == :deferred))
-
-    if non_deferred_fun_infos == [] do
-      # If all functions are deferred, return 0
-      0
-    else
-      # Calculate average progress of non-deferred functions
-      progress_sum =
-        Enum.reduce(non_deferred_fun_infos, 0, fn info, acc -> acc + info.progress end)
-
-      round(progress_sum / length(non_deferred_fun_infos))
-    end
+    progress_sum = Enum.reduce(fun_infos, 0, fn info, acc -> acc + info.progress end)
+    round(progress_sum / length(fun_infos))
   end
 
   defp calculate_elixir_module_status(module, fun_infos, deferred_modules_set) do
