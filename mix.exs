@@ -34,7 +34,7 @@ defmodule Hologram.MixProject do
 
   def deps do
     [
-      {:beam_file, "0.6.3"},
+      {:beam_file, "0.6.4"},
       {:benchee, "~> 1.0", only: :dev, runtime: false},
       {:benchee_markdown, "~> 0.3", only: :dev, runtime: false},
       {:credo, "~> 1.0", only: [:dev, :test], runtime: false},
