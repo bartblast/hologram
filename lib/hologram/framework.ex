@@ -391,6 +391,49 @@ defmodule Hologram.Framework do
   end
 
   @doc """
+  Returns overview statistics of Erlang function porting status.
+
+  ## Parameters
+
+  - `erlang_js_dir` - Path to the directory containing manually ported Erlang functions
+  - `opts` - Keyword list with optional keys:
+    - `:in_progress` - List of Erlang MFA tuples currently being ported (defaults to [])
+    - `:deferred` - List of Erlang MFA tuples that are deferred (defaults to [])
+  """
+  @spec erlang_overview_stats(Path.t(), keyword()) :: %{
+          done_count: non_neg_integer(),
+          in_progress_count: non_neg_integer(),
+          todo_count: non_neg_integer(),
+          deferred_count: non_neg_integer(),
+          progress: non_neg_integer()
+        }
+  def erlang_overview_stats(erlang_js_dir, opts \\ []) do
+    erlang_info = erlang_funs_info(erlang_js_dir, opts)
+
+    stats =
+      Enum.reduce(
+        erlang_info,
+        %{done_count: 0, in_progress_count: 0, deferred_count: 0, todo_count: 0},
+        fn {_mfa, %{status: status}}, acc ->
+          count_key = String.to_existing_atom("#{status}_count")
+          Map.update!(acc, count_key, &(&1 + 1))
+        end
+      )
+
+    # Deferred functions are excluded from the calculation
+    total_relevant = stats.done_count + stats.todo_count + stats.in_progress_count
+
+    progress =
+      if total_relevant > 0 do
+        round(stats.done_count * 100 / total_relevant)
+      else
+        0
+      end
+
+    Map.put(stats, :progress, progress)
+  end
+
+  @doc """
   Lists all manually ported Erlang functions.
 
   ## Parameters

@@ -625,6 +625,109 @@ defmodule Hologram.FrameworkTest do
     end
   end
 
+  describe "erlang_overview_stats/2" do
+    test "returns correct structure with all count fields and progress percentage" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "erlang_overview_stats_2",
+          "basic_structure"
+        ])
+
+      clean_dir(test_dir)
+
+      erlang_content = """
+      const Erlang = {
+        // Start hd/1
+        "hd/1": (list) => list[0],
+        // End hd/1
+        // Deps: []
+      };
+      """
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!(erlang_content)
+
+      result = erlang_overview_stats(test_dir)
+
+      # Verify result structure
+      assert is_map(result)
+      assert Map.has_key?(result, :done_count)
+      assert Map.has_key?(result, :in_progress_count)
+      assert Map.has_key?(result, :deferred_count)
+      assert Map.has_key?(result, :todo_count)
+      assert Map.has_key?(result, :progress)
+
+      # Verify field types and constraints
+      assert is_integer(result.done_count)
+      assert is_integer(result.in_progress_count)
+      assert is_integer(result.deferred_count)
+      assert is_integer(result.todo_count)
+      assert is_integer(result.progress)
+
+      assert result.done_count >= 0
+      assert result.in_progress_count >= 0
+      assert result.deferred_count >= 0
+      assert result.todo_count >= 0
+      assert result.progress >= 0 and result.progress <= 100
+    end
+
+    test "aggregates counts correctly and excludes deferred from progress calculation" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "erlang_overview_stats_2",
+          "aggregation_and_progress"
+        ])
+
+      clean_dir(test_dir)
+
+      erlang_content = """
+      const Erlang = {
+        // Start hd/1
+        "hd/1": (list) => list[0],
+        // End hd/1
+        // Deps: []
+      };
+      """
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!(erlang_content)
+
+      in_progress = [{:erlang, :+, 2}]
+      deferred = [{:erlang, :div, 2}]
+      result = erlang_overview_stats(test_dir, in_progress: in_progress, deferred: deferred)
+
+      # Verify counts are accurate
+      assert result.done_count > 0, "Expected at least one done function"
+      assert result.in_progress_count == 1, "Expected exactly one in_progress function"
+      assert result.deferred_count == 1, "Expected exactly one deferred function"
+      assert result.todo_count > 0, "Expected at least one todo function"
+
+      # Total should match the number of unique Erlang functions
+      erlang_funs_count =
+        erlang_funs_info(test_dir, in_progress: in_progress, deferred: deferred)
+        |> Map.keys()
+        |> length()
+
+      total =
+        result.done_count + result.in_progress_count + result.deferred_count + result.todo_count
+
+      assert total == erlang_funs_count
+
+      # Progress should only consider done, todo, and in_progress (excluding deferred)
+      total_for_progress = result.done_count + result.todo_count + result.in_progress_count
+      expected_progress = round(result.done_count * 100 / total_for_progress)
+      assert result.progress == expected_progress
+    end
+  end
+
   describe "elixir_modules_info/2" do
     test "returns correct structure with group, status, progress, functions, and functions_count" do
       test_dir =
