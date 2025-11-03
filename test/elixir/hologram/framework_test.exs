@@ -246,6 +246,247 @@ defmodule Hologram.FrameworkTest do
     end
   end
 
+  describe "elixir_modules_info/2" do
+    test "returns correct structure with group, status, progress, functions, and functions_count" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "elixir_modules_info_2",
+          "basic_structure"
+        ])
+
+      clean_dir(test_dir)
+
+      erlang_content = """
+      const Erlang = {
+        // Start hd/1
+        "hd/1": (list) => list[0],
+        // End hd/1
+        // Deps: []
+      };
+      """
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!(erlang_content)
+
+      result = elixir_modules_info(test_dir)
+
+      assert is_map(result)
+      refute Enum.empty?(result)
+
+      # Check structure of each entry
+      Enum.each(result, fn {module, info} ->
+        # Verify module is an atom
+        assert is_atom(module)
+
+        # Verify info map has all required fields
+        assert is_map(info)
+        assert Map.has_key?(info, :group)
+        assert Map.has_key?(info, :status)
+        assert Map.has_key?(info, :progress)
+        assert Map.has_key?(info, :functions)
+        assert Map.has_key?(info, :functions_count)
+
+        # Verify field types and constraints
+        assert is_binary(info.group)
+        assert info.status in [:done, :in_progress, :todo, :deferred]
+        assert is_integer(info.progress)
+        assert info.progress >= 0 and info.progress <= 100
+        assert is_list(info.functions)
+        assert is_integer(info.functions_count)
+        assert info.functions_count >= 0
+
+        # Verify functions_count matches functions list length
+        assert info.functions_count == length(info.functions)
+
+        # Verify each function is a {name, arity} tuple
+        Enum.each(info.functions, fn fun_tuple ->
+          assert match?(
+                   {fun, arity} when is_atom(fun) and is_integer(arity) and arity >= 0,
+                   fun_tuple
+                 )
+        end)
+      end)
+    end
+
+    test "assigns correct group to each module" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "elixir_modules_info_2",
+          "module_groups"
+        ])
+
+      clean_dir(test_dir)
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!("const Erlang = {};")
+
+      result = elixir_modules_info(test_dir)
+
+      # Verify specific modules are assigned to their correct groups
+      assert result[Kernel].group == "Core"
+      assert result[Atom].group == "Data Types"
+      assert result[String].group == "Data Types"
+      assert result[Enum].group == "Collections & Enumerables"
+      assert result[List].group == "Collections & Enumerables"
+      assert result[File].group == "IO & System"
+      assert result[Calendar].group == "Calendar"
+      assert result[Agent].group == "Processes & Applications"
+      assert result[Enumerable].group == "Protocols"
+      assert result[Code].group == "Code & Macros"
+      assert result[ArgumentError].group == "Exceptions"
+    end
+
+    test "calculates status with precedence: all functions done > deferred module > any function in_progress > todo" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "elixir_modules_info_2",
+          "status_calculation"
+        ])
+
+      clean_dir(test_dir)
+
+      erlang_content = """
+      const Erlang = {
+        // Start atom_to_list/1
+        "atom_to_list/1": (atom) => atom.toString().split(''),
+        // End atom_to_list/1
+        // Deps: []
+        
+        // Start atom_to_binary/1
+        "atom_to_binary/1": (atom) => atom.toString(),
+        // End atom_to_binary/1
+        // Deps: []
+      };
+      """
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!(erlang_content)
+
+      # Test precedence:
+      # - Atom: all functions done (all deps ported) -> should be :done (highest priority, even if deferred)
+      # - Bitwise: explicitly deferred module -> should be :deferred (2nd priority)
+      # - Base: any function in_progress -> should be :in_progress (Base depends on {:erlang, :==, 2})
+      # - Function: default case -> should be :todo
+      result =
+        elixir_modules_info(test_dir,
+          deferred_elixir_modules: [Atom, Bitwise],
+          in_progress_erlang_funs: [{:erlang, :==, 2}]
+        )
+
+      # All functions done takes precedence over deferred (Atom has only 2 simple deps, both ported)
+      assert result[Atom].status == :done
+
+      # Module explicitly deferred (and not all functions done)
+      assert result[Bitwise].status == :deferred
+
+      # Any function in progress (Base depends on {:erlang, :==, 2})
+      assert result[Base].status == :in_progress
+
+      # Default case should be :todo (Function doesn't depend on {:erlang, :==, 2})
+      assert result[Function].status == :todo
+    end
+
+    test "ensures progress is within 0-100 range" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "elixir_modules_info_2",
+          "progress_calculation"
+        ])
+
+      clean_dir(test_dir)
+
+      erlang_content = """
+      const Erlang = {
+        // Start hd/1
+        "hd/1": (list) => list[0],
+        // End hd/1
+        // Deps: []
+      };
+      """
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!(erlang_content)
+
+      result = elixir_modules_info(test_dir)
+
+      Enum.each(result, fn {_module, info} ->
+        assert info.progress >= 0 and info.progress <= 100
+      end)
+    end
+
+    test "includes all Elixir stdlib modules" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "elixir_modules_info_2",
+          "all_modules"
+        ])
+
+      clean_dir(test_dir)
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!("const Erlang = {};")
+
+      result = elixir_modules_info(test_dir)
+
+      # Verify a few key modules are present
+      assert Map.has_key?(result, Kernel)
+      assert Map.has_key?(result, Atom)
+      assert Map.has_key?(result, Base)
+      assert Map.has_key?(result, String)
+    end
+
+    test "functions list matches module.__info__(:functions)" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "elixir_modules_info_2",
+          "functions_match"
+        ])
+
+      clean_dir(test_dir)
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!("const Erlang = {};")
+
+      result = elixir_modules_info(test_dir)
+
+      modules_to_check = [Kernel, Atom, Base, String]
+
+      for module <- modules_to_check do
+        expected_functions = module.__info__(:functions)
+        actual_functions = result[module].functions
+
+        assert Enum.sort(actual_functions) == Enum.sort(expected_functions),
+               "Expected functions for #{module} to match __info__(:functions)"
+
+        assert result[module].functions_count == length(expected_functions)
+      end
+    end
+  end
+
   describe "elixir_stdlib_erlang_deps/0" do
     test "returns expected modules", %{result: result} do
       assert is_map(result)
@@ -725,247 +966,6 @@ defmodule Hologram.FrameworkTest do
       total_for_progress = result.done_count + result.todo_count + result.in_progress_count
       expected_progress = round(result.done_count * 100 / total_for_progress)
       assert result.progress == expected_progress
-    end
-  end
-
-  describe "elixir_modules_info/2" do
-    test "returns correct structure with group, status, progress, functions, and functions_count" do
-      test_dir =
-        Path.join([
-          @tmp_dir,
-          "tests",
-          "framework",
-          "elixir_modules_info_2",
-          "basic_structure"
-        ])
-
-      clean_dir(test_dir)
-
-      erlang_content = """
-      const Erlang = {
-        // Start hd/1
-        "hd/1": (list) => list[0],
-        // End hd/1
-        // Deps: []
-      };
-      """
-
-      test_dir
-      |> Path.join("erlang.mjs")
-      |> File.write!(erlang_content)
-
-      result = elixir_modules_info(test_dir)
-
-      assert is_map(result)
-      refute Enum.empty?(result)
-
-      # Check structure of each entry
-      Enum.each(result, fn {module, info} ->
-        # Verify module is an atom
-        assert is_atom(module)
-
-        # Verify info map has all required fields
-        assert is_map(info)
-        assert Map.has_key?(info, :group)
-        assert Map.has_key?(info, :status)
-        assert Map.has_key?(info, :progress)
-        assert Map.has_key?(info, :functions)
-        assert Map.has_key?(info, :functions_count)
-
-        # Verify field types and constraints
-        assert is_binary(info.group)
-        assert info.status in [:done, :in_progress, :todo, :deferred]
-        assert is_integer(info.progress)
-        assert info.progress >= 0 and info.progress <= 100
-        assert is_list(info.functions)
-        assert is_integer(info.functions_count)
-        assert info.functions_count >= 0
-
-        # Verify functions_count matches functions list length
-        assert info.functions_count == length(info.functions)
-
-        # Verify each function is a {name, arity} tuple
-        Enum.each(info.functions, fn fun_tuple ->
-          assert match?(
-                   {fun, arity} when is_atom(fun) and is_integer(arity) and arity >= 0,
-                   fun_tuple
-                 )
-        end)
-      end)
-    end
-
-    test "assigns correct group to each module" do
-      test_dir =
-        Path.join([
-          @tmp_dir,
-          "tests",
-          "framework",
-          "elixir_modules_info_2",
-          "module_groups"
-        ])
-
-      clean_dir(test_dir)
-
-      test_dir
-      |> Path.join("erlang.mjs")
-      |> File.write!("const Erlang = {};")
-
-      result = elixir_modules_info(test_dir)
-
-      # Verify specific modules are assigned to their correct groups
-      assert result[Kernel].group == "Core"
-      assert result[Atom].group == "Data Types"
-      assert result[String].group == "Data Types"
-      assert result[Enum].group == "Collections & Enumerables"
-      assert result[List].group == "Collections & Enumerables"
-      assert result[File].group == "IO & System"
-      assert result[Calendar].group == "Calendar"
-      assert result[Agent].group == "Processes & Applications"
-      assert result[Enumerable].group == "Protocols"
-      assert result[Code].group == "Code & Macros"
-      assert result[ArgumentError].group == "Exceptions"
-    end
-
-    test "calculates status with precedence: all functions done > deferred module > any function in_progress > todo" do
-      test_dir =
-        Path.join([
-          @tmp_dir,
-          "tests",
-          "framework",
-          "elixir_modules_info_2",
-          "status_calculation"
-        ])
-
-      clean_dir(test_dir)
-
-      erlang_content = """
-      const Erlang = {
-        // Start atom_to_list/1
-        "atom_to_list/1": (atom) => atom.toString().split(''),
-        // End atom_to_list/1
-        // Deps: []
-        
-        // Start atom_to_binary/1
-        "atom_to_binary/1": (atom) => atom.toString(),
-        // End atom_to_binary/1
-        // Deps: []
-      };
-      """
-
-      test_dir
-      |> Path.join("erlang.mjs")
-      |> File.write!(erlang_content)
-
-      # Test precedence:
-      # - Atom: all functions done (all deps ported) -> should be :done (highest priority, even if deferred)
-      # - Bitwise: explicitly deferred module -> should be :deferred (2nd priority)
-      # - Base: any function in_progress -> should be :in_progress (Base depends on {:erlang, :==, 2})
-      # - Function: default case -> should be :todo
-      result =
-        elixir_modules_info(test_dir,
-          deferred_elixir_modules: [Atom, Bitwise],
-          in_progress_erlang_funs: [{:erlang, :==, 2}]
-        )
-
-      # All functions done takes precedence over deferred (Atom has only 2 simple deps, both ported)
-      assert result[Atom].status == :done
-
-      # Module explicitly deferred (and not all functions done)
-      assert result[Bitwise].status == :deferred
-
-      # Any function in progress (Base depends on {:erlang, :==, 2})
-      assert result[Base].status == :in_progress
-
-      # Default case should be :todo (Function doesn't depend on {:erlang, :==, 2})
-      assert result[Function].status == :todo
-    end
-
-    test "ensures progress is within 0-100 range" do
-      test_dir =
-        Path.join([
-          @tmp_dir,
-          "tests",
-          "framework",
-          "elixir_modules_info_2",
-          "progress_calculation"
-        ])
-
-      clean_dir(test_dir)
-
-      erlang_content = """
-      const Erlang = {
-        // Start hd/1
-        "hd/1": (list) => list[0],
-        // End hd/1
-        // Deps: []
-      };
-      """
-
-      test_dir
-      |> Path.join("erlang.mjs")
-      |> File.write!(erlang_content)
-
-      result = elixir_modules_info(test_dir)
-
-      Enum.each(result, fn {_module, info} ->
-        assert info.progress >= 0 and info.progress <= 100
-      end)
-    end
-
-    test "includes all Elixir stdlib modules" do
-      test_dir =
-        Path.join([
-          @tmp_dir,
-          "tests",
-          "framework",
-          "elixir_modules_info_2",
-          "all_modules"
-        ])
-
-      clean_dir(test_dir)
-
-      test_dir
-      |> Path.join("erlang.mjs")
-      |> File.write!("const Erlang = {};")
-
-      result = elixir_modules_info(test_dir)
-
-      # Verify a few key modules are present
-      assert Map.has_key?(result, Kernel)
-      assert Map.has_key?(result, Atom)
-      assert Map.has_key?(result, Base)
-      assert Map.has_key?(result, String)
-    end
-
-    test "functions list matches module.__info__(:functions)" do
-      test_dir =
-        Path.join([
-          @tmp_dir,
-          "tests",
-          "framework",
-          "elixir_modules_info_2",
-          "functions_match"
-        ])
-
-      clean_dir(test_dir)
-
-      test_dir
-      |> Path.join("erlang.mjs")
-      |> File.write!("const Erlang = {};")
-
-      result = elixir_modules_info(test_dir)
-
-      modules_to_check = [Kernel, Atom, Base, String]
-
-      for module <- modules_to_check do
-        expected_functions = module.__info__(:functions)
-        actual_functions = result[module].functions
-
-        assert Enum.sort(actual_functions) == Enum.sort(expected_functions),
-               "Expected functions for #{module} to match __info__(:functions)"
-
-        assert result[module].functions_count == length(expected_functions)
-      end
     end
   end
 
