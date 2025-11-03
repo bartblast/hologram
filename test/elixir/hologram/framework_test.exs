@@ -487,6 +487,133 @@ defmodule Hologram.FrameworkTest do
     end
   end
 
+  describe "elixir_overview_stats/2" do
+    test "returns correct structure with all count fields and progress percentage" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "elixir_overview_stats_2",
+          "basic_structure"
+        ])
+
+      clean_dir(test_dir)
+
+      erlang_content = """
+      const Erlang = {
+        // Start atom_to_list/1
+        "atom_to_list/1": (atom) => atom.toString().split(''),
+        // End atom_to_list/1
+        // Deps: []
+        
+        // Start atom_to_binary/1
+        "atom_to_binary/1": (atom) => atom.toString(),
+        // End atom_to_binary/1
+        // Deps: []
+      };
+      """
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!(erlang_content)
+
+      result = elixir_overview_stats(test_dir)
+
+      # Verify result structure
+      assert is_map(result)
+      assert Map.has_key?(result, :done_count)
+      assert Map.has_key?(result, :in_progress_count)
+      assert Map.has_key?(result, :deferred_count)
+      assert Map.has_key?(result, :todo_count)
+      assert Map.has_key?(result, :progress)
+
+      # Verify field types and constraints
+      assert is_integer(result.done_count)
+      assert is_integer(result.in_progress_count)
+      assert is_integer(result.deferred_count)
+      assert is_integer(result.todo_count)
+      assert is_integer(result.progress)
+
+      assert result.done_count >= 0
+      assert result.in_progress_count >= 0
+      assert result.deferred_count >= 0
+      assert result.todo_count >= 0
+      assert result.progress >= 0 and result.progress <= 100
+    end
+
+    test "aggregates counts correctly and calculates progress from average of non-deferred function progresses" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "elixir_overview_stats_2",
+          "aggregation_and_progress"
+        ])
+
+      clean_dir(test_dir)
+
+      erlang_content = """
+      const Erlang = {
+        // Start atom_to_list/1
+        "atom_to_list/1": (atom) => atom.toString().split(''),
+        // End atom_to_list/1
+        // Deps: []
+        
+        // Start atom_to_binary/1
+        "atom_to_binary/1": (atom) => atom.toString(),
+        // End atom_to_binary/1
+        // Deps: []
+      };
+      """
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!(erlang_content)
+
+      result =
+        elixir_overview_stats(test_dir,
+          deferred_elixir_modules: [Bitwise],
+          deferred_elixir_funs: [{Kernel, :+, 2}],
+          in_progress_erlang_funs: [{:erlang, :==, 2}]
+        )
+
+      # Verify counts are accurate
+      assert result.done_count > 0, "Expected at least one done function"
+      assert result.in_progress_count > 0, "Expected at least one in_progress function"
+      assert result.deferred_count == 1, "Expected at least one deferred function"
+      assert result.todo_count > 0, "Expected at least one todo function"
+
+      elixir_funs_info =
+        elixir_funs_info(test_dir,
+          deferred_elixir: [{Kernel, :+, 2}],
+          in_progress_erlang: [{:erlang, :==, 2}]
+        )
+
+      elixir_funs_count = map_size(elixir_funs_info)
+
+      total =
+        result.done_count + result.in_progress_count + result.deferred_count + result.todo_count
+
+      # Total should match the number of Elixir functions
+      assert total == elixir_funs_count
+
+      non_deferred_funs =
+        Enum.filter(elixir_funs_info, fn {_mfa, info} -> info.status != :deferred end)
+
+      total_fun_progress =
+        Enum.reduce(non_deferred_funs, 0, fn {_mfa, info}, acc ->
+          acc + info.progress
+        end)
+
+      expected_progress = round(total_fun_progress / length(non_deferred_funs))
+
+      # Progress should be average of non-deferred function progresses      
+      assert result.progress == expected_progress
+    end
+  end
+
   describe "elixir_stdlib_erlang_deps/0" do
     test "returns expected modules", %{result: result} do
       assert is_map(result)

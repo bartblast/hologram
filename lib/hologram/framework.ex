@@ -282,6 +282,64 @@ defmodule Hologram.Framework do
   end
 
   @doc """
+  Returns overview statistics of Elixir functions porting status.
+
+  ## Parameters
+
+  - `erlang_js_dir` - Path to the directory containing manually ported Erlang functions
+  - `opts` - Keyword list with optional keys:
+    - `:deferred_elixir_modules` - List of Elixir modules that are deferred (defaults to [])
+    - `:deferred_elixir_funs` - List of Elixir MFA tuples that are deferred (defaults to [])
+    - `:in_progress_erlang_funs` - List of Erlang MFA tuples currently being ported (defaults to [])
+    - `:deferred_erlang_funs` - List of Erlang MFA tuples that are deferred (defaults to [])
+  """
+  @spec elixir_overview_stats(Path.t(), keyword()) :: %{
+          done_count: non_neg_integer(),
+          in_progress_count: non_neg_integer(),
+          todo_count: non_neg_integer(),
+          deferred_count: non_neg_integer(),
+          progress: non_neg_integer()
+        }
+  def elixir_overview_stats(erlang_js_dir, opts \\ []) do
+    elixir_funs_info =
+      elixir_funs_info(erlang_js_dir,
+        deferred_elixir: Keyword.get(opts, :deferred_elixir_funs, []),
+        in_progress_erlang: Keyword.get(opts, :in_progress_erlang_funs, []),
+        deferred_erlang: Keyword.get(opts, :deferred_erlang_funs, [])
+      )
+
+    stats =
+      Enum.reduce(
+        elixir_funs_info,
+        %{done_count: 0, in_progress_count: 0, deferred_count: 0, todo_count: 0},
+        fn {_mfa, %{status: status}}, acc ->
+          count_key = String.to_existing_atom("#{status}_count")
+          Map.update!(acc, count_key, &(&1 + 1))
+        end
+      )
+
+    non_deferred_funs =
+      Enum.filter(elixir_funs_info, fn {_mfa, info} -> info.status != :deferred end)
+
+    non_deferred_funs_count = length(non_deferred_funs)
+
+    # Calculate progress as average of non-deferred function progresses      
+    progress =
+      if non_deferred_funs_count > 0 do
+        total_progress =
+          Enum.reduce(non_deferred_funs, 0, fn {_mfa, info}, acc ->
+            acc + info.progress
+          end)
+
+        round(total_progress / non_deferred_funs_count)
+      else
+        0
+      end
+
+    Map.put(stats, :progress, progress)
+  end
+
+  @doc """
   Returns Erlang dependencies for Elixir standard library modules.
 
   Analyzes the call graph of selected Elixir standard library modules and identifies
@@ -391,7 +449,7 @@ defmodule Hologram.Framework do
   end
 
   @doc """
-  Returns overview statistics of Erlang function porting status.
+  Returns overview statistics of Erlang functions porting status.
 
   ## Parameters
 
