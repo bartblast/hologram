@@ -546,7 +546,7 @@ defmodule Hologram.Framework do
       MapSet.member?(deferred_elixir_set, elixir_mfa) ->
         :deferred
 
-      Enum.any?(erlang_deps, &(erlang_info[&1].status == :in_progress)) ->
+      Enum.any?(erlang_deps, &(erlang_info[&1].status in [:done, :in_progress])) ->
         :in_progress
 
       true ->

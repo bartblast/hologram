@@ -86,6 +86,11 @@ defmodule Hologram.FrameworkTest do
         "hd/1": (list) => list[0],
         // End hd/1
         // Deps: []
+        
+        // Start +/2
+        "+/2": (a, b) => a + b,
+        // End +/2
+        // Deps: []
       };
       """
 
@@ -97,6 +102,7 @@ defmodule Hologram.FrameworkTest do
       # - Kernel.hd/1: all deps done + deferred + in_progress -> should be :done (highest priority)
       # - Kernel.tl/1: unported + deferred + in_progress -> should be :deferred (2nd priority)
       # - Kernel.length/1: unported + in_progress -> should be :in_progress (3rd priority)
+      # - Kernel.elem/2: some deps done (+/2) but not all (element/2) -> should be :in_progress
       # - Kernel.abs/1: unported -> should be :todo (lowest priority)
       result =
         elixir_funs_info(test_dir,
@@ -111,8 +117,12 @@ defmodule Hologram.FrameworkTest do
       # :deferred takes precedence over :in_progress and :todo
       assert result[{Kernel, :tl, 1}].status == :deferred
 
-      # :in_progress takes precedence over :todo
+      # :in_progress when any dep is :in_progress (none :done)
       assert result[{Kernel, :length, 1}].status == :in_progress
+
+      # :in_progress when some (but not all) deps are :done (none :in_progress)
+      assert result[{Kernel, :elem, 2}].status == :in_progress
+      assert result[{Kernel, :elem, 2}].progress == 50
 
       # :todo is the default when none of the above apply (and progress should be 0%))
       assert result[{Kernel, :abs, 1}].status == :todo
