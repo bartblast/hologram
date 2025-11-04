@@ -257,7 +257,7 @@ defmodule Hologram.FrameworkTest do
   end
 
   describe "elixir_modules_info/2" do
-    test "returns correct structure with group, status, progress, functions, and functions_count" do
+    test "returns correct structure with group, status, progress, functions, all_fun_count, and status counts" do
       test_dir =
         Path.join([
           @tmp_dir,
@@ -298,7 +298,11 @@ defmodule Hologram.FrameworkTest do
         assert Map.has_key?(info, :status)
         assert Map.has_key?(info, :progress)
         assert Map.has_key?(info, :functions)
-        assert Map.has_key?(info, :functions_count)
+        assert Map.has_key?(info, :all_fun_count)
+        assert Map.has_key?(info, :done_fun_count)
+        assert Map.has_key?(info, :in_progress_fun_count)
+        assert Map.has_key?(info, :todo_fun_count)
+        assert Map.has_key?(info, :deferred_fun_count)
 
         # Verify field types and constraints
         assert is_binary(info.group)
@@ -306,11 +310,26 @@ defmodule Hologram.FrameworkTest do
         assert is_integer(info.progress)
         assert info.progress >= 0 and info.progress <= 100
         assert is_list(info.functions)
-        assert is_integer(info.functions_count)
-        assert info.functions_count >= 0
+        assert is_integer(info.all_fun_count)
+        assert info.all_fun_count >= 0
+        assert is_integer(info.done_fun_count)
+        assert info.done_fun_count >= 0
+        assert is_integer(info.in_progress_fun_count)
+        assert info.in_progress_fun_count >= 0
+        assert is_integer(info.todo_fun_count)
+        assert info.todo_fun_count >= 0
+        assert is_integer(info.deferred_fun_count)
+        assert info.deferred_fun_count >= 0
 
-        # Verify functions_count matches functions list length
-        assert info.functions_count == length(info.functions)
+        # Verify all_fun_count matches functions list length
+        assert info.all_fun_count == length(info.functions)
+
+        # Verify sum of status counts equals all_fun_count
+        total_counted =
+          info.done_fun_count + info.in_progress_fun_count + info.todo_fun_count +
+            info.deferred_fun_count
+
+        assert total_counted == info.all_fun_count
 
         # Verify each function is a {name, arity} tuple
         Enum.each(info.functions, fn fun_tuple ->
@@ -492,7 +511,7 @@ defmodule Hologram.FrameworkTest do
         assert Enum.sort(actual_functions) == Enum.sort(expected_functions),
                "Expected functions for #{module} to match __info__(:functions)"
 
-        assert result[module].functions_count == length(expected_functions)
+        assert result[module].all_fun_count == length(expected_functions)
       end
     end
   end

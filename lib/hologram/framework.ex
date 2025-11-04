@@ -228,7 +228,11 @@ defmodule Hologram.Framework do
             status: :done | :in_progress | :todo | :deferred,
             progress: non_neg_integer(),
             functions: [{atom, arity}],
-            functions_count: non_neg_integer()
+            all_fun_count: non_neg_integer(),
+            done_fun_count: non_neg_integer(),
+            in_progress_fun_count: non_neg_integer(),
+            todo_fun_count: non_neg_integer(),
+            deferred_fun_count: non_neg_integer()
           }
         }
   def elixir_modules_info(erlang_js_dir, opts \\ []) do
@@ -259,7 +263,6 @@ defmodule Hologram.Framework do
     |> Enum.map(fn module ->
       group = module_to_group[module]
       functions = module.__info__(:functions)
-      functions_count = length(functions)
 
       fun_infos =
         Enum.map(functions, fn {fun, arity} ->
@@ -269,13 +272,32 @@ defmodule Hologram.Framework do
       status = calculate_elixir_module_status(module, fun_infos, deferred_elixir_modules_set)
       progress = calculate_elixir_module_progress(fun_infos)
 
+      fun_counts =
+        Enum.reduce(
+          fun_infos,
+          %{
+            done_fun_count: 0,
+            in_progress_fun_count: 0,
+            todo_fun_count: 0,
+            deferred_fun_count: 0
+          },
+          fn info, acc ->
+            count_key = String.to_existing_atom("#{info.status}_fun_count")
+            Map.update!(acc, count_key, &(&1 + 1))
+          end
+        )
+
       {module,
        %{
          group: group,
          status: status,
          progress: progress,
          functions: functions,
-         functions_count: functions_count
+         all_fun_count: length(functions),
+         done_fun_count: fun_counts.done_fun_count,
+         in_progress_fun_count: fun_counts.in_progress_fun_count,
+         todo_fun_count: fun_counts.todo_fun_count,
+         deferred_fun_count: fun_counts.deferred_fun_count
        }}
     end)
     |> Enum.into(%{})
