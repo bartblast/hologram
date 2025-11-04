@@ -294,10 +294,14 @@ defmodule Hologram.Framework do
     - `:deferred_erlang_funs` - List of Erlang MFA tuples that are deferred (defaults to [])
   """
   @spec elixir_overview_stats(Path.t(), keyword()) :: %{
-          done_count: non_neg_integer(),
-          in_progress_count: non_neg_integer(),
-          todo_count: non_neg_integer(),
-          deferred_count: non_neg_integer(),
+          done_fun_count: non_neg_integer(),
+          in_progress_fun_count: non_neg_integer(),
+          todo_fun_count: non_neg_integer(),
+          deferred_fun_count: non_neg_integer(),
+          done_module_count: non_neg_integer(),
+          in_progress_module_count: non_neg_integer(),
+          todo_module_count: non_neg_integer(),
+          deferred_module_count: non_neg_integer(),
           progress: non_neg_integer()
         }
   def elixir_overview_stats(erlang_js_dir, opts \\ []) do
@@ -308,12 +312,35 @@ defmodule Hologram.Framework do
         deferred_erlang: Keyword.get(opts, :deferred_erlang_funs, [])
       )
 
-    stats =
+    elixir_modules_info =
+      elixir_modules_info(erlang_js_dir,
+        deferred_elixir_modules: Keyword.get(opts, :deferred_elixir_modules, []),
+        deferred_elixir_funs: Keyword.get(opts, :deferred_elixir_funs, []),
+        in_progress_erlang_funs: Keyword.get(opts, :in_progress_erlang_funs, []),
+        deferred_erlang_funs: Keyword.get(opts, :deferred_erlang_funs, [])
+      )
+
+    fun_stats =
       Enum.reduce(
         elixir_funs_info,
-        %{done_count: 0, in_progress_count: 0, deferred_count: 0, todo_count: 0},
+        %{done_fun_count: 0, in_progress_fun_count: 0, deferred_fun_count: 0, todo_fun_count: 0},
         fn {_mfa, %{status: status}}, acc ->
-          count_key = String.to_existing_atom("#{status}_count")
+          count_key = String.to_existing_atom("#{status}_fun_count")
+          Map.update!(acc, count_key, &(&1 + 1))
+        end
+      )
+
+    module_stats =
+      Enum.reduce(
+        elixir_modules_info,
+        %{
+          done_module_count: 0,
+          in_progress_module_count: 0,
+          deferred_module_count: 0,
+          todo_module_count: 0
+        },
+        fn {_module, %{status: status}}, acc ->
+          count_key = String.to_existing_atom("#{status}_module_count")
           Map.update!(acc, count_key, &(&1 + 1))
         end
       )
@@ -336,7 +363,9 @@ defmodule Hologram.Framework do
         0
       end
 
-    Map.put(stats, :progress, progress)
+    fun_stats
+    |> Map.merge(module_stats)
+    |> Map.put(:progress, progress)
   end
 
   @doc """

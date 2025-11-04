@@ -532,23 +532,36 @@ defmodule Hologram.FrameworkTest do
 
       # Verify result structure
       assert is_map(result)
-      assert Map.has_key?(result, :done_count)
-      assert Map.has_key?(result, :in_progress_count)
-      assert Map.has_key?(result, :deferred_count)
-      assert Map.has_key?(result, :todo_count)
+      assert Map.has_key?(result, :done_fun_count)
+      assert Map.has_key?(result, :in_progress_fun_count)
+      assert Map.has_key?(result, :deferred_fun_count)
+      assert Map.has_key?(result, :todo_fun_count)
+      assert Map.has_key?(result, :done_module_count)
+      assert Map.has_key?(result, :in_progress_module_count)
+      assert Map.has_key?(result, :deferred_module_count)
+      assert Map.has_key?(result, :todo_module_count)
       assert Map.has_key?(result, :progress)
 
-      # Verify field types and constraints
-      assert is_integer(result.done_count)
-      assert is_integer(result.in_progress_count)
-      assert is_integer(result.deferred_count)
-      assert is_integer(result.todo_count)
+      # Verify field types
+      assert is_integer(result.done_fun_count)
+      assert is_integer(result.in_progress_fun_count)
+      assert is_integer(result.deferred_fun_count)
+      assert is_integer(result.todo_fun_count)
+      assert is_integer(result.done_module_count)
+      assert is_integer(result.in_progress_module_count)
+      assert is_integer(result.deferred_module_count)
+      assert is_integer(result.todo_module_count)
       assert is_integer(result.progress)
 
-      assert result.done_count >= 0
-      assert result.in_progress_count >= 0
-      assert result.deferred_count >= 0
-      assert result.todo_count >= 0
+      # Verify field constraints
+      assert result.done_fun_count >= 0
+      assert result.in_progress_fun_count >= 0
+      assert result.deferred_fun_count >= 0
+      assert result.todo_fun_count >= 0
+      assert result.done_module_count >= 0
+      assert result.in_progress_module_count >= 0
+      assert result.deferred_module_count >= 0
+      assert result.todo_module_count >= 0
       assert result.progress >= 0 and result.progress <= 100
     end
 
@@ -589,11 +602,17 @@ defmodule Hologram.FrameworkTest do
           in_progress_erlang_funs: [{:erlang, :==, 2}]
         )
 
-      # Verify counts are accurate
-      assert result.done_count > 0, "Expected at least one done function"
-      assert result.in_progress_count > 0, "Expected at least one in_progress function"
-      assert result.deferred_count == 1, "Expected at least one deferred function"
-      assert result.todo_count > 0, "Expected at least one todo function"
+      # Verify function counts are accurate
+      assert result.done_fun_count > 0, "Expected at least one done function"
+      assert result.in_progress_fun_count > 0, "Expected at least one in_progress function"
+      assert result.deferred_fun_count == 1, "Expected exactly one deferred function"
+      assert result.todo_fun_count > 0, "Expected at least one todo function"
+
+      # Verify module counts are accurate
+      assert result.done_module_count >= 0, "Expected zero or more done modules"
+      assert result.in_progress_module_count > 0, "Expected at least one in_progress module"
+      assert result.deferred_module_count == 1, "Expected exactly one deferred module (Bitwise)"
+      assert result.todo_module_count >= 0, "Expected zero or more todo modules"
 
       elixir_funs_info =
         elixir_funs_info(test_dir,
@@ -601,13 +620,27 @@ defmodule Hologram.FrameworkTest do
           in_progress_erlang: [{:erlang, :==, 2}]
         )
 
-      elixir_funs_count = map_size(elixir_funs_info)
+      elixir_modules_info =
+        elixir_modules_info(test_dir,
+          deferred_elixir_modules: [Bitwise],
+          deferred_elixir_funs: [{Kernel, :+, 2}],
+          in_progress_erlang_funs: [{:erlang, :==, 2}]
+        )
 
-      total =
-        result.done_count + result.in_progress_count + result.deferred_count + result.todo_count
+      elixir_fun_count = map_size(elixir_funs_info)
+      elixir_module_count = map_size(elixir_modules_info)
 
-      # Total should match the number of Elixir functions
-      assert total == elixir_funs_count
+      total_funs =
+        result.done_fun_count + result.in_progress_fun_count + result.deferred_fun_count +
+          result.todo_fun_count
+
+      total_modules =
+        result.done_module_count + result.in_progress_module_count + result.deferred_module_count +
+          result.todo_module_count
+
+      # Totals should match the number of Elixir functions and modules
+      assert total_funs == elixir_fun_count
+      assert total_modules == elixir_module_count
 
       non_deferred_funs =
         Enum.filter(elixir_funs_info, fn {_mfa, info} -> info.status != :deferred end)
