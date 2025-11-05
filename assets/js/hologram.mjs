@@ -567,7 +567,7 @@ export default class Hologram {
       const fileHandle = await root.getFileHandle(snapshotKey, {create: false});
       const file = await fileHandle.getFile();
       return await file.text();
-    } catch (error) {
+    } catch {
       // Fall back to session storage if OPFS fails
       return sessionStorage.getItem(snapshotKey);
     }
