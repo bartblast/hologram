@@ -60,7 +60,7 @@ defmodule Hologram.FrameworkTest do
         assert info.status in [:done, :in_progress, :todo, :deferred]
         assert is_integer(info.progress)
         assert info.progress >= 0 and info.progress <= 100
-        assert info.method in [:manual, :auto]
+        assert info.method in [:auto, :manual]
         assert is_list(info.dependencies)
         assert is_integer(info.dependencies_count)
         assert info.dependencies_count >= 0
