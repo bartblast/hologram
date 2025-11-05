@@ -1,4 +1,6 @@
 defmodule Hologram.Framework do
+  @moduledoc false
+
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Reflection
