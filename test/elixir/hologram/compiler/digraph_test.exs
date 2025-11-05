@@ -878,6 +878,230 @@ defmodule Hologram.Compiler.DigraphTest do
     end
   end
 
+  describe "shortest_path/3" do
+    test "returns nil when graph is empty" do
+      result = shortest_path(new(), :a, :b)
+
+      assert result == nil
+    end
+
+    test "returns nil when source vertex doesn't exist" do
+      result =
+        new()
+        |> add_vertex(:b)
+        |> shortest_path(:a, :b)
+
+      assert result == nil
+    end
+
+    test "returns nil when target vertex doesn't exist" do
+      result =
+        new()
+        |> add_vertex(:a)
+        |> shortest_path(:a, :b)
+
+      assert result == nil
+    end
+
+    test "returns nil when neither vertex exists" do
+      result =
+        new()
+        |> add_vertex(:c)
+        |> shortest_path(:a, :b)
+
+      assert result == nil
+    end
+
+    test "returns single-element list when source equals target" do
+      result =
+        new()
+        |> add_vertex(:a)
+        |> shortest_path(:a, :a)
+
+      assert result == [:a]
+    end
+
+    test "returns nil when source equals target but vertex doesn't exist" do
+      result = shortest_path(new(), :a, :a)
+
+      assert result == nil
+    end
+
+    test "returns direct path when vertices are directly connected" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> shortest_path(:a, :b)
+
+      assert result == [:a, :b]
+    end
+
+    test "returns nil when vertices exist but no path exists" do
+      result =
+        new()
+        |> add_vertex(:a)
+        |> add_vertex(:b)
+        |> shortest_path(:a, :b)
+
+      assert result == nil
+    end
+
+    test "returns nil for reverse direction when only forward edge exists" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> shortest_path(:b, :a)
+
+      assert result == nil
+    end
+
+    test "returns path through linear chain" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> add_edge(:c, :d)
+        |> shortest_path(:a, :d)
+
+      assert result == [:a, :b, :c, :d]
+    end
+
+    test "returns partial path in linear chain when starting from middle" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> add_edge(:c, :d)
+        |> shortest_path(:b, :d)
+
+      assert result == [:b, :c, :d]
+    end
+
+    test "returns shortest path when multiple paths exist" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> add_edge(:c, :d)
+        # Shorter path
+        |> add_edge(:a, :e)
+        |> add_edge(:e, :d)
+        |> shortest_path(:a, :d)
+
+      assert result == [:a, :e, :d]
+    end
+
+    test "returns shortest path in diamond graph" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:a, :c)
+        |> add_edge(:b, :d)
+        |> add_edge(:c, :d)
+        |> shortest_path(:a, :d)
+
+      # Both paths have same length, should return one of them
+      assert result in [[:a, :b, :d], [:a, :c, :d]]
+    end
+
+    test "handles cycles correctly" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        |> add_edge(:c, :a)
+        |> shortest_path(:a, :c)
+
+      assert result == [:a, :b, :c]
+    end
+
+    test "handles self-loop at source" do
+      result =
+        new()
+        |> add_edge(:a, :a)
+        |> add_edge(:a, :b)
+        |> shortest_path(:a, :b)
+
+      assert result == [:a, :b]
+    end
+
+    test "handles self-loop at target" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :b)
+        |> shortest_path(:a, :b)
+
+      assert result == [:a, :b]
+    end
+
+    test "handles self-loop in the middle of path" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :b)
+        |> add_edge(:b, :c)
+        |> shortest_path(:a, :c)
+
+      assert result == [:a, :b, :c]
+    end
+
+    test "returns nil when path is blocked by disconnected component" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        # Disconnected component
+        |> add_edge(:x, :y)
+        |> shortest_path(:a, :y)
+
+      assert result == nil
+    end
+
+    test "finds path within one component of disconnected graph" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :c)
+        # Disconnected component
+        |> add_edge(:x, :y)
+        |> add_edge(:y, :z)
+        |> shortest_path(:a, :c)
+
+      assert result == [:a, :b, :c]
+    end
+
+    test "finds path through multiple possible routes" do
+      result =
+        new()
+        |> add_edge(:start, :a)
+        |> add_edge(:start, :b)
+        |> add_edge(:start, :c)
+        |> add_edge(:a, :middle)
+        |> add_edge(:b, :middle)
+        |> add_edge(:c, :middle)
+        |> add_edge(:middle, :end)
+        |> shortest_path(:start, :end)
+
+      # All paths have same length (3), should return one of them
+      assert result in [
+               [:start, :a, :middle, :end],
+               [:start, :b, :middle, :end],
+               [:start, :c, :middle, :end]
+             ]
+    end
+
+    test "handles bidirectional edge scenario" do
+      result =
+        new()
+        |> add_edge(:a, :b)
+        |> add_edge(:b, :a)
+        |> add_edge(:b, :c)
+        |> shortest_path(:a, :c)
+
+      assert result == [:a, :b, :c]
+    end
+  end
+
   describe "sorted_edges/1" do
     test "lists edges in sorted order" do
       result =

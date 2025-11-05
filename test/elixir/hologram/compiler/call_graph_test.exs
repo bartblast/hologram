@@ -973,6 +973,14 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert get_graph(call_graph_2) == get_graph(call_graph)
   end
 
+  test "manually_ported_elixir_mfas/0" do
+    result = manually_ported_elixir_mfas()
+
+    assert is_list(result)
+    assert {Kernel, :inspect, 1} in result
+    assert {String, :upcase, 1} in result
+  end
+
   describe "maybe_load/2" do
     setup do
       dump_dir = Path.join([@tmp_dir, "tests", "compiler", "call_graph", "maybe_load_2"])
@@ -1131,6 +1139,70 @@ defmodule Hologram.Compiler.CallGraphTest do
     assert get_graph(call_graph) == graph
   end
 
+  describe "reachable_mfas/2" do
+    setup do
+      # 1
+      # ├─ {Module2, :f2, 2}
+      # │  ├─ 4
+      # │  │  ├─ {Module8, :f8, 8}
+      # │  │  ├─ 9
+      # │  ├─ {Module5, :f5, 5}
+      # │  │  ├─ 10
+      # │  │  ├─ 11
+      # ├─ {Module3, :f3, 3}
+      # │  ├─ 6
+      # │  │  ├─ {Module11, :f12, 12}
+      # │  │  ├─ 13
+      # │  ├─ {Module7, :f7, 7}
+      # │  │  ├─ 14
+      # │  │  ├─ {Module15, :f15, 15}
+      # |  |  |- {Collectable.Atom, :fca, 123}
+
+      graph =
+        Digraph.new()
+        |> Digraph.add_edge(:vertex_1, {Module2, :f2, 2})
+        |> Digraph.add_edge(:vertex_1, {Module3, :f3, 3})
+        |> Digraph.add_edge({Module2, :f2, 2}, :vertex_4)
+        |> Digraph.add_edge({Module2, :f2, 2}, {Module5, :f5, 5})
+        |> Digraph.add_edge({Module3, :f3, 3}, :vertex_6)
+        |> Digraph.add_edge({Module3, :f3, 3}, {Module7, :f7, 7})
+        |> Digraph.add_edge(:vertex_4, {Module8, :f8, 8})
+        |> Digraph.add_edge(:vertex_4, :vertex_9)
+        |> Digraph.add_edge({Module5, :f5, 5}, :vertex_10)
+        |> Digraph.add_edge({Module5, :f5, 5}, :vertex_11)
+        |> Digraph.add_edge(:vertex_6, {Module11, :f12, 12})
+        |> Digraph.add_edge(:vertex_6, :vertex_13)
+        |> Digraph.add_edge({Module7, :f7, 7}, :vertex_14)
+        |> Digraph.add_edge({Module7, :f7, 7}, {Module15, :f15, 15})
+        |> Digraph.add_edge({Module7, :f7, 7}, {Collectable.Atom, :fca, 123})
+
+      [graph: graph]
+    end
+
+    test "single MFA argument", %{graph: graph} do
+      result = reachable_mfas(graph, [{Module3, :f3, 3}])
+
+      assert Enum.sort(result) == [
+               {Module11, :f12, 12},
+               {Module15, :f15, 15},
+               {Module3, :f3, 3},
+               {Module7, :f7, 7}
+             ]
+    end
+
+    test "multiple MFAs argument", %{graph: graph} do
+      result = reachable_mfas(graph, [{Module5, :f5, 5}, {Module3, :f3, 3}])
+
+      assert Enum.sort(result) == [
+               {Module11, :f12, 12},
+               {Module15, :f15, 15},
+               {Module3, :f3, 3},
+               {Module5, :f5, 5},
+               {Module7, :f7, 7}
+             ]
+    end
+  end
+
   test "remote_incoming_edges/2", %{empty_call_graph: call_graph} do
     call_graph
     |> add_edge({:module_1, :fun_a, :arity_a}, {:module_2, :fun_b, :arity_b})
@@ -1243,61 +1315,22 @@ defmodule Hologram.Compiler.CallGraphTest do
 
   describe "sorted_reachable_mfas/2" do
     setup do
-      # 1
-      # ├─ {Module2, :f2, 2}
-      # │  ├─ 4
-      # │  │  ├─ {Module8, :f8, 8}
-      # │  │  ├─ 9
-      # │  ├─ {Module5, :f5, 5}
-      # │  │  ├─ 10
-      # │  │  ├─ 11
-      # ├─ {Module3, :f3, 3}
-      # │  ├─ 6
-      # │  │  ├─ {Module11, :f12, 12}
-      # │  │  ├─ 13
-      # │  ├─ {Module7, :f7, 7}
-      # │  │  ├─ 14
-      # │  │  ├─ {Module15, :f15, 15}
-      # |  |  |- {Collectable.Atom, :fca, 123}
-
+      # Simple graph to verify sorting behavior.
+      # Reachability logic is tested in reachable_mfas/2 tests.
       graph =
         Digraph.new()
-        |> Digraph.add_edge(:vertex_1, {Module2, :f2, 2})
+        |> Digraph.add_edge(:vertex_1, {Module7, :f7, 7})
         |> Digraph.add_edge(:vertex_1, {Module3, :f3, 3})
-        |> Digraph.add_edge({Module2, :f2, 2}, :vertex_4)
-        |> Digraph.add_edge({Module2, :f2, 2}, {Module5, :f5, 5})
-        |> Digraph.add_edge({Module3, :f3, 3}, :vertex_6)
-        |> Digraph.add_edge({Module3, :f3, 3}, {Module7, :f7, 7})
-        |> Digraph.add_edge(:vertex_4, {Module8, :f8, 8})
-        |> Digraph.add_edge(:vertex_4, :vertex_9)
-        |> Digraph.add_edge({Module5, :f5, 5}, :vertex_10)
-        |> Digraph.add_edge({Module5, :f5, 5}, :vertex_11)
-        |> Digraph.add_edge(:vertex_6, {Module11, :f12, 12})
-        |> Digraph.add_edge(:vertex_6, :vertex_13)
-        |> Digraph.add_edge({Module7, :f7, 7}, :vertex_14)
-        |> Digraph.add_edge({Module7, :f7, 7}, {Module15, :f15, 15})
-        |> Digraph.add_edge({Module7, :f7, 7}, {Collectable.Atom, :fca, 123})
+        |> Digraph.add_edge({Module3, :f3, 3}, {Module11, :f12, 12})
 
       [graph: graph]
     end
 
-    test "single MFA argument", %{graph: graph} do
-      assert sorted_reachable_mfas(graph, [{Module3, :f3, 3}]) == [
-               {Module11, :f12, 12},
-               {Module15, :f15, 15},
-               {Module3, :f3, 3},
-               {Module7, :f7, 7}
-             ]
-    end
+    test "returns same results as reachable_mfas/2 but sorted", %{graph: graph} do
+      unsorted = reachable_mfas(graph, [:vertex_1])
+      sorted = sorted_reachable_mfas(graph, [:vertex_1])
 
-    test "multiple MFAs argument", %{graph: graph} do
-      assert sorted_reachable_mfas(graph, [{Module5, :f5, 5}, {Module3, :f3, 3}]) == [
-               {Module11, :f12, 12},
-               {Module15, :f15, 15},
-               {Module3, :f3, 3},
-               {Module5, :f5, 5},
-               {Module7, :f7, 7}
-             ]
+      assert sorted == Enum.sort(unsorted)
     end
   end
 

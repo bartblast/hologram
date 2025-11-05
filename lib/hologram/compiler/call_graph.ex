@@ -45,7 +45,7 @@ defmodule Hologram.Compiler.CallGraph do
   # * the function doesn't make sense on the client side
   # * the function must access the Hologram client runtime
   # * the function has only a client-side implementation
-  @manually_ported_mfas [
+  @manually_ported_elixir_mfas [
     {Cldr.Locale, :language_data, 0},
     {Cldr.Validity.U, :encode_key, 2},
     {Code, :ensure_loaded, 1},
@@ -441,6 +441,12 @@ defmodule Hologram.Compiler.CallGraph do
   end
 
   @doc """
+  Returns the list of Elixir MFAs that are manually ported to JavaScript.
+  """
+  @spec manually_ported_elixir_mfas :: [mfa]
+  def manually_ported_elixir_mfas, do: @manually_ported_elixir_mfas
+
+  @doc """
   Loads the graph from the given dump file if the file exists.
   """
   @spec maybe_load(t, String.t()) :: t
@@ -508,6 +514,21 @@ defmodule Hologram.Compiler.CallGraph do
     call_graph
   end
 
+  @doc """
+  Lists MFAs that are reachable from the given call graph vertices.
+  Unimplemented protocol implementations are excluded.
+  """
+  @spec reachable_mfas(Digraph.t(), [vertex]) :: [mfa]
+  def reachable_mfas(graph, vertices) do
+    graph
+    |> Digraph.reachable(vertices)
+    |> Enum.filter(fn
+      # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
+      {module, _function, _arity} -> Reflection.module?(module)
+      _module -> false
+    end)
+  end
+
   defp reject_hex_mfas(mfas) do
     Enum.reject(mfas, fn {module, _function, _arity} ->
       module_str = to_string(module)
@@ -546,7 +567,7 @@ defmodule Hologram.Compiler.CallGraph do
   """
   @spec remove_manually_ported_mfas(t) :: t
   def remove_manually_ported_mfas(call_graph) do
-    remove_vertices(call_graph, @manually_ported_mfas)
+    remove_vertices(call_graph, @manually_ported_elixir_mfas)
   end
 
   @doc """
@@ -621,18 +642,13 @@ defmodule Hologram.Compiler.CallGraph do
 
   @doc """
   Lists MFAs that are reachable from the given call graph vertices.
-  Unimplemented protocol implentations are excluded.
+  Unimplemented protocol implementations are excluded.
   The MFAs returned are sorted.
   """
   @spec sorted_reachable_mfas(Digraph.t(), [vertex]) :: [mfa]
   def sorted_reachable_mfas(graph, vertices) do
     graph
-    |> Digraph.reachable(vertices)
-    |> Enum.filter(fn
-      # Some protocol implementations are referenced but not actually implemented, e.g. Collectable.Atom
-      {module, _function, _arity} -> Reflection.module?(module)
-      _module -> false
-    end)
+    |> reachable_mfas(vertices)
     |> Enum.sort()
   end
 
