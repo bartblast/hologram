@@ -607,7 +607,7 @@ defmodule Hologram.Framework do
     end
   end
 
-  defp calculate_elixir_module_progress([]), do: 0
+  defp calculate_elixir_module_progress([]), do: 100
 
   defp calculate_elixir_module_progress(fun_infos) do
     progress_sum = Enum.reduce(fun_infos, 0, fn info, acc -> acc + info.progress end)
