@@ -52,6 +52,7 @@ defmodule Hologram.FrameworkTest do
         assert is_map(info)
         assert Map.has_key?(info, :status)
         assert Map.has_key?(info, :progress)
+        assert Map.has_key?(info, :method)
         assert Map.has_key?(info, :dependencies)
         assert Map.has_key?(info, :dependencies_count)
 
@@ -59,6 +60,7 @@ defmodule Hologram.FrameworkTest do
         assert info.status in [:done, :in_progress, :todo, :deferred]
         assert is_integer(info.progress)
         assert info.progress >= 0 and info.progress <= 100
+        assert info.method in [:manual, :auto]
         assert is_list(info.dependencies)
         assert is_integer(info.dependencies_count)
         assert info.dependencies_count >= 0
@@ -253,6 +255,31 @@ defmodule Hologram.FrameworkTest do
       assert Map.has_key?(result, {Kernel, :+, 2})
       assert Map.has_key?(result, {Atom, :to_string, 1})
       assert Map.has_key?(result, {String, :length, 1})
+    end
+
+    test "correctly identifies manual vs auto porting method" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "elixir_funs_info_2",
+          "method_identification"
+        ])
+
+      clean_dir(test_dir)
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!("const Erlang = {};")
+
+      result = elixir_funs_info(test_dir)
+
+      # Kernel.+/2 is auto-transpiled
+      assert result[{Kernel, :+, 2}].method == :auto
+
+      # String.downcase/2 is manually ported
+      assert result[{String, :downcase, 2}].method == :manual
     end
   end
 

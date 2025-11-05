@@ -166,6 +166,7 @@ defmodule Hologram.Framework do
           mfa => %{
             status: :done | :in_progress | :todo | :deferred,
             progress: non_neg_integer(),
+            method: :manual | :auto,
             dependencies: [mfa],
             dependencies_count: non_neg_integer()
           }
@@ -204,6 +205,7 @@ defmodule Hologram.Framework do
          %{
            status: status,
            progress: progress,
+           method: elixir_fun_method(elixir_mfa),
            dependencies: erlang_deps,
            dependencies_count: length(erlang_deps)
          }}
@@ -631,6 +633,14 @@ defmodule Hologram.Framework do
       # Otherwise, it's todo
       true ->
         :todo
+    end
+  end
+
+  defp elixir_fun_method(mfa) do
+    if mfa in CallGraph.manually_ported_elixir_mfas() do
+      :manual
+    else
+      :auto
     end
   end
 
