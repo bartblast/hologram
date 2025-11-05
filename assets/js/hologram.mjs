@@ -45,6 +45,8 @@ import {toVNode} from "snabbdom";
 
 // TODO: test
 export default class Hologram {
+  static #PAGE_SNAPSHOT_KEY_PREFIX = "hologram_page_snapshot_";
+
   // Made public to make tests easier
   static prefetchedPages = new Map();
 
@@ -284,8 +286,8 @@ export default class Hologram {
   }
 
   // Made public to make tests easier
-  static loadNewPage(pagePath, html) {
-    $.#savePageSnapshot();
+  static async loadNewPage(pagePath, html) {
+    await $.#savePageSnapshot();
     $.#historyId = crypto.randomUUID();
 
     window.requestAnimationFrame(() => {
@@ -346,9 +348,9 @@ export default class Hologram {
   }
 
   static run() {
-    Hologram.#onReady(() => {
+    Hologram.#onReady(async () => {
       if (!Hologram.#isInitiated) {
-        Hologram.#init();
+        await Hologram.#init();
       }
 
       try {
@@ -556,6 +558,21 @@ export default class Hologram {
     }
   }
 
+  static async #getPageSnapshot(historyId) {
+    const snapshotKey = $.#pageSnapshotKey(historyId);
+
+    // Try OPFS first
+    try {
+      const root = await navigator.storage.getDirectory();
+      const fileHandle = await root.getFileHandle(snapshotKey, {create: false});
+      const file = await fileHandle.getFile();
+      return await file.text();
+    } catch {
+      // Fall back to session storage if OPFS fails
+      return sessionStorage.getItem(snapshotKey);
+    }
+  }
+
   // Deps: [:maps.get/2]
   static #getToParam(operation) {
     return Erlang_Maps["get/2"](
@@ -565,10 +582,10 @@ export default class Hologram {
   }
 
   static async #handlePopstateEvent(event) {
-    $.#savePageSnapshot();
+    await $.#savePageSnapshot();
     $.#historyId = event.state;
 
-    const serializedPageSnapshot = sessionStorage.getItem(event.state);
+    const serializedPageSnapshot = await $.#getPageSnapshot(event.state);
 
     if (serializedPageSnapshot) {
       $.#restorePageSnapshot(serializedPageSnapshot);
@@ -597,7 +614,7 @@ export default class Hologram {
 
   // Executed only once, on the initial page load.
   // Deps: [:maps.get/2]
-  static #init() {
+  static async #init() {
     // TODO: consider when implementing boxed error handling
     // window.addEventListener("error", (event) => {
     //   if (event.error instanceof HologramBoxedError) {
@@ -620,7 +637,8 @@ export default class Hologram {
     });
 
     window.addEventListener("beforeunload", () => {
-      Hologram.#savePageSnapshot();
+      // Force synchronous session storage save since async OPFS may not complete before page termination
+      Hologram.#savePageSnapshot(true);
     });
 
     window.addEventListener("popstate", Hologram.#handlePopstateEvent);
@@ -635,7 +653,7 @@ export default class Hologram {
     // Check if there's already a history state (e.g., when navigating back from external page)
     if (history.state) {
       $.#historyId = history.state;
-      const serializedPageSnapshot = sessionStorage.getItem(history.state);
+      const serializedPageSnapshot = await $.#getPageSnapshot(history.state);
 
       // Only restore state for back/forward navigation, not page reloads
       if (!$.#isPageReload() && serializedPageSnapshot) {
@@ -760,6 +778,10 @@ export default class Hologram {
     }
   }
 
+  static #pageSnapshotKey(historyId) {
+    return `${$.#PAGE_SNAPSHOT_KEY_PREFIX}${historyId}`;
+  }
+
   // TODO: raise error if there is no head or body
   static #patchPage(html) {
     globalThis.hologram.pageScriptLoaded = false;
@@ -789,7 +811,7 @@ export default class Hologram {
     $.#shouldLoadMountData = false;
   }
 
-  static #savePageSnapshot() {
+  static async #savePageSnapshot(forceSync = false) {
     const serializedPageSnapshot = Serializer.serialize(
       {
         componentRegistryEntries: ComponentRegistry.entries,
@@ -800,7 +822,45 @@ export default class Hologram {
       "client",
     );
 
-    sessionStorage.setItem($.#historyId, serializedPageSnapshot);
+    const snapshotKey = $.#pageSnapshotKey($.#historyId);
+
+    // For beforeunload: save synchronously to session storage only
+    if (forceSync) {
+      try {
+        sessionStorage.setItem(snapshotKey, serializedPageSnapshot);
+      } catch (error) {
+        console.error(
+          "Failed to save page snapshot to session storage:",
+          error,
+        );
+      }
+
+      return;
+    }
+
+    // For normal navigation: OPFS primary, session storage fallback
+    try {
+      const root = await navigator.storage.getDirectory();
+      const fileHandle = await root.getFileHandle(snapshotKey, {create: true});
+      const writable = await fileHandle.createWritable();
+      await writable.write(serializedPageSnapshot);
+      await writable.close();
+
+      // Successfully saved to OPFS, clear session storage fallback if it exists
+      sessionStorage.removeItem(snapshotKey);
+    } catch (opfsError) {
+      console.error("Failed to save page snapshot to OPFS:", opfsError);
+
+      // Fallback to session storage if OPFS fails
+      try {
+        sessionStorage.setItem(snapshotKey, serializedPageSnapshot);
+      } catch (sessionStorageError) {
+        console.error(
+          "Failed to save page snapshot to session storage:",
+          sessionStorageError,
+        );
+      }
+    }
   }
 
   static #scheduleQueuedInitActions() {
