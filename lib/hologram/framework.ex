@@ -166,7 +166,7 @@ defmodule Hologram.Framework do
           mfa => %{
             status: :done | :in_progress | :todo | :deferred,
             progress: non_neg_integer(),
-            method: :manual | :auto,
+            method: :auto | :manual,
             dependencies: [mfa],
             dependencies_count: non_neg_integer()
           }
