@@ -171,6 +171,26 @@ describe("Client", () => {
       assert.strictEqual(result, "?active=true&visible=false");
     });
 
+    it("encodes special characters in param keys", () => {
+      const params = Type.map([
+        [Type.atom("user name"), Type.bitstring("hello")],
+      ]);
+
+      const result = Client.buildPageQueryString(params);
+
+      assert.strictEqual(result, "?user%20name=hello");
+    });
+
+    it("encodes special characters in param values", () => {
+      const params = Type.map([
+        [Type.atom("name"), Type.bitstring("hello world")],
+      ]);
+
+      const result = Client.buildPageQueryString(params);
+
+      assert.strictEqual(result, "?name=hello%20world");
+    });
+
     it("throws error when param key is not atom", () => {
       const params = Type.map([
         [Type.bitstring("status"), Type.atom("pending")],

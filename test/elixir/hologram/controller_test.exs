@@ -13,6 +13,7 @@ defmodule Hologram.ControllerTest do
   alias Hologram.Runtime.CSRFProtection
   alias Hologram.Test.Fixtures.Controller.Module1
   alias Hologram.Test.Fixtures.Controller.Module10
+  alias Hologram.Test.Fixtures.Controller.Module11
   alias Hologram.Test.Fixtures.Controller.Module2
   alias Hologram.Test.Fixtures.Controller.Module3
   alias Hologram.Test.Fixtures.Controller.Module4
@@ -102,10 +103,18 @@ defmodule Hologram.ControllerTest do
     setup_page_digest_registry(PageDigestRegistryStub)
   end
 
-  test "extract_params/2" do
-    url_path = "/hologram-test-fixtures-runtime-controller-module1/111/ccc/222"
+  describe "extract_params/2" do
+    test "extracts params from URL path" do
+      url_path = "/hologram-test-fixtures-runtime-controller-module1/111/ccc/222"
 
-    assert extract_params(url_path, Module1) == %{"aaa" => "111", "bbb" => "222"}
+      assert extract_params(url_path, Module1) == %{"aaa" => "111", "bbb" => "222"}
+    end
+
+    test "decodes URL-encoded params" do
+      url_path = "/hologram-test-fixtures-runtime-controller-module1/hello%20world/ccc/foo%2Fbar"
+
+      assert extract_params(url_path, Module1) == %{"aaa" => "hello world", "bbb" => "foo/bar"}
+    end
   end
 
   describe "apply_cookie_ops/2" do
@@ -769,6 +778,19 @@ defmodule Hologram.ControllerTest do
       assert conn.resp_body == "param_aaa = 111, param_bbb = 222"
     end
 
+    test "decodes URL-encoded params" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module11, :dummy_module_11_digest)
+
+      # URL encoded: "hello world" -> "hello%20world", "foo/bar" -> "foo%2Fbar"
+      conn =
+        :get
+        |> Plug.Test.conn("/hologram-test-fixtures-controller-module11/hello%20world/foo%2Fbar")
+        |> Plug.Test.init_test_session(%{})
+        |> handle_initial_page_request(Module11)
+
+      assert conn.resp_body == "param_a = hello world, param_b = foo/bar"
+    end
+
     test "passes server struct with session to page renderer" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module9, :dummy_module_9_digest)
 
@@ -902,6 +924,21 @@ defmodule Hologram.ControllerTest do
         |> handle_subsequent_page_request(Module1)
 
       assert conn.resp_body == "param_aaa = 111, param_bbb = 222"
+    end
+
+    test "decodes URL-encoded query params" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module11, :dummy_module_11_digest)
+
+      # URL encoded: "hello world" -> "hello%20world", "foo/bar" -> "foo%2Fbar"
+      conn =
+        :get
+        |> Plug.Test.conn(
+          "/hologram/page/Hologram.Test.Fixtures.Controller.Module11?param_a=hello%20world&param_b=foo%2Fbar"
+        )
+        |> Plug.Test.init_test_session(%{})
+        |> handle_subsequent_page_request(Module11)
+
+      assert conn.resp_body == "param_a = hello world, param_b = foo/bar"
     end
 
     test "passes server struct with session to page renderer" do

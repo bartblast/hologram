@@ -14,6 +14,7 @@ defmodule HologramFeatureTests.Routing.RouteWithoutParamsPage do
 
   def template do
     ~HOLO"""
+    <h1>Route Without Params Page</h1>
     <p>
       Page module: <strong id="page_module"><code>{inspect(@module)}</code></strong>
     </p>       

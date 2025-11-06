@@ -40,6 +40,7 @@ import ManuallyPortedElixirHologramRouterHelpers from "./elixir/hologram/router/
 import ManuallyPortedElixirIO from "./elixir/io.mjs";
 import ManuallyPortedElixirKernel from "./elixir/kernel.mjs";
 import ManuallyPortedElixirString from "./elixir/string.mjs";
+import ManuallyPortedElixirURI from "./elixir/uri.mjs";
 
 import {toVNode} from "snabbdom";
 
@@ -506,6 +507,13 @@ export default class Hologram {
       "upcase/2",
       "public",
       ManuallyPortedElixirString["upcase/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "URI",
+      "encode/2",
+      "public",
+      ManuallyPortedElixirURI["encode/2"],
     );
   }
 
