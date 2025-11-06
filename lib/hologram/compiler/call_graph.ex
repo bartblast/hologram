@@ -62,7 +62,8 @@ defmodule Hologram.Compiler.CallGraph do
     {String, :replace, 3},
     {String, :trim, 1},
     {String, :upcase, 1},
-    {String, :upcase, 2}
+    {String, :upcase, 2},
+    {URI, :encode, 2}
   ]
 
   @mfas_used_by_all_pages_and_components [
