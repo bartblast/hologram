@@ -6,442 +6,149 @@ defmodule Hologram.Framework do
   alias Hologram.Compiler.CallGraph
   alias Hologram.Reflection
 
-  cond do
-    Version.match?(System.version(), ">= 1.18.0") ->
-      @elixir_stdlib_module_groups [
-        {"Core",
-         [
-           Kernel
-         ]},
-        {"Data Types",
-         [
-           Atom,
-           Base,
-           Bitwise,
-           Date,
-           DateTime,
-           Duration,
-           Exception,
-           Float,
-           Function,
-           Integer,
-           JSON,
-           Module,
-           NaiveDateTime,
-           Record,
-           Regex,
-           String,
-           Time,
-           Tuple,
-           URI,
-           Version,
-           Version.Requirement
-         ]},
-        {"Collections & Enumerables",
-         [
-           Access,
-           Date.Range,
-           Enum,
-           Keyword,
-           List,
-           Map,
-           MapSet,
-           Range,
-           Stream
-         ]},
-        {"IO & System",
-         [
-           File,
-           File.Stat,
-           File.Stream,
-           IO,
-           IO.ANSI,
-           IO.Stream,
-           OptionParser,
-           Path,
-           Port,
-           StringIO,
-           System
-         ]},
-        {"Calendar",
-         [
-           Calendar,
-           Calendar.ISO,
-           Calendar.TimeZoneDatabase,
-           Calendar.UTCOnlyTimeZoneDatabase
-         ]},
-        {"Processes & Applications",
-         [
-           Agent,
-           Application,
-           Config,
-           Config.Provider,
-           Config.Reader,
-           DynamicSupervisor,
-           GenServer,
-           Node,
-           PartitionSupervisor,
-           Process,
-           Registry,
-           Supervisor,
-           Task,
-           Task.Supervisor
-         ]},
-        {"Protocols",
-         [
-           Collectable,
-           Enumerable,
-           Inspect,
-           Inspect.Algebra,
-           Inspect.Opts,
-           JSON.Encoder,
-           List.Chars,
-           Protocol,
-           String.Chars
-         ]},
-        {"Code & Macros",
-         [
-           Code,
-           Code.Fragment,
-           Kernel.ParallelCompiler,
-           Macro,
-           Macro.Env
-         ]},
-        {"Exceptions",
-         [
-           ArgumentError,
-           ArithmeticError,
-           BadArityError,
-           BadBooleanError,
-           BadFunctionError,
-           BadMapError,
-           CaseClauseError,
-           Code.LoadError,
-           CompileError,
-           CondClauseError,
-           Enum.EmptyError,
-           Enum.OutOfBoundsError,
-           ErlangError,
-           File.CopyError,
-           File.Error,
-           File.LinkError,
-           File.RenameError,
-           FunctionClauseError,
-           IO.StreamError,
-           Inspect.Error,
-           JSON.DecodeError,
-           Kernel.TypespecError,
-           KeyError,
-           MatchError,
-           MismatchedDelimiterError,
-           MissingApplicationsError,
-           OptionParser.ParseError,
-           Protocol.UndefinedError,
-           Regex.CompileError,
-           RuntimeError,
-           SyntaxError,
-           System.EnvError,
-           SystemLimitError,
-           TokenMissingError,
-           TryClauseError,
-           URI.Error,
-           UndefinedFunctionError,
-           UnicodeConversionError,
-           Version.InvalidRequirementError,
-           Version.InvalidVersionError,
-           WithClauseError
-         ]}
-      ]
-
-    Version.match?(System.version(), ">= 1.17.0") ->
-      @elixir_stdlib_module_groups [
-        {"Core",
-         [
-           Kernel
-         ]},
-        {"Data Types",
-         [
-           Atom,
-           Base,
-           Bitwise,
-           Date,
-           DateTime,
-           Duration,
-           Exception,
-           Float,
-           Function,
-           Integer,
-           Module,
-           NaiveDateTime,
-           Record,
-           Regex,
-           String,
-           Time,
-           Tuple,
-           URI,
-           Version,
-           Version.Requirement
-         ]},
-        {"Collections & Enumerables",
-         [
-           Access,
-           Date.Range,
-           Enum,
-           Keyword,
-           List,
-           Map,
-           MapSet,
-           Range,
-           Stream
-         ]},
-        {"IO & System",
-         [
-           File,
-           File.Stat,
-           File.Stream,
-           IO,
-           IO.ANSI,
-           IO.Stream,
-           OptionParser,
-           Path,
-           Port,
-           StringIO,
-           System
-         ]},
-        {"Calendar",
-         [
-           Calendar,
-           Calendar.ISO,
-           Calendar.TimeZoneDatabase,
-           Calendar.UTCOnlyTimeZoneDatabase
-         ]},
-        {"Processes & Applications",
-         [
-           Agent,
-           Application,
-           Config,
-           Config.Provider,
-           Config.Reader,
-           DynamicSupervisor,
-           GenServer,
-           Node,
-           PartitionSupervisor,
-           Process,
-           Registry,
-           Supervisor,
-           Task,
-           Task.Supervisor
-         ]},
-        {"Protocols",
-         [
-           Collectable,
-           Enumerable,
-           Inspect,
-           Inspect.Algebra,
-           Inspect.Opts,
-           JSON.Encoder,
-           List.Chars,
-           Protocol,
-           String.Chars
-         ]},
-        {"Code & Macros",
-         [
-           Code,
-           Code.Fragment,
-           Kernel.ParallelCompiler,
-           Macro,
-           Macro.Env
-         ]},
-        {"Exceptions",
-         [
-           ArgumentError,
-           ArithmeticError,
-           BadArityError,
-           BadBooleanError,
-           BadFunctionError,
-           BadMapError,
-           CaseClauseError,
-           Code.LoadError,
-           CompileError,
-           CondClauseError,
-           Enum.EmptyError,
-           Enum.OutOfBoundsError,
-           ErlangError,
-           File.CopyError,
-           File.Error,
-           File.LinkError,
-           File.RenameError,
-           FunctionClauseError,
-           IO.StreamError,
-           Inspect.Error,
-           JSON.DecodeError,
-           Kernel.TypespecError,
-           KeyError,
-           MatchError,
-           MismatchedDelimiterError,
-           MissingApplicationsError,
-           OptionParser.ParseError,
-           Protocol.UndefinedError,
-           Regex.CompileError,
-           RuntimeError,
-           SyntaxError,
-           System.EnvError,
-           SystemLimitError,
-           TokenMissingError,
-           TryClauseError,
-           URI.Error,
-           UndefinedFunctionError,
-           UnicodeConversionError,
-           Version.InvalidRequirementError,
-           Version.InvalidVersionError,
-           WithClauseError
-         ]}
-      ]
-
-    true ->
-      @elixir_stdlib_module_groups [
-        {"Core",
-         [
-           Kernel
-         ]},
-        {"Data Types",
-         [
-           Atom,
-           Base,
-           Bitwise,
-           Date,
-           DateTime,
-           Exception,
-           Float,
-           Function,
-           Integer,
-           Module,
-           NaiveDateTime,
-           Record,
-           Regex,
-           String,
-           Time,
-           Tuple,
-           URI,
-           Version,
-           Version.Requirement
-         ]},
-        {"Collections & Enumerables",
-         [
-           Access,
-           Date.Range,
-           Enum,
-           Keyword,
-           List,
-           Map,
-           MapSet,
-           Range,
-           Stream
-         ]},
-        {"IO & System",
-         [
-           File,
-           File.Stat,
-           File.Stream,
-           IO,
-           IO.ANSI,
-           IO.Stream,
-           OptionParser,
-           Path,
-           Port,
-           StringIO,
-           System
-         ]},
-        {"Calendar",
-         [
-           Calendar,
-           Calendar.ISO,
-           Calendar.TimeZoneDatabase,
-           Calendar.UTCOnlyTimeZoneDatabase
-         ]},
-        {"Processes & Applications",
-         [
-           Agent,
-           Application,
-           Config,
-           Config.Provider,
-           Config.Reader,
-           DynamicSupervisor,
-           GenServer,
-           Node,
-           PartitionSupervisor,
-           Process,
-           Registry,
-           Supervisor,
-           Task,
-           Task.Supervisor
-         ]},
-        {"Protocols",
-         [
-           Collectable,
-           Enumerable,
-           Inspect,
-           Inspect.Algebra,
-           Inspect.Opts,
-           JSON.Encoder,
-           List.Chars,
-           Protocol,
-           String.Chars
-         ]},
-        {"Code & Macros",
-         [
-           Code,
-           Code.Fragment,
-           Kernel.ParallelCompiler,
-           Macro,
-           Macro.Env
-         ]},
-        {"Exceptions",
-         [
-           ArgumentError,
-           ArithmeticError,
-           BadArityError,
-           BadBooleanError,
-           BadFunctionError,
-           BadMapError,
-           CaseClauseError,
-           Code.LoadError,
-           CompileError,
-           CondClauseError,
-           Enum.EmptyError,
-           Enum.OutOfBoundsError,
-           ErlangError,
-           File.CopyError,
-           File.Error,
-           File.LinkError,
-           File.RenameError,
-           FunctionClauseError,
-           IO.StreamError,
-           Inspect.Error,
-           JSON.DecodeError,
-           Kernel.TypespecError,
-           KeyError,
-           MatchError,
-           MismatchedDelimiterError,
-           MissingApplicationsError,
-           OptionParser.ParseError,
-           Protocol.UndefinedError,
-           Regex.CompileError,
-           RuntimeError,
-           SyntaxError,
-           System.EnvError,
-           SystemLimitError,
-           TokenMissingError,
-           TryClauseError,
-           URI.Error,
-           UndefinedFunctionError,
-           UnicodeConversionError,
-           Version.InvalidRequirementError,
-           Version.InvalidVersionError,
-           WithClauseError
-         ]}
-      ]
-  end
+  @elixir_stdlib_module_groups [
+    {"Core",
+     [
+       Kernel
+     ]},
+    {"Data Types",
+     [
+       Atom,
+       Base,
+       Bitwise,
+       Date,
+       DateTime,
+       Duration,
+       Exception,
+       Float,
+       Function,
+       Integer,
+       JSON,
+       Module,
+       NaiveDateTime,
+       Record,
+       Regex,
+       String,
+       Time,
+       Tuple,
+       URI,
+       Version,
+       Version.Requirement
+     ]},
+    {"Collections & Enumerables",
+     [
+       Access,
+       Date.Range,
+       Enum,
+       Keyword,
+       List,
+       Map,
+       MapSet,
+       Range,
+       Stream
+     ]},
+    {"IO & System",
+     [
+       File,
+       File.Stat,
+       File.Stream,
+       IO,
+       IO.ANSI,
+       IO.Stream,
+       OptionParser,
+       Path,
+       Port,
+       StringIO,
+       System
+     ]},
+    {"Calendar",
+     [
+       Calendar,
+       Calendar.ISO,
+       Calendar.TimeZoneDatabase,
+       Calendar.UTCOnlyTimeZoneDatabase
+     ]},
+    {"Processes & Applications",
+     [
+       Agent,
+       Application,
+       Config,
+       Config.Provider,
+       Config.Reader,
+       DynamicSupervisor,
+       GenServer,
+       Node,
+       PartitionSupervisor,
+       Process,
+       Registry,
+       Supervisor,
+       Task,
+       Task.Supervisor
+     ]},
+    {"Protocols",
+     [
+       Collectable,
+       Enumerable,
+       Inspect,
+       Inspect.Algebra,
+       Inspect.Opts,
+       List.Chars,
+       Protocol,
+       String.Chars
+     ]},
+    {"Code & Macros",
+     [
+       Code,
+       Code.Fragment,
+       Kernel.ParallelCompiler,
+       Macro,
+       Macro.Env
+     ]},
+    {"Exceptions",
+     [
+       ArgumentError,
+       ArithmeticError,
+       BadArityError,
+       BadBooleanError,
+       BadFunctionError,
+       BadMapError,
+       CaseClauseError,
+       Code.LoadError,
+       CompileError,
+       CondClauseError,
+       Enum.EmptyError,
+       Enum.OutOfBoundsError,
+       ErlangError,
+       File.CopyError,
+       File.Error,
+       File.LinkError,
+       File.RenameError,
+       FunctionClauseError,
+       IO.StreamError,
+       Inspect.Error,
+       JSON.DecodeError,
+       Kernel.TypespecError,
+       KeyError,
+       MatchError,
+       MismatchedDelimiterError,
+       MissingApplicationsError,
+       OptionParser.ParseError,
+       Protocol.UndefinedError,
+       Regex.CompileError,
+       RuntimeError,
+       SyntaxError,
+       System.EnvError,
+       SystemLimitError,
+       TokenMissingError,
+       TryClauseError,
+       URI.Error,
+       UndefinedFunctionError,
+       UnicodeConversionError,
+       Version.InvalidRequirementError,
+       Version.InvalidVersionError,
+       WithClauseError
+     ]}
+  ]
 
   @doc """
   Aggregates information about Elixir standard library functions.
@@ -548,13 +255,13 @@ defmodule Hologram.Framework do
 
     # Build a map of module => group
     module_to_group =
-      @elixir_stdlib_module_groups
+      elixir_stdlib_module_groups()
       |> Enum.flat_map(fn {group, modules} ->
         Enum.map(modules, fn module -> {module, group} end)
       end)
       |> Enum.into(%{})
 
-    @elixir_stdlib_module_groups
+    elixir_stdlib_module_groups()
     |> Enum.flat_map(fn {_group, modules} -> modules end)
     |> Enum.map(fn module ->
       group = module_to_group[module]
@@ -733,7 +440,7 @@ defmodule Hologram.Framework do
       |> CallGraph.get_graph()
 
     # Now query the graph for each documented stdlib function
-    @elixir_stdlib_module_groups
+    elixir_stdlib_module_groups()
     |> Enum.flat_map(fn {_group, modules} -> modules end)
     |> Enum.reduce(%{}, fn module, modules_acc ->
       module_map =
@@ -751,9 +458,17 @@ defmodule Hologram.Framework do
 
   The return value is a list of pairs `{group_name, modules}` where
   `group_name` is a string and `modules` is a list of Elixir module atoms.
+
+  Modules that are not available in the current Elixir version are automatically filtered out.
   """
   @spec elixir_stdlib_module_groups() :: [{String.t(), [module]}]
-  def elixir_stdlib_module_groups, do: @elixir_stdlib_module_groups
+  def elixir_stdlib_module_groups do
+    @elixir_stdlib_module_groups
+    |> Enum.map(fn {group_name, modules} ->
+      available_modules = Enum.filter(modules, &Code.ensure_loaded?/1)
+      {group_name, available_modules}
+    end)
+  end
 
   @doc """
   Aggregates information about Erlang functions used by Elixir stdlib.
