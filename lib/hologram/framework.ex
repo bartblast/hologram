@@ -641,19 +641,15 @@ defmodule Hologram.Framework do
 
   defp calculate_elixir_module_status(module, fun_infos, deferred_modules_set) do
     cond do
-      # All functions are done
-      Enum.all?(fun_infos, fn info -> info.status == :done end) ->
+      Enum.all?(fun_infos, &(&1.status == :done)) ->
         :done
 
-      # Module is explicitly deferred
       MapSet.member?(deferred_modules_set, module) ->
         :deferred
 
-      # Any function is in progress
-      Enum.any?(fun_infos, fn info -> info.status == :in_progress end) ->
+      Enum.any?(fun_infos, &(&1.status in [:done, :in_progress])) ->
         :in_progress
 
-      # Otherwise, it's todo
       true ->
         :todo
     end

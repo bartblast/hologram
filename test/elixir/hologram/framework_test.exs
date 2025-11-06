@@ -400,7 +400,7 @@ defmodule Hologram.FrameworkTest do
       assert result[ArgumentError].group == "Exceptions"
     end
 
-    test "calculates status with precedence: all functions done > deferred module > any function in_progress > todo" do
+    test "calculates status with precedence: done > deferred > in_progress > todo" do
       test_dir =
         Path.join([
           @tmp_dir,
@@ -423,6 +423,11 @@ defmodule Hologram.FrameworkTest do
         "atom_to_binary/1": (atom) => atom.toString(),
         // End atom_to_binary/1
         // Deps: []
+        
+        // Start hd/1
+        "hd/1": (list) => list[0],
+        // End hd/1
+        // Deps: []
       };
       """
 
@@ -434,7 +439,8 @@ defmodule Hologram.FrameworkTest do
       # - Atom: all functions done (all deps ported) -> should be :done (highest priority, even if deferred)
       # - Bitwise: explicitly deferred module -> should be :deferred (2nd priority)
       # - Base: any function in_progress -> should be :in_progress (Base depends on {:erlang, :==, 2})
-      # - Function: default case -> should be :todo
+      # - Kernel: any function done (but not all) -> should be :in_progress (Kernel.hd/1 deps are ported)
+      # - Port: default case -> should be :todo
       result =
         elixir_modules_info(test_dir,
           deferred_elixir_modules: [Atom, Bitwise],
@@ -450,8 +456,11 @@ defmodule Hologram.FrameworkTest do
       # Any function in progress (Base depends on {:erlang, :==, 2})
       assert result[Base].status == :in_progress
 
-      # Default case should be :todo (Function doesn't depend on {:erlang, :==, 2})
-      assert result[Function].status == :todo
+      # Any function done (but not all) - Kernel.hd/1 has all deps done, but Kernel has many other functions
+      assert result[Kernel].status == :in_progress
+
+      # Default case should be :todo (Port doesn't depend on {:erlang, :==, 2}, {:erlang, :atom_to_list, 1}, {:erlang, :atom_to_binary, 1}, or {:erlang, :hd, 1})
+      assert result[Port].status == :todo
     end
 
     test "ensures progress is within 0-100 range" do
