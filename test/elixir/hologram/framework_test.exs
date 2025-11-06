@@ -6,7 +6,7 @@ defmodule Hologram.FrameworkTest do
   @tmp_dir Reflection.tmp_dir()
 
   setup_all do
-    [result: elixir_stdlib_erlang_deps()]
+    [elixir_stdlib_erlang_deps: elixir_stdlib_erlang_deps()]
   end
 
   describe "elixir_funs_info/2" do
@@ -713,7 +713,7 @@ defmodule Hologram.FrameworkTest do
   end
 
   describe "elixir_stdlib_erlang_deps/0" do
-    test "returns expected modules", %{result: result} do
+    test "returns expected modules", %{elixir_stdlib_erlang_deps: result} do
       assert is_map(result)
 
       module_names = Map.keys(result)
@@ -723,7 +723,7 @@ defmodule Hologram.FrameworkTest do
     end
 
     test "has correct two-level nested structure: modules -> functions -> Erlang MFAs",
-         %{result: result} do
+         %{elixir_stdlib_erlang_deps: result} do
       # Level 1: Modules (atom keys)
       assert is_map(result)
       refute Enum.empty?(result)
@@ -759,7 +759,7 @@ defmodule Hologram.FrameworkTest do
       end)
     end
 
-    test "includes all public functions from each module", %{result: result} do
+    test "includes all public functions from each module", %{elixir_stdlib_erlang_deps: result} do
       # Verify for Atom and Base modules
       for module <- [Atom, Base] do
         module_map = Map.get(result, module)
@@ -777,7 +777,7 @@ defmodule Hologram.FrameworkTest do
       end
     end
 
-    test "all dependency MFAs are from Erlang modules only", %{result: result} do
+    test "all dependency MFAs are from Erlang modules only", %{elixir_stdlib_erlang_deps: result} do
       Enum.each(result, fn {_module, module_map} ->
         Enum.each(module_map, fn {_function_key, erlang_mfas} ->
           Enum.each(erlang_mfas, fn {module, _fun, _arity} ->
@@ -798,7 +798,7 @@ defmodule Hologram.FrameworkTest do
       end)
     end
 
-    test "Kernel module has many functions", %{result: result} do
+    test "Kernel module has many functions", %{elixir_stdlib_erlang_deps: result} do
       kernel_module_map = Map.get(result, Kernel)
 
       # Kernel is a large module with many functions
