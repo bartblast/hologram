@@ -926,6 +926,21 @@ defmodule Hologram.ControllerTest do
       assert conn.resp_body == "param_aaa = 111, param_bbb = 222"
     end
 
+    test "decodes URL-encoded query params" do
+      ETS.put(PageDigestRegistryStub.ets_table_name(), Module11, :dummy_module_11_digest)
+
+      # URL encoded: "hello world" -> "hello%20world", "foo/bar" -> "foo%2Fbar"
+      conn =
+        :get
+        |> Plug.Test.conn(
+          "/hologram/page/Hologram.Test.Fixtures.Controller.Module11?param_a=hello%20world&param_b=foo%2Fbar"
+        )
+        |> Plug.Test.init_test_session(%{})
+        |> handle_subsequent_page_request(Module11)
+
+      assert conn.resp_body == "param_a = hello world, param_b = foo/bar"
+    end
+
     test "passes server struct with session to page renderer" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module9, :dummy_module_9_digest)
 
