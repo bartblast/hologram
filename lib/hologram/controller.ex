@@ -95,7 +95,7 @@ defmodule Hologram.Controller do
     |> Enum.zip(url_path_segments)
     |> Enum.reduce([], fn
       {":" <> key, value}, acc ->
-        [{key, value} | acc]
+        [{key, URI.decode(value)} | acc]
 
       _non_param_segment, acc ->
         acc
