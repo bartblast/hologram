@@ -315,7 +315,6 @@ defmodule Hologram.Framework do
            Float,
            Function,
            Integer,
-           JSON,
            Module,
            NaiveDateTime,
            Record,
