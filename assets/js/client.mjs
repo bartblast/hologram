@@ -63,9 +63,11 @@ export default class Client {
       }
 
       const encodedKey = encodeURIComponent(key.value);
+
       const rawValue = Type.isBitstring(value)
         ? Bitstring.toText(value)
         : value.value.toString();
+
       const encodedValue = encodeURIComponent(rawValue);
 
       queryParts.push(`${encodedKey}=${encodedValue}`);
