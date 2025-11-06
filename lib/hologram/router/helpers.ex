@@ -59,7 +59,13 @@ defmodule Hologram.Router.Helpers do
         end
 
         new_params_acc = Keyword.drop(params_acc, [key])
-        new_path_acc = String.replace(path_acc, ":#{key}", to_string(params[key]))
+
+        value =
+          params[key]
+          |> to_string()
+          |> URI.encode(&URI.char_unreserved?/1)
+
+        new_path_acc = String.replace(path_acc, ":#{key}", value)
 
         {new_params_acc, new_path_acc}
       end)
