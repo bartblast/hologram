@@ -1,6 +1,7 @@
 defmodule Hologram.Framework do
   @moduledoc false
 
+  alias Hologram.Commons.PLT
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Reflection
@@ -414,11 +415,33 @@ defmodule Hologram.Framework do
   """
   @spec elixir_stdlib_erlang_deps() :: %{module => %{{fun, arity} => [mfa]}}
   def elixir_stdlib_erlang_deps do
+    # Build IR PLT for all modules, then filter to only :elixir OTP app modules
+    # This includes both documented stdlib modules AND internal implementation modules
+    # that are part of the Elixir stdlib (e.g., String.Break, Enum.EmptyError)
+    ir_plt = Compiler.build_ir_plt()
+
+    stdlib_ir_items =
+      ir_plt
+      |> PLT.get_all()
+      |> Enum.filter(fn {module, _ir} ->
+        case :application.get_application(module) do
+          {:ok, :elixir} -> true
+          _other -> false
+        end
+      end)
+
+    # Build call graph only from :elixir app modules
+    # This ensures we only include edges within stdlib (including internal modules)
+    # and to Erlang modules, without edges from non-stdlib modules
+    stdlib_ir_plt = PLT.start(items: stdlib_ir_items)
+
     graph =
-      Compiler.build_call_graph()
+      stdlib_ir_plt
+      |> Compiler.build_call_graph()
       |> CallGraph.remove_manually_ported_mfas()
       |> CallGraph.get_graph()
 
+    # Now query the graph for each documented stdlib function
     @elixir_stdlib_module_groups
     |> Enum.flat_map(fn {_group, modules} -> modules end)
     |> Enum.reduce(%{}, fn module, modules_acc ->
