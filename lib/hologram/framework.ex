@@ -1,6 +1,7 @@
 defmodule Hologram.Framework do
   @moduledoc false
 
+  alias Hologram.Commons.PLT
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
   alias Hologram.Reflection
@@ -9,7 +10,6 @@ defmodule Hologram.Framework do
     {"Core",
      [
        Kernel
-       #  Kernel.SpecialForms
      ]},
     {"Data Types",
      [
@@ -92,7 +92,6 @@ defmodule Hologram.Framework do
        Inspect,
        Inspect.Algebra,
        Inspect.Opts,
-       JSON.Encoder,
        List.Chars,
        Protocol,
        String.Chars
@@ -186,32 +185,28 @@ defmodule Hologram.Framework do
         deferred: deferred_erlang
       )
 
-    elixir_deps
-    |> Enum.flat_map(fn {module, funs} ->
-      Enum.map(funs, fn {{fun, arity}, erlang_deps} ->
-        elixir_mfa = {module, fun, arity}
+    for {module, funs} <- elixir_deps, {{fun, arity}, erlang_deps} <- funs, into: %{} do
+      elixir_mfa = {module, fun, arity}
 
-        status =
-          calculate_elixir_fun_status(
-            elixir_mfa,
-            erlang_deps,
-            erlang_funs_info,
-            deferred_elixir_set
-          )
+      status =
+        calculate_elixir_fun_status(
+          elixir_mfa,
+          erlang_deps,
+          erlang_funs_info,
+          deferred_elixir_set
+        )
 
-        progress = calculate_elixir_fun_progress(erlang_deps, erlang_funs_info)
+      progress = calculate_elixir_fun_progress(erlang_deps, erlang_funs_info)
 
-        {elixir_mfa,
-         %{
-           status: status,
-           progress: progress,
-           method: elixir_fun_method(elixir_mfa),
-           dependencies: erlang_deps,
-           dependencies_count: length(erlang_deps)
-         }}
-      end)
-    end)
-    |> Enum.into(%{})
+      {elixir_mfa,
+       %{
+         status: status,
+         progress: progress,
+         method: elixir_fun_method(elixir_mfa),
+         dependencies: erlang_deps,
+         dependencies_count: length(erlang_deps)
+       }}
+    end
   end
 
   @doc """
@@ -239,6 +234,7 @@ defmodule Hologram.Framework do
             deferred_fun_count: non_neg_integer()
           }
         }
+  # credo:disable-for-lines:46 Credo.Check.Refactor.ABCSize
   def elixir_modules_info(erlang_js_dir, opts \\ []) do
     deferred_elixir_modules = Keyword.get(opts, :deferred_elixir_modules, [])
     deferred_elixir_funs = Keyword.get(opts, :deferred_elixir_funs, [])
@@ -254,42 +250,22 @@ defmodule Hologram.Framework do
         deferred_erlang: deferred_erlang_funs
       )
 
-    # Build a map of module => group
-    module_to_group =
-      @elixir_stdlib_module_groups
-      |> Enum.flat_map(fn {group, modules} ->
-        Enum.map(modules, fn module -> {module, group} end)
-      end)
-      |> Enum.into(%{})
+    elixir_stdlib_module_groups = elixir_stdlib_module_groups()
 
-    @elixir_stdlib_module_groups
-    |> Enum.flat_map(fn {_group, modules} -> modules end)
-    |> Enum.map(fn module ->
+    module_to_group = map_module_to_group(elixir_stdlib_module_groups)
+
+    for {_group, modules} <- elixir_stdlib_module_groups, module <- modules, into: %{} do
       group = module_to_group[module]
       functions = module.__info__(:functions)
 
       fun_infos =
-        Enum.map(functions, fn {fun, arity} ->
+        for {fun, arity} <- functions do
           elixir_funs_info[{module, fun, arity}]
-        end)
+        end
 
       status = calculate_elixir_module_status(module, fun_infos, deferred_elixir_modules_set)
       progress = calculate_elixir_module_progress(fun_infos)
-
-      fun_counts =
-        Enum.reduce(
-          fun_infos,
-          %{
-            done_fun_count: 0,
-            in_progress_fun_count: 0,
-            todo_fun_count: 0,
-            deferred_fun_count: 0
-          },
-          fn info, acc ->
-            count_key = String.to_existing_atom("#{info.status}_fun_count")
-            Map.update!(acc, count_key, &(&1 + 1))
-          end
-        )
+      fun_counts = aggregate_fun_counts_by_status(fun_infos, & &1.status)
 
       {module,
        %{
@@ -303,8 +279,7 @@ defmodule Hologram.Framework do
          todo_fun_count: fun_counts.todo_fun_count,
          deferred_fun_count: fun_counts.deferred_fun_count
        }}
-    end)
-    |> Enum.into(%{})
+    end
   end
 
   @doc """
@@ -331,65 +306,24 @@ defmodule Hologram.Framework do
           progress: non_neg_integer()
         }
   def elixir_overview_stats(erlang_js_dir, opts \\ []) do
-    elixir_funs_info =
-      elixir_funs_info(erlang_js_dir,
-        deferred_elixir: Keyword.get(opts, :deferred_elixir_funs, []),
-        in_progress_erlang: Keyword.get(opts, :in_progress_erlang_funs, []),
-        deferred_erlang: Keyword.get(opts, :deferred_erlang_funs, [])
-      )
+    fun_infos_opts = map_elixir_overview_stats_opts_to_fun_infos_opts(opts)
+    elixir_funs_info = elixir_funs_info(erlang_js_dir, fun_infos_opts)
 
-    elixir_modules_info =
-      elixir_modules_info(erlang_js_dir,
-        deferred_elixir_modules: Keyword.get(opts, :deferred_elixir_modules, []),
-        deferred_elixir_funs: Keyword.get(opts, :deferred_elixir_funs, []),
-        in_progress_erlang_funs: Keyword.get(opts, :in_progress_erlang_funs, []),
-        deferred_erlang_funs: Keyword.get(opts, :deferred_erlang_funs, [])
-      )
+    elixir_modules_info = elixir_modules_info(erlang_js_dir, opts)
 
-    fun_stats =
-      Enum.reduce(
-        elixir_funs_info,
-        %{done_fun_count: 0, in_progress_fun_count: 0, deferred_fun_count: 0, todo_fun_count: 0},
-        fn {_mfa, %{status: status}}, acc ->
-          count_key = String.to_existing_atom("#{status}_fun_count")
-          Map.update!(acc, count_key, &(&1 + 1))
-        end
-      )
+    status_fetcher = fn {_mfa, %{status: status}} -> status end
+    fun_counts_by_status = aggregate_fun_counts_by_status(elixir_funs_info, status_fetcher)
 
-    module_stats =
-      Enum.reduce(
-        elixir_modules_info,
-        %{
-          done_module_count: 0,
-          in_progress_module_count: 0,
-          deferred_module_count: 0,
-          todo_module_count: 0
-        },
-        fn {_module, %{status: status}}, acc ->
-          count_key = String.to_existing_atom("#{status}_module_count")
-          Map.update!(acc, count_key, &(&1 + 1))
-        end
-      )
+    module_stats = build_elixir_module_stats(elixir_modules_info)
 
     non_deferred_funs =
       Enum.filter(elixir_funs_info, fn {_mfa, info} -> info.status != :deferred end)
 
-    non_deferred_funs_count = length(non_deferred_funs)
+    non_deferred_fun_count = length(non_deferred_funs)
 
-    # Calculate progress as average of non-deferred function progresses      
-    progress =
-      if non_deferred_funs_count > 0 do
-        total_progress =
-          Enum.reduce(non_deferred_funs, 0, fn {_mfa, info}, acc ->
-            acc + info.progress
-          end)
+    progress = calculate_elixir_overall_progress(non_deferred_funs, non_deferred_fun_count)
 
-        round(total_progress / non_deferred_funs_count)
-      else
-        0
-      end
-
-    fun_stats
+    fun_counts_by_status
     |> Map.merge(module_stats)
     |> Map.put(:progress, progress)
   end
@@ -415,18 +349,20 @@ defmodule Hologram.Framework do
   @spec elixir_stdlib_erlang_deps() :: %{module => %{{fun, arity} => [mfa]}}
   def elixir_stdlib_erlang_deps do
     graph =
-      Compiler.build_call_graph()
+      stdlib_ir_plt()
+      |> Compiler.build_call_graph()
       |> CallGraph.remove_manually_ported_mfas()
       |> CallGraph.get_graph()
 
-    @elixir_stdlib_module_groups
+    # Now query the graph for each documented stdlib function
+    elixir_stdlib_module_groups()
     |> Enum.flat_map(fn {_group, modules} -> modules end)
     |> Enum.reduce(%{}, fn module, modules_acc ->
       module_map =
-        Enum.reduce(module.__info__(:functions), %{}, fn {fun, arity}, funs_acc ->
+        for {fun, arity} <- module.__info__(:functions), into: %{} do
           reachable_erlang_mfas = reachable_erlang_mfas(graph, {module, fun, arity})
-          Map.put(funs_acc, {fun, arity}, reachable_erlang_mfas)
-        end)
+          {{fun, arity}, reachable_erlang_mfas}
+        end
 
       Map.put(modules_acc, module, module_map)
     end)
@@ -437,9 +373,16 @@ defmodule Hologram.Framework do
 
   The return value is a list of pairs `{group_name, modules}` where
   `group_name` is a string and `modules` is a list of Elixir module atoms.
+
+  Modules that are not available in the current Elixir version are automatically filtered out.
   """
   @spec elixir_stdlib_module_groups() :: [{String.t(), [module]}]
-  def elixir_stdlib_module_groups, do: @elixir_stdlib_module_groups
+  def elixir_stdlib_module_groups do
+    Enum.map(@elixir_stdlib_module_groups, fn {group_name, modules} ->
+      available_modules = Enum.filter(modules, &Code.ensure_loaded?/1)
+      {group_name, available_modules}
+    end)
+  end
 
   @doc """
   Aggregates information about Erlang functions used by Elixir stdlib.
@@ -463,46 +406,28 @@ defmodule Hologram.Framework do
   def erlang_funs_info(erlang_js_dir, opts \\ []) do
     modules_map = elixir_stdlib_erlang_deps()
 
-    ported_erlang_funs =
+    done_set =
       erlang_js_dir
       |> list_ported_erlang_funs()
       |> MapSet.new()
 
-    in_progress_mfas = Keyword.get(opts, :in_progress, [])
-    deferred_mfas = Keyword.get(opts, :deferred, [])
+    in_progress_set =
+      opts
+      |> Keyword.get(:in_progress, [])
+      |> MapSet.new()
 
-    in_progress_set = MapSet.new(in_progress_mfas)
-    deferred_set = MapSet.new(deferred_mfas)
+    deferred_set =
+      opts
+      |> Keyword.get(:deferred, [])
+      |> MapSet.new()
 
-    # Build a map of erlang_mfa => list of elixir mfas that depend on it
-    dependents_by_erlang_mfa =
-      modules_map
-      |> Enum.flat_map(fn {module, funs} ->
-        Enum.flat_map(funs, fn {{fun, arity}, erlang_mfas} ->
-          Enum.map(erlang_mfas, fn erlang_mfa ->
-            {erlang_mfa, {module, fun, arity}}
-          end)
-        end)
-      end)
-      |> Enum.reduce(%{}, fn {erlang_mfa, elixir_mfa}, acc ->
-        Map.update(acc, erlang_mfa, [elixir_mfa], fn existing ->
-          [elixir_mfa | existing]
-        end)
-      end)
-
-    dependents_by_erlang_mfa
-    |> Enum.map(fn {erlang_mfa, dependents} ->
+    modules_map
+    |> dependents_by_erlang_mfa()
+    |> Enum.map(fn {mfa, dependents} ->
       unique_dependents = Enum.uniq(dependents)
+      status = calculate_erlang_fun_status(mfa, done_set, in_progress_set, deferred_set)
 
-      status =
-        cond do
-          MapSet.member?(ported_erlang_funs, erlang_mfa) -> :done
-          MapSet.member?(in_progress_set, erlang_mfa) -> :in_progress
-          MapSet.member?(deferred_set, erlang_mfa) -> :deferred
-          true -> :todo
-        end
-
-      {erlang_mfa,
+      {mfa,
        %{
          status: status,
          dependents: unique_dependents,
@@ -586,6 +511,34 @@ defmodule Hologram.Framework do
     end)
   end
 
+  defp aggregate_fun_counts_by_status(fun_infos, status_fetcher) do
+    Enum.reduce(
+      fun_infos,
+      %{done_fun_count: 0, in_progress_fun_count: 0, todo_fun_count: 0, deferred_fun_count: 0},
+      fn item, acc ->
+        status = status_fetcher.(item)
+        count_key = String.to_existing_atom("#{status}_fun_count")
+        Map.update!(acc, count_key, &(&1 + 1))
+      end
+    )
+  end
+
+  defp build_elixir_module_stats(module_infos) do
+    Enum.reduce(
+      module_infos,
+      %{
+        done_module_count: 0,
+        in_progress_module_count: 0,
+        deferred_module_count: 0,
+        todo_module_count: 0
+      },
+      fn {_module, %{status: status}}, acc ->
+        count_key = String.to_existing_atom("#{status}_module_count")
+        Map.update!(acc, count_key, &(&1 + 1))
+      end
+    )
+  end
+
   defp calculate_elixir_fun_progress([], _erlang_info), do: 100
 
   defp calculate_elixir_fun_progress(erlang_deps, erlang_info) do
@@ -618,22 +571,62 @@ defmodule Hologram.Framework do
 
   defp calculate_elixir_module_status(module, fun_infos, deferred_modules_set) do
     cond do
-      # All functions are done
-      Enum.all?(fun_infos, fn info -> info.status == :done end) ->
+      Enum.all?(fun_infos, &(&1.status == :done)) ->
         :done
 
-      # Module is explicitly deferred
       MapSet.member?(deferred_modules_set, module) ->
         :deferred
 
-      # Any function is in progress
-      Enum.any?(fun_infos, fn info -> info.status == :in_progress end) ->
+      Enum.any?(fun_infos, &(&1.status in [:done, :in_progress])) ->
         :in_progress
 
-      # Otherwise, it's todo
       true ->
         :todo
     end
+  end
+
+  # Calculate progress as average of non-deferred function progresses
+  defp calculate_elixir_overall_progress(funs, count)
+
+  defp calculate_elixir_overall_progress(funs, count) when count > 0 do
+    total_progress =
+      Enum.reduce(funs, 0, fn {_mfa, info}, acc ->
+        acc + info.progress
+      end)
+
+    round(total_progress / count)
+  end
+
+  defp calculate_elixir_overall_progress(_funs, _count), do: 0
+
+  defp calculate_erlang_fun_status(mfa, done_set, in_progress_set, deferred_set) do
+    cond do
+      MapSet.member?(done_set, mfa) -> :done
+      MapSet.member?(in_progress_set, mfa) -> :in_progress
+      MapSet.member?(deferred_set, mfa) -> :deferred
+      true -> :todo
+    end
+  end
+
+  # Build a map of erlang_mfa => list of elixir mfas that depend on it
+  defp dependents_by_erlang_mfa(modules_map) do
+    for {module, funs} <- modules_map,
+        {{fun, arity}, erlang_mfas} <- funs,
+        erlang_mfa <- erlang_mfas,
+        reduce: %{} do
+      acc ->
+        Map.update(acc, erlang_mfa, [{module, fun, arity}], fn existing ->
+          [{module, fun, arity} | existing]
+        end)
+    end
+  end
+
+  defp map_elixir_overview_stats_opts_to_fun_infos_opts(opts) do
+    [
+      deferred_elixir: Keyword.get(opts, :deferred_elixir_funs, []),
+      in_progress_erlang: Keyword.get(opts, :in_progress_erlang_funs, []),
+      deferred_erlang: Keyword.get(opts, :deferred_erlang_funs, [])
+    ]
   end
 
   defp elixir_fun_method(mfa) do
@@ -658,9 +651,40 @@ defmodule Hologram.Framework do
     |> String.to_existing_atom()
   end
 
+  # Build a map of module => group
+  defp map_module_to_group(module_groups) do
+    module_groups
+    |> Enum.flat_map(fn {group, modules} ->
+      Enum.map(modules, fn module -> {module, group} end)
+    end)
+    |> Enum.into(%{})
+  end
+
   defp reachable_erlang_mfas(graph, mfa) do
     graph
     |> CallGraph.reachable_mfas([mfa])
     |> Enum.filter(fn {module, _fun, _arity} -> Reflection.erlang_module?(module) end)
+  end
+
+  defp stdlib_ir_plt do
+    # Build IR PLT for all modules, then filter to only :elixir OTP app modules
+    # This includes both documented stdlib modules AND internal implementation modules
+    # that are part of the Elixir stdlib (e.g., String.Break, Enum.EmptyError)
+    ir_plt = Compiler.build_ir_plt()
+
+    stdlib_ir_items =
+      ir_plt
+      |> PLT.get_all()
+      |> Enum.filter(fn {module, _ir} ->
+        case :application.get_application(module) do
+          {:ok, :elixir} -> true
+          _other -> false
+        end
+      end)
+
+    # Build call graph only from :elixir app modules
+    # This ensures we only include edges within stdlib (including internal modules)
+    # and to Erlang modules, without edges from non-stdlib modules
+    PLT.start(items: stdlib_ir_items)
   end
 end

@@ -550,7 +550,7 @@ defmodule Hologram.CompilerTest do
           }\
         """)
 
-      assert result == expected
+      assert normalize_newlines(result) == expected
     end
 
     test ":erlang module function that is not implemented" do
@@ -574,7 +574,7 @@ defmodule Hologram.CompilerTest do
           }\
         """)
 
-      assert result == expected
+      assert normalize_newlines(result) == expected
     end
 
     test ":maps module function that is not implemented" do

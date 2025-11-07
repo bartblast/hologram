@@ -6,7 +6,7 @@ defmodule Hologram.FrameworkTest do
   @tmp_dir Reflection.tmp_dir()
 
   setup_all do
-    [result: elixir_stdlib_erlang_deps()]
+    [elixir_stdlib_erlang_deps: elixir_stdlib_erlang_deps()]
   end
 
   describe "elixir_funs_info/2" do
@@ -400,7 +400,7 @@ defmodule Hologram.FrameworkTest do
       assert result[ArgumentError].group == "Exceptions"
     end
 
-    test "calculates status with precedence: all functions done > deferred module > any function in_progress > todo" do
+    test "calculates status with precedence: done > deferred > in_progress > todo" do
       test_dir =
         Path.join([
           @tmp_dir,
@@ -423,6 +423,11 @@ defmodule Hologram.FrameworkTest do
         "atom_to_binary/1": (atom) => atom.toString(),
         // End atom_to_binary/1
         // Deps: []
+        
+        // Start hd/1
+        "hd/1": (list) => list[0],
+        // End hd/1
+        // Deps: []
       };
       """
 
@@ -434,7 +439,8 @@ defmodule Hologram.FrameworkTest do
       # - Atom: all functions done (all deps ported) -> should be :done (highest priority, even if deferred)
       # - Bitwise: explicitly deferred module -> should be :deferred (2nd priority)
       # - Base: any function in_progress -> should be :in_progress (Base depends on {:erlang, :==, 2})
-      # - Function: default case -> should be :todo
+      # - Kernel: any function done (but not all) -> should be :in_progress (Kernel.hd/1 deps are ported)
+      # - Port: default case -> should be :todo
       result =
         elixir_modules_info(test_dir,
           deferred_elixir_modules: [Atom, Bitwise],
@@ -450,8 +456,12 @@ defmodule Hologram.FrameworkTest do
       # Any function in progress (Base depends on {:erlang, :==, 2})
       assert result[Base].status == :in_progress
 
-      # Default case should be :todo (Function doesn't depend on {:erlang, :==, 2})
-      assert result[Function].status == :todo
+      # Any function done (but not all) - Kernel.hd/1 has all deps done, but Kernel has many other functions
+      assert result[Kernel].status == :in_progress
+
+      # Default case should be :todo (Port doesn't depend on
+      # {:erlang, :==, 2}, {:erlang, :atom_to_list, 1}, {:erlang, :atom_to_binary, 1}, or {:erlang, :hd, 1})
+      assert result[Port].status == :todo
     end
 
     test "ensures progress is within 0-100 range" do
@@ -698,13 +708,13 @@ defmodule Hologram.FrameworkTest do
 
       expected_progress = round(total_fun_progress / length(non_deferred_funs))
 
-      # Progress should be average of non-deferred function progresses      
+      # Progress should be average of non-deferred function progresses
       assert result.progress == expected_progress
     end
   end
 
   describe "elixir_stdlib_erlang_deps/0" do
-    test "returns expected modules", %{result: result} do
+    test "returns expected modules", %{elixir_stdlib_erlang_deps: result} do
       assert is_map(result)
 
       module_names = Map.keys(result)
@@ -714,7 +724,7 @@ defmodule Hologram.FrameworkTest do
     end
 
     test "has correct two-level nested structure: modules -> functions -> Erlang MFAs",
-         %{result: result} do
+         %{elixir_stdlib_erlang_deps: result} do
       # Level 1: Modules (atom keys)
       assert is_map(result)
       refute Enum.empty?(result)
@@ -750,7 +760,7 @@ defmodule Hologram.FrameworkTest do
       end)
     end
 
-    test "includes all public functions from each module", %{result: result} do
+    test "includes all public functions from each module", %{elixir_stdlib_erlang_deps: result} do
       # Verify for Atom and Base modules
       for module <- [Atom, Base] do
         module_map = Map.get(result, module)
@@ -768,7 +778,7 @@ defmodule Hologram.FrameworkTest do
       end
     end
 
-    test "all dependency MFAs are from Erlang modules only", %{result: result} do
+    test "all dependency MFAs are from Erlang modules only", %{elixir_stdlib_erlang_deps: result} do
       Enum.each(result, fn {_module, module_map} ->
         Enum.each(module_map, fn {_function_key, erlang_mfas} ->
           Enum.each(erlang_mfas, fn {module, _fun, _arity} ->
@@ -789,7 +799,7 @@ defmodule Hologram.FrameworkTest do
       end)
     end
 
-    test "Kernel module has many functions", %{result: result} do
+    test "Kernel module has many functions", %{elixir_stdlib_erlang_deps: result} do
       kernel_module_map = Map.get(result, Kernel)
 
       # Kernel is a large module with many functions
@@ -816,17 +826,17 @@ defmodule Hologram.FrameworkTest do
 
       core =
         groups
-        |> Enum.find(fn {name, _} -> name == "Core" end)
+        |> Enum.find(fn {name, _modules} -> name == "Core" end)
         |> elem(1)
 
       data_types =
         groups
-        |> Enum.find(fn {name, _} -> name == "Data Types" end)
+        |> Enum.find(fn {name, _modules} -> name == "Data Types" end)
         |> elem(1)
 
       collections =
         groups
-        |> Enum.find(fn {name, _} -> name == "Collections & Enumerables" end)
+        |> Enum.find(fn {name, _modules} -> name == "Collections & Enumerables" end)
         |> elem(1)
 
       assert Kernel in core
@@ -1207,7 +1217,8 @@ defmodule Hologram.FrameworkTest do
 
       # Total should match the number of unique Erlang functions
       erlang_funs_count =
-        erlang_funs_info(test_dir, in_progress: in_progress, deferred: deferred)
+        test_dir
+        |> erlang_funs_info(in_progress: in_progress, deferred: deferred)
         |> Map.keys()
         |> length()
 
