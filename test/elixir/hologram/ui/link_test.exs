@@ -3,6 +3,7 @@ defmodule Hologram.UI.LinkTest do
 
   alias Hologram.Test.Fixtures.UI.Link.Module1
   alias Hologram.Test.Fixtures.UI.Link.Module2
+  alias Hologram.Test.Fixtures.UI.Link.Module3
   alias Hologram.UI.Link
 
   test "with text anchor, no props" do
@@ -33,5 +34,15 @@ defmodule Hologram.UI.LinkTest do
   test "with style prop" do
     assert render_markup(~HOLO'<Link to={Module1} style="my_style">my anchor text</Link>') ==
              ~s'<a href="/hologram-test-fixtures-ui-link-module1" style="my_style">my anchor text</a>'
+  end
+
+  test "with special chars in href" do
+    markup =
+      ~HOLO'<Link to={Module3, a: "hello world", b: "foo/bar"} style="my_style">my anchor text</Link>'
+
+    expected =
+      ~s'<a href="/hologram-test-fixtures-ui-link-module3/hello%20world/foo%2Fbar" style="my_style">my anchor text</a>'
+
+    assert render_markup(markup) == expected
   end
 end
