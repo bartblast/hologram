@@ -459,7 +459,8 @@ defmodule Hologram.FrameworkTest do
       # Any function done (but not all) - Kernel.hd/1 has all deps done, but Kernel has many other functions
       assert result[Kernel].status == :in_progress
 
-      # Default case should be :todo (Port doesn't depend on {:erlang, :==, 2}, {:erlang, :atom_to_list, 1}, {:erlang, :atom_to_binary, 1}, or {:erlang, :hd, 1})
+      # Default case should be :todo (Port doesn't depend on
+      # {:erlang, :==, 2}, {:erlang, :atom_to_list, 1}, {:erlang, :atom_to_binary, 1}, or {:erlang, :hd, 1})
       assert result[Port].status == :todo
     end
 
@@ -707,7 +708,7 @@ defmodule Hologram.FrameworkTest do
 
       expected_progress = round(total_fun_progress / length(non_deferred_funs))
 
-      # Progress should be average of non-deferred function progresses      
+      # Progress should be average of non-deferred function progresses
       assert result.progress == expected_progress
     end
   end
@@ -825,17 +826,17 @@ defmodule Hologram.FrameworkTest do
 
       core =
         groups
-        |> Enum.find(fn {name, _} -> name == "Core" end)
+        |> Enum.find(fn {name, _modules} -> name == "Core" end)
         |> elem(1)
 
       data_types =
         groups
-        |> Enum.find(fn {name, _} -> name == "Data Types" end)
+        |> Enum.find(fn {name, _modules} -> name == "Data Types" end)
         |> elem(1)
 
       collections =
         groups
-        |> Enum.find(fn {name, _} -> name == "Collections & Enumerables" end)
+        |> Enum.find(fn {name, _modules} -> name == "Collections & Enumerables" end)
         |> elem(1)
 
       assert Kernel in core
@@ -1216,7 +1217,8 @@ defmodule Hologram.FrameworkTest do
 
       # Total should match the number of unique Erlang functions
       erlang_funs_count =
-        erlang_funs_info(test_dir, in_progress: in_progress, deferred: deferred)
+        test_dir
+        |> erlang_funs_info(in_progress: in_progress, deferred: deferred)
         |> Map.keys()
         |> length()
 
