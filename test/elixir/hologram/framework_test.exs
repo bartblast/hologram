@@ -661,13 +661,13 @@ defmodule Hologram.FrameworkTest do
       refute {:__using__, 1} in result[Agent].functions,
              "Expected Agent.__using__/1 to be filtered out from functions list"
 
-      # Verify that Inspect.__deriving__/2 is filtered out from the functions list
-      refute {:__deriving__, 2} in result[Inspect].functions,
-             "Expected Inspect.__deriving__/2 to be filtered out from functions list"
-
       # Verify that GenServer.__before_compile__/1 is filtered out from the functions list
       refute {:__before_compile__, 1} in result[GenServer].functions,
              "Expected GenServer.__before_compile__/1 to be filtered out from functions list"
+
+      # Verify that Inspect.__deriving__/2 is filtered out from the functions list
+      refute {:__deriving__, 2} in result[Inspect].functions,
+             "Expected Inspect.__deriving__/2 to be filtered out from functions list"
 
       # Verify that no functions or macros starting with "__" are in any module's function list
       for {module, info} <- result do
@@ -981,13 +981,13 @@ defmodule Hologram.FrameworkTest do
       refute Map.has_key?(result[Agent], {:__using__, 1}),
              "Expected Agent.__using__/1 to be filtered out"
 
-      # Verify that Inspect.__deriving__/2 is filtered out
-      refute Map.has_key?(result[Inspect], {:__deriving__, 2}),
-             "Expected Inspect.__deriving__/2 to be filtered out"
-
       # Verify that GenServer.__before_compile__/1 is filtered out
       refute Map.has_key?(result[GenServer], {:__before_compile__, 1}),
              "Expected GenServer.__before_compile__/1 to be filtered out"
+
+      # Verify that Inspect.__deriving__/2 is filtered out
+      refute Map.has_key?(result[Inspect], {:__deriving__, 2}),
+             "Expected Inspect.__deriving__/2 to be filtered out"
 
       # Verify that no functions or macros starting with "__" are in any module's function map
       for {module, module_map} <- result do
