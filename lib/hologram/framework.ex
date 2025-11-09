@@ -151,7 +151,7 @@ defmodule Hologram.Framework do
   ]
 
   @doc """
-  Aggregates information about Elixir standard library functions.
+  Aggregates information about Elixir standard library functions and macros.
 
   ## Parameters
 
@@ -212,6 +212,8 @@ defmodule Hologram.Framework do
   @doc """
   Aggregates information about Elixir standard library modules.
 
+  Includes both functions and macros for each module.
+
   ## Parameters
 
   - `erlang_js_dir` - Path to the directory containing manually ported Erlang functions
@@ -256,10 +258,10 @@ defmodule Hologram.Framework do
 
     for {_group, modules} <- elixir_stdlib_module_groups, module <- modules, into: %{} do
       group = module_to_group[module]
-      functions = module.__info__(:functions)
+      funs_and_macros = module.__info__(:functions) ++ module.__info__(:macros)
 
       module_funs_info =
-        for {fun, arity} <- functions do
+        for {fun, arity} <- funs_and_macros do
           elixir_funs_info[{module, fun, arity}]
         end
 
@@ -274,8 +276,8 @@ defmodule Hologram.Framework do
          group: group,
          status: status,
          progress: progress,
-         functions: functions,
-         all_fun_count: length(functions),
+         functions: funs_and_macros,
+         all_fun_count: length(funs_and_macros),
          done_fun_count: fun_counts.done_fun_count,
          in_progress_fun_count: fun_counts.in_progress_fun_count,
          todo_fun_count: fun_counts.todo_fun_count,
@@ -327,13 +329,14 @@ defmodule Hologram.Framework do
   Returns Erlang dependencies for Elixir standard library modules.
 
   Analyzes the call graph of selected Elixir standard library modules and identifies
-  which Erlang functions they depend on. Manually ported functions are excluded.
+  which Erlang functions they depend on. Includes both functions and macros. 
+  Manually ported functions are excluded.
 
   ## Return Structure
 
   Returns a two-level nested map:
-  - **Level 1**: Module (atom) -> functions in that module  
-  - **Level 2**: Function key `{name, arity}` -> list of reachable Erlang MFAs
+  - **Level 1**: Module (atom) -> functions and macros in that module  
+  - **Level 2**: Function/macro key `{name, arity}` -> list of reachable Erlang MFAs
 
   ## Example
 
@@ -353,8 +356,10 @@ defmodule Hologram.Framework do
     elixir_stdlib_module_groups()
     |> Enum.flat_map(fn {_group, modules} -> modules end)
     |> Enum.reduce(%{}, fn module, modules_acc ->
+      funs_and_macros = module.__info__(:functions) ++ module.__info__(:macros)
+
       module_map =
-        for {fun, arity} <- module.__info__(:functions), into: %{} do
+        for {fun, arity} <- funs_and_macros, into: %{} do
           reachable_erlang_mfas = reachable_erlang_mfas(graph, {module, fun, arity})
           {{fun, arity}, reachable_erlang_mfas}
         end

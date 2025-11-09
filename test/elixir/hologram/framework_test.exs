@@ -245,7 +245,7 @@ defmodule Hologram.FrameworkTest do
       assert kernel_elem.dependencies_count == 2
     end
 
-    test "includes all Elixir stdlib functions", %{opts: opts} do
+    test "includes all Elixir stdlib functions and macros", %{opts: opts} do
       test_dir =
         Path.join([
           @tmp_dir,
@@ -268,6 +268,12 @@ defmodule Hologram.FrameworkTest do
       assert Map.has_key?(result, {Kernel, :+, 2})
       assert Map.has_key?(result, {Atom, :to_string, 1})
       assert Map.has_key?(result, {String, :length, 1})
+
+      # Verify some known macros are present
+      assert Map.has_key?(result, {Kernel, :def, 2})
+      assert Map.has_key?(result, {Kernel, :if, 2})
+      assert Map.has_key?(result, {Integer, :is_even, 1})
+      assert Map.has_key?(result, {Record, :is_record, 1})
     end
 
     test "correctly identifies manual vs auto porting method", %{opts: opts} do
@@ -549,7 +555,9 @@ defmodule Hologram.FrameworkTest do
       assert Map.has_key?(result, String)
     end
 
-    test "functions list matches module.__info__(:functions)", %{opts: opts} do
+    test "functions list matches module.__info__(:functions) ++ module.__info__(:macros)", %{
+      opts: opts
+    } do
       test_dir =
         Path.join([
           @tmp_dir,
@@ -571,12 +579,14 @@ defmodule Hologram.FrameworkTest do
 
       for module <- modules_to_check do
         expected_functions = module.__info__(:functions)
+        expected_macros = module.__info__(:macros)
+        expected_all = expected_functions ++ expected_macros
         actual_functions = result[module].functions
 
-        assert Enum.sort(actual_functions) == Enum.sort(expected_functions),
-               "Expected functions for #{module} to match __info__(:functions)"
+        assert Enum.sort(actual_functions) == Enum.sort(expected_all),
+               "Expected functions for #{module} to match __info__(:functions) ++ __info__(:macros)"
 
-        assert result[module].all_fun_count == length(expected_functions)
+        assert result[module].all_fun_count == length(expected_all)
       end
     end
   end
@@ -802,17 +812,21 @@ defmodule Hologram.FrameworkTest do
       end)
     end
 
-    test "includes all public functions from each module", %{elixir_stdlib_erlang_deps: result} do
+    test "includes all public functions and macros from each module", %{
+      elixir_stdlib_erlang_deps: result
+    } do
       # Verify for Atom and Base modules
       for module <- [Atom, Base] do
         module_map = Map.get(result, module)
         expected_functions = module.__info__(:functions)
+        expected_macros = module.__info__(:macros)
+        expected_all = expected_functions ++ expected_macros
 
-        assert Enum.count(expected_functions) > 0
+        assert Enum.count(expected_all) > 0
 
-        Enum.each(expected_functions, fn {fun, arity} ->
+        Enum.each(expected_all, fn {fun, arity} ->
           assert Map.has_key?(module_map, {fun, arity}),
-                 "Expected function #{fun}/#{arity} to be present in #{module} module map"
+                 "Expected function/macro #{fun}/#{arity} to be present in #{module} module map"
 
           erlang_mfas = Map.get(module_map, {fun, arity})
           assert is_list(erlang_mfas)
@@ -841,11 +855,11 @@ defmodule Hologram.FrameworkTest do
       end)
     end
 
-    test "Kernel module has many functions", %{elixir_stdlib_erlang_deps: result} do
+    test "Kernel module has many functions and macros", %{elixir_stdlib_erlang_deps: result} do
       kernel_module_map = Map.get(result, Kernel)
 
-      # Kernel is a large module with many functions
-      assert Enum.count(kernel_module_map) > 50
+      # Kernel is a large module with many functions and macros
+      assert Enum.count(kernel_module_map) > 100
     end
   end
 
