@@ -71,12 +71,12 @@ defmodule Hologram.Router.HelpersTest do
 
     test "URL encodes string '..' param value" do
       assert page_path(Module3, x: "..", y: "abc") ==
-               "/hologram-test-fixtures-router-helpers-module3/%2F%2F/abc"
+               "/hologram-test-fixtures-router-helpers-module3/%2E%2E/abc"
     end
 
     test "URL encodes string '.' param value" do
       assert page_path(Module3, x: ".", y: "abc") ==
-               "/hologram-test-fixtures-router-helpers-module3/%2F/abc"
+               "/hologram-test-fixtures-router-helpers-module3/%2E/abc"
     end
 
     test "URL encodes atom params" do
@@ -91,12 +91,12 @@ defmodule Hologram.Router.HelpersTest do
 
     test "URL encodes atom :.. param value" do
       assert page_path(Module4, x: :.., y: :abc) ==
-               "/hologram-test-fixtures-router-helpers-module4/%2F%2F/abc"
+               "/hologram-test-fixtures-router-helpers-module4/%2E%2E/abc"
     end
 
     test "URL encodes atom :. param value" do
       assert page_path(Module4, x: :., y: :abc) ==
-               "/hologram-test-fixtures-router-helpers-module4/%2F/abc"
+               "/hologram-test-fixtures-router-helpers-module4/%2E/abc"
     end
 
     test "missing single param" do
