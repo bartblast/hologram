@@ -797,7 +797,7 @@ defmodule Hologram.FrameworkTest do
     end
   end
 
-  describe "elixir_stdlib_erlang_deps/0" do
+  describe "elixir_stdlib_erlang_deps/1" do
     test "returns expected modules", %{elixir_stdlib_erlang_deps: result} do
       assert is_map(result)
 
@@ -916,6 +916,20 @@ defmodule Hologram.FrameworkTest do
       integer_is_even_deps = result[Integer][{:is_even, 1}]
       refute {:erlang, :andalso, 2} in integer_is_even_deps
       refute {:erlang, :error, 1} in integer_is_even_deps
+    end
+
+    test "filters out functions/macros starting with '__'", %{elixir_stdlib_erlang_deps: result} do
+      # Verify that Agent.__using__/1 is filtered out
+      refute Map.has_key?(result[Agent], {:__using__, 1}),
+             "Expected Agent.__using__/1 to be filtered out"
+
+      # Verify that Inspect.__deriving__/2 is filtered out
+      refute Map.has_key?(result[Inspect], {:__deriving__, 2}),
+             "Expected Inspect.__deriving__/2 to be filtered out"
+
+      # Verify that GenServer.__before_compile__/1 is filtered out
+      refute Map.has_key?(result[GenServer], {:__before_compile__, 1}),
+             "Expected GenServer.__before_compile__/1 to be filtered out"
     end
   end
 

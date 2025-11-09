@@ -380,7 +380,15 @@ defmodule Hologram.Framework do
     elixir_stdlib_module_groups()
     |> Enum.flat_map(fn {_group, modules} -> modules end)
     |> Enum.reduce(%{}, fn module, modules_acc ->
-      funs_and_macros = module.__info__(:functions) ++ module.__info__(:macros)
+      funs_and_macros =
+        :functions
+        |> module.__info__()
+        |> Enum.concat(module.__info__(:macros))
+        |> Enum.reject(fn {fun, _arity} ->
+          fun
+          |> to_string()
+          |> String.starts_with?("__")
+        end)
 
       module_map =
         for {fun, arity} <- funs_and_macros, into: %{} do
