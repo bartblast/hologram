@@ -572,9 +572,8 @@ defmodule Hologram.FrameworkTest do
       assert Map.has_key?(result, String)
     end
 
-    test "functions list matches module.__info__(:functions) ++ module.__info__(:macros)", %{
-      opts: opts
-    } do
+    test "functions list matches module.__info__(:functions) ++ module.__info__(:macros) with internal functions filtered out",
+         %{opts: opts} do
       test_dir =
         Path.join([
           @tmp_dir,
@@ -597,11 +596,20 @@ defmodule Hologram.FrameworkTest do
       for module <- modules_to_check do
         expected_functions = module.__info__(:functions)
         expected_macros = module.__info__(:macros)
-        expected_all = expected_functions ++ expected_macros
+
+        # Filter out internal functions/macros (those starting with "__")
+        expected_all =
+          (expected_functions ++ expected_macros)
+          |> Enum.reject(fn {fun, _arity} ->
+            fun
+            |> to_string()
+            |> String.starts_with?("__")
+          end)
+
         actual_functions = result[module].functions
 
         assert Enum.sort(actual_functions) == Enum.sort(expected_all),
-               "Expected functions for #{module} to match __info__(:functions) ++ __info__(:macros)"
+               "Expected functions for #{module} to match filtered __info__(:functions) ++ __info__(:macros)"
 
         assert result[module].all_fun_count == length(expected_all)
       end
@@ -628,6 +636,45 @@ defmodule Hologram.FrameworkTest do
       for {module, info} <- result do
         assert info.functions == Enum.sort(info.functions),
                "Expected functions for #{module} to be sorted"
+      end
+    end
+
+    test "filters out internal functions/macros (starting with '__')", %{opts: opts} do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "elixir_modules_info_2",
+          "filter_internal"
+        ])
+
+      clean_dir(test_dir)
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!("const Erlang = {};")
+
+      result = elixir_modules_info(test_dir, opts)
+
+      # Verify that Agent.__using__/1 is filtered out from the functions list
+      refute {:__using__, 1} in result[Agent].functions,
+             "Expected Agent.__using__/1 to be filtered out from functions list"
+
+      # Verify that Inspect.__deriving__/2 is filtered out from the functions list
+      refute {:__deriving__, 2} in result[Inspect].functions,
+             "Expected Inspect.__deriving__/2 to be filtered out from functions list"
+
+      # Verify that GenServer.__before_compile__/1 is filtered out from the functions list
+      refute {:__before_compile__, 1} in result[GenServer].functions,
+             "Expected GenServer.__before_compile__/1 to be filtered out from functions list"
+
+      # Verify that no functions or macros starting with "__" are in any module's function list
+      for {module, info} <- result do
+        for {fun, _arity} <- info.functions do
+          refute String.starts_with?(to_string(fun), "__"),
+                 "Expected #{module}.#{fun} not to start with '__'"
+        end
       end
     end
   end
@@ -819,7 +866,7 @@ defmodule Hologram.FrameworkTest do
         # Level 2: Functions ({name, arity} tuple keys)
         assert is_map(module_map)
 
-        if module != Calendar.TimeZoneDatabase do
+        if module not in [Calendar.TimeZoneDatabase, Date.Range, File.Stream, IO.Stream] do
           refute Enum.empty?(module_map)
         end
 
@@ -844,15 +891,24 @@ defmodule Hologram.FrameworkTest do
       end)
     end
 
-    test "includes all public functions and macros from each module", %{
-      elixir_stdlib_erlang_deps: result
-    } do
+    test "includes all public functions and macros from each module (excluding internal functions starting with '__')",
+         %{
+           elixir_stdlib_erlang_deps: result
+         } do
       # Verify for Atom and Base modules
       for module <- [Atom, Base] do
         module_map = Map.get(result, module)
         expected_functions = module.__info__(:functions)
         expected_macros = module.__info__(:macros)
-        expected_all = expected_functions ++ expected_macros
+
+        # Filter out internal functions/macros (those starting with "__")
+        expected_all =
+          (expected_functions ++ expected_macros)
+          |> Enum.reject(fn {fun, _arity} ->
+            fun
+            |> to_string()
+            |> String.starts_with?("__")
+          end)
 
         assert Enum.count(expected_all) > 0
 

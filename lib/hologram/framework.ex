@@ -270,6 +270,7 @@ defmodule Hologram.Framework do
         :functions
         |> module.__info__()
         |> Enum.concat(module.__info__(:macros))
+        |> filter_out_internal()
         |> Enum.sort()
 
       module_funs_info =
@@ -384,11 +385,7 @@ defmodule Hologram.Framework do
         :functions
         |> module.__info__()
         |> Enum.concat(module.__info__(:macros))
-        |> Enum.reject(fn {fun, _arity} ->
-          fun
-          |> to_string()
-          |> String.starts_with?("__")
-        end)
+        |> filter_out_internal()
 
       module_map =
         for {fun, arity} <- funs_and_macros, into: %{} do
@@ -683,6 +680,14 @@ defmodule Hologram.Framework do
     filename
     |> Path.basename(".mjs")
     |> String.to_existing_atom()
+  end
+
+  defp filter_out_internal(funs_and_macros) do
+    Enum.reject(funs_and_macros, fn {fun, _arity} ->
+      fun
+      |> to_string()
+      |> String.starts_with?("__")
+    end)
   end
 
   # Build a map of module => group
