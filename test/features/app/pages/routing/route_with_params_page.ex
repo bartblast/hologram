@@ -17,6 +17,7 @@ defmodule HologramFeatureTests.Routing.RouteWithParamsPage do
 
   def template do
     ~HOLO"""
+    <h1>Route With Params Page</h1>
     <p>
       Page module: <strong id="page_module"><code>{inspect(@module)}</code></strong>
     </p>       

@@ -62,9 +62,15 @@ export default class Client {
         );
       }
 
-      queryParts.push(
-        `${key.value}=${Type.isBitstring(value) ? Bitstring.toText(value) : value.value.toString()}`,
-      );
+      const encodedKey = encodeURIComponent(key.value);
+
+      const rawValue = Type.isBitstring(value)
+        ? Bitstring.toText(value)
+        : value.value.toString();
+
+      const encodedValue = encodeURIComponent(rawValue);
+
+      queryParts.push(`${encodedKey}=${encodedValue}`);
     });
 
     return queryParts.length > 0 ? `?${queryParts.join("&")}` : "";

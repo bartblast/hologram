@@ -52,25 +52,42 @@ defmodule Hologram.Router.Helpers do
     initial_acc = {params, page_module.__route__()}
 
     {remaining_params, path} =
-      Enum.reduce(required_params, initial_acc, fn {key, _type, _opts}, {params_acc, path_acc} ->
-        if !Keyword.has_key?(params_acc, key) do
-          raise ArgumentError,
-                ~s'page "#{Reflection.module_name(page_module)}" expects "#{key}" param'
-        end
+      Enum.reduce(required_params, initial_acc, &process_param(&1, &2, page_module, params))
 
-        new_params_acc = Keyword.drop(params_acc, [key])
-        new_path_acc = String.replace(path_acc, ":#{key}", to_string(params[key]))
-
-        {new_params_acc, new_path_acc}
-      end)
-
-    if remaining_params != [] do
-      {key, _value} = hd(remaining_params)
-
-      raise ArgumentError,
-            ~s/page "#{Reflection.module_name(page_module)}" doesn't expect "#{key}" param/
-    end
+    ensure_no_extra_params!(remaining_params, page_module)
 
     path
+  end
+
+  defp encode_param_value(value) do
+    value
+    |> to_string()
+    |> URI.encode(&URI.char_unreserved?/1)
+  end
+
+  defp ensure_no_extra_params!([], _page_module), do: :ok
+
+  defp ensure_no_extra_params!(remaining_params, page_module) do
+    {key, _value} = hd(remaining_params)
+
+    raise ArgumentError,
+          ~s/page "#{Reflection.module_name(page_module)}" doesn't expect "#{key}" param/
+  end
+
+  defp ensure_param_exists!(params, key, page_module) do
+    if not Keyword.has_key?(params, key) do
+      raise ArgumentError,
+            ~s'page "#{Reflection.module_name(page_module)}" expects "#{key}" param'
+    end
+  end
+
+  defp process_param({key, _type, _opts}, {params_acc, path_acc}, page_module, original_params) do
+    ensure_param_exists!(params_acc, key, page_module)
+
+    encoded_value = encode_param_value(original_params[key])
+    new_path = String.replace(path_acc, ":#{key}", encoded_value)
+    new_params = Keyword.drop(params_acc, [key])
+
+    {new_params, new_path}
   end
 end

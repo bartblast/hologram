@@ -5,6 +5,8 @@ defmodule HologramFeatureTests.NavigationTest do
   alias HologramFeatureTests.Navigation.Page2
   alias HologramFeatureTests.Navigation.Page3
   alias HologramFeatureTests.Navigation.Page4
+  alias HologramFeatureTests.Navigation.Page5
+  alias HologramFeatureTests.Routing.RouteWithPercentEncodedParamsPage
 
   describe "link component" do
     feature "without params", %{session: session} do
@@ -26,6 +28,16 @@ defmodule HologramFeatureTests.NavigationTest do
       |> assert_text(~s'%{i: 123, s: "abc"}')
       |> click(button("Put page 3 result"))
       |> assert_text("Page 3 result")
+    end
+
+    feature "with percent-encoded params", %{session: session} do
+      session
+      |> visit(Page5)
+      |> click(link("Link with percent-encoded params"))
+      |> assert_page(RouteWithPercentEncodedParamsPage, a: "hello world", b: "foo/bar")
+      |> assert_text("Route With Percent Encoded Params Page")
+      |> assert_text(css("#param_a"), ~s'"hello world"')
+      |> assert_text(css("#param_b"), ~s'"foo/bar"')
     end
   end
 

@@ -57,6 +57,11 @@ defmodule Hologram.Router.HelpersTest do
                "/hologram-test-fixtures-router-helpers-module2/abc/123"
     end
 
+    test "URL encodes params" do
+      assert page_path(Module2, param_1: "hello world", param_2: "foo/bar") ==
+               "/hologram-test-fixtures-router-helpers-module2/hello%20world/foo%2Fbar"
+    end
+
     test "missing single param" do
       assert_raise ArgumentError,
                    ~s'page "Hologram.Test.Fixtures.Router.Helpers.Module2" expects "param_1" param',
