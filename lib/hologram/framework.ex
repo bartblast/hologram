@@ -9,7 +9,8 @@ defmodule Hologram.Framework do
   @elixir_stdlib_module_groups [
     {"Core",
      [
-       Kernel
+       Kernel,
+       Kernel.SpecialForms
      ]},
     {"Data Types",
      [
