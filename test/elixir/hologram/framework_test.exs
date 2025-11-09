@@ -606,6 +606,30 @@ defmodule Hologram.FrameworkTest do
         assert result[module].all_fun_count == length(expected_all)
       end
     end
+
+    test "functions list is sorted", %{opts: opts} do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "elixir_modules_info_2",
+          "functions_sorted"
+        ])
+
+      clean_dir(test_dir)
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!("const Erlang = {};")
+
+      result = elixir_modules_info(test_dir, opts)
+
+      for {module, info} <- result do
+        assert info.functions == Enum.sort(info.functions),
+               "Expected functions for #{module} to be sorted"
+      end
+    end
   end
 
   describe "elixir_overview_stats/2" do

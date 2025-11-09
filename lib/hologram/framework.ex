@@ -264,7 +264,12 @@ defmodule Hologram.Framework do
 
     for {_group, modules} <- elixir_stdlib_module_groups, module <- modules, into: %{} do
       group = module_to_group[module]
-      funs_and_macros = module.__info__(:functions) ++ module.__info__(:macros)
+
+      funs_and_macros =
+        :functions
+        |> module.__info__()
+        |> Enum.concat(module.__info__(:macros))
+        |> Enum.sort()
 
       module_funs_info =
         for {fun, arity} <- funs_and_macros do
