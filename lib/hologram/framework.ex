@@ -160,6 +160,7 @@ defmodule Hologram.Framework do
     - `:deferred_elixir_funs` - List of Elixir MFA tuples that are deferred
     - `:in_progress_erlang_funs` - List of Erlang MFA tuples currently being ported
     - `:deferred_erlang_funs` - List of Erlang MFA tuples that are deferred
+    - `:macro_deps` - Macro dependencies
   """
   @spec elixir_funs_info(Path.t(), keyword()) :: %{
           mfa => %{
@@ -174,15 +175,17 @@ defmodule Hologram.Framework do
     deferred_elixir_funs = Keyword.fetch!(opts, :deferred_elixir_funs)
     in_progress_erlang_funs = Keyword.fetch!(opts, :in_progress_erlang_funs)
     deferred_erlang_funs = Keyword.fetch!(opts, :deferred_erlang_funs)
+    macro_deps = Keyword.fetch!(opts, :macro_deps)
 
     deferred_elixir_funs_set = MapSet.new(deferred_elixir_funs)
 
-    elixir_deps = elixir_stdlib_erlang_deps()
+    elixir_deps = elixir_stdlib_erlang_deps(macro_deps)
 
     erlang_funs_info =
       erlang_funs_info(erlang_js_dir,
         in_progress_erlang_funs: in_progress_erlang_funs,
-        deferred_erlang_funs: deferred_erlang_funs
+        deferred_erlang_funs: deferred_erlang_funs,
+        macro_deps: macro_deps
       )
 
     for {module, funs} <- elixir_deps, {{fun, arity}, erlang_deps} <- funs, into: %{} do
@@ -221,7 +224,8 @@ defmodule Hologram.Framework do
     - `:deferred_elixir_modules` - List of Elixir modules that are deferred
     - `:deferred_elixir_funs` - List of Elixir MFA tuples that are deferred
     - `:in_progress_erlang_funs` - List of Erlang MFA tuples currently being worked on
-    - `:deferred_erlang_funs` - List of Erlang MFA tuples that are deferred   
+    - `:deferred_erlang_funs` - List of Erlang MFA tuples that are deferred
+    - `:macro_deps` - Macro dependencies
   """
   @spec elixir_modules_info(Path.t(), keyword()) :: %{
           module => %{
@@ -242,6 +246,7 @@ defmodule Hologram.Framework do
     deferred_elixir_funs = Keyword.fetch!(opts, :deferred_elixir_funs)
     in_progress_erlang_funs = Keyword.fetch!(opts, :in_progress_erlang_funs)
     deferred_erlang_funs = Keyword.fetch!(opts, :deferred_erlang_funs)
+    macro_deps = Keyword.fetch!(opts, :macro_deps)
 
     deferred_elixir_modules_set = MapSet.new(deferred_elixir_modules)
 
@@ -249,7 +254,8 @@ defmodule Hologram.Framework do
       elixir_funs_info(erlang_js_dir,
         deferred_elixir_funs: deferred_elixir_funs,
         in_progress_erlang_funs: in_progress_erlang_funs,
-        deferred_erlang_funs: deferred_erlang_funs
+        deferred_erlang_funs: deferred_erlang_funs,
+        macro_deps: macro_deps
       )
 
     elixir_stdlib_module_groups = elixir_stdlib_module_groups()
@@ -297,6 +303,7 @@ defmodule Hologram.Framework do
     - `:deferred_elixir_funs` - List of Elixir MFA tuples that are deferred
     - `:in_progress_erlang_funs` - List of Erlang MFA tuples currently being ported
     - `:deferred_erlang_funs` - List of Erlang MFA tuples that are deferred
+    - `:macro_deps` - Macro dependencies
   """
   @spec elixir_overview_stats(Path.t(), keyword()) :: %{
           done_fun_count: non_neg_integer(),
@@ -332,6 +339,11 @@ defmodule Hologram.Framework do
   which Erlang functions they depend on. Includes both functions and macros. 
   Manually ported functions are excluded.
 
+  ## Parameters
+
+  - `macro_deps` - Map of macro dependencies where keys are MFA tuples and values are lists of MFA tuples they depend on.
+    Edges from the key to each value in the list will be injected into the call graph.
+
   ## Return Structure
 
   Returns a two-level nested map:
@@ -340,16 +352,23 @@ defmodule Hologram.Framework do
 
   ## Example
 
-      iex> deps = elixir_stdlib_erlang_deps()
+      iex> deps = elixir_stdlib_erlang_deps(%{{Kernel, :!, 1} => [{Kernel, :in, 2}]})
       iex> deps[Kernel][{:hd, 1}]
       [{:erlang, :hd, 1}]
   """
-  @spec elixir_stdlib_erlang_deps() :: %{module => %{{fun, arity} => [mfa]}}
-  def elixir_stdlib_erlang_deps do
+  @spec elixir_stdlib_erlang_deps(%{mfa => [mfa]}) :: %{module => %{{fun, arity} => [mfa]}}
+  def elixir_stdlib_erlang_deps(macro_deps) do
+    # Convert macro_deps map to list of edges
+    macro_edges =
+      for {from_mfa, to_mfas} <- macro_deps, to_mfa <- to_mfas do
+        {from_mfa, to_mfa}
+      end
+
     graph =
       stdlib_ir_plt()
       |> Compiler.build_call_graph()
       |> CallGraph.remove_manually_ported_mfas()
+      |> CallGraph.add_edges(macro_edges)
       |> CallGraph.get_graph()
 
     # Now query the graph for each documented stdlib function
@@ -393,6 +412,7 @@ defmodule Hologram.Framework do
   - `opts` - Keyword list with required keys:
     - `:in_progress_erlang_funs` - List of MFA tuples currently being ported
     - `:deferred_erlang_funs` - List of MFA tuples that are deferred
+    - `:macro_deps` - Macro dependencies
     
     Note: `:in_progress` takes precedence over `:deferred` when determining status.
   """
@@ -404,7 +424,8 @@ defmodule Hologram.Framework do
           }
         }
   def erlang_funs_info(erlang_js_dir, opts) do
-    modules_map = elixir_stdlib_erlang_deps()
+    macro_deps = Keyword.fetch!(opts, :macro_deps)
+    modules_map = elixir_stdlib_erlang_deps(macro_deps)
 
     done_erlang_funs_set =
       erlang_js_dir
@@ -453,6 +474,7 @@ defmodule Hologram.Framework do
   - `opts` - Keyword list with required keys:
     - `:in_progress_erlang_funs` - List of Erlang MFA tuples currently being ported
     - `:deferred_erlang_funs` - List of Erlang MFA tuples that are deferred
+    - `:macro_deps` - Macro dependencies
   """
   @spec erlang_overview_stats(Path.t(), keyword()) :: %{
           done_count: non_neg_integer(),

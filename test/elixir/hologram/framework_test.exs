@@ -3,10 +3,23 @@ defmodule Hologram.FrameworkTest do
   import Hologram.Framework
   alias Hologram.Reflection
 
+  @macro_deps %{
+    {Integer, :is_even, 1} => [
+      {Bitwise, :&&&, 2},
+      {Kernel, :==, 2},
+      {Kernel, :and, 2},
+      {Kernel, :is_integer, 1}
+    ],
+    {Kernel, :and, 2} => [
+      {:erlang, :andalso, 2},
+      {:erlang, :error, 1}
+    ]
+  }
+
   @tmp_dir Reflection.tmp_dir()
 
   setup_all do
-    [elixir_stdlib_erlang_deps: elixir_stdlib_erlang_deps()]
+    [elixir_stdlib_erlang_deps: elixir_stdlib_erlang_deps(@macro_deps)]
   end
 
   describe "elixir_funs_info/2" do
@@ -15,7 +28,8 @@ defmodule Hologram.FrameworkTest do
         opts: [
           deferred_elixir_funs: [],
           in_progress_erlang_funs: [],
-          deferred_erlang_funs: []
+          deferred_erlang_funs: [],
+          macro_deps: @macro_deps
         ]
       ]
     end
@@ -120,7 +134,8 @@ defmodule Hologram.FrameworkTest do
       opts = [
         deferred_elixir_funs: [{Kernel, :hd, 1}, {Kernel, :tl, 1}],
         in_progress_erlang_funs: [{:erlang, :hd, 1}, {:erlang, :tl, 1}, {:erlang, :length, 1}],
-        deferred_erlang_funs: []
+        deferred_erlang_funs: [],
+        macro_deps: @macro_deps
       ]
 
       result = elixir_funs_info(test_dir, opts)
@@ -145,7 +160,7 @@ defmodule Hologram.FrameworkTest do
     end
 
     test "calculates 0% progress when no dependencies are ported", %{opts: opts} do
-      deps_map = elixir_stdlib_erlang_deps()
+      deps_map = elixir_stdlib_erlang_deps(@macro_deps)
       assert deps_map[Kernel][{:elem, 2}] == [{:erlang, :+, 2}, {:erlang, :element, 2}]
 
       test_dir =
@@ -171,7 +186,7 @@ defmodule Hologram.FrameworkTest do
     end
 
     test "calculates 50% progress when half of dependencies are ported", %{opts: opts} do
-      deps_map = elixir_stdlib_erlang_deps()
+      deps_map = elixir_stdlib_erlang_deps(@macro_deps)
       assert deps_map[Kernel][{:elem, 2}] == [{:erlang, :+, 2}, {:erlang, :element, 2}]
 
       test_dir =
@@ -206,7 +221,7 @@ defmodule Hologram.FrameworkTest do
     end
 
     test "calculates 100% progress when all dependencies are ported", %{opts: opts} do
-      deps_map = elixir_stdlib_erlang_deps()
+      deps_map = elixir_stdlib_erlang_deps(@macro_deps)
       assert deps_map[Kernel][{:elem, 2}] == [{:erlang, :+, 2}, {:erlang, :element, 2}]
 
       test_dir =
@@ -309,7 +324,8 @@ defmodule Hologram.FrameworkTest do
           deferred_elixir_modules: [],
           deferred_elixir_funs: [],
           in_progress_erlang_funs: [],
-          deferred_erlang_funs: []
+          deferred_erlang_funs: [],
+          macro_deps: @macro_deps
         ]
       ]
     end
@@ -476,7 +492,8 @@ defmodule Hologram.FrameworkTest do
         deferred_elixir_modules: [Atom, Bitwise],
         deferred_elixir_funs: [],
         in_progress_erlang_funs: [{:erlang, :==, 2}],
-        deferred_erlang_funs: []
+        deferred_erlang_funs: [],
+        macro_deps: @macro_deps
       ]
 
       result = elixir_modules_info(test_dir, opts)
@@ -598,7 +615,8 @@ defmodule Hologram.FrameworkTest do
           deferred_elixir_modules: [],
           deferred_elixir_funs: [],
           in_progress_erlang_funs: [],
-          deferred_erlang_funs: []
+          deferred_erlang_funs: [],
+          macro_deps: @macro_deps
         ]
       ]
     end
@@ -700,13 +718,15 @@ defmodule Hologram.FrameworkTest do
       |> Path.join("erlang.mjs")
       |> File.write!(erlang_content)
 
-      result =
-        elixir_overview_stats(test_dir,
-          deferred_elixir_modules: [Bitwise],
-          deferred_elixir_funs: [{Kernel, :+, 2}],
-          in_progress_erlang_funs: [{:erlang, :==, 2}],
-          deferred_erlang_funs: []
-        )
+      opts = [
+        deferred_elixir_modules: [Bitwise],
+        deferred_elixir_funs: [{Kernel, :+, 2}],
+        in_progress_erlang_funs: [{:erlang, :==, 2}],
+        deferred_erlang_funs: [],
+        macro_deps: @macro_deps
+      ]
+
+      result = elixir_overview_stats(test_dir, opts)
 
       # Verify function counts are accurate
       assert result.done_fun_count > 0, "Expected at least one done function"
@@ -720,20 +740,8 @@ defmodule Hologram.FrameworkTest do
       assert result.todo_module_count >= 0, "Expected zero or more todo modules"
       assert result.deferred_module_count == 1, "Expected exactly one deferred module (Bitwise)"
 
-      elixir_funs_info =
-        elixir_funs_info(test_dir,
-          deferred_elixir_funs: [{Kernel, :+, 2}],
-          in_progress_erlang_funs: [{:erlang, :==, 2}],
-          deferred_erlang_funs: []
-        )
-
-      elixir_modules_info =
-        elixir_modules_info(test_dir,
-          deferred_elixir_modules: [Bitwise],
-          deferred_elixir_funs: [{Kernel, :+, 2}],
-          in_progress_erlang_funs: [{:erlang, :==, 2}],
-          deferred_erlang_funs: []
-        )
+      elixir_funs_info = elixir_funs_info(test_dir, opts)
+      elixir_modules_info = elixir_modules_info(test_dir, opts)
 
       elixir_fun_count = map_size(elixir_funs_info)
       elixir_module_count = map_size(elixir_modules_info)
@@ -903,7 +911,7 @@ defmodule Hologram.FrameworkTest do
 
   describe "erlang_funs_info/2" do
     setup do
-      [opts: [in_progress_erlang_funs: [], deferred_erlang_funs: []]]
+      [opts: [in_progress_erlang_funs: [], deferred_erlang_funs: [], macro_deps: @macro_deps]]
     end
 
     test "returns correct structure with status, dependents, and dependents_count" do
@@ -956,7 +964,8 @@ defmodule Hologram.FrameworkTest do
 
       opts = [
         in_progress_erlang_funs: [{:erlang, :-, 2}, {:erlang, :/, 2}],
-        deferred_erlang_funs: [{:erlang, :div, 2}]
+        deferred_erlang_funs: [{:erlang, :div, 2}],
+        macro_deps: @macro_deps
       ]
 
       result = erlang_funs_info(test_dir, opts)
@@ -1042,7 +1051,8 @@ defmodule Hologram.FrameworkTest do
 
       opts = [
         in_progress_erlang_funs: [{:erlang, :+, 2}, {:erlang, :hd, 1}],
-        deferred_erlang_funs: []
+        deferred_erlang_funs: [],
+        macro_deps: @macro_deps
       ]
 
       result = erlang_funs_info(test_dir, opts)
@@ -1069,7 +1079,8 @@ defmodule Hologram.FrameworkTest do
 
       opts = [
         in_progress_erlang_funs: [],
-        deferred_erlang_funs: [{:erlang, :+, 2}, {:erlang, :hd, 1}]
+        deferred_erlang_funs: [{:erlang, :+, 2}, {:erlang, :hd, 1}],
+        macro_deps: @macro_deps
       ]
 
       result = erlang_funs_info(test_dir, opts)
@@ -1186,7 +1197,8 @@ defmodule Hologram.FrameworkTest do
       # - //2 is in none of the lists -> should be :todo
       opts = [
         in_progress_erlang_funs: [{:erlang, :hd, 1}, {:erlang, :+, 2}],
-        deferred_erlang_funs: [{:erlang, :hd, 1}, {:erlang, :+, 2}, {:erlang, :-, 2}]
+        deferred_erlang_funs: [{:erlang, :hd, 1}, {:erlang, :+, 2}, {:erlang, :-, 2}],
+        macro_deps: @macro_deps
       ]
 
       result = erlang_funs_info(test_dir, opts)
@@ -1207,7 +1219,8 @@ defmodule Hologram.FrameworkTest do
       [
         opts: [
           in_progress_erlang_funs: [],
-          deferred_erlang_funs: []
+          deferred_erlang_funs: [],
+          macro_deps: @macro_deps
         ]
       ]
     end
@@ -1288,7 +1301,8 @@ defmodule Hologram.FrameworkTest do
 
       opts = [
         in_progress_erlang_funs: [{:erlang, :+, 2}],
-        deferred_erlang_funs: [{:erlang, :div, 2}]
+        deferred_erlang_funs: [{:erlang, :div, 2}],
+        macro_deps: @macro_deps
       ]
 
       result = erlang_overview_stats(test_dir, opts)
