@@ -62,6 +62,21 @@ defmodule Hologram.Router.HelpersTest do
                "/hologram-test-fixtures-router-helpers-module2/hello%20world/foo%2Fbar"
     end
 
+    test "doesn't URL encode dots in param values if the full value is not equal to '..' or '.'" do
+      assert page_path(Module2, param_1: "..a..a..", param_2: ".b.b.") ==
+               "/hologram-test-fixtures-router-helpers-module2/..a..a../.b.b."
+    end
+
+    test "URL encodes '..' param value" do
+      assert page_path(Module2, param_1: "..", param_2: "abc") ==
+               "/hologram-test-fixtures-router-helpers-module2/%2F%2F/abc"
+    end
+
+    test "URL encodes '.' param value" do
+      assert page_path(Module2, param_1: ".", param_2: "abc") ==
+               "/hologram-test-fixtures-router-helpers-module2/%2F/abc"
+    end
+
     test "missing single param" do
       assert_raise ArgumentError,
                    ~s'page "Hologram.Test.Fixtures.Router.Helpers.Module2" expects "param_1" param',
