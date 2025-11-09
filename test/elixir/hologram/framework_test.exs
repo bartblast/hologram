@@ -869,6 +869,30 @@ defmodule Hologram.FrameworkTest do
       # Kernel is a large module with many functions and macros
       assert Enum.count(kernel_module_map) > 100
     end
+
+    test "injects macro dependencies into call graph", %{elixir_stdlib_erlang_deps: result} do
+      # Test that Kernel.and/2 includes the directly specified Erlang dependencies
+      kernel_and_deps = result[Kernel][{:and, 2}]
+      assert {:erlang, :andalso, 2} in kernel_and_deps
+      assert {:erlang, :error, 1} in kernel_and_deps
+
+      # Test that Integer.is_even/1 includes transitive dependencies through Kernel.and/2
+      integer_is_even_deps = result[Integer][{:is_even, 1}]
+      assert {:erlang, :andalso, 2} in integer_is_even_deps
+      assert {:erlang, :error, 1} in integer_is_even_deps
+    end
+
+    test "does not inject macro dependencies into call graph when macro_deps is empty" do
+      result = elixir_stdlib_erlang_deps(%{})
+
+      kernel_and_deps = result[Kernel][{:and, 2}]
+      refute {:erlang, :andalso, 2} in kernel_and_deps
+      refute {:erlang, :error, 1} in kernel_and_deps
+
+      integer_is_even_deps = result[Integer][{:is_even, 1}]
+      refute {:erlang, :andalso, 2} in integer_is_even_deps
+      refute {:erlang, :error, 1} in integer_is_even_deps
+    end
   end
 
   describe "elixir_stdlib_module_groups/0" do

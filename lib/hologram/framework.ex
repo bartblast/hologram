@@ -358,7 +358,6 @@ defmodule Hologram.Framework do
   """
   @spec elixir_stdlib_erlang_deps(%{mfa => [mfa]}) :: %{module => %{{fun, arity} => [mfa]}}
   def elixir_stdlib_erlang_deps(macro_deps) do
-    # Convert macro_deps map to list of edges
     macro_edges =
       for {from_mfa, to_mfas} <- macro_deps, to_mfa <- to_mfas do
         {from_mfa, to_mfa}
