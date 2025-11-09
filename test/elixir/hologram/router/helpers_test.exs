@@ -5,7 +5,6 @@ defmodule Hologram.Router.HelpersTest do
   import Hologram.Test.Stubs
   import Mox
 
-  alias Hologram.Test.Fixtures.Compiler.Tranformer.Module3
   alias Hologram.Test.Fixtures.Router.Helpers.Module1
   alias Hologram.Test.Fixtures.Router.Helpers.Module2
   alias Hologram.Test.Fixtures.Router.Helpers.Module3
