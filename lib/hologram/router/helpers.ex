@@ -91,9 +91,9 @@ defmodule Hologram.Router.Helpers do
     {new_params, new_path}
   end
 
-  defp uri_encode(".."), do: "%2F%2F"
+  defp uri_encode(".."), do: "%2E%2E"
 
-  defp uri_encode("."), do: "%2F"
+  defp uri_encode("."), do: "%2E"
 
   defp uri_encode(str_value) do
     URI.encode(str_value, &URI.char_unreserved?/1)
