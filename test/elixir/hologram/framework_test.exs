@@ -918,7 +918,9 @@ defmodule Hologram.FrameworkTest do
       refute {:erlang, :error, 1} in integer_is_even_deps
     end
 
-    test "filters out functions/macros starting with '__'", %{elixir_stdlib_erlang_deps: result} do
+    test "filters out internal functions/macros (starting with '__')", %{
+      elixir_stdlib_erlang_deps: result
+    } do
       # Verify that Agent.__using__/1 is filtered out
       refute Map.has_key?(result[Agent], {:__using__, 1}),
              "Expected Agent.__using__/1 to be filtered out"
