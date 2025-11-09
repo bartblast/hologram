@@ -59,6 +59,10 @@ defmodule Hologram.Router.Helpers do
     path
   end
 
+  defp encode_param_value(".."), do: "%2F%2F"
+
+  defp encode_param_value("."), do: "%2F"
+
   defp encode_param_value(value) do
     value
     |> to_string()
