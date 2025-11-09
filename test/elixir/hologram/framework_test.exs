@@ -988,6 +988,14 @@ defmodule Hologram.FrameworkTest do
       # Verify that GenServer.__before_compile__/1 is filtered out
       refute Map.has_key?(result[GenServer], {:__before_compile__, 1}),
              "Expected GenServer.__before_compile__/1 to be filtered out"
+
+      # Verify that no functions or macros starting with "__" are in any module's function map
+      for {module, module_map} <- result do
+        for {{fun, _arity}, _erlang_mfas} <- module_map do
+          refute String.starts_with?(to_string(fun), "__"),
+                 "Expected #{module}.#{fun} not to start with '__'"
+        end
+      end
     end
   end
 
