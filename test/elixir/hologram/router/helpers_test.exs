@@ -7,6 +7,8 @@ defmodule Hologram.Router.HelpersTest do
 
   alias Hologram.Test.Fixtures.Router.Helpers.Module1
   alias Hologram.Test.Fixtures.Router.Helpers.Module2
+  alias Hologram.Test.Fixtures.Router.Helpers.Module3
+  alias Hologram.Test.Fixtures.Router.Helpers.Module4
 
   use_module_stub :asset_path_registry
 
@@ -57,24 +59,44 @@ defmodule Hologram.Router.HelpersTest do
                "/hologram-test-fixtures-router-helpers-module2/abc/123"
     end
 
-    test "URL encodes params" do
-      assert page_path(Module2, param_1: "hello world", param_2: "foo/bar") ==
-               "/hologram-test-fixtures-router-helpers-module2/hello%20world/foo%2Fbar"
+    test "URL encodes string params" do
+      assert page_path(Module3, x: "hello world", y: "foo/bar") ==
+               "/hologram-test-fixtures-router-helpers-module3/hello%20world/foo%2Fbar"
     end
 
-    test "doesn't URL encode dots in param values if the full value is not equal to '..' or '.'" do
-      assert page_path(Module2, param_1: "..a..a..", param_2: ".b.b.") ==
-               "/hologram-test-fixtures-router-helpers-module2/..a..a../.b.b."
+    test "doesn't URL encode string dots in param values if the full value is not equal to '..' or '.'" do
+      assert page_path(Module3, x: "..a..a..", y: ".b.b.") ==
+               "/hologram-test-fixtures-router-helpers-module3/..a..a../.b.b."
     end
 
-    test "URL encodes '..' param value" do
-      assert page_path(Module2, param_1: "..", param_2: "abc") ==
-               "/hologram-test-fixtures-router-helpers-module2/%2F%2F/abc"
+    test "URL encodes string '..' param value" do
+      assert page_path(Module3, x: "..", y: "abc") ==
+               "/hologram-test-fixtures-router-helpers-module3/%2F%2F/abc"
     end
 
-    test "URL encodes '.' param value" do
-      assert page_path(Module2, param_1: ".", param_2: "abc") ==
-               "/hologram-test-fixtures-router-helpers-module2/%2F/abc"
+    test "URL encodes string '.' param value" do
+      assert page_path(Module3, x: ".", y: "abc") ==
+               "/hologram-test-fixtures-router-helpers-module3/%2F/abc"
+    end
+
+    test "URL encodes atom params" do
+      assert page_path(Module4, x: :"hello world", y: :"foo/bar") ==
+               "/hologram-test-fixtures-router-helpers-module4/hello%20world/foo%2Fbar"
+    end
+
+    test "doesn't URL encode atom dots in param values if the full value is not equal to :.. or :." do
+      assert page_path(Module4, x: :"..a..a..", y: :".b.b.") ==
+               "/hologram-test-fixtures-router-helpers-module4/..a..a../.b.b."
+    end
+
+    test "URL encodes atom :.. param value" do
+      assert page_path(Module4, x: :.., y: :abc) ==
+               "/hologram-test-fixtures-router-helpers-module4/%2F%2F/abc"
+    end
+
+    test "URL encodes atom :. param value" do
+      assert page_path(Module4, x: :., y: :abc) ==
+               "/hologram-test-fixtures-router-helpers-module4/%2F/abc"
     end
 
     test "missing single param" do

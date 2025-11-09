@@ -59,14 +59,10 @@ defmodule Hologram.Router.Helpers do
     path
   end
 
-  defp encode_param_value(".."), do: "%2F%2F"
-
-  defp encode_param_value("."), do: "%2F"
-
   defp encode_param_value(value) do
     value
     |> to_string()
-    |> URI.encode(&URI.char_unreserved?/1)
+    |> uri_encode()
   end
 
   defp ensure_no_extra_params!([], _page_module), do: :ok
@@ -93,5 +89,13 @@ defmodule Hologram.Router.Helpers do
     new_params = Keyword.drop(params_acc, [key])
 
     {new_params, new_path}
+  end
+
+  defp uri_encode(".."), do: "%2F%2F"
+
+  defp uri_encode("."), do: "%2F"
+
+  defp uri_encode(str_value) do
+    URI.encode(str_value, &URI.char_unreserved?/1)
   end
 end
