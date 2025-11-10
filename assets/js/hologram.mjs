@@ -64,6 +64,9 @@ export default class Hologram {
     Utils: Utils,
   };
 
+  // In-memory cache for page snapshots (fastest access)
+  static #pageSnapshots = new Map();
+
   static #historyId = null;
   static #isInitiated = false;
   static #pageModule = null;
@@ -569,15 +572,38 @@ export default class Hologram {
   static async #getPageSnapshot(historyId) {
     const snapshotKey = $.#pageSnapshotKey(historyId);
 
-    // Try OPFS first
+    // Try in-memory cache first (fastest) - returns deserialized object
+    if ($.#pageSnapshots.has(snapshotKey)) {
+      return $.#pageSnapshots.get(snapshotKey);
+    }
+
+    // Try OPFS second
     try {
       const root = await navigator.storage.getDirectory();
       const fileHandle = await root.getFileHandle(snapshotKey, {create: false});
       const file = await fileHandle.getFile();
-      return await file.text();
+      const serializedSnapshot = await file.text();
+      const deserializedSnapshot = Deserializer.deserialize(serializedSnapshot);
+
+      // Cache the deserialized snapshot in memory for faster subsequent access
+      $.#pageSnapshots.set(snapshotKey, deserializedSnapshot);
+
+      return deserializedSnapshot;
     } catch {
       // Fall back to session storage if OPFS fails
-      return sessionStorage.getItem(snapshotKey);
+      const serializedSnapshot = sessionStorage.getItem(snapshotKey);
+
+      if (serializedSnapshot) {
+        const deserializedSnapshot =
+          Deserializer.deserialize(serializedSnapshot);
+
+        // Cache the deserialized snapshot in memory for faster subsequent access
+        $.#pageSnapshots.set(snapshotKey, deserializedSnapshot);
+
+        return deserializedSnapshot;
+      }
+
+      return null;
     }
   }
 
@@ -593,10 +619,10 @@ export default class Hologram {
     await $.#savePageSnapshot();
     $.#historyId = event.state;
 
-    const serializedPageSnapshot = await $.#getPageSnapshot(event.state);
+    const pageSnapshot = await $.#getPageSnapshot(event.state);
 
-    if (serializedPageSnapshot) {
-      $.#restorePageSnapshot(serializedPageSnapshot);
+    if (pageSnapshot) {
+      $.#restorePageSnapshot(pageSnapshot);
     }
 
     if ($.#isPageModuleRegistered(Hologram.#pageModule)) {
@@ -661,11 +687,11 @@ export default class Hologram {
     // Check if there's already a history state (e.g., when navigating back from external page)
     if (history.state) {
       $.#historyId = history.state;
-      const serializedPageSnapshot = await $.#getPageSnapshot(history.state);
+      const pageSnapshot = await $.#getPageSnapshot(history.state);
 
       // Only restore state for back/forward navigation, not page reloads
-      if (!$.#isPageReload() && serializedPageSnapshot) {
-        $.#restorePageSnapshot(serializedPageSnapshot);
+      if (!$.#isPageReload() && pageSnapshot) {
+        $.#restorePageSnapshot(pageSnapshot);
       }
     } else {
       $.#historyId = crypto.randomUUID();
@@ -806,9 +832,9 @@ export default class Hologram {
     $.#registeredPageModules.add(pageModule.value);
   }
 
-  static #restorePageSnapshot(serializedPageSnapshot) {
+  static #restorePageSnapshot(pageSnapshot) {
     const {componentRegistryEntries, pageModule, pageParams, scrollPosition} =
-      Deserializer.deserialize(serializedPageSnapshot);
+      pageSnapshot;
 
     ComponentRegistry.populate(componentRegistryEntries);
 
@@ -820,17 +846,19 @@ export default class Hologram {
   }
 
   static async #savePageSnapshot(forceSync = false) {
-    const serializedPageSnapshot = Serializer.serialize(
-      {
-        componentRegistryEntries: ComponentRegistry.entries,
-        pageModule: Hologram.#pageModule,
-        pageParams: Hologram.#pageParams,
-        scrollPosition: [window.scrollX, window.scrollY],
-      },
-      "client",
-    );
+    const pageSnapshot = {
+      componentRegistryEntries: ComponentRegistry.entries,
+      pageModule: Hologram.#pageModule,
+      pageParams: Hologram.#pageParams,
+      scrollPosition: [window.scrollX, window.scrollY],
+    };
 
     const snapshotKey = $.#pageSnapshotKey($.#historyId);
+
+    // Always save deserialized object to in-memory cache first (fastest)
+    $.#pageSnapshots.set(snapshotKey, pageSnapshot);
+
+    const serializedPageSnapshot = Serializer.serialize(pageSnapshot, "client");
 
     // For beforeunload: save synchronously to session storage only
     if (forceSync) {
