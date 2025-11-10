@@ -1946,6 +1946,70 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "rem/2" do
+    test "returns remainder of positive integers" do
+      assert :erlang.rem(10, 3) === 1
+    end
+
+    test "returns remainder with negative dividend and positive divisor" do
+      assert :erlang.rem(-10, 3) === -1
+    end
+
+    test "returns remainder with positive dividend and negative divisor" do
+      assert :erlang.rem(10, -3) === 1
+    end
+
+    test "returns remainder with negative integers" do
+      assert :erlang.rem(-10, -3) === -1
+    end
+
+    test "returns 0 when dividend is evenly divisible" do
+      assert :erlang.rem(12, 4) === 0
+    end
+
+    test "returns 0 when dividend is 0" do
+      assert :erlang.rem(0, 5) === 0
+    end
+
+    test "returns 0 when dividend is 1" do
+      assert :erlang.rem(42, 1) === 0
+    end
+
+    test "returns 0 when dividend is -1" do
+      assert :erlang.rem(42, -1) === 0
+    end
+
+    test "raises ArithmeticError when dividend is 0" do
+      assert_error ArithmeticError, "bad argument in arithmetic expression: rem(5, 0)", fn ->
+        assert :erlang.rem(5, 0)
+      end
+    end
+
+    test "raises ArithmeticError if the first argument is a float" do
+      assert_error ArithmeticError, "bad argument in arithmetic expression: rem(5.5, 2)", fn ->
+        assert :erlang.rem(5.5, 2)
+      end
+    end
+
+    test "raises ArithmeticError if the second argument is a float" do
+      assert_error ArithmeticError, "bad argument in arithmetic expression: rem(5, 2.5)", fn ->
+        assert :erlang.rem(5, 2.5)
+      end
+    end
+
+    test "raises ArithmeticError if the first argument is not a number" do
+      assert_error ArithmeticError, "bad argument in arithmetic expression: rem(:abc, 2)", fn ->
+        assert :erlang.rem(:abc, 2)
+      end
+    end
+
+    test "raises ArithmeticError if the second argument is not a number" do
+      assert_error ArithmeticError, "bad argument in arithmetic expression: rem(5, :abc)", fn ->
+        assert :erlang.rem(5, :abc)
+      end
+    end
+  end
+
   describe "split_binary/2" do
     test "splits binary at position 0" do
       binary = "0123456789"
