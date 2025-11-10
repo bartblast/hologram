@@ -1068,6 +1068,65 @@ defmodule Hologram.FrameworkTest do
       # Progress should be average of non-deferred function progresses
       assert result.progress == expected_progress
     end
+
+    test "calculates progress using only non-deferred functions" do
+      test_dir =
+        Path.join([
+          @tmp_dir,
+          "tests",
+          "framework",
+          "elixir_overview_stats_2",
+          "deferred_exclusion_test"
+        ])
+
+      clean_dir(test_dir)
+
+      test_dir
+      |> Path.join("erlang.mjs")
+      |> File.write!("const Erlang = {};")
+
+      # Use overrides to set all functions to specific progress values
+      # Get the list of all functions first
+      tmp_info =
+        elixir_funs_info(test_dir,
+          deferred_elixir_funs: [],
+          in_progress_erlang_funs: [],
+          deferred_erlang_funs: [],
+          macro_deps: @macro_deps,
+          overrides: %{}
+        )
+
+      all_funs = Map.keys(tmp_info)
+
+      # Create overrides: set first 3 functions to specific values, rest to deferred
+      [fun1, fun2, fun3 | rest] = all_funs
+
+      overrides =
+        %{
+          fun1 => {:done, 90},
+          fun2 => {:todo, 30},
+          fun3 => {:in_progress, 60}
+        }
+        |> Map.merge(Map.new(rest, fn fun -> {fun, {:deferred, 100}} end))
+
+      opts = [
+        deferred_elixir_modules: [],
+        deferred_elixir_funs: [],
+        in_progress_erlang_funs: [],
+        deferred_erlang_funs: [],
+        macro_deps: @macro_deps,
+        overrides: overrides
+      ]
+
+      result = elixir_overview_stats(test_dir, opts)
+
+      # Verify deferred count
+      assert result.deferred_fun_count == length(rest)
+
+      # Expected progress is average of the 3 non-deferred functions:
+      # (90 + 30 + 60) / 3 = 60
+      assert result.progress == 60
+    end
   end
 
   describe "elixir_stdlib_erlang_deps/1" do
