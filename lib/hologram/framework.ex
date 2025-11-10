@@ -642,7 +642,7 @@ defmodule Hologram.Framework do
 
     if non_deferred_fun_count > 0 do
       total_progress =
-        Enum.reduce(elixir_funs_info, 0, fn {_elixir_mfa, info}, acc ->
+        Enum.reduce(non_deferred_funs, 0, fn {_elixir_mfa, info}, acc ->
           acc + info.progress
         end)
 
