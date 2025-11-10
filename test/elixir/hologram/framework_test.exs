@@ -30,7 +30,7 @@ defmodule Hologram.FrameworkTest do
           in_progress_erlang_funs: [],
           deferred_erlang_funs: [],
           macro_deps: @macro_deps,
-          status_overrides: %{}
+          overrides: %{}
         ]
       ]
     end
@@ -137,7 +137,7 @@ defmodule Hologram.FrameworkTest do
         in_progress_erlang_funs: [{:erlang, :hd, 1}, {:erlang, :tl, 1}, {:erlang, :length, 1}],
         deferred_erlang_funs: [],
         macro_deps: @macro_deps,
-        status_overrides: %{}
+        overrides: %{}
       ]
 
       result = elixir_funs_info(test_dir, opts)
@@ -318,14 +318,14 @@ defmodule Hologram.FrameworkTest do
       assert result[{String, :downcase, 2}].method == :manual
     end
 
-    test "applies status_overrides opt to override calculated status", %{opts: opts} do
+    test "applies overrides opt to override calculated status and progress", %{opts: opts} do
       test_dir =
         Path.join([
           @tmp_dir,
           "tests",
           "framework",
           "elixir_funs_info_2",
-          "status_overrides"
+          "overrides"
         ])
 
       clean_dir(test_dir)
@@ -347,28 +347,32 @@ defmodule Hologram.FrameworkTest do
       # and Kernel.tl/1 should be :todo (no deps ported)
       result_without_overrides = elixir_funs_info(test_dir, opts)
       assert result_without_overrides[{Kernel, :hd, 1}].status == :done
+      assert result_without_overrides[{Kernel, :hd, 1}].progress == 100
       assert result_without_overrides[{Kernel, :tl, 1}].status == :todo
+      assert result_without_overrides[{Kernel, :tl, 1}].progress == 0
 
-      # With overrides, we can change these statuses
+      # With overrides, we can change both status and progress
       opts_with_overrides =
-        Keyword.put(opts, :status_overrides, %{
-          {Kernel, :hd, 1} => :in_progress,
-          {Kernel, :tl, 1} => :done
+        Keyword.put(opts, :overrides, %{
+          {Kernel, :hd, 1} => {:in_progress, 75},
+          {Kernel, :tl, 1} => {:done, 100}
         })
 
       result_with_overrides = elixir_funs_info(test_dir, opts_with_overrides)
       assert result_with_overrides[{Kernel, :hd, 1}].status == :in_progress
+      assert result_with_overrides[{Kernel, :hd, 1}].progress == 75
       assert result_with_overrides[{Kernel, :tl, 1}].status == :done
+      assert result_with_overrides[{Kernel, :tl, 1}].progress == 100
     end
 
-    test "status_overrides takes precedence over deferred_elixir_funs", %{opts: opts} do
+    test "overrides takes precedence over deferred_elixir_funs", %{opts: opts} do
       test_dir =
         Path.join([
           @tmp_dir,
           "tests",
           "framework",
           "elixir_funs_info_2",
-          "status_overrides_precedence"
+          "overrides_precedence"
         ])
 
       clean_dir(test_dir)
@@ -384,22 +388,23 @@ defmodule Hologram.FrameworkTest do
       result_without_override = elixir_funs_info(test_dir, opts_with_deferred)
       assert result_without_override[{Kernel, :hd, 1}].status == :deferred
 
-      # With override, it should use the override status
+      # With override, it should use the override status and progress
       opts_with_override =
-        Keyword.put(opts_with_deferred, :status_overrides, %{{Kernel, :hd, 1} => :done})
+        Keyword.put(opts_with_deferred, :overrides, %{{Kernel, :hd, 1} => {:done, 100}})
 
       result_with_override = elixir_funs_info(test_dir, opts_with_override)
       assert result_with_override[{Kernel, :hd, 1}].status == :done
+      assert result_with_override[{Kernel, :hd, 1}].progress == 100
     end
 
-    test "status_overrides does not affect functions not in the override map", %{opts: opts} do
+    test "overrides does not affect functions not in the override map", %{opts: opts} do
       test_dir =
         Path.join([
           @tmp_dir,
           "tests",
           "framework",
           "elixir_funs_info_2",
-          "status_overrides_selective"
+          "overrides_selective"
         ])
 
       clean_dir(test_dir)
@@ -424,27 +429,29 @@ defmodule Hologram.FrameworkTest do
 
       # Override only Kernel.hd/1
       opts_with_overrides =
-        Keyword.put(opts, :status_overrides, %{
-          {Kernel, :hd, 1} => :in_progress
+        Keyword.put(opts, :overrides, %{
+          {Kernel, :hd, 1} => {:in_progress, 50}
         })
 
       result = elixir_funs_info(test_dir, opts_with_overrides)
 
-      # Kernel.hd/1 should have the override status
+      # Kernel.hd/1 should have the override status and progress
       assert result[{Kernel, :hd, 1}].status == :in_progress
+      assert result[{Kernel, :hd, 1}].progress == 50
 
-      # Kernel.tl/1 should have its calculated status (not affected by override)
+      # Kernel.tl/1 should have its calculated status and progress (not affected by override)
       assert result[{Kernel, :tl, 1}].status == :todo
+      assert result[{Kernel, :tl, 1}].progress == 0
     end
 
-    test "status_overrides works with empty map", %{opts: opts} do
+    test "overrides works with empty map", %{opts: opts} do
       test_dir =
         Path.join([
           @tmp_dir,
           "tests",
           "framework",
           "elixir_funs_info_2",
-          "status_overrides_empty"
+          "overrides_empty"
         ])
 
       clean_dir(test_dir)
@@ -463,12 +470,13 @@ defmodule Hologram.FrameworkTest do
       |> File.write!(erlang_content)
 
       # With empty override map, should behave like no overrides
-      opts_with_empty_overrides = Keyword.put(opts, :status_overrides, %{})
-      result = elixir_funs_info(test_dir, opts_with_empty_overrides)
+      result = elixir_funs_info(test_dir, opts)
 
-      # All functions should have their calculated status
+      # All functions should have their calculated status and progress
       assert result[{Kernel, :hd, 1}].status == :done
+      assert result[{Kernel, :hd, 1}].progress == 100
       assert result[{Kernel, :tl, 1}].status == :todo
+      assert result[{Kernel, :tl, 1}].progress == 0
     end
   end
 
@@ -481,7 +489,7 @@ defmodule Hologram.FrameworkTest do
           in_progress_erlang_funs: [],
           deferred_erlang_funs: [],
           macro_deps: @macro_deps,
-          status_overrides: %{}
+          overrides: %{}
         ]
       ]
     end
@@ -650,7 +658,7 @@ defmodule Hologram.FrameworkTest do
         in_progress_erlang_funs: [{:erlang, :==, 2}],
         deferred_erlang_funs: [],
         macro_deps: @macro_deps,
-        status_overrides: %{}
+        overrides: %{}
       ]
 
       result = elixir_modules_info(test_dir, opts)
@@ -835,14 +843,16 @@ defmodule Hologram.FrameworkTest do
       end
     end
 
-    test "status_overrides affects module-level status and count aggregations", %{opts: opts} do
+    test "overrides affects module-level status, progress, and count aggregations", %{
+      opts: opts
+    } do
       test_dir =
         Path.join([
           @tmp_dir,
           "tests",
           "framework",
           "elixir_modules_info_2",
-          "status_overrides_integration"
+          "overrides_integration"
         ])
 
       clean_dir(test_dir)
@@ -866,25 +876,30 @@ defmodule Hologram.FrameworkTest do
       |> File.write!(erlang_content)
 
       # Without overrides, Atom module should be :done (all deps ported)
-      result_without = elixir_modules_info(test_dir, opts)
-      assert result_without[Atom].status == :done
-      initial_done_count = result_without[Atom].done_fun_count
+      result_without_overrides = elixir_modules_info(test_dir, opts)
+      assert result_without_overrides[Atom].status == :done
+      assert result_without_overrides[Atom].progress == 100
+
+      assert result_without_overrides[Atom].in_progress_fun_count == 0
+      initial_done_count = result_without_overrides[Atom].done_fun_count
       assert initial_done_count > 0
 
-      # Override one Atom function to :in_progress
+      # Override one Atom function to :in_progress with 60% progress
       opts_with_overrides =
-        Keyword.put(opts, :status_overrides, %{
-          {Atom, :to_string, 1} => :in_progress
+        Keyword.put(opts, :overrides, %{
+          {Atom, :to_string, 1} => {:in_progress, 60}
         })
 
-      result_with = elixir_modules_info(test_dir, opts_with_overrides)
-
       # Module status should change to :in_progress
-      assert result_with[Atom].status == :in_progress
+      result_with_overrides = elixir_modules_info(test_dir, opts_with_overrides)
+      assert result_with_overrides[Atom].status == :in_progress
+
+      # Module progress should be recalculated based on new function progress values
+      assert result_with_overrides[Atom].progress < 100
 
       # Function counts should be updated
-      assert result_with[Atom].done_fun_count == initial_done_count - 1
-      assert result_with[Atom].in_progress_fun_count == 1
+      assert result_with_overrides[Atom].done_fun_count == initial_done_count - 1
+      assert result_with_overrides[Atom].in_progress_fun_count == 1
     end
   end
 
@@ -897,7 +912,7 @@ defmodule Hologram.FrameworkTest do
           in_progress_erlang_funs: [],
           deferred_erlang_funs: [],
           macro_deps: @macro_deps,
-          status_overrides: %{}
+          overrides: %{}
         ]
       ]
     end
@@ -1005,7 +1020,7 @@ defmodule Hologram.FrameworkTest do
         in_progress_erlang_funs: [{:erlang, :==, 2}],
         deferred_erlang_funs: [],
         macro_deps: @macro_deps,
-        status_overrides: %{}
+        overrides: %{}
       ]
 
       result = elixir_overview_stats(test_dir, opts)
