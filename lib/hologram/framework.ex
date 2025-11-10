@@ -162,6 +162,8 @@ defmodule Hologram.Framework do
     - `:in_progress_erlang_funs` - List of Erlang MFA tuples currently being ported
     - `:deferred_erlang_funs` - List of Erlang MFA tuples that are deferred
     - `:macro_deps` - Macro dependencies
+    - `:status_overrides` Map of Elixir MFA tuples to status atoms 
+      (`:done`, `:in_progress`, `:todo`, or `:deferred`) that override the calculated status
   """
   @spec elixir_funs_info(Path.t(), keyword()) :: %{
           mfa => %{
@@ -177,6 +179,7 @@ defmodule Hologram.Framework do
     in_progress_erlang_funs = Keyword.fetch!(opts, :in_progress_erlang_funs)
     deferred_erlang_funs = Keyword.fetch!(opts, :deferred_erlang_funs)
     macro_deps = Keyword.fetch!(opts, :macro_deps)
+    status_overrides = Keyword.fetch!(opts, :status_overrides)
 
     deferred_elixir_funs_set = MapSet.new(deferred_elixir_funs)
 
@@ -192,13 +195,16 @@ defmodule Hologram.Framework do
     for {module, funs} <- elixir_deps, {{fun, arity}, erlang_deps} <- funs, into: %{} do
       elixir_mfa = {module, fun, arity}
 
-      status =
+      calculated_status =
         calculate_elixir_fun_status(
           elixir_mfa,
           erlang_deps,
           erlang_funs_info,
           deferred_elixir_funs_set
         )
+
+      # Apply status override if present
+      status = Map.get(status_overrides, elixir_mfa, calculated_status)
 
       progress = calculate_elixir_fun_progress(erlang_deps, erlang_funs_info)
 
@@ -227,6 +233,8 @@ defmodule Hologram.Framework do
     - `:in_progress_erlang_funs` - List of Erlang MFA tuples currently being worked on
     - `:deferred_erlang_funs` - List of Erlang MFA tuples that are deferred
     - `:macro_deps` - Macro dependencies
+    - `:status_overrides` Map of Elixir MFA tuples to status atoms 
+      (`:done`, `:in_progress`, `:todo`, or `:deferred`) that override the calculated status
   """
   @spec elixir_modules_info(Path.t(), keyword()) :: %{
           module => %{
@@ -248,6 +256,7 @@ defmodule Hologram.Framework do
     in_progress_erlang_funs = Keyword.fetch!(opts, :in_progress_erlang_funs)
     deferred_erlang_funs = Keyword.fetch!(opts, :deferred_erlang_funs)
     macro_deps = Keyword.fetch!(opts, :macro_deps)
+    status_overrides = Keyword.fetch!(opts, :status_overrides)
 
     deferred_elixir_modules_set = MapSet.new(deferred_elixir_modules)
 
@@ -256,7 +265,8 @@ defmodule Hologram.Framework do
         deferred_elixir_funs: deferred_elixir_funs,
         in_progress_erlang_funs: in_progress_erlang_funs,
         deferred_erlang_funs: deferred_erlang_funs,
-        macro_deps: macro_deps
+        macro_deps: macro_deps,
+        status_overrides: status_overrides
       )
 
     elixir_stdlib_module_groups = elixir_stdlib_module_groups()
@@ -311,6 +321,8 @@ defmodule Hologram.Framework do
     - `:in_progress_erlang_funs` - List of Erlang MFA tuples currently being ported
     - `:deferred_erlang_funs` - List of Erlang MFA tuples that are deferred
     - `:macro_deps` - Macro dependencies
+    - `:status_overrides` Map of Elixir MFA tuples to status atoms 
+      (`:done`, `:in_progress`, `:todo`, or `:deferred`) that override the calculated status
   """
   @spec elixir_overview_stats(Path.t(), keyword()) :: %{
           done_fun_count: non_neg_integer(),
