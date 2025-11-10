@@ -162,8 +162,9 @@ defmodule Hologram.Framework do
     - `:in_progress_erlang_funs` - List of Erlang MFA tuples currently being ported
     - `:deferred_erlang_funs` - List of Erlang MFA tuples that are deferred
     - `:macro_deps` - Macro dependencies
-    - `:status_overrides` Map of Elixir MFA tuples to status atoms 
-      (`:done`, `:in_progress`, `:todo`, or `:deferred`) that override the calculated status
+    - `:overrides` - Map of Elixir MFA tuples to `{status, progress}` tuples where
+      status is one of `:done`, `:in_progress`, `:todo`, or `:deferred` and progress is 
+      an integer between 0 and 100. Both values override the calculated status and progress.
   """
   @spec elixir_funs_info(Path.t(), keyword()) :: %{
           mfa => %{
@@ -179,7 +180,7 @@ defmodule Hologram.Framework do
     in_progress_erlang_funs = Keyword.fetch!(opts, :in_progress_erlang_funs)
     deferred_erlang_funs = Keyword.fetch!(opts, :deferred_erlang_funs)
     macro_deps = Keyword.fetch!(opts, :macro_deps)
-    status_overrides = Keyword.fetch!(opts, :status_overrides)
+    overrides = Keyword.fetch!(opts, :overrides)
 
     deferred_elixir_funs_set = MapSet.new(deferred_elixir_funs)
 
@@ -203,10 +204,14 @@ defmodule Hologram.Framework do
           deferred_elixir_funs_set
         )
 
-      # Apply status override if present
-      status = Map.get(status_overrides, elixir_mfa, calculated_status)
+      calculated_progress = calculate_elixir_fun_progress(erlang_deps, erlang_funs_info)
 
-      progress = calculate_elixir_fun_progress(erlang_deps, erlang_funs_info)
+      # Apply status and progress overrides if present
+      {status, progress} =
+        case Map.get(overrides, elixir_mfa) do
+          {override_status, override_progress} -> {override_status, override_progress}
+          nil -> {calculated_status, calculated_progress}
+        end
 
       {elixir_mfa,
        %{
@@ -233,8 +238,9 @@ defmodule Hologram.Framework do
     - `:in_progress_erlang_funs` - List of Erlang MFA tuples currently being worked on
     - `:deferred_erlang_funs` - List of Erlang MFA tuples that are deferred
     - `:macro_deps` - Macro dependencies
-    - `:status_overrides` Map of Elixir MFA tuples to status atoms 
-      (`:done`, `:in_progress`, `:todo`, or `:deferred`) that override the calculated status
+    - `:overrides` - Map of Elixir MFA tuples to `{status, progress}` tuples where
+      status is one of `:done`, `:in_progress`, `:todo`, or `:deferred` and progress is 
+      an integer between 0 and 100. Both values override the calculated status and progress.
   """
   @spec elixir_modules_info(Path.t(), keyword()) :: %{
           module => %{
@@ -256,7 +262,7 @@ defmodule Hologram.Framework do
     in_progress_erlang_funs = Keyword.fetch!(opts, :in_progress_erlang_funs)
     deferred_erlang_funs = Keyword.fetch!(opts, :deferred_erlang_funs)
     macro_deps = Keyword.fetch!(opts, :macro_deps)
-    status_overrides = Keyword.fetch!(opts, :status_overrides)
+    overrides = Keyword.fetch!(opts, :overrides)
 
     deferred_elixir_modules_set = MapSet.new(deferred_elixir_modules)
 
@@ -266,7 +272,7 @@ defmodule Hologram.Framework do
         in_progress_erlang_funs: in_progress_erlang_funs,
         deferred_erlang_funs: deferred_erlang_funs,
         macro_deps: macro_deps,
-        status_overrides: status_overrides
+        overrides: overrides
       )
 
     elixir_stdlib_module_groups = elixir_stdlib_module_groups()
@@ -321,8 +327,9 @@ defmodule Hologram.Framework do
     - `:in_progress_erlang_funs` - List of Erlang MFA tuples currently being ported
     - `:deferred_erlang_funs` - List of Erlang MFA tuples that are deferred
     - `:macro_deps` - Macro dependencies
-    - `:status_overrides` Map of Elixir MFA tuples to status atoms 
-      (`:done`, `:in_progress`, `:todo`, or `:deferred`) that override the calculated status
+    - `:overrides` - Map of Elixir MFA tuples to `{status, progress}` tuples where
+      status is one of `:done`, `:in_progress`, `:todo`, or `:deferred` and progress is 
+      an integer between 0 and 100. Both values override the calculated status and progress.
   """
   @spec elixir_overview_stats(Path.t(), keyword()) :: %{
           done_fun_count: non_neg_integer(),
