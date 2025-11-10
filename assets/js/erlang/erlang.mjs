@@ -29,7 +29,7 @@ MFAs for sorting:
   {:erlang, :"=<", 2},
   {:erlang, :==, 2},
   {:erlang, :>, 2},
-  {:erlang, :>=, 2},
+  {:erlang, :>=, 2}
 ]
 |> Enum.sort()
 */
@@ -859,6 +859,26 @@ const Erlang = {
     return Type.isTrue(left) ? left : rightFun(context);
   },
   // End orelse/2
+  // Deps: []
+
+  // Start rem/2
+  "rem/2": (integer1, integer2) => {
+    if (
+      !Type.isInteger(integer1) ||
+      !Type.isInteger(integer2) ||
+      integer2.value === 0n
+    ) {
+      const arg1 = Interpreter.inspect(integer1);
+      const arg2 = Interpreter.inspect(integer2);
+
+      Interpreter.raiseArithmeticError(`rem(${arg1}, ${arg2})`);
+    }
+
+    // JavaScript's % operator on BigInt has the same sign behavior as Erlang's rem
+    // The result has the same sign as the dividend (integer1)
+    return Type.integer(integer1.value % integer2.value);
+  },
+  // End rem/2
   // Deps: []
 
   // Start split_binary/2

@@ -2675,6 +2675,98 @@ describe("Erlang", () => {
     });
   });
 
+  describe("rem/2", () => {
+    const testedFun = Erlang["rem/2"];
+
+    it("returns remainder of positive integers", () => {
+      const result = testedFun(Type.integer(10), Type.integer(3));
+
+      assert.deepStrictEqual(result, Type.integer(1));
+    });
+
+    it("returns remainder with negative dividend and positive divisor", () => {
+      const result = testedFun(Type.integer(-10), Type.integer(3));
+
+      assert.deepStrictEqual(result, Type.integer(-1));
+    });
+
+    it("returns remainder with positive dividend and negative divisor", () => {
+      const result = testedFun(Type.integer(10), Type.integer(-3));
+
+      assert.deepStrictEqual(result, Type.integer(1));
+    });
+
+    it("returns remainder with negative integers", () => {
+      const result = testedFun(Type.integer(-10), Type.integer(-3));
+
+      assert.deepStrictEqual(result, Type.integer(-1));
+    });
+
+    it("returns 0 when dividend is evenly divisible", () => {
+      const result = testedFun(Type.integer(12), Type.integer(4));
+
+      assert.deepStrictEqual(result, Type.integer(0));
+    });
+
+    it("returns 0 when dividend is 0", () => {
+      const result = testedFun(Type.integer(0), Type.integer(5));
+
+      assert.deepStrictEqual(result, Type.integer(0));
+    });
+
+    it("returns 0 when dividend is 1", () => {
+      const result = testedFun(Type.integer(42), Type.integer(1));
+
+      assert.deepStrictEqual(result, Type.integer(0));
+    });
+
+    it("returns 0 when dividend is -1", () => {
+      const result = testedFun(Type.integer(42), Type.integer(-1));
+
+      assert.deepStrictEqual(result, Type.integer(0));
+    });
+
+    it("raises ArithmeticError when dividend is 0", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(5), Type.integer(0)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: rem(5, 0)",
+      );
+    });
+
+    it("raises ArithmeticError if the first argument is a float", () => {
+      assertBoxedError(
+        () => testedFun(Type.float(5.5), Type.integer(2)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: rem(5.5, 2)",
+      );
+    });
+
+    it("raises ArithmeticError if the second argument is a float", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(5), Type.float(2.5)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: rem(5, 2.5)",
+      );
+    });
+
+    it("raises ArithmeticError if the first argument is not a number", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc"), Type.integer(2)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: rem(:abc, 2)",
+      );
+    });
+
+    it("raises ArithmeticError if the second argument is not a number", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(5), Type.atom("abc")),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: rem(5, :abc)",
+      );
+    });
+  });
+
   describe("split_binary/2", () => {
     const split_binary = Erlang["split_binary/2"];
 
