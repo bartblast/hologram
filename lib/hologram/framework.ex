@@ -4,12 +4,14 @@ defmodule Hologram.Framework do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.Digraph
   alias Hologram.Reflection
 
   @elixir_stdlib_module_groups [
     {"Core",
      [
-       Kernel
+       Kernel,
+       Kernel.SpecialForms
      ]},
     {"Data Types",
      [
@@ -151,17 +153,65 @@ defmodule Hologram.Framework do
   ]
 
   @doc """
-  Aggregates information about Elixir standard library functions.
+  Builds a call graph for Elixir standard library with macro dependencies.
+
+  ## Parameters
+
+  - `macro_deps` - Map of macro dependencies where keys are MFA tuples and values are lists of MFA tuples they depend on.
+    Edges from the key to each value in the list will be injected into the call graph.
+
+  ## Returns
+
+  A directed graph containing call relationships between Elixir stdlib functions/macros and their dependencies.
+  Only includes functions from Elixir stdlib modules (`:elixir` OTP app) and Erlang modules.
+  Non-stdlib Elixir modules (e.g., from `:ecto`, `:phoenix`) are filtered out.
+  """
+  @spec build_stdlib_call_graph(%{mfa => [mfa]}) :: Digraph.t()
+  def build_stdlib_call_graph(macro_deps) do
+    macro_edges =
+      for {from_mfa, to_mfas} <- macro_deps, to_mfa <- to_mfas do
+        {from_mfa, to_mfa}
+      end
+
+    graph =
+      build_stdlib_ir_plt()
+      |> Compiler.build_call_graph()
+      |> CallGraph.remove_manually_ported_mfas()
+      |> CallGraph.add_edges(macro_edges)
+      |> CallGraph.get_graph()
+
+    # Remove non-stdlib Elixir modules (keep only :elixir app and Erlang modules)
+    non_stdlib_elixir_mfas =
+      graph.vertices
+      |> Map.keys()
+      |> Enum.filter(fn
+        {module, _fun, _arity} ->
+          Reflection.elixir_module?(module) &&
+            match?({:ok, app} when app != :elixir, :application.get_application(module))
+
+        _non_mfa ->
+          false
+      end)
+
+    Digraph.remove_vertices(graph, non_stdlib_elixir_mfas)
+  end
+
+  @doc """
+  Aggregates information about Elixir standard library functions and macros.
 
   ## Parameters
 
   - `erlang_js_dir` - Path to the directory containing manually ported Erlang functions
+  - `stdlib_deps` - Precomputed Elixir stdlib Erlang dependencies from `elixir_stdlib_erlang_deps/1`
   - `opts` - Keyword list with required keys:
     - `:deferred_elixir_funs` - List of Elixir MFA tuples that are deferred
     - `:in_progress_erlang_funs` - List of Erlang MFA tuples currently being ported
     - `:deferred_erlang_funs` - List of Erlang MFA tuples that are deferred
+    - `:overrides` - Map of Elixir MFA tuples to `{status, progress}` tuples where
+      status is one of `:done`, `:in_progress`, `:todo`, or `:deferred` and progress is 
+      an integer between 0 and 100. Both values override the calculated status and progress.
   """
-  @spec elixir_funs_info(Path.t(), keyword()) :: %{
+  @spec elixir_funs_info(Path.t(), %{module => %{{fun, arity} => [mfa]}}, keyword()) :: %{
           mfa => %{
             status: :done | :in_progress | :todo | :deferred,
             progress: non_neg_integer(),
@@ -170,33 +220,31 @@ defmodule Hologram.Framework do
             dependencies_count: non_neg_integer()
           }
         }
-  def elixir_funs_info(erlang_js_dir, opts) do
+  def elixir_funs_info(erlang_js_dir, stdlib_deps, opts) do
     deferred_elixir_funs = Keyword.fetch!(opts, :deferred_elixir_funs)
     in_progress_erlang_funs = Keyword.fetch!(opts, :in_progress_erlang_funs)
     deferred_erlang_funs = Keyword.fetch!(opts, :deferred_erlang_funs)
+    overrides = Keyword.fetch!(opts, :overrides)
 
     deferred_elixir_funs_set = MapSet.new(deferred_elixir_funs)
 
-    elixir_deps = elixir_stdlib_erlang_deps()
-
     erlang_funs_info =
-      erlang_funs_info(erlang_js_dir,
+      erlang_funs_info(erlang_js_dir, stdlib_deps,
         in_progress_erlang_funs: in_progress_erlang_funs,
         deferred_erlang_funs: deferred_erlang_funs
       )
 
-    for {module, funs} <- elixir_deps, {{fun, arity}, erlang_deps} <- funs, into: %{} do
+    for {module, funs} <- stdlib_deps, {{fun, arity}, erlang_deps} <- funs, into: %{} do
       elixir_mfa = {module, fun, arity}
 
-      status =
-        calculate_elixir_fun_status(
+      {status, progress} =
+        resolve_elixir_fun_status_and_progess(
           elixir_mfa,
           erlang_deps,
           erlang_funs_info,
-          deferred_elixir_funs_set
+          deferred_elixir_funs_set,
+          overrides
         )
-
-      progress = calculate_elixir_fun_progress(erlang_deps, erlang_funs_info)
 
       {elixir_mfa,
        %{
@@ -212,16 +260,22 @@ defmodule Hologram.Framework do
   @doc """
   Aggregates information about Elixir standard library modules.
 
+  Includes both functions and macros for each module.
+
   ## Parameters
 
   - `erlang_js_dir` - Path to the directory containing manually ported Erlang functions
+  - `stdlib_deps` - Precomputed Elixir stdlib Erlang dependencies from `elixir_stdlib_erlang_deps/1`
   - `opts` - Keyword list with required keys:
     - `:deferred_elixir_modules` - List of Elixir modules that are deferred
     - `:deferred_elixir_funs` - List of Elixir MFA tuples that are deferred
     - `:in_progress_erlang_funs` - List of Erlang MFA tuples currently being worked on
-    - `:deferred_erlang_funs` - List of Erlang MFA tuples that are deferred   
+    - `:deferred_erlang_funs` - List of Erlang MFA tuples that are deferred
+    - `:overrides` - Map of Elixir MFA tuples to `{status, progress}` tuples where
+      status is one of `:done`, `:in_progress`, `:todo`, or `:deferred` and progress is 
+      an integer between 0 and 100. Both values override the calculated status and progress.
   """
-  @spec elixir_modules_info(Path.t(), keyword()) :: %{
+  @spec elixir_modules_info(Path.t(), %{module => %{{fun, arity} => [mfa]}}, keyword()) :: %{
           module => %{
             group: String.t(),
             status: :done | :in_progress | :todo | :deferred,
@@ -235,19 +289,21 @@ defmodule Hologram.Framework do
           }
         }
   # credo:disable-for-lines:46 Credo.Check.Refactor.ABCSize
-  def elixir_modules_info(erlang_js_dir, opts) do
+  def elixir_modules_info(erlang_js_dir, stdlib_deps, opts) do
     deferred_elixir_modules = Keyword.fetch!(opts, :deferred_elixir_modules)
     deferred_elixir_funs = Keyword.fetch!(opts, :deferred_elixir_funs)
     in_progress_erlang_funs = Keyword.fetch!(opts, :in_progress_erlang_funs)
     deferred_erlang_funs = Keyword.fetch!(opts, :deferred_erlang_funs)
+    overrides = Keyword.fetch!(opts, :overrides)
 
     deferred_elixir_modules_set = MapSet.new(deferred_elixir_modules)
 
     elixir_funs_info =
-      elixir_funs_info(erlang_js_dir,
+      elixir_funs_info(erlang_js_dir, stdlib_deps,
         deferred_elixir_funs: deferred_elixir_funs,
         in_progress_erlang_funs: in_progress_erlang_funs,
-        deferred_erlang_funs: deferred_erlang_funs
+        deferred_erlang_funs: deferred_erlang_funs,
+        overrides: overrides
       )
 
     elixir_stdlib_module_groups = elixir_stdlib_module_groups()
@@ -256,10 +312,16 @@ defmodule Hologram.Framework do
 
     for {_group, modules} <- elixir_stdlib_module_groups, module <- modules, into: %{} do
       group = module_to_group[module]
-      functions = module.__info__(:functions)
+
+      funs_and_macros =
+        :functions
+        |> module.__info__()
+        |> Enum.concat(module.__info__(:macros))
+        |> filter_out_internal()
+        |> Enum.sort()
 
       module_funs_info =
-        for {fun, arity} <- functions do
+        for {fun, arity} <- funs_and_macros do
           elixir_funs_info[{module, fun, arity}]
         end
 
@@ -274,8 +336,8 @@ defmodule Hologram.Framework do
          group: group,
          status: status,
          progress: progress,
-         functions: functions,
-         all_fun_count: length(functions),
+         functions: funs_and_macros,
+         all_fun_count: length(funs_and_macros),
          done_fun_count: fun_counts.done_fun_count,
          in_progress_fun_count: fun_counts.in_progress_fun_count,
          todo_fun_count: fun_counts.todo_fun_count,
@@ -290,13 +352,17 @@ defmodule Hologram.Framework do
   ## Parameters
 
   - `erlang_js_dir` - Path to the directory containing manually ported Erlang functions
+  - `stdlib_deps` - Precomputed Elixir stdlib Erlang dependencies from `elixir_stdlib_erlang_deps/1`
   - `opts` - Keyword list with required keys:
     - `:deferred_elixir_modules` - List of Elixir modules that are deferred
     - `:deferred_elixir_funs` - List of Elixir MFA tuples that are deferred
     - `:in_progress_erlang_funs` - List of Erlang MFA tuples currently being ported
     - `:deferred_erlang_funs` - List of Erlang MFA tuples that are deferred
+    - `:overrides` - Map of Elixir MFA tuples to `{status, progress}` tuples where
+      status is one of `:done`, `:in_progress`, `:todo`, or `:deferred` and progress is 
+      an integer between 0 and 100. Both values override the calculated status and progress.
   """
-  @spec elixir_overview_stats(Path.t(), keyword()) :: %{
+  @spec elixir_overview_stats(Path.t(), %{module => %{{fun, arity} => [mfa]}}, keyword()) :: %{
           done_fun_count: non_neg_integer(),
           in_progress_fun_count: non_neg_integer(),
           todo_fun_count: non_neg_integer(),
@@ -307,14 +373,16 @@ defmodule Hologram.Framework do
           deferred_module_count: non_neg_integer(),
           progress: non_neg_integer()
         }
-  def elixir_overview_stats(erlang_js_dir, opts) do
-    elixir_funs_info = elixir_funs_info(erlang_js_dir, opts)
-    status_fetcher = fn {_elixir_mfa, %{status: status}} -> status end
-    fun_stats = aggregate_counts_by_status(elixir_funs_info, "fun", status_fetcher)
+  def elixir_overview_stats(erlang_js_dir, stdlib_deps, opts) do
+    elixir_funs_info = elixir_funs_info(erlang_js_dir, stdlib_deps, opts)
+    fun_status_fetcher = fn {_elixir_mfa, %{status: status}} -> status end
+    fun_stats = aggregate_counts_by_status(elixir_funs_info, "fun", fun_status_fetcher)
 
-    elixir_modules_info = elixir_modules_info(erlang_js_dir, opts)
-    status_fetcher = fn {_module, %{status: status}} -> status end
-    module_stats = aggregate_counts_by_status(elixir_modules_info, "module", status_fetcher)
+    elixir_modules_info = elixir_modules_info(erlang_js_dir, stdlib_deps, opts)
+    module_status_fetcher = fn {_module, %{status: status}} -> status end
+
+    module_stats =
+      aggregate_counts_by_status(elixir_modules_info, "module", module_status_fetcher)
 
     progress = calculate_elixir_overall_progress(elixir_funs_info)
 
@@ -327,34 +395,42 @@ defmodule Hologram.Framework do
   Returns Erlang dependencies for Elixir standard library modules.
 
   Analyzes the call graph of selected Elixir standard library modules and identifies
-  which Erlang functions they depend on. Manually ported functions are excluded.
+  which Erlang functions they depend on. Includes both functions and macros. 
+  Manually ported functions are excluded.
+
+  ## Parameters
+
+  - `macro_deps` - Map of macro dependencies where keys are MFA tuples and values are lists of MFA tuples they depend on.
+    Edges from the key to each value in the list will be injected into the call graph.
 
   ## Return Structure
 
   Returns a two-level nested map:
-  - **Level 1**: Module (atom) -> functions in that module  
-  - **Level 2**: Function key `{name, arity}` -> list of reachable Erlang MFAs
+  - **Level 1**: Module (atom) -> functions and macros in that module  
+  - **Level 2**: Function/macro key `{name, arity}` -> list of reachable Erlang MFAs
 
   ## Example
 
-      iex> deps = elixir_stdlib_erlang_deps()
+      iex> deps = elixir_stdlib_erlang_deps(%{{Kernel, :!, 1} => [{Kernel, :in, 2}]})
       iex> deps[Kernel][{:hd, 1}]
       [{:erlang, :hd, 1}]
   """
-  @spec elixir_stdlib_erlang_deps() :: %{module => %{{fun, arity} => [mfa]}}
-  def elixir_stdlib_erlang_deps do
-    graph =
-      stdlib_ir_plt()
-      |> Compiler.build_call_graph()
-      |> CallGraph.remove_manually_ported_mfas()
-      |> CallGraph.get_graph()
+  @spec elixir_stdlib_erlang_deps(%{mfa => [mfa]}) :: %{module => %{{fun, arity} => [mfa]}}
+  def elixir_stdlib_erlang_deps(macro_deps) do
+    graph = build_stdlib_call_graph(macro_deps)
 
     # Now query the graph for each documented stdlib function
     elixir_stdlib_module_groups()
     |> Enum.flat_map(fn {_group, modules} -> modules end)
     |> Enum.reduce(%{}, fn module, modules_acc ->
+      funs_and_macros =
+        :functions
+        |> module.__info__()
+        |> Enum.concat(module.__info__(:macros))
+        |> filter_out_internal()
+
       module_map =
-        for {fun, arity} <- module.__info__(:functions), into: %{} do
+        for {fun, arity} <- funs_and_macros, into: %{} do
           reachable_erlang_mfas = reachable_erlang_mfas(graph, {module, fun, arity})
           {{fun, arity}, reachable_erlang_mfas}
         end
@@ -385,22 +461,21 @@ defmodule Hologram.Framework do
   ## Parameters
 
   - `erlang_js_dir` - Path to the directory containing manually ported Erlang functions
+  - `stdlib_deps` - Precomputed Elixir stdlib Erlang dependencies from `elixir_stdlib_erlang_deps/1`
   - `opts` - Keyword list with required keys:
     - `:in_progress_erlang_funs` - List of MFA tuples currently being ported
     - `:deferred_erlang_funs` - List of MFA tuples that are deferred
     
     Note: `:in_progress` takes precedence over `:deferred` when determining status.
   """
-  @spec erlang_funs_info(Path.t(), keyword()) :: %{
+  @spec erlang_funs_info(Path.t(), %{module => %{{fun, arity} => [mfa]}}, keyword()) :: %{
           mfa => %{
             status: :done | :in_progress | :todo | :deferred,
             dependents: [mfa],
             dependents_count: non_neg_integer()
           }
         }
-  def erlang_funs_info(erlang_js_dir, opts) do
-    modules_map = elixir_stdlib_erlang_deps()
-
+  def erlang_funs_info(erlang_js_dir, stdlib_deps, opts) do
     done_erlang_funs_set =
       erlang_js_dir
       |> list_ported_erlang_funs()
@@ -416,7 +491,7 @@ defmodule Hologram.Framework do
       |> Keyword.fetch!(:deferred_erlang_funs)
       |> MapSet.new()
 
-    modules_map
+    stdlib_deps
     |> dependents_by_erlang_mfa()
     |> Enum.map(fn {erlang_mfa, dependents} ->
       unique_dependents = Enum.uniq(dependents)
@@ -445,19 +520,20 @@ defmodule Hologram.Framework do
   ## Parameters
 
   - `erlang_js_dir` - Path to the directory containing manually ported Erlang functions
+  - `stdlib_deps` - Precomputed Elixir stdlib Erlang dependencies from `elixir_stdlib_erlang_deps/1`
   - `opts` - Keyword list with required keys:
     - `:in_progress_erlang_funs` - List of Erlang MFA tuples currently being ported
     - `:deferred_erlang_funs` - List of Erlang MFA tuples that are deferred
   """
-  @spec erlang_overview_stats(Path.t(), keyword()) :: %{
+  @spec erlang_overview_stats(Path.t(), %{module => %{{fun, arity} => [mfa]}}, keyword()) :: %{
           done_count: non_neg_integer(),
           in_progress_count: non_neg_integer(),
           todo_count: non_neg_integer(),
           deferred_count: non_neg_integer(),
           progress: non_neg_integer()
         }
-  def erlang_overview_stats(erlang_js_dir, opts) do
-    erlang_funs_info = erlang_funs_info(erlang_js_dir, opts)
+  def erlang_overview_stats(erlang_js_dir, stdlib_deps, opts) do
+    erlang_funs_info = erlang_funs_info(erlang_js_dir, stdlib_deps, opts)
 
     status_fetcher = fn {_mfa, %{status: status}} -> status end
     stats = aggregate_counts_by_status(erlang_funs_info, "fun", status_fetcher)
@@ -507,9 +583,11 @@ defmodule Hologram.Framework do
     end)
   end
 
+  # sobelow_skip ["DOS.BinToAtom"]
   defp aggregate_counts_by_status(items_info, item_type, status_fetcher) do
     Enum.reduce(
       items_info,
+      # credo:disable-for-lines:6 Credo.Check.Warning.UnsafeToAtom
       %{
         "done_#{item_type}_count": 0,
         "in_progress_#{item_type}_count": 0,
@@ -522,6 +600,28 @@ defmodule Hologram.Framework do
         Map.update!(acc, count_key, &(&1 + 1))
       end
     )
+  end
+
+  defp build_stdlib_ir_plt do
+    # Build IR PLT for all modules, then filter to only :elixir OTP app modules
+    # This includes both documented stdlib modules AND internal implementation modules
+    # that are part of the Elixir stdlib (e.g., String.Break, Enum.EmptyError)
+    ir_plt = Compiler.build_ir_plt()
+
+    stdlib_ir_items =
+      ir_plt
+      |> PLT.get_all()
+      |> Enum.filter(fn {module, _ir} ->
+        case :application.get_application(module) do
+          {:ok, :elixir} -> true
+          _other -> false
+        end
+      end)
+
+    # Build call graph only from :elixir app modules
+    # This ensures we only include edges within stdlib (including internal modules)
+    # and to Erlang modules, without edges from non-stdlib modules
+    PLT.start(items: stdlib_ir_items)
   end
 
   defp calculate_elixir_fun_progress([], _erlang_funs_info), do: 100
@@ -586,7 +686,7 @@ defmodule Hologram.Framework do
 
     if non_deferred_fun_count > 0 do
       total_progress =
-        Enum.reduce(elixir_funs_info, 0, fn {_elixir_mfa, info}, acc ->
+        Enum.reduce(non_deferred_funs, 0, fn {_elixir_mfa, info}, acc ->
           acc + info.progress
         end)
 
@@ -645,6 +745,14 @@ defmodule Hologram.Framework do
     |> String.to_existing_atom()
   end
 
+  defp filter_out_internal(funs_and_macros) do
+    Enum.reject(funs_and_macros, fn {fun, _arity} ->
+      fun
+      |> to_string()
+      |> String.starts_with?("__")
+    end)
+  end
+
   # Build a map of module => group
   defp map_module_to_group(module_groups) do
     module_groups
@@ -660,25 +768,27 @@ defmodule Hologram.Framework do
     |> Enum.filter(fn {module, _fun, _arity} -> Reflection.erlang_module?(module) end)
   end
 
-  defp stdlib_ir_plt do
-    # Build IR PLT for all modules, then filter to only :elixir OTP app modules
-    # This includes both documented stdlib modules AND internal implementation modules
-    # that are part of the Elixir stdlib (e.g., String.Break, Enum.EmptyError)
-    ir_plt = Compiler.build_ir_plt()
+  defp resolve_elixir_fun_status_and_progess(
+         elixir_mfa,
+         erlang_deps,
+         erlang_funs_info,
+         deferred_elixir_funs_set,
+         overrides
+       ) do
+    calculated_status =
+      calculate_elixir_fun_status(
+        elixir_mfa,
+        erlang_deps,
+        erlang_funs_info,
+        deferred_elixir_funs_set
+      )
 
-    stdlib_ir_items =
-      ir_plt
-      |> PLT.get_all()
-      |> Enum.filter(fn {module, _ir} ->
-        case :application.get_application(module) do
-          {:ok, :elixir} -> true
-          _other -> false
-        end
-      end)
+    calculated_progress = calculate_elixir_fun_progress(erlang_deps, erlang_funs_info)
 
-    # Build call graph only from :elixir app modules
-    # This ensures we only include edges within stdlib (including internal modules)
-    # and to Erlang modules, without edges from non-stdlib modules
-    PLT.start(items: stdlib_ir_items)
+    # Apply status and progress overrides if present
+    case Map.get(overrides, elixir_mfa) do
+      {override_status, override_progress} -> {override_status, override_progress}
+      nil -> {calculated_status, calculated_progress}
+    end
   end
 end
