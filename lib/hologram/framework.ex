@@ -237,22 +237,14 @@ defmodule Hologram.Framework do
     for {module, funs} <- stdlib_deps, {{fun, arity}, erlang_deps} <- funs, into: %{} do
       elixir_mfa = {module, fun, arity}
 
-      calculated_status =
-        calculate_elixir_fun_status(
+      {status, progress} =
+        resolve_elixir_fun_status_and_progess(
           elixir_mfa,
           erlang_deps,
           erlang_funs_info,
-          deferred_elixir_funs_set
+          deferred_elixir_funs_set,
+          overrides
         )
-
-      calculated_progress = calculate_elixir_fun_progress(erlang_deps, erlang_funs_info)
-
-      # Apply status and progress overrides if present
-      {status, progress} =
-        case Map.get(overrides, elixir_mfa) do
-          {override_status, override_progress} -> {override_status, override_progress}
-          nil -> {calculated_status, calculated_progress}
-        end
 
       {elixir_mfa,
        %{
@@ -383,12 +375,14 @@ defmodule Hologram.Framework do
         }
   def elixir_overview_stats(erlang_js_dir, stdlib_deps, opts) do
     elixir_funs_info = elixir_funs_info(erlang_js_dir, stdlib_deps, opts)
-    status_fetcher = fn {_elixir_mfa, %{status: status}} -> status end
-    fun_stats = aggregate_counts_by_status(elixir_funs_info, "fun", status_fetcher)
+    fun_status_fetcher = fn {_elixir_mfa, %{status: status}} -> status end
+    fun_stats = aggregate_counts_by_status(elixir_funs_info, "fun", fun_status_fetcher)
 
     elixir_modules_info = elixir_modules_info(erlang_js_dir, stdlib_deps, opts)
-    status_fetcher = fn {_module, %{status: status}} -> status end
-    module_stats = aggregate_counts_by_status(elixir_modules_info, "module", status_fetcher)
+    module_status_fetcher = fn {_module, %{status: status}} -> status end
+
+    module_stats =
+      aggregate_counts_by_status(elixir_modules_info, "module", module_status_fetcher)
 
     progress = calculate_elixir_overall_progress(elixir_funs_info)
 
@@ -592,6 +586,7 @@ defmodule Hologram.Framework do
   defp aggregate_counts_by_status(items_info, item_type, status_fetcher) do
     Enum.reduce(
       items_info,
+      # credo:disable-for-lines:6 Credo.Check.Warning.UnsafeToAtom
       %{
         "done_#{item_type}_count": 0,
         "in_progress_#{item_type}_count": 0,
@@ -770,5 +765,29 @@ defmodule Hologram.Framework do
     graph
     |> CallGraph.reachable_mfas([source_mfa])
     |> Enum.filter(fn {module, _fun, _arity} -> Reflection.erlang_module?(module) end)
+  end
+
+  defp resolve_elixir_fun_status_and_progess(
+         elixir_mfa,
+         erlang_deps,
+         erlang_funs_info,
+         deferred_elixir_funs_set,
+         overrides
+       ) do
+    calculated_status =
+      calculate_elixir_fun_status(
+        elixir_mfa,
+        erlang_deps,
+        erlang_funs_info,
+        deferred_elixir_funs_set
+      )
+
+    calculated_progress = calculate_elixir_fun_progress(erlang_deps, erlang_funs_info)
+
+    # Apply status and progress overrides if present
+    case Map.get(overrides, elixir_mfa) do
+      {override_status, override_progress} -> {override_status, override_progress}
+      nil -> {calculated_status, calculated_progress}
+    end
   end
 end

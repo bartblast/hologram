@@ -57,7 +57,8 @@ defmodule Hologram.FrameworkTest do
       assert Map.has_key?(kernel_and_targets, {:erlang, :error, 1})
 
       # Verify Integer.is_even/1 has edges to its dependencies
-      # (from macro_deps: {Integer, :is_even, 1} => [{Bitwise, :&&&, 2}, {Kernel, :==, 2}, {Kernel, :and, 2}, {Kernel, :is_integer, 1}])
+      # (from macro_deps: {Integer, :is_even, 1} =>
+      # [{Bitwise, :&&&, 2}, {Kernel, :==, 2}, {Kernel, :and, 2}, {Kernel, :is_integer, 1}])
       integer_is_even_targets = Map.get(result.outgoing_edges, {Integer, :is_even, 1}, %{})
       assert Map.has_key?(integer_is_even_targets, {Bitwise, :&&&, 2})
       assert Map.has_key?(integer_is_even_targets, {Kernel, :==, 2})
@@ -81,7 +82,7 @@ defmodule Hologram.FrameworkTest do
 
     test "removes manually ported Elixir MFAs from graph", %{result: result} do
       # Get list of manually ported Elixir functions that should be removed
-      manually_ported = Hologram.Compiler.CallGraph.manually_ported_elixir_mfas()
+      manually_ported = CallGraph.manually_ported_elixir_mfas()
 
       # Verify that manually ported Elixir functions are not in the graph
       # (they should have been removed by remove_manually_ported_mfas/1)
@@ -892,8 +893,7 @@ defmodule Hologram.FrameworkTest do
 
         # Filter out internal functions/macros (those starting with "__")
         expected_all =
-          (expected_functions ++ expected_macros)
-          |> Enum.reject(fn {fun, _arity} ->
+          Enum.reject(expected_functions ++ expected_macros, fn {fun, _arity} ->
             fun
             |> to_string()
             |> String.starts_with?("__")
@@ -966,11 +966,11 @@ defmodule Hologram.FrameworkTest do
              "Expected Inspect.__deriving__/2 to be filtered out from functions list"
 
       # Verify that no functions or macros starting with "__" are in any module's function list
-      for {module, info} <- result do
-        for {fun, _arity} <- info.functions do
-          refute String.starts_with?(to_string(fun), "__"),
-                 "Expected #{module}.#{fun} not to start with '__'"
-        end
+      for {module, info} <- result, {fun, _arity} <- info.functions do
+        refute fun
+               |> to_string()
+               |> String.starts_with?("__"),
+               "Expected #{module}.#{fun} not to start with '__'"
       end
     end
 
@@ -1237,12 +1237,13 @@ defmodule Hologram.FrameworkTest do
       [fun1, fun2, fun3 | rest] = all_funs
 
       overrides =
-        %{
+        rest
+        |> Map.new(fn fun -> {fun, {:deferred, 100}} end)
+        |> Map.merge(%{
           fun1 => {:done, 90},
           fun2 => {:todo, 30},
           fun3 => {:in_progress, 60}
-        }
-        |> Map.merge(Map.new(rest, fn fun -> {fun, {:deferred, 100}} end))
+        })
 
       opts = [
         deferred_elixir_modules: [],
@@ -1322,8 +1323,7 @@ defmodule Hologram.FrameworkTest do
 
         # Filter out internal functions/macros (those starting with "__")
         expected_all =
-          (expected_functions ++ expected_macros)
-          |> Enum.reject(fn {fun, _arity} ->
+          Enum.reject(expected_functions ++ expected_macros, fn {fun, _arity} ->
             fun
             |> to_string()
             |> String.starts_with?("__")
@@ -1409,11 +1409,11 @@ defmodule Hologram.FrameworkTest do
              "Expected Inspect.__deriving__/2 to be filtered out"
 
       # Verify that no functions or macros starting with "__" are in any module's function map
-      for {module, module_map} <- result do
-        for {{fun, _arity}, _erlang_mfas} <- module_map do
-          refute String.starts_with?(to_string(fun), "__"),
-                 "Expected #{module}.#{fun} not to start with '__'"
-        end
+      for {module, module_map} <- result, {{fun, _arity}, _erlang_mfas} <- module_map do
+        refute fun
+               |> to_string()
+               |> String.starts_with?("__"),
+               "Expected #{module}.#{fun} not to start with '__'"
       end
     end
   end
