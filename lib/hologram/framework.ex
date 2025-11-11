@@ -163,6 +163,8 @@ defmodule Hologram.Framework do
   ## Returns
 
   A directed graph containing call relationships between Elixir stdlib functions/macros and their dependencies.
+  Only includes functions from Elixir stdlib modules (`:elixir` OTP app) and Erlang modules.
+  Non-stdlib Elixir modules (e.g., from `:ecto`, `:phoenix`) are filtered out.
   """
   @spec build_stdlib_call_graph(%{mfa => [mfa]}) :: Digraph.t()
   def build_stdlib_call_graph(macro_deps) do
@@ -171,11 +173,27 @@ defmodule Hologram.Framework do
         {from_mfa, to_mfa}
       end
 
-    build_stdlib_ir_plt()
-    |> Compiler.build_call_graph()
-    |> CallGraph.remove_manually_ported_mfas()
-    |> CallGraph.add_edges(macro_edges)
-    |> CallGraph.get_graph()
+    graph =
+      build_stdlib_ir_plt()
+      |> Compiler.build_call_graph()
+      |> CallGraph.remove_manually_ported_mfas()
+      |> CallGraph.add_edges(macro_edges)
+      |> CallGraph.get_graph()
+
+    # Remove non-stdlib Elixir modules (keep only :elixir app and Erlang modules)
+    non_stdlib_elixir_mfas =
+      graph.vertices
+      |> Map.keys()
+      |> Enum.filter(fn
+        {module, _fun, _arity} ->
+          Reflection.elixir_module?(module) &&
+            match?({:ok, app} when app != :elixir, :application.get_application(module))
+
+        _non_mfa ->
+          false
+      end)
+
+    Digraph.remove_vertices(graph, non_stdlib_elixir_mfas)
   end
 
   @doc """
