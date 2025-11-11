@@ -7,6 +7,7 @@ defmodule Hologram.Router.HelpersTest do
 
   alias Hologram.Test.Fixtures.Router.Helpers.Module1
   alias Hologram.Test.Fixtures.Router.Helpers.Module2
+  alias Hologram.Test.Fixtures.Router.Helpers.Module3
 
   use_module_stub :asset_path_registry
 
@@ -58,8 +59,8 @@ defmodule Hologram.Router.HelpersTest do
     end
 
     test "URL encodes params" do
-      assert page_path(Module2, param_1: "hello world", param_2: "foo/bar") ==
-               "/hologram-test-fixtures-router-helpers-module2/hello%20world/foo%2Fbar"
+      assert page_path(Module3, x: "hello world", y: :"foo/bar") ==
+               "/hologram-test-fixtures-router-helpers-module3/hello%20world/foo%2Fbar"
     end
 
     test "missing single param" do
