@@ -4,6 +4,7 @@ defmodule Hologram.Framework do
   alias Hologram.Commons.PLT
   alias Hologram.Compiler
   alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.Digraph
   alias Hologram.Reflection
 
   @elixir_stdlib_module_groups [
@@ -150,6 +151,32 @@ defmodule Hologram.Framework do
        WithClauseError
      ]}
   ]
+
+  @doc """
+  Builds a call graph for Elixir standard library with macro dependencies.
+
+  ## Parameters
+
+  - `macro_deps` - Map of macro dependencies where keys are MFA tuples and values are lists of MFA tuples they depend on.
+    Edges from the key to each value in the list will be injected into the call graph.
+
+  ## Returns
+
+  A directed graph containing call relationships between Elixir stdlib functions/macros and their dependencies.
+  """
+  @spec build_stdlib_call_graph(%{mfa => [mfa]}) :: Digraph.t()
+  def build_stdlib_call_graph(macro_deps) do
+    macro_edges =
+      for {from_mfa, to_mfas} <- macro_deps, to_mfa <- to_mfas do
+        {from_mfa, to_mfa}
+      end
+
+    build_stdlib_ir_plt()
+    |> Compiler.build_call_graph()
+    |> CallGraph.remove_manually_ported_mfas()
+    |> CallGraph.add_edges(macro_edges)
+    |> CallGraph.get_graph()
+  end
 
   @doc """
   Aggregates information about Elixir standard library functions and macros.
@@ -384,17 +411,7 @@ defmodule Hologram.Framework do
   """
   @spec elixir_stdlib_erlang_deps(%{mfa => [mfa]}) :: %{module => %{{fun, arity} => [mfa]}}
   def elixir_stdlib_erlang_deps(macro_deps) do
-    macro_edges =
-      for {from_mfa, to_mfas} <- macro_deps, to_mfa <- to_mfas do
-        {from_mfa, to_mfa}
-      end
-
-    graph =
-      stdlib_ir_plt()
-      |> Compiler.build_call_graph()
-      |> CallGraph.remove_manually_ported_mfas()
-      |> CallGraph.add_edges(macro_edges)
-      |> CallGraph.get_graph()
+    graph = build_stdlib_call_graph(macro_deps)
 
     # Now query the graph for each documented stdlib function
     elixir_stdlib_module_groups()
@@ -580,6 +597,28 @@ defmodule Hologram.Framework do
     )
   end
 
+  defp build_stdlib_ir_plt do
+    # Build IR PLT for all modules, then filter to only :elixir OTP app modules
+    # This includes both documented stdlib modules AND internal implementation modules
+    # that are part of the Elixir stdlib (e.g., String.Break, Enum.EmptyError)
+    ir_plt = Compiler.build_ir_plt()
+
+    stdlib_ir_items =
+      ir_plt
+      |> PLT.get_all()
+      |> Enum.filter(fn {module, _ir} ->
+        case :application.get_application(module) do
+          {:ok, :elixir} -> true
+          _other -> false
+        end
+      end)
+
+    # Build call graph only from :elixir app modules
+    # This ensures we only include edges within stdlib (including internal modules)
+    # and to Erlang modules, without edges from non-stdlib modules
+    PLT.start(items: stdlib_ir_items)
+  end
+
   defp calculate_elixir_fun_progress([], _erlang_funs_info), do: 100
 
   defp calculate_elixir_fun_progress(erlang_deps, erlang_funs_info) do
@@ -722,27 +761,5 @@ defmodule Hologram.Framework do
     graph
     |> CallGraph.reachable_mfas([source_mfa])
     |> Enum.filter(fn {module, _fun, _arity} -> Reflection.erlang_module?(module) end)
-  end
-
-  defp stdlib_ir_plt do
-    # Build IR PLT for all modules, then filter to only :elixir OTP app modules
-    # This includes both documented stdlib modules AND internal implementation modules
-    # that are part of the Elixir stdlib (e.g., String.Break, Enum.EmptyError)
-    ir_plt = Compiler.build_ir_plt()
-
-    stdlib_ir_items =
-      ir_plt
-      |> PLT.get_all()
-      |> Enum.filter(fn {module, _ir} ->
-        case :application.get_application(module) do
-          {:ok, :elixir} -> true
-          _other -> false
-        end
-      end)
-
-    # Build call graph only from :elixir app modules
-    # This ensures we only include edges within stdlib (including internal modules)
-    # and to Erlang modules, without edges from non-stdlib modules
-    PLT.start(items: stdlib_ir_items)
   end
 end
