@@ -583,6 +583,7 @@ defmodule Hologram.Framework do
     end)
   end
 
+  # sobelow_skip ["DOS.BinToAtom"]
   defp aggregate_counts_by_status(items_info, item_type, status_fetcher) do
     Enum.reduce(
       items_info,
