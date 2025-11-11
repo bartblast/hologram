@@ -1,6 +1,9 @@
 defmodule Hologram.FrameworkTest do
   use Hologram.Test.BasicCase, async: true
   import Hologram.Framework
+
+  alias Hologram.Compiler.CallGraph
+  alias Hologram.Compiler.Digraph
   alias Hologram.Reflection
 
   @macro_deps %{
@@ -20,6 +23,105 @@ defmodule Hologram.FrameworkTest do
 
   setup_all do
     [elixir_stdlib_erlang_deps: elixir_stdlib_erlang_deps(@macro_deps)]
+  end
+
+  describe "build_stdlib_call_graph/1" do
+    setup do
+      [result: build_stdlib_call_graph(@macro_deps)]
+    end
+
+    test "returns a Digraph struct", %{result: result} do
+      assert %Digraph{} = result
+    end
+
+    test "graph contains Elixir stdlib functions as vertices", %{result: result} do
+      # Check some known Elixir stdlib functions are vertices
+      assert Map.has_key?(result.vertices, {Kernel, :hd, 1})
+      assert Map.has_key?(result.vertices, {Kernel, :+, 2})
+      assert Map.has_key?(result.vertices, {Atom, :to_string, 1})
+      assert Map.has_key?(result.vertices, {String, :length, 1})
+    end
+
+    test "graph contains Erlang functions as vertices", %{result: result} do
+      # Check some known Erlang functions are vertices
+      assert Map.has_key?(result.vertices, {:erlang, :hd, 1})
+      assert Map.has_key?(result.vertices, {:erlang, :+, 2})
+      assert Map.has_key?(result.vertices, {:erlang, :tl, 1})
+    end
+
+    test "includes edges from macro dependencies", %{result: result} do
+      # Verify Kernel.and/2 -> :erlang.andalso/2 edge exists
+      # (from macro_deps: {Kernel, :and, 2} => [{:erlang, :andalso, 2}, {:erlang, :error, 1}])
+      kernel_and_targets = Map.get(result.outgoing_edges, {Kernel, :and, 2}, %{})
+      assert Map.has_key?(kernel_and_targets, {:erlang, :andalso, 2})
+      assert Map.has_key?(kernel_and_targets, {:erlang, :error, 1})
+
+      # Verify Integer.is_even/1 has edges to its dependencies
+      # (from macro_deps: {Integer, :is_even, 1} => [{Bitwise, :&&&, 2}, {Kernel, :==, 2}, {Kernel, :and, 2}, {Kernel, :is_integer, 1}])
+      integer_is_even_targets = Map.get(result.outgoing_edges, {Integer, :is_even, 1}, %{})
+      assert Map.has_key?(integer_is_even_targets, {Bitwise, :&&&, 2})
+      assert Map.has_key?(integer_is_even_targets, {Kernel, :==, 2})
+      assert Map.has_key?(integer_is_even_targets, {Kernel, :and, 2})
+      assert Map.has_key?(integer_is_even_targets, {Kernel, :is_integer, 1})
+    end
+
+    test "works with empty macro dependencies" do
+      result = build_stdlib_call_graph(%{})
+
+      assert %Digraph{} = result
+
+      assert map_size(result.vertices) > 0,
+             "Expected graph to have vertices even with empty macro_deps"
+
+      # Verify Kernel.and/2 does NOT have edges to Erlang functions when macro_deps is empty
+      kernel_and_targets = Map.get(result.outgoing_edges, {Kernel, :and, 2}, %{})
+      refute Map.has_key?(kernel_and_targets, {:erlang, :andalso, 2})
+      refute Map.has_key?(kernel_and_targets, {:erlang, :error, 1})
+    end
+
+    test "removes manually ported Elixir MFAs from graph", %{result: result} do
+      # Get list of manually ported Elixir functions that should be removed
+      manually_ported = Hologram.Compiler.CallGraph.manually_ported_elixir_mfas()
+
+      # Verify that manually ported Elixir functions are not in the graph
+      # (they should have been removed by remove_manually_ported_mfas/1)
+      for mfa <- manually_ported do
+        refute Map.has_key?(result.vertices, mfa),
+               "Expected #{inspect(mfa)} to be removed as it's manually ported"
+      end
+    end
+
+    test "graph only includes Elixir stdlib modules", %{result: result} do
+      # Filter to only Elixir module vertices (exclude Erlang vertices and non-module vertices)
+      elixir_module_vertices =
+        result.vertices
+        |> Map.keys()
+        |> Enum.filter(fn
+          {module, _fun, _arity} -> Reflection.elixir_module?(module)
+          _mfa -> false
+        end)
+
+      # All Elixir vertices should be from the :elixir OTP application
+      for {module, _fun, _arity} <- elixir_module_vertices do
+        {:ok, app} = :application.get_application(module)
+
+        assert app == :elixir,
+               "Expected #{inspect(module)} to be from :elixir app, got #{inspect(app)}"
+      end
+    end
+
+    test "macro dependencies create transitive edges in graph", %{result: result} do
+      # Integer.is_even/1 depends on Kernel.and/2 (via macro_deps)
+      # Kernel.and/2 depends on :erlang.andalso/2 (via macro_deps)
+      # So Integer.is_even/1 should transitively reach :erlang.andalso/2
+      reachable_from_is_even = CallGraph.reachable_mfas(result, [{Integer, :is_even, 1}])
+
+      assert {:erlang, :andalso, 2} in reachable_from_is_even,
+             "Expected Integer.is_even/1 to transitively reach :erlang.andalso/2 through Kernel.and/2"
+
+      assert {:erlang, :error, 1} in reachable_from_is_even,
+             "Expected Integer.is_even/1 to transitively reach :erlang.error/1 through Kernel.and/2"
+    end
   end
 
   describe "elixir_funs_info/2" do
