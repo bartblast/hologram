@@ -35,6 +35,48 @@ const mapA1B2 = freeze(
 // Always update both together.
 
 describe("Erlang_Maps", () => {
+  describe("find/2", () => {
+    const find = Erlang_Maps["find/2"];
+
+    it("successfully find key in map and return ok tuple with value", () => {
+      const key = Type.string("two");
+      const value = Type.integer(2);
+
+      const map = Type.map([
+          [Type.string("one"), Type.integer(1)],
+          [key, value],
+      ]);
+
+      const result = find(key, map);
+
+      assert.deepStrictEqual(result, value);
+    });
+
+    it("key does not exist in map", () => {
+      const key = Type.string("hello");
+      const expected = Type.tuple([
+        Type.atom("error")
+      ]);
+
+      const map = Type.map([
+          [Type.string("hi"), Type.integer(42)],
+          [key, value],
+      ]);
+
+      const result = find(key, map);
+      
+      assert.deepStrictEqual(result, expected);
+    })
+
+    it("raises BadMapError if the second argument is not a map", () => {
+        assertBoxedError(
+            () => get(Type.atom("a"), Type.integer(1)),
+            "BadMapError",
+            "expected a map, got: 1"
+        );
+    });
+  });
+
   describe("fold/3", () => {
     const fold = Erlang_Maps["fold/3"];
 
