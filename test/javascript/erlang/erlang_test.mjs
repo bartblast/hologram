@@ -1823,6 +1823,70 @@ describe("Erlang", () => {
     });
   });
 
+  describe("binary_to_float/1", () => {
+    const testedFun = Erlang["binary_to_float/1"];
+
+    it("converts binary with positive float", () => {
+      const result = testedFun(Type.bitstring("3.14"));
+
+      assert.deepStrictEqual(result, Type.float(3.14));
+    });
+
+    it("converts binary with negative float", () => {
+      const result = testedFun(Type.bitstring("-2.5"));
+
+      assert.deepStrictEqual(result, Type.float(-2.5));
+    });
+
+    it("converts binary with scientific notation (lowercase e)", () => {
+      const result = testedFun(Type.bitstring("1.5e2"));
+
+      assert.deepStrictEqual(result, Type.float(150.0));
+    });
+
+    it("converts binary with scientific notation (uppercase E)", () => {
+      const result = testedFun(Type.bitstring("1.5E2"));
+
+      assert.deepStrictEqual(result, Type.float(150.0));
+    });
+
+    it("converts binary with negative exponent", () => {
+      const result = testedFun(Type.bitstring("1.5e-2"));
+
+      assert.deepStrictEqual(result, Type.float(0.015));
+    });
+
+    it("converts integer with exponent (no decimal point)", () => {
+      const result = testedFun(Type.bitstring("15e1"));
+
+      assert.deepStrictEqual(result, Type.float(150.0));
+    });
+
+    it("raises ArgumentError if argument is not a binary", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("raises ArgumentError if binary doesn't represent a float (integer without exponent)", () => {
+      assertBoxedError(
+        () => testedFun(Type.bitstring("42")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a textual representation of a float"),
+      );
+    });
+
+    it("raises ArgumentError if binary is not a valid number", () => {
+      assertBoxedError(
+        () => testedFun(Type.bitstring("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a textual representation of a float"),
+      );
+    });
+  });
+
   describe("bit_size/1", () => {
     const bit_size = Erlang["bit_size/1"];
 

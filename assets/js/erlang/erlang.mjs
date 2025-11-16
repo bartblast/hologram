@@ -416,6 +416,38 @@ const Erlang = {
   // End binary_to_integer/2
   // Deps: []
 
+  // Start binary_to_float/1
+  "binary_to_float/1": (binary) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    Bitstring.maybeSetTextFromBytes(binary);
+    const text = binary.text;
+
+    // Validate that the text represents a valid float
+    // Erlang requires floats to have decimal point or exponent
+    if (!/^[+-]?\d+\.\d+([eE][+-]?\d+)?$|^[+-]?\d+[eE][+-]?\d+$/.test(text)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a textual representation of a float"),
+      );
+    }
+
+    const value = parseFloat(text);
+
+    if (!isFinite(value)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a textual representation of a float"),
+      );
+    }
+
+    return Type.float(value);
+  },
+  // End binary_to_float/1
+  // Deps: []
+
   // Start bit_size/1
   "bit_size/1": (term) => {
     if (!Type.isBitstring(term)) {
