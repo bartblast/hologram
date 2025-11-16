@@ -4245,4 +4245,412 @@ describe("Erlang", () => {
       );
     });
   });
+
+  // Batch 1O tests
+  describe("demonitor/1", () => {
+    const testedFun = Erlang["demonitor/1"];
+
+    it("demonitors a process", () => {
+      const ref = Type.reference();
+      assert.deepStrictEqual(testedFun(ref), Type.boolean(true));
+    });
+
+    it("raises ArgumentError if not a reference", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_ref")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a reference")
+      );
+    });
+  });
+
+  describe("fun_info/1", () => {
+    const testedFun = Erlang["fun_info/1"];
+
+    it("returns function info", () => {
+      const fun = Type.anonymousFunction(0, [], null);
+      const result = testedFun(fun);
+      assert.strictEqual(result.type, "list");
+      assert.ok(result.data.length > 0);
+    });
+
+    it("raises ArgumentError if not a function", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_fun")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a function")
+      );
+    });
+  });
+
+  describe("fun_info/2", () => {
+    const testedFun = Erlang["fun_info/2"];
+
+    it("returns function arity", () => {
+      const fun = Type.anonymousFunction(2, [], null);
+      const result = testedFun(fun, Type.atom("arity"));
+      assert.deepStrictEqual(result, Type.tuple([Type.atom("arity"), Type.integer(2n)]));
+    });
+
+    it("returns function type", () => {
+      const fun = Type.anonymousFunction(0, [], null);
+      const result = testedFun(fun, Type.atom("type"));
+      assert.deepStrictEqual(result, Type.tuple([Type.atom("type"), Type.atom("local")]));
+    });
+
+    it("raises ArgumentError if first argument is not a function", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_fun"), Type.atom("arity")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a function")
+      );
+    });
+
+    it("raises ArgumentError if second argument is not an atom", () => {
+      const fun = Type.anonymousFunction(0, [], null);
+      assertBoxedError(
+        () => testedFun(fun, Type.integer(123n)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an atom")
+      );
+    });
+  });
+
+  describe("garbage_collect/0", () => {
+    const testedFun = Erlang["garbage_collect/0"];
+
+    it("triggers garbage collection", () => {
+      assert.deepStrictEqual(testedFun(), Type.boolean(true));
+    });
+  });
+
+  describe("is_alive/0", () => {
+    const testedFun = Erlang["is_alive/0"];
+
+    it("returns false for non-distributed node", () => {
+      assert.deepStrictEqual(testedFun(), Type.boolean(false));
+    });
+  });
+
+  describe("link/1", () => {
+    const testedFun = Erlang["link/1"];
+
+    it("links to a process", () => {
+      const pid = Type.pid("client", [0, 1, 0], "client");
+      assert.deepStrictEqual(testedFun(pid), Type.boolean(true));
+    });
+
+    it("raises ArgumentError if not a PID", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_pid")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a pid")
+      );
+    });
+  });
+
+  describe("loaded/0", () => {
+    const testedFun = Erlang["loaded/0"];
+
+    it("returns list of loaded modules", () => {
+      const result = testedFun();
+      assert.strictEqual(result.type, "list");
+      assert.ok(result.data.length > 0);
+    });
+  });
+
+  describe("memory/0", () => {
+    const testedFun = Erlang["memory/0"];
+
+    it("returns memory information", () => {
+      const result = testedFun();
+      assert.strictEqual(result.type, "list");
+      assert.ok(result.data.length > 0);
+    });
+  });
+
+  describe("monitor/2", () => {
+    const testedFun = Erlang["monitor/2"];
+
+    it("monitors a process", () => {
+      const pid = Type.pid("client", [0, 1, 0], "client");
+      const result = testedFun(Type.atom("process"), pid);
+      assert.strictEqual(result.type, "reference");
+    });
+
+    it("raises ArgumentError if first argument is not :process", () => {
+      const pid = Type.pid("client", [0, 1, 0], "client");
+      assertBoxedError(
+        () => testedFun(Type.atom("invalid"), pid),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "invalid monitor type")
+      );
+    });
+
+    it("raises ArgumentError if second argument is not a PID", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("process"), Type.atom("not_pid")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a pid")
+      );
+    });
+  });
+
+  describe("node/1", () => {
+    const testedFun = Erlang["node/1"];
+
+    it("returns node of a PID", () => {
+      const pid = Type.pid("client", [0, 1, 0], "client");
+      const result = testedFun(pid);
+      assert.strictEqual(result.type, "atom");
+      assert.deepStrictEqual(result, Type.atom("nonode@nohost"));
+    });
+
+    it("raises ArgumentError if not a PID", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_pid")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a pid")
+      );
+    });
+  });
+
+  describe("nodes/0", () => {
+    const testedFun = Erlang["nodes/0"];
+
+    it("returns list of connected nodes", () => {
+      const result = testedFun();
+      assert.strictEqual(result.type, "list");
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+  });
+
+  describe("process_flag/2", () => {
+    const testedFun = Erlang["process_flag/2"];
+
+    it("sets trap_exit flag", () => {
+      const result = testedFun(Type.atom("trap_exit"), Type.boolean(true));
+      assert.strictEqual(result.type, "boolean");
+    });
+
+    it("raises ArgumentError if first argument is not an atom", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(123n), Type.boolean(true)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an atom")
+      );
+    });
+  });
+
+  describe("process_info/1", () => {
+    const testedFun = Erlang["process_info/1"];
+
+    it("returns process information", () => {
+      const pid = Type.pid("client", [0, 1, 0], "client");
+      const result = testedFun(pid);
+      assert.strictEqual(result.type, "list");
+      assert.ok(result.data.length > 0);
+    });
+
+    it("raises ArgumentError if not a PID", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_pid")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a pid")
+      );
+    });
+  });
+
+  describe("process_info/2", () => {
+    const testedFun = Erlang["process_info/2"];
+
+    it("returns process status", () => {
+      const pid = Type.pid("client", [0, 1, 0], "client");
+      const result = testedFun(pid, Type.atom("status"));
+      assert.deepStrictEqual(result, Type.tuple([Type.atom("status"), Type.atom("running")]));
+    });
+
+    it("returns process messages", () => {
+      const pid = Type.pid("client", [0, 1, 0], "client");
+      const result = testedFun(pid, Type.atom("messages"));
+      assert.deepStrictEqual(result, Type.tuple([Type.atom("messages"), Type.list([])]));
+    });
+
+    it("raises ArgumentError if first argument is not a PID", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_pid"), Type.atom("status")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a pid")
+      );
+    });
+
+    it("raises ArgumentError if second argument is not an atom", () => {
+      const pid = Type.pid("client", [0, 1, 0], "client");
+      assertBoxedError(
+        () => testedFun(pid, Type.integer(123n)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an atom")
+      );
+    });
+  });
+
+  describe("spawn_link/1", () => {
+    const testedFun = Erlang["spawn_link/1"];
+
+    it("spawns and links a process", () => {
+      const fun = Type.anonymousFunction(0, [], null);
+      const result = testedFun(fun);
+      assert.strictEqual(result.type, "pid");
+    });
+
+    it("raises ArgumentError if not a function", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_fun")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a function")
+      );
+    });
+  });
+
+  describe("spawn_link/3", () => {
+    const testedFun = Erlang["spawn_link/3"];
+
+    it("spawns and links a process with MFA", () => {
+      const result = testedFun(Type.atom("Kernel"), Type.atom("abs"), Type.list([Type.integer(-5n)]));
+      assert.strictEqual(result.type, "pid");
+    });
+
+    it("raises ArgumentError if first argument is not an atom", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(123n), Type.atom("abs"), Type.list([])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an atom")
+      );
+    });
+
+    it("raises ArgumentError if second argument is not an atom", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("Kernel"), Type.integer(123n), Type.list([])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an atom")
+      );
+    });
+
+    it("raises ArgumentError if third argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("Kernel"), Type.atom("abs"), Type.atom("not_list")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a list")
+      );
+    });
+  });
+
+  describe("spawn_monitor/1", () => {
+    const testedFun = Erlang["spawn_monitor/1"];
+
+    it("spawns and monitors a process", () => {
+      const fun = Type.anonymousFunction(0, [], null);
+      const result = testedFun(fun);
+      assert.strictEqual(result.type, "tuple");
+      assert.strictEqual(result.data[0].type, "pid");
+      assert.strictEqual(result.data[1].type, "reference");
+    });
+
+    it("raises ArgumentError if not a function", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_fun")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a function")
+      );
+    });
+  });
+
+  describe("spawn_monitor/3", () => {
+    const testedFun = Erlang["spawn_monitor/3"];
+
+    it("spawns and monitors a process with MFA", () => {
+      const result = testedFun(Type.atom("Kernel"), Type.atom("abs"), Type.list([Type.integer(-5n)]));
+      assert.strictEqual(result.type, "tuple");
+      assert.strictEqual(result.data[0].type, "pid");
+      assert.strictEqual(result.data[1].type, "reference");
+    });
+
+    it("raises ArgumentError if first argument is not an atom", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(123n), Type.atom("abs"), Type.list([])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an atom")
+      );
+    });
+
+    it("raises ArgumentError if second argument is not an atom", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("Kernel"), Type.integer(123n), Type.list([])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an atom")
+      );
+    });
+
+    it("raises ArgumentError if third argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("Kernel"), Type.atom("abs"), Type.atom("not_list")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a list")
+      );
+    });
+  });
+
+  describe("system_info/1", () => {
+    const testedFun = Erlang["system_info/1"];
+
+    it("returns process count", () => {
+      const result = testedFun(Type.atom("process_count"));
+      assert.strictEqual(result.type, "integer");
+    });
+
+    it("returns port count", () => {
+      const result = testedFun(Type.atom("port_count"));
+      assert.strictEqual(result.type, "integer");
+    });
+
+    it("returns system version", () => {
+      const result = testedFun(Type.atom("system_version"));
+      assert.strictEqual(result.type, "bitstring");
+    });
+
+    it("returns otp release", () => {
+      const result = testedFun(Type.atom("otp_release"));
+      assert.strictEqual(result.type, "bitstring");
+    });
+
+    it("returns wordsize", () => {
+      const result = testedFun(Type.atom("wordsize"));
+      assert.deepStrictEqual(result, Type.integer(8n));
+    });
+
+    it("raises ArgumentError if not an atom", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(123n)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an atom")
+      );
+    });
+  });
+
+  describe("unlink/1", () => {
+    const testedFun = Erlang["unlink/1"];
+
+    it("unlinks from a process", () => {
+      const pid = Type.pid("client", [0, 1, 0], "client");
+      assert.deepStrictEqual(testedFun(pid), Type.boolean(true));
+    });
+
+    it("raises ArgumentError if not a PID or port", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_pid")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a pid or port")
+      );
+    });
+  });
 });

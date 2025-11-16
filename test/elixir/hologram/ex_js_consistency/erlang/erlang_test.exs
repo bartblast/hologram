@@ -3141,4 +3141,320 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   #     assert is_binary(result)
   #   end
   # end
+
+  # Batch 1O tests
+  describe "demonitor/1" do
+    test "demonitors a process" do
+      ref = make_ref()
+      assert :erlang.demonitor(ref) == true
+    end
+
+    test "raises ArgumentError if not a reference" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a reference"), fn ->
+        :erlang.demonitor(:not_ref)
+      end
+    end
+  end
+
+  describe "fun_info/1" do
+    test "returns function info" do
+      fun = fn -> :ok end
+      result = :erlang.fun_info(fun)
+      assert is_list(result)
+    end
+
+    test "raises ArgumentError if not a function" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a function"), fn ->
+        :erlang.fun_info(:not_fun)
+      end
+    end
+  end
+
+  describe "fun_info/2" do
+    test "returns function arity" do
+      fun = fn x, y -> x + y end
+      assert :erlang.fun_info(fun, :arity) == {:arity, 2}
+    end
+
+    test "returns function type" do
+      fun = fn -> :ok end
+      assert :erlang.fun_info(fun, :type) == {:type, :local}
+    end
+
+    test "raises ArgumentError if first argument is not a function" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a function"), fn ->
+        :erlang.fun_info(:not_fun, :arity)
+      end
+    end
+
+    test "raises ArgumentError if second argument is not an atom" do
+      fun = fn -> :ok end
+
+      assert_error ArgumentError, build_argument_error_msg(2, "not an atom"), fn ->
+        :erlang.fun_info(fun, 123)
+      end
+    end
+  end
+
+  describe "garbage_collect/0" do
+    test "triggers garbage collection" do
+      assert :erlang.garbage_collect() == true
+    end
+  end
+
+  describe "is_alive/0" do
+    test "returns false for non-distributed node" do
+      assert :erlang.is_alive() == false
+    end
+  end
+
+  describe "link/1" do
+    test "links to a process" do
+      pid = self()
+      assert :erlang.link(pid) == true
+    end
+
+    test "raises ArgumentError if not a PID" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a pid"), fn ->
+        :erlang.link(:not_pid)
+      end
+    end
+  end
+
+  describe "loaded/0" do
+    test "returns list of loaded modules" do
+      result = :erlang.loaded()
+      assert is_list(result)
+      assert length(result) > 0
+    end
+  end
+
+  describe "memory/0" do
+    test "returns memory information" do
+      result = :erlang.memory()
+      assert is_list(result)
+      assert length(result) > 0
+    end
+  end
+
+  describe "monitor/2" do
+    test "monitors a process" do
+      pid = self()
+      ref = :erlang.monitor(:process, pid)
+      assert is_reference(ref)
+    end
+
+    test "raises ArgumentError if first argument is not :process" do
+      assert_error ArgumentError, build_argument_error_msg(1, "invalid monitor type"), fn ->
+        :erlang.monitor(:invalid, self())
+      end
+    end
+
+    test "raises ArgumentError if second argument is not a PID" do
+      assert_error ArgumentError, build_argument_error_msg(2, "not a pid"), fn ->
+        :erlang.monitor(:process, :not_pid)
+      end
+    end
+  end
+
+  describe "node/1" do
+    test "returns node of a PID" do
+      pid = self()
+      result = :erlang.node(pid)
+      assert is_atom(result)
+    end
+
+    test "raises ArgumentError if not a PID" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a pid"), fn ->
+        :erlang.node(:not_pid)
+      end
+    end
+  end
+
+  describe "nodes/0" do
+    test "returns list of connected nodes" do
+      result = :erlang.nodes()
+      assert is_list(result)
+    end
+  end
+
+  describe "process_flag/2" do
+    test "sets trap_exit flag" do
+      result = :erlang.process_flag(:trap_exit, true)
+      assert is_boolean(result)
+    end
+
+    test "raises ArgumentError if first argument is not an atom" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not an atom"), fn ->
+        :erlang.process_flag(123, true)
+      end
+    end
+  end
+
+  describe "process_info/1" do
+    test "returns process information" do
+      pid = self()
+      result = :erlang.process_info(pid)
+      assert is_list(result)
+      assert length(result) > 0
+    end
+
+    test "raises ArgumentError if not a PID" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a pid"), fn ->
+        :erlang.process_info(:not_pid)
+      end
+    end
+  end
+
+  describe "process_info/2" do
+    test "returns process status" do
+      pid = self()
+      assert :erlang.process_info(pid, :status) == {:status, :running}
+    end
+
+    test "returns process messages" do
+      pid = self()
+      assert :erlang.process_info(pid, :messages) == {:messages, []}
+    end
+
+    test "raises ArgumentError if first argument is not a PID" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a pid"), fn ->
+        :erlang.process_info(:not_pid, :status)
+      end
+    end
+
+    test "raises ArgumentError if second argument is not an atom" do
+      pid = self()
+
+      assert_error ArgumentError, build_argument_error_msg(2, "not an atom"), fn ->
+        :erlang.process_info(pid, 123)
+      end
+    end
+  end
+
+  describe "spawn_link/1" do
+    test "spawns and links a process" do
+      fun = fn -> :ok end
+      pid = :erlang.spawn_link(fun)
+      assert is_pid(pid)
+    end
+
+    test "raises ArgumentError if not a function" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a function"), fn ->
+        :erlang.spawn_link(:not_fun)
+      end
+    end
+  end
+
+  describe "spawn_link/3" do
+    test "spawns and links a process with MFA" do
+      pid = :erlang.spawn_link(Kernel, :abs, [-5])
+      assert is_pid(pid)
+    end
+
+    test "raises ArgumentError if first argument is not an atom" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not an atom"), fn ->
+        :erlang.spawn_link(123, :abs, [-5])
+      end
+    end
+
+    test "raises ArgumentError if second argument is not an atom" do
+      assert_error ArgumentError, build_argument_error_msg(2, "not an atom"), fn ->
+        :erlang.spawn_link(Kernel, 123, [-5])
+      end
+    end
+
+    test "raises ArgumentError if third argument is not a list" do
+      assert_error ArgumentError, build_argument_error_msg(3, "not a list"), fn ->
+        :erlang.spawn_link(Kernel, :abs, :not_list)
+      end
+    end
+  end
+
+  describe "spawn_monitor/1" do
+    test "spawns and monitors a process" do
+      fun = fn -> :ok end
+      {pid, ref} = :erlang.spawn_monitor(fun)
+      assert is_pid(pid)
+      assert is_reference(ref)
+    end
+
+    test "raises ArgumentError if not a function" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a function"), fn ->
+        :erlang.spawn_monitor(:not_fun)
+      end
+    end
+  end
+
+  describe "spawn_monitor/3" do
+    test "spawns and monitors a process with MFA" do
+      {pid, ref} = :erlang.spawn_monitor(Kernel, :abs, [-5])
+      assert is_pid(pid)
+      assert is_reference(ref)
+    end
+
+    test "raises ArgumentError if first argument is not an atom" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not an atom"), fn ->
+        :erlang.spawn_monitor(123, :abs, [-5])
+      end
+    end
+
+    test "raises ArgumentError if second argument is not an atom" do
+      assert_error ArgumentError, build_argument_error_msg(2, "not an atom"), fn ->
+        :erlang.spawn_monitor(Kernel, 123, [-5])
+      end
+    end
+
+    test "raises ArgumentError if third argument is not a list" do
+      assert_error ArgumentError, build_argument_error_msg(3, "not a list"), fn ->
+        :erlang.spawn_monitor(Kernel, :abs, :not_list)
+      end
+    end
+  end
+
+  describe "system_info/1" do
+    test "returns process count" do
+      result = :erlang.system_info(:process_count)
+      assert is_integer(result)
+    end
+
+    test "returns port count" do
+      result = :erlang.system_info(:port_count)
+      assert is_integer(result)
+    end
+
+    test "returns system version" do
+      result = :erlang.system_info(:system_version)
+      assert is_binary(result)
+    end
+
+    test "returns otp release" do
+      result = :erlang.system_info(:otp_release)
+      assert is_binary(result)
+    end
+
+    test "returns wordsize" do
+      result = :erlang.system_info(:wordsize)
+      assert result == 8
+    end
+
+    test "raises ArgumentError if not an atom" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not an atom"), fn ->
+        :erlang.system_info(123)
+      end
+    end
+  end
+
+  describe "unlink/1" do
+    test "unlinks from a process" do
+      pid = self()
+      assert :erlang.unlink(pid) == true
+    end
+
+    test "raises ArgumentError if not a PID or port" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a pid or port"), fn ->
+        :erlang.unlink(:not_pid)
+      end
+    end
+  end
 end

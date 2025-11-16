@@ -761,6 +761,21 @@ const Erlang = {
   // End delete_element/2
   // Deps: []
 
+  // Start demonitor/1
+  "demonitor/1": (monitorRef) => {
+    if (!Type.isReference(monitorRef)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a reference"),
+      );
+    }
+
+    // In Hologram, demonitoring is simplified
+    // Just return true to indicate success
+    return Type.boolean(true);
+  },
+  // End demonitor/1
+  // Deps: []
+
   // Start date/0
   "date/0": () => {
     // Return current date as {Year, Month, Day}
@@ -988,6 +1003,55 @@ const Erlang = {
   // End function_exported/3
   // Deps: []
 
+  // Start fun_info/1
+  "fun_info/1": (fun) => {
+    if (!Type.isFunction(fun)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a function"),
+      );
+    }
+
+    // Return basic function info as a list of tuples
+    const info = [
+      Type.tuple([Type.atom("type"), Type.atom("local")]),
+      Type.tuple([Type.atom("arity"), Type.integer(BigInt(fun.arity || 0))]),
+    ];
+
+    return Type.list(info);
+  },
+  // End fun_info/1
+  // Deps: []
+
+  // Start fun_info/2
+  "fun_info/2": (fun, item) => {
+    if (!Type.isFunction(fun)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a function"),
+      );
+    }
+
+    if (!Type.isAtom(item)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    const itemName = item.value;
+
+    switch (itemName) {
+      case "type":
+        return Type.tuple([Type.atom("type"), Type.atom("local")]);
+      case "arity":
+        return Type.tuple([Type.atom("arity"), Type.integer(BigInt(fun.arity || 0))]);
+      default:
+        throw new HologramBoxedError(
+          Type.tuple([Type.atom("badarg"), item])
+        );
+    }
+  },
+  // End fun_info/2
+  // Deps: []
+
   // Start get/0
   "get/0": () => {
     // Get all key-value pairs from process dictionary
@@ -1053,6 +1117,15 @@ const Erlang = {
     return Type.list(keys);
   },
   // End get_keys/1
+  // Deps: []
+
+  // Start garbage_collect/0
+  "garbage_collect/0": () => {
+    // In browser/Node.js, we can't force garbage collection explicitly
+    // This is a no-op in Hologram
+    return Type.boolean(true);
+  },
+  // End garbage_collect/0
   // Deps: []
 
   // Start group_leader/0
@@ -1302,6 +1375,14 @@ const Erlang = {
   // End iolist_size/1
   // Deps: [:erlang.iolist_to_binary/1, :erlang.byte_size/1]
 
+  // Start is_alive/0
+  "is_alive/0": () => {
+    // In Hologram, we always consider the node alive
+    return Type.boolean(true);
+  },
+  // End is_alive/0
+  // Deps: []
+
   // Start is_atom/1
   "is_atom/1": (term) => {
     return Type.boolean(Type.isAtom(term));
@@ -1432,6 +1513,21 @@ const Erlang = {
     return Type.integer(list.data.length);
   },
   // End length/1
+  // Deps: []
+
+  // Start link/1
+  "link/1": (pid) => {
+    if (!Type.isPid(pid)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a pid"),
+      );
+    }
+
+    // In Hologram, linking is simplified
+    // Just return true to indicate success
+    return Type.boolean(true);
+  },
+  // End link/1
   // Deps: []
 
   // Start list_to_pid/1
@@ -1757,6 +1853,14 @@ const Erlang = {
   // End localtime/0
   // Deps: []
 
+  // Start loaded/0
+  "loaded/0": () => {
+    // Return list of loaded modules (simplified in Hologram)
+    return Type.list([Type.atom("Erlang")]);
+  },
+  // End loaded/0
+  // Deps: []
+
   // Start make_ref/0
   "make_ref/0": () => {
     // Generate a unique reference using timestamp and random values
@@ -1787,6 +1891,19 @@ const Erlang = {
     return Type.tuple(data);
   },
   // End make_tuple/2
+  // Deps: []
+
+  // Start memory/0
+  "memory/0": () => {
+    // Return memory information (simplified in Hologram)
+    const info = [
+      Type.tuple([Type.atom("total"), Type.integer(0n)]),
+      Type.tuple([Type.atom("processes"), Type.integer(0n)]),
+      Type.tuple([Type.atom("system"), Type.integer(0n)]),
+    ];
+    return Type.list(info);
+  },
+  // End memory/0
   // Deps: []
 
   // Start map_size/1
@@ -1892,6 +2009,26 @@ const Erlang = {
   // End monotonic_time/0
   // Deps: []
 
+  // Start monitor/2
+  "monitor/2": (type, item) => {
+    if (!Type.isAtom(type)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (type.value !== "process") {
+      Interpreter.raiseArgumentError(
+        "invalid monitor type, only 'process' is supported",
+      );
+    }
+
+    // Return a reference for the monitor
+    return Erlang["make_ref/0"]();
+  },
+  // End monitor/2
+  // Deps: [:erlang.make_ref/0]
+
   // Start not/1
   "not/1": (term) => {
     if (!Type.isBoolean(term)) {
@@ -1912,6 +2049,15 @@ const Erlang = {
   // End node/0
   // Deps: []
 
+  // Start node/1
+  "node/1": (arg) => {
+    // Return the node of pid/port/reference
+    // In Hologram, everything is on the same node
+    return Type.atom("nonode@nohost");
+  },
+  // End node/1
+  // Deps: []
+
   // Start now/0
   "now/0": () => {
     // Return timestamp as {MegaSecs, Secs, MicroSecs} (deprecated but still used)
@@ -1920,6 +2066,14 @@ const Erlang = {
   },
   // End now/0
   // Deps: [:erlang.timestamp/0]
+
+  // Start nodes/0
+  "nodes/0": () => {
+    // Return list of connected nodes (empty in Hologram)
+    return Type.list([]);
+  },
+  // End nodes/0
+  // Deps: []
 
   // Start orelse/2
   "orelse/2": (leftFun, rightFun, context) => {
@@ -2032,6 +2186,67 @@ const Erlang = {
     return Type.list([Type.pid("<0.0.0>")]);
   },
   // End processes/0
+  // Deps: []
+
+  // Start process_flag/2
+  "process_flag/2": (flag, value) => {
+    if (!Type.isAtom(flag)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    // In Hologram, return default values for process flags
+    return Type.atom("undefined");
+  },
+  // End process_flag/2
+  // Deps: []
+
+  // Start process_info/1
+  "process_info/1": (pid) => {
+    if (!Type.isPid(pid)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a pid"),
+      );
+    }
+
+    // Return basic process info
+    const info = [
+      Type.tuple([Type.atom("status"), Type.atom("running")]),
+      Type.tuple([Type.atom("messages"), Type.list([])]),
+    ];
+
+    return Type.list(info);
+  },
+  // End process_info/1
+  // Deps: []
+
+  // Start process_info/2
+  "process_info/2": (pid, item) => {
+    if (!Type.isPid(pid)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a pid"),
+      );
+    }
+
+    if (!Type.isAtom(item)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    const itemName = item.value;
+
+    switch (itemName) {
+      case "status":
+        return Type.tuple([Type.atom("status"), Type.atom("running")]);
+      case "messages":
+        return Type.tuple([Type.atom("messages"), Type.list([])]);
+      default:
+        return Type.atom("undefined");
+    }
+  },
+  // End process_info/2
   // Deps: []
 
   // Start register/2
@@ -2238,6 +2453,110 @@ const Erlang = {
   // End spawn/3
   // Deps: []
 
+  // Start spawn_link/1
+  "spawn_link/1": (fun) => {
+    if (!Type.isFunction(fun)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a function"),
+      );
+    }
+
+    // Create a new process (simulated with a unique PID)
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000000);
+    const newPid = Type.pid("client", [0, timestamp, random], "client");
+
+    // In a real implementation, this would create a linked process
+    // For now, we just return the PID
+    return newPid;
+  },
+  // End spawn_link/1
+  // Deps: []
+
+  // Start spawn_link/3
+  "spawn_link/3": (module, fun, args) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(fun)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    // Return a unique PID (using timestamp and random number)
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000000);
+    return Type.pid("client", [0, timestamp, random], "client");
+  },
+  // End spawn_link/3
+  // Deps: []
+
+  // Start spawn_monitor/1
+  "spawn_monitor/1": (fun) => {
+    if (!Type.isFunction(fun)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a function"),
+      );
+    }
+
+    // Create a new process (simulated with a unique PID)
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000000);
+    const newPid = Type.pid("client", [0, timestamp, random], "client");
+
+    // Create a monitor reference
+    const monitorRef = Type.reference();
+
+    // Return tuple of {pid, reference}
+    return Type.tuple([newPid, monitorRef]);
+  },
+  // End spawn_monitor/1
+  // Deps: []
+
+  // Start spawn_monitor/3
+  "spawn_monitor/3": (module, fun, args) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(fun)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    // Create a new process (simulated with a unique PID)
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000000);
+    const newPid = Type.pid("client", [0, timestamp, random], "client");
+
+    // Create a monitor reference
+    const monitorRef = Type.reference();
+
+    // Return tuple of {pid, reference}
+    return Type.tuple([newPid, monitorRef]);
+  },
+  // End spawn_monitor/3
+  // Deps: []
+
   // Start size/1
   "size/1": (term) => {
     if (Type.isTuple(term)) {
@@ -2308,6 +2627,36 @@ const Erlang = {
   },
   // End split_binary/2
   // Deps: [:erlang.byte_size/1]
+
+  // Start system_info/1
+  "system_info/1": (item) => {
+    if (!Type.isAtom(item)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    const itemName = item.value;
+
+    switch (itemName) {
+      case "process_count":
+        return Type.integer(1n);
+      case "port_count":
+        return Type.integer(0n);
+      case "system_version":
+        return Type.bitstring("Hologram 0.1.0");
+      case "otp_release":
+        return Type.bitstring("27");
+      case "wordsize":
+        return Type.integer(8n);
+      default:
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(1, "unsupported system_info item"),
+        );
+    }
+  },
+  // End system_info/1
+  // Deps: []
 
   // Start system_time/0
   "system_time/0": () => {
@@ -2441,6 +2790,21 @@ const Erlang = {
     return Type.integer(tuple.data.length);
   },
   // End tuple_size/1
+  // Deps: []
+
+  // Start unlink/1
+  "unlink/1": (pid) => {
+    if (!Type.isPid(pid) && !Type.isPort(pid)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a pid or port"),
+      );
+    }
+
+    // In a real implementation, this would remove the link to the process
+    // For now, we just return true
+    return Type.boolean(true);
+  },
+  // End unlink/1
   // Deps: []
 
   // Start unique_integer/0
