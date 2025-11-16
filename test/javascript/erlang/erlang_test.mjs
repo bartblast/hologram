@@ -1887,6 +1887,42 @@ describe("Erlang", () => {
     });
   });
 
+  describe("binary_to_list/1", () => {
+    const testedFun = Erlang["binary_to_list/1"];
+
+    it("converts empty binary to empty list", () => {
+      const result = testedFun(Type.bitstring(""));
+
+      assert.deepStrictEqual(result, Type.list());
+    });
+
+    it("converts binary to list of byte values", () => {
+      const result = testedFun(Type.bitstring("ABC"));
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(65), Type.integer(66), Type.integer(67)]),
+      );
+    });
+
+    it("converts binary with UTF-8 characters", () => {
+      const result = testedFun(Type.bitstring("Hi"));
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(72), Type.integer(105)]),
+      );
+    });
+
+    it("raises ArgumentError if argument is not a binary", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+  });
+
   describe("bit_size/1", () => {
     const bit_size = Erlang["bit_size/1"];
 
