@@ -189,6 +189,49 @@ const Erlang_Lists = {
   // End flatten/1
   // Deps: []
 
+  // Start flatmap/2
+  "flatmap/2": function (fun, list) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.flatmap/2", arguments),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.flatmap/2", arguments),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.flatmap_1/2"),
+      );
+    }
+
+    const data = list.data.reduce((acc, elem) => {
+      const result = Interpreter.callAnonymousFunction(fun, [elem]);
+
+      if (!Type.isList(result)) {
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":lists.flatmap_1/2"),
+        );
+      }
+
+      if (!Type.isProperList(result)) {
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":lists.flatmap_1/2"),
+        );
+      }
+
+      return acc.concat(result.data);
+    }, []);
+
+    return Type.list(data);
+  },
+  // End flatmap/2
+  // Deps: []
+
   // Start foldl/3
   "foldl/3": function (fun, initialAcc, list) {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
