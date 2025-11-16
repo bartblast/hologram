@@ -23,7 +23,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
 
     test "raises BadMapError if the second argument is not a map" do
-      assert_error BadMapError, "expected a map, got: 1", {:maps, :find, [:a, 1]}
+      assert_error BadMapError, "expected a map, got: 1", {:maps, :find, ["a", 1]}
     end
   end
 

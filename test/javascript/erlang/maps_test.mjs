@@ -70,7 +70,7 @@ describe("Erlang_Maps", () => {
 
     it("raises BadMapError if the second argument is not a map", () => {
         assertBoxedError(
-            () => get(Type.atom("a"), Type.integer(1)),
+            () => find(Type.string("a"), Type.integer(1)),
             "BadMapError",
             "expected a map, got: 1"
         );
