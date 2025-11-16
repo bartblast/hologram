@@ -90,6 +90,131 @@ const Erlang_Sets = {
   },
   // End filter/2
   // Deps: []
+
+  // Start any/2
+  "any/2": (predicate, set) => {
+    if (!Type.isAnonymousFunction(predicate) || predicate.arity !== 1) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a fun that takes one argument",
+        ),
+      );
+    }
+
+    const elements = getSetElements(set);
+
+    for (const element of elements) {
+      const result = Interpreter.callAnonymousFunction(predicate, [element]);
+
+      if (!Type.isFalse(result)) {
+        return Type.boolean(true);
+      }
+    }
+
+    return Type.boolean(false);
+  },
+  // End any/2
+  // Deps: []
+
+  // Start fold/3
+  "fold/3": (fun, initialAcc, set) => {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a fun that takes two arguments",
+        ),
+      );
+    }
+
+    const elements = getSetElements(set);
+    let acc = initialAcc;
+
+    for (const element of elements) {
+      acc = Interpreter.callAnonymousFunction(fun, [element, acc]);
+    }
+
+    return acc;
+  },
+  // End fold/3
+  // Deps: []
+
+  // Start intersection/2
+  "intersection/2": (set1, set2) => {
+    const elements1 = getSetElements(set1);
+    const elements2 = getSetElements(set2);
+
+    // Create a map for fast lookup
+    const set2Map = new Map();
+    for (const elem of elements2) {
+      const key = Type.encodeMapKey(elem);
+      set2Map.set(key, elem);
+    }
+
+    // Find common elements
+    const intersection = [];
+    for (const elem of elements1) {
+      const key = Type.encodeMapKey(elem);
+      if (set2Map.has(key)) {
+        intersection.push(elem);
+      }
+    }
+
+    return createSet(intersection);
+  },
+  // End intersection/2
+  // Deps: []
+
+  // Start is_disjoint/2
+  "is_disjoint/2": (set1, set2) => {
+    const elements1 = getSetElements(set1);
+    const elements2 = getSetElements(set2);
+
+    // Create a map for fast lookup
+    const set2Map = new Map();
+    for (const elem of elements2) {
+      const key = Type.encodeMapKey(elem);
+      set2Map.set(key, elem);
+    }
+
+    // Check if any element from set1 exists in set2
+    for (const elem of elements1) {
+      const key = Type.encodeMapKey(elem);
+      if (set2Map.has(key)) {
+        return Type.boolean(false);
+      }
+    }
+
+    return Type.boolean(true);
+  },
+  // End is_disjoint/2
+  // Deps: []
+
+  // Start is_subset/2
+  "is_subset/2": (set1, set2) => {
+    const elements1 = getSetElements(set1);
+    const elements2 = getSetElements(set2);
+
+    // Create a map for fast lookup
+    const set2Map = new Map();
+    for (const elem of elements2) {
+      const key = Type.encodeMapKey(elem);
+      set2Map.set(key, elem);
+    }
+
+    // Check if all elements from set1 exist in set2
+    for (const elem of elements1) {
+      const key = Type.encodeMapKey(elem);
+      if (!set2Map.has(key)) {
+        return Type.boolean(false);
+      }
+    }
+
+    return Type.boolean(true);
+  },
+  // End is_subset/2
+  // Deps: []
 };
 
 export default Erlang_Sets;

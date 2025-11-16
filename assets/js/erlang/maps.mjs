@@ -246,6 +246,133 @@ const Erlang_Maps = {
   },
   // End update/3
   // Deps: [:maps.is_key/2, :maps.put/3]
+
+  // Start find/2
+  "find/2": (key, map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    const encodedKey = Type.encodeMapKey(key);
+
+    if (map.data[encodedKey]) {
+      return Type.tuple([Type.atom("ok"), map.data[encodedKey][1]]);
+    }
+
+    return Type.atom("error");
+  },
+  // End find/2
+  // Deps: []
+
+  // Start intersect/2
+  "intersect/2": (map1, map2) => {
+    if (!Type.isMap(map1)) {
+      Interpreter.raiseBadMapError(map1);
+    }
+
+    if (!Type.isMap(map2)) {
+      Interpreter.raiseBadMapError(map2);
+    }
+
+    const result = {};
+
+    // Keep only keys that exist in both maps, with values from map1
+    for (const encodedKey in map1.data) {
+      if (map2.data[encodedKey]) {
+        result[encodedKey] = map1.data[encodedKey];
+      }
+    }
+
+    return {type: "map", data: result};
+  },
+  // End intersect/2
+  // Deps: []
+
+  // Start intersect_with/3
+  "intersect_with/3": (combiner, map1, map2) => {
+    if (!Type.isAnonymousFunction(combiner) || combiner.arity !== 3) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a fun that takes three arguments",
+        ),
+      );
+    }
+
+    if (!Type.isMap(map1)) {
+      Interpreter.raiseBadMapError(map1);
+    }
+
+    if (!Type.isMap(map2)) {
+      Interpreter.raiseBadMapError(map2);
+    }
+
+    const result = {};
+
+    // Keep only keys that exist in both maps, combine values using combiner function
+    for (const encodedKey in map1.data) {
+      if (map2.data[encodedKey]) {
+        const [key, value1] = map1.data[encodedKey];
+        const value2 = map2.data[encodedKey][1];
+
+        const combinedValue = Interpreter.callAnonymousFunction(combiner, [
+          key,
+          value1,
+          value2,
+        ]);
+
+        result[encodedKey] = [key, combinedValue];
+      }
+    }
+
+    return {type: "map", data: result};
+  },
+  // End intersect_with/3
+  // Deps: []
+
+  // Start merge_with/3
+  "merge_with/3": (combiner, map1, map2) => {
+    if (!Type.isAnonymousFunction(combiner) || combiner.arity !== 3) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a fun that takes three arguments",
+        ),
+      );
+    }
+
+    if (!Type.isMap(map1)) {
+      Interpreter.raiseBadMapError(map1);
+    }
+
+    if (!Type.isMap(map2)) {
+      Interpreter.raiseBadMapError(map2);
+    }
+
+    const result = {...map1.data};
+
+    // Merge map2 into result, using combiner for duplicate keys
+    for (const encodedKey in map2.data) {
+      if (result[encodedKey]) {
+        const [key, value1] = result[encodedKey];
+        const value2 = map2.data[encodedKey][1];
+
+        const combinedValue = Interpreter.callAnonymousFunction(combiner, [
+          key,
+          value1,
+          value2,
+        ]);
+
+        result[encodedKey] = [key, combinedValue];
+      } else {
+        result[encodedKey] = map2.data[encodedKey];
+      }
+    }
+
+    return {type: "map", data: result};
+  },
+  // End merge_with/3
+  // Deps: []
 };
 
 export default Erlang_Maps;
