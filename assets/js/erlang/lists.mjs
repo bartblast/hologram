@@ -389,6 +389,62 @@ const Erlang_Lists = {
   // End map/2
   // Deps: []
 
+  // Start max/1
+  "max/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.max/1", [list]),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.max/1", [list]),
+      );
+    }
+
+    if (list.data.length === 0) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "[]"),
+      );
+    }
+
+    return list.data.reduce((max, elem) => {
+      const comparison = Interpreter.compareTerms(elem, max);
+      return comparison === 1 ? elem : max;
+    });
+  },
+  // End max/1
+  // Deps: []
+
+  // Start min/1
+  "min/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.min/1", [list]),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.min/1", [list]),
+      );
+    }
+
+    if (list.data.length === 0) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "[]"),
+      );
+    }
+
+    return list.data.reduce((min, elem) => {
+      const comparison = Interpreter.compareTerms(elem, min);
+      return comparison === -1 ? elem : min;
+    });
+  },
+  // End min/1
+  // Deps: []
+
   // Start member/2
   "member/2": (elem, list) => {
     if (!Type.isList(list)) {

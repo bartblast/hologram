@@ -1303,6 +1303,156 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("max/1", () => {
+    const testedFun = Erlang_Lists["max/1"];
+
+    it("returns maximum from list of integers", () => {
+      const list = Type.list([
+        Type.integer(3),
+        Type.integer(1),
+        Type.integer(5),
+        Type.integer(2),
+      ]);
+      const result = testedFun(list);
+
+      assert.deepStrictEqual(result, Type.integer(5));
+    });
+
+    it("returns maximum from list of floats", () => {
+      const list = Type.list([
+        Type.float(3.5),
+        Type.float(1.2),
+        Type.float(5.9),
+        Type.float(2.1),
+      ]);
+      const result = testedFun(list);
+
+      assert.deepStrictEqual(result, Type.float(5.9));
+    });
+
+    it("returns maximum from mixed number types", () => {
+      const list = Type.list([
+        Type.integer(3),
+        Type.float(3.1),
+        Type.integer(2),
+      ]);
+      const result = testedFun(list);
+
+      assert.deepStrictEqual(result, Type.float(3.1));
+    });
+
+    it("returns single element from list with one element", () => {
+      const list = Type.list([Type.integer(42)]);
+      const result = testedFun(list);
+
+      assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    it("raises FunctionClauseError if argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.max/1", [
+          Type.atom("abc"),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if list is improper", () => {
+      assertBoxedError(
+        () =>
+          testedFun(Type.improperList([Type.integer(1), Type.integer(2)])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.max/1", [
+          Type.improperList([Type.integer(1), Type.integer(2)]),
+        ]),
+      );
+    });
+
+    it("raises ArgumentError if list is empty", () => {
+      assertBoxedError(
+        () => testedFun(Type.list([])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "[]"),
+      );
+    });
+  });
+
+  describe("min/1", () => {
+    const testedFun = Erlang_Lists["min/1"];
+
+    it("returns minimum from list of integers", () => {
+      const list = Type.list([
+        Type.integer(3),
+        Type.integer(1),
+        Type.integer(5),
+        Type.integer(2),
+      ]);
+      const result = testedFun(list);
+
+      assert.deepStrictEqual(result, Type.integer(1));
+    });
+
+    it("returns minimum from list of floats", () => {
+      const list = Type.list([
+        Type.float(3.5),
+        Type.float(1.2),
+        Type.float(5.9),
+        Type.float(2.1),
+      ]);
+      const result = testedFun(list);
+
+      assert.deepStrictEqual(result, Type.float(1.2));
+    });
+
+    it("returns minimum from mixed number types", () => {
+      const list = Type.list([
+        Type.integer(3),
+        Type.float(2.9),
+        Type.integer(4),
+      ]);
+      const result = testedFun(list);
+
+      assert.deepStrictEqual(result, Type.float(2.9));
+    });
+
+    it("returns single element from list with one element", () => {
+      const list = Type.list([Type.integer(42)]);
+      const result = testedFun(list);
+
+      assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    it("raises FunctionClauseError if argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.min/1", [
+          Type.atom("abc"),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if list is improper", () => {
+      assertBoxedError(
+        () =>
+          testedFun(Type.improperList([Type.integer(1), Type.integer(2)])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.min/1", [
+          Type.improperList([Type.integer(1), Type.integer(2)]),
+        ]),
+      );
+    });
+
+    it("raises ArgumentError if list is empty", () => {
+      assertBoxedError(
+        () => testedFun(Type.list([])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "[]"),
+      );
+    });
+  });
+
   describe("member/2", () => {
     const member = Erlang_Lists["member/2"];
 
