@@ -32,9 +32,11 @@ import SelectEvent from "./events/select_event.mjs";
 import SubmitEvent from "./events/submit_event.mjs";
 import TransitionEvent from "./events/transition_event.mjs";
 
+import ManuallyPortedElixirBitwise from "./elixir/bitwise.mjs";
 import ManuallyPortedElixirCldrLocale from "./elixir/cldr/locale.mjs";
 import ManuallyPortedElixirCldrValidityU from "./elixir/cldr/validity/u.mjs";
 import ManuallyPortedElixirCode from "./elixir/code.mjs";
+import ManuallyPortedElixirFunction from "./elixir/function.mjs";
 import ManuallyPortedElixirHologramJS from "./elixir/hologram/js.mjs";
 import ManuallyPortedElixirHologramRouterHelpers from "./elixir/hologram/router/helpers.mjs";
 import ManuallyPortedElixirIO from "./elixir/io.mjs";
@@ -394,6 +396,90 @@ export default class Hologram {
 
   static #defineManuallyPortedFunctions() {
     Interpreter.defineManuallyPortedFunction(
+      "Bitwise",
+      "bnot/1",
+      "public",
+      ManuallyPortedElixirBitwise["bnot/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Bitwise",
+      "~~~/1",
+      "public",
+      ManuallyPortedElixirBitwise["~~~/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Bitwise",
+      "band/2",
+      "public",
+      ManuallyPortedElixirBitwise["band/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Bitwise",
+      "&&&/2",
+      "public",
+      ManuallyPortedElixirBitwise["&&&/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Bitwise",
+      "bor/2",
+      "public",
+      ManuallyPortedElixirBitwise["bor/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Bitwise",
+      "|||/2",
+      "public",
+      ManuallyPortedElixirBitwise["|||/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Bitwise",
+      "bxor/2",
+      "public",
+      ManuallyPortedElixirBitwise["bxor/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Bitwise",
+      "^^^/2",
+      "public",
+      ManuallyPortedElixirBitwise["^^^/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Bitwise",
+      "bsl/2",
+      "public",
+      ManuallyPortedElixirBitwise["bsl/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Bitwise",
+      "<<</2",
+      "public",
+      ManuallyPortedElixirBitwise["<<</2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Bitwise",
+      "bsr/2",
+      "public",
+      ManuallyPortedElixirBitwise["bsr/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Bitwise",
+      ">>>/2",
+      "public",
+      ManuallyPortedElixirBitwise[">>>/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
       "Cldr.Locale",
       "language_data/0",
       "public",
@@ -412,6 +498,34 @@ export default class Hologram {
       "ensure_compiled/1",
       "public",
       ManuallyPortedElixirCode["ensure_compiled/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Function",
+      "capture/3",
+      "public",
+      ManuallyPortedElixirFunction["capture/3"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Function",
+      "info/1",
+      "public",
+      ManuallyPortedElixirFunction["info/1"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Function",
+      "info/2",
+      "public",
+      ManuallyPortedElixirFunction["info/2"],
+    );
+
+    Interpreter.defineManuallyPortedFunction(
+      "Function",
+      "identity/1",
+      "public",
+      ManuallyPortedElixirFunction["identity/1"],
     );
 
     Interpreter.defineManuallyPortedFunction(

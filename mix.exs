@@ -90,10 +90,12 @@ defmodule Hologram.MixProject do
     ]
   end
 
-  def preferred_cli_env do
+  def cli do
     [
-      t: :test,
-      "test.js": :test
+      preferred_envs: [
+        t: :test,
+        "test.js": :test
+      ]
     ]
   end
 
@@ -136,7 +138,6 @@ defmodule Hologram.MixProject do
       elixirc_paths: elixirc_paths(Mix.env()),
       homepage_url: "https://hologram.page/",
       package: package(),
-      preferred_cli_env: preferred_cli_env(),
       start_permanent: Mix.env() == :prod,
       source_url: "https://github.com/bartblast/hologram",
       test_paths: ["test/elixir"],

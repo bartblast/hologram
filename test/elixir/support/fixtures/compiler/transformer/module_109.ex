@@ -4,7 +4,7 @@ defmodule Hologram.Test.Fixtures.Compiler.Tranformer.Module109 do
 
   defstruct [:a, :b]
 
-  def test(x) do
-    %Module109{x | a: 1, b: 2}
+  def test(%Module109{} = x) do
+    %{x | a: 1, b: 2}
   end
 end
