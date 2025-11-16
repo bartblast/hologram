@@ -933,16 +933,16 @@ defmodule Hologram.Template.RendererTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module25, :dummy_module_25_digest)
 
       assert {~s'layout vars = %{cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;}',
-              _component_registry,
-              _server_struct} = render_page(Module25, @params, @server, @opts)
+              _component_registry, _server_struct} =
+               render_page(Module25, @params, @server, @opts)
     end
 
     test "cast layout props passed implicitely from page state" do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module27, :dummy_module_27_digest)
 
       assert {~s'layout vars = %{cid: &quot;layout&quot;, prop_1: &quot;prop_value_1&quot;, prop_3: &quot;prop_value_3&quot;}',
-              _component_registry,
-              _server_struct} = render_page(Module27, @params, @server, @opts)
+              _component_registry, _server_struct} =
+               render_page(Module27, @params, @server, @opts)
     end
 
     test "aggregate page vars, giving state vars priority over param vars when there are name conflicts" do
@@ -958,8 +958,8 @@ defmodule Hologram.Template.RendererTest do
       ETS.put(PageDigestRegistryStub.ets_table_name(), Module24, :dummy_module_24_digest)
 
       assert {~s'layout vars = %{cid: &quot;layout&quot;, key_1: &quot;prop_value_1&quot;, key_2: &quot;state_value_2&quot;, key_3: &quot;state_value_3&quot;}',
-              _component_registry,
-              _server_struct} = render_page(Module24, @params, @server, @opts)
+              _component_registry, _server_struct} =
+               render_page(Module24, @params, @server, @opts)
     end
 
     test "merge the page component struct into the result" do

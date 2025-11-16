@@ -46,6 +46,47 @@ import ManuallyPortedElixirURI from "./elixir/uri.mjs";
 
 import {toVNode} from "snabbdom";
 
+const MANUALLY_PORTED_FUNCTIONS = [
+  ["Bitwise", "bnot/1", ManuallyPortedElixirBitwise["bnot/1"]],
+  ["Bitwise", "~~~/1", ManuallyPortedElixirBitwise["~~~/1"]],
+  ["Bitwise", "band/2", ManuallyPortedElixirBitwise["band/2"]],
+  ["Bitwise", "&&&/2", ManuallyPortedElixirBitwise["&&&/2"]],
+  ["Bitwise", "bor/2", ManuallyPortedElixirBitwise["bor/2"]],
+  ["Bitwise", "|||/2", ManuallyPortedElixirBitwise["|||/2"]],
+  ["Bitwise", "bxor/2", ManuallyPortedElixirBitwise["bxor/2"]],
+  ["Bitwise", "^^^/2", ManuallyPortedElixirBitwise["^^^/2"]],
+  ["Bitwise", "bsl/2", ManuallyPortedElixirBitwise["bsl/2"]],
+  ["Bitwise", "<<</2", ManuallyPortedElixirBitwise["<<</2"]],
+  ["Bitwise", "bsr/2", ManuallyPortedElixirBitwise["bsr/2"]],
+  ["Bitwise", ">>>/2", ManuallyPortedElixirBitwise[">>>/2"]],
+  ["Cldr.Locale", "language_data/0", ManuallyPortedElixirCldrLocale["language_data/0"]],
+  ["Cldr.Validity.U", "encode_key/2", ManuallyPortedElixirCldrValidityU["encode_key/2"]],
+  ["Code", "ensure_compiled/1", ManuallyPortedElixirCode["ensure_compiled/1"]],
+  ["Function", "capture/3", ManuallyPortedElixirFunction["capture/3"]],
+  ["Function", "info/1", ManuallyPortedElixirFunction["info/1"]],
+  ["Function", "info/2", ManuallyPortedElixirFunction["info/2"]],
+  ["Function", "identity/1", ManuallyPortedElixirFunction["identity/1"]],
+  ["Hologram.JS", "exec/1", ManuallyPortedElixirHologramJS["exec/1"]],
+  [
+    "Hologram.Router.Helpers",
+    "asset_path/1",
+    ManuallyPortedElixirHologramRouterHelpers["asset_path/1"],
+  ],
+  ["IO", "inspect/1", ManuallyPortedElixirIO["inspect/1"]],
+  ["IO", "inspect/2", ManuallyPortedElixirIO["inspect/2"]],
+  ["IO", "inspect/3", ManuallyPortedElixirIO["inspect/3"]],
+  ["Kernel", "inspect/1", ManuallyPortedElixirKernel["inspect/1"]],
+  ["Kernel", "inspect/2", ManuallyPortedElixirKernel["inspect/2"]],
+  ["String", "contains?/2", ManuallyPortedElixirString["contains?/2"]],
+  ["String", "downcase/1", ManuallyPortedElixirString["downcase/1"]],
+  ["String", "downcase/2", ManuallyPortedElixirString["downcase/2"]],
+  ["String", "replace/3", ManuallyPortedElixirString["replace/3"]],
+  ["String", "trim/1", ManuallyPortedElixirString["trim/1"]],
+  ["String", "upcase/1", ManuallyPortedElixirString["upcase/1"]],
+  ["String", "upcase/2", ManuallyPortedElixirString["upcase/2"]],
+  ["URI", "encode/2", ManuallyPortedElixirURI["encode/2"]],
+];
+
 // TODO: test
 export default class Hologram {
   static #PAGE_SNAPSHOT_KEY_PREFIX = "hologram_page_snapshot_";
@@ -395,242 +436,15 @@ export default class Hologram {
   }
 
   static #defineManuallyPortedFunctions() {
-    Interpreter.defineManuallyPortedFunction(
-      "Bitwise",
-      "bnot/1",
-      "public",
-      ManuallyPortedElixirBitwise["bnot/1"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Bitwise",
-      "~~~/1",
-      "public",
-      ManuallyPortedElixirBitwise["~~~/1"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Bitwise",
-      "band/2",
-      "public",
-      ManuallyPortedElixirBitwise["band/2"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Bitwise",
-      "&&&/2",
-      "public",
-      ManuallyPortedElixirBitwise["&&&/2"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Bitwise",
-      "bor/2",
-      "public",
-      ManuallyPortedElixirBitwise["bor/2"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Bitwise",
-      "|||/2",
-      "public",
-      ManuallyPortedElixirBitwise["|||/2"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Bitwise",
-      "bxor/2",
-      "public",
-      ManuallyPortedElixirBitwise["bxor/2"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Bitwise",
-      "^^^/2",
-      "public",
-      ManuallyPortedElixirBitwise["^^^/2"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Bitwise",
-      "bsl/2",
-      "public",
-      ManuallyPortedElixirBitwise["bsl/2"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Bitwise",
-      "<<</2",
-      "public",
-      ManuallyPortedElixirBitwise["<<</2"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Bitwise",
-      "bsr/2",
-      "public",
-      ManuallyPortedElixirBitwise["bsr/2"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Bitwise",
-      ">>>/2",
-      "public",
-      ManuallyPortedElixirBitwise[">>>/2"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Cldr.Locale",
-      "language_data/0",
-      "public",
-      ManuallyPortedElixirCldrLocale["language_data/0"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Cldr.Validity.U",
-      "encode_key/2",
-      "public",
-      ManuallyPortedElixirCldrValidityU["encode_key/2"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Code",
-      "ensure_compiled/1",
-      "public",
-      ManuallyPortedElixirCode["ensure_compiled/1"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Function",
-      "capture/3",
-      "public",
-      ManuallyPortedElixirFunction["capture/3"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Function",
-      "info/1",
-      "public",
-      ManuallyPortedElixirFunction["info/1"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Function",
-      "info/2",
-      "public",
-      ManuallyPortedElixirFunction["info/2"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Function",
-      "identity/1",
-      "public",
-      ManuallyPortedElixirFunction["identity/1"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Hologram.JS",
-      "exec/1",
-      "public",
-      ManuallyPortedElixirHologramJS["exec/1"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Hologram.Router.Helpers",
-      "asset_path/1",
-      "public",
-      ManuallyPortedElixirHologramRouterHelpers["asset_path/1"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "IO",
-      "inspect/1",
-      "public",
-      ManuallyPortedElixirIO["inspect/1"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "IO",
-      "inspect/2",
-      "public",
-      ManuallyPortedElixirIO["inspect/2"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "IO",
-      "inspect/3",
-      "public",
-      ManuallyPortedElixirIO["inspect/3"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Kernel",
-      "inspect/1",
-      "public",
-      ManuallyPortedElixirKernel["inspect/1"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "Kernel",
-      "inspect/2",
-      "public",
-      ManuallyPortedElixirKernel["inspect/2"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "String",
-      "contains?/2",
-      "public",
-      ManuallyPortedElixirString["contains?/2"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "String",
-      "downcase/1",
-      "public",
-      ManuallyPortedElixirString["downcase/1"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "String",
-      "downcase/2",
-      "public",
-      ManuallyPortedElixirString["downcase/2"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "String",
-      "replace/3",
-      "public",
-      ManuallyPortedElixirString["replace/3"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "String",
-      "trim/1",
-      "public",
-      ManuallyPortedElixirString["trim/1"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "String",
-      "upcase/1",
-      "public",
-      ManuallyPortedElixirString["upcase/1"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "String",
-      "upcase/2",
-      "public",
-      ManuallyPortedElixirString["upcase/2"],
-    );
-
-    Interpreter.defineManuallyPortedFunction(
-      "URI",
-      "encode/2",
-      "public",
-      ManuallyPortedElixirURI["encode/2"],
+    MANUALLY_PORTED_FUNCTIONS.forEach(
+      ([module, funArityStr, implementation, visibility = "public"]) => {
+        Interpreter.defineManuallyPortedFunction(
+          module,
+          funArityStr,
+          visibility,
+          implementation,
+        );
+      },
     );
   }
 
