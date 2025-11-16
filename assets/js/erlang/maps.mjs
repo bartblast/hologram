@@ -9,6 +9,20 @@ import Utils from "../utils.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_Maps = {
+  // Start from_keys/2
+  "from_keys/2": (keys, value) => {
+    if (!Type.isList(keys)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    const pairs = keys.data.map((key) => [key, value]);
+    return Type.map(pairs);
+  },
+  // End from_keys/2
+  // Deps: []
+
   // Start fold/3
   "fold/3": (fun, initialAcc, map) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 3) {

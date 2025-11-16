@@ -116,6 +116,143 @@ const Erlang_Unicode = {
   },
   // End characters_to_list/1
   // Deps: []
+
+  // Start characters_to_nfc_binary/1
+  "characters_to_nfc_binary/1": (input) => {
+    let str;
+
+    if (Type.isBinary(input)) {
+      Bitstring.maybeSetBytesFromText(input);
+      str = new TextDecoder("utf-8").decode(input.bytes);
+    } else if (Type.isList(input)) {
+      const chars = input.data.map((elem) => {
+        if (!Type.isInteger(elem)) {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(1, "not valid character data"),
+          );
+        }
+        return String.fromCharCode(Number(elem.value));
+      });
+      str = chars.join("");
+    } else {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary or list"),
+      );
+    }
+
+    // Normalize to NFC (Canonical Decomposition, followed by Canonical Composition)
+    const normalized = str.normalize("NFC");
+    const bytes = new TextEncoder().encode(normalized);
+
+    return Type.bitstring(bytes, 0);
+  },
+  // End characters_to_nfc_binary/1
+  // Deps: []
+
+  // Start characters_to_nfc_list/1
+  "characters_to_nfc_list/1": (input) => {
+    const binary = Erlang_Unicode["characters_to_nfc_binary/1"](input);
+    const codepoints = Bitstring.toCodepoints(binary);
+    return codepoints;
+  },
+  // End characters_to_nfc_list/1
+  // Deps: [:unicode.characters_to_nfc_binary/1]
+
+  // Start characters_to_nfd_binary/1
+  "characters_to_nfd_binary/1": (input) => {
+    let str;
+
+    if (Type.isBinary(input)) {
+      Bitstring.maybeSetBytesFromText(input);
+      str = new TextDecoder("utf-8").decode(input.bytes);
+    } else if (Type.isList(input)) {
+      const chars = input.data.map((elem) => {
+        if (!Type.isInteger(elem)) {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(1, "not valid character data"),
+          );
+        }
+        return String.fromCharCode(Number(elem.value));
+      });
+      str = chars.join("");
+    } else {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary or list"),
+      );
+    }
+
+    // Normalize to NFD (Canonical Decomposition)
+    const normalized = str.normalize("NFD");
+    const bytes = new TextEncoder().encode(normalized);
+
+    return Type.bitstring(bytes, 0);
+  },
+  // End characters_to_nfd_binary/1
+  // Deps: []
+
+  // Start characters_to_nfkc_binary/1
+  "characters_to_nfkc_binary/1": (input) => {
+    let str;
+
+    if (Type.isBinary(input)) {
+      Bitstring.maybeSetBytesFromText(input);
+      str = new TextDecoder("utf-8").decode(input.bytes);
+    } else if (Type.isList(input)) {
+      const chars = input.data.map((elem) => {
+        if (!Type.isInteger(elem)) {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(1, "not valid character data"),
+          );
+        }
+        return String.fromCharCode(Number(elem.value));
+      });
+      str = chars.join("");
+    } else {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary or list"),
+      );
+    }
+
+    // Normalize to NFKC (Compatibility Decomposition, followed by Canonical Composition)
+    const normalized = str.normalize("NFKC");
+    const bytes = new TextEncoder().encode(normalized);
+
+    return Type.bitstring(bytes, 0);
+  },
+  // End characters_to_nfkc_binary/1
+  // Deps: []
+
+  // Start characters_to_nfkd_binary/1
+  "characters_to_nfkd_binary/1": (input) => {
+    let str;
+
+    if (Type.isBinary(input)) {
+      Bitstring.maybeSetBytesFromText(input);
+      str = new TextDecoder("utf-8").decode(input.bytes);
+    } else if (Type.isList(input)) {
+      const chars = input.data.map((elem) => {
+        if (!Type.isInteger(elem)) {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(1, "not valid character data"),
+          );
+        }
+        return String.fromCharCode(Number(elem.value));
+      });
+      str = chars.join("");
+    } else {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary or list"),
+      );
+    }
+
+    // Normalize to NFKD (Compatibility Decomposition)
+    const normalized = str.normalize("NFKD");
+    const bytes = new TextEncoder().encode(normalized);
+
+    return Type.bitstring(bytes, 0);
+  },
+  // End characters_to_nfkd_binary/1
+  // Deps: []
 };
 
 export default Erlang_Unicode;
