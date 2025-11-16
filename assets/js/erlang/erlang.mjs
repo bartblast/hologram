@@ -449,6 +449,29 @@ const Erlang = {
   // End binary_to_existing_atom/2
   // Deps: [:erlang.binary_to_atom/2]
 
+  // Start binary_to_float/1
+  "binary_to_float/1": (binary) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    Bitstring.maybeSetBytesFromText(binary);
+    const text = Bitstring.toText(binary);
+    const floatValue = parseFloat(text);
+
+    if (isNaN(floatValue)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a textual representation of a float"),
+      );
+    }
+
+    return Type.float(floatValue);
+  },
+  // End binary_to_float/1
+  // Deps: []
+
   // Start binary_to_integer/1
   "binary_to_integer/1": (binary) => {
     return Erlang["binary_to_integer/2"](binary, Type.integer(10));
@@ -630,6 +653,31 @@ const Erlang = {
   // End bit_size/1
   // Deps: []
 
+  // Start bitstring_to_list/1
+  "bitstring_to_list/1": (bitstring) => {
+    if (!Type.isBitstring(bitstring)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
+      );
+    }
+
+    Bitstring.maybeSetBytesFromText(bitstring);
+    const bitCount = Bitstring.calculateBitCount(bitstring);
+
+    // If not byte-aligned, raise error
+    if (bitCount % 8 !== 0) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    return Type.list(
+      Array.from(bitstring.bytes).map((byte) => Type.integer(byte)),
+    );
+  },
+  // End bitstring_to_list/1
+  // Deps: []
+
   // Start byte_size/1
   "byte_size/1": (bitstring) => {
     if (!Type.isBitstring(bitstring)) {
@@ -711,6 +759,19 @@ const Erlang = {
     return Type.tuple(newData);
   },
   // End delete_element/2
+  // Deps: []
+
+  // Start date/0
+  "date/0": () => {
+    // Return current date as {Year, Month, Day}
+    const now = new Date();
+    return Type.tuple([
+      Type.integer(BigInt(now.getFullYear())),
+      Type.integer(BigInt(now.getMonth() + 1)), // JavaScript months are 0-indexed
+      Type.integer(BigInt(now.getDate())),
+    ]);
+  },
+  // End date/0
   // Deps: []
 
   // Start display/1
@@ -992,6 +1053,38 @@ const Erlang = {
     return Type.list(keys);
   },
   // End get_keys/1
+  // Deps: []
+
+  // Start group_leader/0
+  "group_leader/0": () => {
+    // Return the group leader process (simplified in Hologram)
+    return Type.pid("<0.0.0>");
+  },
+  // End group_leader/0
+  // Deps: []
+
+  // Start halt/0
+  "halt/0": () => {
+    // Halt the system - in browser context, this would close/reload
+    throw new HologramInterpreterError(
+      "Function :erlang.halt/0 is not fully supported in Hologram.\n" +
+      "Cannot halt the Erlang runtime in a browser environment.\n" +
+      "See what to do here: https://www.hologram.page/TODO"
+    );
+  },
+  // End halt/0
+  // Deps: []
+
+  // Start halt/1
+  "halt/1": (status) => {
+    // Halt with exit status
+    throw new HologramInterpreterError(
+      "Function :erlang.halt/1 is not fully supported in Hologram.\n" +
+      "Cannot halt the Erlang runtime in a browser environment.\n" +
+      "See what to do here: https://www.hologram.page/TODO"
+    );
+  },
+  // End halt/1
   // Deps: []
 
   // Start hd/1
@@ -1387,6 +1480,48 @@ const Erlang = {
   // End list_to_pid/1
   // Deps: []
 
+  // Start list_to_port/1
+  "list_to_port/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    // Convert list of integers to string
+    const str = String.fromCharCode(...list.data.map((i) => Number(i.value)));
+    return Type.port(str);
+  },
+  // End list_to_port/1
+  // Deps: []
+
+  // Start list_to_reference/1
+  "list_to_reference/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    // Convert list of integers to string
+    const str = String.fromCharCode(...list.data.map((i) => Number(i.value)));
+    return Type.reference(str);
+  },
+  // End list_to_reference/1
+  // Deps: []
+
   // Start list_to_atom/1
   "list_to_atom/1": (list) => {
     if (!Type.isList(list)) {
@@ -1462,6 +1597,14 @@ const Erlang = {
     return Erlang["iolist_to_binary/1"](list);
   },
   // End list_to_binary/1
+  // Deps: [:erlang.iolist_to_binary/1]
+
+  // Start list_to_bitstring/1
+  "list_to_bitstring/1": (list) => {
+    // list_to_bitstring is an alias for iolist_to_binary
+    return Erlang["iolist_to_binary/1"](list);
+  },
+  // End list_to_bitstring/1
   // Deps: [:erlang.iolist_to_binary/1]
 
   // Start list_to_float/1
@@ -1592,6 +1735,26 @@ const Erlang = {
     return Type.tuple(list.data);
   },
   // End list_to_tuple/1
+  // Deps: []
+
+  // Start localtime/0
+  "localtime/0": () => {
+    // Return local time as {{Year, Month, Day}, {Hour, Minute, Second}}
+    const now = new Date();
+    return Type.tuple([
+      Type.tuple([
+        Type.integer(BigInt(now.getFullYear())),
+        Type.integer(BigInt(now.getMonth() + 1)),
+        Type.integer(BigInt(now.getDate())),
+      ]),
+      Type.tuple([
+        Type.integer(BigInt(now.getHours())),
+        Type.integer(BigInt(now.getMinutes())),
+        Type.integer(BigInt(now.getSeconds())),
+      ]),
+    ]);
+  },
+  // End localtime/0
   // Deps: []
 
   // Start make_ref/0
@@ -1749,6 +1912,15 @@ const Erlang = {
   // End node/0
   // Deps: []
 
+  // Start now/0
+  "now/0": () => {
+    // Return timestamp as {MegaSecs, Secs, MicroSecs} (deprecated but still used)
+    // This is similar to timestamp/0
+    return Erlang["timestamp/0"]();
+  },
+  // End now/0
+  // Deps: [:erlang.timestamp/0]
+
   // Start orelse/2
   "orelse/2": (leftFun, rightFun, context) => {
     const left = leftFun(context);
@@ -1822,6 +1994,92 @@ const Erlang = {
     return Type.list(charCodes);
   },
   // End port_to_list/1
+  // Deps: []
+
+  // Start phash2/1
+  "phash2/1": (term) => {
+    return Erlang["phash2/2"](term, Type.integer(BigInt(27)));
+  },
+  // End phash2/1
+  // Deps: [:erlang.phash2/2]
+
+  // Start phash2/2
+  "phash2/2": (term, range) => {
+    if (!Type.isInteger(range)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    // Simple hash function - in production would use a proper portable hash
+    const termStr = JSON.stringify(term);
+    let hash = 0;
+    for (let i = 0; i < termStr.length; i++) {
+      hash = ((hash << 5) - hash) + termStr.charCodeAt(i);
+      hash = hash & hash; // Convert to 32bit integer
+    }
+
+    const rangeNum = Number(range.value);
+    return Type.integer(BigInt(Math.abs(hash) % rangeNum));
+  },
+  // End phash2/2
+  // Deps: []
+
+  // Start processes/0
+  "processes/0": () => {
+    // In Hologram, return a list with just the current process
+    // Full implementation would require process tracking
+    return Type.list([Type.pid("<0.0.0>")]);
+  },
+  // End processes/0
+  // Deps: []
+
+  // Start register/2
+  "register/2": (name, pid) => {
+    if (!Type.isAtom(name)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isPid(pid)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a pid"),
+      );
+    }
+
+    // Store in global registry
+    if (!globalThis.__hologramProcessRegistry) {
+      globalThis.__hologramProcessRegistry = new Map();
+    }
+
+    const nameStr = name.value;
+    if (globalThis.__hologramProcessRegistry.has(nameStr)) {
+      throw new HologramBoxedError(
+        Type.tuple([Type.atom("error"), Type.tuple([Type.atom("already_registered"), name])])
+      );
+    }
+
+    globalThis.__hologramProcessRegistry.set(nameStr, pid);
+    return Type.atom("true");
+  },
+  // End register/2
+  // Deps: []
+
+  // Start registered/0
+  "registered/0": () => {
+    // Return list of registered process names
+    if (!globalThis.__hologramProcessRegistry) {
+      globalThis.__hologramProcessRegistry = new Map();
+    }
+
+    const names = Array.from(globalThis.__hologramProcessRegistry.keys()).map(
+      (name) => Type.atom(name)
+    );
+
+    return Type.list(names);
+  },
+  // End registered/0
   // Deps: []
 
   // Start rem/2
@@ -2131,6 +2389,19 @@ const Erlang = {
   // End throw/1
   // Deps: []
 
+  // Start time/0
+  "time/0": () => {
+    // Return current time as {Hour, Minute, Second}
+    const now = new Date();
+    return Type.tuple([
+      Type.integer(BigInt(now.getHours())),
+      Type.integer(BigInt(now.getMinutes())),
+      Type.integer(BigInt(now.getSeconds())),
+    ]);
+  },
+  // End time/0
+  // Deps: []
+
   // Start trunc/1
   "trunc/1": (number) => {
     if (Type.isInteger(number)) {
@@ -2225,6 +2496,71 @@ const Erlang = {
   },
   // End unique_integer/1
   // Deps: [:erlang.unique_integer/0]
+
+  // Start universaltime/0
+  "universaltime/0": () => {
+    // Return UTC time as {{Year, Month, Day}, {Hour, Minute, Second}}
+    const now = new Date();
+    return Type.tuple([
+      Type.tuple([
+        Type.integer(BigInt(now.getUTCFullYear())),
+        Type.integer(BigInt(now.getUTCMonth() + 1)),
+        Type.integer(BigInt(now.getUTCDate())),
+      ]),
+      Type.tuple([
+        Type.integer(BigInt(now.getUTCHours())),
+        Type.integer(BigInt(now.getUTCMinutes())),
+        Type.integer(BigInt(now.getUTCSeconds())),
+      ]),
+    ]);
+  },
+  // End universaltime/0
+  // Deps: []
+
+  // Start unregister/1
+  "unregister/1": (name) => {
+    if (!Type.isAtom(name)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!globalThis.__hologramProcessRegistry) {
+      globalThis.__hologramProcessRegistry = new Map();
+    }
+
+    const nameStr = name.value;
+    if (!globalThis.__hologramProcessRegistry.has(nameStr)) {
+      throw new HologramBoxedError(
+        Type.tuple([Type.atom("error"), Type.tuple([Type.atom("not_registered"), name])])
+      );
+    }
+
+    globalThis.__hologramProcessRegistry.delete(nameStr);
+    return Type.atom("true");
+  },
+  // End unregister/1
+  // Deps: []
+
+  // Start whereis/1
+  "whereis/1": (name) => {
+    if (!Type.isAtom(name)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!globalThis.__hologramProcessRegistry) {
+      globalThis.__hologramProcessRegistry = new Map();
+    }
+
+    const nameStr = name.value;
+    const pid = globalThis.__hologramProcessRegistry.get(nameStr);
+
+    return pid !== undefined ? pid : Type.atom("undefined");
+  },
+  // End whereis/1
+  // Deps: []
 };
 
 export default Erlang;
