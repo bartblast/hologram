@@ -90,6 +90,123 @@ const Erlang_Lists = {
   // End any/2
   // Deps: []
 
+  // Start append/1
+  "append/1": (listOfLists) => {
+    if (!Type.isList(listOfLists)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.append/1", [
+          listOfLists,
+        ]),
+      );
+    }
+
+    if (!Type.isProperList(listOfLists)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.append/1", [
+          listOfLists,
+        ]),
+      );
+    }
+
+    const result = [];
+
+    for (const list of listOfLists.data) {
+      if (!Type.isList(list)) {
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":lists.append_1/2"),
+        );
+      }
+
+      if (!Type.isProperList(list)) {
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":lists.append_1/2"),
+        );
+      }
+
+      result.push(...list.data);
+    }
+
+    return Type.list(result);
+  },
+  // End append/1
+  // Deps: []
+
+  // Start append/2
+  "append/2": (list1, list2) => {
+    if (!Type.isList(list1)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.append/2", [
+          list1,
+          list2,
+        ]),
+      );
+    }
+
+    if (!Type.isProperList(list1)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.append/2", [
+          list1,
+          list2,
+        ]),
+      );
+    }
+
+    if (!Type.isList(list2)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.append/2", [
+          list1,
+          list2,
+        ]),
+      );
+    }
+
+    // list2 can be improper - we preserve that
+    const result = Type.list([...list1.data, ...list2.data]);
+    if (list2.tail) {
+      result.tail = list2.tail;
+    }
+
+    return result;
+  },
+  // End append/2
+  // Deps: []
+
+  // Start delete/2
+  "delete/2": (elem, list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.delete/2", [
+          elem,
+          list,
+        ]),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.delete/2", [
+          elem,
+          list,
+        ]),
+      );
+    }
+
+    const result = [];
+    let deleted = false;
+
+    for (const item of list.data) {
+      if (!deleted && Interpreter.isStrictlyEqual(item, elem)) {
+        deleted = true;
+      } else {
+        result.push(item);
+      }
+    }
+
+    return Type.list(result);
+  },
+  // End delete/2
+  // Deps: []
+
   // Start duplicate/2
   "duplicate/2": (n, elem) => {
     if (!Type.isInteger(n)) {
@@ -363,6 +480,31 @@ const Erlang_Lists = {
   },
   // End keymember/3
   // Deps: [:lists.keyfind/3]
+
+  // Start last/1
+  "last/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.last/1", [list]),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.last/1", [list]),
+      );
+    }
+
+    if (list.data.length === 0) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.last/1", [list]),
+      );
+    }
+
+    return list.data[list.data.length - 1];
+  },
+  // End last/1
+  // Deps: []
 
   // Start map/2
   "map/2": function (fun, list) {
@@ -867,6 +1009,114 @@ const Erlang_Lists = {
     return Type.list(list.data.slice(dropCount));
   },
   // End dropwhile/2
+  // Deps: []
+
+  // Start unzip/1
+  "unzip/1": (listOfTuples) => {
+    if (!Type.isList(listOfTuples)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.unzip/1", [
+          listOfTuples,
+        ]),
+      );
+    }
+
+    if (!Type.isProperList(listOfTuples)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.unzip/1", [
+          listOfTuples,
+        ]),
+      );
+    }
+
+    const list1 = [];
+    const list2 = [];
+
+    for (const tuple of listOfTuples.data) {
+      if (!Type.isTuple(tuple) || tuple.data.length !== 2) {
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":lists.unzip_1/3"),
+        );
+      }
+
+      list1.push(tuple.data[0]);
+      list2.push(tuple.data[1]);
+    }
+
+    return Type.tuple([Type.list(list1), Type.list(list2)]);
+  },
+  // End unzip/1
+  // Deps: []
+
+  // Start usort/1
+  "usort/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.usort/1", [list]),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.usort_1/4"),
+      );
+    }
+
+    const sorted = list.data.sort(Interpreter.compareTerms);
+
+    // Remove duplicates
+    const unique = [];
+    for (let i = 0; i < sorted.length; i++) {
+      if (i === 0 || !Interpreter.isStrictlyEqual(sorted[i], sorted[i - 1])) {
+        unique.push(sorted[i]);
+      }
+    }
+
+    return Type.list(unique);
+  },
+  // End usort/1
+  // Deps: []
+
+  // Start zip/2
+  "zip/2": (list1, list2) => {
+    if (!Type.isList(list1)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.zip/2", [list1, list2]),
+      );
+    }
+
+    if (!Type.isList(list2)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.zip/2", [list1, list2]),
+      );
+    }
+
+    if (!Type.isProperList(list1)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.zip_1/3"),
+      );
+    }
+
+    if (!Type.isProperList(list2)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.zip_1/3"),
+      );
+    }
+
+    if (list1.data.length !== list2.data.length) {
+      Interpreter.raiseErlangError(
+        Interpreter.buildErlangErrorMsg(":lists_not_same_length"),
+      );
+    }
+
+    const result = [];
+    for (let i = 0; i < list1.data.length; i++) {
+      result.push(Type.tuple([list1.data[i], list2.data[i]]));
+    }
+
+    return Type.list(result);
+  },
+  // End zip/2
   // Deps: []
 };
 

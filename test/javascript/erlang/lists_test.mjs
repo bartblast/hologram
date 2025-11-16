@@ -319,6 +319,219 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("append/1", () => {
+    const testedFun = Erlang_Lists["append/1"];
+
+    it("appends list of lists", () => {
+      const listOfLists = Type.list([
+        Type.list([Type.integer(1), Type.integer(2)]),
+        Type.list([Type.integer(3), Type.integer(4)]),
+        Type.list([Type.integer(5)]),
+      ]);
+      const result = testedFun(listOfLists);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+          Type.integer(4),
+          Type.integer(5),
+        ]),
+      );
+    });
+
+    it("handles empty list of lists", () => {
+      const result = testedFun(Type.list([]));
+
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("handles list containing empty lists", () => {
+      const listOfLists = Type.list([
+        Type.list([]),
+        Type.list([Type.integer(1)]),
+        Type.list([]),
+      ]);
+      const result = testedFun(listOfLists);
+
+      assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
+    });
+
+    it("raises FunctionClauseError if argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.append/1", [
+          Type.atom("abc"),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if list is improper", () => {
+      assertBoxedError(
+        () =>
+          testedFun(
+            Type.improperList([Type.list([]), Type.list([])]),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.append/1", [
+          Type.improperList([Type.list([]), Type.list([])]),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if list contains non-list", () => {
+      assertBoxedError(
+        () => testedFun(Type.list([Type.list([]), Type.atom("abc")])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.append_1/2"),
+      );
+    });
+  });
+
+  describe("append/2", () => {
+    const testedFun = Erlang_Lists["append/2"];
+
+    it("appends two lists", () => {
+      const list1 = Type.list([Type.integer(1), Type.integer(2)]);
+      const list2 = Type.list([Type.integer(3), Type.integer(4)]);
+      const result = testedFun(list1, list2);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+          Type.integer(4),
+        ]),
+      );
+    });
+
+    it("appends to empty list", () => {
+      const list1 = Type.list([]);
+      const list2 = Type.list([Type.integer(1)]);
+      const result = testedFun(list1, list2);
+
+      assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
+    });
+
+    it("appends empty list", () => {
+      const list1 = Type.list([Type.integer(1)]);
+      const list2 = Type.list([]);
+      const result = testedFun(list1, list2);
+
+      assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
+    });
+
+    it("raises FunctionClauseError if first argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc"), Type.list([])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.append/2", [
+          Type.atom("abc"),
+          Type.list([]),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if first list is improper", () => {
+      assertBoxedError(
+        () =>
+          testedFun(
+            Type.improperList([Type.integer(1), Type.integer(2)]),
+            Type.list([]),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.append/2", [
+          Type.improperList([Type.integer(1), Type.integer(2)]),
+          Type.list([]),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if second argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.list([]), Type.atom("abc")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.append/2", [
+          Type.list([]),
+          Type.atom("abc"),
+        ]),
+      );
+    });
+  });
+
+  describe("delete/2", () => {
+    const testedFun = Erlang_Lists["delete/2"];
+
+    it("deletes first occurrence of element", () => {
+      const list = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+        Type.integer(2),
+      ]);
+      const result = testedFun(Type.integer(2), list);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(1), Type.integer(3), Type.integer(2)]),
+      );
+    });
+
+    it("returns same list if element not found", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = testedFun(Type.integer(3), list);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(1), Type.integer(2)]),
+      );
+    });
+
+    it("handles empty list", () => {
+      const result = testedFun(Type.integer(1), Type.list([]));
+
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("deletes from single element list", () => {
+      const list = Type.list([Type.integer(1)]);
+      const result = testedFun(Type.integer(1), list);
+
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("raises FunctionClauseError if second argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.atom("abc")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.delete/2", [
+          Type.integer(1),
+          Type.atom("abc"),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if list is improper", () => {
+      assertBoxedError(
+        () =>
+          testedFun(
+            Type.integer(1),
+            Type.improperList([Type.integer(1), Type.integer(2)]),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.delete/2", [
+          Type.integer(1),
+          Type.improperList([Type.integer(1), Type.integer(2)]),
+        ]),
+      );
+    });
+  });
+
   describe("duplicate/2", () => {
     const testedFun = Erlang_Lists["duplicate/2"];
 
@@ -1207,6 +1420,55 @@ describe("Erlang_Lists", () => {
           ),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+      );
+    });
+  });
+
+  describe("last/1", () => {
+    const testedFun = Erlang_Lists["last/1"];
+
+    it("returns last element", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+      const result = testedFun(list);
+
+      assert.deepStrictEqual(result, Type.integer(3));
+    });
+
+    it("returns element from single element list", () => {
+      const list = Type.list([Type.atom("a")]);
+      const result = testedFun(list);
+
+      assert.deepStrictEqual(result, Type.atom("a"));
+    });
+
+    it("raises FunctionClauseError if argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.last/1", [
+          Type.atom("abc"),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if list is improper", () => {
+      assertBoxedError(
+        () =>
+          testedFun(Type.improperList([Type.integer(1), Type.integer(2)])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.last/1", [
+          Type.improperList([Type.integer(1), Type.integer(2)]),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if list is empty", () => {
+      assertBoxedError(
+        () => testedFun(Type.list([])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.last/1", [
+          Type.list([]),
+        ]),
       );
     });
   });
@@ -2406,6 +2668,228 @@ describe("Erlang_Lists", () => {
         () => testedFun(badFun, Type.list([Type.integer(1)])),
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":lists.dropwhile_2/4"),
+      );
+    });
+  });
+
+  describe("unzip/1", () => {
+    const testedFun = Erlang_Lists["unzip/1"];
+
+    it("unzips list of tuples", () => {
+      const listOfTuples = Type.list([
+        Type.tuple([Type.integer(1), Type.atom("a")]),
+        Type.tuple([Type.integer(2), Type.atom("b")]),
+        Type.tuple([Type.integer(3), Type.atom("c")]),
+      ]);
+      const result = testedFun(listOfTuples);
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([
+          Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+          Type.list([Type.atom("a"), Type.atom("b"), Type.atom("c")]),
+        ]),
+      );
+    });
+
+    it("unzips empty list", () => {
+      const result = testedFun(Type.list([]));
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([Type.list([]), Type.list([])]),
+      );
+    });
+
+    it("raises FunctionClauseError if argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.unzip/1", [
+          Type.atom("abc"),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if list is improper", () => {
+      assertBoxedError(
+        () =>
+          testedFun(
+            Type.improperList([
+              Type.tuple([Type.integer(1), Type.integer(2)]),
+              Type.tuple([Type.integer(3), Type.integer(4)]),
+            ]),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.unzip/1", [
+          Type.improperList([
+            Type.tuple([Type.integer(1), Type.integer(2)]),
+            Type.tuple([Type.integer(3), Type.integer(4)]),
+          ]),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if list contains non-2-tuple", () => {
+      assertBoxedError(
+        () =>
+          testedFun(
+            Type.list([
+              Type.tuple([Type.integer(1), Type.integer(2)]),
+              Type.tuple([Type.integer(3)]),
+            ]),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.unzip_1/3"),
+      );
+    });
+  });
+
+  describe("usort/1", () => {
+    const testedFun = Erlang_Lists["usort/1"];
+
+    it("sorts and removes duplicates", () => {
+      const list = Type.list([
+        Type.integer(3),
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(1),
+        Type.integer(3),
+      ]);
+      const result = testedFun(list);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      );
+    });
+
+    it("handles list with no duplicates", () => {
+      const list = Type.list([Type.integer(3), Type.integer(1), Type.integer(2)]);
+      const result = testedFun(list);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      );
+    });
+
+    it("handles empty list", () => {
+      const result = testedFun(Type.list([]));
+
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("handles list with all duplicates", () => {
+      const list = Type.list([
+        Type.integer(1),
+        Type.integer(1),
+        Type.integer(1),
+      ]);
+      const result = testedFun(list);
+
+      assert.deepStrictEqual(result, Type.list([Type.integer(1)]));
+    });
+
+    it("raises FunctionClauseError if argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.usort/1", [
+          Type.atom("abc"),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if list is improper", () => {
+      assertBoxedError(
+        () =>
+          testedFun(Type.improperList([Type.integer(1), Type.integer(2)])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.usort_1/4"),
+      );
+    });
+  });
+
+  describe("zip/2", () => {
+    const testedFun = Erlang_Lists["zip/2"];
+
+    it("zips two lists of same length", () => {
+      const list1 = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+      const list2 = Type.list([Type.atom("a"), Type.atom("b"), Type.atom("c")]);
+      const result = testedFun(list1, list2);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.tuple([Type.integer(1), Type.atom("a")]),
+          Type.tuple([Type.integer(2), Type.atom("b")]),
+          Type.tuple([Type.integer(3), Type.atom("c")]),
+        ]),
+      );
+    });
+
+    it("zips empty lists", () => {
+      const result = testedFun(Type.list([]), Type.list([]));
+
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("raises FunctionClauseError if first argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc"), Type.list([])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.zip/2", [
+          Type.atom("abc"),
+          Type.list([]),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if second argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.list([]), Type.atom("abc")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.zip/2", [
+          Type.list([]),
+          Type.atom("abc"),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if first list is improper", () => {
+      assertBoxedError(
+        () =>
+          testedFun(
+            Type.improperList([Type.integer(1), Type.integer(2)]),
+            Type.list([Type.integer(1), Type.integer(2)]),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.zip_1/3"),
+      );
+    });
+
+    it("raises FunctionClauseError if second list is improper", () => {
+      assertBoxedError(
+        () =>
+          testedFun(
+            Type.list([Type.integer(1), Type.integer(2)]),
+            Type.improperList([Type.integer(1), Type.integer(2)]),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.zip_1/3"),
+      );
+    });
+
+    it("raises ErlangError if lists have different lengths", () => {
+      assertBoxedError(
+        () =>
+          testedFun(
+            Type.list([Type.integer(1)]),
+            Type.list([Type.integer(1), Type.integer(2)]),
+          ),
+        "ErlangError",
+        Interpreter.buildErlangErrorMsg(":lists_not_same_length"),
       );
     });
   });
