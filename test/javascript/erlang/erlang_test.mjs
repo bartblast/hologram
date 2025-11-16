@@ -2780,6 +2780,66 @@ describe("Erlang", () => {
     });
   });
 
+  describe("make_tuple/2", () => {
+    const testedFun = Erlang["make_tuple/2"];
+
+    it("creates empty tuple when size is 0", () => {
+      const result = testedFun(Type.integer(0), Type.atom("default"));
+
+      assert.deepStrictEqual(result, Type.tuple([]));
+    });
+
+    it("creates tuple of size 1", () => {
+      const result = testedFun(Type.integer(1), Type.atom("x"));
+
+      assert.deepStrictEqual(result, Type.tuple([Type.atom("x")]));
+    });
+
+    it("creates tuple of size 5 with default value", () => {
+      const result = testedFun(Type.integer(5), Type.integer(42));
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([
+          Type.integer(42),
+          Type.integer(42),
+          Type.integer(42),
+          Type.integer(42),
+          Type.integer(42),
+        ]),
+      );
+    });
+
+    it("works with various default values", () => {
+      const result = testedFun(Type.integer(3), Type.list([Type.integer(1), Type.integer(2)]));
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([
+          Type.list([Type.integer(1), Type.integer(2)]),
+          Type.list([Type.integer(1), Type.integer(2)]),
+          Type.list([Type.integer(1), Type.integer(2)]),
+        ]),
+      );
+    });
+
+    it("raises ArgumentError if size is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc"), Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if size is negative", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(-1), Type.atom("x")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a valid tuple size"),
+      );
+    });
+  });
+
   describe("not/1", () => {
     const not = Erlang["not/1"];
 

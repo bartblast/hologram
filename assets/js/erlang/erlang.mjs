@@ -871,6 +871,28 @@ const Erlang = {
   // End map_size/1
   // Deps: []
 
+  // Start make_tuple/2
+  "make_tuple/2": (size, defaultValue) => {
+    if (!Type.isInteger(size)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (size.value < 0n) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a valid tuple size"),
+      );
+    }
+
+    const length = Number(size.value);
+    const data = new Array(length).fill(defaultValue);
+
+    return Type.tuple(data);
+  },
+  // End make_tuple/2
+  // Deps: []
+
   // TODO: test
   // Start max/2
   "max/2": (term1, term2) => {
