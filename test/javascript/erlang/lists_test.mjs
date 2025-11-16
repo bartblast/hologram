@@ -1714,6 +1714,68 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("keymap/3", () => {
+    const testedFun = Erlang_Lists["keymap/3"];
+
+    const double = Type.anonymousFunction(1, [{
+      params: (_context) => [Type.variablePattern("x")],
+      guards: [],
+      body: (context) => Erlang["*/2"](context.vars.x, Type.integer(2)),
+    }], contextFixture());
+
+    it("maps function over key position in tuples", () => {
+      const tuples = Type.list([
+        Type.tuple([Type.atom("a"), Type.integer(1)]),
+        Type.tuple([Type.atom("b"), Type.integer(2)]),
+      ]);
+      const result = testedFun(double, Type.integer(2), tuples);
+
+      assert.deepStrictEqual(result, Type.list([
+        Type.tuple([Type.atom("a"), Type.integer(2)]),
+        Type.tuple([Type.atom("b"), Type.integer(4)]),
+      ]));
+    });
+
+    it("raises ArgumentError if index not an integer", () => {
+      assertBoxedError(
+        () => testedFun(double, Type.atom("bad"), Type.list([])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    });
+  });
+
+  describe("keystore/4", () => {
+    const testedFun = Erlang_Lists["keystore/4"];
+
+    it("replaces tuple if key exists", () => {
+      const tuples = Type.list([Type.tuple([Type.atom("a"), Type.integer(1)])]);
+      const newTuple = Type.tuple([Type.atom("a"), Type.integer(99)]);
+      const result = testedFun(Type.atom("a"), Type.integer(1), tuples, newTuple);
+
+      assert.deepStrictEqual(result, Type.list([newTuple]));
+    });
+
+    it("appends tuple if key doesn't exist", () => {
+      const tuples = Type.list([Type.tuple([Type.atom("a"), Type.integer(1)])]);
+      const newTuple = Type.tuple([Type.atom("b"), Type.integer(2)]);
+      const result = testedFun(Type.atom("b"), Type.integer(1), tuples, newTuple);
+
+      assert.deepStrictEqual(result, Type.list([
+        Type.tuple([Type.atom("a"), Type.integer(1)]),
+        newTuple,
+      ]));
+    });
+
+    it("raises ArgumentError if index not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("a"), Type.atom("bad"), Type.list([]), Type.tuple([])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    });
+  });
+
   describe("keyreplace/4", () => {
     const testedFun = Erlang_Lists["keyreplace/4"];
 
@@ -2000,6 +2062,66 @@ describe("Erlang_Lists", () => {
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":lists.map_1/2"),
       );
+    });
+  });
+
+  describe("mapfoldl/3", () => {
+    const testedFun = Erlang_Lists["mapfoldl/3"];
+
+    const doubleAndSum = Type.anonymousFunction(2, [{
+      params: (_context) => [Type.variablePattern("x"), Type.variablePattern("acc")],
+      guards: [],
+      body: (context) => {
+        const doubled = Erlang["*/2"](context.vars.x, Type.integer(2));
+        const newAcc = Erlang["+/2"](context.vars.acc, context.vars.x);
+        return Type.tuple([doubled, newAcc]);
+      },
+    }], contextFixture());
+
+    it("maps and folds from left", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+      const result = testedFun(doubleAndSum, Type.integer(0), list);
+
+      assert.deepStrictEqual(result, Type.tuple([
+        Type.list([Type.integer(2), Type.integer(4), Type.integer(6)]),
+        Type.integer(6),
+      ]));
+    });
+
+    it("handles empty list", () => {
+      const result = testedFun(doubleAndSum, Type.integer(0), Type.list([]));
+
+      assert.deepStrictEqual(result, Type.tuple([Type.list([]), Type.integer(0)]));
+    });
+  });
+
+  describe("mapfoldr/3", () => {
+    const testedFun = Erlang_Lists["mapfoldr/3"];
+
+    const doubleAndSum = Type.anonymousFunction(2, [{
+      params: (_context) => [Type.variablePattern("x"), Type.variablePattern("acc")],
+      guards: [],
+      body: (context) => {
+        const doubled = Erlang["*/2"](context.vars.x, Type.integer(2));
+        const newAcc = Erlang["+/2"](context.vars.acc, context.vars.x);
+        return Type.tuple([doubled, newAcc]);
+      },
+    }], contextFixture());
+
+    it("maps and folds from right", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+      const result = testedFun(doubleAndSum, Type.integer(0), list);
+
+      assert.deepStrictEqual(result, Type.tuple([
+        Type.list([Type.integer(2), Type.integer(4), Type.integer(6)]),
+        Type.integer(6),
+      ]));
+    });
+
+    it("handles empty list", () => {
+      const result = testedFun(doubleAndSum, Type.integer(0), Type.list([]));
+
+      assert.deepStrictEqual(result, Type.tuple([Type.list([]), Type.integer(0)]));
     });
   });
 
@@ -2495,6 +2617,27 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("merge3/3", () => {
+    const testedFun = Erlang_Lists["merge3/3"];
+
+    it("merges three sorted lists", () => {
+      const list1 = Type.list([Type.integer(1), Type.integer(4)]);
+      const list2 = Type.list([Type.integer(2), Type.integer(5)]);
+      const list3 = Type.list([Type.integer(3), Type.integer(6)]);
+      const result = testedFun(list1, list2, list3);
+
+      assert.deepStrictEqual(result, Type.list([
+        Type.integer(1), Type.integer(2), Type.integer(3),
+        Type.integer(4), Type.integer(5), Type.integer(6),
+      ]));
+    });
+
+    it("handles empty lists", () => {
+      const result = testedFun(Type.list([]), Type.list([]), Type.list([]));
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+  });
+
   describe("prefix/2", () => {
     const testedFun = Erlang_Lists["prefix/2"];
 
@@ -2801,6 +2944,33 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("sort/2", () => {
+    const testedFun = Erlang_Lists["sort/2"];
+
+    const ascending = Type.anonymousFunction(2, [{
+      params: (_context) => [Type.variablePattern("a"), Type.variablePattern("b")],
+      guards: [],
+      body: (context) => {
+        const comp = Interpreter.compareTerms(context.vars.a, context.vars.b);
+        return comp <= 0 ? Type.atom("true") : Type.atom("false");
+      },
+    }], contextFixture());
+
+    it("sorts list with custom comparator", () => {
+      const list = Type.list([Type.integer(3), Type.integer(1), Type.integer(2)]);
+      const result = testedFun(ascending, list);
+
+      assert.deepStrictEqual(result, Type.list([
+        Type.integer(1), Type.integer(2), Type.integer(3),
+      ]));
+    });
+
+    it("handles empty list", () => {
+      const result = testedFun(ascending, Type.list([]));
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+  });
+
   describe("split/2", () => {
     const testedFun = Erlang_Lists["split/2"];
 
@@ -2914,6 +3084,33 @@ describe("Erlang_Lists", () => {
           Type.list([Type.integer(1)]),
         ]),
       );
+    });
+  });
+
+  describe("splitwith/2", () => {
+    const testedFun = Erlang_Lists["splitwith/2"];
+
+    const lessThan3 = Type.anonymousFunction(1, [{
+      params: (_context) => [Type.variablePattern("x")],
+      guards: [],
+      body: (context) => Erlang["</2"](context.vars.x, Type.integer(3)),
+    }], contextFixture());
+
+    it("splits list at first failing predicate", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3), Type.integer(1)]);
+      const result = testedFun(lessThan3, list);
+
+      assert.deepStrictEqual(result, Type.tuple([
+        Type.list([Type.integer(1), Type.integer(2)]),
+        Type.list([Type.integer(3), Type.integer(1)]),
+      ]));
+    });
+
+    it("handles all satisfying", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = testedFun(lessThan3, list);
+
+      assert.deepStrictEqual(result, Type.tuple([list, Type.list([])]));
     });
   });
 
@@ -3624,6 +3821,34 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("uniq/1", () => {
+    const testedFun = Erlang_Lists["uniq/1"];
+
+    it("removes consecutive duplicates", () => {
+      const list = Type.list([
+        Type.integer(1), Type.integer(1), Type.integer(2),
+        Type.integer(3), Type.integer(3), Type.integer(3), Type.integer(2),
+      ]);
+      const result = testedFun(list);
+
+      assert.deepStrictEqual(result, Type.list([
+        Type.integer(1), Type.integer(2), Type.integer(3), Type.integer(2),
+      ]));
+    });
+
+    it("handles list with no duplicates", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+      const result = testedFun(list);
+
+      assert.deepStrictEqual(result, list);
+    });
+
+    it("handles empty list", () => {
+      const result = testedFun(Type.list([]));
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+  });
+
   describe("usort/1", () => {
     const testedFun = Erlang_Lists["usort/1"];
 
@@ -3831,6 +4056,39 @@ describe("Erlang_Lists", () => {
             Type.list([Type.integer(1), Type.integer(2)]),
             Type.list([Type.integer(3)]),
           ),
+        "ErlangError",
+        Interpreter.buildErlangErrorMsg(":lists_not_same_length"),
+      );
+    });
+  });
+
+  describe("zip3/3", () => {
+    const testedFun = Erlang_Lists["zip3/3"];
+
+    it("zips three lists of same length", () => {
+      const list1 = Type.list([Type.integer(1), Type.integer(2)]);
+      const list2 = Type.list([Type.atom("a"), Type.atom("b")]);
+      const list3 = Type.list([Type.float(1.5), Type.float(2.5)]);
+      const result = testedFun(list1, list2, list3);
+
+      assert.deepStrictEqual(result, Type.list([
+        Type.tuple([Type.integer(1), Type.atom("a"), Type.float(1.5)]),
+        Type.tuple([Type.integer(2), Type.atom("b"), Type.float(2.5)]),
+      ]));
+    });
+
+    it("handles empty lists", () => {
+      const result = testedFun(Type.list([]), Type.list([]), Type.list([]));
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("raises ErlangError if lists have different lengths", () => {
+      assertBoxedError(
+        () => testedFun(
+          Type.list([Type.integer(1), Type.integer(2)]),
+          Type.list([Type.integer(3)]),
+          Type.list([Type.integer(4)]),
+        ),
         "ErlangError",
         Interpreter.buildErlangErrorMsg(":lists_not_same_length"),
       );
