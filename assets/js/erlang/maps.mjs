@@ -232,6 +232,17 @@ const Erlang_Maps = {
   },
   // End update/3
   // Deps: [:maps.is_key/2, :maps.put/3]
+
+  // Start values/1
+  "values/1": (map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    return Type.list(Object.values(map.data).map(([_key, value]) => value));
+  },
+  // End values/1
+  // Deps: []
 };
 
 export default Erlang_Maps;
