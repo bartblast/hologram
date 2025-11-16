@@ -278,6 +278,24 @@ const Erlang_Lists = {
   },
   // End sort/1
   // Deps: []
+  "duplicate/2": (count, elem) => {
+    if (!Type.isInteger(count)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (count.value < 0) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a non-negative integer"),
+      );
+    }
+
+    const size = count.value;
+    const data = new Array(size).fill(elem);
+
+    return Type.list(data);
+  },
 };
 
 export default Erlang_Lists;
