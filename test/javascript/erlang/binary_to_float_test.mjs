@@ -6,7 +6,9 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
+import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_Binary_To_Float from "../../../assets/js/erlang/binary_to_float.mjs";
+import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
@@ -57,6 +59,11 @@ describe("Erlang_Binary_To_Float", () => {
     it("parses negative exponent", () => {
       const r = binary_to_float(Type.bitstring("1.23e-3"));
       assert.strictEqual(r.value, 0.00123);
+    });
+
+    it("parses negative zero", () => {
+      const result = binary_to_float(Type.bitstring("-0.0"));
+      assert.isTrue(Interpreter.isEqual(result, Type.float(-0.0)));
     });
 
     // ------------------------------
@@ -167,6 +174,16 @@ describe("Erlang_Binary_To_Float", () => {
         () => binary_to_float(Type.bitstring("0x1.fp2")),
         "ErlangError",
         "badarg"
+      );
+    });
+
+    it("rejects non-UTF-8 binary", () => {
+      const bin = Bitstring.fromBits([0xff, 0xff, 0xff]);
+
+      assertBoxedError(
+        () => binary_to_float(bin),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 1st argument: expected a binary\n"
       );
     });
   });

@@ -42,6 +42,11 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryToFloatTest do
       assert result == 0.00123
     end
 
+    test "parses negative zero" do
+      result = :erlang.binary_to_float("-0.0")
+      assert result == -0.0
+    end
+
     # -------------------------
     # Error Cases
     # -------------------------
@@ -127,6 +132,12 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryToFloatTest do
     test "raises badarg on hex-style JS float" do
       assert_raise ArgumentError, fn ->
         :erlang.binary_to_float("0x1.fp2")
+      end
+    end
+
+    test "rejects non-UTF-8 binary" do
+      assert_raise ArgumentError, fn ->
+        :erlang.binary_to_float(<<255, 255, 255>>)
       end
     end
   end
