@@ -846,6 +846,20 @@ const Erlang = {
   // End not/1
   // Deps: []
 
+  // Start xor/2
+  "xor/2": (left, right) => {
+    if (!Type.isBoolean(left) || !Type.isBoolean(right)) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    const leftValue = left.value === "true";
+    const rightValue = right.value === "true";
+
+    return Type.boolean(leftValue !== rightValue);
+  },
+  // End xor/2
+  // Deps: []
+
   // Start orelse/2
   "orelse/2": (leftFun, rightFun, context) => {
     const left = leftFun(context);

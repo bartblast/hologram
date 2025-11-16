@@ -2614,6 +2614,42 @@ describe("Erlang", () => {
     });
   });
 
+  describe("xor/2", () => {
+    const xor = Erlang["xor/2"];
+
+    it("true xor false", () => {
+      assertBoxedTrue(xor(Type.boolean(true), Type.boolean(false)));
+    });
+
+    it("false xor true", () => {
+      assertBoxedTrue(xor(Type.boolean(false), Type.boolean(true)));
+    });
+
+    it("true xor true", () => {
+      assertBoxedFalse(xor(Type.boolean(true), Type.boolean(true)));
+    });
+
+    it("false xor false", () => {
+      assertBoxedFalse(xor(Type.boolean(false), Type.boolean(false)));
+    });
+
+    it("raises ArgumentError if the first argument is not a boolean", () => {
+      assertBoxedError(
+        () => xor(atomAbc, Type.boolean(true)),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a boolean", () => {
+      assertBoxedError(
+        () => xor(Type.boolean(true), atomAbc),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+  });
+
   describe("orelse/2", () => {
     const orelse = Erlang["orelse/2"];
 
