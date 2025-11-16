@@ -1021,6 +1021,39 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("flatlength/1", () => {
+    const testedFun = Erlang_Lists["flatlength/1"];
+
+    it("counts elements in deeply nested list", () => {
+      const list = Type.list([
+        Type.integer(1),
+        Type.list([Type.integer(2), Type.integer(3)]),
+        Type.list([Type.list([Type.integer(4)])]),
+      ]);
+      const result = testedFun(list);
+      assert.deepStrictEqual(result, Type.integer(4));
+    });
+
+    it("returns 0 for empty list", () => {
+      const result = testedFun(Type.list([]));
+      assert.deepStrictEqual(result, Type.integer(0));
+    });
+
+    it("raises FunctionClauseError for improper list", () => {
+      const improperList = Type.improperList([
+        Type.integer(1),
+        Type.integer(2),
+      ]);
+      assertBoxedError(
+        () => testedFun(improperList),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.flatlength/1", [
+          improperList,
+        ]),
+      );
+    });
+  });
+
   describe("flatmap/2", () => {
     const testedFun = Erlang_Lists["flatmap/2"];
 
@@ -1892,6 +1925,46 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("keymerge/3", () => {
+    const testedFun = Erlang_Lists["keymerge/3"];
+
+    it("merges two sorted tuple lists by key", () => {
+      const tuples1 = Type.list([
+        Type.tuple([Type.atom("a"), Type.integer(1)]),
+        Type.tuple([Type.atom("c"), Type.integer(3)]),
+      ]);
+      const tuples2 = Type.list([
+        Type.tuple([Type.atom("b"), Type.integer(2)]),
+        Type.tuple([Type.atom("d"), Type.integer(4)]),
+      ]);
+      const result = testedFun(Type.integer(1), tuples1, tuples2);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.tuple([Type.atom("a"), Type.integer(1)]),
+          Type.tuple([Type.atom("b"), Type.integer(2)]),
+          Type.tuple([Type.atom("c"), Type.integer(3)]),
+          Type.tuple([Type.atom("d"), Type.integer(4)]),
+        ]),
+      );
+    });
+
+    it("handles empty lists", () => {
+      const tuples = Type.list([Type.tuple([Type.atom("a"), Type.integer(1)])]);
+      const result = testedFun(Type.integer(1), tuples, Type.list([]));
+      assert.deepStrictEqual(result, tuples);
+    });
+
+    it("raises ArgumentError for invalid index", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(0), Type.list([]), Type.list([])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+  });
+
   describe("join/2", () => {
     const testedFun = Erlang_Lists["join/2"];
 
@@ -2574,6 +2647,46 @@ describe("Erlang_Lists", () => {
         () => member(Type.integer(2), Type.atom("abc")),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    });
+  });
+
+  describe("merge/1", () => {
+    const testedFun = Erlang_Lists["merge/1"];
+
+    it("merges list of sorted lists", () => {
+      const listOfLists = Type.list([
+        Type.list([Type.integer(1), Type.integer(5)]),
+        Type.list([Type.integer(2), Type.integer(6)]),
+        Type.list([Type.integer(3), Type.integer(7)]),
+      ]);
+      const result = testedFun(listOfLists);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+          Type.integer(5),
+          Type.integer(6),
+          Type.integer(7),
+        ]),
+      );
+    });
+
+    it("handles empty list of lists", () => {
+      const result = testedFun(Type.list([]));
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("raises FunctionClauseError for non-list argument", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.merge/1", [
+          Type.atom("abc"),
+        ]),
       );
     });
   });
@@ -3849,6 +3962,255 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("uniq/2", () => {
+    const testedFun = Erlang_Lists["uniq/2"];
+
+    const caselessEqual = Type.anonymousFunction(
+      2,
+      [
+        {
+          params: (_context) => [
+            Type.variablePattern("a"),
+            Type.variablePattern("b"),
+          ],
+          guards: [],
+          body: (context) => {
+            const a = context.vars.a;
+            const b = context.vars.b;
+            if (Type.isAtom(a) && Type.isAtom(b)) {
+              return Type.boolean(
+                a.value.toLowerCase() === b.value.toLowerCase(),
+              );
+            }
+            return Interpreter.isEqual(a, b)
+              ? Type.atom("true")
+              : Type.atom("false");
+          },
+        },
+      ],
+      contextFixture(),
+    );
+
+    it("removes consecutive duplicates using custom equality", () => {
+      const list = Type.list([
+        Type.atom("a"),
+        Type.atom("A"),
+        Type.atom("b"),
+        Type.atom("B"),
+        Type.atom("b"),
+      ]);
+      const result = testedFun(caselessEqual, list);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.atom("a"), Type.atom("b")]),
+      );
+    });
+
+    it("handles empty list", () => {
+      const result = testedFun(caselessEqual, Type.list([]));
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("raises FunctionClauseError for non-function first argument", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_fun"), Type.list([])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.uniq/2", [
+          Type.atom("not_fun"),
+          Type.list([]),
+        ]),
+      );
+    });
+  });
+
+  describe("ukeysort/2", () => {
+    const testedFun = Erlang_Lists["ukeysort/2"];
+
+    it("sorts tuples by key and removes duplicates", () => {
+      const tuples = Type.list([
+        Type.tuple([Type.atom("b"), Type.integer(2)]),
+        Type.tuple([Type.atom("a"), Type.integer(1)]),
+        Type.tuple([Type.atom("a"), Type.integer(3)]),
+      ]);
+      const result = testedFun(Type.integer(1), tuples);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.tuple([Type.atom("a"), Type.integer(1)]),
+          Type.tuple([Type.atom("b"), Type.integer(2)]),
+        ]),
+      );
+    });
+
+    it("handles empty list", () => {
+      const result = testedFun(Type.integer(1), Type.list([]));
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("raises ArgumentError for invalid index", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(0), Type.list([])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+  });
+
+  describe("ukeymerge/3", () => {
+    const testedFun = Erlang_Lists["ukeymerge/3"];
+
+    it("merges sorted tuple lists and removes duplicates by key", () => {
+      const tuples1 = Type.list([
+        Type.tuple([Type.atom("a"), Type.integer(1)]),
+        Type.tuple([Type.atom("c"), Type.integer(3)]),
+      ]);
+      const tuples2 = Type.list([
+        Type.tuple([Type.atom("a"), Type.integer(2)]),
+        Type.tuple([Type.atom("b"), Type.integer(4)]),
+      ]);
+      const result = testedFun(Type.integer(1), tuples1, tuples2);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.tuple([Type.atom("a"), Type.integer(1)]),
+          Type.tuple([Type.atom("b"), Type.integer(4)]),
+          Type.tuple([Type.atom("c"), Type.integer(3)]),
+        ]),
+      );
+    });
+
+    it("handles empty lists", () => {
+      const tuples = Type.list([Type.tuple([Type.atom("a"), Type.integer(1)])]);
+      const result = testedFun(Type.integer(1), tuples, Type.list([]));
+      assert.deepStrictEqual(result, tuples);
+    });
+
+    it("raises ArgumentError for invalid index", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(0), Type.list([]), Type.list([])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+  });
+
+  describe("umerge/1", () => {
+    const testedFun = Erlang_Lists["umerge/1"];
+
+    it("merges list of sorted lists with union", () => {
+      const listOfLists = Type.list([
+        Type.list([Type.integer(1), Type.integer(3)]),
+        Type.list([Type.integer(2), Type.integer(3)]),
+        Type.list([Type.integer(3), Type.integer(4)]),
+      ]);
+      const result = testedFun(listOfLists);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+          Type.integer(4),
+        ]),
+      );
+    });
+
+    it("handles empty list of lists", () => {
+      const result = testedFun(Type.list([]));
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("raises FunctionClauseError for non-list argument", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.umerge/1", [
+          Type.atom("abc"),
+        ]),
+      );
+    });
+  });
+
+  describe("umerge/2", () => {
+    const testedFun = Erlang_Lists["umerge/2"];
+
+    it("merges two sorted lists with union", () => {
+      const list1 = Type.list([Type.integer(1), Type.integer(3), Type.integer(5)]);
+      const list2 = Type.list([Type.integer(3), Type.integer(4), Type.integer(5)]);
+      const result = testedFun(list1, list2);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.integer(1),
+          Type.integer(3),
+          Type.integer(4),
+          Type.integer(5),
+        ]),
+      );
+    });
+
+    it("handles empty lists", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = testedFun(list, Type.list([]));
+      assert.deepStrictEqual(result, list);
+    });
+
+    it("raises FunctionClauseError for non-list arguments", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc"), Type.list([])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.umerge/2", [
+          Type.atom("abc"),
+          Type.list([]),
+        ]),
+      );
+    });
+  });
+
+  describe("umerge3/3", () => {
+    const testedFun = Erlang_Lists["umerge3/3"];
+
+    it("merges three sorted lists with union", () => {
+      const list1 = Type.list([Type.integer(1), Type.integer(4)]);
+      const list2 = Type.list([Type.integer(2), Type.integer(4)]);
+      const list3 = Type.list([Type.integer(3), Type.integer(4)]);
+      const result = testedFun(list1, list2, list3);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+          Type.integer(4),
+        ]),
+      );
+    });
+
+    it("handles empty lists", () => {
+      const list = Type.list([Type.integer(1)]);
+      const result = testedFun(list, Type.list([]), Type.list([]));
+      assert.deepStrictEqual(result, list);
+    });
+
+    it("raises FunctionClauseError for non-list arguments", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc"), Type.list([]), Type.list([])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.umerge3/3", [
+          Type.atom("abc"),
+          Type.list([]),
+          Type.list([]),
+        ]),
+      );
+    });
+  });
+
   describe("usort/1", () => {
     const testedFun = Erlang_Lists["usort/1"];
 
@@ -3911,6 +4273,63 @@ describe("Erlang_Lists", () => {
           testedFun(Type.improperList([Type.integer(1), Type.integer(2)])),
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":lists.usort_1/4"),
+      );
+    });
+  });
+
+  describe("usort/2", () => {
+    const testedFun = Erlang_Lists["usort/2"];
+
+    const descending = Type.anonymousFunction(
+      2,
+      [
+        {
+          params: (_context) => [
+            Type.variablePattern("a"),
+            Type.variablePattern("b"),
+          ],
+          guards: [],
+          body: (context) => {
+            const comp = Interpreter.compareTerms(
+              context.vars.a,
+              context.vars.b,
+            );
+            return comp >= 0 ? Type.atom("true") : Type.atom("false");
+          },
+        },
+      ],
+      contextFixture(),
+    );
+
+    it("sorts with custom comparator and removes duplicates", () => {
+      const list = Type.list([
+        Type.integer(1),
+        Type.integer(3),
+        Type.integer(2),
+        Type.integer(3),
+        Type.integer(1),
+      ]);
+      const result = testedFun(descending, list);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(3), Type.integer(2), Type.integer(1)]),
+      );
+    });
+
+    it("handles empty list", () => {
+      const result = testedFun(descending, Type.list([]));
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("raises FunctionClauseError for non-function first argument", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_fun"), Type.list([])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.usort/2", [
+          Type.atom("not_fun"),
+          Type.list([]),
+        ]),
       );
     });
   });
