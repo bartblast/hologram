@@ -1043,6 +1043,55 @@ const Erlang = {
   // End list_to_existing_atom/1
   // Deps: [:erlang.list_to_atom/1]
 
+  // Start list_to_float/1
+  "list_to_float/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    // Convert list to binary first, then use binary_to_float
+    const binary = Erlang["list_to_binary/1"](list);
+    return Erlang["binary_to_float/1"](binary);
+  },
+  // End list_to_float/1
+  // Deps: [:erlang.list_to_binary/1, :erlang.binary_to_float/1]
+
+  // Start list_to_integer/1
+  "list_to_integer/1": (list) => {
+    return Erlang["list_to_integer/2"](list, Type.integer(10));
+  },
+  // End list_to_integer/1
+  // Deps: [:erlang.list_to_integer/2]
+
+  // Start list_to_integer/2
+  "list_to_integer/2": (list, base) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    // Convert list to binary first, then use binary_to_integer
+    const binary = Erlang["list_to_binary/1"](list);
+    return Erlang["binary_to_integer/2"](binary, base);
+  },
+  // End list_to_integer/2
+  // Deps: [:erlang.list_to_binary/1, :erlang.binary_to_integer/2]
+
   // Start map_size/1
   "map_size/1": (map) => {
     if (!Type.isMap(map)) {
