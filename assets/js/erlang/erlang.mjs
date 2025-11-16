@@ -1146,6 +1146,35 @@ const Erlang = {
   // End binary_to_term/2
   // Deps: []
 
+  // Start binary_to_term/3
+  "binary_to_term/3": (binary, opts, extraOpts) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    if (!Type.isList(opts)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    if (!Type.isList(extraOpts)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    throw new HologramInterpreterError(
+      "Function :erlang.binary_to_term/3 is not yet fully implemented in Hologram.\n" +
+      "Deserializing Erlang External Term Format requires complex binary parsing.\n" +
+      "See what to do here: https://www.hologram.page/TODO"
+    );
+  },
+  // End binary_to_term/3
+  // Deps: []
+
   // Start bit_size/1
   "bit_size/1": (term) => {
     if (!Type.isBitstring(term)) {
@@ -1543,6 +1572,27 @@ const Erlang = {
   // End delete_module/1
   // Deps: []
 
+  // Start delete_module/2
+  "delete_module/2": (module, options) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    Interpreter.raiseHologramInterpreterError(
+      "delete_module/2 is not supported in browser environment",
+    );
+  },
+  // End delete_module/2
+  // Deps: []
+
   // Start demonitor/1
   "demonitor/1": (monitorRef) => {
     if (!Type.isReference(monitorRef)) {
@@ -1638,6 +1688,37 @@ const Erlang = {
     return Type.integer(result);
   },
   // End convert_time_unit/3
+  // Deps: []
+
+  // Start convert_time_unit/4
+  "convert_time_unit/4": (time, fromUnit, toUnit, options) => {
+    if (!Type.isInteger(time)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isAtom(fromUnit)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(toUnit)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(4, "not a list"),
+      );
+    }
+
+    return Erlang["convert_time_unit/3"](time, fromUnit, toUnit);
+  },
+  // End convert_time_unit/4
   // Deps: []
 
   // Start copy/1
@@ -1785,6 +1866,26 @@ const Erlang = {
     return Type.boolean(false);
   },
   // End check_old_code/1
+  // Deps: []
+
+  // Start check_old_code/2
+  "check_old_code/2": (module, options) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    // Module loading/purging not supported in browser environment
+    return Type.boolean(false);
+  },
+  // End check_old_code/2
   // Deps: []
 
   // Start check_process_code/2
@@ -2023,6 +2124,25 @@ const Erlang = {
     return Erlang["external_size/1"](term);
   },
   // End external_size/2
+  // Deps: [:erlang.external_size/1]
+
+  // Start external_size/3
+  "external_size/3": (term, options, extraOptions) => {
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    if (!Type.isList(extraOptions)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    return Erlang["external_size/1"](term);
+  },
+  // End external_size/3
   // Deps: [:erlang.external_size/1]
 
   // Start float/1
@@ -2287,6 +2407,31 @@ const Erlang = {
   // End fun_info/2
   // Deps: []
 
+  // Start fun_info/3
+  "fun_info/3": (fun, item, options) => {
+    if (!Type.isFunction(fun)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a function"),
+      );
+    }
+
+    if (!Type.isAtom(item)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    return Erlang["fun_info/2"](fun, item);
+  },
+  // End fun_info/3
+  // Deps: [:erlang.fun_info/2]
+
   // Start fun_to_list/1
   "fun_to_list/1": (fun) => {
     if (!Type.isFunction(fun)) {
@@ -2443,6 +2588,40 @@ const Erlang = {
     return Type.boolean(true);
   },
   // End garbage_collect/0
+  // Deps: []
+
+  // Start garbage_collect/1
+  "garbage_collect/1": (pid) => {
+    if (!Type.isPid(pid)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a pid"),
+      );
+    }
+
+    // Trigger JavaScript garbage collection (no-op in browser)
+    return Type.boolean(true);
+  },
+  // End garbage_collect/1
+  // Deps: []
+
+  // Start garbage_collect/2
+  "garbage_collect/2": (pid, options) => {
+    if (!Type.isPid(pid)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a pid"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    // Trigger JavaScript garbage collection (no-op in browser)
+    return Type.boolean(true);
+  },
+  // End garbage_collect/2
   // Deps: []
 
   // Start group_leader/0
@@ -3661,6 +3840,33 @@ const Erlang = {
   // End load_module/2
   // Deps: []
 
+  // Start load_module/3
+  "load_module/3": (module, binary, options) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a binary"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    Interpreter.raiseHologramInterpreterError(
+      "load_module/3 is not supported in browser environment",
+    );
+  },
+  // End load_module/3
+  // Deps: []
+
   // Start loaded/0
   "loaded/0": () => {
     // Return list of loaded modules (simplified in Hologram)
@@ -4105,6 +4311,25 @@ const Erlang = {
   // End monotonic_time/1
   // Deps: [:erlang.convert_time_unit/3]
 
+  // Start monotonic_time/2
+  "monotonic_time/2": (unit, options) => {
+    if (!Type.isAtom(unit)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    return Erlang["monotonic_time/1"](unit);
+  },
+  // End monotonic_time/2
+  // Deps: [:erlang.monotonic_time/1]
+
   // Start monitor/2
   "monitor/2": (type, item) => {
     if (!Type.isAtom(type)) {
@@ -4332,6 +4557,26 @@ const Erlang = {
     return Type.boolean(true);
   },
   // End purge_module/1
+  // Deps: []
+
+  // Start purge_module/2
+  "purge_module/2": (module, options) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    // Module loading/purging not supported in browser environment
+    return Type.boolean(true);
+  },
+  // End purge_module/2
   // Deps: []
 
   // Start prepare_loading/2
@@ -4575,6 +4820,31 @@ const Erlang = {
   // End port_info/2
   // Deps: []
 
+  // Start port_info/3
+  "port_info/3": (port, item, options) => {
+    if (!Type.isPort(port)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a port"),
+      );
+    }
+
+    if (!Type.isAtom(item)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    return Erlang["port_info/2"](port, item);
+  },
+  // End port_info/3
+  // Deps: [:erlang.port_info/2]
+
   // Start ports/0
   "ports/0": () => {
     // Return list of all ports in the system
@@ -4582,6 +4852,21 @@ const Erlang = {
     return Type.list([]);
   },
   // End ports/0
+  // Deps: []
+
+  // Start ports/1
+  "ports/1": (options) => {
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    // Return list of all ports in the system
+    // In Hologram, we don't have real ports, so return empty list
+    return Type.list([]);
+  },
+  // End ports/1
   // Deps: []
 
   // Start port_control/3
@@ -4726,6 +5011,20 @@ const Erlang = {
   // End processes/0
   // Deps: []
 
+  // Start processes/1
+  "processes/1": (options) => {
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    // Return list of all processes (simplified in Hologram)
+    return Type.list([Type.pid("<0.0.0>")]);
+  },
+  // End processes/1
+  // Deps: []
+
   // Start process_flag/2
   "process_flag/2": (flag, value) => {
     if (!Type.isAtom(flag)) {
@@ -4786,6 +5085,31 @@ const Erlang = {
   },
   // End process_info/2
   // Deps: []
+
+  // Start process_info/3
+  "process_info/3": (pid, item, options) => {
+    if (!Type.isPid(pid)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a pid"),
+      );
+    }
+
+    if (!Type.isAtom(item)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    return Erlang["process_info/2"](pid, item);
+  },
+  // End process_info/3
+  // Deps: [:erlang.process_info/2]
 
   // Start process_display/2
   "process_display/2": (pid, type) => {
@@ -5215,6 +5539,21 @@ const Erlang = {
   // End set_cookie/2
   // Deps: []
 
+  // Start set_on_load/1
+  "set_on_load/1": (functionName) => {
+    if (!Type.isAtom(functionName)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    Interpreter.raiseHologramInterpreterError(
+      "set_on_load/1 is not supported in browser environment",
+    );
+  },
+  // End set_on_load/1
+  // Deps: []
+
   // Start setelement/3
   "setelement/3": (index, tuple, value) => {
     if (!Type.isInteger(index)) {
@@ -5612,6 +5951,25 @@ const Erlang = {
   // End statistics/1
   // Deps: []
 
+  // Start statistics/2
+  "statistics/2": (item, options) => {
+    if (!Type.isAtom(item)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    return Erlang["statistics/1"](item);
+  },
+  // End statistics/2
+  // Deps: [:erlang.statistics/1]
+
   // Start system_flag/2
   "system_flag/2": (flag, value) => {
     if (!Type.isAtom(flag)) {
@@ -5884,6 +6242,19 @@ const Erlang = {
   // End timestamp/0
   // Deps: []
 
+  // Start timestamp/1
+  "timestamp/1": (options) => {
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    return Erlang["timestamp/0"]();
+  },
+  // End timestamp/1
+  // Deps: [:erlang.timestamp/0]
+
   // Start term_to_binary/1
   "term_to_binary/1": (term) => {
     // ETF (External Term Format) serialization is complex
@@ -5914,6 +6285,29 @@ const Erlang = {
     );
   },
   // End term_to_binary/2
+  // Deps: []
+
+  // Start term_to_binary/3
+  "term_to_binary/3": (term, options, extraOptions) => {
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    if (!Type.isList(extraOptions)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    throw new HologramInterpreterError(
+      "Function :erlang.term_to_binary/3 is not yet fully implemented in Hologram.\n" +
+      "Serializing to Erlang External Term Format requires complex binary encoding.\n" +
+      "See what to do here: https://www.hologram.page/TODO"
+    );
+  },
+  // End term_to_binary/3
   // Deps: []
 
   // Start throw/1
@@ -6135,6 +6529,25 @@ const Erlang = {
   },
   // End unique_integer/1
   // Deps: [:erlang.unique_integer/0]
+
+  // Start unique_integer/2
+  "unique_integer/2": (modifiers, options) => {
+    if (!Type.isList(modifiers)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    return Erlang["unique_integer/1"](modifiers);
+  },
+  // End unique_integer/2
+  // Deps: [:erlang.unique_integer/1]
 
   // Start universaltime/0
   "universaltime/0": () => {
