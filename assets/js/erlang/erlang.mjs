@@ -326,6 +326,57 @@ const Erlang = {
   // End band/2
   // Deps: []
 
+  // Start binary_part/3
+  "binary_part/3": (subject, start, length) => {
+    if (!Type.isBinary(subject)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    if (!Type.isInteger(start)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (!Type.isInteger(length)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    }
+
+    const totalBytes = Bitstring.calculateBitCount(subject) / 8;
+
+    if (start.value < 0n || start.value > totalBytes) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    }
+
+    const isReverse = length.value < 0n;
+    const outOfRangeForward =
+      !isReverse && start.value + length.value > totalBytes;
+    const outOfRangeReverse = isReverse && start.value + length.value < 0n;
+
+    if (outOfRangeForward || outOfRangeReverse) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "out of range"),
+      );
+    }
+
+    const actualStart = isReverse ? start.value + length.value : start.value;
+    const actualLength = isReverse ? -length.value : length.value;
+
+    return Bitstring.takeChunk(
+      subject,
+      Number(actualStart) * 8,
+      Number(actualLength) * 8,
+    );
+  },
+  // End binary_part/3
+  // Deps: []
+
   // Start binary_to_atom/1
   "binary_to_atom/1": (binary) => {
     return Erlang["binary_to_atom/2"](binary, Type.atom("utf8"));

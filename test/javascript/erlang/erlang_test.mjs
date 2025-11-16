@@ -1623,6 +1623,211 @@ describe("Erlang", () => {
     });
   });
 
+  describe("binary_part/3", () => {
+    const binary_part = Erlang["binary_part/3"];
+
+    it("first argument is a text binary", () => {
+      const binary = Bitstring.fromText("goldfish");
+      const result = binary_part(binary, Type.integer(4), Type.integer(4));
+      const expected = Bitstring.fromText("fish");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("first argument is a byte binary", () => {
+      const binary = Bitstring.fromBytes([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      const result = binary_part(binary, Type.integer(4), Type.integer(2));
+      const expected = Bitstring.fromBytes([5, 6]);
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("first argument is empty", () => {
+      const binary = Bitstring.fromText("");
+      const result = binary_part(binary, Type.integer(0), Type.integer(0));
+      const expected = Bitstring.fromText("");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("first argument contains multi-byte unicode characters", () => {
+      // The character "á" is represented in UTF-8 as two bytes: [195, 161]
+      const binary = Bitstring.fromText("á");
+      const result = binary_part(binary, Type.integer(0), Type.integer(1));
+      const expected = Bitstring.fromBytes([195]);
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("second argument is zero", () => {
+      const binary = Bitstring.fromText("goldfish");
+      const result = binary_part(binary, Type.integer(0), Type.integer(4));
+      const expected = Bitstring.fromText("gold");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("start is at the end of the binary", () => {
+      const binary = Bitstring.fromText("goldfish");
+      const result = binary_part(binary, Type.integer(8), Type.integer(-4));
+      const expected = Bitstring.fromText("fish");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("third argument is negative", () => {
+      const binary = Bitstring.fromText("golden retriever");
+      const result = binary_part(binary, Type.integer(16), Type.integer(-9));
+      const expected = Bitstring.fromText("retriever");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("third argument is zero", () => {
+      const binary = Bitstring.fromText("goldfish");
+      const result = binary_part(binary, Type.integer(2), Type.integer(0));
+      const expected = Bitstring.fromText("");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("from the middle of the binary", () => {
+      const binary = Bitstring.fromText("golden retriever");
+      const result = binary_part(binary, Type.integer(7), Type.integer(9));
+      const expected = Bitstring.fromText("retriever");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("takes whole binary", () => {
+      const binary = Bitstring.fromText("goldfish");
+      const result = binary_part(binary, Type.integer(0), Type.integer(8));
+      const expected = Bitstring.fromText("goldfish");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("takes whole binary reversed", () => {
+      const binary = Bitstring.fromText("goldfish");
+      const result = binary_part(binary, Type.integer(8), Type.integer(-8));
+      const expected = Bitstring.fromText("goldfish");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if the first argument is not a binary", () => {
+      assertBoxedError(
+        () => binary_part(Type.integer(1), Type.integer(1), Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("raises ArgumentError if the first argument is a non-binary bitstring", () => {
+      assertBoxedError(
+        () =>
+          binary_part(
+            Type.bitstring([1, 0, 1]),
+            Type.integer(1),
+            Type.integer(1),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not an integer", () => {
+      assertBoxedError(
+        () =>
+          binary_part(
+            Type.bitstring("goldfish"),
+            Type.boolean(true),
+            Type.integer(2),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if the third argument is not an integer", () => {
+      assertBoxedError(
+        () =>
+          binary_part(
+            Type.bitstring("goldfish"),
+            Type.integer(1),
+            Type.boolean(true),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is negative", () => {
+      assertBoxedError(
+        () =>
+          binary_part(
+            Type.bitstring("goldfish"),
+            Type.integer(-1),
+            Type.integer(2),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is larger than the size of the first argument", () => {
+      assertBoxedError(
+        () =>
+          binary_part(
+            Type.bitstring("goldfish"),
+            Type.integer(9),
+            Type.integer(2),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if the third argument is positive and the second and third arguments summed is larger than the size of the first argument", () => {
+      assertBoxedError(
+        () =>
+          binary_part(
+            Type.bitstring("goldfish"),
+            Type.integer(1),
+            Type.integer(8),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is zero and third argument is larger than the size of the first argument", () => {
+      assertBoxedError(
+        () =>
+          binary_part(
+            Type.bitstring("goldfish"),
+            Type.integer(0),
+            Type.integer(9),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if the third argument is negative and the second and third arguments summed is smaller than zero", () => {
+      assertBoxedError(
+        () =>
+          binary_part(
+            Type.bitstring("goldfish"),
+            Type.integer(4),
+            Type.integer(-5),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "out of range"),
+      );
+    });
+  });
+
   describe("binary_to_atom/1", () => {
     it("delegates to binary_to_atom/2", () => {
       const binary = Type.bitstring("全息图");

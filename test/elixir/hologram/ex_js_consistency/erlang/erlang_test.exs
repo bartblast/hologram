@@ -1373,6 +1373,107 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "binary_part/3" do
+    test "first argument is a text binary" do
+      assert :erlang.binary_part("goldfish", 4, 4) == "fish"
+    end
+
+    test "first argument is a byte binary" do
+      assert :erlang.binary_part(<<1, 2, 3, 4, 5, 6, 7, 8, 9, 10>>, 4, 2) == <<5, 6>>
+    end
+
+    test "first argument is empty" do
+      assert :erlang.binary_part("", 0, 0) == ""
+    end
+
+    test "first argument contains multi-byte unicode characters" do
+      # The character "á" is represented in UTF-8 as two bytes: <<195, 161>>
+      assert :erlang.binary_part("á", 0, 1) == <<195>>
+    end
+
+    test "second argument is zero" do
+      assert :erlang.binary_part("goldfish", 0, 4) == "gold"
+    end
+
+    test "start is at the end of the binary" do
+      assert :erlang.binary_part("goldfish", 8, -4) == "fish"
+    end
+
+    test "third argument is negative" do
+      assert :erlang.binary_part("golden retriever", 16, -9) == "retriever"
+    end
+
+    test "third argument is zero" do
+      assert :erlang.binary_part("goldfish", 2, 0) == ""
+    end
+
+    test "from the middle of the binary" do
+      assert :erlang.binary_part("golden retriever", 7, 9) == "retriever"
+    end
+
+    test "takes whole binary" do
+      assert :erlang.binary_part("goldfish", 0, 8) == "goldfish"
+    end
+
+    test "takes whole binary reversed" do
+      assert :erlang.binary_part("goldfish", 8, -8) == "goldfish"
+    end
+
+    test "raises ArgumentError if the first argument is not a binary" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :binary_part, [1, 1, 1]}
+    end
+
+    test "raises ArgumentError if the first argument is a non-binary bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :binary_part, [<<1::1, 0::1, 1::1>>, 1, 1]}
+    end
+
+    test "raises ArgumentError if the second argument is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer"),
+                   {:erlang, :binary_part, ["goldfish", true, 2]}
+    end
+
+    test "raises ArgumentError if the third argument is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not an integer"),
+                   {:erlang, :binary_part, ["goldfish", 1, true]}
+    end
+
+    test "raises ArgumentError if the second argument is negative" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "out of range"),
+                   {:erlang, :binary_part, ["goldfish", -1, 2]}
+    end
+
+    test "raises ArgumentError if the second argument is larger than the size of the first argument" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "out of range"),
+                   {:erlang, :binary_part, ["goldfish", 9, 2]}
+    end
+
+    test "raises ArgumentError if the third argument is positive and the second and third arguments summed is larger than the size of the first argument" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "out of range"),
+                   {:erlang, :binary_part, ["goldfish", 1, 8]}
+    end
+
+    test "raises ArgumentError if the second argument is zero and third argument is larger than the size of the first argument" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "out of range"),
+                   {:erlang, :binary_part, ["goldfish", 0, 9]}
+    end
+
+    test "raises ArgumentError if the third argument is negative and the second and third arguments summed is smaller than zero" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "out of range"),
+                   {:erlang, :binary_part, ["goldfish", 4, -5]}
+    end
+  end
+
   if SystemUtils.otp_version() >= 23 do
     test "binary_to_atom/1" do
       # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
