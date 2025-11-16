@@ -267,6 +267,20 @@ const Erlang = {
   // End andalso/2
   // Deps: []
 
+  // Start append_element/2
+  "append_element/2": (tuple, term) => {
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+      );
+    }
+
+    const newData = [...tuple.data, term];
+    return Type.tuple(newData);
+  },
+  // End append_element/2
+  // Deps: []
+
   // :erlang.apply/3 calls are encoded as Interpreter.callNamedFuntion() calls.
   // See: https://github.com/bartblast/hologram/blob/4e832c722af7b0c1a0cca1c8c08287b999ecae78/lib/hologram/compiler/encoder.ex#L559
 
@@ -629,6 +643,36 @@ const Erlang = {
   // End div/2
   // Deps: []
 
+  // Start delete_element/2
+  "delete_element/2": (index, tuple) => {
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    }
+
+    const indexNum = Number(index.value);
+    const tupleSize = tuple.data.length;
+
+    if (indexNum < 1 || indexNum > tupleSize) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    }
+
+    // Remove element at index (1-based)
+    const newData = tuple.data.filter((_, i) => i !== indexNum - 1);
+    return Type.tuple(newData);
+  },
+  // End delete_element/2
+  // Deps: []
+
   // Start element/2
   "element/2": (index, tuple) => {
     if (!Type.isInteger(index)) {
@@ -831,6 +875,42 @@ const Erlang = {
     return Bitstring.toCodepoints(Type.bitstring(text));
   },
   // End integer_to_list/2
+  // Deps: []
+
+  // Start insert_element/3
+  "insert_element/3": (index, tuple, term) => {
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    }
+
+    const indexNum = Number(index.value);
+    const tupleSize = tuple.data.length;
+
+    // In Erlang, insert_element allows inserting at position 1 to size+1
+    if (indexNum < 1 || indexNum > tupleSize + 1) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    }
+
+    // Insert element at index (1-based)
+    const newData = [
+      ...tuple.data.slice(0, indexNum - 1),
+      term,
+      ...tuple.data.slice(indexNum - 1),
+    ];
+
+    return Type.tuple(newData);
+  },
+  // End insert_element/3
   // Deps: []
 
   // TODO: test

@@ -1453,6 +1453,45 @@ describe("Erlang", () => {
     });
   });
 
+  describe("append_element/2", () => {
+    const testedFun = Erlang["append_element/2"];
+
+    it("appends element to tuple", () => {
+      const tuple = Type.tuple([Type.integer(1), Type.integer(2)]);
+      const result = testedFun(tuple, Type.integer(3));
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      );
+    });
+
+    it("appends to empty tuple", () => {
+      const tuple = Type.tuple([]);
+      const result = testedFun(tuple, Type.atom("a"));
+
+      assert.deepStrictEqual(result, Type.tuple([Type.atom("a")]));
+    });
+
+    it("appends different types", () => {
+      const tuple = Type.tuple([Type.integer(1)]);
+      const result = testedFun(tuple, Type.atom("abc"));
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([Type.integer(1), Type.atom("abc")]),
+      );
+    });
+
+    it("raises ArgumentError if first argument is not a tuple", () => {
+      assertBoxedError(
+        () => testedFun(Type.list([integer1]), Type.integer(2)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+      );
+    });
+  });
+
   describe("atom_to_binary/1", () => {
     it("delegates to atom_to_binary/2", () => {
       const atom = Type.atom("全息图");
@@ -2143,6 +2182,91 @@ describe("Erlang", () => {
     });
   });
 
+  describe("delete_element/2", () => {
+    const testedFun = Erlang["delete_element/2"];
+
+    it("deletes element from beginning of tuple", () => {
+      const tuple = Type.tuple([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+      const result = testedFun(Type.integer(1), tuple);
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([Type.integer(2), Type.integer(3)]),
+      );
+    });
+
+    it("deletes element from middle of tuple", () => {
+      const tuple = Type.tuple([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+      const result = testedFun(Type.integer(2), tuple);
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([Type.integer(1), Type.integer(3)]),
+      );
+    });
+
+    it("deletes element from end of tuple", () => {
+      const tuple = Type.tuple([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+      const result = testedFun(Type.integer(3), tuple);
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([Type.integer(1), Type.integer(2)]),
+      );
+    });
+
+    it("deletes only element from tuple", () => {
+      const tuple = Type.tuple([Type.atom("a")]);
+      const result = testedFun(Type.integer(1), tuple);
+
+      assert.deepStrictEqual(result, Type.tuple([]));
+    });
+
+    it("raises ArgumentError if first argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc"), tuple2),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if second argument is not a tuple", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.list([integer1])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    });
+
+    it("raises ArgumentError if index is less than 1", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(0), tuple2),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if index is greater than tuple size", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(3), tuple2),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+  });
+
   describe("element/2", () => {
     const element = Erlang["element/2"];
 
@@ -2616,6 +2740,90 @@ describe("Erlang", () => {
           2,
           "not an integer in the range 2 through 36",
         ),
+      );
+    });
+  });
+
+  describe("insert_element/3", () => {
+    const testedFun = Erlang["insert_element/3"];
+
+    it("inserts element at beginning of tuple", () => {
+      const tuple = Type.tuple([Type.integer(2), Type.integer(3)]);
+      const result = testedFun(Type.integer(1), tuple, Type.integer(1));
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      );
+    });
+
+    it("inserts element in middle of tuple", () => {
+      const tuple = Type.tuple([Type.integer(1), Type.integer(3)]);
+      const result = testedFun(Type.integer(2), tuple, Type.integer(2));
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      );
+    });
+
+    it("inserts element at end of tuple", () => {
+      const tuple = Type.tuple([Type.integer(1), Type.integer(2)]);
+      const result = testedFun(Type.integer(3), tuple, Type.integer(3));
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      );
+    });
+
+    it("inserts into empty tuple", () => {
+      const tuple = Type.tuple([]);
+      const result = testedFun(Type.integer(1), tuple, Type.atom("a"));
+
+      assert.deepStrictEqual(result, Type.tuple([Type.atom("a")]));
+    });
+
+    it("inserts different types", () => {
+      const tuple = Type.tuple([Type.integer(1)]);
+      const result = testedFun(Type.integer(1), tuple, Type.atom("abc"));
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([Type.atom("abc"), Type.integer(1)]),
+      );
+    });
+
+    it("raises ArgumentError if first argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc"), tuple2, Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if second argument is not a tuple", () => {
+      assertBoxedError(
+        () =>
+          testedFun(Type.integer(1), Type.list([integer1]), Type.integer(2)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    });
+
+    it("raises ArgumentError if index is less than 1", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(0), tuple2, Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if index is greater than tuple size + 1", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(4), tuple2, Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
     });
   });
