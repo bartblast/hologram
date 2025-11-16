@@ -691,6 +691,55 @@ const Erlang = {
   // End integer_to_binary/2
   // Deps: []
 
+  // Start integer_to_list/1
+  "integer_to_list/1": (integer) => {
+    return Erlang["integer_to_list/2"](integer, Type.integer(10));
+  },
+  // End integer_to_list/1
+  // Deps: [:erlang.integer_to_list/2]
+
+  // Start integer_to_list/2
+  "integer_to_list/2": (integer, base) => {
+    if (!Type.isInteger(integer)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isInteger(base)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    const baseNum = Number(base.value);
+
+    if (baseNum < 2 || baseNum > 36) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    }
+
+    const intValue = integer.value;
+    let text;
+
+    if (baseNum === 10) {
+      text = intValue.toString();
+    } else {
+      // For other bases, convert to string in that base
+      // BigInt toString supports radix
+      text = intValue.toString(baseNum);
+    }
+
+    // Convert to list of character codes
+    return Bitstring.toCodepoints(Type.bitstring(text));
+  },
+  // End integer_to_list/2
+  // Deps: []
+
   // TODO: test
   // Start iolist_to_binary/1
   "iolist_to_binary/1": (ioListOrBinary) => {
