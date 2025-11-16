@@ -448,6 +448,83 @@ const Erlang = {
   // End binary_to_float/1
   // Deps: []
 
+  // Start bnot/1
+  "bnot/1": (integer) => {
+    if (!Type.isInteger(integer)) {
+      Interpreter.raiseArgumentError(
+        `bad argument in bitwise expression: bnot ${Interpreter.inspect(integer)}`,
+      );
+    }
+
+    return Type.integer(~integer.value);
+  },
+  // End bnot/1
+  // Deps: []
+
+  // Start bor/2
+  "bor/2": (integer1, integer2) => {
+    if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
+      const arg1 = Interpreter.inspect(integer1);
+      const arg2 = Interpreter.inspect(integer2);
+
+      Interpreter.raiseArgumentError(
+        `bad argument in bitwise expression: ${arg1} bor ${arg2}`,
+      );
+    }
+
+    return Type.integer(integer1.value | integer2.value);
+  },
+  // End bor/2
+  // Deps: []
+
+  // Start bsl/2
+  "bsl/2": (integer, shift) => {
+    if (!Type.isInteger(integer) || !Type.isInteger(shift)) {
+      const arg1 = Interpreter.inspect(integer);
+      const arg2 = Interpreter.inspect(shift);
+
+      Interpreter.raiseArgumentError(
+        `bad argument in bitwise expression: ${arg1} bsl ${arg2}`,
+      );
+    }
+
+    return Type.integer(integer.value << shift.value);
+  },
+  // End bsl/2
+  // Deps: []
+
+  // Start bsr/2
+  "bsr/2": (integer, shift) => {
+    if (!Type.isInteger(integer) || !Type.isInteger(shift)) {
+      const arg1 = Interpreter.inspect(integer);
+      const arg2 = Interpreter.inspect(shift);
+
+      Interpreter.raiseArgumentError(
+        `bad argument in bitwise expression: ${arg1} bsr ${arg2}`,
+      );
+    }
+
+    return Type.integer(integer.value >> shift.value);
+  },
+  // End bsr/2
+  // Deps: []
+
+  // Start bxor/2
+  "bxor/2": (integer1, integer2) => {
+    if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
+      const arg1 = Interpreter.inspect(integer1);
+      const arg2 = Interpreter.inspect(integer2);
+
+      Interpreter.raiseArgumentError(
+        `bad argument in bitwise expression: ${arg1} bxor ${arg2}`,
+      );
+    }
+
+    return Type.integer(integer1.value ^ integer2.value);
+  },
+  // End bxor/2
+  // Deps: []
+
   // Start binary_to_list/1
   "binary_to_list/1": (binary) => {
     if (!Type.isBinary(binary)) {
@@ -463,6 +540,22 @@ const Erlang = {
     return Type.list(data);
   },
   // End binary_to_list/1
+  // Deps: []
+
+  // Start band/2
+  "band/2": (integer1, integer2) => {
+    if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
+      const arg1 = Interpreter.inspect(integer1);
+      const arg2 = Interpreter.inspect(integer2);
+
+      Interpreter.raiseArgumentError(
+        `bad argument in bitwise expression: ${arg1} band ${arg2}`,
+      );
+    }
+
+    return Type.integer(integer1.value & integer2.value);
+  },
+  // End band/2
   // Deps: []
 
   // Start bit_size/1
