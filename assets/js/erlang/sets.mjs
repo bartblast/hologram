@@ -215,6 +215,67 @@ const Erlang_Sets = {
   },
   // End is_subset/2
   // Deps: []
+
+  // Start add_element/2
+  "add_element/2": (element, set) => {
+    const elements = getSetElements(set);
+
+    // Check if element already exists
+    for (const elem of elements) {
+      const key = Type.encodeMapKey(elem);
+      const newKey = Type.encodeMapKey(element);
+      if (key === newKey) {
+        // Element already in set, return unchanged
+        return set;
+      }
+    }
+
+    // Add element to set
+    const newElements = [...elements, element];
+    return createSet(newElements);
+  },
+  // End add_element/2
+  // Deps: []
+
+  // Start del_element/2
+  "del_element/2": (element, set) => {
+    const elements = getSetElements(set);
+    const elementKey = Type.encodeMapKey(element);
+
+    // Filter out the element
+    const filtered = elements.filter((elem) => {
+      return Type.encodeMapKey(elem) !== elementKey;
+    });
+
+    return createSet(filtered);
+  },
+  // End del_element/2
+  // Deps: []
+
+  // Start from_list/1
+  "from_list/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    // Create set from list, removing duplicates
+    const seen = new Map();
+    const unique = [];
+
+    for (const elem of list.data) {
+      const key = Type.encodeMapKey(elem);
+      if (!seen.has(key)) {
+        seen.set(key, true);
+        unique.push(elem);
+      }
+    }
+
+    return createSet(unique);
+  },
+  // End from_list/1
+  // Deps: []
 };
 
 export default Erlang_Sets;
