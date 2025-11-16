@@ -280,6 +280,83 @@ const Erlang = {
   // End append_element/2
   // Deps: []
 
+  // Start apply/2
+  "apply/2": (fun, args) => {
+    if (!Type.isFunction(fun)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a function"),
+      );
+    }
+
+    if (!Type.isList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
+      );
+    }
+
+    // Call the function with the arguments
+    return fun.fun(...args.data);
+  },
+  // End apply/2
+  // Deps: []
+
+  // Start apply/3
+  "apply/3": (module, functionName, args) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(functionName)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+      );
+    }
+
+    // Get the module and function
+    const moduleName = module.value;
+    const funName = functionName.value;
+    const arity = args.data.length;
+    const key = `${funName}/${arity}`;
+
+    // Check if the module and function exist
+    if (!(moduleName in globalThis)) {
+      Interpreter.raiseArgumentError(
+        `module ${moduleName} is not loaded`,
+      );
+    }
+
+    if (!(key in globalThis[moduleName])) {
+      Interpreter.raiseArgumentError(
+        `function ${moduleName}.${key} is undefined or private`,
+      );
+    }
+
+    // Call the function
+    return globalThis[moduleName][key](...args.data);
+  },
+  // End apply/3
+  // Deps: []
+
   // :erlang.apply/3 calls are encoded as Interpreter.callNamedFuntion() calls.
   // See: https://github.com/bartblast/hologram/blob/4e832c722af7b0c1a0cca1c8c08287b999ecae78/lib/hologram/compiler/encoder.ex#L559
 
@@ -521,6 +598,25 @@ const Erlang = {
   // End binary_to_list/3
   // Deps: []
 
+  // Start binary_to_term/1
+  "binary_to_term/1": (binary) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    // ETF (External Term Format) deserialization is complex
+    // This would require a full implementation of Erlang's term encoding
+    throw new HologramInterpreterError(
+      "Function :erlang.binary_to_term/1 is not yet fully implemented in Hologram.\n" +
+      "Deserializing Erlang External Term Format requires complex binary parsing.\n" +
+      "See what to do here: https://www.hologram.page/TODO"
+    );
+  },
+  // End binary_to_term/1
+  // Deps: []
+
   // Start bit_size/1
   "bit_size/1": (term) => {
     if (!Type.isBitstring(term)) {
@@ -667,6 +763,50 @@ const Erlang = {
   // End error/2
   // Deps: []
 
+  // Start erase/0
+  "erase/0": () => {
+    // Clear all entries from process dictionary and return them
+    if (!globalThis.__hologramProcessDict) {
+      globalThis.__hologramProcessDict = new Map();
+    }
+
+    const entries = Array.from(globalThis.__hologramProcessDict.entries()).map(
+      ([key, value]) => Type.tuple([JSON.parse(key), value])
+    );
+
+    globalThis.__hologramProcessDict.clear();
+    return Type.list(entries);
+  },
+  // End erase/0
+  // Deps: []
+
+  // Start erase/1
+  "erase/1": (key) => {
+    // Erase key from process dictionary and return previous value
+    if (!globalThis.__hologramProcessDict) {
+      globalThis.__hologramProcessDict = new Map();
+    }
+
+    const encodedKey = Type.encodeMapKey(key);
+    const prevValue = globalThis.__hologramProcessDict.get(encodedKey);
+    globalThis.__hologramProcessDict.delete(encodedKey);
+
+    return prevValue !== undefined ? prevValue : Type.atom("undefined");
+  },
+  // End erase/1
+  // Deps: []
+
+  // Start exit/1
+  "exit/1": (reason) => {
+    // Exit the current process with the given reason
+    // In Hologram, this throws an error to simulate process exit
+    throw new HologramBoxedError(
+      Type.tuple([Type.atom("exit"), reason])
+    );
+  },
+  // End exit/1
+  // Deps: []
+
   // Start float/1
   "float/1": (number) => {
     if (Type.isFloat(number)) {
@@ -715,6 +855,25 @@ const Erlang = {
     return Type.bitstring(float.value.toString());
   },
   // End float_to_binary/2
+  // Deps: []
+
+  // Start float_to_list/1
+  "float_to_list/1": (float) => {
+    if (!Type.isFloat(float)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a float"),
+      );
+    }
+
+    // Convert float to string, then to list of character codes
+    const str = float.value.toString();
+    const charCodes = Array.from(str).map((char) =>
+      Type.integer(char.charCodeAt(0))
+    );
+
+    return Type.list(charCodes);
+  },
+  // End float_to_list/1
   // Deps: []
 
   // Start floor/1
@@ -785,6 +944,56 @@ const Erlang = {
   // End get/0
   // Deps: []
 
+  // Start get/1
+  "get/1": (key) => {
+    // Get value from process dictionary by key
+    if (!globalThis.__hologramProcessDict) {
+      globalThis.__hologramProcessDict = new Map();
+    }
+
+    const encodedKey = Type.encodeMapKey(key);
+    const value = globalThis.__hologramProcessDict.get(encodedKey);
+
+    return value !== undefined ? value : Type.atom("undefined");
+  },
+  // End get/1
+  // Deps: []
+
+  // Start get_keys/0
+  "get_keys/0": () => {
+    // Get all keys from process dictionary
+    if (!globalThis.__hologramProcessDict) {
+      globalThis.__hologramProcessDict = new Map();
+    }
+
+    const keys = Array.from(globalThis.__hologramProcessDict.keys()).map(
+      (encodedKey) => JSON.parse(encodedKey)
+    );
+
+    return Type.list(keys);
+  },
+  // End get_keys/0
+  // Deps: []
+
+  // Start get_keys/1
+  "get_keys/1": (value) => {
+    // Get all keys that have the specified value
+    if (!globalThis.__hologramProcessDict) {
+      globalThis.__hologramProcessDict = new Map();
+    }
+
+    const keys = [];
+    for (const [encodedKey, storedValue] of globalThis.__hologramProcessDict.entries()) {
+      if (Interpreter.isStrictlyEqual(storedValue, value)) {
+        keys.push(JSON.parse(encodedKey));
+      }
+    }
+
+    return Type.list(keys);
+  },
+  // End get_keys/1
+  // Deps: []
+
   // Start hd/1
   "hd/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
@@ -827,6 +1036,60 @@ const Erlang = {
     return Type.bitstring(str);
   },
   // End integer_to_binary/2
+  // Deps: []
+
+  // Start integer_to_list/1
+  "integer_to_list/1": (integer) => {
+    if (!Type.isInteger(integer)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    // Convert integer to string, then to list of character codes
+    const str = integer.value.toString();
+    const charCodes = Array.from(str).map((char) =>
+      Type.integer(char.charCodeAt(0))
+    );
+
+    return Type.list(charCodes);
+  },
+  // End integer_to_list/1
+  // Deps: []
+
+  // Start integer_to_list/2
+  "integer_to_list/2": (integer, base) => {
+    if (!Type.isInteger(integer)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isInteger(base)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    const baseNum = Number(base.value);
+    if (baseNum < 2 || baseNum > 36) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    }
+
+    // Convert integer to string with base, then to list of character codes
+    const str = integer.value.toString(baseNum).toUpperCase();
+    const charCodes = Array.from(str).map((char) =>
+      Type.integer(char.charCodeAt(0))
+    );
+
+    return Type.list(charCodes);
+  },
+  // End integer_to_list/2
   // Deps: []
 
   // Start insert_element/3
@@ -1016,6 +1279,18 @@ const Erlang = {
     return Type.boolean(Type.isMap(term));
   },
   // End is_map/1
+  // Deps: []
+
+  // Start is_map_key/2
+  "is_map_key/2": (key, map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    const encodedKey = Type.encodeMapKey(key);
+    return Type.boolean(encodedKey in map.data);
+  },
+  // End is_map_key/2
   // Deps: []
 
   // Start is_number/1
@@ -1362,6 +1637,24 @@ const Erlang = {
   // End map_size/1
   // Deps: []
 
+  // Start map_get/2
+  "map_get/2": (key, map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    const encodedKey = Type.encodeMapKey(key);
+    if (!(encodedKey in map.data)) {
+      throw new HologramBoxedError(
+        Type.tuple([Type.atom("badkey"), key])
+      );
+    }
+
+    return map.data[encodedKey];
+  },
+  // End map_get/2
+  // Deps: []
+
   // TODO: test
   // Start max/2
   "max/2": (term1, term2) => {
@@ -1447,6 +1740,15 @@ const Erlang = {
   // End not/1
   // Deps: []
 
+  // Start node/0
+  "node/0": () => {
+    // Return the current node name
+    // In Hologram, we use a default node name
+    return Type.atom("nonode@nohost");
+  },
+  // End node/0
+  // Deps: []
+
   // Start orelse/2
   "orelse/2": (leftFun, rightFun, context) => {
     const left = leftFun(context);
@@ -1484,6 +1786,44 @@ const Erlang = {
   // End put/2
   // Deps: []
 
+  // Start pid_to_list/1
+  "pid_to_list/1": (pid) => {
+    if (!Type.isPid(pid)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a pid"),
+      );
+    }
+
+    // Convert PID to string representation, then to list of character codes
+    const str = pid.value;
+    const charCodes = Array.from(str).map((char) =>
+      Type.integer(char.charCodeAt(0))
+    );
+
+    return Type.list(charCodes);
+  },
+  // End pid_to_list/1
+  // Deps: []
+
+  // Start port_to_list/1
+  "port_to_list/1": (port) => {
+    if (!Type.isPort(port)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a port"),
+      );
+    }
+
+    // Convert port to string representation, then to list of character codes
+    const str = port.value;
+    const charCodes = Array.from(str).map((char) =>
+      Type.integer(char.charCodeAt(0))
+    );
+
+    return Type.list(charCodes);
+  },
+  // End port_to_list/1
+  // Deps: []
+
   // Start rem/2
   "rem/2": (integer1, integer2) => {
     if (
@@ -1502,6 +1842,25 @@ const Erlang = {
     return Type.integer(integer1.value % integer2.value);
   },
   // End rem/2
+  // Deps: []
+
+  // Start ref_to_list/1
+  "ref_to_list/1": (ref) => {
+    if (!Type.isReference(ref)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a reference"),
+      );
+    }
+
+    // Convert reference to string representation, then to list of character codes
+    const str = ref.value;
+    const charCodes = Array.from(str).map((char) =>
+      Type.integer(char.charCodeAt(0))
+    );
+
+    return Type.list(charCodes);
+  },
+  // End ref_to_list/1
   // Deps: []
 
   // Start round/1
@@ -1747,6 +2106,29 @@ const Erlang = {
     ]);
   },
   // End timestamp/0
+  // Deps: []
+
+  // Start term_to_binary/1
+  "term_to_binary/1": (term) => {
+    // ETF (External Term Format) serialization is complex
+    // This would require a full implementation of Erlang's term encoding
+    throw new HologramInterpreterError(
+      "Function :erlang.term_to_binary/1 is not yet fully implemented in Hologram.\n" +
+      "Serializing to Erlang External Term Format requires complex binary encoding.\n" +
+      "See what to do here: https://www.hologram.page/TODO"
+    );
+  },
+  // End term_to_binary/1
+  // Deps: []
+
+  // Start throw/1
+  "throw/1": (term) => {
+    // Throw an exception with the given term
+    throw new HologramBoxedError(
+      Type.tuple([Type.atom("throw"), term])
+    );
+  },
+  // End throw/1
   // Deps: []
 
   // Start trunc/1

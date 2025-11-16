@@ -2875,4 +2875,270 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       end
     end
   end
+
+  # ========================================
+  # Batch 1M: 20 functions
+  # ========================================
+
+  describe "apply/2" do
+    test "applies function with arguments" do
+      fun = fn x, y -> x + y end
+      assert :erlang.apply(fun, [2, 3]) == 5
+    end
+
+    test "raises ArgumentError if first argument is not a function" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a function"), fn ->
+        :erlang.apply(:not_fun, [1, 2])
+      end
+    end
+
+    test "raises ArgumentError if second argument is not a list" do
+      fun = fn x -> x end
+      assert_error ArgumentError, build_argument_error_msg(2, "not a list"), fn ->
+        :erlang.apply(fun, :not_list)
+      end
+    end
+  end
+
+  describe "apply/3" do
+    test "applies module function with arguments" do
+      assert :erlang.apply(:erlang, :max, [2, 3]) == 3
+    end
+
+    test "raises ArgumentError if module is not an atom" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not an atom"), fn ->
+        :erlang.apply("not_atom", :max, [1, 2])
+      end
+    end
+  end
+
+  describe "erase/0" do
+    test "clears process dictionary and returns entries" do
+      :erlang.put(:key1, :value1)
+      :erlang.put(:key2, :value2)
+      result = :erlang.erase()
+      assert is_list(result)
+      assert {:key1, :value1} in result
+      assert {:key2, :value2} in result
+      assert :erlang.get() == []
+    end
+  end
+
+  describe "erase/1" do
+    test "erases key from process dictionary" do
+      :erlang.put(:key, :value)
+      assert :erlang.erase(:key) == :value
+      assert :erlang.get(:key) == :undefined
+    end
+
+    test "returns undefined for non-existent key" do
+      :erlang.erase(:nonexistent)
+      assert :erlang.erase(:nonexistent) == :undefined
+    end
+  end
+
+  describe "exit/1" do
+    test "raises exit error" do
+      assert_error ErlangError, "{:exit, :normal}", fn ->
+        :erlang.exit(:normal)
+      end
+    end
+  end
+
+  describe "float_to_list/1" do
+    test "converts float to character list" do
+      result = :erlang.float_to_list(3.14)
+      str = List.to_string(result)
+      assert String.contains?(str, "3.14")
+    end
+
+    test "raises ArgumentError if not a float" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a float"), fn ->
+        :erlang.float_to_list(42)
+      end
+    end
+  end
+
+  describe "get/1" do
+    test "retrieves value from process dictionary" do
+      :erlang.put(:key, :value)
+      assert :erlang.get(:key) == :value
+    end
+
+    test "returns undefined for missing key" do
+      :erlang.erase(:missing)
+      assert :erlang.get(:missing) == :undefined
+    end
+  end
+
+  describe "get_keys/0" do
+    test "returns all keys from process dictionary" do
+      :erlang.erase()
+      :erlang.put(:key1, :value1)
+      :erlang.put(:key2, :value2)
+      keys = :erlang.get_keys()
+      assert :key1 in keys
+      assert :key2 in keys
+    end
+
+    test "returns empty list when no keys" do
+      :erlang.erase()
+      assert :erlang.get_keys() == []
+    end
+  end
+
+  describe "get_keys/1" do
+    test "returns keys with matching value" do
+      :erlang.erase()
+      :erlang.put(:key1, :value)
+      :erlang.put(:key2, :value)
+      :erlang.put(:key3, :other)
+      keys = :erlang.get_keys(:value)
+      assert :key1 in keys
+      assert :key2 in keys
+      refute :key3 in keys
+    end
+  end
+
+  describe "integer_to_list/1" do
+    test "converts integer to character list" do
+      assert :erlang.integer_to_list(123) == [?1, ?2, ?3]
+    end
+
+    test "converts negative integer" do
+      assert :erlang.integer_to_list(-456) == [?-, ?4, ?5, ?6]
+    end
+
+    test "raises ArgumentError if not an integer" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not an integer"), fn ->
+        :erlang.integer_to_list(3.14)
+      end
+    end
+  end
+
+  describe "integer_to_list/2" do
+    test "converts integer to character list with base" do
+      assert :erlang.integer_to_list(255, 16) == [?F, ?F]
+    end
+
+    test "converts with binary base" do
+      assert :erlang.integer_to_list(5, 2) == [?1, ?0, ?1]
+    end
+
+    test "raises ArgumentError if base out of range" do
+      assert_error ArgumentError, build_argument_error_msg(2, "not an integer in the range 2 through 36"), fn ->
+        :erlang.integer_to_list(100, 37)
+      end
+    end
+  end
+
+  describe "is_map_key/2" do
+    test "returns true if key exists in map" do
+      assert :erlang.is_map_key(:a, %{a: 1, b: 2}) == true
+    end
+
+    test "returns false if key does not exist" do
+      assert :erlang.is_map_key(:c, %{a: 1, b: 2}) == false
+    end
+
+    test "raises BadMapError if not a map" do
+      assert_error ArgumentError, "bad_map", fn ->
+        :erlang.is_map_key(:a, :not_map)
+      end
+    end
+  end
+
+  describe "map_get/2" do
+    test "gets value from map" do
+      assert :erlang.map_get(:a, %{a: 1, b: 2}) == 1
+    end
+
+    test "raises badkey error if key not found" do
+      assert_error ErlangError, "{:badkey, :c}", fn ->
+        :erlang.map_get(:c, %{a: 1, b: 2})
+      end
+    end
+
+    test "raises BadMapError if not a map" do
+      assert_error ArgumentError, "bad_map", fn ->
+        :erlang.map_get(:a, :not_map)
+      end
+    end
+  end
+
+  describe "node/0" do
+    test "returns node name" do
+      result = :erlang.node()
+      assert is_atom(result)
+    end
+  end
+
+  describe "pid_to_list/1" do
+    test "converts PID to character list" do
+      pid = self()
+      result = :erlang.pid_to_list(pid)
+      assert is_list(result)
+      assert length(result) > 0
+    end
+
+    test "raises ArgumentError if not a PID" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a pid"), fn ->
+        :erlang.pid_to_list(:not_pid)
+      end
+    end
+  end
+
+  describe "port_to_list/1" do
+    test "converts port to character list" do
+      {:ok, port} = :gen_tcp.listen(0, [])
+      result = :erlang.port_to_list(port)
+      :gen_tcp.close(port)
+      assert is_list(result)
+      assert length(result) > 0
+    end
+
+    test "raises ArgumentError if not a port" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a port"), fn ->
+        :erlang.port_to_list(:not_port)
+      end
+    end
+  end
+
+  describe "ref_to_list/1" do
+    test "converts reference to character list" do
+      ref = make_ref()
+      result = :erlang.ref_to_list(ref)
+      assert is_list(result)
+      assert length(result) > 0
+    end
+
+    test "raises ArgumentError if not a reference" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a reference"), fn ->
+        :erlang.ref_to_list(:not_ref)
+      end
+    end
+  end
+
+  describe "throw/1" do
+    test "throws exception" do
+      assert_error ErlangError, "{:throw, :my_error}", fn ->
+        :erlang.throw(:my_error)
+      end
+    end
+  end
+
+  # NOTE: binary_to_term/1 and term_to_binary/1 are not yet fully implemented
+  # describe "binary_to_term/1" do
+  #   test "deserializes term from binary" do
+  #     binary = :erlang.term_to_binary({:ok, 123})
+  #     assert :erlang.binary_to_term(binary) == {:ok, 123}
+  #   end
+  # end
+  #
+  # describe "term_to_binary/1" do
+  #   test "serializes term to binary" do
+  #     result = :erlang.term_to_binary({:ok, 123})
+  #     assert is_binary(result)
+  #   end
+  # end
 end

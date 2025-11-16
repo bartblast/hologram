@@ -3983,4 +3983,266 @@ describe("Erlang", () => {
       );
     });
   });
+
+  // ========================================
+  // Batch 1M: 20 functions
+  // ========================================
+
+  describe("apply/2", () => {
+    const testedFun = Erlang["apply/2"];
+
+    it("applies function with arguments", () => {
+      const fun = Type.anonymousFunction((...args) => {
+        return Type.integer(args[0].value + args[1].value);
+      });
+      const result = testedFun(fun, Type.list([Type.integer(2), Type.integer(3)]));
+      assert.deepStrictEqual(result, Type.integer(5));
+    });
+
+    it("raises ArgumentError if not a function", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_fun"), Type.list([])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a function")
+      );
+    });
+  });
+
+  describe("erase/0", () => {
+    const testedFun = Erlang["erase/0"];
+
+    it("clears process dictionary", () => {
+      globalThis.__hologramProcessDict = new Map();
+      Erlang["put/2"](Type.atom("key"), Type.atom("value"));
+      testedFun();
+      assert.deepStrictEqual(Erlang["get/0"](), Type.list([]));
+    });
+  });
+
+  describe("erase/1", () => {
+    const testedFun = Erlang["erase/1"];
+
+    it("erases key from process dictionary", () => {
+      globalThis.__hologramProcessDict = new Map();
+      Erlang["put/2"](Type.atom("key"), Type.atom("value"));
+      assert.deepStrictEqual(testedFun(Type.atom("key")), Type.atom("value"));
+      assert.deepStrictEqual(Erlang["get/1"](Type.atom("key")), Type.atom("undefined"));
+    });
+  });
+
+  describe("exit/1", () => {
+    const testedFun = Erlang["exit/1"];
+
+    it("throws exit error", () => {
+      assert.throws(
+        () => testedFun(Type.atom("normal")),
+        (err) => err instanceof HologramBoxedError
+      );
+    });
+  });
+
+  describe("float_to_list/1", () => {
+    const testedFun = Erlang["float_to_list/1"];
+
+    it("converts float to character list", () => {
+      const result = testedFun(Type.float(3.14));
+      assert.strictEqual(result.type, "list");
+      assert.ok(result.data.length > 0);
+    });
+
+    it("raises ArgumentError if not a float", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(42)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a float")
+      );
+    });
+  });
+
+  describe("get/1", () => {
+    const testedFun = Erlang["get/1"];
+
+    it("retrieves value from process dictionary", () => {
+      globalThis.__hologramProcessDict = new Map();
+      Erlang["put/2"](Type.atom("key"), Type.atom("value"));
+      assert.deepStrictEqual(testedFun(Type.atom("key")), Type.atom("value"));
+    });
+
+    it("returns undefined for missing key", () => {
+      globalThis.__hologramProcessDict = new Map();
+      assert.deepStrictEqual(testedFun(Type.atom("missing")), Type.atom("undefined"));
+    });
+  });
+
+  describe("get_keys/0", () => {
+    const testedFun = Erlang["get_keys/0"];
+
+    it("returns all keys", () => {
+      globalThis.__hologramProcessDict = new Map();
+      Erlang["put/2"](Type.atom("key1"), Type.atom("value1"));
+      Erlang["put/2"](Type.atom("key2"), Type.atom("value2"));
+      const result = testedFun();
+      assert.strictEqual(result.data.length, 2);
+    });
+  });
+
+  describe("get_keys/1", () => {
+    const testedFun = Erlang["get_keys/1"];
+
+    it("returns keys with matching value", () => {
+      globalThis.__hologramProcessDict = new Map();
+      Erlang["put/2"](Type.atom("key1"), Type.atom("value"));
+      Erlang["put/2"](Type.atom("key2"), Type.atom("value"));
+      Erlang["put/2"](Type.atom("key3"), Type.atom("other"));
+      const result = testedFun(Type.atom("value"));
+      assert.strictEqual(result.data.length, 2);
+    });
+  });
+
+  describe("integer_to_list/1", () => {
+    const testedFun = Erlang["integer_to_list/1"];
+
+    it("converts integer to character list", () => {
+      const result = testedFun(Type.integer(123));
+      assert.deepStrictEqual(result, Type.list([
+        Type.integer(49), Type.integer(50), Type.integer(51)
+      ]));
+    });
+
+    it("raises ArgumentError if not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.float(3.14)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an integer")
+      );
+    });
+  });
+
+  describe("integer_to_list/2", () => {
+    const testedFun = Erlang["integer_to_list/2"];
+
+    it("converts integer with base", () => {
+      const result = testedFun(Type.integer(255), Type.integer(16));
+      assert.deepStrictEqual(result, Type.list([
+        Type.integer(70), Type.integer(70) // "FF"
+      ]));
+    });
+
+    it("raises ArgumentError if base out of range", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(100), Type.integer(37)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an integer in the range 2 through 36")
+      );
+    });
+  });
+
+  describe("is_map_key/2", () => {
+    const testedFun = Erlang["is_map_key/2"];
+
+    it("returns true if key exists", () => {
+      const map = Type.map({[Type.encodeMapKey(Type.atom("a"))]: Type.integer(1)});
+      assert.deepStrictEqual(testedFun(Type.atom("a"), map), Type.boolean(true));
+    });
+
+    it("returns false if key does not exist", () => {
+      const map = Type.map({[Type.encodeMapKey(Type.atom("a"))]: Type.integer(1)});
+      assert.deepStrictEqual(testedFun(Type.atom("b"), map), Type.boolean(false));
+    });
+  });
+
+  describe("map_get/2", () => {
+    const testedFun = Erlang["map_get/2"];
+
+    it("gets value from map", () => {
+      const map = Type.map({[Type.encodeMapKey(Type.atom("a"))]: Type.integer(1)});
+      assert.deepStrictEqual(testedFun(Type.atom("a"), map), Type.integer(1));
+    });
+
+    it("raises badkey error if key not found", () => {
+      const map = Type.map({[Type.encodeMapKey(Type.atom("a"))]: Type.integer(1)});
+      assert.throws(
+        () => testedFun(Type.atom("b"), map),
+        (err) => err instanceof HologramBoxedError
+      );
+    });
+  });
+
+  describe("node/0", () => {
+    const testedFun = Erlang["node/0"];
+
+    it("returns node name", () => {
+      const result = testedFun();
+      assert.strictEqual(result.type, "atom");
+      assert.deepStrictEqual(result, Type.atom("nonode@nohost"));
+    });
+  });
+
+  describe("pid_to_list/1", () => {
+    const testedFun = Erlang["pid_to_list/1"];
+
+    it("converts PID to character list", () => {
+      const pid = Type.pid("<0.1.0>");
+      const result = testedFun(pid);
+      assert.strictEqual(result.type, "list");
+      assert.ok(result.data.length > 0);
+    });
+
+    it("raises ArgumentError if not a PID", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_pid")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a pid")
+      );
+    });
+  });
+
+  describe("port_to_list/1", () => {
+    const testedFun = Erlang["port_to_list/1"];
+
+    it("converts port to character list", () => {
+      const port = Type.port("#Port<0.1>");
+      const result = testedFun(port);
+      assert.strictEqual(result.type, "list");
+      assert.ok(result.data.length > 0);
+    });
+
+    it("raises ArgumentError if not a port", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_port")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a port")
+      );
+    });
+  });
+
+  describe("ref_to_list/1", () => {
+    const testedFun = Erlang["ref_to_list/1"];
+
+    it("converts reference to character list", () => {
+      const ref = Type.reference("#Ref<0.1.2>");
+      const result = testedFun(ref);
+      assert.strictEqual(result.type, "list");
+      assert.ok(result.data.length > 0);
+    });
+
+    it("raises ArgumentError if not a reference", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_ref")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a reference")
+      );
+    });
+  });
+
+  describe("throw/1", () => {
+    const testedFun = Erlang["throw/1"];
+
+    it("throws exception", () => {
+      assert.throws(
+        () => testedFun(Type.atom("my_error")),
+        (err) => err instanceof HologramBoxedError
+      );
+    });
+  });
 });
