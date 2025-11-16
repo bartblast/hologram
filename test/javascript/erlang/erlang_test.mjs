@@ -2859,6 +2859,78 @@ describe("Erlang", () => {
     });
   });
 
+  describe("list_to_binary/1", () => {
+    const testedFun = Erlang["list_to_binary/1"];
+
+    it("converts empty list to empty binary", () => {
+      const result = testedFun(Type.list());
+
+      assert.deepStrictEqual(result, Type.bitstring(""));
+    });
+
+    it("converts list of bytes to binary", () => {
+      const list = Type.list([Type.integer(72), Type.integer(105)]);
+      const result = testedFun(list);
+
+      assert.deepStrictEqual(result, Type.bitstring("Hi"));
+    });
+
+    it("converts list with byte values", () => {
+      const list = Type.list([Type.integer(65), Type.integer(66), Type.integer(67)]);
+      const result = testedFun(list);
+
+      assert.deepStrictEqual(result, Type.bitstring("ABC"));
+    });
+
+    it("raises ArgumentError if argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if argument is not a proper list", () => {
+      const improperList = Type.improperList([Type.integer(65), Type.integer(66)]);
+
+      assertBoxedError(
+        () => testedFun(improperList),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    });
+
+    it("raises ArgumentError if list contains non-integer", () => {
+      const list = Type.list([Type.integer(65), Type.atom("abc")]);
+
+      assertBoxedError(
+        () => testedFun(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list of bytes"),
+      );
+    });
+
+    it("raises ArgumentError if list contains negative integer", () => {
+      const list = Type.list([Type.integer(-1)]);
+
+      assertBoxedError(
+        () => testedFun(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list of bytes"),
+      );
+    });
+
+    it("raises ArgumentError if list contains integer > 255", () => {
+      const list = Type.list([Type.integer(256)]);
+
+      assertBoxedError(
+        () => testedFun(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list of bytes"),
+      );
+    });
+  });
+
   describe("map_size/1", () => {
     const map_size = Erlang["map_size/1"];
 

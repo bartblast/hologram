@@ -909,6 +909,44 @@ const Erlang = {
   // End list_to_tuple/1
   // Deps: []
 
+  // Start list_to_binary/1
+  "list_to_binary/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    // Validate that all elements are integers in valid byte range (0-255)
+    for (const elem of list.data) {
+      if (!Type.isInteger(elem)) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(1, "not a list of bytes"),
+        );
+      }
+
+      const value = Number(elem.value);
+      if (value < 0 || value > 255) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(1, "not a list of bytes"),
+        );
+      }
+    }
+
+    // Convert list of integers to string using character codes
+    const text = String.fromCharCode(...list.data.map((elem) => Number(elem.value)));
+
+    return Type.bitstring(text);
+  },
+  // End list_to_binary/1
+  // Deps: []
+
   // Start map_size/1
   "map_size/1": (map) => {
     if (!Type.isMap(map)) {
