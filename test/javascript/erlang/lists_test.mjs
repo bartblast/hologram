@@ -1453,6 +1453,193 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("nth/2", () => {
+    const testedFun = Erlang_Lists["nth/2"];
+
+    it("returns first element with index 1", () => {
+      const list = Type.list([
+        Type.integer(10),
+        Type.integer(20),
+        Type.integer(30),
+      ]);
+      const result = testedFun(Type.integer(1), list);
+
+      assert.deepStrictEqual(result, Type.integer(10));
+    });
+
+    it("returns middle element", () => {
+      const list = Type.list([
+        Type.integer(10),
+        Type.integer(20),
+        Type.integer(30),
+      ]);
+      const result = testedFun(Type.integer(2), list);
+
+      assert.deepStrictEqual(result, Type.integer(20));
+    });
+
+    it("returns last element", () => {
+      const list = Type.list([
+        Type.integer(10),
+        Type.integer(20),
+        Type.integer(30),
+      ]);
+      const result = testedFun(Type.integer(3), list);
+
+      assert.deepStrictEqual(result, Type.integer(30));
+    });
+
+    it("raises FunctionClauseError if first argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc"), Type.list([Type.integer(1)])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.nth/2", [
+          Type.atom("abc"),
+          Type.list([Type.integer(1)]),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if second argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.atom("abc")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.nth/2", [
+          Type.integer(1),
+          Type.atom("abc"),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if list is improper", () => {
+      assertBoxedError(
+        () =>
+          testedFun(
+            Type.integer(1),
+            Type.improperList([Type.integer(1), Type.integer(2)]),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.nth/2", [
+          Type.integer(1),
+          Type.improperList([Type.integer(1), Type.integer(2)]),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if index is less than 1", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(0), Type.list([Type.integer(1)])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.nth/2", [
+          Type.integer(0),
+          Type.list([Type.integer(1)]),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if index is greater than list length", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(4), Type.list([Type.integer(1)])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.nth/2", [
+          Type.integer(4),
+          Type.list([Type.integer(1)]),
+        ]),
+      );
+    });
+  });
+
+  describe("nthtail/2", () => {
+    const testedFun = Erlang_Lists["nthtail/2"];
+
+    it("returns list with N=0 (no change)", () => {
+      const list = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+      const result = testedFun(Type.integer(0), list);
+
+      assert.deepStrictEqual(result, list);
+    });
+
+    it("returns tail after 1 element", () => {
+      const list = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+      const result = testedFun(Type.integer(1), list);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(2), Type.integer(3)]),
+      );
+    });
+
+    it("returns tail after 2 elements", () => {
+      const list = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+      const result = testedFun(Type.integer(2), list);
+
+      assert.deepStrictEqual(result, Type.list([Type.integer(3)]));
+    });
+
+    it("returns empty list when dropping all elements", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = testedFun(Type.integer(2), list);
+
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("raises FunctionClauseError if first argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc"), Type.list([Type.integer(1)])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.nthtail/2", [
+          Type.atom("abc"),
+          Type.list([Type.integer(1)]),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if second argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.atom("abc")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.nthtail/2", [
+          Type.integer(1),
+          Type.atom("abc"),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if N is negative", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(-1), Type.list([Type.integer(1)])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.nthtail/2", [
+          Type.integer(-1),
+          Type.list([Type.integer(1)]),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if N is greater than list length", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(3), Type.list([Type.integer(1)])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.nthtail/2", [
+          Type.integer(3),
+          Type.list([Type.integer(1)]),
+        ]),
+      );
+    });
+  });
+
   describe("member/2", () => {
     const member = Erlang_Lists["member/2"];
 
@@ -1669,6 +1856,122 @@ describe("Erlang_Lists", () => {
         () => sort(improperList),
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":lists.split_1/5"),
+      );
+    });
+  });
+
+  describe("split/2", () => {
+    const testedFun = Erlang_Lists["split/2"];
+
+    it("splits list at given position", () => {
+      const list = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+        Type.integer(4),
+      ]);
+      const result = testedFun(Type.integer(2), list);
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([
+          Type.list([Type.integer(1), Type.integer(2)]),
+          Type.list([Type.integer(3), Type.integer(4)]),
+        ]),
+      );
+    });
+
+    it("splits at beginning (N=0)", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = testedFun(Type.integer(0), list);
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([
+          Type.list([]),
+          Type.list([Type.integer(1), Type.integer(2)]),
+        ]),
+      );
+    });
+
+    it("splits at end (N=length)", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = testedFun(Type.integer(2), list);
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([
+          Type.list([Type.integer(1), Type.integer(2)]),
+          Type.list([]),
+        ]),
+      );
+    });
+
+    it("splits empty list", () => {
+      const result = testedFun(Type.integer(0), Type.list([]));
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([Type.list([]), Type.list([])]),
+      );
+    });
+
+    it("raises FunctionClauseError if first argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc"), Type.list([Type.integer(1)])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.split/2", [
+          Type.atom("abc"),
+          Type.list([Type.integer(1)]),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if second argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.atom("abc")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.split/2", [
+          Type.integer(1),
+          Type.atom("abc"),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if list is improper", () => {
+      assertBoxedError(
+        () =>
+          testedFun(
+            Type.integer(1),
+            Type.improperList([Type.integer(1), Type.integer(2)]),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.split/2", [
+          Type.integer(1),
+          Type.improperList([Type.integer(1), Type.integer(2)]),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if N is negative", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(-1), Type.list([Type.integer(1)])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.split/2", [
+          Type.integer(-1),
+          Type.list([Type.integer(1)]),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if N is greater than list length", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(3), Type.list([Type.integer(1)])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.split/2", [
+          Type.integer(3),
+          Type.list([Type.integer(1)]),
+        ]),
       );
     });
   });

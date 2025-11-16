@@ -445,6 +445,89 @@ const Erlang_Lists = {
   // End min/1
   // Deps: []
 
+  // Start nth/2
+  "nth/2": (n, list) => {
+    if (!Type.isInteger(n)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.nth/2", [n, list]),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.nth/2", [n, list]),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.nth/2", [n, list]),
+      );
+    }
+
+    const index = Number(n.value);
+
+    if (index < 1 || index > list.data.length) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.nth/2", [n, list]),
+      );
+    }
+
+    return list.data[index - 1];
+  },
+  // End nth/2
+  // Deps: []
+
+  // Start nthtail/2
+  "nthtail/2": (n, list) => {
+    if (!Type.isInteger(n)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.nthtail/2", [n, list]),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.nthtail/2", [n, list]),
+      );
+    }
+
+    const index = Number(n.value);
+
+    if (index < 0) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.nthtail/2", [n, list]),
+      );
+    }
+
+    // For nthtail, we need to traverse the list n times
+    let currentList = list;
+    for (let i = 0; i < index; i++) {
+      if (!Type.isList(currentList) || currentList.data.length === 0) {
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":lists.nthtail/2", [
+            n,
+            list,
+          ]),
+        );
+      }
+      // Get the tail
+      if (currentList.data.length === 1) {
+        // Last element, return the tail (which might be improper)
+        currentList = currentList.tail || Type.list([]);
+      } else {
+        currentList = Type.list(currentList.data.slice(1));
+        if (currentList.data.length === 0 && list.tail) {
+          currentList = list.tail;
+        }
+      }
+    }
+
+    return currentList;
+  },
+  // End nthtail/2
+  // Deps: []
+
   // Start member/2
   "member/2": (elem, list) => {
     if (!Type.isList(list)) {
@@ -541,6 +624,42 @@ const Erlang_Lists = {
     return Type.list(list.data.sort(Interpreter.compareTerms));
   },
   // End sort/1
+  // Deps: []
+
+  // Start split/2
+  "split/2": (n, list) => {
+    if (!Type.isInteger(n)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.split/2", [n, list]),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.split/2", [n, list]),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.split/2", [n, list]),
+      );
+    }
+
+    const index = Number(n.value);
+
+    if (index < 0 || index > list.data.length) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.split/2", [n, list]),
+      );
+    }
+
+    const left = Type.list(list.data.slice(0, index));
+    const right = Type.list(list.data.slice(index));
+
+    return Type.tuple([left, right]);
+  },
+  // End split/2
   // Deps: []
 };
 
