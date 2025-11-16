@@ -171,6 +171,47 @@ const Erlang_Lists = {
   // End append/2
   // Deps: []
 
+  // Start concat/1
+  "concat/1": (listOfAtoms) => {
+    if (!Type.isList(listOfAtoms)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.concat/1", [
+          listOfAtoms,
+        ]),
+      );
+    }
+
+    if (!Type.isProperList(listOfAtoms)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.concat/1", [
+          listOfAtoms,
+        ]),
+      );
+    }
+
+    let result = "";
+
+    for (const elem of listOfAtoms.data) {
+      if (Type.isAtom(elem)) {
+        result += elem.value;
+      } else if (Type.isBitstring(elem)) {
+        result += elem.text || "";
+      } else if (Type.isInteger(elem)) {
+        result += elem.value.toString();
+      } else if (Type.isFloat(elem)) {
+        result += elem.value.toString();
+      } else {
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":lists.concat_1/2"),
+        );
+      }
+    }
+
+    return Type.atom(result);
+  },
+  // End concat/1
+  // Deps: []
+
   // Start delete/2
   "delete/2": (elem, list) => {
     if (!Type.isList(list)) {
@@ -205,6 +246,31 @@ const Erlang_Lists = {
     return Type.list(result);
   },
   // End delete/2
+  // Deps: []
+
+  // Start droplast/1
+  "droplast/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.droplast/1", [list]),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.droplast/1", [list]),
+      );
+    }
+
+    if (list.data.length === 0) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.droplast/1", [list]),
+      );
+    }
+
+    return Type.list(list.data.slice(0, -1));
+  },
+  // End droplast/1
   // Deps: []
 
   // Start duplicate/2
@@ -305,6 +371,37 @@ const Erlang_Lists = {
   },
   // End flatten/1
   // Deps: []
+
+  // Start flatten/2
+  "flatten/2": (list, tail) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.flatten/2", [
+          list,
+          tail,
+        ]),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.flatten/2", [
+          list,
+          tail,
+        ]),
+      );
+    }
+
+    const flattened = Erlang_Lists["flatten/1"](list);
+
+    if (!Type.isList(tail)) {
+      return Erlang_Lists["append/2"](flattened, Type.list([tail]));
+    }
+
+    return Erlang_Lists["append/2"](flattened, tail);
+  },
+  // End flatten/2
+  // Deps: [:lists.flatten/1, :lists.append/2]
 
   // Start flatmap/2
   "flatmap/2": function (fun, list) {
@@ -480,6 +577,37 @@ const Erlang_Lists = {
   },
   // End keymember/3
   // Deps: [:lists.keyfind/3]
+
+  // Start join/2
+  "join/2": (sep, list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.join/2", [sep, list]),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.join/2", [sep, list]),
+      );
+    }
+
+    if (list.data.length === 0) {
+      return Type.list([]);
+    }
+
+    const result = [];
+    for (let i = 0; i < list.data.length; i++) {
+      result.push(list.data[i]);
+      if (i < list.data.length - 1) {
+        result.push(sep);
+      }
+    }
+
+    return Type.list(result);
+  },
+  // End join/2
+  // Deps: []
 
   // Start last/1
   "last/1": (list) => {
@@ -670,6 +798,50 @@ const Erlang_Lists = {
   // End nthtail/2
   // Deps: []
 
+  // Start partition/2
+  "partition/2": function (fun, list) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.partition/2", arguments),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.partition/2", arguments),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.partition_1/4"),
+      );
+    }
+
+    const satisfying = [];
+    const notSatisfying = [];
+
+    for (const elem of list.data) {
+      const result = Interpreter.callAnonymousFunction(fun, [elem]);
+
+      if (!Type.isBoolean(result)) {
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":lists.partition_1/4"),
+        );
+      }
+
+      if (Type.isTrue(result)) {
+        satisfying.push(elem);
+      } else {
+        notSatisfying.push(elem);
+      }
+    }
+
+    return Type.tuple([Type.list(satisfying), Type.list(notSatisfying)]);
+  },
+  // End partition/2
+  // Deps: []
+
   // Start member/2
   "member/2": (elem, list) => {
     if (!Type.isList(list)) {
@@ -749,6 +921,160 @@ const Erlang_Lists = {
   // End reverse/2
   // Deps: []
 
+  // Start search/2
+  "search/2": function (fun, list) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.search/2", arguments),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.search/2", arguments),
+      );
+    }
+
+    for (const elem of list.data) {
+      const result = Interpreter.callAnonymousFunction(fun, [elem]);
+
+      if (!Type.isBoolean(result) && !Type.isTuple(result)) {
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":lists.search_1/2"),
+        );
+      }
+
+      // Check if it's {true, Value} tuple
+      if (Type.isTuple(result)) {
+        if (
+          result.data.length === 2 &&
+          Type.isAtom(result.data[0]) &&
+          result.data[0].value === "true"
+        ) {
+          return Type.tuple([Type.atom("value"), result.data[1]]);
+        }
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":lists.search_1/2"),
+        );
+      }
+
+      if (Type.isTrue(result)) {
+        return Type.tuple([Type.atom("value"), elem]);
+      }
+    }
+
+    // If we exhausted the list, validate it's proper
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.search_1/2"),
+      );
+    }
+
+    return Type.boolean(false);
+  },
+  // End search/2
+  // Deps: []
+
+  // Start seq/2
+  "seq/2": (from, to) => {
+    if (!Type.isInteger(from)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.seq/2", [from, to]),
+      );
+    }
+
+    if (!Type.isInteger(to)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.seq/2", [from, to]),
+      );
+    }
+
+    const fromVal = Number(from.value);
+    const toVal = Number(to.value);
+
+    if (fromVal > toVal) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.seq_loop/3"),
+      );
+    }
+
+    const result = [];
+    for (let i = fromVal; i <= toVal; i++) {
+      result.push(Type.integer(i));
+    }
+
+    return Type.list(result);
+  },
+  // End seq/2
+  // Deps: []
+
+  // Start seq/3
+  "seq/3": (from, to, incr) => {
+    if (!Type.isInteger(from)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.seq/3", [
+          from,
+          to,
+          incr,
+        ]),
+      );
+    }
+
+    if (!Type.isInteger(to)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.seq/3", [
+          from,
+          to,
+          incr,
+        ]),
+      );
+    }
+
+    if (!Type.isInteger(incr)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.seq/3", [
+          from,
+          to,
+          incr,
+        ]),
+      );
+    }
+
+    const fromVal = Number(from.value);
+    const toVal = Number(to.value);
+    const incrVal = Number(incr.value);
+
+    if (incrVal === 0) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "zero"),
+      );
+    }
+
+    if (
+      (incrVal > 0 && fromVal > toVal) ||
+      (incrVal < 0 && fromVal < toVal)
+    ) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.seq_loop/4"),
+      );
+    }
+
+    const result = [];
+    if (incrVal > 0) {
+      for (let i = fromVal; i <= toVal; i += incrVal) {
+        result.push(Type.integer(i));
+      }
+    } else {
+      for (let i = fromVal; i >= toVal; i += incrVal) {
+        result.push(Type.integer(i));
+      }
+    }
+
+    return Type.list(result);
+  },
+  // End seq/3
+  // Deps: []
+
   // Start sort/1
   "sort/1": (list) => {
     if (!Type.isList(list)) {
@@ -802,6 +1128,48 @@ const Erlang_Lists = {
     return Type.tuple([left, right]);
   },
   // End split/2
+  // Deps: []
+
+  // Start sum/1
+  "sum/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sum/1", [list]),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sum/1", [list]),
+      );
+    }
+
+    let sum = 0n;
+    let hasFloat = false;
+
+    for (const elem of list.data) {
+      if (Type.isInteger(elem)) {
+        if (hasFloat) {
+          sum += Number(elem.value);
+        } else {
+          sum += elem.value;
+        }
+      } else if (Type.isFloat(elem)) {
+        if (!hasFloat) {
+          sum = Number(sum);
+          hasFloat = true;
+        }
+        sum += elem.value;
+      } else {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(1, "not a list of numbers"),
+        );
+      }
+    }
+
+    return hasFloat ? Type.float(sum) : Type.integer(sum);
+  },
+  // End sum/1
   // Deps: []
 
   // Start sublist/2
@@ -1117,6 +1485,66 @@ const Erlang_Lists = {
     return Type.list(result);
   },
   // End zip/2
+  // Deps: []
+
+  // Start zipwith/3
+  "zipwith/3": function (fun, list1, list2) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.zipwith/3", arguments),
+      );
+    }
+
+    if (!Type.isList(list1)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.zipwith/3", [
+          fun,
+          list1,
+          list2,
+        ]),
+      );
+    }
+
+    if (!Type.isList(list2)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.zipwith/3", [
+          fun,
+          list1,
+          list2,
+        ]),
+      );
+    }
+
+    if (!Type.isProperList(list1)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.zipwith_1/4"),
+      );
+    }
+
+    if (!Type.isProperList(list2)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.zipwith_1/4"),
+      );
+    }
+
+    if (list1.data.length !== list2.data.length) {
+      Interpreter.raiseErlangError(
+        Interpreter.buildErlangErrorMsg(":lists_not_same_length"),
+      );
+    }
+
+    const result = [];
+    for (let i = 0; i < list1.data.length; i++) {
+      const value = Interpreter.callAnonymousFunction(fun, [
+        list1.data[i],
+        list2.data[i],
+      ]);
+      result.push(value);
+    }
+
+    return Type.list(result);
+  },
+  // End zipwith/3
   // Deps: []
 };
 
