@@ -6721,6 +6721,443 @@ const Erlang = {
   },
   // End yield/0
   // Deps: []
+
+  // Start binary_part/3
+  "binary_part/3": (binary, pos, length) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    if (!Type.isInteger(pos)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (!Type.isInteger(length)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    }
+
+    const posNum = Number(pos.value);
+    const lenNum = Number(length.value);
+    const totalBytes = binary.bytes.length;
+
+    // Handle negative position (count from end)
+    const actualPos = posNum < 0 ? totalBytes + posNum : posNum;
+
+    // Handle negative length (count backwards)
+    const actualLength = lenNum < 0 ? -lenNum : lenNum;
+    const startPos = lenNum < 0 ? actualPos - actualLength + 1 : actualPos;
+
+    // Validate range
+    if (startPos < 0 || startPos > totalBytes || actualLength < 0) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    }
+
+    if (startPos + actualLength > totalBytes) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "out of range"),
+      );
+    }
+
+    return Bitstring.takeChunk(binary, startPos * 8, actualLength * 8);
+  },
+  // End binary_part/3
+  // Deps: []
+
+  // Start raise/3
+  "raise/3": (class_, reason, stacktrace) => {
+    // Validate class
+    if (!Type.isAtom(class_) ||
+        !["error", "exit", "throw"].includes(class_.value)) {
+      Interpreter.raiseArgumentError("bad class");
+    }
+
+    // Note: stacktrace parameter is typically ignored in browser context
+    // Just raise the error based on class
+    switch (class_.value) {
+      case "error":
+        throw new HologramBoxedError(reason);
+      case "exit":
+        throw new HologramBoxedError(Type.tuple([Type.atom("EXIT"), reason]));
+      case "throw":
+        throw new HologramBoxedError(Type.tuple([Type.atom("nocatch"), reason]));
+    }
+  },
+  // End raise/3
+  // Deps: []
+
+  // Start apply/3
+  "apply/3": (module, function_, args) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(function_)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+      );
+    }
+
+    return Interpreter.callNamedFunction(module, function_, args.data);
+  },
+  // End apply/3
+  // Deps: []
+
+  // Start error/3
+  "error/3": (reason, args, options) => {
+    // Validate options is a list
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    // In Hologram, we don't support all error options
+    // Just raise the error with the reason
+    throw new HologramBoxedError(reason);
+  },
+  // End error/3
+  // Deps: []
+
+  // Start integer_to_list/1
+  "integer_to_list/1": (integer) => {
+    return Erlang["integer_to_list/2"](integer, Type.integer(10));
+  },
+  // End integer_to_list/1
+  // Deps: [:erlang.integer_to_list/2]
+
+  // Start integer_to_list/2
+  "integer_to_list/2": (integer, base) => {
+    if (!Type.isInteger(integer)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isInteger(base) || base.value < 2 || base.value > 36) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    }
+
+    const str = integer.value.toString(Number(base.value));
+    const codePoints = Array.from(str).map(char => Type.integer(char.charCodeAt(0)));
+
+    return Type.list(codePoints);
+  },
+  // End integer_to_list/2
+  // Deps: []
+
+  // Start function_exported/3
+  "function_exported/3": (module, function_, arity) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(function_)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isInteger(arity)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    }
+
+    // In Hologram, we check if the function exists in our runtime
+    try {
+      const moduleName = module.value;
+      const functionName = function_.value;
+      const arityNum = Number(arity.value);
+      const fullName = `${functionName}/${arityNum}`;
+
+      // Check if module and function exist
+      const moduleObj = Interpreter.getModule(module);
+      const result = moduleObj && typeof moduleObj[fullName] === "function";
+
+      return Type.boolean(result);
+    } catch {
+      return Type.boolean(false);
+    }
+  },
+  // End function_exported/3
+  // Deps: []
+
+  // Start map_get/2
+  "map_get/2": (key, map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    const keyString = Interpreter.stringifyKey(key);
+
+    if (!(keyString in map.data)) {
+      Interpreter.raiseBadKeyError(key);
+    }
+
+    return map.data[keyString];
+  },
+  // End map_get/2
+  // Deps: []
+
+  // Start convert_time_unit/3
+  "convert_time_unit/3": (time, fromUnit, toUnit) => {
+    if (!Type.isInteger(time)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    // Validate units - can be integers (for custom units) or atoms
+    const getUnitMultiplier = (unit) => {
+      if (Type.isInteger(unit)) {
+        return Number(unit.value);
+      } else if (Type.isAtom(unit)) {
+        switch (unit.value) {
+          case "second": return 1000000000;
+          case "millisecond": return 1000000;
+          case "microsecond": return 1000;
+          case "nanosecond": return 1;
+          case "native": return 1000; // Assume nanosecond precision
+          case "perf_counter": return 1000;
+          default:
+            Interpreter.raiseArgumentError("bad time unit");
+        }
+      } else {
+        Interpreter.raiseArgumentError("bad time unit");
+      }
+    };
+
+    const fromMultiplier = getUnitMultiplier(fromUnit);
+    const toMultiplier = getUnitMultiplier(toUnit);
+
+    // Convert: time * fromMultiplier / toMultiplier
+    const timeNum = Number(time.value);
+    const result = Math.floor((timeNum * fromMultiplier) / toMultiplier);
+
+    return Type.integer(result);
+  },
+  // End convert_time_unit/3
+  // Deps: []
+
+  // Start trunc/1
+  "trunc/1": (number) => {
+    if (Type.isInteger(number)) {
+      return number;
+    }
+
+    if (Type.isFloat(number)) {
+      return Type.integer(Math.trunc(number.value));
+    }
+
+    Interpreter.raiseArgumentError(
+      Interpreter.buildArgumentErrorMsg(1, "not a number"),
+    );
+  },
+  // End trunc/1
+  // Deps: []
+
+  // Start tuple_size/1
+  "tuple_size/1": (tuple) => {
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+      );
+    }
+
+    return Type.integer(tuple.data.length);
+  },
+  // End tuple_size/1
+  // Deps: []
+
+  // Start pid_to_list/1
+  "pid_to_list/1": (pid) => {
+    if (!Type.isPid(pid)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a pid"),
+      );
+    }
+
+    // Format PID as "<X.Y.Z>"
+    const pidStr = `<${pid.segments[0]}.${pid.segments[1]}.${pid.segments[2]}>`;
+    const codePoints = Array.from(pidStr).map(char => Type.integer(char.charCodeAt(0)));
+
+    return Type.list(codePoints);
+  },
+  // End pid_to_list/1
+  // Deps: []
+
+  // Start ref_to_list/1
+  "ref_to_list/1": (ref) => {
+    if (!Type.isReference(ref)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a reference"),
+      );
+    }
+
+    // Format reference as "#Ref<X.Y.Z.W>"
+    const refStr = `#Ref<${ref.value.join(".")}>`;
+    const codePoints = Array.from(refStr).map(char => Type.integer(char.charCodeAt(0)));
+
+    return Type.list(codePoints);
+  },
+  // End ref_to_list/1
+  // Deps: []
+
+  // Start list_to_atom/1
+  "list_to_atom/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    // Validate all elements are integers (codepoints)
+    for (const elem of list.data) {
+      if (!Type.isInteger(elem)) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(1, "not a list of integers"),
+        );
+      }
+    }
+
+    const str = list.data.map(int => String.fromCharCode(Number(int.value))).join("");
+    return Type.atom(str);
+  },
+  // End list_to_atom/1
+  // Deps: []
+
+  // Start band/2
+  "band/2": (left, right) => {
+    if (!Type.isInteger(left) || !Type.isInteger(right)) {
+      Interpreter.raiseArgumentError("bad argument in bitwise operation");
+    }
+
+    return Type.integer(left.value & right.value);
+  },
+  // End band/2
+  // Deps: []
+
+  // Start xor/2
+  "xor/2": (left, right) => {
+    if (!Type.isBoolean(left) || !Type.isBoolean(right)) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    const result = (Type.isTrue(left) && !Type.isTrue(right)) ||
+                   (!Type.isTrue(left) && Type.isTrue(right));
+
+    return Type.boolean(result);
+  },
+  // End xor/2
+  // Deps: []
+
+  // Start bsl/2
+  "bsl/2": (left, right) => {
+    if (!Type.isInteger(left) || !Type.isInteger(right)) {
+      Interpreter.raiseArgumentError("bad argument in bitwise operation");
+    }
+
+    // JavaScript BigInt shift only works with BigInt on both sides
+    return Type.integer(left.value << right.value);
+  },
+  // End bsl/2
+  // Deps: []
+
+  // Start bsr/2
+  "bsr/2": (left, right) => {
+    if (!Type.isInteger(left) || !Type.isInteger(right)) {
+      Interpreter.raiseArgumentError("bad argument in bitwise operation");
+    }
+
+    return Type.integer(left.value >> right.value);
+  },
+  // End bsr/2
+  // Deps: []
+
+  // Start setelement/3
+  "setelement/3": (index, tuple, value) => {
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    }
+
+    const idx = Number(index.value) - 1; // Convert to 0-based index
+
+    if (idx < 0 || idx >= tuple.data.length) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    }
+
+    // Create a new tuple with the updated value
+    const newData = [...tuple.data];
+    newData[idx] = value;
+
+    return Type.tuple(newData);
+  },
+  // End setelement/3
+  // Deps: []
+
+  // Start list_to_tuple/1
+  "list_to_tuple/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    return Type.tuple(list.data);
+  },
+  // End list_to_tuple/1
+  // Deps: []
 };
 
 export default Erlang;
