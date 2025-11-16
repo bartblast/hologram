@@ -699,6 +699,134 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("foreach/2", () => {
+    const testedFun = Erlang_Lists["foreach/2"];
+
+    it("calls function for each element and returns :ok", () => {
+      const results = [];
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              results.push(context.vars.elem);
+              return Type.atom("ok");
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+      const result = testedFun(fun, list);
+
+      assert.deepStrictEqual(result, Type.atom("ok"));
+      assert.deepStrictEqual(results, [
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+    });
+
+    it("handles empty list", () => {
+      const results = [];
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              results.push(context.vars.elem);
+              return Type.atom("ok");
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const result = testedFun(fun, Type.list([]));
+
+      assert.deepStrictEqual(result, Type.atom("ok"));
+      assert.deepStrictEqual(results, []);
+    });
+
+    it("raises FunctionClauseError if first argument is not a 1-arity function", () => {
+      const fun = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (_context) => [
+              Type.variablePattern("a"),
+              Type.variablePattern("b"),
+            ],
+            guards: [],
+            body: (_context) => Type.atom("ok"),
+          },
+        ],
+        contextFixture(),
+      );
+
+      assertBoxedError(
+        () => testedFun(fun, Type.list([Type.integer(1)])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foreach/2", [
+          fun,
+          Type.list([Type.integer(1)]),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if second argument is not a list", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (_context) => Type.atom("ok"),
+          },
+        ],
+        contextFixture(),
+      );
+
+      assertBoxedError(
+        () => testedFun(fun, Type.atom("abc")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foreach/2", [
+          fun,
+          Type.atom("abc"),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if list is improper", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (_context) => Type.atom("ok"),
+          },
+        ],
+        contextFixture(),
+      );
+
+      assertBoxedError(
+        () =>
+          testedFun(
+            fun,
+            Type.improperList([Type.integer(1), Type.integer(2)]),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foreach_1/2"),
+      );
+    });
+  });
+
   describe("keyfind/3", () => {
     const keyfind = Erlang_Lists["keyfind/3"];
 
