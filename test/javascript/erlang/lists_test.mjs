@@ -827,6 +827,94 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("foldr/3", () => {
+    const testedFun = Erlang_Lists["foldr/3"];
+
+    const subtractFun = Type.anonymousFunction(
+      2,
+      [
+        {
+          params: (_context) => [
+            Type.variablePattern("elem"),
+            Type.variablePattern("acc"),
+          ],
+          guards: [],
+          body: (context) => {
+            return Erlang["-/2"](context.vars.elem, context.vars.acc);
+          },
+        },
+      ],
+      contextFixture(),
+    );
+
+    it("folds list from right to left", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+      const result = testedFun(subtractFun, Type.integer(0), list);
+
+      // (1 - (2 - (3 - 0))) = (1 - (2 - 3)) = (1 - (-1)) = 2
+      assert.deepStrictEqual(result, Type.integer(2));
+    });
+
+    it("handles empty list", () => {
+      const result = testedFun(subtractFun, Type.integer(42), Type.list([]));
+
+      assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    it("handles single element list", () => {
+      const list = Type.list([Type.integer(5)]);
+      const result = testedFun(subtractFun, Type.integer(3), list);
+
+      // (5 - 3) = 2
+      assert.deepStrictEqual(result, Type.integer(2));
+    });
+
+    it("raises FunctionClauseError if first argument is not a 2-arity function", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (_context) => Type.integer(1),
+          },
+        ],
+        contextFixture(),
+      );
+
+      assertBoxedError(
+        () => testedFun(fun, Type.integer(0), Type.list([Type.integer(1)])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr/3", [
+          fun,
+          Type.integer(0),
+          Type.list([Type.integer(1)]),
+        ]),
+      );
+    });
+
+    it("raises CaseClauseError if third argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(subtractFun, Type.integer(0), Type.atom("abc")),
+        "CaseClauseError",
+        "no case clause matching: :abc",
+      );
+    });
+
+    it("raises FunctionClauseError if list is improper", () => {
+      assertBoxedError(
+        () =>
+          testedFun(
+            subtractFun,
+            Type.integer(0),
+            Type.improperList([Type.integer(1), Type.integer(2)]),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3"),
+      );
+    });
+  });
+
   describe("keyfind/3", () => {
     const keyfind = Erlang_Lists["keyfind/3"];
 

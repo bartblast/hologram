@@ -244,6 +244,32 @@ const Erlang_Lists = {
   // End foreach/2
   // Deps: []
 
+  // Start foldr/3
+  "foldr/3": function (fun, initialAcc, list) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr/3", arguments),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseCaseClauseError(list);
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3"),
+      );
+    }
+
+    return list.data.reduceRight(
+      (acc, elem) => Interpreter.callAnonymousFunction(fun, [elem, acc]),
+      initialAcc,
+    );
+  },
+  // End foldr/3
+  // Deps: []
+
   // Start keyfind/3
   "keyfind/3": (value, index, tuples) => {
     if (!Type.isInteger(index)) {
