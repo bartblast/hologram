@@ -548,6 +548,20 @@ const Erlang = {
   // End apply/3
   // Deps: []
 
+  // Start apply/1
+  "apply/1": (fun) => {
+    if (!Type.isFunction(fun)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a function"),
+      );
+    }
+
+    // Apply a function with no arguments
+    return fun.call();
+  },
+  // End apply/1
+  // Deps: []
+
   // :erlang.apply/3 calls are encoded as Interpreter.callNamedFuntion() calls.
   // See: https://github.com/bartblast/hologram/blob/4e832c722af7b0c1a0cca1c8c08287b999ecae78/lib/hologram/compiler/encoder.ex#L559
 
@@ -619,6 +633,26 @@ const Erlang = {
   // End atom_to_list/1
   // Deps: []
 
+  // Start atom_to_list/2
+  "atom_to_list/2": (atom, encoding) => {
+    if (!Type.isAtom(atom)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(encoding)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    // Convert atom to list with encoding (for now ignore encoding)
+    return Bitstring.toCodepoints(Type.bitstring(atom.value));
+  },
+  // End atom_to_list/2
+  // Deps: []
+
   // Start band/2
   "band/2": (integer1, integer2) => {
     if (!Type.isInteger(integer1)) {
@@ -666,6 +700,32 @@ const Erlang = {
     return Type.atom(Bitstring.toText(binary));
   },
   // End binary_to_atom/2
+  // Deps: []
+
+  // Start binary_to_atom/3
+  "binary_to_atom/3": (binary, inEncoding, outEncoding) => {
+    if (!Type.isBitstring(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
+      );
+    }
+
+    if (!Type.isAtom(inEncoding)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(outEncoding)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an atom"),
+      );
+    }
+
+    // Convert binary to atom with encoding (for now ignore encoding)
+    return Type.atom(Bitstring.toText(binary));
+  },
+  // End binary_to_atom/3
   // Deps: []
 
   // Note: due to practical reasons the behaviour of the client version is inconsistent with the server version.
@@ -733,6 +793,33 @@ const Erlang = {
     return Type.float(floatValue);
   },
   // End binary_to_float/1
+  // Deps: []
+
+  // Start binary_to_float/2
+  "binary_to_float/2": (binary, options) => {
+    if (!Type.isBitstring(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    // Convert binary to float with options (for now ignore options)
+    const text = Bitstring.toText(binary);
+    const floatValue = parseFloat(text);
+
+    if (isNaN(floatValue)) {
+      Interpreter.raiseArgumentError("not a valid float");
+    }
+
+    return Type.float(floatValue);
+  },
+  // End binary_to_float/2
   // Deps: []
 
   // Start binary_to_integer/1
@@ -944,6 +1031,27 @@ const Erlang = {
     return Type.list(bytes.map((byte) => Type.integer(byte)));
   },
   // End binary_to_list/3
+  // Deps: []
+
+  // Start binary_to_list/2
+  "binary_to_list/2": (binary, encoding) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    if (!Type.isAtom(encoding)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    // Convert binary to list with encoding (for now ignore encoding)
+    const bytes = Array.from(binary.bytes);
+    return Type.list(bytes.map((byte) => Type.integer(byte)));
+  },
+  // End binary_to_list/2
   // Deps: []
 
   // Start binary_to_pid/1
@@ -1382,6 +1490,22 @@ const Erlang = {
   // End delete/2
   // Deps: []
 
+  // Start disconnect_node/1
+  "disconnect_node/1": (node) => {
+    if (!Type.isAtom(node)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    // Disconnect from a distributed node
+    // In Hologram (browser environment), distributed nodes are not supported
+    // Return false (node not connected)
+    return Type.boolean(false);
+  },
+  // End disconnect_node/1
+  // Deps: []
+
   // Start delete_module/1
   "delete_module/1": (module) => {
     if (!Type.isAtom(module)) {
@@ -1492,6 +1616,39 @@ const Erlang = {
     return Type.integer(result);
   },
   // End convert_time_unit/3
+  // Deps: []
+
+  // Start copy/1
+  "copy/1": (term) => {
+    // Copy a term (makes a deep copy for mutable structures)
+    // In Hologram, terms are immutable, so just return the term
+    return term;
+  },
+  // End copy/1
+  // Deps: []
+
+  // Start copy/2
+  "copy/2": (term, count) => {
+    if (!Type.isInteger(count)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (count.value < 0n) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a non-negative integer"),
+      );
+    }
+
+    // Create a list of count copies of term
+    const copies = [];
+    for (let i = 0n; i < count.value; i++) {
+      copies.push(term);
+    }
+    return Type.list(copies);
+  },
+  // End copy/2
   // Deps: []
 
   // Start crc32/1
@@ -1806,6 +1963,22 @@ const Erlang = {
   // End external_size/1
   // Deps: []
 
+  // Start external_size/2
+  "external_size/2": (term, options) => {
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    // Calculate external term format size with options
+    // Options can include: {minor_version, Version}
+    // For now, use same logic as external_size/1
+    return Erlang["external_size/1"](term);
+  },
+  // End external_size/2
+  // Deps: [:erlang.external_size/1]
+
   // Start float/1
   "float/1": (number) => {
     if (Type.isFloat(number)) {
@@ -1819,6 +1992,20 @@ const Erlang = {
     );
   },
   // End float/1
+  // Deps: []
+
+  // Start float_to_integer/1
+  "float_to_integer/1": (float) => {
+    if (!Type.isFloat(float)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a float"),
+      );
+    }
+
+    // Convert float to integer by truncating
+    return Type.integer(BigInt(Math.trunc(float.value)));
+  },
+  // End float_to_integer/1
   // Deps: []
 
   // Start float_to_binary/1
@@ -1987,6 +2174,22 @@ const Erlang = {
     return Type.boolean(key in globalThis[moduleName]);
   },
   // End function_exported/3
+  // Deps: []
+
+  // Start behaviour_info/1
+  "behaviour_info/1": (item) => {
+    if (!Type.isAtom(item)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    // Get behaviour information
+    // This is used to query behaviour callbacks
+    // In Hologram, return undefined (no behaviour info available)
+    return Type.atom("undefined");
+  },
+  // End behaviour_info/1
   // Deps: []
 
   // Start fun_info/1
@@ -2327,6 +2530,20 @@ const Erlang = {
   // End integer_to_binary/2
   // Deps: []
 
+  // Start integer_to_float/1
+  "integer_to_float/1": (integer) => {
+    if (!Type.isInteger(integer)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    // Convert integer to float
+    return Type.float(Number(integer.value));
+  },
+  // End integer_to_float/1
+  // Deps: []
+
   // Start integer_to_list/1
   "integer_to_list/1": (integer) => {
     if (!Type.isInteger(integer)) {
@@ -2445,6 +2662,20 @@ const Erlang = {
   },
   // End iolist_to_binary/1
   // Deps: [:lists.flatten/1]
+
+  // Start iolist_to_binary/2
+  "iolist_to_binary/2": (iolist, options) => {
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    // Convert iolist to binary with options (for now ignore options)
+    return Erlang["iolist_to_binary/1"](iolist);
+  },
+  // End iolist_to_binary/2
+  // Deps: [:erlang.iolist_to_binary/1]
 
   // Start iolist_to_iovec/1
   "iolist_to_iovec/1": (iolist) => {
@@ -2896,6 +3127,35 @@ const Erlang = {
   // End list_to_atom/1
   // Deps: []
 
+  // Start list_to_atom/2
+  "list_to_atom/2": (list, encoding) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isAtom(encoding)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    // Convert list to atom with encoding (for now ignore encoding)
+    const segments = Type.listToArray(list).map((item) => {
+      if (!Type.isInteger(item)) {
+        throw new Error("List contains non-integer");
+      }
+      return Number(item.value);
+    });
+
+    const text = Bitstring.toText(Type.bitstring(segments));
+
+    return Type.atom(text);
+  },
+  // End list_to_atom/2
+  // Deps: []
+
   // Start list_to_existing_atom/1
   "list_to_existing_atom/1": (list) => {
     if (!Type.isList(list)) {
@@ -2955,6 +3215,20 @@ const Erlang = {
     return Erlang["iolist_to_binary/1"](list);
   },
   // End list_to_binary/1
+  // Deps: [:erlang.iolist_to_binary/1]
+
+  // Start list_to_binary/2
+  "list_to_binary/2": (list, encoding) => {
+    if (!Type.isAtom(encoding)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    // Convert list to binary with encoding (for now ignore encoding)
+    return Erlang["iolist_to_binary/1"](list);
+  },
+  // End list_to_binary/2
   // Deps: [:erlang.iolist_to_binary/1]
 
   // Start list_to_bitstring/1
@@ -3024,6 +3298,40 @@ const Erlang = {
     return Type.float(value);
   },
   // End list_to_float/1
+  // Deps: []
+
+  // Start list_to_float/2
+  "list_to_float/2": (list, options) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    // Convert list to float with options (for now ignore options)
+    const codePoints = Type.listToArray(list).map((item) => {
+      if (!Type.isInteger(item)) {
+        throw new Error("List contains non-integer");
+      }
+      return Number(item.value);
+    });
+
+    const text = String.fromCharCode(...codePoints);
+    const value = parseFloat(text);
+
+    if (isNaN(value)) {
+      throw new Error("not a valid float");
+    }
+
+    return Type.float(value);
+  },
+  // End list_to_float/2
   // Deps: []
 
   // Start list_to_integer/1
@@ -3510,6 +3818,96 @@ const Erlang = {
     return Type.boolean(isLoaded);
   },
   // End module_loaded/1
+  // Deps: []
+
+  // Start module_info/0
+  "module_info/0": () => {
+    // Get module information for current module
+    // In Hologram, return a minimal module info list
+    return Type.list([
+      Type.tuple([Type.atom("module"), Type.atom("erlang")]),
+      Type.tuple([Type.atom("attributes"), Type.list([])]),
+      Type.tuple([Type.atom("exports"), Type.list([])]),
+    ]);
+  },
+  // End module_info/0
+  // Deps: []
+
+  // Start module_info/1
+  "module_info/1": (item) => {
+    if (!Type.isAtom(item)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    // Get specific module information
+    // Valid items: module, attributes, compile, exports, functions, nifs, native
+    const itemStr = item.value;
+
+    switch (itemStr) {
+      case "module":
+        return Type.atom("erlang");
+      case "attributes":
+      case "exports":
+      case "functions":
+      case "nifs":
+        return Type.list([]);
+      default:
+        return Type.atom("undefined");
+    }
+  },
+  // End module_info/1
+  // Deps: []
+
+  // Start get_module_info/1
+  "get_module_info/1": (module) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    // Get module information
+    return Type.list([
+      Type.tuple([Type.atom("module"), module]),
+      Type.tuple([Type.atom("attributes"), Type.list([])]),
+      Type.tuple([Type.atom("exports"), Type.list([])]),
+    ]);
+  },
+  // End get_module_info/1
+  // Deps: []
+
+  // Start get_module_info/2
+  "get_module_info/2": (module, item) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(item)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    // Get specific module information
+    const itemStr = item.value;
+
+    switch (itemStr) {
+      case "module":
+        return module;
+      case "attributes":
+      case "exports":
+      case "functions":
+      case "nifs":
+        return Type.list([]);
+      default:
+        return Type.atom("undefined");
+    }
+  },
+  // End get_module_info/2
   // Deps: []
 
   // Start monotonic_time/0
