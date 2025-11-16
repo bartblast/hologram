@@ -2187,6 +2187,60 @@ describe("Erlang", () => {
     });
   });
 
+  describe("floor/1", () => {
+    const testedFun = Erlang["floor/1"];
+
+    it("returns the integer unchanged", () => {
+      const result = testedFun(Type.integer(42));
+
+      assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    it("returns floor of positive float", () => {
+      const result = testedFun(Type.float(2.7));
+
+      assert.deepStrictEqual(result, Type.integer(2));
+    });
+
+    it("returns floor of negative float", () => {
+      const result = testedFun(Type.float(-2.3));
+
+      assert.deepStrictEqual(result, Type.integer(-3));
+    });
+
+    it("returns 0 for 0.5", () => {
+      const result = testedFun(Type.float(0.5));
+
+      assert.deepStrictEqual(result, Type.integer(0));
+    });
+
+    it("returns -1 for -0.5", () => {
+      const result = testedFun(Type.float(-0.5));
+
+      assert.deepStrictEqual(result, Type.integer(-1));
+    });
+
+    it("returns 0 for 0.0", () => {
+      const result = testedFun(Type.float(0.0));
+
+      assert.deepStrictEqual(result, Type.integer(0));
+    });
+
+    it("returns 0 for -0.0", () => {
+      const result = testedFun(Type.float(-0.0));
+
+      assert.deepStrictEqual(result, Type.integer(0));
+    });
+
+    it("raises ArgumentError if argument is not a number", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    });
+  });
+
   describe("hd/1", () => {
     const hd = Erlang["hd/1"];
 
