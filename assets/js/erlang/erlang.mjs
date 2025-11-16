@@ -520,6 +520,21 @@ const Erlang = {
   // End error/2
   // Deps: []
 
+  // Start float/1
+  "float/1": (number) => {
+    if (Type.isFloat(number)) {
+      return number;
+    } else if (Type.isInteger(number)) {
+      return Type.float(Number(number.value));
+    }
+
+    Interpreter.raiseArgumentError(
+      Interpreter.buildArgumentErrorMsg(1, "not a number"),
+    );
+  },
+  // End float/1
+  // Deps: []
+
   // Start float_to_binary/2
   "float_to_binary/2": (float, opts) => {
     if (!Type.isFloat(float)) {
@@ -877,6 +892,180 @@ const Erlang = {
   // End list_to_pid/1
   // Deps: []
 
+  // Start list_to_atom/1
+  "list_to_atom/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    // Validate that all elements are integers representing valid codepoints
+    const areCodePointsValid = list.data.every(
+      (item) => Type.isInteger(item) && Bitstring.validateCodePoint(item.value),
+    );
+
+    if (!areCodePointsValid) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a valid list of codepoints"),
+      );
+    }
+
+    // Convert codepoints to string
+    const segments = list.data.map((codePoint) =>
+      Type.bitstringSegment(codePoint, {type: "utf8"}),
+    );
+    const text = Bitstring.toText(Type.bitstring(segments));
+
+    return Type.atom(text);
+  },
+  // End list_to_atom/1
+  // Deps: []
+
+  // Start list_to_binary/1
+  "list_to_binary/1": (list) => {
+    // list_to_binary is an alias for iolist_to_binary
+    return Erlang["iolist_to_binary/1"](list);
+  },
+  // End list_to_binary/1
+  // Deps: [:erlang.iolist_to_binary/1]
+
+  // Start list_to_float/1
+  "list_to_float/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    // Validate that all elements are integers representing valid codepoints
+    const areCodePointsValid = list.data.every(
+      (item) => Type.isInteger(item) && Bitstring.validateCodePoint(item.value),
+    );
+
+    if (!areCodePointsValid) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    }
+
+    // Convert codepoints to string
+    const segments = list.data.map((codePoint) =>
+      Type.bitstringSegment(codePoint, {type: "utf8"}),
+    );
+    const text = Bitstring.toText(Type.bitstring(segments));
+
+    // Validate float format and parse
+    // Erlang requires floats to have a decimal point and at least one digit on each side
+    const floatPattern = /^[+-]?\d+\.\d+([eE][+-]?\d+)?$/;
+    if (!floatPattern.test(text)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    }
+
+    const value = parseFloat(text);
+    if (!isFinite(value)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    }
+
+    return Type.float(value);
+  },
+  // End list_to_float/1
+  // Deps: []
+
+  // Start list_to_integer/1
+  "list_to_integer/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    // Validate that all elements are integers representing valid codepoints
+    const areCodePointsValid = list.data.every(
+      (item) => Type.isInteger(item) && Bitstring.validateCodePoint(item.value),
+    );
+
+    if (!areCodePointsValid) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    }
+
+    // Convert codepoints to string
+    const segments = list.data.map((codePoint) =>
+      Type.bitstringSegment(codePoint, {type: "utf8"}),
+    );
+    const text = Bitstring.toText(Type.bitstring(segments));
+
+    // Validate integer format and parse
+    const intPattern = /^[+-]?\d+$/;
+    if (!intPattern.test(text)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of an integer",
+        ),
+      );
+    }
+
+    return Type.integer(BigInt(text));
+  },
+  // End list_to_integer/1
+  // Deps: []
+
+  // Start list_to_tuple/1
+  "list_to_tuple/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    return Type.tuple(list.data);
+  },
+  // End list_to_tuple/1
+  // Deps: []
+
   // Start map_size/1
   "map_size/1": (map) => {
     if (!Type.isMap(map)) {
@@ -966,6 +1155,21 @@ const Erlang = {
     return Type.integer(integer1.value % integer2.value);
   },
   // End rem/2
+  // Deps: []
+
+  // Start round/1
+  "round/1": (number) => {
+    if (Type.isInteger(number)) {
+      return number;
+    } else if (Type.isFloat(number)) {
+      return Type.integer(BigInt(Math.round(number.value)));
+    }
+
+    Interpreter.raiseArgumentError(
+      Interpreter.buildArgumentErrorMsg(1, "not a number"),
+    );
+  },
+  // End round/1
   // Deps: []
 
   // Start self/0
@@ -1070,6 +1274,22 @@ const Erlang = {
   // End spawn/3
   // Deps: []
 
+  // Start size/1
+  "size/1": (term) => {
+    if (Type.isTuple(term)) {
+      return Type.integer(term.data.length);
+    } else if (Type.isBinary(term)) {
+      Bitstring.maybeSetBytesFromText(term);
+      return Type.integer(term.bytes.length);
+    }
+
+    Interpreter.raiseArgumentError(
+      Interpreter.buildArgumentErrorMsg(1, "not a tuple or binary"),
+    );
+  },
+  // End size/1
+  // Deps: []
+
   // Start split_binary/2
   "split_binary/2": (binary, position) => {
     if (!Type.isBinary(binary)) {
@@ -1152,6 +1372,21 @@ const Erlang = {
   // End tl/1
   // Deps: []
 
+  // Start trunc/1
+  "trunc/1": (number) => {
+    if (Type.isInteger(number)) {
+      return number;
+    } else if (Type.isFloat(number)) {
+      return Type.integer(BigInt(Math.trunc(number.value)));
+    }
+
+    Interpreter.raiseArgumentError(
+      Interpreter.buildArgumentErrorMsg(1, "not a number"),
+    );
+  },
+  // End trunc/1
+  // Deps: []
+
   // Start tuple_to_list/1
   "tuple_to_list/1": (tuple) => {
     if (!Type.isTuple(tuple)) {
@@ -1163,6 +1398,19 @@ const Erlang = {
     return Type.list(tuple.data);
   },
   // End tuple_to_list/1
+  // Deps: []
+
+  // Start tuple_size/1
+  "tuple_size/1": (tuple) => {
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+      );
+    }
+
+    return Type.integer(tuple.data.length);
+  },
+  // End tuple_size/1
   // Deps: []
 };
 

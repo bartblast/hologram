@@ -2075,6 +2075,30 @@ describe("Erlang", () => {
     assertBoxedError(() => error(reason, args), "MyError", "my message");
   });
 
+  describe("float/1", () => {
+    const testedFun = Erlang["float/1"];
+
+    it("converts integer to float", () => {
+      assert.deepStrictEqual(testedFun(Type.integer(42)), Type.float(42.0));
+    });
+
+    it("returns float unchanged", () => {
+      assert.deepStrictEqual(testedFun(Type.float(3.14)), Type.float(3.14));
+    });
+
+    it("converts zero integer to float", () => {
+      assert.deepStrictEqual(testedFun(Type.integer(0)), Type.float(0.0));
+    });
+
+    it("raises ArgumentError if not a number", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_a_number")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    });
+  });
+
   describe("float_to_binary/2", () => {
     const float_to_binary = Erlang["float_to_binary/2"];
 
@@ -2620,6 +2644,156 @@ describe("Erlang", () => {
     });
   });
 
+  describe("list_to_atom/1", () => {
+    const testedFun = Erlang["list_to_atom/1"];
+
+    it("converts list of codepoints to atom", () => {
+      const list = Type.list([
+        Type.integer(104),
+        Type.integer(101),
+        Type.integer(108),
+        Type.integer(108),
+        Type.integer(111)
+      ]);
+      assert.deepStrictEqual(testedFun(list), Type.atom("hello"));
+    });
+
+    it("converts empty list to empty atom", () => {
+      assert.deepStrictEqual(testedFun(Type.list([])), Type.atom(""));
+    });
+
+    it("raises ArgumentError if not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_a_list")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if not a proper list", () => {
+      const improperList = Type.improperList([Type.integer(104), Type.integer(101)]);
+      assertBoxedError(
+        () => testedFun(improperList),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    });
+  });
+
+  describe("list_to_binary/1", () => {
+    const testedFun = Erlang["list_to_binary/1"];
+
+    it("converts list of bytes to binary", () => {
+      const list = Type.list([Type.integer(72), Type.integer(105)]);
+      assert.deepStrictEqual(testedFun(list), Type.bitstring("Hi"));
+    });
+
+    it("converts nested iolist to binary", () => {
+      const list = Type.list([Type.integer(72), Type.list([Type.integer(105)])]);
+      assert.deepStrictEqual(testedFun(list), Type.bitstring("Hi"));
+    });
+  });
+
+  describe("list_to_float/1", () => {
+    const testedFun = Erlang["list_to_float/1"];
+
+    it("converts list of codepoints to float", () => {
+      const list = Type.list([Type.integer(51), Type.integer(46), Type.integer(49), Type.integer(52)]);
+      assert.deepStrictEqual(testedFun(list), Type.float(3.14));
+    });
+
+    it("converts negative float", () => {
+      const list = Type.list([Type.integer(45), Type.integer(49), Type.integer(46), Type.integer(53)]);
+      assert.deepStrictEqual(testedFun(list), Type.float(-1.5));
+    });
+
+    it("converts scientific notation", () => {
+      const list = Type.list([
+        Type.integer(49), Type.integer(46), Type.integer(50), Type.integer(51), Type.integer(101), Type.integer(50)
+      ]);
+      assert.deepStrictEqual(testedFun(list), Type.float(123.0));
+    });
+
+    it("raises ArgumentError if not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_a_list")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if not a textual representation of a float", () => {
+      const list = Type.list([Type.integer(49), Type.integer(50), Type.integer(51)]);
+      assertBoxedError(
+        () => testedFun(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a textual representation of a float"),
+      );
+    });
+  });
+
+  describe("list_to_integer/1", () => {
+    const testedFun = Erlang["list_to_integer/1"];
+
+    it("converts list of codepoints to integer", () => {
+      const list = Type.list([Type.integer(49), Type.integer(50), Type.integer(51)]);
+      assert.deepStrictEqual(testedFun(list), Type.integer(123));
+    });
+
+    it("converts negative integer", () => {
+      const list = Type.list([Type.integer(45), Type.integer(49), Type.integer(50), Type.integer(51)]);
+      assert.deepStrictEqual(testedFun(list), Type.integer(-123));
+    });
+
+    it("raises ArgumentError if not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_a_list")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if not a textual representation of an integer", () => {
+      const list = Type.list([Type.integer(49), Type.integer(46), Type.integer(50)]);
+      assertBoxedError(
+        () => testedFun(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a textual representation of an integer"),
+      );
+    });
+  });
+
+  describe("list_to_tuple/1", () => {
+    const testedFun = Erlang["list_to_tuple/1"];
+
+    it("converts list to tuple", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+      const expected = Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]);
+      assert.deepStrictEqual(testedFun(list), expected);
+    });
+
+    it("converts empty list to empty tuple", () => {
+      assert.deepStrictEqual(testedFun(Type.list([])), Type.tuple([]));
+    });
+
+    it("raises ArgumentError if not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_a_list")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if not a proper list", () => {
+      const improperList = Type.improperList([Type.integer(1), Type.integer(2)]);
+      assertBoxedError(
+        () => testedFun(improperList),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    });
+  });
+
   describe("list_to_pid/1", () => {
     const fun = Erlang["list_to_pid/1"];
 
@@ -2898,6 +3072,38 @@ describe("Erlang", () => {
     });
   });
 
+  describe("round/1", () => {
+    const testedFun = Erlang["round/1"];
+
+    it("rounds float to nearest integer", () => {
+      assert.deepStrictEqual(testedFun(Type.float(3.6)), Type.integer(4));
+    });
+
+    it("rounds float down", () => {
+      assert.deepStrictEqual(testedFun(Type.float(3.4)), Type.integer(3));
+    });
+
+    it("rounds exactly half up", () => {
+      assert.deepStrictEqual(testedFun(Type.float(2.5)), Type.integer(3));
+    });
+
+    it("rounds negative float", () => {
+      assert.deepStrictEqual(testedFun(Type.float(-2.7)), Type.integer(-3));
+    });
+
+    it("returns integer unchanged", () => {
+      assert.deepStrictEqual(testedFun(Type.integer(42)), Type.integer(42));
+    });
+
+    it("raises ArgumentError if not a number", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_a_number")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    });
+  });
+
   describe("self/0", () => {
     const testedFun = Erlang["self/0"];
 
@@ -3061,6 +3267,36 @@ describe("Erlang", () => {
         () => testedFun(Type.atom("Kernel"), Type.atom("+"), improperList),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+      );
+    });
+  });
+
+  describe("size/1", () => {
+    const testedFun = Erlang["size/1"];
+
+    it("returns size of tuple", () => {
+      const tuple = Type.tuple([Type.atom("a"), Type.atom("b"), Type.atom("c")]);
+      assert.deepStrictEqual(testedFun(tuple), Type.integer(3));
+    });
+
+    it("returns size of empty tuple", () => {
+      assert.deepStrictEqual(testedFun(Type.tuple([])), Type.integer(0));
+    });
+
+    it("returns size of binary", () => {
+      assert.deepStrictEqual(testedFun(Type.bitstring("hello")), Type.integer(5));
+    });
+
+    it("returns size of empty binary", () => {
+      assert.deepStrictEqual(testedFun(Type.bitstring("")), Type.integer(0));
+    });
+
+    it("raises ArgumentError if not a tuple or binary", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+      assertBoxedError(
+        () => testedFun(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a tuple or binary"),
       );
     });
   });
@@ -3256,6 +3492,34 @@ describe("Erlang", () => {
     });
   });
 
+  describe("trunc/1", () => {
+    const testedFun = Erlang["trunc/1"];
+
+    it("truncates positive float", () => {
+      assert.deepStrictEqual(testedFun(Type.float(3.9)), Type.integer(3));
+    });
+
+    it("truncates negative float", () => {
+      assert.deepStrictEqual(testedFun(Type.float(-3.9)), Type.integer(-3));
+    });
+
+    it("truncates float towards zero", () => {
+      assert.deepStrictEqual(testedFun(Type.float(-0.9)), Type.integer(0));
+    });
+
+    it("returns integer unchanged", () => {
+      assert.deepStrictEqual(testedFun(Type.integer(42)), Type.integer(42));
+    });
+
+    it("raises ArgumentError if not a number", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_a_number")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    });
+  });
+
   describe("tuple_to_list/1", () => {
     const tuple_to_list = Erlang["tuple_to_list/1"];
 
@@ -3272,6 +3536,28 @@ describe("Erlang", () => {
     it("raises ArgumentError if the argument is not a tuple", () => {
       assertBoxedError(
         () => tuple_to_list(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+      );
+    });
+  });
+
+  describe("tuple_size/1", () => {
+    const testedFun = Erlang["tuple_size/1"];
+
+    it("returns size of tuple", () => {
+      const tuple = Type.tuple([Type.atom("a"), Type.atom("b"), Type.atom("c")]);
+      assert.deepStrictEqual(testedFun(tuple), Type.integer(3));
+    });
+
+    it("returns size of empty tuple", () => {
+      assert.deepStrictEqual(testedFun(Type.tuple([])), Type.integer(0));
+    });
+
+    it("raises ArgumentError if not a tuple", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+      assertBoxedError(
+        () => testedFun(list),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
       );

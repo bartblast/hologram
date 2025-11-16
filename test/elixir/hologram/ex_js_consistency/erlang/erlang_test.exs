@@ -1619,6 +1619,26 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "float/1" do
+    test "converts integer to float" do
+      assert :erlang.float(42) === 42.0
+    end
+
+    test "returns float unchanged" do
+      assert :erlang.float(3.14) === 3.14
+    end
+
+    test "converts zero integer to float" do
+      assert :erlang.float(0) === 0.0
+    end
+
+    test "raises ArgumentError if argument is not a number" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a number"), fn ->
+        :erlang.float(:not_a_number)
+      end
+    end
+  end
+
   describe "float_to_binary/2" do
     test ":short option" do
       assert :erlang.float_to_binary(0.1 + 0.2, [:short]) == "0.30000000000000004"
@@ -1946,6 +1966,112 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "list_to_atom/1" do
+    test "converts list of codepoints to atom" do
+      assert :erlang.list_to_atom([104, 101, 108, 108, 111]) == :hello
+    end
+
+    test "converts empty list to empty atom" do
+      assert :erlang.list_to_atom([]) == :""
+    end
+
+    test "raises ArgumentError if not a list" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a list"), fn ->
+        :erlang.list_to_atom(:not_a_list)
+      end
+    end
+
+    test "raises ArgumentError if not a proper list" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a proper list"), fn ->
+        :erlang.list_to_atom([104 | 101])
+      end
+    end
+  end
+
+  describe "list_to_binary/1" do
+    test "converts list of bytes to binary" do
+      assert :erlang.list_to_binary([72, 105]) == "Hi"
+    end
+
+    test "converts nested iolist to binary" do
+      assert :erlang.list_to_binary([72, [105]]) == "Hi"
+    end
+  end
+
+  describe "list_to_float/1" do
+    test "converts list of codepoints to float" do
+      assert :erlang.list_to_float([51, 46, 49, 52]) == 3.14
+    end
+
+    test "converts negative float" do
+      assert :erlang.list_to_float([45, 49, 46, 53]) == -1.5
+    end
+
+    test "converts scientific notation" do
+      assert :erlang.list_to_float([49, 46, 50, 51, 101, 50]) == 123.0
+    end
+
+    test "raises ArgumentError if not a list" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a list"), fn ->
+        :erlang.list_to_float(:not_a_list)
+      end
+    end
+
+    test "raises ArgumentError if not a textual representation of a float" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   fn ->
+                     :erlang.list_to_float([49, 50, 51])
+                   end
+    end
+  end
+
+  describe "list_to_integer/1" do
+    test "converts list of codepoints to integer" do
+      assert :erlang.list_to_integer([49, 50, 51]) == 123
+    end
+
+    test "converts negative integer" do
+      assert :erlang.list_to_integer([45, 49, 50, 51]) == -123
+    end
+
+    test "raises ArgumentError if not a list" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a list"), fn ->
+        :erlang.list_to_integer(:not_a_list)
+      end
+    end
+
+    test "raises ArgumentError if not a textual representation of an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of an integer"),
+                   fn ->
+                     :erlang.list_to_integer([49, 46, 50])
+                   end
+    end
+  end
+
+  describe "list_to_tuple/1" do
+    test "converts list to tuple" do
+      assert :erlang.list_to_tuple([1, 2, 3]) == {1, 2, 3}
+    end
+
+    test "converts empty list to empty tuple" do
+      assert :erlang.list_to_tuple([]) == {}
+    end
+
+    test "raises ArgumentError if not a list" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a list"), fn ->
+        :erlang.list_to_tuple(:not_a_list)
+      end
+    end
+
+    test "raises ArgumentError if not a proper list" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a proper list"), fn ->
+        :erlang.list_to_tuple([1 | 2])
+      end
+    end
+  end
+
   describe "list_to_pid/1" do
     test "valid textual representation of PID" do
       assert :erlang.list_to_pid(~c"<0.11.222>") == pid("0.11.222")
@@ -2090,6 +2216,34 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "round/1" do
+    test "rounds float to nearest integer" do
+      assert :erlang.round(3.6) == 4
+    end
+
+    test "rounds float down" do
+      assert :erlang.round(3.4) == 3
+    end
+
+    test "rounds exactly half up" do
+      assert :erlang.round(2.5) == 3
+    end
+
+    test "rounds negative float" do
+      assert :erlang.round(-2.7) == -3
+    end
+
+    test "returns integer unchanged" do
+      assert :erlang.round(42) == 42
+    end
+
+    test "raises ArgumentError if not a number" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a number"), fn ->
+        :erlang.round(:not_a_number)
+      end
+    end
+  end
+
   describe "self/0" do
     test "returns a PID" do
       result = :erlang.self()
@@ -2202,6 +2356,30 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "size/1" do
+    test "returns size of tuple" do
+      assert :erlang.size({:a, :b, :c}) == 3
+    end
+
+    test "returns size of empty tuple" do
+      assert :erlang.size({}) == 0
+    end
+
+    test "returns size of binary" do
+      assert :erlang.size("hello") == 5
+    end
+
+    test "returns size of empty binary" do
+      assert :erlang.size("") == 0
+    end
+
+    test "raises ArgumentError if not a tuple or binary" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a tuple or binary"), fn ->
+        :erlang.size([1, 2, 3])
+      end
+    end
+  end
+
   describe "split_binary/2" do
     test "splits binary at position 0" do
       binary = "0123456789"
@@ -2294,6 +2472,30 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "trunc/1" do
+    test "truncates positive float" do
+      assert :erlang.trunc(3.9) == 3
+    end
+
+    test "truncates negative float" do
+      assert :erlang.trunc(-3.9) == -3
+    end
+
+    test "truncates float towards zero" do
+      assert :erlang.trunc(-0.9) == 0
+    end
+
+    test "returns integer unchanged" do
+      assert :erlang.trunc(42) == 42
+    end
+
+    test "raises ArgumentError if not a number" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a number"), fn ->
+        :erlang.trunc(:not_a_number)
+      end
+    end
+  end
+
   describe "tuple_to_list/1" do
     test "returns a list corresponding to the given tuple" do
       assert :erlang.tuple_to_list({1, 2, 3}) == [1, 2, 3]
@@ -2303,6 +2505,22 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a tuple"),
                    {:erlang, :tuple_to_list, [:abc]}
+    end
+  end
+
+  describe "tuple_size/1" do
+    test "returns size of tuple" do
+      assert :erlang.tuple_size({:a, :b, :c}) == 3
+    end
+
+    test "returns size of empty tuple" do
+      assert :erlang.tuple_size({}) == 0
+    end
+
+    test "raises ArgumentError if not a tuple" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a tuple"), fn ->
+        :erlang.tuple_size([1, 2, 3])
+      end
     end
   end
 end
