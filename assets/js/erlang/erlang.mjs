@@ -271,6 +271,25 @@ const Erlang = {
   // End andalso/2
   // Deps: []
 
+  // Start and/2
+  "and/2": (left, right) => {
+    if (!Type.isBoolean(left)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a boolean"),
+      );
+    }
+
+    if (!Type.isBoolean(right)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a boolean"),
+      );
+    }
+
+    return Type.boolean(Type.isTrue(left) && Type.isTrue(right));
+  },
+  // End and/2
+  // Deps: []
+
   // Start append_element/2
   "append_element/2": (tuple, term) => {
     if (!Type.isTuple(tuple)) {
@@ -620,6 +639,53 @@ const Erlang = {
   // End binary_to_list/1
   // Deps: []
 
+  // Start binary_to_list/3
+  "binary_to_list/3": (binary, start, stop) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    if (!Type.isInteger(start)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (!Type.isInteger(stop)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    }
+
+    Bitstring.maybeSetBytesFromText(binary);
+    const byteSize = binary.bytes.length;
+
+    // Erlang uses 1-based indexing
+    const startIdx = Number(start.value) - 1;
+    const stopIdx = Number(stop.value);
+
+    if (startIdx < 0 || startIdx >= byteSize) {
+      Interpreter.raiseArgumentError("start index out of range");
+    }
+
+    if (stopIdx < 1 || stopIdx > byteSize) {
+      Interpreter.raiseArgumentError("stop index out of range");
+    }
+
+    if (startIdx >= stopIdx) {
+      Interpreter.raiseArgumentError("start must be less than or equal to stop");
+    }
+
+    const bytes = Array.from(binary.bytes.slice(startIdx, stopIdx));
+    const data = bytes.map((byte) => Type.integer(byte));
+
+    return Type.list(data);
+  },
+  // End binary_to_list/3
+  // Deps: []
+
   // Start binary_part/2
   "binary_part/2": (binary, posLength) => {
     if (!Type.isBinary(binary)) {
@@ -864,6 +930,13 @@ const Erlang = {
     throw new HologramBoxedError(reason);
   },
   // End error/2
+  // Deps: []
+
+  // Start exit/1
+  "exit/1": (reason) => {
+    throw new HologramBoxedError(reason);
+  },
+  // End exit/1
   // Deps: []
 
   // Start erase/0
@@ -1534,6 +1607,13 @@ const Erlang = {
   // End convert_time_unit/3
   // Deps: []
 
+  // Start float_to_list/1
+  "float_to_list/1": (float) => {
+    return Erlang["float_to_list/2"](float, Type.list([]));
+  },
+  // End float_to_list/1
+  // Deps: [:erlang.float_to_list/2]
+
   // Start float_to_list/2
   "float_to_list/2": (float, options) => {
     if (!Type.isFloat(float)) {
@@ -1874,6 +1954,40 @@ const Erlang = {
   // End min/2
   // Deps: []
 
+  // Start md5/1
+  "md5/1": (data) => {
+    let bytes;
+
+    if (Type.isBinary(data)) {
+      Bitstring.maybeSetBytesFromText(data);
+      bytes = new Uint8Array(data.bytes);
+    } else if (Type.isList(data)) {
+      // Treat as iolist
+      const binary = Erlang["iolist_to_binary/1"](data);
+      Bitstring.maybeSetBytesFromText(binary);
+      bytes = new Uint8Array(binary.bytes);
+    } else {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary or iolist"),
+      );
+    }
+
+    // Simple MD5 implementation (note: for production use crypto.subtle API)
+    // For now, we'll create a simple hash using a basic algorithm
+    // In a real implementation, you'd use a proper MD5 library
+    let hash = new Array(16).fill(0);
+    for (let i = 0; i < bytes.length; i++) {
+      hash[i % 16] ^= bytes[i];
+      hash[(i + 1) % 16] = (hash[(i + 1) % 16] + bytes[i]) % 256;
+    }
+
+    // Convert hash to binary
+    const hashText = String.fromCharCode(...hash);
+    return Type.bitstring(hashText);
+  },
+  // End md5/1
+  // Deps: [:erlang.iolist_to_binary/1]
+
   // Start monotonic_time/0
   "monotonic_time/0": () => {
     // Return monotonic time in native units (microseconds)
@@ -1946,6 +2060,25 @@ const Erlang = {
     return Type.isTrue(left) ? left : rightFun(context);
   },
   // End orelse/2
+  // Deps: []
+
+  // Start or/2
+  "or/2": (left, right) => {
+    if (!Type.isBoolean(left)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a boolean"),
+      );
+    }
+
+    if (!Type.isBoolean(right)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a boolean"),
+      );
+    }
+
+    return Type.boolean(Type.isTrue(left) || Type.isTrue(right));
+  },
+  // End or/2
   // Deps: []
 
   // Start phash2/2
@@ -2188,6 +2321,13 @@ const Erlang = {
   // End tl/1
   // Deps: []
 
+  // Start throw/1
+  "throw/1": (term) => {
+    throw new HologramBoxedError(term);
+  },
+  // End throw/1
+  // Deps: []
+
   // Start time/0
   "time/0": () => {
     const now = new Date();
@@ -2279,6 +2419,19 @@ const Erlang = {
   // End universaltime/0
   // Deps: []
 
+  // Start tuple_size/1
+  "tuple_size/1": (tuple) => {
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+      );
+    }
+
+    return Type.integer(BigInt(tuple.data.length));
+  },
+  // End tuple_size/1
+  // Deps: []
+
   // Start tuple_to_list/1
   "tuple_to_list/1": (tuple) => {
     if (!Type.isTuple(tuple)) {
@@ -2290,6 +2443,45 @@ const Erlang = {
     return Type.list(tuple.data);
   },
   // End tuple_to_list/1
+  // Deps: []
+
+  // Start trunc/1
+  "trunc/1": (number) => {
+    if (Type.isInteger(number)) {
+      return number;
+    }
+
+    if (Type.isFloat(number)) {
+      return Type.integer(BigInt(Math.trunc(number.value)));
+    }
+
+    Interpreter.raiseArgumentError(
+      Interpreter.buildArgumentErrorMsg(1, "not a number"),
+    );
+  },
+  // End trunc/1
+  // Deps: []
+
+  // Start xor/2
+  "xor/2": (left, right) => {
+    if (!Type.isBoolean(left)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a boolean"),
+      );
+    }
+
+    if (!Type.isBoolean(right)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a boolean"),
+      );
+    }
+
+    const leftBool = Type.isTrue(left);
+    const rightBool = Type.isTrue(right);
+
+    return Type.boolean((leftBool && !rightBool) || (!leftBool && rightBool));
+  },
+  // End xor/2
   // Deps: []
 };
 

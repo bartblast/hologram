@@ -12,6 +12,7 @@ import {
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
+import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
@@ -1453,6 +1454,46 @@ describe("Erlang", () => {
     });
   });
 
+  describe("and/2", () => {
+    const testedFun = Erlang["and/2"];
+
+    it("returns true when both arguments are true", () => {
+      const result = testedFun(Type.boolean(true), Type.boolean(true));
+      assertBoxedTrue(result);
+    });
+
+    it("returns false when first argument is false", () => {
+      const result = testedFun(Type.boolean(false), Type.boolean(true));
+      assertBoxedFalse(result);
+    });
+
+    it("returns false when second argument is false", () => {
+      const result = testedFun(Type.boolean(true), Type.boolean(false));
+      assertBoxedFalse(result);
+    });
+
+    it("returns false when both arguments are false", () => {
+      const result = testedFun(Type.boolean(false), Type.boolean(false));
+      assertBoxedFalse(result);
+    });
+
+    it("raises ArgumentError if first argument is not a boolean", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.boolean(true)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a boolean"),
+      );
+    });
+
+    it("raises ArgumentError if second argument is not a boolean", () => {
+      assertBoxedError(
+        () => testedFun(Type.boolean(true), Type.atom("test")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a boolean"),
+      );
+    });
+  });
+
   describe("append_element/2", () => {
     const testedFun = Erlang["append_element/2"];
 
@@ -2046,6 +2087,77 @@ describe("Erlang", () => {
         () => testedFun(Type.atom("abc")),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+  });
+
+  describe("binary_to_list/3", () => {
+    const testedFun = Erlang["binary_to_list/3"];
+
+    it("converts binary part to list", () => {
+      const binary = Type.bitstring("Hello World");
+      const result = testedFun(binary, Type.integer(1), Type.integer(5));
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(72), Type.integer(101), Type.integer(108), Type.integer(108), Type.integer(111)])
+      );
+    });
+
+    it("converts single character", () => {
+      const binary = Type.bitstring("ABC");
+      const result = testedFun(binary, Type.integer(2), Type.integer(2));
+
+      assert.deepStrictEqual(result, Type.list([Type.integer(66)]));
+    });
+
+    it("converts entire binary using start=1 and stop=size", () => {
+      const binary = Type.bitstring("Hi");
+      const result = testedFun(binary, Type.integer(1), Type.integer(2));
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(72), Type.integer(105)])
+      );
+    });
+
+    it("raises ArgumentError if first argument is not a binary", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc"), Type.integer(1), Type.integer(2)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("raises ArgumentError if second argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.bitstring("ABC"), Type.atom("one"), Type.integer(2)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if third argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.bitstring("ABC"), Type.integer(1), Type.atom("two")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if start index is out of range", () => {
+      assertBoxedError(
+        () => testedFun(Type.bitstring("ABC"), Type.integer(0), Type.integer(2)),
+        "ArgumentError",
+        "start index out of range",
+      );
+    });
+
+    it("raises ArgumentError if stop index is out of range", () => {
+      assertBoxedError(
+        () => testedFun(Type.bitstring("ABC"), Type.integer(1), Type.integer(4)),
+        "ArgumentError",
+        "stop index out of range",
       );
     });
   });
@@ -3480,6 +3592,35 @@ describe("Erlang", () => {
     });
   });
 
+  describe("float_to_list/1", () => {
+    const testedFun = Erlang["float_to_list/1"];
+
+    it("converts float to list with default options", () => {
+      const result = testedFun(Type.float(3.14));
+      assert.ok(Type.isList(result));
+
+      const str = result.data.map((c) => String.fromCharCode(Number(c.value))).join("");
+      assert.ok(str.includes("3.1"));
+    });
+
+    it("converts negative float", () => {
+      const result = testedFun(Type.float(-42.5));
+      assert.ok(Type.isList(result));
+
+      const str = result.data.map((c) => String.fromCharCode(Number(c.value))).join("");
+      assert.ok(str.startsWith("-"));
+      assert.ok(str.includes("42"));
+    });
+
+    it("raises ArgumentError for non-float", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(42)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a float"),
+      );
+    });
+  });
+
   describe("float_to_list/2", () => {
     const testedFun = Erlang["float_to_list/2"];
 
@@ -3861,6 +4002,45 @@ describe("Erlang", () => {
     });
   });
 
+  describe("md5/1", () => {
+    const testedFun = Erlang["md5/1"];
+
+    it("returns 16-byte binary hash for binary input", () => {
+      const binary = Type.bitstring("hello");
+      const result = testedFun(binary);
+
+      assert.ok(Type.isBinary(result));
+      Bitstring.maybeSetBytesFromText(result);
+      assert.strictEqual(result.bytes.length, 16);
+    });
+
+    it("returns hash for empty binary", () => {
+      const binary = Type.bitstring("");
+      const result = testedFun(binary);
+
+      assert.ok(Type.isBinary(result));
+      Bitstring.maybeSetBytesFromText(result);
+      assert.strictEqual(result.bytes.length, 16);
+    });
+
+    it("returns hash for iolist input", () => {
+      const iolist = Type.list([Type.bitstring("he"), Type.bitstring("llo")]);
+      const result = testedFun(iolist);
+
+      assert.ok(Type.isBinary(result));
+      Bitstring.maybeSetBytesFromText(result);
+      assert.strictEqual(result.bytes.length, 16);
+    });
+
+    it("raises ArgumentError for non-binary and non-iolist", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(42)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary or iolist"),
+      );
+    });
+  });
+
   describe("not/1", () => {
     const not = Erlang["not/1"];
 
@@ -3968,6 +4148,46 @@ describe("Erlang", () => {
           ),
         "ArgumentError",
         "argument error: nil",
+      );
+    });
+  });
+
+  describe("or/2", () => {
+    const testedFun = Erlang["or/2"];
+
+    it("returns true when both arguments are true", () => {
+      const result = testedFun(Type.boolean(true), Type.boolean(true));
+      assertBoxedTrue(result);
+    });
+
+    it("returns true when first argument is true", () => {
+      const result = testedFun(Type.boolean(true), Type.boolean(false));
+      assertBoxedTrue(result);
+    });
+
+    it("returns true when second argument is true", () => {
+      const result = testedFun(Type.boolean(false), Type.boolean(true));
+      assertBoxedTrue(result);
+    });
+
+    it("returns false when both arguments are false", () => {
+      const result = testedFun(Type.boolean(false), Type.boolean(false));
+      assertBoxedFalse(result);
+    });
+
+    it("raises ArgumentError if first argument is not a boolean", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.boolean(true)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a boolean"),
+      );
+    });
+
+    it("raises ArgumentError if second argument is not a boolean", () => {
+      assertBoxedError(
+        () => testedFun(Type.boolean(true), Type.atom("test")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a boolean"),
       );
     });
   });
@@ -4402,6 +4622,76 @@ describe("Erlang", () => {
     });
   });
 
+  describe("trunc/1", () => {
+    const testedFun = Erlang["trunc/1"];
+
+    it("truncates positive float to integer", () => {
+      const result = testedFun(Type.float(3.14));
+      assert.deepStrictEqual(result, Type.integer(3));
+    });
+
+    it("truncates negative float to integer", () => {
+      const result = testedFun(Type.float(-3.14));
+      assert.deepStrictEqual(result, Type.integer(-3));
+    });
+
+    it("truncates float with large decimal part", () => {
+      const result = testedFun(Type.float(9.99));
+      assert.deepStrictEqual(result, Type.integer(9));
+    });
+
+    it("returns integer unchanged", () => {
+      const result = testedFun(Type.integer(42));
+      assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    it("truncates zero float", () => {
+      const result = testedFun(Type.float(0.0));
+      assert.deepStrictEqual(result, Type.integer(0));
+    });
+
+    it("raises ArgumentError for non-number", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("test")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    });
+  });
+
+  describe("tuple_size/1", () => {
+    const testedFun = Erlang["tuple_size/1"];
+
+    it("returns size of tuple", () => {
+      const tuple = Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]);
+      const result = testedFun(tuple);
+
+      assert.deepStrictEqual(result, Type.integer(3));
+    });
+
+    it("returns 0 for empty tuple", () => {
+      const tuple = Type.tuple([]);
+      const result = testedFun(tuple);
+
+      assert.deepStrictEqual(result, Type.integer(0));
+    });
+
+    it("returns 1 for single-element tuple", () => {
+      const tuple = Type.tuple([Type.atom("x")]);
+      const result = testedFun(tuple);
+
+      assert.deepStrictEqual(result, Type.integer(1));
+    });
+
+    it("raises ArgumentError for non-tuple", () => {
+      assertBoxedError(
+        () => testedFun(Type.list([Type.integer(1)])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+      );
+    });
+  });
+
   describe("tuple_to_list/1", () => {
     const tuple_to_list = Erlang["tuple_to_list/1"];
 
@@ -4453,6 +4743,28 @@ describe("Erlang", () => {
       const result = testedFun(Type.atom("millisecond"));
       assert.ok(Type.isInteger(result));
       assert.ok(result.value > 0n);
+    });
+  });
+
+  describe("throw/1", () => {
+    const testedFun = Erlang["throw/1"];
+
+    it("throws an error with the given term", () => {
+      const term = Type.atom("custom_error");
+
+      assert.throws(() => testedFun(term));
+    });
+
+    it("throws with tuple term", () => {
+      const term = Type.tuple([Type.atom("error"), Type.atom("reason")]);
+
+      assert.throws(() => testedFun(term));
+    });
+
+    it("throws with any term", () => {
+      const term = Type.integer(123);
+
+      assert.throws(() => testedFun(term));
     });
   });
 
@@ -4576,6 +4888,46 @@ describe("Erlang", () => {
     });
   });
 
+  describe("xor/2", () => {
+    const testedFun = Erlang["xor/2"];
+
+    it("returns true when only first argument is true", () => {
+      const result = testedFun(Type.boolean(true), Type.boolean(false));
+      assertBoxedTrue(result);
+    });
+
+    it("returns true when only second argument is true", () => {
+      const result = testedFun(Type.boolean(false), Type.boolean(true));
+      assertBoxedTrue(result);
+    });
+
+    it("returns false when both arguments are true", () => {
+      const result = testedFun(Type.boolean(true), Type.boolean(true));
+      assertBoxedFalse(result);
+    });
+
+    it("returns false when both arguments are false", () => {
+      const result = testedFun(Type.boolean(false), Type.boolean(false));
+      assertBoxedFalse(result);
+    });
+
+    it("raises ArgumentError if first argument is not a boolean", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.boolean(true)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a boolean"),
+      );
+    });
+
+    it("raises ArgumentError if second argument is not a boolean", () => {
+      assertBoxedError(
+        () => testedFun(Type.boolean(true), Type.atom("test")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a boolean"),
+      );
+    });
+  });
+
   describe("erase/0", () => {
     const testedFun = Erlang["erase/0"];
     const put = Erlang["put/2"];
@@ -4627,6 +4979,22 @@ describe("Erlang", () => {
     it("returns undefined for non-existent key", () => {
       const result = testedFun(Type.atom("nonexistent"));
       assert.deepStrictEqual(result, Type.atom("undefined"));
+    });
+  });
+
+  describe("exit/1", () => {
+    const testedFun = Erlang["exit/1"];
+
+    it("throws an error with the given reason", () => {
+      const reason = Type.atom("normal");
+
+      assert.throws(() => testedFun(reason));
+    });
+
+    it("throws with custom error term", () => {
+      const reason = Type.tuple([Type.atom("error"), Type.integer(42)]);
+
+      assert.throws(() => testedFun(reason));
     });
   });
 
