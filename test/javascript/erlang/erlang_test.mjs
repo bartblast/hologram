@@ -2050,6 +2050,82 @@ describe("Erlang", () => {
     });
   });
 
+  describe("binary_part/2", () => {
+    const testedFun = Erlang["binary_part/2"];
+
+    it("extracts part of binary using {Pos, Length} tuple", () => {
+      const binary = Type.bitstring("Hello World");
+      const result = testedFun(binary, Type.tuple([Type.integer(0), Type.integer(5)]));
+      assert.deepStrictEqual(result, Type.bitstring("Hello"));
+    });
+
+    it("extracts from middle of binary", () => {
+      const binary = Type.bitstring("Hello World");
+      const result = testedFun(binary, Type.tuple([Type.integer(6), Type.integer(5)]));
+      assert.deepStrictEqual(result, Type.bitstring("World"));
+    });
+
+    it("handles negative position (from end)", () => {
+      const binary = Type.bitstring("Hello");
+      const result = testedFun(binary, Type.tuple([Type.integer(-3), Type.integer(3)]));
+      assert.deepStrictEqual(result, Type.bitstring("llo"));
+    });
+
+    it("raises ArgumentError if first argument is not a binary", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_binary"), Type.tuple([Type.integer(0), Type.integer(1)])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("raises ArgumentError if second argument is not a tuple", () => {
+      assertBoxedError(
+        () => testedFun(Type.bitstring("test"), Type.atom("not_tuple")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a valid {Pos, Length} tuple"),
+      );
+    });
+  });
+
+  describe("binary_part/3", () => {
+    const testedFun = Erlang["binary_part/3"];
+
+    it("extracts part of binary", () => {
+      const binary = Type.bitstring("Hello World");
+      const result = testedFun(binary, Type.integer(0), Type.integer(5));
+      assert.deepStrictEqual(result, Type.bitstring("Hello"));
+    });
+
+    it("extracts from middle", () => {
+      const binary = Type.bitstring("Hello World");
+      const result = testedFun(binary, Type.integer(6), Type.integer(5));
+      assert.deepStrictEqual(result, Type.bitstring("World"));
+    });
+
+    it("extracts zero-length part", () => {
+      const binary = Type.bitstring("Hello");
+      const result = testedFun(binary, Type.integer(2), Type.integer(0));
+      assert.deepStrictEqual(result, Type.bitstring(""));
+    });
+
+    it("raises ArgumentError for negative length", () => {
+      assertBoxedError(
+        () => testedFun(Type.bitstring("test"), Type.integer(0), Type.integer(-1)),
+        "ArgumentError",
+        "length must be non-negative",
+      );
+    });
+
+    it("raises ArgumentError for position out of range", () => {
+      assertBoxedError(
+        () => testedFun(Type.bitstring("test"), Type.integer(10), Type.integer(1)),
+        "ArgumentError",
+        "position out of range",
+      );
+    });
+  });
+
   describe("bit_size/1", () => {
     const bit_size = Erlang["bit_size/1"];
 
@@ -4497,6 +4573,223 @@ describe("Erlang", () => {
       // Verify UTC date matches
       assert.deepStrictEqual(dateTuple.data[0], Type.integer(BigInt(now.getUTCFullYear())));
       assert.deepStrictEqual(dateTuple.data[1], Type.integer(BigInt(now.getUTCMonth() + 1)));
+    });
+  });
+
+  describe("erase/0", () => {
+    const testedFun = Erlang["erase/0"];
+    const put = Erlang["put/2"];
+
+    beforeEach(() => {
+      // Clear process dictionary before each test
+      Erlang["erase/0"]();
+    });
+
+    it("returns all entries and clears process dictionary", () => {
+      put(Type.atom("key1"), Type.integer(1));
+      put(Type.atom("key2"), Type.integer(2));
+
+      const result = testedFun();
+
+      assert.ok(Type.isList(result));
+      assert.strictEqual(result.data.length, 2);
+
+      // After erase, get should return empty list
+      const after = Erlang["get/0"]();
+      assert.deepStrictEqual(after, Type.list([]));
+    });
+
+    it("returns empty list when dictionary is empty", () => {
+      const result = testedFun();
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+  });
+
+  describe("erase/1", () => {
+    const testedFun = Erlang["erase/1"];
+    const put = Erlang["put/2"];
+
+    beforeEach(() => {
+      Erlang["erase/0"]();
+    });
+
+    it("erases key and returns its value", () => {
+      put(Type.atom("mykey"), Type.integer(42));
+      const result = testedFun(Type.atom("mykey"));
+
+      assert.deepStrictEqual(result, Type.integer(42));
+
+      // Verify key is gone
+      const after = Erlang["get/1"](Type.atom("mykey"));
+      assert.deepStrictEqual(after, Type.atom("undefined"));
+    });
+
+    it("returns undefined for non-existent key", () => {
+      const result = testedFun(Type.atom("nonexistent"));
+      assert.deepStrictEqual(result, Type.atom("undefined"));
+    });
+  });
+
+  describe("get/0", () => {
+    const testedFun = Erlang["get/0"];
+    const put = Erlang["put/2"];
+
+    beforeEach(() => {
+      Erlang["erase/0"]();
+    });
+
+    it("returns all process dictionary entries", () => {
+      put(Type.atom("a"), Type.integer(1));
+      put(Type.atom("b"), Type.integer(2));
+
+      const result = testedFun();
+
+      assert.ok(Type.isList(result));
+      assert.strictEqual(result.data.length, 2);
+    });
+
+    it("returns empty list when dictionary is empty", () => {
+      const result = testedFun();
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+  });
+
+  describe("get/1", () => {
+    const testedFun = Erlang["get/1"];
+    const put = Erlang["put/2"];
+
+    beforeEach(() => {
+      Erlang["erase/0"]();
+    });
+
+    it("returns value for existing key", () => {
+      put(Type.atom("mykey"), Type.integer(42));
+      const result = testedFun(Type.atom("mykey"));
+
+      assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    it("returns undefined for non-existent key", () => {
+      const result = testedFun(Type.atom("nonexistent"));
+      assert.deepStrictEqual(result, Type.atom("undefined"));
+    });
+
+    it("handles different key types", () => {
+      put(Type.integer(123), Type.atom("int_key"));
+      const result = testedFun(Type.integer(123));
+
+      assert.deepStrictEqual(result, Type.atom("int_key"));
+    });
+  });
+
+  describe("get_keys/0", () => {
+    const testedFun = Erlang["get_keys/0"];
+    const put = Erlang["put/2"];
+
+    beforeEach(() => {
+      Erlang["erase/0"]();
+    });
+
+    it("returns all keys", () => {
+      put(Type.atom("a"), Type.integer(1));
+      put(Type.atom("b"), Type.integer(2));
+
+      const result = testedFun();
+
+      assert.ok(Type.isList(result));
+      assert.strictEqual(result.data.length, 2);
+    });
+
+    it("returns empty list when dictionary is empty", () => {
+      const result = testedFun();
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+  });
+
+  describe("iolist_size/1", () => {
+    const testedFun = Erlang["iolist_size/1"];
+
+    it("returns size of binary", () => {
+      const result = testedFun(Type.bitstring("Hello"));
+      assert.deepStrictEqual(result, Type.integer(5));
+    });
+
+    it("returns size of simple iolist", () => {
+      const iolist = Type.list([Type.integer(72), Type.integer(105)]);
+      const result = testedFun(iolist);
+      assert.deepStrictEqual(result, Type.integer(2));
+    });
+
+    it("returns size of nested iolist", () => {
+      const iolist = Type.list([
+        Type.bitstring("Hi"),
+        Type.list([Type.integer(33)]),
+      ]);
+      const result = testedFun(iolist);
+      assert.deepStrictEqual(result, Type.integer(3));
+    });
+
+    it("returns 0 for empty list", () => {
+      const result = testedFun(Type.list([]));
+      assert.deepStrictEqual(result, Type.integer(0));
+    });
+  });
+
+  describe("put/2", () => {
+    const testedFun = Erlang["put/2"];
+
+    beforeEach(() => {
+      Erlang["erase/0"]();
+    });
+
+    it("stores key-value and returns undefined for new key", () => {
+      const result = testedFun(Type.atom("key"), Type.integer(42));
+
+      assert.deepStrictEqual(result, Type.atom("undefined"));
+
+      // Verify it was stored
+      const value = Erlang["get/1"](Type.atom("key"));
+      assert.deepStrictEqual(value, Type.integer(42));
+    });
+
+    it("returns old value when overwriting", () => {
+      testedFun(Type.atom("key"), Type.integer(1));
+      const result = testedFun(Type.atom("key"), Type.integer(2));
+
+      assert.deepStrictEqual(result, Type.integer(1));
+
+      // Verify new value is stored
+      const value = Erlang["get/1"](Type.atom("key"));
+      assert.deepStrictEqual(value, Type.integer(2));
+    });
+  });
+
+  describe("size/1", () => {
+    const testedFun = Erlang["size/1"];
+
+    it("returns size of tuple", () => {
+      const tuple = Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]);
+      const result = testedFun(tuple);
+      assert.deepStrictEqual(result, Type.integer(3));
+    });
+
+    it("returns 0 for empty tuple", () => {
+      const result = testedFun(Type.tuple([]));
+      assert.deepStrictEqual(result, Type.integer(0));
+    });
+
+    it("returns byte size of binary", () => {
+      const binary = Type.bitstring("Hello");
+      const result = testedFun(binary);
+      assert.deepStrictEqual(result, Type.integer(5));
+    });
+
+    it("raises ArgumentError for non-tuple and non-binary", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_tuple_or_binary")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a tuple or binary"),
+      );
     });
   });
 });

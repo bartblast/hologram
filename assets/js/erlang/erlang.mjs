@@ -35,6 +35,9 @@ MFAs for sorting:
 |> Enum.sort()
 */
 
+// Simple process dictionary (client-side only has single "process")
+const ProcessDictionary = new Map();
+
 const Erlang = {
   // Start */2
   "*/2": (left, right) => {
@@ -617,6 +620,81 @@ const Erlang = {
   // End binary_to_list/1
   // Deps: []
 
+  // Start binary_part/2
+  "binary_part/2": (binary, posLength) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    if (!Type.isTuple(posLength) || posLength.data.length !== 2) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a valid {Pos, Length} tuple"),
+      );
+    }
+
+    const pos = posLength.data[0];
+    const length = posLength.data[1];
+
+    if (!Type.isInteger(pos) || !Type.isInteger(length)) {
+      Interpreter.raiseArgumentError("arguments must be integers");
+    }
+
+    return Erlang["binary_part/3"](binary, pos, length);
+  },
+  // End binary_part/2
+  // Deps: [:erlang.binary_part/3]
+
+  // Start binary_part/3
+  "binary_part/3": (binary, pos, length) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    if (!Type.isInteger(pos)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (!Type.isInteger(length)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    }
+
+    Bitstring.maybeSetBytesFromText(binary);
+    const byteSize = binary.bytes.length;
+    const posNum = Number(pos.value);
+    const lengthNum = Number(length.value);
+
+    // Handle negative position (count from end)
+    const actualPos = posNum < 0 ? byteSize + posNum : posNum;
+
+    if (actualPos < 0 || actualPos > byteSize) {
+      Interpreter.raiseArgumentError("position out of range");
+    }
+
+    if (lengthNum < 0) {
+      Interpreter.raiseArgumentError("length must be non-negative");
+    }
+
+    if (actualPos + lengthNum > byteSize) {
+      Interpreter.raiseArgumentError("position + length out of range");
+    }
+
+    // Extract the substring
+    const partBytes = binary.bytes.slice(actualPos, actualPos + lengthNum);
+    const partText = new TextDecoder().decode(new Uint8Array(partBytes));
+
+    return Type.bitstring(partText);
+  },
+  // End binary_part/3
+  // Deps: []
+
   // Start band/2
   "band/2": (integer1, integer2) => {
     if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
@@ -786,6 +864,60 @@ const Erlang = {
     throw new HologramBoxedError(reason);
   },
   // End error/2
+  // Deps: []
+
+  // Start erase/0
+  "erase/0": () => {
+    const entries = [];
+    for (const [key, value] of ProcessDictionary.entries()) {
+      entries.push(Type.tuple([key, value]));
+    }
+    ProcessDictionary.clear();
+    return Type.list(entries);
+  },
+  // End erase/0
+  // Deps: []
+
+  // Start erase/1
+  "erase/1": (key) => {
+    const encodedKey = Type.encodeMapKey(key);
+    const value = ProcessDictionary.get(encodedKey);
+    ProcessDictionary.delete(encodedKey);
+    return value !== undefined ? value[1] : Type.atom("undefined");
+  },
+  // End erase/1
+  // Deps: []
+
+  // Start get/0
+  "get/0": () => {
+    const entries = [];
+    for (const [encodedKey, value] of ProcessDictionary.entries()) {
+      // Decode the key back (simplified - just store original key with value)
+      entries.push(Type.tuple([value[0], value[1]]));
+    }
+    return Type.list(entries);
+  },
+  // End get/0
+  // Deps: []
+
+  // Start get/1
+  "get/1": (key) => {
+    const encodedKey = Type.encodeMapKey(key);
+    const value = ProcessDictionary.get(encodedKey);
+    return value !== undefined ? value[1] : Type.atom("undefined");
+  },
+  // End get/1
+  // Deps: []
+
+  // Start get_keys/0
+  "get_keys/0": () => {
+    const keys = [];
+    for (const [encodedKey, value] of ProcessDictionary.entries()) {
+      keys.push(value[0]); // Original key
+    }
+    return Type.list(keys);
+  },
+  // End get_keys/0
   // Deps: []
 
   // Start float_to_binary/2
@@ -1018,6 +1150,15 @@ const Erlang = {
   },
   // End iolist_to_binary/1
   // Deps: [:lists.flatten/1]
+
+  // Start iolist_size/1
+  "iolist_size/1": (iolist) => {
+    // Convert iolist to binary and get its size
+    const binary = Erlang["iolist_to_binary/1"](iolist);
+    return Erlang["byte_size/1"](binary);
+  },
+  // End iolist_size/1
+  // Deps: [:erlang.iolist_to_binary/1, :erlang.byte_size/1]
 
   // Start is_atom/1
   "is_atom/1": (term) => {
@@ -1839,6 +1980,17 @@ const Erlang = {
   // End phash2/2
   // Deps: []
 
+  // Start put/2
+  "put/2": (key, value) => {
+    const encodedKey = Type.encodeMapKey(key);
+    const oldValue = ProcessDictionary.get(encodedKey);
+    // Store both key and value so we can return them in get/0
+    ProcessDictionary.set(encodedKey, [key, value]);
+    return oldValue !== undefined ? oldValue[1] : Type.atom("undefined");
+  },
+  // End put/2
+  // Deps: []
+
   // Start pid_to_list/1
   "pid_to_list/1": (pid) => {
     if (!Type.isPid(pid)) {
@@ -1971,6 +2123,21 @@ const Erlang = {
     return Type.tuple([firstPart, secondPart]);
   },
   // End split_binary/2
+  // Deps: [:erlang.byte_size/1]
+
+  // Start size/1
+  "size/1": (term) => {
+    if (Type.isTuple(term)) {
+      return Type.integer(BigInt(term.data.length));
+    } else if (Type.isBinary(term)) {
+      return Erlang["byte_size/1"](term);
+    } else {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a tuple or binary"),
+      );
+    }
+  },
+  // End size/1
   // Deps: [:erlang.byte_size/1]
 
   // Start system_time/0
