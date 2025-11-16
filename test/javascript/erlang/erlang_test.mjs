@@ -2767,6 +2767,72 @@ describe("Erlang", () => {
     });
   });
 
+  describe("round/1", () => {
+    const testedFun = Erlang["round/1"];
+
+    it("returns the integer unchanged", () => {
+      const result = testedFun(Type.integer(42));
+
+      assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    it("rounds positive float down when decimal part < 0.5", () => {
+      const result = testedFun(Type.float(2.3));
+
+      assert.deepStrictEqual(result, Type.integer(2));
+    });
+
+    it("rounds positive float up when decimal part > 0.5", () => {
+      const result = testedFun(Type.float(2.7));
+
+      assert.deepStrictEqual(result, Type.integer(3));
+    });
+
+    it("rounds positive float up when decimal part = 0.5", () => {
+      const result = testedFun(Type.float(2.5));
+
+      assert.deepStrictEqual(result, Type.integer(3));
+    });
+
+    it("rounds negative float up when decimal part > -0.5", () => {
+      const result = testedFun(Type.float(-2.3));
+
+      assert.deepStrictEqual(result, Type.integer(-2));
+    });
+
+    it("rounds negative float down when decimal part < -0.5", () => {
+      const result = testedFun(Type.float(-2.7));
+
+      assert.deepStrictEqual(result, Type.integer(-3));
+    });
+
+    it("rounds negative float down when decimal part = -0.5", () => {
+      const result = testedFun(Type.float(-2.5));
+
+      assert.deepStrictEqual(result, Type.integer(-3));
+    });
+
+    it("rounds 0.0 to 0", () => {
+      const result = testedFun(Type.float(0.0));
+
+      assert.deepStrictEqual(result, Type.integer(0));
+    });
+
+    it("rounds -0.0 to 0", () => {
+      const result = testedFun(Type.float(-0.0));
+
+      assert.deepStrictEqual(result, Type.integer(0));
+    });
+
+    it("raises ArgumentError if argument is not a number", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    });
+  });
+
   describe("split_binary/2", () => {
     const split_binary = Erlang["split_binary/2"];
 

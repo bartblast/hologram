@@ -881,6 +881,29 @@ const Erlang = {
   // End rem/2
   // Deps: []
 
+  // Start round/1
+  "round/1": (number) => {
+    if (!Type.isNumber(number)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    }
+
+    if (Type.isInteger(number)) {
+      return number;
+    }
+
+    // Erlang's round/1 uses "round half away from zero" strategy
+    // For positive numbers: round(0.5) = 1, round(1.5) = 2
+    // For negative numbers: round(-0.5) = -1, round(-1.5) = -2
+    const value = number.value;
+    const rounded = value >= 0 ? Math.floor(value + 0.5) : Math.ceil(value - 0.5);
+
+    return Type.integer(rounded);
+  },
+  // End round/1
+  // Deps: []
+
   // Start split_binary/2
   "split_binary/2": (binary, position) => {
     if (!Type.isBinary(binary)) {
