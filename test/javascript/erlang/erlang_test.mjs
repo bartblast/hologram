@@ -2504,6 +2504,122 @@ describe("Erlang", () => {
     });
   });
 
+  describe("integer_to_list/1", () => {
+    const testedFun = Erlang["integer_to_list/1"];
+
+    it("converts positive integer to list", () => {
+      const result = testedFun(Type.integer(123));
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(49), Type.integer(50), Type.integer(51)]),
+      );
+    });
+
+    it("converts negative integer to list", () => {
+      const result = testedFun(Type.integer(-456));
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.integer(45),
+          Type.integer(52),
+          Type.integer(53),
+          Type.integer(54),
+        ]),
+      );
+    });
+
+    it("converts zero to list", () => {
+      const result = testedFun(Type.integer(0));
+
+      assert.deepStrictEqual(result, Type.list([Type.integer(48)]));
+    });
+
+    it("raises ArgumentError if argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    });
+  });
+
+  describe("integer_to_list/2", () => {
+    const testedFun = Erlang["integer_to_list/2"];
+
+    it("converts integer to list in base 10", () => {
+      const result = testedFun(Type.integer(123), Type.integer(10));
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(49), Type.integer(50), Type.integer(51)]),
+      );
+    });
+
+    it("converts integer to list in base 2", () => {
+      const result = testedFun(Type.integer(5), Type.integer(2));
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(49), Type.integer(48), Type.integer(49)]),
+      );
+    });
+
+    it("converts integer to list in base 16", () => {
+      const result = testedFun(Type.integer(255), Type.integer(16));
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(102), Type.integer(102)]),
+      );
+    });
+
+    it("converts integer to list in base 36", () => {
+      const result = testedFun(Type.integer(35), Type.integer(36));
+
+      assert.deepStrictEqual(result, Type.list([Type.integer(122)]));
+    });
+
+    it("raises ArgumentError if first argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc"), Type.integer(10)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if second argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(123), Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if base is less than 2", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(123), Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    });
+
+    it("raises ArgumentError if base is greater than 36", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(123), Type.integer(37)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    });
+  });
+
   describe("is_atom/1", () => {
     const is_atom = Erlang["is_atom/1"];
 
