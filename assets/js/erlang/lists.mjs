@@ -661,6 +661,213 @@ const Erlang_Lists = {
   },
   // End split/2
   // Deps: []
+
+  // Start sublist/2
+  "sublist/2": (list, length) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sublist/2", [
+          list,
+          length,
+        ]),
+      );
+    }
+
+    if (!Type.isInteger(length)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sublist/2", [
+          list,
+          length,
+        ]),
+      );
+    }
+
+    const len = Number(length.value);
+
+    if (len < 0) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sublist/2", [
+          list,
+          length,
+        ]),
+      );
+    }
+
+    // Validate proper list while taking elements
+    const result = [];
+    for (let i = 0; i < Math.min(len, list.data.length); i++) {
+      result.push(list.data[i]);
+    }
+
+    // If we took fewer elements than requested, check if list is proper
+    if (result.length < len && !Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sublist_2/4"),
+      );
+    }
+
+    return Type.list(result);
+  },
+  // End sublist/2
+  // Deps: []
+
+  // Start sublist/3
+  "sublist/3": (list, start, length) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sublist/3", [
+          list,
+          start,
+          length,
+        ]),
+      );
+    }
+
+    if (!Type.isInteger(start)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sublist/3", [
+          list,
+          start,
+          length,
+        ]),
+      );
+    }
+
+    if (!Type.isInteger(length)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sublist/3", [
+          list,
+          start,
+          length,
+        ]),
+      );
+    }
+
+    const startIdx = Number(start.value);
+    const len = Number(length.value);
+
+    if (startIdx < 1 || len < 0) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sublist/3", [
+          list,
+          start,
+          length,
+        ]),
+      );
+    }
+
+    // Check if we need to validate the list is proper
+    const needsProperCheck = startIdx > list.data.length;
+
+    if (needsProperCheck && !Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sublist_3/5"),
+      );
+    }
+
+    // Take elements from start position (1-indexed)
+    const result = [];
+    const actualStart = Math.min(startIdx - 1, list.data.length);
+    const actualEnd = Math.min(actualStart + len, list.data.length);
+
+    for (let i = actualStart; i < actualEnd; i++) {
+      result.push(list.data[i]);
+    }
+
+    return Type.list(result);
+  },
+  // End sublist/3
+  // Deps: []
+
+  // Start takewhile/2
+  "takewhile/2": function (fun, list) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.takewhile/2", arguments),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.takewhile/2", arguments),
+      );
+    }
+
+    const result = [];
+
+    for (let i = 0; i < list.data.length; i++) {
+      const elem = list.data[i];
+      const testResult = Interpreter.callAnonymousFunction(fun, [elem]);
+
+      if (!Type.isBoolean(testResult)) {
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":lists.takewhile_2/4"),
+        );
+      }
+
+      if (Type.isFalse(testResult)) {
+        break;
+      }
+
+      result.push(elem);
+    }
+
+    // If we exhausted the list, validate it's proper
+    if (result.length === list.data.length && !Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.takewhile_2/4"),
+      );
+    }
+
+    return Type.list(result);
+  },
+  // End takewhile/2
+  // Deps: []
+
+  // Start dropwhile/2
+  "dropwhile/2": function (fun, list) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.dropwhile/2", arguments),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.dropwhile/2", arguments),
+      );
+    }
+
+    let dropCount = 0;
+
+    for (let i = 0; i < list.data.length; i++) {
+      const elem = list.data[i];
+      const testResult = Interpreter.callAnonymousFunction(fun, [elem]);
+
+      if (!Type.isBoolean(testResult)) {
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":lists.dropwhile_2/4"),
+        );
+      }
+
+      if (Type.isFalse(testResult)) {
+        break;
+      }
+
+      dropCount++;
+    }
+
+    // If we dropped everything, validate it's proper
+    if (dropCount === list.data.length && !Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.dropwhile_2/4"),
+      );
+    }
+
+    return Type.list(list.data.slice(dropCount));
+  },
+  // End dropwhile/2
+  // Deps: []
 };
 
 export default Erlang_Lists;

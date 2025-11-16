@@ -1975,4 +1975,438 @@ describe("Erlang_Lists", () => {
       );
     });
   });
+
+  describe("sublist/2", () => {
+    const testedFun = Erlang_Lists["sublist/2"];
+
+    it("returns first N elements", () => {
+      const list = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+        Type.integer(4),
+      ]);
+      const result = testedFun(list, Type.integer(2));
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(1), Type.integer(2)]),
+      );
+    });
+
+    it("returns entire list when N equals length", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = testedFun(list, Type.integer(2));
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(1), Type.integer(2)]),
+      );
+    });
+
+    it("returns entire list when N exceeds length", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = testedFun(list, Type.integer(5));
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(1), Type.integer(2)]),
+      );
+    });
+
+    it("returns empty list when N is 0", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = testedFun(list, Type.integer(0));
+
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("raises FunctionClauseError if first argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc"), Type.integer(1)),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sublist/2", [
+          Type.atom("abc"),
+          Type.integer(1),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if second argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.list([Type.integer(1)]), Type.atom("abc")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sublist/2", [
+          Type.list([Type.integer(1)]),
+          Type.atom("abc"),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if N is negative", () => {
+      assertBoxedError(
+        () => testedFun(Type.list([Type.integer(1)]), Type.integer(-1)),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sublist/2", [
+          Type.list([Type.integer(1)]),
+          Type.integer(-1),
+        ]),
+      );
+    });
+  });
+
+  describe("sublist/3", () => {
+    const testedFun = Erlang_Lists["sublist/3"];
+
+    it("returns sublist from start position with given length", () => {
+      const list = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+        Type.integer(4),
+      ]);
+      const result = testedFun(list, Type.integer(2), Type.integer(2));
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(2), Type.integer(3)]),
+      );
+    });
+
+    it("returns sublist from beginning", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+      const result = testedFun(list, Type.integer(1), Type.integer(2));
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(1), Type.integer(2)]),
+      );
+    });
+
+    it("returns empty list when length is 0", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = testedFun(list, Type.integer(1), Type.integer(0));
+
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("returns empty list when start is beyond list length", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = testedFun(list, Type.integer(5), Type.integer(2));
+
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("returns partial list when length exceeds remaining elements", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+      const result = testedFun(list, Type.integer(2), Type.integer(5));
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(2), Type.integer(3)]),
+      );
+    });
+
+    it("raises FunctionClauseError if first argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc"), Type.integer(1), Type.integer(1)),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sublist/3", [
+          Type.atom("abc"),
+          Type.integer(1),
+          Type.integer(1),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if start is not an integer", () => {
+      assertBoxedError(
+        () =>
+          testedFun(
+            Type.list([Type.integer(1)]),
+            Type.atom("abc"),
+            Type.integer(1),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sublist/3", [
+          Type.list([Type.integer(1)]),
+          Type.atom("abc"),
+          Type.integer(1),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if length is not an integer", () => {
+      assertBoxedError(
+        () =>
+          testedFun(
+            Type.list([Type.integer(1)]),
+            Type.integer(1),
+            Type.atom("abc"),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sublist/3", [
+          Type.list([Type.integer(1)]),
+          Type.integer(1),
+          Type.atom("abc"),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if start is less than 1", () => {
+      assertBoxedError(
+        () =>
+          testedFun(Type.list([Type.integer(1)]), Type.integer(0), Type.integer(1)),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sublist/3", [
+          Type.list([Type.integer(1)]),
+          Type.integer(0),
+          Type.integer(1),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if length is negative", () => {
+      assertBoxedError(
+        () =>
+          testedFun(
+            Type.list([Type.integer(1)]),
+            Type.integer(1),
+            Type.integer(-1),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sublist/3", [
+          Type.list([Type.integer(1)]),
+          Type.integer(1),
+          Type.integer(-1),
+        ]),
+      );
+    });
+  });
+
+  describe("takewhile/2", () => {
+    const testedFun = Erlang_Lists["takewhile/2"];
+
+    const lessThan3 = Type.anonymousFunction(
+      1,
+      [
+        {
+          params: (_context) => [Type.variablePattern("elem")],
+          guards: [],
+          body: (context) => {
+            return Erlang["</2"](context.vars.elem, Type.integer(3));
+          },
+        },
+      ],
+      contextFixture(),
+    );
+
+    it("takes elements while predicate is true", () => {
+      const list = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+        Type.integer(4),
+      ]);
+      const result = testedFun(lessThan3, list);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(1), Type.integer(2)]),
+      );
+    });
+
+    it("returns empty list when first element fails predicate", () => {
+      const list = Type.list([Type.integer(5), Type.integer(1)]);
+      const result = testedFun(lessThan3, list);
+
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("returns entire list when all elements pass predicate", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = testedFun(lessThan3, list);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(1), Type.integer(2)]),
+      );
+    });
+
+    it("returns empty list for empty input", () => {
+      const result = testedFun(lessThan3, Type.list([]));
+
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("raises FunctionClauseError if first argument is not a 1-arity function", () => {
+      const fun = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (_context) => [
+              Type.variablePattern("a"),
+              Type.variablePattern("b"),
+            ],
+            guards: [],
+            body: (_context) => Type.boolean(true),
+          },
+        ],
+        contextFixture(),
+      );
+
+      assertBoxedError(
+        () => testedFun(fun, Type.list([Type.integer(1)])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.takewhile/2", [
+          fun,
+          Type.list([Type.integer(1)]),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if second argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(lessThan3, Type.atom("abc")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.takewhile/2", [
+          lessThan3,
+          Type.atom("abc"),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if function returns non-boolean", () => {
+      const badFun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (_context) => Type.integer(42),
+          },
+        ],
+        contextFixture(),
+      );
+
+      assertBoxedError(
+        () => testedFun(badFun, Type.list([Type.integer(1)])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.takewhile_2/4"),
+      );
+    });
+  });
+
+  describe("dropwhile/2", () => {
+    const testedFun = Erlang_Lists["dropwhile/2"];
+
+    const lessThan3 = Type.anonymousFunction(
+      1,
+      [
+        {
+          params: (_context) => [Type.variablePattern("elem")],
+          guards: [],
+          body: (context) => {
+            return Erlang["</2"](context.vars.elem, Type.integer(3));
+          },
+        },
+      ],
+      contextFixture(),
+    );
+
+    it("drops elements while predicate is true", () => {
+      const list = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+        Type.integer(4),
+      ]);
+      const result = testedFun(lessThan3, list);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(3), Type.integer(4)]),
+      );
+    });
+
+    it("returns entire list when first element fails predicate", () => {
+      const list = Type.list([Type.integer(5), Type.integer(1)]);
+      const result = testedFun(lessThan3, list);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(5), Type.integer(1)]),
+      );
+    });
+
+    it("returns empty list when all elements pass predicate", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = testedFun(lessThan3, list);
+
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("returns empty list for empty input", () => {
+      const result = testedFun(lessThan3, Type.list([]));
+
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("raises FunctionClauseError if first argument is not a 1-arity function", () => {
+      const fun = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (_context) => [
+              Type.variablePattern("a"),
+              Type.variablePattern("b"),
+            ],
+            guards: [],
+            body: (_context) => Type.boolean(true),
+          },
+        ],
+        contextFixture(),
+      );
+
+      assertBoxedError(
+        () => testedFun(fun, Type.list([Type.integer(1)])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.dropwhile/2", [
+          fun,
+          Type.list([Type.integer(1)]),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if second argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(lessThan3, Type.atom("abc")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.dropwhile/2", [
+          lessThan3,
+          Type.atom("abc"),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if function returns non-boolean", () => {
+      const badFun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (_context) => Type.integer(42),
+          },
+        ],
+        contextFixture(),
+      );
+
+      assertBoxedError(
+        () => testedFun(badFun, Type.list([Type.integer(1)])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.dropwhile_2/4"),
+      );
+    });
+  });
 });
