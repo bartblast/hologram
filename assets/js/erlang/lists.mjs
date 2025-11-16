@@ -904,6 +904,430 @@ const Erlang_Lists = {
   },
   // End seq/3
   // Deps: []
+
+  // Start keydelete/3
+  "keydelete/3": (key, n, tupleList) => {
+    if (!Type.isInteger(n)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (n.value < 1) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    }
+
+    if (!Type.isList(tupleList)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(tupleList)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+      );
+    }
+
+    const result = [];
+    let deleted = false;
+
+    for (const tuple of tupleList.data) {
+      if (
+        !deleted &&
+        Type.isTuple(tuple) &&
+        tuple.data.length >= n.value &&
+        Interpreter.isStrictlyEqual(tuple.data[Number(n.value) - 1], key)
+      ) {
+        deleted = true;
+      } else {
+        result.push(tuple);
+      }
+    }
+
+    return Type.list(result);
+  },
+  // End keydelete/3
+  // Deps: []
+
+  // Start keyreplace/4
+  "keyreplace/4": (key, n, tupleList, newTuple) => {
+    if (!Type.isInteger(n)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (n.value < 1) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    }
+
+    if (!Type.isList(tupleList)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(tupleList)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+      );
+    }
+
+    const result = [];
+    let replaced = false;
+
+    for (const tuple of tupleList.data) {
+      if (
+        !replaced &&
+        Type.isTuple(tuple) &&
+        tuple.data.length >= n.value &&
+        Interpreter.isStrictlyEqual(tuple.data[Number(n.value) - 1], key)
+      ) {
+        result.push(newTuple);
+        replaced = true;
+      } else {
+        result.push(tuple);
+      }
+    }
+
+    return Type.list(result);
+  },
+  // End keyreplace/4
+  // Deps: []
+
+  // Start keysort/2
+  "keysort/2": (n, tupleList) => {
+    if (!Type.isInteger(n)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (n.value < 1) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    }
+
+    if (!Type.isList(tupleList)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keysort/2", [n, tupleList]),
+      );
+    }
+
+    if (!Type.isProperList(tupleList)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keysort/2", [n, tupleList]),
+      );
+    }
+
+    const index = Number(n.value) - 1;
+
+    // Validate all elements are tuples with sufficient size
+    for (const tuple of tupleList.data) {
+      if (!Type.isTuple(tuple)) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(2, "list element is not a tuple"),
+        );
+      }
+      if (tuple.data.length < n.value) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(2, "tuple size is too small"),
+        );
+      }
+    }
+
+    const sorted = tupleList.data.slice().sort((a, b) => {
+      return Interpreter.compareTerms(a.data[index], b.data[index]);
+    });
+
+    return Type.list(sorted);
+  },
+  // End keysort/2
+  // Deps: []
+
+  // Start keystore/4
+  "keystore/4": (key, n, tupleList, newTuple) => {
+    if (!Type.isInteger(n)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (n.value < 1) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    }
+
+    if (!Type.isList(tupleList)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(tupleList)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+      );
+    }
+
+    const result = [];
+    let stored = false;
+
+    for (const tuple of tupleList.data) {
+      if (
+        !stored &&
+        Type.isTuple(tuple) &&
+        tuple.data.length >= n.value &&
+        Interpreter.isStrictlyEqual(tuple.data[Number(n.value) - 1], key)
+      ) {
+        result.push(newTuple);
+        stored = true;
+      } else {
+        result.push(tuple);
+      }
+    }
+
+    if (!stored) {
+      result.push(newTuple);
+    }
+
+    return Type.list(result);
+  },
+  // End keystore/4
+  // Deps: []
+
+  // Start keytake/3
+  "keytake/3": (key, n, tupleList) => {
+    if (!Type.isInteger(n)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (n.value < 1) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    }
+
+    if (!Type.isList(tupleList)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(tupleList)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+      );
+    }
+
+    const result = [];
+    let foundTuple = null;
+
+    for (const tuple of tupleList.data) {
+      if (
+        foundTuple === null &&
+        Type.isTuple(tuple) &&
+        tuple.data.length >= n.value &&
+        Interpreter.isStrictlyEqual(tuple.data[Number(n.value) - 1], key)
+      ) {
+        foundTuple = tuple;
+      } else {
+        result.push(tuple);
+      }
+    }
+
+    if (foundTuple !== null) {
+      return Type.tuple([
+        Type.atom("value"),
+        foundTuple,
+        Type.list(result),
+      ]);
+    } else {
+      return Type.boolean(false);
+    }
+  },
+  // End keytake/3
+  // Deps: []
+
+  // Start mapfoldl/3
+  "mapfoldl/3": function (fun, acc0, list) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldl/3", arguments),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldl/3", arguments),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldl/3", arguments),
+      );
+    }
+
+    const result = [];
+    let acc = acc0;
+
+    for (const elem of list.data) {
+      const funResult = Interpreter.callAnonymousFunction(fun, [elem, acc]);
+
+      if (!Type.isTuple(funResult) || funResult.data.length !== 2) {
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldl_1/3"),
+        );
+      }
+
+      result.push(funResult.data[0]);
+      acc = funResult.data[1];
+    }
+
+    return Type.tuple([Type.list(result), acc]);
+  },
+  // End mapfoldl/3
+  // Deps: []
+
+  // Start max/1
+  "max/1": (list) => {
+    if (!Type.isList(list) || list.data.length === 0) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.max/1", [list]),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.max/1", [list]),
+      );
+    }
+
+    let maxElem = list.data[0];
+    for (let i = 1; i < list.data.length; i++) {
+      if (Interpreter.compareTerms(list.data[i], maxElem) === 1) {
+        maxElem = list.data[i];
+      }
+    }
+
+    return maxElem;
+  },
+  // End max/1
+  // Deps: []
+
+  // Start min/1
+  "min/1": (list) => {
+    if (!Type.isList(list) || list.data.length === 0) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.min/1", [list]),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.min/1", [list]),
+      );
+    }
+
+    let minElem = list.data[0];
+    for (let i = 1; i < list.data.length; i++) {
+      if (Interpreter.compareTerms(list.data[i], minElem) === -1) {
+        minElem = list.data[i];
+      }
+    }
+
+    return minElem;
+  },
+  // End min/1
+  // Deps: []
+
+  // Start prefix/2
+  "prefix/2": (list1, list2) => {
+    if (!Type.isList(list1)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [list1, list2]),
+      );
+    }
+
+    if (!Type.isProperList(list1)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [list1, list2]),
+      );
+    }
+
+    if (!Type.isList(list2)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [list1, list2]),
+      );
+    }
+
+    if (!Type.isProperList(list2)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [list1, list2]),
+      );
+    }
+
+    if (list1.data.length > list2.data.length) {
+      return Type.boolean(false);
+    }
+
+    for (let i = 0; i < list1.data.length; i++) {
+      if (!Interpreter.isStrictlyEqual(list1.data[i], list2.data[i])) {
+        return Type.boolean(false);
+      }
+    }
+
+    return Type.boolean(true);
+  },
+  // End prefix/2
+  // Deps: []
+
+  // Start sort/2
+  "sort/2": function (fun, list) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2", arguments),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2", arguments),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2", arguments),
+      );
+    }
+
+    const sorted = list.data.slice().sort((a, b) => {
+      const result = Interpreter.callAnonymousFunction(fun, [a, b]);
+
+      if (!Type.isBoolean(result)) {
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":lists.sort_1/3"),
+        );
+      }
+
+      return Type.isTrue(result) ? -1 : 0;
+    });
+
+    return Type.list(sorted);
+  },
+  // End sort/2
+  // Deps: []
 };
 
 export default Erlang_Lists;
