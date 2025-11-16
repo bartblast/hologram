@@ -996,6 +996,53 @@ const Erlang = {
   // End list_to_binary/1
   // Deps: []
 
+  // Start list_to_atom/1
+  "list_to_atom/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    // Validate that all elements are valid character codes
+    for (const elem of list.data) {
+      if (!Type.isInteger(elem)) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(1, "not a textual representation of an atom"),
+        );
+      }
+
+      const value = Number(elem.value);
+      if (!Bitstring.validateCodePoint(value)) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(1, "not a textual representation of an atom"),
+        );
+      }
+    }
+
+    // Convert list of integers to string
+    const text = String.fromCharCode(...list.data.map((elem) => Number(elem.value)));
+
+    return Type.atom(text);
+  },
+  // End list_to_atom/1
+  // Deps: []
+
+  // Start list_to_existing_atom/1
+  "list_to_existing_atom/1": (list) => {
+    // Note: In Hologram, we cannot check if an atom "exists" at runtime
+    // as atoms are created on-demand. This function behaves the same as list_to_atom/1
+    return Erlang["list_to_atom/1"](list);
+  },
+  // End list_to_existing_atom/1
+  // Deps: [:erlang.list_to_atom/1]
+
   // Start map_size/1
   "map_size/1": (map) => {
     if (!Type.isMap(map)) {
