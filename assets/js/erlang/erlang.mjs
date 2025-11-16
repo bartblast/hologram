@@ -1335,6 +1335,28 @@ const Erlang = {
   // End cancel_timer/1
   // Deps: []
 
+  // Start cancel_timer/2
+  "cancel_timer/2": (timerRef, options) => {
+    if (!Type.isReference(timerRef)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a reference"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    // Cancel timer with options
+    // Options can include: {async, Bool}, {info, Bool}
+    // In Hologram, timers are simplified
+    return Type.boolean(false);
+  },
+  // End cancel_timer/2
+  // Deps: []
+
   // Start ceil/1
   "ceil/1": (number) => {
     if (Type.isInteger(number)) {
@@ -1794,6 +1816,15 @@ const Erlang = {
   // End display/1
   // Deps: []
 
+  // Start display/2
+  "display/2": (device, term) => {
+    // Display term to device (ignore device in browser environment)
+    console.log(Interpreter.inspect(term));
+    return Type.atom("ok");
+  },
+  // End display/2
+  // Deps: []
+
   // Start element/2
   "element/2": (index, tuple) => {
     if (!Type.isInteger(index)) {
@@ -1834,6 +1865,21 @@ const Erlang = {
     throw new HologramBoxedError(reason);
   },
   // End error/2
+  // Deps: []
+
+  // Start error/3
+  "error/3": (reason, args, options) => {
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    // Raise error with options
+    // Options can include: {error_info, Map}
+    throw new HologramBoxedError(reason);
+  },
+  // End error/3
   // Deps: []
 
   // Start erase/0
@@ -2277,6 +2323,23 @@ const Erlang = {
   // End fun_to_binary/1
   // Deps: []
 
+  // Start finish_loading/1
+  "finish_loading/1": (preparedList) => {
+    if (!Type.isList(preparedList)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    // Finish loading previously prepared modules
+    // In Hologram (browser environment), module loading is not supported
+    Interpreter.raiseHologramInterpreterError(
+      "finish_loading/1 is not supported in browser environment",
+    );
+  },
+  // End finish_loading/1
+  // Deps: []
+
   // Start get/0
   "get/0": () => {
     // Get all key-value pairs from process dictionary
@@ -2317,6 +2380,16 @@ const Erlang = {
     return Type.list([]);
   },
   // End get_stacktrace/0
+  // Deps: []
+
+  // Start get_stacktrace/1
+  "get_stacktrace/1": (error) => {
+    // Get stacktrace from error
+    // This is for OTP 21+ compatibility
+    // In Hologram, return an empty stacktrace
+    return Type.list([]);
+  },
+  // End get_stacktrace/1
   // Deps: []
 
   // Start get_keys/0
@@ -2484,6 +2557,21 @@ const Erlang = {
     );
   },
   // End halt/1
+  // Deps: []
+
+  // Start has_prepared_code_on_load/1
+  "has_prepared_code_on_load/1": (module) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    // Check if module has on_load callback after prepare_loading
+    // In Hologram, return false (no prepared code)
+    return Type.boolean(false);
+  },
+  // End has_prepared_code_on_load/1
   // Deps: []
 
   // Start hd/1
@@ -2738,6 +2826,44 @@ const Erlang = {
   },
   // End iolist_size/1
   // Deps: [:erlang.iolist_to_binary/1, :erlang.byte_size/1]
+
+  // Start format/1
+  "format/1": (formatString) => {
+    if (!Type.isBitstring(formatString)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
+      );
+    }
+
+    // Format and print string (simplified in browser)
+    const str = Bitstring.toText(formatString);
+    console.log(str);
+    return Type.atom("ok");
+  },
+  // End format/1
+  // Deps: []
+
+  // Start format/2
+  "format/2": (formatString, args) => {
+    if (!Type.isBitstring(formatString)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
+      );
+    }
+
+    if (!Type.isList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    // Format and print string with arguments (simplified in browser)
+    const str = Bitstring.toText(formatString);
+    console.log(str, Type.listToArray(args));
+    return Type.atom("ok");
+  },
+  // End format/2
+  // Deps: []
 
   // Start is_alive/0
   "is_alive/0": () => {
@@ -3554,6 +3680,40 @@ const Erlang = {
   // End make_ref/0
   // Deps: []
 
+  // Start make_fun/3
+  "make_fun/3": (module, functionName, arity) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(functionName)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isInteger(arity)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    }
+
+    // Create a fun from module, function name, and arity
+    // In Hologram, this is a simplified implementation
+    const moduleName = module.value;
+    const funName = functionName.value;
+    const key = `${funName}/${arity.value}`;
+
+    // Return a function that calls the MFA
+    return Type.functionValue((...args) => {
+      return globalThis[moduleName][key](...args);
+    });
+  },
+  // End make_fun/3
+  // Deps: []
+
   // Start make_tuple/2
   "make_tuple/2": (size, initialValue) => {
     if (!Type.isInteger(size)) {
@@ -4174,6 +4334,29 @@ const Erlang = {
   // End purge_module/1
   // Deps: []
 
+  // Start prepare_loading/2
+  "prepare_loading/2": (module, code) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isBitstring(code)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a bitstring"),
+      );
+    }
+
+    // Prepare module for atomic loading
+    // In Hologram (browser environment), module loading is not supported
+    Interpreter.raiseHologramInterpreterError(
+      "prepare_loading/2 is not supported in browser environment",
+    );
+  },
+  // End prepare_loading/2
+  // Deps: []
+
   // Start pid_to_list/1
   "pid_to_list/1": (pid) => {
     if (!Type.isPid(pid)) {
@@ -4756,6 +4939,49 @@ const Erlang = {
   // End read_timer/1
   // Deps: []
 
+  // Start read_timer/2
+  "read_timer/2": (timerRef, options) => {
+    if (!Type.isReference(timerRef)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a reference"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    // Read timer with options
+    // Options can include: {async, Bool}
+    // In Hologram, timers are simplified
+    return Type.boolean(false);
+  },
+  // End read_timer/2
+  // Deps: []
+
+  // Start raise/2
+  "raise/2": (classAtom, reason) => {
+    if (!Type.isAtom(classAtom)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    // Raise exception without stacktrace
+    const classStr = classAtom.value;
+    if (!["error", "exit", "throw"].includes(classStr)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a valid exception class"),
+      );
+    }
+
+    throw Interpreter.buildHologramBoxedError(reason);
+  },
+  // End raise/2
+  // Deps: []
+
   // Start raise/3
   "raise/3": (classAtom, reason, stacktrace) => {
     if (!Type.isAtom(classAtom)) {
@@ -4899,6 +5125,34 @@ const Erlang = {
   },
   // End send_after/3
   // Deps: []
+
+  // Start send_after/4
+  "send_after/4": (time, dest, message, options) => {
+    if (!Type.isInteger(time)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isPid(dest) && !Type.isAtom(dest)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a pid or registered name"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(4, "not a list"),
+      );
+    }
+
+    // Send message after delay with options
+    // Options can include: {abs, Bool}
+    // Use send_after/3 for now
+    return Erlang["send_after/3"](time, dest, message);
+  },
+  // End send_after/4
+  // Deps: [:erlang.send_after/3]
 
   // Start send_nosuspend/2
   "send_nosuspend/2": (dest, message) => {
@@ -5215,6 +5469,32 @@ const Erlang = {
   // End split_binary/2
   // Deps: [:erlang.byte_size/1]
 
+  // Start split_binary/3
+  "split_binary/3": (binary, pos, options) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    if (!Type.isInteger(pos)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    // Split binary with options (for now ignore options)
+    return Erlang["split_binary/2"](binary, pos);
+  },
+  // End split_binary/3
+  // Deps: [:erlang.split_binary/2]
+
   // Start start_timer/3
   "start_timer/3": (time, dest, message) => {
     if (!Type.isInteger(time)) {
@@ -5257,6 +5537,34 @@ const Erlang = {
   },
   // End start_timer/3
   // Deps: []
+
+  // Start start_timer/4
+  "start_timer/4": (time, dest, message, options) => {
+    if (!Type.isInteger(time)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isPid(dest) && !Type.isAtom(dest)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a pid or registered name"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(4, "not a list"),
+      );
+    }
+
+    // Start timer with options
+    // Options can include: {abs, Bool}
+    // Use start_timer/3 for now
+    return Erlang["start_timer/3"](time, dest, message);
+  },
+  // End start_timer/4
+  // Deps: [:erlang.start_timer/3]
 
   // Start statistics/1
   "statistics/1": (item) => {
@@ -5485,6 +5793,50 @@ const Erlang = {
   },
   // End system_time/1
   // Deps: [:erlang.convert_time_unit/3]
+
+  // Start system_time/2
+  "system_time/2": (unit, options) => {
+    if (!Type.isAtom(unit)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    // Get system time with options (for now ignore options)
+    return Erlang["system_time/1"](unit);
+  },
+  // End system_time/2
+  // Deps: [:erlang.system_time/1]
+
+  // Start time_offset/0
+  "time_offset/0": () => {
+    // Get time offset between monotonic time and system time
+    // In Hologram, return 0 (no offset)
+    return Type.integer(0n);
+  },
+  // End time_offset/0
+  // Deps: []
+
+  // Start time_offset/1
+  "time_offset/1": (unit) => {
+    if (!Type.isAtom(unit)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    // Get time offset in specified unit
+    // In Hologram, return 0 (no offset)
+    return Type.integer(0n);
+  },
+  // End time_offset/1
+  // Deps: []
 
   // Start tl/1
   "tl/1": (list) => {
