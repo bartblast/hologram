@@ -105,6 +105,35 @@ const Erlang_Lists = {
   // End foldl/3
   // Deps: []
 
+  // Start foreach/2
+  "foreach/2": function (fun, list) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foreach/2", arguments),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foreach/2", [fun, list]),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foreach/2", [fun, list]),
+      );
+    }
+
+    for (const elem of list.data) {
+      Interpreter.callAnonymousFunction(fun, [elem]);
+    }
+
+    return Type.atom("ok");
+  },
+  // End foreach/2
+  // Deps: []
+
   // Start keyfind/3
   "keyfind/3": (value, index, tuples) => {
     if (!Type.isInteger(index)) {

@@ -377,6 +377,159 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("foreach/2", () => {
+    const foreach = Erlang_Lists["foreach/2"];
+
+    it("executes function for each element in empty list", () => {
+      let callCount = 0;
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (_context) => {
+              callCount++;
+              return Type.atom("ignored");
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const result = foreach(fun, emptyList);
+
+      assert.strictEqual(callCount, 0);
+      assert.deepStrictEqual(result, Type.atom("ok"));
+    });
+
+    it("executes function for each element in non-empty list", () => {
+      let sum = 0;
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              sum += Number(context.vars.elem.value);
+              return Type.atom("ignored");
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const list = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      const result = foreach(fun, list);
+
+      assert.strictEqual(sum, 6);
+      assert.deepStrictEqual(result, Type.atom("ok"));
+    });
+
+    it("ignores the return value of the function", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return Erlang["*/2"](Type.integer(2), context.vars.elem);
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const list = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = foreach(fun, list);
+
+      assert.deepStrictEqual(result, Type.atom("ok"));
+    });
+
+    it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.foreach/2",
+        [Type.atom("abc"), emptyList],
+      );
+
+      assertBoxedError(
+        () => foreach(Type.atom("abc"), emptyList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument is an anonymous function with arity different than 1", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.foreach/2",
+        [funArity2, emptyList],
+      );
+
+      assertBoxedError(
+        () => foreach(funArity2, emptyList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is not a list", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (_context) => Type.atom("ok"),
+          },
+        ],
+        contextFixture(),
+      );
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.foreach/2",
+        [fun, Type.atom("abc")],
+      );
+
+      assertBoxedError(
+        () => foreach(fun, Type.atom("abc")),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is an improper list", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (_context) => Type.atom("ok"),
+          },
+        ],
+        contextFixture(),
+      );
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.foreach/2",
+        [fun, improperList],
+      );
+
+      assertBoxedError(
+        () => foreach(fun, improperList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+  });
+
   describe("keyfind/3", () => {
     const keyfind = Erlang_Lists["keyfind/3"];
 

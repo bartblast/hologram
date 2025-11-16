@@ -187,6 +187,90 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "foreach/2" do
+    test "executes function for each element in empty list" do
+      agent = start_supervised!({Agent, fn -> 0 end})
+
+      fun = fn _elem ->
+        Agent.update(agent, &(&1 + 1))
+        :ignored
+      end
+
+      result = :lists.foreach(fun, [])
+
+      assert result == :ok
+      assert Agent.get(agent, & &1) == 0
+    end
+
+    test "executes function for each element in non-empty list" do
+      agent = start_supervised!({Agent, fn -> 0 end})
+
+      fun = fn elem ->
+        Agent.update(agent, &(&1 + elem))
+        :ignored
+      end
+
+      result = :lists.foreach(fun, [1, 2, 3])
+
+      assert result == :ok
+      assert Agent.get(agent, & &1) == 6
+    end
+
+    test "ignores the return value of the function" do
+      fun = fn elem -> elem * 2 end
+
+      result = :lists.foreach(fun, [1, 2])
+
+      assert result == :ok
+    end
+
+    test "raises FunctionClauseError if the first argument is not an anonymous function" do
+      expected_msg = build_function_clause_error_msg(":lists.foreach/2", [:abc, []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.foreach(:abc, [])
+      end
+    end
+
+    test "raises FunctionClauseError if the first argument is an anonymous function with arity different than 1" do
+      expected_msg = ~r"""
+      no function clause matching in :lists\.foreach/2
+
+      The following arguments were given to :lists\.foreach/2:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\."test foreach/2 raises FunctionClauseError if the first argument is an anonymous function with arity different than 1"/1>
+
+          # 2
+          \[\]
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.foreach(fn x, y -> x + y end, [])
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is not a list" do
+      fun = fn _elem -> :ok end
+
+      expected_msg = build_function_clause_error_msg(":lists.foreach/2", [fun, :abc])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.foreach(fun, :abc)
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is an improper list" do
+      fun = fn _elem -> :ok end
+
+      expected_msg = build_function_clause_error_msg(":lists.foreach/2", [fun, [1, 2 | 3]])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.foreach(fun, [1, 2 | 3])
+      end
+    end
+  end
+
   describe "keyfind/3" do
     test "returns the tuple that contains the given value at the given one-based index" do
       assert :lists.keyfind(7, 3, [{1, 2}, :abc, {5, 6, 7}]) == {5, 6, 7}
