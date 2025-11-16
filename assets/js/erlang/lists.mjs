@@ -49,6 +49,47 @@ const Erlang_Lists = {
   // End all/2
   // Deps: []
 
+  // Start any/2
+  "any/2": function (fun, list) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", arguments),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", arguments),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.any_1/2"),
+      );
+    }
+
+    for (const elem of list.data) {
+      const result = Interpreter.callAnonymousFunction(fun, [elem]);
+
+      if (!Type.isBoolean(result)) {
+        Interpreter.raiseErlangError(
+          Interpreter.buildErlangErrorMsg(
+            `{:bad_filter, ${Interpreter.inspect(result)}}`,
+          ),
+        );
+      }
+
+      if (Type.isTrue(result)) {
+        return Type.boolean(true);
+      }
+    }
+
+    return Type.boolean(false);
+  },
+  // End any/2
+  // Deps: []
+
   // Start filter/2
   "filter/2": function (fun, list) {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
