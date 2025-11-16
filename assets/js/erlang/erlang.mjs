@@ -4,6 +4,7 @@ import Bitstring from "../bitstring.mjs";
 import HologramBoxedError from "../errors/boxed_error.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
+import Sequence from "../sequence.mjs";
 import Type from "../type.mjs";
 import Utils from "../utils.mjs";
 
@@ -281,7 +282,67 @@ const Erlang = {
   // End append_element/2
   // Deps: []
 
-  // :erlang.apply/3 calls are encoded as Interpreter.callNamedFuntion() calls.
+  // Start apply/2
+  "apply/2": (fun, args) => {
+    if (!Type.isAnonymousFunction(fun)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a function"),
+      );
+    }
+
+    if (!Type.isList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
+      );
+    }
+
+    return Interpreter.callAnonymousFunction(fun, args.data);
+  },
+  // End apply/2
+  // Deps: []
+
+  // Start apply/3
+  "apply/3": (module, functionName, args) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(functionName)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+      );
+    }
+
+    const context = Interpreter.buildContext({
+      module: Type.atom("Elixir.Erlang"),
+      vars: {},
+    });
+    return Interpreter.callNamedFunction(module, functionName, args, context);
+  },
+  // End apply/3
+  // Deps: []
+
+  // Note: :erlang.apply/3 calls are often encoded as Interpreter.callNamedFunction() calls.
   // See: https://github.com/bartblast/hologram/blob/4e832c722af7b0c1a0cca1c8c08287b999ecae78/lib/hologram/compiler/encoder.ex#L559
 
   // Start atom_to_binary/1
@@ -1328,6 +1389,152 @@ const Erlang = {
   // End float_to_list/2
   // Deps: []
 
+  // Start fun_info/1
+  "fun_info/1": (fun) => {
+    if (!Type.isAnonymousFunction(fun)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a function"),
+      );
+    }
+
+    const arity = Type.tuple([Type.atom("arity"), Type.integer(fun.arity)]);
+    const env = Type.tuple([Type.atom("env"), Type.list([])]);
+    const index = Type.tuple([Type.atom("index"), Type.integer(0)]);
+    const name = Type.tuple([
+      Type.atom("name"),
+      fun.capturedFunction || Type.atom("anonymous"),
+    ]);
+    const module = Type.tuple([
+      Type.atom("module"),
+      fun.capturedModule || Type.atom("erl_eval"),
+    ]);
+    const newIndex = Type.tuple([
+      Type.atom("new_index"),
+      Type.integer(fun.uniqueId),
+    ]);
+    const newUniq = Type.tuple([Type.atom("new_uniq"), Type.integer(0)]);
+    const pid = Type.tuple([
+      Type.atom("pid"),
+      Type.pid(Type.atom("nonode@nohost"), [0, 0, 0], "client"),
+    ]);
+    const type = Type.tuple([Type.atom("type"), Type.atom("local")]);
+    const uniq = Type.tuple([Type.atom("uniq"), Type.integer(0)]);
+
+    return Type.list([
+      arity,
+      env,
+      index,
+      module,
+      name,
+      newIndex,
+      newUniq,
+      pid,
+      type,
+      uniq,
+    ]);
+  },
+  // End fun_info/1
+  // Deps: []
+
+  // Start fun_info/2
+  "fun_info/2": (fun, item) => {
+    if (!Type.isAnonymousFunction(fun)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a function"),
+      );
+    }
+
+    if (!Type.isAtom(item)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    switch (item.value) {
+      case "arity":
+        return Type.tuple([Type.atom("arity"), Type.integer(fun.arity)]);
+
+      case "env":
+        return Type.tuple([Type.atom("env"), Type.list([])]);
+
+      case "index":
+        return Type.tuple([Type.atom("index"), Type.integer(0)]);
+
+      case "module":
+        return Type.tuple([
+          Type.atom("module"),
+          fun.capturedModule || Type.atom("erl_eval"),
+        ]);
+
+      case "name":
+        return Type.tuple([
+          Type.atom("name"),
+          fun.capturedFunction || Type.atom("anonymous"),
+        ]);
+
+      case "new_index":
+        return Type.tuple([
+          Type.atom("new_index"),
+          Type.integer(fun.uniqueId),
+        ]);
+
+      case "new_uniq":
+        return Type.tuple([Type.atom("new_uniq"), Type.integer(0)]);
+
+      case "pid":
+        return Type.tuple([
+          Type.atom("pid"),
+          Type.pid(Type.atom("nonode@nohost"), [0, 0, 0], "client"),
+        ]);
+
+      case "type":
+        return Type.tuple([Type.atom("type"), Type.atom("local")]);
+
+      case "uniq":
+        return Type.tuple([Type.atom("uniq"), Type.integer(0)]);
+
+      default:
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(2, "invalid item"),
+        );
+    }
+  },
+  // End fun_info/2
+  // Deps: []
+
+  // Start function_exported/3
+  "function_exported/3": (module, functionName, arity) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(functionName)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isInteger(arity)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    }
+
+    const moduleProxy = Interpreter.moduleProxy(module);
+    if (typeof moduleProxy === "undefined") {
+      return Type.boolean(false);
+    }
+
+    const functionArityStr = `${functionName.value}/${arity.value}`;
+    const hasFunction =
+      moduleProxy.__exports__ && moduleProxy.__exports__.has(functionArityStr);
+    return Type.boolean(Boolean(hasFunction));
+  },
+  // End function_exported/3
+  // Deps: []
+
   // Start is_map_key/2
   "is_map_key/2": (key, map) => {
     if (!Type.isMap(map)) {
@@ -1388,6 +1595,78 @@ const Erlang = {
     return Type.tuple(data);
   },
   // End make_tuple/2
+  // Deps: []
+
+  // Start make_ref/0
+  "make_ref/0": () => {
+    const id = Sequence.next();
+    return Type.reference(
+      Type.atom("nonode@nohost"),
+      [0, 0, id],
+      "client",
+    );
+  },
+  // End make_ref/0
+  // Deps: []
+
+  // Start make_fun/3
+  "make_fun/3": (module, functionName, arity) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(functionName)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isInteger(arity)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    }
+
+    if (arity.value < 0n) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a valid arity"),
+      );
+    }
+
+    // Verify the function exists
+    const moduleProxy = Interpreter.moduleProxy(module);
+    if (typeof moduleProxy === "undefined") {
+      Interpreter.raiseError(
+        "FunctionClauseError",
+        `no function clause matching in :erlang.make_fun/3`,
+      );
+    }
+
+    const functionArityStr = `${functionName.value}/${arity.value}`;
+    if (!moduleProxy.__exports__ || !moduleProxy.__exports__.has(functionArityStr)) {
+      Interpreter.raiseError(
+        "FunctionClauseError",
+        `no function clause matching in :erlang.make_fun/3`,
+      );
+    }
+
+    // Create a function capture
+    const context = Interpreter.buildContext({
+      module: Type.atom("Elixir.Erlang"),
+      vars: {},
+    });
+
+    return Type.functionCapture(
+      module,
+      functionName,
+      Number(arity.value),
+      [], // clauses will be called via the module function
+      context,
+    );
+  },
+  // End make_fun/3
   // Deps: []
 
   // TODO: test
@@ -1457,6 +1736,14 @@ const Erlang = {
   // End not/1
   // Deps: []
 
+  // Start node/0
+  "node/0": () => {
+    // Client-side Hologram doesn't support distributed nodes
+    return Type.atom("nonode@nohost");
+  },
+  // End node/0
+  // Deps: []
+
   // Start orelse/2
   "orelse/2": (leftFun, rightFun, context) => {
     const left = leftFun(context);
@@ -1504,6 +1791,24 @@ const Erlang = {
   // End phash2/2
   // Deps: []
 
+  // Start pid_to_list/1
+  "pid_to_list/1": (pid) => {
+    if (!Type.isPid(pid)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a pid"),
+      );
+    }
+
+    const str = Interpreter.inspect(pid);
+    const codePoints = [];
+    for (let i = 0; i < str.length; i++) {
+      codePoints.push(Type.integer(BigInt(str.charCodeAt(i))));
+    }
+    return Type.list(codePoints);
+  },
+  // End pid_to_list/1
+  // Deps: []
+
   // Start rem/2
   "rem/2": (integer1, integer2) => {
     if (
@@ -1522,6 +1827,24 @@ const Erlang = {
     return Type.integer(integer1.value % integer2.value);
   },
   // End rem/2
+  // Deps: []
+
+  // Start ref_to_list/1
+  "ref_to_list/1": (ref) => {
+    if (!Type.isReference(ref)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a reference"),
+      );
+    }
+
+    const str = Interpreter.inspect(ref);
+    const codePoints = [];
+    for (let i = 0; i < str.length; i++) {
+      codePoints.push(Type.integer(BigInt(str.charCodeAt(i))));
+    }
+    return Type.list(codePoints);
+  },
+  // End ref_to_list/1
   // Deps: []
 
   // Start round/1
@@ -1642,5 +1965,8 @@ const Erlang = {
   // End tuple_to_list/1
   // Deps: []
 };
+
+// Add __exports__ metadata to make the module compatible with Interpreter.moduleProxy
+Erlang.__exports__ = new Set(Object.keys(Erlang));
 
 export default Erlang;

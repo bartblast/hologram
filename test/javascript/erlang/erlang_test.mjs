@@ -1492,6 +1492,94 @@ describe("Erlang", () => {
     });
   });
 
+  describe("apply/2", () => {
+    const testedFun = Erlang["apply/2"];
+
+    it("applies anonymous function with arguments", () => {
+      const fun = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (ctx) => [Type.variablePattern("a"), Type.variablePattern("b")],
+            guards: [],
+            body: (ctx) => {
+              const a = ctx.vars.a;
+              const b = ctx.vars.b;
+              return Type.integer(a.value + b.value);
+            },
+          },
+        ],
+        Interpreter.buildContext({ module: Type.atom("Elixir.Test"), vars: {} }),
+      );
+      const args = Type.list([Type.integer(3), Type.integer(4)]);
+      const result = testedFun(fun, args);
+      assert.deepStrictEqual(result, Type.integer(7));
+    });
+
+    it("raises ArgumentError if first argument is not a function", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_fun"), Type.list([])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a function"),
+      );
+    });
+
+    it("raises ArgumentError if second argument is not a list", () => {
+      const fun = Type.anonymousFunction(0, [], Interpreter.buildContext({ module: Type.atom("Elixir.Test"), vars: {} }));
+      assertBoxedError(
+        () => testedFun(fun, Type.atom("not_list")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if second argument is not a proper list", () => {
+      const fun = Type.anonymousFunction(0, [], Interpreter.buildContext({ module: Type.atom("Elixir.Test"), vars: {} }));
+      assertBoxedError(
+        () => testedFun(fun, Type.improperList([Type.integer(1), Type.integer(2)])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
+      );
+    });
+  });
+
+  describe("apply/3", () => {
+    const testedFun = Erlang["apply/3"];
+
+    it("applies module function with arguments", () => {
+      const result = testedFun(
+        Type.atom("erlang"),
+        Type.atom("+"),
+        Type.list([Type.integer(2), Type.integer(3)]),
+      );
+      assert.deepStrictEqual(result, Type.integer(5));
+    });
+
+    it("raises ArgumentError if first argument is not an atom", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.atom("func"), Type.list([])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    });
+
+    it("raises ArgumentError if second argument is not an atom", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("erlang"), Type.integer(1), Type.list([])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    });
+
+    it("raises ArgumentError if third argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("erlang"), Type.atom("abs"), Type.atom("not_list")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    });
+  });
+
   describe("atom_to_binary/1", () => {
     it("delegates to atom_to_binary/2", () => {
       const atom = Type.atom("全息图");
@@ -3295,6 +3383,146 @@ describe("Erlang", () => {
     });
   });
 
+  describe("fun_info/1", () => {
+    const testedFun = Erlang["fun_info/1"];
+
+    it("returns function info as list of tuples", () => {
+      const fun = Type.anonymousFunction(
+        2,
+        [],
+        Interpreter.buildContext({ module: Type.atom("Elixir.Test"), vars: {} }),
+      );
+      const result = testedFun(fun);
+
+      assert.ok(Type.isList(result));
+      assert.strictEqual(result.data.length, 10);
+
+      // Check that we have an arity tuple
+      const arityTuple = result.data.find(t =>
+        Type.isTuple(t) && t.data[0].value === "arity"
+      );
+      assert.ok(arityTuple);
+      assert.deepStrictEqual(arityTuple.data[1], Type.integer(2));
+    });
+
+    it("raises ArgumentError if argument is not a function", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_fun")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a function"),
+      );
+    });
+  });
+
+  describe("fun_info/2", () => {
+    const testedFun = Erlang["fun_info/2"];
+
+    it("returns arity info", () => {
+      const fun = Type.anonymousFunction(
+        3,
+        [],
+        Interpreter.buildContext({ module: Type.atom("Elixir.Test"), vars: {} }),
+      );
+      const result = testedFun(fun, Type.atom("arity"));
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([Type.atom("arity"), Type.integer(3)]),
+      );
+    });
+
+    it("returns module info", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [],
+        Interpreter.buildContext({ module: Type.atom("Elixir.Test"), vars: {} }),
+      );
+      const result = testedFun(fun, Type.atom("module"));
+      assert.ok(Type.isTuple(result));
+      assert.deepStrictEqual(result.data[0], Type.atom("module"));
+    });
+
+    it("raises ArgumentError if first argument is not a function", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_fun"), Type.atom("arity")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a function"),
+      );
+    });
+
+    it("raises ArgumentError if second argument is not an atom", () => {
+      const fun = Type.anonymousFunction(1, [], Interpreter.buildContext({ module: Type.atom("Elixir.Test"), vars: {} }));
+      assertBoxedError(
+        () => testedFun(fun, Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    });
+
+    it("raises ArgumentError for invalid item", () => {
+      const fun = Type.anonymousFunction(1, [], Interpreter.buildContext({ module: Type.atom("Elixir.Test"), vars: {} }));
+      assertBoxedError(
+        () => testedFun(fun, Type.atom("invalid_key")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "invalid item"),
+      );
+    });
+  });
+
+  describe("function_exported/3", () => {
+    const testedFun = Erlang["function_exported/3"];
+
+    it("returns true for exported function", () => {
+      const result = testedFun(
+        Type.atom("erlang"),
+        Type.atom("abs"),
+        Type.integer(1),
+      );
+      assert.deepStrictEqual(result, Type.boolean(true));
+    });
+
+    it("returns false for non-existent function", () => {
+      const result = testedFun(
+        Type.atom("erlang"),
+        Type.atom("nonexistent_func"),
+        Type.integer(99),
+      );
+      assert.deepStrictEqual(result, Type.boolean(false));
+    });
+
+    it("returns false for non-existent module", () => {
+      const result = testedFun(
+        Type.atom("Elixir.NonExistentModule"),
+        Type.atom("func"),
+        Type.integer(1),
+      );
+      assert.deepStrictEqual(result, Type.boolean(false));
+    });
+
+    it("raises ArgumentError if first argument is not an atom", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.atom("func"), Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    });
+
+    it("raises ArgumentError if second argument is not an atom", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("erlang"), Type.integer(1), Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    });
+
+    it("raises ArgumentError if third argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("erlang"), Type.atom("abs"), Type.atom("not_int")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    });
+  });
+
   describe("is_map_key/2", () => {
     const testedFun = Erlang["is_map_key/2"];
 
@@ -3427,6 +3655,72 @@ describe("Erlang", () => {
     });
   });
 
+  describe("make_fun/3", () => {
+    const testedFun = Erlang["make_fun/3"];
+
+    it("creates function reference for exported function", () => {
+      const result = testedFun(
+        Type.atom("erlang"),
+        Type.atom("abs"),
+        Type.integer(1),
+      );
+      assert.ok(Type.isAnonymousFunction(result));
+      assert.strictEqual(result.arity, 1);
+      assert.deepStrictEqual(result.capturedModule, Type.atom("erlang"));
+      assert.deepStrictEqual(result.capturedFunction, Type.atom("abs"));
+    });
+
+    it("raises ArgumentError if first argument is not an atom", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.atom("func"), Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    });
+
+    it("raises ArgumentError if second argument is not an atom", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("erlang"), Type.integer(1), Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    });
+
+    it("raises ArgumentError if third argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("erlang"), Type.atom("abs"), Type.atom("not_int")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if arity is negative", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("erlang"), Type.atom("abs"), Type.integer(-1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a valid arity"),
+      );
+    });
+  });
+
+  describe("make_ref/0", () => {
+    const testedFun = Erlang["make_ref/0"];
+
+    it("creates a reference", () => {
+      const result = testedFun();
+      assert.ok(Type.isReference(result));
+      assert.deepStrictEqual(result.node, Type.atom("nonode@nohost"));
+      assert.strictEqual(result.origin, "client");
+    });
+
+    it("creates unique references", () => {
+      const ref1 = testedFun();
+      const ref2 = testedFun();
+      // References should be unique (different IDs)
+      assert.notStrictEqual(ref1.segments[2], ref2.segments[2]);
+    });
+  });
+
   describe("monotonic_time/0", () => {
     const testedFun = Erlang["monotonic_time/0"];
 
@@ -3465,6 +3759,15 @@ describe("Erlang", () => {
 
     it("not boolean", () => {
       assertBoxedError(() => not(atomAbc), "ArgumentError", "argument error");
+    });
+  });
+
+  describe("node/0", () => {
+    const testedFun = Erlang["node/0"];
+
+    it("returns nonode@nohost for client-side execution", () => {
+      const result = testedFun();
+      assert.deepStrictEqual(result, Type.atom("nonode@nohost"));
     });
   });
 
@@ -3561,6 +3864,31 @@ describe("Erlang", () => {
     });
   });
 
+  describe("pid_to_list/1", () => {
+    const testedFun = Erlang["pid_to_list/1"];
+
+    it("converts PID to character list", () => {
+      const pid = Type.pid(Type.atom("nonode@nohost"), [0, 11, 111], "client");
+      const result = testedFun(pid);
+      assert.ok(Type.isList(result));
+      assert.ok(result.data.length > 0);
+      // Check that result starts with '#' 'P' 'I' 'D' '<'
+      assert.deepStrictEqual(result.data[0], Type.integer(35)); // '#'
+      assert.deepStrictEqual(result.data[1], Type.integer(80)); // 'P'
+      assert.deepStrictEqual(result.data[2], Type.integer(73)); // 'I'
+      assert.deepStrictEqual(result.data[3], Type.integer(68)); // 'D'
+      assert.deepStrictEqual(result.data[4], Type.integer(60)); // '<'
+    });
+
+    it("raises ArgumentError for non-PID", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_pid")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a pid"),
+      );
+    });
+  });
+
   describe("rem/2", () => {
     const testedFun = Erlang["rem/2"];
 
@@ -3649,6 +3977,30 @@ describe("Erlang", () => {
         () => testedFun(Type.integer(5), Type.atom("abc")),
         "ArithmeticError",
         "bad argument in arithmetic expression: rem(5, :abc)",
+      );
+    });
+  });
+
+  describe("ref_to_list/1", () => {
+    const testedFun = Erlang["ref_to_list/1"];
+
+    it("converts reference to character list", () => {
+      const ref = Type.reference(Type.atom("nonode@nohost"), [0, 0, 123], "client");
+      const result = testedFun(ref);
+      assert.ok(Type.isList(result));
+      assert.ok(result.data.length > 0);
+      // Check that result starts with '#' 'R' 'e' 'f' 'e' 'r' 'e' 'n' 'c' 'e' '<'
+      assert.deepStrictEqual(result.data[0], Type.integer(35)); // '#'
+      assert.deepStrictEqual(result.data[1], Type.integer(82)); // 'R'
+      assert.deepStrictEqual(result.data[2], Type.integer(101)); // 'e'
+      assert.deepStrictEqual(result.data[3], Type.integer(102)); // 'f'
+    });
+
+    it("raises ArgumentError for non-reference", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_ref")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a reference"),
       );
     });
   });
