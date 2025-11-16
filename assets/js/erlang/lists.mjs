@@ -90,6 +90,34 @@ const Erlang_Lists = {
   // End any/2
   // Deps: []
 
+  // Start duplicate/2
+  "duplicate/2": (n, elem) => {
+    if (!Type.isInteger(n)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.duplicate/2", [
+          n,
+          elem,
+        ]),
+      );
+    }
+
+    const nValue = Number(n.value);
+
+    if (nValue < 0) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.duplicate/2", [
+          n,
+          elem,
+        ]),
+      );
+    }
+
+    const data = Array(nValue).fill(elem);
+    return Type.list(data);
+  },
+  // End duplicate/2
+  // Deps: []
+
   // Start filter/2
   "filter/2": function (fun, list) {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {

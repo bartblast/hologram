@@ -319,6 +319,60 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("duplicate/2", () => {
+    const testedFun = Erlang_Lists["duplicate/2"];
+
+    it("duplicates element N times", () => {
+      const result = testedFun(Type.integer(3), Type.atom("a"));
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.atom("a"), Type.atom("a"), Type.atom("a")]),
+      );
+    });
+
+    it("handles N = 0", () => {
+      const result = testedFun(Type.integer(0), Type.atom("a"));
+
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("handles N = 1", () => {
+      const result = testedFun(Type.integer(1), Type.integer(42));
+
+      assert.deepStrictEqual(result, Type.list([Type.integer(42)]));
+    });
+
+    it("duplicates different types", () => {
+      const tuple = Type.tuple([Type.integer(1), Type.integer(2)]);
+      const result = testedFun(Type.integer(2), tuple);
+
+      assert.deepStrictEqual(result, Type.list([tuple, tuple]));
+    });
+
+    it("raises FunctionClauseError if first argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc"), Type.integer(1)),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.duplicate/2", [
+          Type.atom("abc"),
+          Type.integer(1),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if N is negative", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(-1), Type.atom("a")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.duplicate/2", [
+          Type.integer(-1),
+          Type.atom("a"),
+        ]),
+      );
+    });
+  });
+
   describe("filter/2", () => {
     const filter = Erlang_Lists["filter/2"];
 
