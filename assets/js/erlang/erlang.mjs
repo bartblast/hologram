@@ -1265,6 +1265,98 @@ const Erlang = {
   // End list_to_integer/2
   // Deps: [:erlang.list_to_binary/1, :erlang.binary_to_integer/2]
 
+  // Start convert_time_unit/3
+  "convert_time_unit/3": (time, fromUnit, toUnit) => {
+    if (!Type.isInteger(time)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    const getMultiplier = (unit) => {
+      if (Type.isInteger(unit)) {
+        return unit.value;
+      }
+      if (!Type.isAtom(unit)) {
+        Interpreter.raiseArgumentError("invalid time unit");
+      }
+      switch (unit.value) {
+        case "second": return 1000000000n;
+        case "millisecond": return 1000000n;
+        case "microsecond": return 1000n;
+        case "nanosecond": return 1n;
+        case "native": return 1000n; // Assume microsecond precision
+        case "perf_counter": return 1000n;
+        default:
+          Interpreter.raiseArgumentError("invalid time unit");
+      }
+    };
+
+    const fromMult = getMultiplier(fromUnit);
+    const toMult = getMultiplier(toUnit);
+
+    // Convert: time * fromMult / toMult
+    const result = (time.value * fromMult) / toMult;
+    return Type.integer(result);
+  },
+  // End convert_time_unit/3
+  // Deps: []
+
+  // Start float_to_list/2
+  "float_to_list/2": (float, options) => {
+    if (!Type.isFloat(float)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a float"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    // For simplicity, use default formatting
+    // Full implementation would parse options for scientific notation, decimals, etc.
+    const str = float.value.toString();
+    const codePoints = [];
+    for (let i = 0; i < str.length; i++) {
+      codePoints.push(Type.integer(BigInt(str.charCodeAt(i))));
+    }
+    return Type.list(codePoints);
+  },
+  // End float_to_list/2
+  // Deps: []
+
+  // Start is_map_key/2
+  "is_map_key/2": (key, map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    const keyString = Type.encodeMapKey(key);
+    return Type.boolean(keyString in map.data);
+  },
+  // End is_map_key/2
+  // Deps: []
+
+  // Start map_get/2
+  "map_get/2": (key, map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    const keyString = Type.encodeMapKey(key);
+    if (!(keyString in map.data)) {
+      const message = `key ${Interpreter.inspect(key)} not found in: ${Interpreter.inspect(map)}`;
+      Interpreter.raiseError("BadKeyError", message);
+    }
+
+    return map.data[keyString][1]; // Return value part of [key, value]
+  },
+  // End map_get/2
+  // Deps: []
+
   // Start map_size/1
   "map_size/1": (map) => {
     if (!Type.isMap(map)) {
@@ -1332,6 +1424,28 @@ const Erlang = {
   // End min/2
   // Deps: []
 
+  // Start monotonic_time/0
+  "monotonic_time/0": () => {
+    // Return monotonic time in native units (microseconds)
+    // Using performance.now() which returns milliseconds with microsecond precision
+    const microseconds = BigInt(Math.floor(performance.now() * 1000));
+    return Type.integer(microseconds);
+  },
+  // End monotonic_time/0
+  // Deps: []
+
+  // Start monotonic_time/1
+  "monotonic_time/1": (unit) => {
+    const nativeTime = Erlang["monotonic_time/0"]();
+    return Erlang["convert_time_unit/3"](
+      nativeTime,
+      Type.atom("native"),
+      unit,
+    );
+  },
+  // End monotonic_time/1
+  // Deps: [:erlang.monotonic_time/0, :erlang.convert_time_unit/3]
+
   // Start not/1
   "not/1": (term) => {
     if (!Type.isBoolean(term)) {
@@ -1356,6 +1470,38 @@ const Erlang = {
     return Type.isTrue(left) ? left : rightFun(context);
   },
   // End orelse/2
+  // Deps: []
+
+  // Start phash2/2
+  "phash2/2": (term, range) => {
+    if (!Type.isInteger(range)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (range.value <= 0n) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a positive integer"),
+      );
+    }
+
+    // Simple hash function for terms
+    // This is a simplified version - Erlang's actual phash2 is more sophisticated
+    const str = Interpreter.inspect(term);
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+
+    // Ensure positive and within range
+    const positiveHash = Math.abs(hash);
+    const result = BigInt(positiveHash) % range.value;
+    return Type.integer(result);
+  },
+  // End phash2/2
   // Deps: []
 
   // Start rem/2

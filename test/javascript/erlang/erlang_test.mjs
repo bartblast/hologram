@@ -3255,6 +3255,97 @@ describe("Erlang", () => {
     });
   });
 
+  describe("convert_time_unit/3", () => {
+    const testedFun = Erlang["convert_time_unit/3"];
+
+    it("converts from seconds to milliseconds", () => {
+      const result = testedFun(Type.integer(2), Type.atom("second"), Type.atom("millisecond"));
+      assert.deepStrictEqual(result, Type.integer(2000));
+    });
+
+    it("converts from milliseconds to microseconds", () => {
+      const result = testedFun(Type.integer(1), Type.atom("millisecond"), Type.atom("microsecond"));
+      assert.deepStrictEqual(result, Type.integer(1000));
+    });
+
+    it("raises ArgumentError for non-integer time", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_int"), Type.atom("second"), Type.atom("millisecond")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    });
+  });
+
+  describe("float_to_list/2", () => {
+    const testedFun = Erlang["float_to_list/2"];
+
+    it("converts float to list", () => {
+      const result = testedFun(Type.float(3.14), Type.list([]));
+      assert.ok(Type.isList(result));
+      assert.ok(result.data.length > 0);
+    });
+
+    it("raises ArgumentError for non-float", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.list([])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a float"),
+      );
+    });
+  });
+
+  describe("is_map_key/2", () => {
+    const testedFun = Erlang["is_map_key/2"];
+
+    it("returns true when key exists", () => {
+      const map = Type.map([[Type.atom("a"), Type.integer(1)]]);
+      const result = testedFun(Type.atom("a"), map);
+      assert.deepStrictEqual(result, Type.boolean(true));
+    });
+
+    it("returns false when key does not exist", () => {
+      const map = Type.map([[Type.atom("a"), Type.integer(1)]]);
+      const result = testedFun(Type.atom("b"), map);
+      assert.deepStrictEqual(result, Type.boolean(false));
+    });
+
+    it("raises BadMapError for non-map", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("a"), Type.atom("not_map")),
+        "BadMapError",
+        "expected a map, got: :not_map",
+      );
+    });
+  });
+
+  describe("map_get/2", () => {
+    const testedFun = Erlang["map_get/2"];
+
+    it("returns value for existing key", () => {
+      const map = Type.map([[Type.atom("key"), Type.integer(42)]]);
+      const result = testedFun(Type.atom("key"), map);
+      assert.deepStrictEqual(result, Type.integer(42));
+    });
+
+    it("raises BadKeyError when key does not exist", () => {
+      const map = Type.map([[Type.atom("a"), Type.integer(1)]]);
+      assertBoxedError(
+        () => testedFun(Type.atom("b"), map),
+        "BadKeyError",
+        "key :b not found in: %{a: 1}",
+      );
+    });
+
+    it("raises BadMapError for non-map", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("a"), Type.list([])),
+        "BadMapError",
+        "expected a map, got: []",
+      );
+    });
+  });
+
   describe("map_size/1", () => {
     const map_size = Erlang["map_size/1"];
 
@@ -3336,6 +3427,31 @@ describe("Erlang", () => {
     });
   });
 
+  describe("monotonic_time/0", () => {
+    const testedFun = Erlang["monotonic_time/0"];
+
+    it("returns an integer", () => {
+      const result = testedFun();
+      assert.ok(Type.isInteger(result));
+      assert.ok(result.value > 0n);
+    });
+  });
+
+  describe("monotonic_time/1", () => {
+    const testedFun = Erlang["monotonic_time/1"];
+
+    it("returns time in specified unit", () => {
+      const result = testedFun(Type.atom("millisecond"));
+      assert.ok(Type.isInteger(result));
+      assert.ok(result.value > 0n);
+    });
+
+    it("converts to seconds", () => {
+      const result = testedFun(Type.atom("second"));
+      assert.ok(Type.isInteger(result));
+    });
+  });
+
   describe("not/1", () => {
     const not = Erlang["not/1"];
 
@@ -3409,6 +3525,38 @@ describe("Erlang", () => {
           ),
         "ArgumentError",
         "argument error: nil",
+      );
+    });
+  });
+
+  describe("phash2/2", () => {
+    const testedFun = Erlang["phash2/2"];
+
+    it("returns hash within range", () => {
+      const result = testedFun(Type.atom("test"), Type.integer(100));
+      assert.ok(Type.isInteger(result));
+      assert.ok(result.value >= 0n && result.value < 100n);
+    });
+
+    it("returns consistent hash for same input", () => {
+      const result1 = testedFun(Type.atom("test"), Type.integer(1000));
+      const result2 = testedFun(Type.atom("test"), Type.integer(1000));
+      assert.deepStrictEqual(result1, result2);
+    });
+
+    it("raises ArgumentError for non-integer range", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("test"), Type.atom("not_int")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError for non-positive range", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("test"), Type.integer(0)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a positive integer"),
       );
     });
   });
