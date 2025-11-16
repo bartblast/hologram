@@ -803,6 +803,71 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("filtermap/2", () => {
+    const testedFun = Erlang_Lists["filtermap/2"];
+
+    const doubleIfEven = Type.anonymousFunction(
+      1,
+      [{
+        params: (_context) => [Type.variablePattern("x")],
+        guards: [],
+        body: (context) => {
+          const x = context.vars.x;
+          const rem = Erlang["rem/2"](x, Type.integer(2));
+          if (Interpreter.isEqual(rem, Type.integer(0))) {
+            return Type.tuple([Type.atom("true"), Erlang["*/2"](x, Type.integer(2))]);
+          }
+          return Type.atom("false");
+        },
+      }],
+      contextFixture(),
+    );
+
+    it("filters and maps elements", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3), Type.integer(4)]);
+      const result = testedFun(doubleIfEven, list);
+      assert.deepStrictEqual(result, Type.list([Type.integer(4), Type.integer(8)]));
+    });
+
+    it("handles true to keep element as-is", () => {
+      const keepAll = Type.anonymousFunction(1, [{
+        params: (_context) => [Type.variablePattern("x")],
+        guards: [],
+        body: (_context) => Type.atom("true"),
+      }], contextFixture());
+
+      const list = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = testedFun(keepAll, list);
+      assert.deepStrictEqual(result, list);
+    });
+
+    it("handles false to filter out element", () => {
+      const rejectAll = Type.anonymousFunction(1, [{
+        params: (_context) => [Type.variablePattern("x")],
+        guards: [],
+        body: (_context) => Type.atom("false"),
+      }], contextFixture());
+
+      const list = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = testedFun(rejectAll, list);
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("raises FunctionClauseError for wrong arity", () => {
+      const wrongArity = Type.anonymousFunction(2, [{
+        params: (_context) => [Type.variablePattern("x"), Type.variablePattern("y")],
+        guards: [],
+        body: (_context) => Type.atom("true"),
+      }], contextFixture());
+
+      assertBoxedError(
+        () => testedFun(wrongArity, Type.list([])),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.filtermap/2", [wrongArity, Type.list([])]),
+      );
+    });
+  });
+
   describe("flatten/1", () => {
     const flatten = Erlang_Lists["flatten/1"];
 

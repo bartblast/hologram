@@ -344,6 +344,56 @@ const Erlang_Lists = {
   // End filter/2
   // Deps: []
 
+  // Start filtermap/2
+  "filtermap/2": function (fun, list) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.filtermap/2", arguments),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.filtermap/2", arguments),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.filtermap_1/3"),
+      );
+    }
+
+    const result = [];
+    for (const elem of list.data) {
+      const funResult = Interpreter.callAnonymousFunction(fun, [elem]);
+
+      if (Type.isTrue(funResult)) {
+        result.push(elem);
+      } else if (Type.isTuple(funResult)) {
+        if (
+          funResult.data.length === 2 &&
+          Type.isAtom(funResult.data[0]) &&
+          funResult.data[0].value === "true"
+        ) {
+          result.push(funResult.data[1]);
+        } else {
+          Interpreter.raiseFunctionClauseError(
+            Interpreter.buildFunctionClauseErrorMsg(":lists.filtermap_1/3"),
+          );
+        }
+      } else if (!Type.isFalse(funResult)) {
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":lists.filtermap_1/3"),
+        );
+      }
+    }
+
+    return Type.list(result);
+  },
+  // End filtermap/2
+  // Deps: []
+
   // Start flatten/1
   "flatten/1": (list) => {
     if (!Type.isList(list)) {
@@ -625,6 +675,59 @@ const Erlang_Lists = {
   // End keymember/3
   // Deps: [:lists.keyfind/3]
 
+  // Start keymap/3
+  "keymap/3": function (fun, index, tuples) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a function of arity 1"),
+      );
+    }
+
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (index.value < 1) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    }
+
+    if (!Type.isList(tuples)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(tuples)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+      );
+    }
+
+    const indexNum = Number(index.value) - 1;
+    const result = [];
+
+    for (const tuple of tuples.data) {
+      if (!Type.isTuple(tuple) || tuple.data.length <= indexNum) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(3, "list element is not a tuple or tuple is too small"),
+        );
+      }
+
+      const newValue = Interpreter.callAnonymousFunction(fun, [tuple.data[indexNum]]);
+      const newTupleData = tuple.data.slice();
+      newTupleData[indexNum] = newValue;
+      result.push(Type.tuple(newTupleData));
+    }
+
+    return Type.list(result);
+  },
+  // End keymap/3
+  // Deps: []
+
   // Start keyreplace/4
   "keyreplace/4": (value, index, tuples, newTuple) => {
     if (!Type.isInteger(index)) {
@@ -771,6 +874,58 @@ const Erlang_Lists = {
   // End keytake/3
   // Deps: []
 
+  // Start keystore/4
+  "keystore/4": (value, index, tuples, newTuple) => {
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (index.value < 1) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    }
+
+    if (!Type.isList(tuples)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(tuples)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+      );
+    }
+
+    const result = [];
+    let stored = false;
+
+    for (const tuple of tuples.data) {
+      if (
+        !stored &&
+        Type.isTuple(tuple) &&
+        tuple.data.length >= index.value &&
+        Interpreter.isEqual(tuple.data[Number(index.value) - 1], value)
+      ) {
+        result.push(newTuple);
+        stored = true;
+      } else {
+        result.push(tuple);
+      }
+    }
+
+    if (!stored) {
+      result.push(newTuple);
+    }
+
+    return Type.list(result);
+  },
+  // End keystore/4
+  // Deps: []
+
   // Start join/2
   "join/2": (sep, list) => {
     if (!Type.isList(list)) {
@@ -850,6 +1005,88 @@ const Erlang_Lists = {
     );
   },
   // End map/2
+  // Deps: []
+
+  // Start mapfoldl/3
+  "mapfoldl/3": function (fun, acc, list) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldl/3", arguments),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldl/3", arguments),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldl_1/3"),
+      );
+    }
+
+    const result = [];
+    let currentAcc = acc;
+
+    for (const elem of list.data) {
+      const funResult = Interpreter.callAnonymousFunction(fun, [elem, currentAcc]);
+
+      if (!Type.isTuple(funResult) || funResult.data.length !== 2) {
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldl_1/3"),
+        );
+      }
+
+      result.push(funResult.data[0]);
+      currentAcc = funResult.data[1];
+    }
+
+    return Type.tuple([Type.list(result), currentAcc]);
+  },
+  // End mapfoldl/3
+  // Deps: []
+
+  // Start mapfoldr/3
+  "mapfoldr/3": function (fun, acc, list) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldr/3", arguments),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldr/3", arguments),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldr_1/3"),
+      );
+    }
+
+    const result = [];
+    let currentAcc = acc;
+
+    for (let i = list.data.length - 1; i >= 0; i--) {
+      const funResult = Interpreter.callAnonymousFunction(fun, [list.data[i], currentAcc]);
+
+      if (!Type.isTuple(funResult) || funResult.data.length !== 2) {
+        Interpreter.raiseFunctionClauseError(
+          Interpreter.buildFunctionClauseErrorMsg(":lists.mapfoldr_1/3"),
+        );
+      }
+
+      result.unshift(funResult.data[0]);
+      currentAcc = funResult.data[1];
+    }
+
+    return Type.tuple([Type.list(result), currentAcc]);
+  },
+  // End mapfoldr/3
   // Deps: []
 
   // Start max/1
@@ -1129,6 +1366,64 @@ const Erlang_Lists = {
   // End merge/2
   // Deps: []
 
+  // Start merge3/3
+  "merge3/3": (list1, list2, list3) => {
+    if (!Type.isList(list1)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.merge3/3", [
+          list1,
+          list2,
+          list3,
+        ]),
+      );
+    }
+
+    if (!Type.isList(list2)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.merge3/3", [
+          list1,
+          list2,
+          list3,
+        ]),
+      );
+    }
+
+    if (!Type.isList(list3)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.merge3/3", [
+          list1,
+          list2,
+          list3,
+        ]),
+      );
+    }
+
+    if (!Type.isProperList(list1)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.merge3_1/4"),
+      );
+    }
+
+    if (!Type.isProperList(list2)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.merge3_1/4"),
+      );
+    }
+
+    if (!Type.isProperList(list3)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.merge3_1/4"),
+      );
+    }
+
+    // Merge list1 and list2 first
+    const merged12 = Erlang_Lists["merge/2"](list1, list2);
+    // Then merge result with list3
+    return Erlang_Lists["merge/2"](merged12, list3);
+  },
+  // End merge3/3
+  // Deps: [:lists.merge/2]
+
   // Start prefix/2
   "prefix/2": (prefix, list) => {
     if (!Type.isList(prefix)) {
@@ -1395,6 +1690,43 @@ const Erlang_Lists = {
   // End sort/1
   // Deps: []
 
+  // Start sort/2
+  "sort/2": function (fun, list) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2", arguments),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2", arguments),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sort_1/3"),
+      );
+    }
+
+    return Type.list(
+      list.data.slice().sort((a, b) => {
+        const result = Interpreter.callAnonymousFunction(fun, [a, b]);
+
+        if (!Type.isBoolean(result)) {
+          Interpreter.raiseFunctionClauseError(
+            Interpreter.buildFunctionClauseErrorMsg(":lists.sort_1/3"),
+          );
+        }
+
+        return Type.isTrue(result) ? -1 : 1;
+      }),
+    );
+  },
+  // End sort/2
+  // Deps: []
+
   // Start split/2
   "split/2": (n, list) => {
     if (!Type.isInteger(n)) {
@@ -1429,6 +1761,45 @@ const Erlang_Lists = {
     return Type.tuple([left, right]);
   },
   // End split/2
+  // Deps: []
+
+  // Start splitwith/2
+  "splitwith/2": function (predicate, list) {
+    if (!Type.isAnonymousFunction(predicate) || predicate.arity !== 1) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.splitwith/2", arguments),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.splitwith/2", arguments),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.splitwith_1/4"),
+      );
+    }
+
+    const satisfying = [];
+    let i = 0;
+
+    for (; i < list.data.length; i++) {
+      const result = Interpreter.callAnonymousFunction(predicate, [list.data[i]]);
+
+      if (!Type.isTrue(result)) {
+        break;
+      }
+      satisfying.push(list.data[i]);
+    }
+
+    const notSatisfying = list.data.slice(i);
+
+    return Type.tuple([Type.list(satisfying), Type.list(notSatisfying)]);
+  },
+  // End splitwith/2
   // Deps: []
 
   // Start sum/1
@@ -1853,6 +2224,37 @@ const Erlang_Lists = {
   // End unzip3/1
   // Deps: []
 
+  // Start uniq/1
+  "uniq/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.uniq/1", [list]),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.uniq_1/2"),
+      );
+    }
+
+    if (list.data.length === 0) {
+      return Type.list([]);
+    }
+
+    const result = [list.data[0]];
+
+    for (let i = 1; i < list.data.length; i++) {
+      if (!Interpreter.isEqual(list.data[i], list.data[i - 1])) {
+        result.push(list.data[i]);
+      }
+    }
+
+    return Type.list(result);
+  },
+  // End uniq/1
+  // Deps: []
+
   // Start usort/1
   "usort/1": (list) => {
     if (!Type.isList(list)) {
@@ -1922,6 +2324,77 @@ const Erlang_Lists = {
     return Type.list(result);
   },
   // End zip/2
+  // Deps: []
+
+  // Start zip3/3
+  "zip3/3": (list1, list2, list3) => {
+    if (!Type.isList(list1)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.zip3/3", [
+          list1,
+          list2,
+          list3,
+        ]),
+      );
+    }
+
+    if (!Type.isList(list2)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.zip3/3", [
+          list1,
+          list2,
+          list3,
+        ]),
+      );
+    }
+
+    if (!Type.isList(list3)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.zip3/3", [
+          list1,
+          list2,
+          list3,
+        ]),
+      );
+    }
+
+    if (!Type.isProperList(list1)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.zip3_1/4"),
+      );
+    }
+
+    if (!Type.isProperList(list2)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.zip3_1/4"),
+      );
+    }
+
+    if (!Type.isProperList(list3)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.zip3_1/4"),
+      );
+    }
+
+    if (
+      list1.data.length !== list2.data.length ||
+      list1.data.length !== list3.data.length
+    ) {
+      Interpreter.raiseErlangError(
+        Interpreter.buildErlangErrorMsg(":lists_not_same_length"),
+      );
+    }
+
+    const result = [];
+    for (let i = 0; i < list1.data.length; i++) {
+      result.push(
+        Type.tuple([list1.data[i], list2.data[i], list3.data[i]]),
+      );
+    }
+
+    return Type.list(result);
+  },
+  // End zip3/3
   // Deps: []
 
   // Start zipwith/3
