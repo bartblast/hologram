@@ -692,6 +692,109 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("enumerate/1", () => {
+    const testedFun = Erlang_Lists["enumerate/1"];
+
+    it("adds 1-based index to each element", () => {
+      const list = Type.list([Type.atom("a"), Type.atom("b"), Type.atom("c")]);
+      const result = testedFun(list);
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.tuple([Type.integer(1), Type.atom("a")]),
+          Type.tuple([Type.integer(2), Type.atom("b")]),
+          Type.tuple([Type.integer(3), Type.atom("c")]),
+        ]),
+      );
+    });
+
+    it("handles empty list", () => {
+      const result = testedFun(Type.list([]));
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("raises FunctionClauseError for non-list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.enumerate/1", [Type.atom("abc")]),
+      );
+    });
+  });
+
+  describe("enumerate/2", () => {
+    const testedFun = Erlang_Lists["enumerate/2"];
+
+    it("adds custom start index", () => {
+      const list = Type.list([Type.atom("a"), Type.atom("b")]);
+      const result = testedFun(Type.integer(10), list);
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.tuple([Type.integer(10), Type.atom("a")]),
+          Type.tuple([Type.integer(11), Type.atom("b")]),
+        ]),
+      );
+    });
+
+    it("applies function to indexed elements", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [{
+          params: (_context) => [Type.variablePattern("tuple")],
+          guards: [],
+          body: (context) => context.vars.tuple.data[0],
+        }],
+        contextFixture(),
+      );
+      const list = Type.list([Type.atom("a"), Type.atom("b")]);
+      const result = testedFun(list, fun);
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(1), Type.integer(2)]),
+      );
+    });
+
+    it("handles empty list", () => {
+      const result = testedFun(Type.integer(5), Type.list([]));
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+  });
+
+  describe("enumerate/3", () => {
+    const testedFun = Erlang_Lists["enumerate/3"];
+
+    it("adds index with custom step", () => {
+      const list = Type.list([Type.atom("a"), Type.atom("b"), Type.atom("c")]);
+      const result = testedFun(Type.integer(10), list, Type.integer(5));
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.tuple([Type.integer(10), Type.atom("a")]),
+          Type.tuple([Type.integer(15), Type.atom("b")]),
+          Type.tuple([Type.integer(20), Type.atom("c")]),
+        ]),
+      );
+    });
+
+    it("handles negative step", () => {
+      const list = Type.list([Type.atom("a"), Type.atom("b")]);
+      const result = testedFun(Type.integer(0), list, Type.integer(-1));
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.tuple([Type.integer(0), Type.atom("a")]),
+          Type.tuple([Type.integer(-1), Type.atom("b")]),
+        ]),
+      );
+    });
+
+    it("handles empty list", () => {
+      const result = testedFun(Type.integer(1), Type.list([]), Type.integer(1));
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+  });
+
   describe("filter/2", () => {
     const filter = Erlang_Lists["filter/2"];
 
@@ -1885,6 +1988,36 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("keysearch/3", () => {
+    const testedFun = Erlang_Lists["keysearch/3"];
+
+    it("returns {value, Tuple} when match found", () => {
+      const tuples = Type.list([
+        Type.tuple([Type.atom("a"), Type.integer(1)]),
+        Type.tuple([Type.atom("b"), Type.integer(2)]),
+      ]);
+      const result = testedFun(Type.atom("b"), Type.integer(1), tuples);
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([Type.atom("value"), Type.tuple([Type.atom("b"), Type.integer(2)])]),
+      );
+    });
+
+    it("returns false when no match found", () => {
+      const tuples = Type.list([Type.tuple([Type.atom("a"), Type.integer(1)])]);
+      const result = testedFun(Type.atom("b"), Type.integer(1), tuples);
+      assert.deepStrictEqual(result, Type.atom("false"));
+    });
+
+    it("raises ArgumentError for invalid index", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("a"), Type.integer(0), Type.list([])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    });
+  });
+
   describe("keytake/3", () => {
     const testedFun = Erlang_Lists["keytake/3"];
 
@@ -2747,6 +2880,34 @@ describe("Erlang_Lists", () => {
 
     it("handles empty lists", () => {
       const result = testedFun(Type.list([]), Type.list([]), Type.list([]));
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+  });
+
+  describe("merge/3", () => {
+    const testedFun = Erlang_Lists["merge/3"];
+
+    const ascending = Type.anonymousFunction(2, [{
+      params: (_context) => [Type.variablePattern("a"), Type.variablePattern("b")],
+      guards: [],
+      body: (context) => {
+        const comp = Interpreter.compareTerms(context.vars.a, context.vars.b);
+        return comp <= 0 ? Type.atom("true") : Type.atom("false");
+      },
+    }], contextFixture());
+
+    it("merges two sorted lists with custom comparator", () => {
+      const list1 = Type.list([Type.integer(1), Type.integer(3)]);
+      const list2 = Type.list([Type.integer(2), Type.integer(4)]);
+      const result = testedFun(ascending, list1, list2);
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(1), Type.integer(2), Type.integer(3), Type.integer(4)]),
+      );
+    });
+
+    it("handles empty lists", () => {
+      const result = testedFun(ascending, Type.list([]), Type.list([]));
       assert.deepStrictEqual(result, Type.list([]));
     });
   });
@@ -4211,6 +4372,34 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("umerge/3", () => {
+    const testedFun = Erlang_Lists["umerge/3"];
+
+    const ascending = Type.anonymousFunction(2, [{
+      params: (_context) => [Type.variablePattern("a"), Type.variablePattern("b")],
+      guards: [],
+      body: (context) => {
+        const comp = Interpreter.compareTerms(context.vars.a, context.vars.b);
+        return comp < 0 ? Type.atom("true") : Type.atom("false");
+      },
+    }], contextFixture());
+
+    it("merges with union using custom comparator", () => {
+      const list1 = Type.list([Type.integer(1), Type.integer(3)]);
+      const list2 = Type.list([Type.integer(2), Type.integer(3)]);
+      const result = testedFun(ascending, list1, list2);
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      );
+    });
+
+    it("handles empty lists", () => {
+      const result = testedFun(ascending, Type.list([]), Type.list([]));
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+  });
+
   describe("usort/1", () => {
     const testedFun = Erlang_Lists["usort/1"];
 
@@ -4688,6 +4877,99 @@ describe("Erlang_Lists", () => {
         "ErlangError",
         Interpreter.buildErlangErrorMsg(":lists_not_same_length"),
       );
+    });
+  });
+
+  describe("zip/3", () => {
+    const testedFun = Erlang_Lists["zip/3"];
+
+    it("zips with trim", () => {
+      const list1 = Type.list([Type.integer(1), Type.integer(2)]);
+      const list2 = Type.list([Type.atom("a")]);
+      const result = testedFun(list1, list2, Type.atom("trim"));
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.tuple([Type.integer(1), Type.atom("a")])]),
+      );
+    });
+
+    it("zips with pad", () => {
+      const list1 = Type.list([Type.integer(1)]);
+      const list2 = Type.list([Type.atom("a"), Type.atom("b")]);
+      const pad = Type.tuple([Type.atom("pad"), Type.tuple([Type.integer(0), Type.atom("x")])]);
+      const result = testedFun(list1, list2, pad);
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.tuple([Type.integer(1), Type.atom("a")]),
+          Type.tuple([Type.integer(0), Type.atom("b")]),
+        ]),
+      );
+    });
+  });
+
+  describe("zip3/4", () => {
+    const testedFun = Erlang_Lists["zip3/4"];
+
+    it("zips three lists with trim", () => {
+      const result = testedFun(
+        Type.list([Type.integer(1), Type.integer(2)]),
+        Type.list([Type.atom("a")]),
+        Type.list([Type.atom("x"), Type.atom("y")]),
+        Type.atom("trim"),
+      );
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.tuple([Type.integer(1), Type.atom("a"), Type.atom("x")])]),
+      );
+    });
+  });
+
+  describe("zipwith/4", () => {
+    const testedFun = Erlang_Lists["zipwith/4"];
+
+    const add = Type.anonymousFunction(2, [{
+      params: (_context) => [Type.variablePattern("a"), Type.variablePattern("b")],
+      guards: [],
+      body: (context) => Erlang["+/2"](context.vars.a, context.vars.b),
+    }], contextFixture());
+
+    it("zipswith with trim", () => {
+      const result = testedFun(
+        add,
+        Type.list([Type.integer(1), Type.integer(2)]),
+        Type.list([Type.integer(3)]),
+        Type.atom("trim"),
+      );
+      assert.deepStrictEqual(result, Type.list([Type.integer(4)]));
+    });
+  });
+
+  describe("zipwith3/5", () => {
+    const testedFun = Erlang_Lists["zipwith3/5"];
+
+    const sumThree = Type.anonymousFunction(3, [{
+      params: (_context) => [
+        Type.variablePattern("a"),
+        Type.variablePattern("b"),
+        Type.variablePattern("c"),
+      ],
+      guards: [],
+      body: (context) => {
+        const sum1 = Erlang["+/2"](context.vars.a, context.vars.b);
+        return Erlang["+/2"](sum1, context.vars.c);
+      },
+    }], contextFixture());
+
+    it("zipswith3 with trim", () => {
+      const result = testedFun(
+        sumThree,
+        Type.list([Type.integer(1)]),
+        Type.list([Type.integer(2), Type.integer(3)]),
+        Type.list([Type.integer(4)]),
+        Type.atom("trim"),
+      );
+      assert.deepStrictEqual(result, Type.list([Type.integer(7)]));
     });
   });
 });
