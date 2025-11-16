@@ -2355,6 +2355,21 @@ describe("Erlang", () => {
     });
   });
 
+  describe("date/0", () => {
+    const testedFun = Erlang["date/0"];
+
+    it("returns current date as {Year, Month, Day} tuple", () => {
+      const result = testedFun();
+      const now = new Date();
+
+      assert.ok(Type.isTuple(result));
+      assert.strictEqual(result.data.length, 3);
+      assert.deepStrictEqual(result.data[0], Type.integer(BigInt(now.getFullYear())));
+      assert.deepStrictEqual(result.data[1], Type.integer(BigInt(now.getMonth() + 1)));
+      assert.deepStrictEqual(result.data[2], Type.integer(BigInt(now.getDate())));
+    });
+  });
+
   describe("element/2", () => {
     const element = Erlang["element/2"];
 
@@ -3343,6 +3358,30 @@ describe("Erlang", () => {
     });
   });
 
+  describe("localtime/0", () => {
+    const testedFun = Erlang["localtime/0"];
+
+    it("returns current local datetime as {{Year, Month, Day}, {Hour, Minute, Second}}", () => {
+      const result = testedFun();
+      const now = new Date();
+
+      assert.ok(Type.isTuple(result));
+      assert.strictEqual(result.data.length, 2);
+
+      const dateTuple = result.data[0];
+      const timeTuple = result.data[1];
+
+      assert.ok(Type.isTuple(dateTuple));
+      assert.strictEqual(dateTuple.data.length, 3);
+      assert.ok(Type.isTuple(timeTuple));
+      assert.strictEqual(timeTuple.data.length, 3);
+
+      // Verify date matches current date
+      assert.deepStrictEqual(dateTuple.data[0], Type.integer(BigInt(now.getFullYear())));
+      assert.deepStrictEqual(dateTuple.data[1], Type.integer(BigInt(now.getMonth() + 1)));
+    });
+  });
+
   describe("convert_time_unit/3", () => {
     const testedFun = Erlang["convert_time_unit/3"];
 
@@ -3768,6 +3807,31 @@ describe("Erlang", () => {
     it("returns nonode@nohost for client-side execution", () => {
       const result = testedFun();
       assert.deepStrictEqual(result, Type.atom("nonode@nohost"));
+    });
+  });
+
+  describe("now/0", () => {
+    const testedFun = Erlang["now/0"];
+
+    it("returns {MegaSecs, Secs, MicroSecs} tuple", () => {
+      const result = testedFun();
+
+      assert.ok(Type.isTuple(result));
+      assert.strictEqual(result.data.length, 3);
+      assert.ok(Type.isInteger(result.data[0])); // MegaSecs
+      assert.ok(Type.isInteger(result.data[1])); // Secs
+      assert.ok(Type.isInteger(result.data[2])); // MicroSecs
+    });
+
+    it("returns monotonically increasing values", () => {
+      const result1 = testedFun();
+      const result2 = testedFun();
+
+      // Second call should be >= first call
+      const time1 = result1.data[0].value * 1000000000000n + result1.data[1].value * 1000000n + result1.data[2].value;
+      const time2 = result2.data[0].value * 1000000000000n + result2.data[1].value * 1000000n + result2.data[2].value;
+
+      assert.ok(time2 >= time1);
     });
   });
 
@@ -4281,6 +4345,158 @@ describe("Erlang", () => {
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
       );
+    });
+  });
+
+  describe("system_time/0", () => {
+    const testedFun = Erlang["system_time/0"];
+
+    it("returns an integer representing system time", () => {
+      const result = testedFun();
+      assert.ok(Type.isInteger(result));
+      assert.ok(result.value > 0n);
+    });
+
+    it("returns monotonically increasing values", () => {
+      const time1 = testedFun();
+      const time2 = testedFun();
+      assert.ok(time2.value >= time1.value);
+    });
+  });
+
+  describe("system_time/1", () => {
+    const testedFun = Erlang["system_time/1"];
+
+    it("returns system time in specified unit", () => {
+      const result = testedFun(Type.atom("second"));
+      assert.ok(Type.isInteger(result));
+      assert.ok(result.value > 0n);
+    });
+
+    it("converts to milliseconds", () => {
+      const result = testedFun(Type.atom("millisecond"));
+      assert.ok(Type.isInteger(result));
+      assert.ok(result.value > 0n);
+    });
+  });
+
+  describe("time/0", () => {
+    const testedFun = Erlang["time/0"];
+
+    it("returns current time as {Hour, Minute, Second}", () => {
+      const result = testedFun();
+
+      assert.ok(Type.isTuple(result));
+      assert.strictEqual(result.data.length, 3);
+      assert.ok(Type.isInteger(result.data[0]));
+      assert.ok(Type.isInteger(result.data[1]));
+      assert.ok(Type.isInteger(result.data[2]));
+
+      // Verify hour is in valid range
+      assert.ok(result.data[0].value >= 0n && result.data[0].value <= 23n);
+      assert.ok(result.data[1].value >= 0n && result.data[1].value <= 59n);
+      assert.ok(result.data[2].value >= 0n && result.data[2].value <= 59n);
+    });
+  });
+
+  describe("timestamp/0", () => {
+    const testedFun = Erlang["timestamp/0"];
+
+    it("returns {MegaSecs, Secs, MicroSecs} tuple", () => {
+      const result = testedFun();
+
+      assert.ok(Type.isTuple(result));
+      assert.strictEqual(result.data.length, 3);
+      assert.ok(Type.isInteger(result.data[0]));
+      assert.ok(Type.isInteger(result.data[1]));
+      assert.ok(Type.isInteger(result.data[2]));
+    });
+  });
+
+  describe("unique_integer/0", () => {
+    const testedFun = Erlang["unique_integer/0"];
+
+    it("returns a unique integer", () => {
+      const result1 = testedFun();
+      const result2 = testedFun();
+
+      assert.ok(Type.isInteger(result1));
+      assert.ok(Type.isInteger(result2));
+      assert.notStrictEqual(result1.value, result2.value);
+    });
+
+    it("returns monotonically increasing values", () => {
+      const result1 = testedFun();
+      const result2 = testedFun();
+
+      assert.ok(result2.value > result1.value);
+    });
+  });
+
+  describe("unique_integer/1", () => {
+    const testedFun = Erlang["unique_integer/1"];
+
+    it("returns unique integer with no modifiers", () => {
+      const result = testedFun(Type.list([]));
+      assert.ok(Type.isInteger(result));
+    });
+
+    it("returns positive integer with positive modifier", () => {
+      const result = testedFun(Type.list([Type.atom("positive")]));
+      assert.ok(Type.isInteger(result));
+      assert.ok(result.value > 0n);
+    });
+
+    it("returns unique integers with monotonic modifier", () => {
+      const result1 = testedFun(Type.list([Type.atom("monotonic")]));
+      const result2 = testedFun(Type.list([Type.atom("monotonic")]));
+      assert.ok(result2.value > result1.value);
+    });
+
+    it("handles both positive and monotonic modifiers", () => {
+      const result = testedFun(Type.list([Type.atom("positive"), Type.atom("monotonic")]));
+      assert.ok(Type.isInteger(result));
+      assert.ok(result.value > 0n);
+    });
+
+    it("raises ArgumentError for invalid modifier", () => {
+      assertBoxedError(
+        () => testedFun(Type.list([Type.atom("invalid")])),
+        "ArgumentError",
+        "badarg: invalid modifier :invalid",
+      );
+    });
+
+    it("raises ArgumentError if argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_list")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+  });
+
+  describe("universaltime/0", () => {
+    const testedFun = Erlang["universaltime/0"];
+
+    it("returns current UTC datetime as {{Year, Month, Day}, {Hour, Minute, Second}}", () => {
+      const result = testedFun();
+      const now = new Date();
+
+      assert.ok(Type.isTuple(result));
+      assert.strictEqual(result.data.length, 2);
+
+      const dateTuple = result.data[0];
+      const timeTuple = result.data[1];
+
+      assert.ok(Type.isTuple(dateTuple));
+      assert.strictEqual(dateTuple.data.length, 3);
+      assert.ok(Type.isTuple(timeTuple));
+      assert.strictEqual(timeTuple.data.length, 3);
+
+      // Verify UTC date matches
+      assert.deepStrictEqual(dateTuple.data[0], Type.integer(BigInt(now.getUTCFullYear())));
+      assert.deepStrictEqual(dateTuple.data[1], Type.integer(BigInt(now.getUTCMonth() + 1)));
     });
   });
 });

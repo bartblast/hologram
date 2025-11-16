@@ -734,6 +734,18 @@ const Erlang = {
   // End delete_element/2
   // Deps: []
 
+  // Start date/0
+  "date/0": () => {
+    const now = new Date();
+    return Type.tuple([
+      Type.integer(BigInt(now.getFullYear())),
+      Type.integer(BigInt(now.getMonth() + 1)), // JavaScript months are 0-indexed
+      Type.integer(BigInt(now.getDate())),
+    ]);
+  },
+  // End date/0
+  // Deps: []
+
   // Start element/2
   "element/2": (index, tuple) => {
     if (!Type.isInteger(index)) {
@@ -1326,6 +1338,24 @@ const Erlang = {
   // End list_to_integer/2
   // Deps: [:erlang.list_to_binary/1, :erlang.binary_to_integer/2]
 
+  // Start localtime/0
+  "localtime/0": () => {
+    const now = new Date();
+    const date = Type.tuple([
+      Type.integer(BigInt(now.getFullYear())),
+      Type.integer(BigInt(now.getMonth() + 1)),
+      Type.integer(BigInt(now.getDate())),
+    ]);
+    const time = Type.tuple([
+      Type.integer(BigInt(now.getHours())),
+      Type.integer(BigInt(now.getMinutes())),
+      Type.integer(BigInt(now.getSeconds())),
+    ]);
+    return Type.tuple([date, time]);
+  },
+  // End localtime/0
+  // Deps: []
+
   // Start convert_time_unit/3
   "convert_time_unit/3": (time, fromUnit, toUnit) => {
     if (!Type.isInteger(time)) {
@@ -1744,6 +1774,24 @@ const Erlang = {
   // End node/0
   // Deps: []
 
+  // Start now/0
+  "now/0": () => {
+    // Returns {MegaSecs, Secs, MicroSecs}
+    // This is deprecated in Erlang/OTP 18+ in favor of system_time, but still commonly used
+    const microseconds = BigInt(Math.floor(performance.now() * 1000));
+    const megaSecs = microseconds / 1000000000000n;
+    const secs = (microseconds / 1000000n) % 1000000n;
+    const microSecs = microseconds % 1000000n;
+
+    return Type.tuple([
+      Type.integer(megaSecs),
+      Type.integer(secs),
+      Type.integer(microSecs),
+    ]);
+  },
+  // End now/0
+  // Deps: []
+
   // Start orelse/2
   "orelse/2": (leftFun, rightFun, context) => {
     const left = leftFun(context);
@@ -1925,6 +1973,27 @@ const Erlang = {
   // End split_binary/2
   // Deps: [:erlang.byte_size/1]
 
+  // Start system_time/0
+  "system_time/0": () => {
+    // Returns system time in native time unit (microseconds in JavaScript)
+    const microseconds = BigInt(Math.floor(performance.now() * 1000 + performance.timeOrigin * 1000));
+    return Type.integer(microseconds);
+  },
+  // End system_time/0
+  // Deps: []
+
+  // Start system_time/1
+  "system_time/1": (unit) => {
+    const nativeTime = Erlang["system_time/0"]();
+    return Erlang["convert_time_unit/3"](
+      nativeTime,
+      Type.atom("native"),
+      unit,
+    );
+  },
+  // End system_time/1
+  // Deps: [:erlang.system_time/0, :erlang.convert_time_unit/3]
+
   // Start tl/1
   "tl/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
@@ -1950,6 +2019,97 @@ const Erlang = {
     return isProper ? Type.list(data) : Type.improperList(data);
   },
   // End tl/1
+  // Deps: []
+
+  // Start time/0
+  "time/0": () => {
+    const now = new Date();
+    return Type.tuple([
+      Type.integer(BigInt(now.getHours())),
+      Type.integer(BigInt(now.getMinutes())),
+      Type.integer(BigInt(now.getSeconds())),
+    ]);
+  },
+  // End time/0
+  // Deps: []
+
+  // Start timestamp/0
+  "timestamp/0": () => {
+    // Returns {MegaSecs, Secs, MicroSecs} - same as now/0
+    return Erlang["now/0"]();
+  },
+  // End timestamp/0
+  // Deps: [:erlang.now/0]
+
+  // Start unique_integer/0
+  "unique_integer/0": () => {
+    // Returns a unique integer
+    const id = Sequence.next();
+    return Type.integer(BigInt(id));
+  },
+  // End unique_integer/0
+  // Deps: []
+
+  // Start unique_integer/1
+  "unique_integer/1": (modifiers) => {
+    if (!Type.isList(modifiers)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    // Get base unique integer
+    let value = BigInt(Sequence.next());
+
+    // Check for modifiers
+    let isMonotonic = false;
+    let isPositive = false;
+
+    for (const modifier of modifiers.data) {
+      if (Type.isAtom(modifier)) {
+        if (modifier.value === "monotonic") {
+          isMonotonic = true;
+        } else if (modifier.value === "positive") {
+          isPositive = true;
+        } else {
+          Interpreter.raiseArgumentError(
+            `badarg: invalid modifier ${Interpreter.inspect(modifier)}`,
+          );
+        }
+      } else {
+        Interpreter.raiseArgumentError(
+          `badarg: invalid modifier ${Interpreter.inspect(modifier)}`,
+        );
+      }
+    }
+
+    // monotonic is always true with Sequence.next()
+    // Make positive if requested (ensure > 0)
+    if (isPositive && value <= 0n) {
+      value = -value;
+    }
+
+    return Type.integer(value);
+  },
+  // End unique_integer/1
+  // Deps: []
+
+  // Start universaltime/0
+  "universaltime/0": () => {
+    const now = new Date();
+    const date = Type.tuple([
+      Type.integer(BigInt(now.getUTCFullYear())),
+      Type.integer(BigInt(now.getUTCMonth() + 1)),
+      Type.integer(BigInt(now.getUTCDate())),
+    ]);
+    const time = Type.tuple([
+      Type.integer(BigInt(now.getUTCHours())),
+      Type.integer(BigInt(now.getUTCMinutes())),
+      Type.integer(BigInt(now.getUTCSeconds())),
+    ]);
+    return Type.tuple([date, time]);
+  },
+  // End universaltime/0
   // Deps: []
 
   // Start tuple_to_list/1
