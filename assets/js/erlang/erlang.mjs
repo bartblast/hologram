@@ -129,6 +129,14 @@ const Erlang = {
   // End -/2
   // Deps: []
 
+  // Start !/2
+  "!/2": (dest, message) => {
+    // Send operator (same as send/2)
+    return Erlang["send/2"](dest, message);
+  },
+  // End !/2
+  // Deps: [:erlang.send/2]
+
   // TODO: optimize
   // This implementation is slow, i.e. O(m * n),
   // where m = Enum.count(left), n = Enum.count(right).
@@ -207,6 +215,24 @@ const Erlang = {
   },
   // End =</2
   // Deps: [:erlang.</2, :erlang.==/2]
+
+  // Start =/2
+  "=/2": (left, right) => {
+    // Match operator (pattern matching in Erlang)
+    // In Hologram, this is simplified to check equality
+    // Returns right if match succeeds, otherwise raises badmatch
+    if (Interpreter.isStrictlyEqual(left, right)) {
+      return right;
+    }
+
+    // In a full implementation, this would do pattern matching
+    // For now, raise badmatch error
+    throw new HologramBoxedError(
+      Type.tuple([Type.atom("badmatch"), right])
+    );
+  },
+  // End =/2
+  // Deps: []
 
   // Start ==/2
   "==/2": (left, right) => {
@@ -389,6 +415,26 @@ const Erlang = {
     return Type.isTrue(left) ? rightFun(context) : left;
   },
   // End andalso/2
+  // Deps: []
+
+  // Start and/2
+  "and/2": (boolean1, boolean2) => {
+    if (!Type.isBoolean(boolean1)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a boolean"),
+      );
+    }
+
+    if (!Type.isBoolean(boolean2)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a boolean"),
+      );
+    }
+
+    // Logical AND operation
+    return Type.boolean(boolean1.value && boolean2.value);
+  },
+  // End and/2
   // Deps: []
 
   // Start append_element/2
@@ -745,6 +791,33 @@ const Erlang = {
   },
   // End binary_to_integer/2
   // Deps: []
+
+  // Start binary_to_integer/3
+  "binary_to_integer/3": (binary, base, options) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    if (!Type.isInteger(base)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    // Convert binary to integer with base and options (OTP 26+)
+    // For now, ignore options and use binary_to_integer/2
+    return Erlang["binary_to_integer/2"](binary, base);
+  },
+  // End binary_to_integer/3
+  // Deps: [:erlang.binary_to_integer/2]
 
   // Start binary_part/2
   "binary_part/2": (binary, posLen) => {
@@ -1337,6 +1410,28 @@ const Erlang = {
     return Type.boolean(true);
   },
   // End demonitor/1
+  // Deps: []
+
+  // Start demonitor/2
+  "demonitor/2": (monitorRef, options) => {
+    if (!Type.isReference(monitorRef)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a reference"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    // Remove a monitor with options
+    // Options can include: flush, info
+    // In Hologram, demonitoring is simplified
+    return Type.boolean(true);
+  },
+  // End demonitor/2
   // Deps: []
 
   // Start date/0
@@ -3472,6 +3567,28 @@ const Erlang = {
   // End monitor/2
   // Deps: [:erlang.make_ref/0]
 
+  // Start monitor/3
+  "monitor/3": (type, item, options) => {
+    if (!Type.isAtom(type)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    // Set up a monitor with options
+    // Options can include: {alias, Alias}, {tag, Tag}
+    // In Hologram, monitoring is simplified
+    return Erlang["make_ref/0"]();
+  },
+  // End monitor/3
+  // Deps: [:erlang.make_ref/0]
+
   // Start monitor_node/2
   "monitor_node/2": (node, flag) => {
     if (!Type.isAtom(node)) {
@@ -3599,6 +3716,26 @@ const Erlang = {
     return Type.isTrue(left) ? left : rightFun(context);
   },
   // End orelse/2
+  // Deps: []
+
+  // Start or/2
+  "or/2": (boolean1, boolean2) => {
+    if (!Type.isBoolean(boolean1)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a boolean"),
+      );
+    }
+
+    if (!Type.isBoolean(boolean2)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a boolean"),
+      );
+    }
+
+    // Logical OR operation
+    return Type.boolean(boolean1.value || boolean2.value);
+  },
+  // End or/2
   // Deps: []
 
   // Start put/2
@@ -3921,6 +4058,15 @@ const Erlang = {
   },
   // End phash/2
   // Deps: []
+
+  // Start phash/1
+  "phash/1": (term) => {
+    // Portable hash function (deprecated, use phash2 instead)
+    // Default range is 2^27
+    return Erlang["phash/2"](term, Type.integer(BigInt(134217728)));
+  },
+  // End phash/1
+  // Deps: [:erlang.phash/2]
 
   // Start phash2/1
   "phash2/1": (term) => {
@@ -4776,6 +4922,107 @@ const Erlang = {
   // End system_flag/2
   // Deps: []
 
+  // Start system_monitor/0
+  "system_monitor/0": () => {
+    // Get current system monitor settings
+    // Returns {MonitorPid, Options} or undefined
+    // In Hologram, return undefined (no monitoring set)
+    return Type.atom("undefined");
+  },
+  // End system_monitor/0
+  // Deps: []
+
+  // Start system_monitor/1
+  "system_monitor/1": (arg) => {
+    if (!Type.isPid(arg) && !Type.isAtom(arg)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a pid or atom"),
+      );
+    }
+
+    // Set or clear system monitor
+    // In Hologram (browser environment), system monitoring is not supported
+    // Return previous settings (undefined)
+    return Type.atom("undefined");
+  },
+  // End system_monitor/1
+  // Deps: []
+
+  // Start system_monitor/2
+  "system_monitor/2": (monitorPid, options) => {
+    if (!Type.isPid(monitorPid) && !Type.isAtom(monitorPid)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a pid or atom"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    // Set system monitor with options
+    // Options can include: busy_port, busy_dist_port, long_gc, long_schedule, etc.
+    // In Hologram, return undefined (no previous monitor)
+    return Type.atom("undefined");
+  },
+  // End system_monitor/2
+  // Deps: []
+
+  // Start system_profile/0
+  "system_profile/0": () => {
+    // Get current system profiler settings
+    // Returns {ProfilerPid, Options} or undefined
+    // In Hologram, return undefined (no profiling)
+    return Type.atom("undefined");
+  },
+  // End system_profile/0
+  // Deps: []
+
+  // Start system_profile/1
+  "system_profile/1": (arg) => {
+    if (!Type.isPid(arg) && !Type.isPort(arg) && !Type.isAtom(arg)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a pid, port, or atom",
+        ),
+      );
+    }
+
+    // Set or clear system profiler
+    // In Hologram (browser environment), profiling is not supported
+    return Type.atom("undefined");
+  },
+  // End system_profile/1
+  // Deps: []
+
+  // Start system_profile/2
+  "system_profile/2": (profilerPid, options) => {
+    if (!Type.isPid(profilerPid) && !Type.isPort(profilerPid) && !Type.isAtom(profilerPid)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a pid, port, or atom",
+        ),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    // Set system profiler with options
+    // Options can include: runnable_procs, runnable_ports, scheduler, timestamp, etc.
+    // In Hologram, return undefined (no previous profiler)
+    return Type.atom("undefined");
+  },
+  // End system_profile/2
+  // Deps: []
+
   // Start system_info/1
   "system_info/1": (item) => {
     if (!Type.isAtom(item)) {
@@ -4929,6 +5176,78 @@ const Erlang = {
   // End throw/1
   // Deps: []
 
+  // Start trace/3
+  "trace/3": (pidPortSpec, how, flagList) => {
+    if (!Type.isList(flagList)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    // Enable/disable tracing for processes or ports
+    // In Hologram (browser environment), tracing is not supported
+    // Return the number of processes/ports affected (0)
+    return Type.integer(0n);
+  },
+  // End trace/3
+  // Deps: []
+
+  // Start trace_delivered/1
+  "trace_delivered/1": (tracee) => {
+    if (!Type.isPid(tracee) && !Type.isAtom(tracee)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a pid or atom"),
+      );
+    }
+
+    // Get trace message delivery reference
+    // In Hologram, tracing is not supported
+    return Erlang["make_ref/0"]();
+  },
+  // End trace_delivered/1
+  // Deps: [:erlang.make_ref/0]
+
+  // Start trace_info/2
+  "trace_info/2": (pidPortFuncEvent, item) => {
+    if (!Type.isAtom(item)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    // Get trace information
+    // In Hologram, tracing is not supported
+    return Type.atom("undefined");
+  },
+  // End trace_info/2
+  // Deps: []
+
+  // Start trace_pattern/2
+  "trace_pattern/2": (mfa, matchSpec) => {
+    // Set trace patterns for function calls
+    // In Hologram (browser environment), tracing is not supported
+    // Return the number of functions that matched (0)
+    return Type.integer(0n);
+  },
+  // End trace_pattern/2
+  // Deps: []
+
+  // Start trace_pattern/3
+  "trace_pattern/3": (mfa, matchSpec, flagList) => {
+    if (!Type.isList(flagList)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    // Set trace patterns with flags
+    // Flags can include: global, local, meta, call_count, call_time
+    // In Hologram, tracing is not supported
+    return Type.integer(0n);
+  },
+  // End trace_pattern/3
+  // Deps: []
+
   // Start time/0
   "time/0": () => {
     // Return current time as {Hour, Minute, Second}
@@ -4996,6 +5315,21 @@ const Erlang = {
     return Type.boolean(true);
   },
   // End unlink/1
+  // Deps: []
+
+  // Start unalias/1
+  "unalias/1": (alias) => {
+    if (!Type.isReference(alias)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a reference"),
+      );
+    }
+
+    // Deactivate an alias
+    // In Hologram, aliases are simplified
+    return Type.boolean(true);
+  },
+  // End unalias/1
   // Deps: []
 
   // Start unique_integer/0
