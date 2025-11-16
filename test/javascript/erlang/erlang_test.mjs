@@ -2721,6 +2721,44 @@ describe("Erlang", () => {
     });
   });
 
+  describe("list_to_tuple/1", () => {
+    const testedFun = Erlang["list_to_tuple/1"];
+
+    it("converts empty list to empty tuple", () => {
+      const result = testedFun(Type.list());
+
+      assert.deepStrictEqual(result, Type.tuple([]));
+    });
+
+    it("converts non-empty list to tuple", () => {
+      const list = Type.list([Type.integer(1), Type.atom("a"), Type.float(3.14)]);
+      const result = testedFun(list);
+
+      assert.deepStrictEqual(
+        result,
+        Type.tuple([Type.integer(1), Type.atom("a"), Type.float(3.14)]),
+      );
+    });
+
+    it("raises ArgumentError if argument is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if argument is not a proper list", () => {
+      const improperList = Type.improperList([Type.integer(1), Type.integer(2), Type.integer(3)]);
+
+      assertBoxedError(
+        () => testedFun(improperList),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    });
+  });
+
   describe("map_size/1", () => {
     const map_size = Erlang["map_size/1"];
 
