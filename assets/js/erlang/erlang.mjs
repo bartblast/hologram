@@ -7158,6 +7158,403 @@ const Erlang = {
   },
   // End list_to_tuple/1
   // Deps: []
+
+  // Start node/0
+  "node/0": () => {
+    // In Hologram (browser environment), we simulate a node
+    // Return a standard node name for the client
+    return Type.atom("hologram_client@nohost");
+  },
+  // End node/0
+  // Deps: []
+
+  // Start make_ref/0
+  "make_ref/0": () => {
+    // Generate a unique reference
+    // Use timestamp and random values for uniqueness
+    const timestamp = Date.now();
+    const random1 = Math.floor(Math.random() * 0xFFFFFFFF);
+    const random2 = Math.floor(Math.random() * 0xFFFFFFFF);
+
+    return Type.reference([timestamp, random1, random2, 0]);
+  },
+  // End make_ref/0
+  // Deps: []
+
+  // Start float_to_list/2
+  "float_to_list/2": (float, options) => {
+    if (!Type.isFloat(float)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a float"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
+      );
+    }
+
+    // Parse options
+    let useShort = false;
+    for (const opt of options.data) {
+      if (Type.isAtom(opt) && opt.value === "short") {
+        useShort = true;
+      }
+    }
+
+    const str = useShort ? float.value.toString() : float.value.toExponential();
+    const codePoints = Array.from(str).map(char => Type.integer(char.charCodeAt(0)));
+
+    return Type.list(codePoints);
+  },
+  // End float_to_list/2
+  // Deps: []
+
+  // Start insert_element/3
+  "insert_element/3": (index, tuple, value) => {
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    }
+
+    const idx = Number(index.value) - 1; // Convert to 0-based
+
+    if (idx < 0 || idx > tuple.data.length) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    }
+
+    // Create new tuple with inserted value
+    const newData = [...tuple.data.slice(0, idx), value, ...tuple.data.slice(idx)];
+
+    return Type.tuple(newData);
+  },
+  // End insert_element/3
+  // Deps: []
+
+  // Start phash2/2
+  "phash2/2": (term, range) => {
+    if (!Type.isInteger(range)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (range.value < 1 || range.value > 4294967296n) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    }
+
+    // Simple hash implementation
+    const str = Interpreter.inspect(term);
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+
+    // Ensure positive and within range
+    const positiveHash = Math.abs(hash);
+    const rangeNum = Number(range.value);
+    const result = positiveHash % rangeNum;
+
+    return Type.integer(result);
+  },
+  // End phash2/2
+  // Deps: []
+
+  // Start binary_to_float/1
+  "binary_to_float/1": (binary) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    const text = Bitstring.toText(binary);
+    const num = parseFloat(text);
+
+    if (isNaN(num)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a textual representation of a float"),
+      );
+    }
+
+    return Type.float(num);
+  },
+  // End binary_to_float/1
+  // Deps: []
+
+  // Start monotonic_time/0
+  "monotonic_time/0": () => {
+    // Return monotonic time in native unit (nanoseconds)
+    // Use performance.now() for monotonic time, convert to nanoseconds
+    const milliseconds = performance.now();
+    const nanoseconds = Math.floor(milliseconds * 1000000);
+
+    return Type.integer(nanoseconds);
+  },
+  // End monotonic_time/0
+  // Deps: []
+
+  // Start unique_integer/0
+  "unique_integer/0": () => {
+    // Generate a unique integer
+    // Use timestamp and counter for uniqueness
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000000);
+    const unique = timestamp * 1000000 + random;
+
+    return Type.integer(unique);
+  },
+  // End unique_integer/0
+  // Deps: []
+
+  // Start throw/1
+  "throw/1": (term) => {
+    throw new HologramBoxedError(Type.tuple([Type.atom("nocatch"), term]));
+  },
+  // End throw/1
+  // Deps: []
+
+  // Start apply/2
+  "apply/2": (fun, args) => {
+    if (!Type.isAnonymousFunction(fun)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a function"),
+      );
+    }
+
+    if (!Type.isList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
+      );
+    }
+
+    if (args.data.length !== fun.arity) {
+      Interpreter.raiseArgumentError(
+        `function arity mismatch: expected ${fun.arity}, got ${args.data.length}`,
+      );
+    }
+
+    return Interpreter.callAnonymousFunction(fun, args.data);
+  },
+  // End apply/2
+  // Deps: []
+
+  // Start list_to_integer/1
+  "list_to_integer/1": (list) => {
+    return Erlang["list_to_integer/2"](list, Type.integer(10));
+  },
+  // End list_to_integer/1
+  // Deps: [:erlang.list_to_integer/2]
+
+  // Start list_to_integer/2
+  "list_to_integer/2": (list, base) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    if (!Type.isInteger(base) || base.value < 2 || base.value > 36) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    }
+
+    // Convert list of integers (codepoints) to string
+    const str = list.data.map(int => {
+      if (!Type.isInteger(int)) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(1, "not a list of integers"),
+        );
+      }
+      return String.fromCharCode(Number(int.value));
+    }).join("");
+
+    const baseNum = Number(base.value);
+    const result = parseInt(str, baseNum);
+
+    if (isNaN(result)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a textual representation of an integer"),
+      );
+    }
+
+    return Type.integer(result);
+  },
+  // End list_to_integer/2
+  // Deps: []
+
+  // Start bor/2
+  "bor/2": (left, right) => {
+    if (!Type.isInteger(left) || !Type.isInteger(right)) {
+      Interpreter.raiseArgumentError("bad argument in bitwise operation");
+    }
+
+    return Type.integer(left.value | right.value);
+  },
+  // End bor/2
+  // Deps: []
+
+  // Start make_tuple/2
+  "make_tuple/2": (arity, initialValue) => {
+    if (!Type.isInteger(arity)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (arity.value < 0) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "negative arity"),
+      );
+    }
+
+    const size = Number(arity.value);
+    const data = new Array(size).fill(initialValue);
+
+    return Type.tuple(data);
+  },
+  // End make_tuple/2
+  // Deps: []
+
+  // Start round/1
+  "round/1": (number) => {
+    if (Type.isInteger(number)) {
+      return number;
+    }
+
+    if (Type.isFloat(number)) {
+      return Type.integer(Math.round(number.value));
+    }
+
+    Interpreter.raiseArgumentError(
+      Interpreter.buildArgumentErrorMsg(1, "not a number"),
+    );
+  },
+  // End round/1
+  // Deps: []
+
+  // Start list_to_binary/1
+  "list_to_binary/1": (ioList) => {
+    return Erlang["iolist_to_binary/1"](ioList);
+  },
+  // End list_to_binary/1
+  // Deps: [:erlang.iolist_to_binary/1]
+
+  // Start float/1
+  "float/1": (number) => {
+    if (Type.isFloat(number)) {
+      return number;
+    }
+
+    if (Type.isInteger(number)) {
+      return Type.float(Number(number.value));
+    }
+
+    Interpreter.raiseArgumentError(
+      Interpreter.buildArgumentErrorMsg(1, "not a number"),
+    );
+  },
+  // End float/1
+  // Deps: []
+
+  // Start bnot/1
+  "bnot/1": (integer) => {
+    if (!Type.isInteger(integer)) {
+      Interpreter.raiseArgumentError("bad argument in bitwise operation");
+    }
+
+    return Type.integer(~integer.value);
+  },
+  // End bnot/1
+  // Deps: []
+
+  // Start bxor/2
+  "bxor/2": (left, right) => {
+    if (!Type.isInteger(left) || !Type.isInteger(right)) {
+      Interpreter.raiseArgumentError("bad argument in bitwise operation");
+    }
+
+    return Type.integer(left.value ^ right.value);
+  },
+  // End bxor/2
+  // Deps: []
+
+  // Start monotonic_time/1
+  "monotonic_time/1": (unit) => {
+    const nanoTime = Number(Erlang["monotonic_time/0"]().value);
+
+    // Convert from nanoseconds to requested unit
+    return Erlang["convert_time_unit/3"](
+      Type.integer(nanoTime),
+      Type.atom("nanosecond"),
+      unit,
+    );
+  },
+  // End monotonic_time/1
+  // Deps: [:erlang.monotonic_time/0, :erlang.convert_time_unit/3]
+
+  // Start unique_integer/1
+  "unique_integer/1": (modifiers) => {
+    if (!Type.isList(modifiers)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    // Check for positive modifier
+    let positive = false;
+    for (const mod of modifiers.data) {
+      if (Type.isAtom(mod) && mod.value === "positive") {
+        positive = true;
+      }
+    }
+
+    const baseInt = Erlang["unique_integer/0"]();
+
+    if (positive && baseInt.value < 0n) {
+      return Type.integer(-baseInt.value);
+    }
+
+    return baseInt;
+  },
+  // End unique_integer/1
+  // Deps: [:erlang.unique_integer/0]
 };
 
 export default Erlang;
