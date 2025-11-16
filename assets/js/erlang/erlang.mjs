@@ -267,6 +267,19 @@ const Erlang = {
   // End andalso/2
   // Deps: []
 
+  // Start append_element/2
+  "append_element/2": (tuple, element) => {
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+      );
+    }
+
+    return Type.tuple([...tuple.data, element]);
+  },
+  // End append_element/2
+  // Deps: []
+
   // :erlang.apply/3 calls are encoded as Interpreter.callNamedFuntion() calls.
   // See: https://github.com/bartblast/hologram/blob/4e832c722af7b0c1a0cca1c8c08287b999ecae78/lib/hologram/compiler/encoder.ex#L559
 
@@ -416,6 +429,98 @@ const Erlang = {
   // End binary_to_integer/2
   // Deps: []
 
+  // Start binary_part/3
+  "binary_part/3": (binary, start, length) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    if (!Type.isInteger(start)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (!Type.isInteger(length)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    }
+
+    const startNum = Number(start.value);
+    const lengthNum = Number(length.value);
+
+    Bitstring.maybeSetBytesFromText(binary);
+    const totalBytes = binary.bytes.length;
+
+    if (startNum < 0 || lengthNum < 0 || startNum + lengthNum > totalBytes) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    }
+
+    return Bitstring.takeChunk(binary, startNum * 8, lengthNum * 8);
+  },
+  // End binary_part/3
+  // Deps: []
+
+  // Start binary_to_list/1
+  "binary_to_list/1": (binary) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    Bitstring.maybeSetBytesFromText(binary);
+    return Type.list(
+      Array.from(binary.bytes).map((byte) => Type.integer(byte)),
+    );
+  },
+  // End binary_to_list/1
+  // Deps: []
+
+  // Start binary_to_list/3
+  "binary_to_list/3": (binary, start, stop) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    if (!Type.isInteger(start)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (!Type.isInteger(stop)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    }
+
+    Bitstring.maybeSetBytesFromText(binary);
+    const totalBytes = binary.bytes.length;
+    const startNum = Number(start.value);
+    const stopNum = Number(stop.value);
+
+    // Erlang uses 1-based indexing
+    if (startNum < 1 || stopNum < 1 || startNum > stopNum || stopNum > totalBytes) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    }
+
+    // Convert to 0-based indexing for JavaScript
+    const bytes = Array.from(binary.bytes).slice(startNum - 1, stopNum);
+    return Type.list(bytes.map((byte) => Type.integer(byte)));
+  },
+  // End binary_to_list/3
+  // Deps: []
+
   // Start bit_size/1
   "bit_size/1": (term) => {
     if (!Type.isBitstring(term)) {
@@ -444,6 +549,21 @@ const Erlang = {
   // End byte_size/1
   // Deps: []
 
+  // Start ceil/1
+  "ceil/1": (number) => {
+    if (Type.isInteger(number)) {
+      return number;
+    } else if (Type.isFloat(number)) {
+      return Type.integer(BigInt(Math.ceil(number.value)));
+    }
+
+    Interpreter.raiseArgumentError(
+      Interpreter.buildArgumentErrorMsg(1, "not a number"),
+    );
+  },
+  // End ceil/1
+  // Deps: []
+
   // Start div/2
   "div/2": (integer1, integer2) => {
     if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
@@ -468,6 +588,33 @@ const Erlang = {
     );
   },
   // End div/2
+  // Deps: []
+
+  // Start delete_element/2
+  "delete_element/2": (index, tuple) => {
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    }
+
+    const idx = Number(index.value);
+    if (idx < 1 || idx > tuple.data.length) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    }
+
+    const newData = tuple.data.filter((_, i) => i !== idx - 1);
+    return Type.tuple(newData);
+  },
+  // End delete_element/2
   // Deps: []
 
   // Start display/1
@@ -570,6 +717,21 @@ const Erlang = {
   // End float_to_binary/2
   // Deps: []
 
+  // Start floor/1
+  "floor/1": (number) => {
+    if (Type.isInteger(number)) {
+      return number;
+    } else if (Type.isFloat(number)) {
+      return Type.integer(BigInt(Math.floor(number.value)));
+    }
+
+    Interpreter.raiseArgumentError(
+      Interpreter.buildArgumentErrorMsg(1, "not a number"),
+    );
+  },
+  // End floor/1
+  // Deps: []
+
   // Start function_exported/3
   "function_exported/3": (module, functionName, arity) => {
     if (!Type.isAtom(module)) {
@@ -604,6 +766,23 @@ const Erlang = {
     return Type.boolean(key in globalThis[moduleName]);
   },
   // End function_exported/3
+  // Deps: []
+
+  // Start get/0
+  "get/0": () => {
+    // Get all key-value pairs from process dictionary
+    // In Hologram, we simulate this with a global process dictionary
+    if (!globalThis.__hologramProcessDict) {
+      globalThis.__hologramProcessDict = new Map();
+    }
+
+    // Return as a list of {key, value} tuples
+    const entries = Array.from(globalThis.__hologramProcessDict.entries()).map(
+      ([key, value]) => Type.tuple([key, value])
+    );
+    return Type.list(entries);
+  },
+  // End get/0
   // Deps: []
 
   // Start hd/1
@@ -648,6 +827,38 @@ const Erlang = {
     return Type.bitstring(str);
   },
   // End integer_to_binary/2
+  // Deps: []
+
+  // Start insert_element/3
+  "insert_element/3": (index, tuple, element) => {
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    }
+
+    const idx = Number(index.value);
+    // insert_element allows idx from 1 to length+1
+    if (idx < 1 || idx > tuple.data.length + 1) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    }
+
+    const newData = [
+      ...tuple.data.slice(0, idx - 1),
+      element,
+      ...tuple.data.slice(idx - 1),
+    ];
+    return Type.tuple(newData);
+  },
+  // End insert_element/3
   // Deps: []
 
   // TODO: test
@@ -725,6 +936,15 @@ const Erlang = {
   },
   // End iolist_to_list/1
   // Deps: [:lists.flatten/1]
+
+  // Start iolist_size/1
+  "iolist_size/1": (ioListOrBinary) => {
+    // Convert to binary and get its size
+    const binary = Erlang["iolist_to_binary/1"](ioListOrBinary);
+    return Erlang["byte_size/1"](binary);
+  },
+  // End iolist_size/1
+  // Deps: [:erlang.iolist_to_binary/1, :erlang.byte_size/1]
 
   // Start is_atom/1
   "is_atom/1": (term) => {
@@ -928,6 +1148,39 @@ const Erlang = {
   // End list_to_atom/1
   // Deps: []
 
+  // Start list_to_existing_atom/1
+  "list_to_existing_atom/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    const segments = list.data.map((item) => {
+      if (!Type.isInteger(item)) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+        );
+      }
+      return Type.bitstringSegment(item, {type: "integer", size: 8});
+    });
+
+    const text = Bitstring.toText(Type.bitstring(segments));
+
+    // Check if atom exists (in real Erlang this checks the atom table)
+    // In Hologram, we'll create it if it doesn't exist, but raise if invalid
+    // This is a simplified implementation - true Erlang behavior would require atom table tracking
+    return Type.atom(text);
+  },
+  // End list_to_existing_atom/1
+  // Deps: []
+
   // Start list_to_binary/1
   "list_to_binary/1": (list) => {
     // list_to_binary is an alias for iolist_to_binary
@@ -1066,6 +1319,38 @@ const Erlang = {
   // End list_to_tuple/1
   // Deps: []
 
+  // Start make_ref/0
+  "make_ref/0": () => {
+    // Generate a unique reference using timestamp and random values
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 0xFFFFFFFF);
+    const id = `#Ref<0.${timestamp}.${random}>`;
+    return Type.reference(id);
+  },
+  // End make_ref/0
+  // Deps: []
+
+  // Start make_tuple/2
+  "make_tuple/2": (size, initialValue) => {
+    if (!Type.isInteger(size)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (size.value < 0n) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "negative size"),
+      );
+    }
+
+    const sizeNum = Number(size.value);
+    const data = new Array(sizeNum).fill(initialValue);
+    return Type.tuple(data);
+  },
+  // End make_tuple/2
+  // Deps: []
+
   // Start map_size/1
   "map_size/1": (map) => {
     if (!Type.isMap(map)) {
@@ -1111,6 +1396,46 @@ const Erlang = {
   // End min/2
   // Deps: []
 
+  // Start md5/1
+  "md5/1": (data) => {
+    let bytes;
+
+    if (Type.isBinary(data)) {
+      Bitstring.maybeSetBytesFromText(data);
+      bytes = data.bytes;
+    } else if (Type.isList(data)) {
+      // Convert iolist to binary first
+      const binary = Erlang["iolist_to_binary/1"](data);
+      Bitstring.maybeSetBytesFromText(binary);
+      bytes = binary.bytes;
+    } else {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary or iolist"),
+      );
+    }
+
+    // Simple MD5 implementation (placeholder - would need full implementation for production)
+    // For now, return a 16-byte hash
+    throw new HologramInterpreterError(
+      "Function :erlang.md5/1 is not yet fully implemented in Hologram.\n" +
+      "MD5 hashing requires a crypto library which is not yet integrated.\n" +
+      "See what to do here: https://www.hologram.page/TODO"
+    );
+  },
+  // End md5/1
+  // Deps: [:erlang.iolist_to_binary/1]
+
+  // Start monotonic_time/0
+  "monotonic_time/0": () => {
+    // Return monotonic time in native time unit (nanoseconds)
+    // Using performance.now() which provides monotonic time in milliseconds
+    const timeMs = performance.now();
+    const timeNs = BigInt(Math.floor(timeMs * 1_000_000));
+    return Type.integer(timeNs);
+  },
+  // End monotonic_time/0
+  // Deps: []
+
   // Start not/1
   "not/1": (term) => {
     if (!Type.isBoolean(term)) {
@@ -1135,6 +1460,28 @@ const Erlang = {
     return Type.isTrue(left) ? left : rightFun(context);
   },
   // End orelse/2
+  // Deps: []
+
+  // Start put/2
+  "put/2": (key, value) => {
+    // Store key-value pair in process dictionary
+    // In Hologram, we simulate this with a global process dictionary
+    if (!globalThis.__hologramProcessDict) {
+      globalThis.__hologramProcessDict = new Map();
+    }
+
+    // Get the previous value if it exists
+    const prevValue = globalThis.__hologramProcessDict.get(
+      Type.encodeMapKey(key)
+    );
+
+    // Store the new value with encoded key
+    globalThis.__hologramProcessDict.set(Type.encodeMapKey(key), value);
+
+    // Return the previous value or undefined atom
+    return prevValue !== undefined ? prevValue : Type.atom("undefined");
+  },
+  // End put/2
   // Deps: []
 
   // Start rem/2
@@ -1345,6 +1692,17 @@ const Erlang = {
   // End split_binary/2
   // Deps: [:erlang.byte_size/1]
 
+  // Start system_time/0
+  "system_time/0": () => {
+    // Return system time in native time unit (nanoseconds)
+    // Using Date.now() which provides time in milliseconds since Unix epoch
+    const timeMs = Date.now();
+    const timeNs = BigInt(timeMs) * 1_000_000n;
+    return Type.integer(timeNs);
+  },
+  // End system_time/0
+  // Deps: []
+
   // Start tl/1
   "tl/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
@@ -1370,6 +1728,25 @@ const Erlang = {
     return isProper ? Type.list(data) : Type.improperList(data);
   },
   // End tl/1
+  // Deps: []
+
+  // Start timestamp/0
+  "timestamp/0": () => {
+    // Return current timestamp as {MegaSecs, Secs, MicroSecs}
+    // Compatible with Erlang's erlang:timestamp/0
+    const now = Date.now(); // milliseconds since epoch
+    const microSecs = now * 1000; // convert to microseconds
+    const megaSecs = Math.floor(microSecs / 1_000_000_000_000);
+    const secs = Math.floor((microSecs % 1_000_000_000_000) / 1_000_000);
+    const micros = Math.floor(microSecs % 1_000_000);
+
+    return Type.tuple([
+      Type.integer(BigInt(megaSecs)),
+      Type.integer(BigInt(secs)),
+      Type.integer(BigInt(micros)),
+    ]);
+  },
+  // End timestamp/0
   // Deps: []
 
   // Start trunc/1
@@ -1412,6 +1789,60 @@ const Erlang = {
   },
   // End tuple_size/1
   // Deps: []
+
+  // Start unique_integer/0
+  "unique_integer/0": () => {
+    // Generate a unique integer using timestamp and counter
+    if (!globalThis.__hologramUniqueIntegerCounter) {
+      globalThis.__hologramUniqueIntegerCounter = 0n;
+    }
+
+    const counter = globalThis.__hologramUniqueIntegerCounter++;
+    const timestamp = BigInt(Date.now());
+    const unique = (timestamp << 32n) | counter;
+
+    return Type.integer(unique);
+  },
+  // End unique_integer/0
+  // Deps: []
+
+  // Start unique_integer/1
+  "unique_integer/1": (modifiers) => {
+    if (!Type.isList(modifiers)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(modifiers)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    // Check for valid modifiers (positive, monotonic)
+    let isPositive = false;
+    for (const modifier of modifiers.data) {
+      if (Interpreter.isStrictlyEqual(modifier, Type.atom("positive"))) {
+        isPositive = true;
+      } else if (!Interpreter.isStrictlyEqual(modifier, Type.atom("monotonic"))) {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(1, "invalid modifier"),
+        );
+      }
+    }
+
+    const unique = Erlang["unique_integer/0"]();
+
+    // If positive modifier is set, ensure the result is positive
+    if (isPositive && unique.value < 0n) {
+      return Type.integer(-unique.value);
+    }
+
+    return unique;
+  },
+  // End unique_integer/1
+  // Deps: [:erlang.unique_integer/0]
 };
 
 export default Erlang;

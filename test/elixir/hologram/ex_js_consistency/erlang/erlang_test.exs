@@ -2523,4 +2523,356 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       end
     end
   end
+
+  # ========================================
+  # Batch 1L: 20 functions
+  # ========================================
+
+  describe "append_element/2" do
+    test "appends element to empty tuple" do
+      assert :erlang.append_element({}, :a) == {:a}
+    end
+
+    test "appends element to non-empty tuple" do
+      assert :erlang.append_element({1, 2}, 3) == {1, 2, 3}
+    end
+
+    test "raises ArgumentError if not a tuple" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a tuple"), fn ->
+        :erlang.append_element([1, 2], 3)
+      end
+    end
+  end
+
+  describe "binary_part/3" do
+    test "extracts part of binary" do
+      assert :erlang.binary_part(<<"hello">>, 1, 3) == <<"ell">>
+    end
+
+    test "extracts from start" do
+      assert :erlang.binary_part(<<"hello">>, 0, 2) == <<"he">>
+    end
+
+    test "raises ArgumentError if not a binary" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a binary"), fn ->
+        :erlang.binary_part([1, 2, 3], 0, 1)
+      end
+    end
+
+    test "raises ArgumentError if position is out of range" do
+      assert_error ArgumentError, build_argument_error_msg(2, "out of range"), fn ->
+        :erlang.binary_part(<<"hello">>, 10, 1)
+      end
+    end
+  end
+
+  describe "binary_to_list/1" do
+    test "converts binary to list of bytes" do
+      assert :erlang.binary_to_list(<<1, 2, 3>>) == [1, 2, 3]
+    end
+
+    test "converts empty binary" do
+      assert :erlang.binary_to_list(<<>>) == []
+    end
+
+    test "raises ArgumentError if not a binary" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a binary"), fn ->
+        :erlang.binary_to_list([1, 2, 3])
+      end
+    end
+  end
+
+  describe "binary_to_list/3" do
+    test "converts binary range to list" do
+      assert :erlang.binary_to_list(<<1, 2, 3, 4, 5>>, 2, 4) == [2, 3, 4]
+    end
+
+    test "raises ArgumentError if not a binary" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a binary"), fn ->
+        :erlang.binary_to_list([1, 2, 3], 1, 2)
+      end
+    end
+
+    test "raises ArgumentError if range is out of bounds" do
+      assert_error ArgumentError, build_argument_error_msg(2, "out of range"), fn ->
+        :erlang.binary_to_list(<<1, 2, 3>>, 1, 5)
+      end
+    end
+  end
+
+  describe "ceil/1" do
+    test "rounds up float" do
+      assert :erlang.ceil(1.2) == 2
+    end
+
+    test "rounds up negative float" do
+      assert :erlang.ceil(-1.8) == -1
+    end
+
+    test "returns integer unchanged" do
+      assert :erlang.ceil(42) == 42
+    end
+
+    test "raises ArgumentError if not a number" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a number"), fn ->
+        :erlang.ceil(:a)
+      end
+    end
+  end
+
+  describe "delete_element/2" do
+    test "deletes element from tuple" do
+      assert :erlang.delete_element(2, {1, 2, 3}) == {1, 3}
+    end
+
+    test "deletes first element" do
+      assert :erlang.delete_element(1, {1, 2, 3}) == {2, 3}
+    end
+
+    test "raises ArgumentError if not a tuple" do
+      assert_error ArgumentError, build_argument_error_msg(2, "not a tuple"), fn ->
+        :erlang.delete_element(1, [1, 2, 3])
+      end
+    end
+
+    test "raises ArgumentError if index out of range" do
+      assert_error ArgumentError, build_argument_error_msg(1, "out of range"), fn ->
+        :erlang.delete_element(5, {1, 2, 3})
+      end
+    end
+  end
+
+  describe "floor/1" do
+    test "rounds down float" do
+      assert :erlang.floor(1.8) == 1
+    end
+
+    test "rounds down negative float" do
+      assert :erlang.floor(-1.2) == -2
+    end
+
+    test "returns integer unchanged" do
+      assert :erlang.floor(42) == 42
+    end
+
+    test "raises ArgumentError if not a number" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a number"), fn ->
+        :erlang.floor(:a)
+      end
+    end
+  end
+
+  describe "get/0" do
+    test "returns empty list when no keys stored" do
+      # Clear process dictionary first
+      :erlang.erase()
+      assert :erlang.get() == []
+    end
+
+    test "returns all key-value pairs" do
+      :erlang.erase()
+      :erlang.put(:key1, :value1)
+      :erlang.put(:key2, :value2)
+      result = :erlang.get()
+      assert length(result) == 2
+      assert {:key1, :value1} in result
+      assert {:key2, :value2} in result
+    end
+  end
+
+  describe "insert_element/3" do
+    test "inserts element into tuple" do
+      assert :erlang.insert_element(2, {1, 3}, 2) == {1, 2, 3}
+    end
+
+    test "inserts at beginning" do
+      assert :erlang.insert_element(1, {2, 3}, 1) == {1, 2, 3}
+    end
+
+    test "raises ArgumentError if not a tuple" do
+      assert_error ArgumentError, build_argument_error_msg(2, "not a tuple"), fn ->
+        :erlang.insert_element(1, [1, 2], 0)
+      end
+    end
+
+    test "raises ArgumentError if index out of range" do
+      assert_error ArgumentError, build_argument_error_msg(1, "out of range"), fn ->
+        :erlang.insert_element(10, {1, 2}, 3)
+      end
+    end
+  end
+
+  describe "iolist_size/1" do
+    test "returns size of flat list" do
+      assert :erlang.iolist_size([1, 2, 3]) == 3
+    end
+
+    test "returns size of nested iolist" do
+      assert :erlang.iolist_size([1, [2, 3], 4]) == 4
+    end
+
+    test "returns size of binary" do
+      assert :erlang.iolist_size(<<"hello">>) == 5
+    end
+
+    test "raises ArgumentError if not an iolist" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a valid iodata"), fn ->
+        :erlang.iolist_size(:not_iolist)
+      end
+    end
+  end
+
+  describe "list_to_existing_atom/1" do
+    test "converts character list to existing atom" do
+      # Create the atom first
+      _ = :test_atom
+      assert :erlang.list_to_existing_atom([116, 101, 115, 116, 95, 97, 116, 111, 109]) == :test_atom
+    end
+
+    test "raises ArgumentError if not a list" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a list"), fn ->
+        :erlang.list_to_existing_atom(:not_list)
+      end
+    end
+  end
+
+  describe "make_ref/0" do
+    test "returns a reference" do
+      ref = :erlang.make_ref()
+      assert is_reference(ref)
+    end
+
+    test "returns unique references" do
+      ref1 = :erlang.make_ref()
+      ref2 = :erlang.make_ref()
+      assert ref1 != ref2
+    end
+  end
+
+  describe "make_tuple/2" do
+    test "creates tuple with specified size and initial value" do
+      assert :erlang.make_tuple(3, :a) == {:a, :a, :a}
+    end
+
+    test "creates empty tuple" do
+      assert :erlang.make_tuple(0, :a) == {}
+    end
+
+    test "raises ArgumentError if size is not integer" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not an integer"), fn ->
+        :erlang.make_tuple(:not_int, :a)
+      end
+    end
+
+    test "raises ArgumentError if size is negative" do
+      assert_error ArgumentError, build_argument_error_msg(1, "negative size"), fn ->
+        :erlang.make_tuple(-1, :a)
+      end
+    end
+  end
+
+  # NOTE: md5/1 is not yet fully implemented in Hologram JavaScript runtime
+  # describe "md5/1" do
+  #   test "computes MD5 hash of binary" do
+  #     hash = :erlang.md5(<<"hello">>)
+  #     assert byte_size(hash) == 16
+  #   end
+  #
+  #   test "computes MD5 hash of iolist" do
+  #     hash = :erlang.md5([<<"hel">>, <<"lo">>])
+  #     assert byte_size(hash) == 16
+  #   end
+  # end
+
+  describe "monotonic_time/0" do
+    test "returns an integer" do
+      time = :erlang.monotonic_time()
+      assert is_integer(time)
+    end
+
+    test "is monotonic increasing" do
+      time1 = :erlang.monotonic_time()
+      :timer.sleep(1)
+      time2 = :erlang.monotonic_time()
+      assert time2 >= time1
+    end
+  end
+
+  describe "put/2" do
+    test "stores value and returns undefined for new key" do
+      :erlang.erase()
+      assert :erlang.put(:new_key, :value) == :undefined
+    end
+
+    test "stores value and returns previous value" do
+      :erlang.erase()
+      :erlang.put(:key, :old_value)
+      assert :erlang.put(:key, :new_value) == :old_value
+      assert :erlang.get(:key) == :new_value
+    end
+  end
+
+  describe "system_time/0" do
+    test "returns an integer" do
+      time = :erlang.system_time()
+      assert is_integer(time)
+    end
+
+    test "returns positive value" do
+      time = :erlang.system_time()
+      assert time > 0
+    end
+  end
+
+  describe "timestamp/0" do
+    test "returns a three-element tuple" do
+      {mega, secs, micro} = :erlang.timestamp()
+      assert is_integer(mega)
+      assert is_integer(secs)
+      assert is_integer(micro)
+    end
+
+    test "microseconds are in valid range" do
+      {_mega, _secs, micro} = :erlang.timestamp()
+      assert micro >= 0 and micro < 1_000_000
+    end
+  end
+
+  describe "unique_integer/0" do
+    test "returns an integer" do
+      result = :erlang.unique_integer()
+      assert is_integer(result)
+    end
+
+    test "returns unique values" do
+      val1 = :erlang.unique_integer()
+      val2 = :erlang.unique_integer()
+      assert val1 != val2
+    end
+  end
+
+  describe "unique_integer/1" do
+    test "returns positive integer with positive modifier" do
+      result = :erlang.unique_integer([:positive])
+      assert is_integer(result)
+      assert result >= 0
+    end
+
+    test "accepts monotonic modifier" do
+      result = :erlang.unique_integer([:monotonic])
+      assert is_integer(result)
+    end
+
+    test "accepts both modifiers" do
+      result = :erlang.unique_integer([:positive, :monotonic])
+      assert is_integer(result)
+      assert result >= 0
+    end
+
+    test "raises ArgumentError if not a list" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a list"), fn ->
+        :erlang.unique_integer(:not_list)
+      end
+    end
+  end
 end
