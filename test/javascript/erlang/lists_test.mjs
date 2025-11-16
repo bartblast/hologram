@@ -51,6 +51,140 @@ const funArity2 = Type.anonymousFunction(
 // Always update both together.
 
 describe("Erlang_Lists", () => {
+  describe("all/2", () => {
+    const all = Erlang_Lists["all/2"];
+
+    const fun = Type.anonymousFunction(
+      1,
+      [
+        {
+          params: (_context) => [Type.variablePattern("elem")],
+          guards: [],
+          body: (context) => {
+            return Erlang[">/2"](context.vars.elem, Type.integer(0));
+          },
+        },
+      ],
+      contextFixture(),
+    );
+
+    it("returns true for empty list", () => {
+      const result = all(fun, Type.list());
+
+      assertBoxedTrue(result);
+    });
+
+    it("returns true when all elements satisfy predicate", () => {
+      const list = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
+      const result = all(fun, list);
+
+      assertBoxedTrue(result);
+    });
+
+    it("returns false when some elements don't satisfy predicate", () => {
+      const list = Type.list([Type.integer(1), Type.integer(0), Type.integer(3)]);
+      const result = all(fun, list);
+
+      assertBoxedFalse(result);
+    });
+
+    it("returns false when no elements satisfy predicate", () => {
+      const list = Type.list([Type.integer(0), Type.integer(-1), Type.integer(-2)]);
+      const result = all(fun, list);
+
+      assertBoxedFalse(result);
+    });
+
+    it("raises FunctionClauseError if first arg is not an anonymous function", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.all/2",
+        [Type.atom("abc"), Type.list()],
+      );
+
+      assertBoxedError(
+        () => all(Type.atom("abc"), Type.list()),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if first arg has wrong arity", () => {
+      const funArity2 = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (_context) => [
+              Type.variablePattern("x"),
+              Type.variablePattern("y"),
+            ],
+            guards: [],
+            body: (context) => {
+              return Erlang["+/2"](context.vars.x, context.vars.y);
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.all/2",
+        [funArity2, Type.list()],
+      );
+
+      assertBoxedError(
+        () => all(funArity2, Type.list()),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if second arg is not a list", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.all/2",
+        [fun, Type.atom("abc")],
+      );
+
+      assertBoxedError(
+        () => all(fun, Type.atom("abc")),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if second arg is not a proper list", () => {
+      const improperList = Type.improperList([Type.integer(1), Type.integer(2), Type.integer(3)]);
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(":lists.all_1/2");
+
+      assertBoxedError(
+        () => all(fun, improperList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises ErlangError if predicate doesn't return boolean", () => {
+      const badFun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return Type.integer(42);
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      assertBoxedError(
+        () => all(badFun, Type.list([Type.integer(1)])),
+        "ErlangError",
+        Interpreter.buildErlangErrorMsg("{:bad_filter, 42}"),
+      );
+    });
+  });
+
   describe("filter/2", () => {
     const filter = Erlang_Lists["filter/2"];
 
