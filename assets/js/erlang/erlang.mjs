@@ -529,6 +529,41 @@ const Erlang = {
   // End binary_to_integer/2
   // Deps: []
 
+  // Start binary_part/2
+  "binary_part/2": (binary, posLen) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    if (!Type.isTuple(posLen) || posLen.data.length !== 2) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a valid position/length tuple"),
+      );
+    }
+
+    const start = posLen.data[0];
+    const length = posLen.data[1];
+
+    if (!Type.isInteger(start)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "position is not an integer"),
+      );
+    }
+
+    if (!Type.isInteger(length)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "length is not an integer"),
+      );
+    }
+
+    // Use binary_part/3 to do the actual work
+    return Erlang["binary_part/3"](binary, start, length);
+  },
+  // End binary_part/2
+  // Deps: [:erlang.binary_part/3]
+
   // Start binary_part/3
   "binary_part/3": (binary, start, length) => {
     if (!Type.isBinary(binary)) {
@@ -693,6 +728,48 @@ const Erlang = {
   // End byte_size/1
   // Deps: []
 
+  // Start bump_reductions/1
+  "bump_reductions/1": (reductions) => {
+    if (!Type.isInteger(reductions)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    // In a browser environment, we can't actually bump reductions
+    // This is primarily a scheduler hint in Erlang
+    // Just return true to indicate success
+    return Type.boolean(true);
+  },
+  // End bump_reductions/1
+  // Deps: []
+
+  // Start cancel_timer/1
+  "cancel_timer/1": (timerRef) => {
+    if (!Type.isReference(timerRef)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a reference"),
+      );
+    }
+
+    // Check if timer exists in global timer registry
+    if (!globalThis.__hologramTimers) {
+      globalThis.__hologramTimers = {};
+    }
+
+    const timerId = timerRef.value;
+    if (globalThis.__hologramTimers[timerId]) {
+      clearTimeout(globalThis.__hologramTimers[timerId].timeoutId);
+      const remaining = globalThis.__hologramTimers[timerId].remaining;
+      delete globalThis.__hologramTimers[timerId];
+      return Type.integer(BigInt(Math.max(0, remaining)));
+    }
+
+    return Type.boolean(false);
+  },
+  // End cancel_timer/1
+  // Deps: []
+
   // Start ceil/1
   "ceil/1": (number) => {
     if (Type.isInteger(number)) {
@@ -789,6 +866,53 @@ const Erlang = {
   // End date/0
   // Deps: []
 
+  // Start convert_time_unit/3
+  "convert_time_unit/3": (time, fromUnit, toUnit) => {
+    if (!Type.isInteger(time)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isAtom(fromUnit)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(toUnit)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an atom"),
+      );
+    }
+
+    // Define conversion rates to nanoseconds
+    const toNanoseconds = {
+      second: 1_000_000_000n,
+      millisecond: 1_000_000n,
+      microsecond: 1_000n,
+      nanosecond: 1n,
+      native: 1n, // Treat native as nanoseconds
+    };
+
+    const fromRate = toNanoseconds[fromUnit.value];
+    const toRate = toNanoseconds[toUnit.value];
+
+    if (!fromRate || !toRate) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "invalid time unit"),
+      );
+    }
+
+    // Convert: time * fromRate / toRate
+    const timeValue = time.value;
+    const result = (timeValue * fromRate) / toRate;
+
+    return Type.integer(result);
+  },
+  // End convert_time_unit/3
+  // Deps: []
+
   // Start display/1
   "display/1": (term) => {
     console.log(Interpreter.inspect(term));
@@ -883,6 +1007,73 @@ const Erlang = {
   // End exit/1
   // Deps: []
 
+  // Start external_size/1
+  "external_size/1": (term) => {
+    // Calculate the external term format size
+    // This is a simplified implementation - actual ETF encoding is complex
+    // For now, return an approximation based on term type
+
+    if (Type.isAtom(term)) {
+      // Atom: 1 byte tag + 2 bytes length + UTF-8 bytes
+      return Type.integer(BigInt(3 + term.value.length * 2));
+    } else if (Type.isInteger(term)) {
+      // Small/big integer: varies by size
+      const absValue = term.value < 0n ? -term.value : term.value;
+      if (absValue < 256n) {
+        return Type.integer(2n); // SMALL_INTEGER_EXT
+      } else if (absValue < 2147483648n) {
+        return Type.integer(5n); // INTEGER_EXT
+      } else {
+        // Estimate for big integers
+        const bytes = absValue.toString(16).length / 2;
+        return Type.integer(BigInt(Math.ceil(bytes) + 4));
+      }
+    } else if (Type.isFloat(term)) {
+      return Type.integer(9n); // NEW_FLOAT_EXT: 1 + 8 bytes
+    } else if (Type.isBitstring(term)) {
+      Bitstring.maybeSetBytesFromText(term);
+      return Type.integer(BigInt(6 + term.bytes.length)); // BINARY_EXT
+    } else if (Type.isTuple(term)) {
+      // Tuple: tag + size + elements
+      let size = term.data.length < 256 ? 2n : 5n;
+      for (const elem of term.data) {
+        size += Erlang["external_size/1"](elem).value;
+      }
+      return Type.integer(size);
+    } else if (Type.isList(term)) {
+      // List: elements + NIL_EXT
+      let size = 1n; // NIL_EXT
+      let current = term;
+      while (Type.isList(current) && current.data.length > 0) {
+        size += 5n; // LIST_EXT overhead
+        size += Erlang["external_size/1"](current.data[0]).value;
+        current = current.data[1] || Type.list([]);
+      }
+      return Type.integer(size);
+    } else if (Type.isPid(term)) {
+      return Type.integer(13n); // PID_EXT
+    } else if (Type.isReference(term)) {
+      return Type.integer(15n); // NEW_REFERENCE_EXT (approximate)
+    } else if (Type.isPort(term)) {
+      return Type.integer(11n); // PORT_EXT
+    } else if (Type.isMap(term)) {
+      // Map: tag + size + key-value pairs
+      const keys = Object.keys(term.data);
+      let size = 5n; // MAP_EXT tag + size
+      for (const key of keys) {
+        const decodedKey = Type.decodeMapKey(key);
+        size += Erlang["external_size/1"](decodedKey).value;
+        size += Erlang["external_size/1"](term.data[key]).value;
+      }
+      return Type.integer(size);
+    }
+
+    // Default case
+    return Type.integer(10n);
+  },
+  // End external_size/1
+  // Deps: []
+
   // Start float/1
   "float/1": (number) => {
     if (Type.isFloat(number)) {
@@ -896,6 +1087,21 @@ const Erlang = {
     );
   },
   // End float/1
+  // Deps: []
+
+  // Start float_to_binary/1
+  "float_to_binary/1": (float) => {
+    if (!Type.isFloat(float)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a float"),
+      );
+    }
+
+    // Default formatting - use scientific notation with precision
+    const str = float.value.toExponential();
+    return Type.bitstring(str);
+  },
+  // End float_to_binary/1
   // Deps: []
 
   // Start float_to_binary/2
@@ -1134,6 +1340,66 @@ const Erlang = {
     return Type.pid("<0.0.0>");
   },
   // End group_leader/0
+  // Deps: []
+
+  // Start hash/2
+  "hash/2": (term, range) => {
+    if (!Type.isInteger(range)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    const rangeNum = Number(range.value);
+    if (rangeNum < 1 || rangeNum > 2 ** 27) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "range must be between 1 and 2^27"),
+      );
+    }
+
+    // Simple hash function (not cryptographic)
+    // Convert term to string and hash it
+    const str = Interpreter.inspect(term);
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+
+    // Return hash in range [1, range]
+    const result = (Math.abs(hash) % rangeNum) + 1;
+    return Type.integer(BigInt(result));
+  },
+  // End hash/2
+  // Deps: []
+
+  // Start hibernate/3
+  "hibernate/3": (module, fun, args) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(fun)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    // Hibernate reduces process memory and waits for a message
+    // In Hologram, we can't truly hibernate, so just return a PID
+    // This is a placeholder implementation
+    return Type.pid("<0.0.0>");
+  },
+  // End hibernate/3
   // Deps: []
 
   // Start halt/0
@@ -1486,6 +1752,22 @@ const Erlang = {
     return Type.boolean(Type.isPort(term));
   },
   // End is_port/1
+  // Deps: []
+
+  // Start is_process_alive/1
+  "is_process_alive/1": (pid) => {
+    if (!Type.isPid(pid)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a pid"),
+      );
+    }
+
+    // In Hologram, we can't actually check if a process is alive
+    // For now, always return true for any valid PID
+    // In a real implementation, this would check the process registry
+    return Type.boolean(true);
+  },
+  // End is_process_alive/1
   // Deps: []
 
   // Start is_reference/1
@@ -1998,6 +2280,23 @@ const Erlang = {
   // End md5/1
   // Deps: [:erlang.iolist_to_binary/1]
 
+  // Start module_loaded/1
+  "module_loaded/1": (module) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    // In Hologram, we can't check loaded modules in the same way as Erlang
+    // Return true for common modules, false otherwise
+    const commonModules = ["Elixir.Kernel", "Elixir.Enum", "Elixir.List", "Elixir.String"];
+    const isLoaded = commonModules.includes(module.value);
+    return Type.boolean(isLoaded);
+  },
+  // End module_loaded/1
+  // Deps: []
+
   // Start monotonic_time/0
   "monotonic_time/0": () => {
     // Return monotonic time in native time unit (nanoseconds)
@@ -2008,6 +2307,30 @@ const Erlang = {
   },
   // End monotonic_time/0
   // Deps: []
+
+  // Start monotonic_time/1
+  "monotonic_time/1": (unit) => {
+    if (!Type.isAtom(unit)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    // Get monotonic time in nanoseconds
+    const timeMs = performance.now();
+    const timeNs = BigInt(Math.floor(timeMs * 1_000_000));
+
+    // Convert to requested unit
+    const result = Erlang["convert_time_unit/3"](
+      Type.integer(timeNs),
+      Type.atom("nanosecond"),
+      unit
+    );
+
+    return result;
+  },
+  // End monotonic_time/1
+  // Deps: [:erlang.convert_time_unit/3]
 
   // Start monitor/2
   "monitor/2": (type, item) => {
@@ -2148,6 +2471,47 @@ const Erlang = {
     return Type.list(charCodes);
   },
   // End port_to_list/1
+  // Deps: []
+
+  // Start ports/0
+  "ports/0": () => {
+    // Return list of all ports in the system
+    // In Hologram, we don't have real ports, so return empty list
+    return Type.list([]);
+  },
+  // End ports/0
+  // Deps: []
+
+  // Start phash/2
+  "phash/2": (term, range) => {
+    if (!Type.isInteger(range)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    const rangeNum = Number(range.value);
+    if (rangeNum < 1) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "range must be at least 1"),
+      );
+    }
+
+    // Simple hash function (deprecated in favor of phash2)
+    // Use same algorithm as hash/2
+    const str = Interpreter.inspect(term);
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32bit integer
+    }
+
+    // Return hash in range [1, range]
+    const result = (Math.abs(hash) % rangeNum) + 1;
+    return Type.integer(BigInt(result));
+  },
+  // End phash/2
   // Deps: []
 
   // Start phash2/1
@@ -2317,6 +2681,30 @@ const Erlang = {
   // End rem/2
   // Deps: []
 
+  // Start read_timer/1
+  "read_timer/1": (timerRef) => {
+    if (!Type.isReference(timerRef)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a reference"),
+      );
+    }
+
+    // Check if timer exists in global timer registry
+    if (!globalThis.__hologramTimers) {
+      globalThis.__hologramTimers = {};
+    }
+
+    const timerId = timerRef.value;
+    if (globalThis.__hologramTimers[timerId]) {
+      const remaining = globalThis.__hologramTimers[timerId].remaining;
+      return Type.integer(BigInt(Math.max(0, remaining)));
+    }
+
+    return Type.boolean(false);
+  },
+  // End read_timer/1
+  // Deps: []
+
   // Start ref_to_list/1
   "ref_to_list/1": (ref) => {
     if (!Type.isReference(ref)) {
@@ -2372,6 +2760,49 @@ const Erlang = {
     return message;
   },
   // End send/2
+  // Deps: []
+
+  // Start send_after/3
+  "send_after/3": (time, dest, message) => {
+    if (!Type.isInteger(time)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isPid(dest) && !Type.isAtom(dest)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a pid or atom"),
+      );
+    }
+
+    // Create a timer reference
+    const timerRef = Type.reference();
+    const timeMs = Number(time.value);
+
+    // Initialize timer registry
+    if (!globalThis.__hologramTimers) {
+      globalThis.__hologramTimers = {};
+    }
+
+    // Set up the timer
+    const startTime = Date.now();
+    const timeoutId = setTimeout(() => {
+      // In a real implementation, this would send the message to the process
+      // For now, just clean up the timer
+      delete globalThis.__hologramTimers[timerRef.value];
+    }, timeMs);
+
+    // Store timer info
+    globalThis.__hologramTimers[timerRef.value] = {
+      timeoutId,
+      remaining: timeMs,
+      startTime,
+    };
+
+    return timerRef;
+  },
+  // End send_after/3
   // Deps: []
 
   // Start setelement/3
@@ -2628,6 +3059,111 @@ const Erlang = {
   // End split_binary/2
   // Deps: [:erlang.byte_size/1]
 
+  // Start start_timer/3
+  "start_timer/3": (time, dest, message) => {
+    if (!Type.isInteger(time)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isPid(dest) && !Type.isAtom(dest)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a pid or atom"),
+      );
+    }
+
+    // Create a timer reference
+    const timerRef = Type.reference();
+    const timeMs = Number(time.value);
+
+    // Initialize timer registry
+    if (!globalThis.__hologramTimers) {
+      globalThis.__hologramTimers = {};
+    }
+
+    // Set up the timer
+    const startTime = Date.now();
+    const timeoutId = setTimeout(() => {
+      // In a real implementation, this would send {timeout, Ref, Msg} to the process
+      // For now, just clean up the timer
+      delete globalThis.__hologramTimers[timerRef.value];
+    }, timeMs);
+
+    // Store timer info
+    globalThis.__hologramTimers[timerRef.value] = {
+      timeoutId,
+      remaining: timeMs,
+      startTime,
+    };
+
+    return timerRef;
+  },
+  // End start_timer/3
+  // Deps: []
+
+  // Start statistics/1
+  "statistics/1": (item) => {
+    if (!Type.isAtom(item)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    const itemName = item.value;
+
+    switch (itemName) {
+      case "runtime":
+        // Return {TotalRunTime, TimeSinceLastCall} in milliseconds
+        const now = Date.now();
+        if (!globalThis.__hologramStatsRuntime) {
+          globalThis.__hologramStatsRuntime = { start: now, last: now };
+        }
+        const total = now - globalThis.__hologramStatsRuntime.start;
+        const since = now - globalThis.__hologramStatsRuntime.last;
+        globalThis.__hologramStatsRuntime.last = now;
+        return Type.tuple([Type.integer(BigInt(total)), Type.integer(BigInt(since))]);
+
+      case "wall_clock":
+        // Similar to runtime but for wall clock time
+        const wallNow = Date.now();
+        if (!globalThis.__hologramStatsWallClock) {
+          globalThis.__hologramStatsWallClock = { start: wallNow, last: wallNow };
+        }
+        const wallTotal = wallNow - globalThis.__hologramStatsWallClock.start;
+        const wallSince = wallNow - globalThis.__hologramStatsWallClock.last;
+        globalThis.__hologramStatsWallClock.last = wallNow;
+        return Type.tuple([Type.integer(BigInt(wallTotal)), Type.integer(BigInt(wallSince))]);
+
+      case "reductions":
+        // Return {TotalReductions, ReductionsSinceLastCall}
+        return Type.tuple([Type.integer(0n), Type.integer(0n)]);
+
+      default:
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(1, "unsupported statistics item"),
+        );
+    }
+  },
+  // End statistics/1
+  // Deps: []
+
+  // Start system_flag/2
+  "system_flag/2": (flag, value) => {
+    if (!Type.isAtom(flag)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    // In Hologram, we can't actually set system flags
+    // Just return the "old" value (which is always the same as the new value)
+    // Common flags: backtrace_depth, cpu_topology, dirty_cpu_schedulers_online, etc.
+    return value;
+  },
+  // End system_flag/2
+  // Deps: []
+
   // Start system_info/1
   "system_info/1": (item) => {
     if (!Type.isAtom(item)) {
@@ -2668,6 +3204,30 @@ const Erlang = {
   },
   // End system_time/0
   // Deps: []
+
+  // Start system_time/1
+  "system_time/1": (unit) => {
+    if (!Type.isAtom(unit)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    // Get system time in nanoseconds
+    const timeMs = Date.now();
+    const timeNs = BigInt(timeMs) * 1_000_000n;
+
+    // Convert to requested unit
+    const result = Erlang["convert_time_unit/3"](
+      Type.integer(timeNs),
+      Type.atom("nanosecond"),
+      unit
+    );
+
+    return result;
+  },
+  // End system_time/1
+  // Deps: [:erlang.convert_time_unit/3]
 
   // Start tl/1
   "tl/1": (list) => {
@@ -2924,6 +3484,16 @@ const Erlang = {
     return pid !== undefined ? pid : Type.atom("undefined");
   },
   // End whereis/1
+  // Deps: []
+
+  // Start yield/0
+  "yield/0": () => {
+    // Yield voluntarily to allow other processes to run
+    // In a browser environment, we can't actually yield to other Erlang processes
+    // Return true to indicate the process is still running
+    return Type.boolean(true);
+  },
+  // End yield/0
   // Deps: []
 };
 
