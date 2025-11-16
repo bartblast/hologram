@@ -581,6 +581,23 @@ const Erlang = {
   // End floor/1
   // Deps: []
 
+  // Start float/1
+  "float/1": (number) => {
+    if (!Type.isNumber(number)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    }
+
+    if (Type.isFloat(number)) {
+      return number;
+    }
+
+    return Type.float(Number(number.value));
+  },
+  // End float/1
+  // Deps: []
+
   // Start hd/1
   "hd/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {

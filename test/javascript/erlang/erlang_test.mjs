@@ -2241,6 +2241,42 @@ describe("Erlang", () => {
     });
   });
 
+  describe("float/1", () => {
+    const testedFun = Erlang["float/1"];
+
+    it("returns the float unchanged", () => {
+      const result = testedFun(Type.float(3.14));
+
+      assert.deepStrictEqual(result, Type.float(3.14));
+    });
+
+    it("converts positive integer to float", () => {
+      const result = testedFun(Type.integer(42));
+
+      assert.deepStrictEqual(result, Type.float(42.0));
+    });
+
+    it("converts negative integer to float", () => {
+      const result = testedFun(Type.integer(-42));
+
+      assert.deepStrictEqual(result, Type.float(-42.0));
+    });
+
+    it("converts 0 to 0.0", () => {
+      const result = testedFun(Type.integer(0));
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("raises ArgumentError if argument is not a number", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    });
+  });
+
   describe("hd/1", () => {
     const hd = Erlang["hd/1"];
 
