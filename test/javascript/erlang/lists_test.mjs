@@ -834,4 +834,37 @@ describe("Erlang_Lists", () => {
       );
     });
   });
+
+  describe("duplicate/2", () => {
+  const duplicate = Erlang_Lists["duplicate/2"];
+
+  it("repeats element N times", () => {
+    const result = duplicate(Type.integer(3), Type.atom("a"));
+
+    assert.deepStrictEqual(
+      result,
+      Type.list([Type.atom("a"), Type.atom("a"), Type.atom("a")])
+    );
+  });
+
+  it("returns empty list when count = 0", () => {
+    const result = duplicate(Type.integer(0), Type.atom("x"));
+
+    assert.deepStrictEqual(result, Type.list());
+  });
+
+  it("error when count negative", () => {
+    assertBoxedError(
+      () => duplicate(Type.integer(-1), Type.atom("x")),
+      "FunctionClauseError"
+    );
+  });
+
+  it("error when count not integer", () => {
+    assertBoxedError(
+      () => duplicate(Type.float(1.5), Type.atom("x")),
+      "FunctionClauseError"
+    );
+  });
+});
 });
