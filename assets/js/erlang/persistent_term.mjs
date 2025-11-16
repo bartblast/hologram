@@ -15,6 +15,15 @@ const Erlang_Persistent_Term = {
   },
   // End get/2
   // Deps: []
+
+  // Start put/2
+  "put/2": (key, value) => {
+    const scopedKey = Type.tuple([Type.atom("persistent_term"), key]);
+    MemoryStorage.put(Type.encodeMapKey(scopedKey), value);
+    return Type.atom("ok");
+  },
+  // End put/2
+  // Deps: []
 };
 
 export default Erlang_Persistent_Term;

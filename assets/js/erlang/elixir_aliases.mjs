@@ -64,6 +64,19 @@ const Erlang_Elixir_Aliases = {
   },
   // End concat/1
   // Deps: []
+
+  // Start safe_concat/1
+  "safe_concat/1": function (segments) {
+    try {
+      // Try to concat normally
+      return Erlang_Elixir_Aliases["concat/1"](segments);
+    } catch (error) {
+      // If concat fails, return nil
+      return Type.nil();
+    }
+  },
+  // End safe_concat/1
+  // Deps: [:elixir_aliases.concat/1]
 };
 
 export default Erlang_Elixir_Aliases;
