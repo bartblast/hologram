@@ -470,6 +470,14 @@ const Erlang = {
   // End div/2
   // Deps: []
 
+  // Start display/1
+  "display/1": (term) => {
+    console.log(Interpreter.inspect(term));
+    return Type.atom("ok");
+  },
+  // End display/1
+  // Deps: []
+
   // Start element/2
   "element/2": (index, tuple) => {
     if (!Type.isInteger(index)) {
@@ -547,6 +555,42 @@ const Erlang = {
   // End float_to_binary/2
   // Deps: []
 
+  // Start function_exported/3
+  "function_exported/3": (module, functionName, arity) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(functionName)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isInteger(arity)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    }
+
+    const moduleName = module.value.startsWith("Elixir.")
+      ? module.value
+      : `Elixir.${module.value}`;
+    const key = `${functionName.value}/${arity.value}`;
+
+    // Check if module exists in globalThis
+    if (!globalThis[moduleName]) {
+      return Type.boolean(false);
+    }
+
+    // Check if function exists in the module
+    return Type.boolean(key in globalThis[moduleName]);
+  },
+  // End function_exported/3
+  // Deps: []
+
   // Start hd/1
   "hd/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
@@ -622,6 +666,49 @@ const Erlang = {
     return Bitstring.concat(chunks);
   },
   // End iolist_to_binary/1
+  // Deps: [:lists.flatten/1]
+
+  // Start iolist_to_list/1
+  "iolist_to_list/1": (ioListOrBinary) => {
+    // If it's a binary, convert to list of bytes
+    if (Type.isBitstring(ioListOrBinary)) {
+      Bitstring.maybeSetBytesFromText(ioListOrBinary);
+      return Type.list(
+        Array.from(ioListOrBinary.bytes).map((byte) => Type.integer(byte)),
+      );
+    }
+
+    // If it's a list, flatten and convert all elements
+    const flattened = Erlang_Lists["flatten/1"](ioListOrBinary);
+
+    const bytes = flattened.data.flatMap((term) => {
+      if (Type.isBitstring(term)) {
+        Bitstring.maybeSetBytesFromText(term);
+        return Array.from(term.bytes);
+      } else if (Type.isInteger(term)) {
+        const value = Number(term.value);
+        if (value < 0 || value > 255) {
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(
+              1,
+              "not an iolist term",
+            ),
+          );
+        }
+        return [value];
+      } else {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "not an iolist term",
+          ),
+        );
+      }
+    });
+
+    return Type.list(bytes.map((byte) => Type.integer(byte)));
+  },
+  // End iolist_to_list/1
   // Deps: [:lists.flatten/1]
 
   // Start is_atom/1
@@ -879,6 +966,108 @@ const Erlang = {
     return Type.integer(integer1.value % integer2.value);
   },
   // End rem/2
+  // Deps: []
+
+  // Start self/0
+  "self/0": () => {
+    // Return a fixed PID for the client process
+    return Type.pid("client", [0, 0, 0], "client");
+  },
+  // End self/0
+  // Deps: []
+
+  // Start send/2
+  "send/2": (dest, message) => {
+    // On client-side, this is a simplified version
+    // Just return the message as per Erlang semantics
+    // Validation: dest should be a PID or atom
+    if (!Type.isPid(dest) && !Type.isAtom(dest)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a pid or atom"),
+      );
+    }
+    return message;
+  },
+  // End send/2
+  // Deps: []
+
+  // Start setelement/3
+  "setelement/3": (index, tuple, value) => {
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    }
+
+    const idx = Number(index.value);
+    if (idx < 1 || idx > tuple.data.length) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    }
+
+    // Create a new tuple with the element replaced
+    const newData = [...tuple.data];
+    newData[idx - 1] = value;
+    return Type.tuple(newData);
+  },
+  // End setelement/3
+  // Deps: []
+
+  // Start spawn/1
+  "spawn/1": (fun) => {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 0) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a function of arity 0"),
+      );
+    }
+
+    // Return a unique PID (using timestamp and random number)
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000000);
+    return Type.pid("client", [0, timestamp, random], "client");
+  },
+  // End spawn/1
+  // Deps: []
+
+  // Start spawn/3
+  "spawn/3": (module, functionName, args) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(functionName)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+      );
+    }
+
+    // Return a unique PID (using timestamp and random number)
+    const timestamp = Date.now();
+    const random = Math.floor(Math.random() * 1000000);
+    return Type.pid("client", [0, timestamp, random], "client");
+  },
+  // End spawn/3
   // Deps: []
 
   // Start split_binary/2

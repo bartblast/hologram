@@ -1571,6 +1571,24 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "display/1" do
+    test "displays an atom and returns :ok" do
+      assert :erlang.display(:hello) == :ok
+    end
+
+    test "displays an integer and returns :ok" do
+      assert :erlang.display(42) == :ok
+    end
+
+    test "displays a list and returns :ok" do
+      assert :erlang.display([1, 2, 3]) == :ok
+    end
+
+    test "displays a tuple and returns :ok" do
+      assert :erlang.display({:a, :b}) == :ok
+    end
+  end
+
   describe "element/2" do
     test "returns the element at the one-based index in the tuple" do
       assert :erlang.element(2, {5, 6, 7}) == 6
@@ -1621,6 +1639,38 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "raises ArgumentError if the second argument is not a proper list" do
       assert_error ArgumentError, build_argument_error_msg(2, "not a proper list"), fn ->
         :erlang.float_to_binary(1.0, [{:decimals, 4} | :compact])
+      end
+    end
+  end
+
+  describe "function_exported/3" do
+    test "returns true if function is exported" do
+      assert :erlang.function_exported(Kernel, :+, 2) == true
+    end
+
+    test "returns false if function is not exported" do
+      assert :erlang.function_exported(Kernel, :non_existent, 0) == false
+    end
+
+    test "returns false if module does not exist" do
+      assert :erlang.function_exported(NonExistentModule, :foo, 1) == false
+    end
+
+    test "raises ArgumentError if first argument is not an atom" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not an atom"), fn ->
+        :erlang.function_exported(123, :foo, 1)
+      end
+    end
+
+    test "raises ArgumentError if second argument is not an atom" do
+      assert_error ArgumentError, build_argument_error_msg(2, "not an atom"), fn ->
+        :erlang.function_exported(Kernel, 123, 1)
+      end
+    end
+
+    test "raises ArgumentError if third argument is not an integer" do
+      assert_error ArgumentError, build_argument_error_msg(3, "not an integer"), fn ->
+        :erlang.function_exported(Kernel, :+, :not_an_integer)
       end
     end
   end
@@ -1686,6 +1736,36 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "not an integer in the range 2 through 36"),
                    {:erlang, :integer_to_binary, [123_123, :abc]}
+    end
+  end
+
+  describe "iolist_to_list/1" do
+    test "converts binary to list of bytes" do
+      assert :erlang.iolist_to_list("abc") == [97, 98, 99]
+    end
+
+    test "converts simple iolist to list of bytes" do
+      assert :erlang.iolist_to_list([97, 98, 99]) == [97, 98, 99]
+    end
+
+    test "converts nested iolist to list of bytes" do
+      assert :erlang.iolist_to_list([97, [98], [[99]]]) == [97, 98, 99]
+    end
+
+    test "converts mixed iolist with binaries and integers" do
+      assert :erlang.iolist_to_list([97, "bc", 100]) == [97, 98, 99, 100]
+    end
+
+    test "raises ArgumentError for integer out of byte range" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not an iolist term"), fn ->
+        :erlang.iolist_to_list([256])
+      end
+    end
+
+    test "raises ArgumentError for negative integer" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not an iolist term"), fn ->
+        :erlang.iolist_to_list([-1])
+      end
     end
   end
 
@@ -2006,6 +2086,118 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "raises ArithmeticError if the second argument is not a number" do
       assert_error ArithmeticError, "bad argument in arithmetic expression: rem(5, :abc)", fn ->
         assert :erlang.rem(5, :abc)
+      end
+    end
+  end
+
+  describe "self/0" do
+    test "returns a PID" do
+      result = :erlang.self()
+      assert is_pid(result)
+    end
+  end
+
+  describe "send/2" do
+    test "sends message to PID and returns the message" do
+      pid = :erlang.self()
+      assert :erlang.send(pid, :hello) == :hello
+    end
+
+    test "sends message to atom and returns the message" do
+      assert :erlang.send(:some_process, {:msg, 123}) == {:msg, 123}
+    end
+
+    test "raises ArgumentError if destination is not a PID or atom" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a pid or atom"), fn ->
+        :erlang.send(123, :message)
+      end
+    end
+  end
+
+  describe "setelement/3" do
+    test "sets element at position 1" do
+      assert :erlang.setelement(1, {:a, :b, :c}, :x) == {:x, :b, :c}
+    end
+
+    test "sets element at position 2" do
+      assert :erlang.setelement(2, {:a, :b, :c}, :y) == {:a, :y, :c}
+    end
+
+    test "sets element at position 3" do
+      assert :erlang.setelement(3, {:a, :b, :c}, :z) == {:a, :b, :z}
+    end
+
+    test "raises ArgumentError if index is not an integer" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not an integer"), fn ->
+        :erlang.setelement(:not_int, {:a, :b}, :x)
+      end
+    end
+
+    test "raises ArgumentError if tuple is not a tuple" do
+      assert_error ArgumentError, build_argument_error_msg(2, "not a tuple"), fn ->
+        :erlang.setelement(1, [:a, :b], :x)
+      end
+    end
+
+    test "raises ArgumentError if index is less than 1" do
+      assert_error ArgumentError, build_argument_error_msg(1, "out of range"), fn ->
+        :erlang.setelement(0, {:a, :b}, :x)
+      end
+    end
+
+    test "raises ArgumentError if index is greater than tuple size" do
+      assert_error ArgumentError, build_argument_error_msg(1, "out of range"), fn ->
+        :erlang.setelement(4, {:a, :b, :c}, :x)
+      end
+    end
+  end
+
+  describe "spawn/1" do
+    test "returns a PID when given a zero-arity function" do
+      result = :erlang.spawn(fn -> :ok end)
+      assert is_pid(result)
+    end
+
+    test "raises ArgumentError if argument is not a function" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a function of arity 0"), fn ->
+        :erlang.spawn(:not_a_function)
+      end
+    end
+
+    test "raises ArgumentError if function arity is not 0" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a function of arity 0"), fn ->
+        :erlang.spawn(fn x -> x end)
+      end
+    end
+  end
+
+  describe "spawn/3" do
+    test "returns a PID when given module, function, and args" do
+      result = :erlang.spawn(Kernel, :+, [1, 2])
+      assert is_pid(result)
+    end
+
+    test "raises ArgumentError if module is not an atom" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not an atom"), fn ->
+        :erlang.spawn(123, :foo, [])
+      end
+    end
+
+    test "raises ArgumentError if function is not an atom" do
+      assert_error ArgumentError, build_argument_error_msg(2, "not an atom"), fn ->
+        :erlang.spawn(Kernel, 123, [])
+      end
+    end
+
+    test "raises ArgumentError if args is not a list" do
+      assert_error ArgumentError, build_argument_error_msg(3, "not a list"), fn ->
+        :erlang.spawn(Kernel, :+, :not_a_list)
+      end
+    end
+
+    test "raises ArgumentError if args is not a proper list" do
+      assert_error ArgumentError, build_argument_error_msg(3, "not a proper list"), fn ->
+        :erlang.spawn(Kernel, :+, [1 | 2])
       end
     end
   end

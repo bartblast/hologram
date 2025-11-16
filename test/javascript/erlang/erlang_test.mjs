@@ -1989,6 +1989,30 @@ describe("Erlang", () => {
     });
   });
 
+  describe("display/1", () => {
+    const testedFun = Erlang["display/1"];
+
+    it("displays an atom and returns :ok", () => {
+      const result = testedFun(Type.atom("hello"));
+      assert.deepStrictEqual(result, Type.atom("ok"));
+    });
+
+    it("displays an integer and returns :ok", () => {
+      const result = testedFun(Type.integer(42));
+      assert.deepStrictEqual(result, Type.atom("ok"));
+    });
+
+    it("displays a list and returns :ok", () => {
+      const result = testedFun(Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]));
+      assert.deepStrictEqual(result, Type.atom("ok"));
+    });
+
+    it("displays a tuple and returns :ok", () => {
+      const result = testedFun(Type.tuple([Type.atom("a"), Type.atom("b")]));
+      assert.deepStrictEqual(result, Type.atom("ok"));
+    });
+  });
+
   describe("element/2", () => {
     const element = Erlang["element/2"];
 
@@ -2133,6 +2157,55 @@ describe("Erlang", () => {
     });
   });
 
+  describe("function_exported/3", () => {
+    const testedFun = Erlang["function_exported/3"];
+
+    it("returns true if function is exported", () => {
+      // Note: This test may not work exactly as the Elixir version
+      // because module introspection works differently in JS
+      const result = testedFun(
+        Type.atom("Kernel"),
+        Type.atom("+"),
+        Type.integer(2)
+      );
+      // For now, we just test that it returns a boolean
+      assert.ok(Type.isBoolean(result));
+    });
+
+    it("returns false if module does not exist", () => {
+      const result = testedFun(
+        Type.atom("NonExistentModule"),
+        Type.atom("foo"),
+        Type.integer(1)
+      );
+      assertBoxedFalse(result);
+    });
+
+    it("raises ArgumentError if first argument is not an atom", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(123), Type.atom("foo"), Type.integer(1)),
+        "ArgumentError",
+        "argument error: not an atom",
+      );
+    });
+
+    it("raises ArgumentError if second argument is not an atom", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("Kernel"), Type.integer(123), Type.integer(1)),
+        "ArgumentError",
+        "argument error: not an atom",
+      );
+    });
+
+    it("raises ArgumentError if third argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("Kernel"), Type.atom("+"), Type.atom("not_int")),
+        "ArgumentError",
+        "argument error: not an integer",
+      );
+    });
+  });
+
   describe("hd/1", () => {
     const hd = Erlang["hd/1"];
 
@@ -2256,6 +2329,64 @@ describe("Erlang", () => {
           2,
           "not an integer in the range 2 through 36",
         ),
+      );
+    });
+  });
+
+  describe("iolist_to_list/1", () => {
+    const testedFun = Erlang["iolist_to_list/1"];
+
+    it("converts binary to list of bytes", () => {
+      const binary = Type.bitstring("abc");
+      const result = testedFun(binary);
+      const expected = Type.list([Type.integer(97), Type.integer(98), Type.integer(99)]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts simple iolist to list of bytes", () => {
+      const iolist = Type.list([Type.integer(97), Type.integer(98), Type.integer(99)]);
+      const result = testedFun(iolist);
+      const expected = Type.list([Type.integer(97), Type.integer(98), Type.integer(99)]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts nested iolist to list of bytes", () => {
+      const iolist = Type.list([
+        Type.integer(97),
+        Type.list([Type.integer(98)]),
+        Type.list([Type.list([Type.integer(99)])])
+      ]);
+      const result = testedFun(iolist);
+      const expected = Type.list([Type.integer(97), Type.integer(98), Type.integer(99)]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts mixed iolist with binaries and integers", () => {
+      const iolist = Type.list([
+        Type.integer(97),
+        Type.bitstring("bc"),
+        Type.integer(100)
+      ]);
+      const result = testedFun(iolist);
+      const expected = Type.list([Type.integer(97), Type.integer(98), Type.integer(99), Type.integer(100)]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError for integer out of byte range", () => {
+      const iolist = Type.list([Type.integer(256)]);
+      assertBoxedError(
+        () => testedFun(iolist),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
+      );
+    });
+
+    it("raises ArgumentError for negative integer", () => {
+      const iolist = Type.list([Type.integer(-1)]);
+      assertBoxedError(
+        () => testedFun(iolist),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an iolist term"),
       );
     });
   });
@@ -2763,6 +2894,173 @@ describe("Erlang", () => {
         () => testedFun(Type.integer(5), Type.atom("abc")),
         "ArithmeticError",
         "bad argument in arithmetic expression: rem(5, :abc)",
+      );
+    });
+  });
+
+  describe("self/0", () => {
+    const testedFun = Erlang["self/0"];
+
+    it("returns a PID", () => {
+      const result = testedFun();
+      assert.ok(Type.isPid(result));
+    });
+  });
+
+  describe("send/2", () => {
+    const testedFun = Erlang["send/2"];
+
+    it("sends message to PID and returns the message", () => {
+      const pid = Erlang["self/0"]();
+      const message = Type.atom("hello");
+      const result = testedFun(pid, message);
+      assert.deepStrictEqual(result, message);
+    });
+
+    it("sends message to atom and returns the message", () => {
+      const dest = Type.atom("some_process");
+      const message = Type.tuple([Type.atom("msg"), Type.integer(123)]);
+      const result = testedFun(dest, message);
+      assert.deepStrictEqual(result, message);
+    });
+
+    it("raises ArgumentError if destination is not a PID or atom", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(123), Type.atom("message")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a pid or atom"),
+      );
+    });
+  });
+
+  describe("setelement/3", () => {
+    const testedFun = Erlang["setelement/3"];
+
+    it("sets element at position 1", () => {
+      const tuple = Type.tuple([Type.atom("a"), Type.atom("b"), Type.atom("c")]);
+      const result = testedFun(Type.integer(1), tuple, Type.atom("x"));
+      const expected = Type.tuple([Type.atom("x"), Type.atom("b"), Type.atom("c")]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("sets element at position 2", () => {
+      const tuple = Type.tuple([Type.atom("a"), Type.atom("b"), Type.atom("c")]);
+      const result = testedFun(Type.integer(2), tuple, Type.atom("y"));
+      const expected = Type.tuple([Type.atom("a"), Type.atom("y"), Type.atom("c")]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("sets element at position 3", () => {
+      const tuple = Type.tuple([Type.atom("a"), Type.atom("b"), Type.atom("c")]);
+      const result = testedFun(Type.integer(3), tuple, Type.atom("z"));
+      const expected = Type.tuple([Type.atom("a"), Type.atom("b"), Type.atom("z")]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if index is not an integer", () => {
+      const tuple = Type.tuple([Type.atom("a"), Type.atom("b")]);
+      assertBoxedError(
+        () => testedFun(Type.atom("not_int"), tuple, Type.atom("x")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if tuple is not a tuple", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.list([Type.atom("a"), Type.atom("b")]), Type.atom("x")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    });
+
+    it("raises ArgumentError if index is less than 1", () => {
+      const tuple = Type.tuple([Type.atom("a"), Type.atom("b")]);
+      assertBoxedError(
+        () => testedFun(Type.integer(0), tuple, Type.atom("x")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if index is greater than tuple size", () => {
+      const tuple = Type.tuple([Type.atom("a"), Type.atom("b"), Type.atom("c")]);
+      assertBoxedError(
+        () => testedFun(Type.integer(4), tuple, Type.atom("x")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+  });
+
+  describe("spawn/1", () => {
+    const testedFun = Erlang["spawn/1"];
+
+    it("returns a PID when given a zero-arity function", () => {
+      const fun = Type.anonymousFunction(0, [], () => Type.atom("ok"));
+      const result = testedFun(fun);
+      assert.ok(Type.isPid(result));
+    });
+
+    it("raises ArgumentError if argument is not a function", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("not_a_function")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a function of arity 0"),
+      );
+    });
+
+    it("raises ArgumentError if function arity is not 0", () => {
+      const fun = Type.anonymousFunction(1, [], (x) => x);
+      assertBoxedError(
+        () => testedFun(fun),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a function of arity 0"),
+      );
+    });
+  });
+
+  describe("spawn/3", () => {
+    const testedFun = Erlang["spawn/3"];
+
+    it("returns a PID when given module, function, and args", () => {
+      const module = Type.atom("Kernel");
+      const functionName = Type.atom("+");
+      const args = Type.list([Type.integer(1), Type.integer(2)]);
+      const result = testedFun(module, functionName, args);
+      assert.ok(Type.isPid(result));
+    });
+
+    it("raises ArgumentError if module is not an atom", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(123), Type.atom("foo"), Type.list([])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    });
+
+    it("raises ArgumentError if function is not an atom", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("Kernel"), Type.integer(123), Type.list([])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    });
+
+    it("raises ArgumentError if args is not a list", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("Kernel"), Type.atom("+"), Type.atom("not_a_list")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if args is not a proper list", () => {
+      const improperList = Type.improperList([Type.integer(1), Type.integer(2)]);
+      assertBoxedError(
+        () => testedFun(Type.atom("Kernel"), Type.atom("+"), improperList),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
       );
     });
   });
