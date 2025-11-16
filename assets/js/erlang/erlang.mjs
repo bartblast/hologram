@@ -890,6 +890,15 @@ const Erlang = {
   // End date/0
   // Deps: []
 
+  // Start display/1
+  "display/1": (term) => {
+    const str = Interpreter.inspect(term);
+    console.log(str);
+    return Type.atom("ok");
+  },
+  // End display/1
+  // Deps: []
+
   // Start element/2
   "element/2": (index, tuple) => {
     if (!Type.isInteger(index)) {
@@ -1062,6 +1071,53 @@ const Erlang = {
   // End float/1
   // Deps: []
 
+  // Start function_exported/3
+  "function_exported/3": (module, function_name, arity) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(function_name)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isInteger(arity)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    }
+
+    // Check if the module has the function exported
+    // For now, we'll check if it exists in the global Erlang object
+    const moduleName = module.value;
+    const funcName = function_name.value;
+    const arityNum = Number(arity.value);
+    const mfaKey = `${funcName}/${arityNum}`;
+
+    // Try to find the module
+    if (moduleName === "erlang") {
+      return Type.boolean(mfaKey in Erlang);
+    }
+
+    // For other modules, check if they're available in the global context
+    // This is a simplified implementation for client-side
+    try {
+      const moduleObj = globalThis[Utils.snakeToCamel(moduleName)];
+      if (moduleObj && moduleObj.__exports__) {
+        return Type.boolean(moduleObj.__exports__.has(mfaKey));
+      }
+      return Type.boolean(false);
+    } catch {
+      return Type.boolean(false);
+    }
+  },
+  // End function_exported/3
+  // Deps: []
+
   // Start hd/1
   "hd/1": (list) => {
     if (!Type.isList(list) || list.data.length === 0) {
@@ -1223,6 +1279,14 @@ const Erlang = {
   },
   // End iolist_to_binary/1
   // Deps: [:lists.flatten/1]
+
+  // Start iolist_to_list/1
+  "iolist_to_list/1": (iolist) => {
+    const binary = Erlang["iolist_to_binary/1"](iolist);
+    return Erlang["binary_to_list/1"](binary);
+  },
+  // End iolist_to_list/1
+  // Deps: [:erlang.iolist_to_binary/1, :erlang.binary_to_list/1]
 
   // Start iolist_size/1
   "iolist_size/1": (iolist) => {
@@ -2180,6 +2244,58 @@ const Erlang = {
   // End ref_to_list/1
   // Deps: []
 
+  // Start reverse/1
+  "reverse/1": (list) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    const reversed = [...list.data].reverse();
+    return Type.list(reversed);
+  },
+  // End reverse/1
+  // Deps: []
+
+  // Start reverse/2
+  "reverse/2": (list, tail) => {
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    const reversed = [...list.data].reverse();
+
+    // If tail is a list, concatenate; otherwise make improper list
+    if (Type.isProperList(tail)) {
+      const combined = reversed.concat(tail.data);
+      return Type.list(combined);
+    } else if (Type.isList(tail)) {
+      const combined = reversed.concat(tail.data);
+      return Type.improperList(combined);
+    } else {
+      // Single element tail - make improper list
+      const combined = reversed.concat([tail]);
+      return Type.improperList(combined);
+    }
+  },
+  // End reverse/2
+  // Deps: []
+
   // Start round/1
   "round/1": (number) => {
     if (!Type.isNumber(number)) {
@@ -2257,6 +2373,103 @@ const Erlang = {
   },
   // End split_binary/2
   // Deps: [:erlang.byte_size/1]
+
+  // Start spawn/1
+  "spawn/1": (fun) => {
+    if (!Type.isAnonymousFunction(fun)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a function"),
+      );
+    }
+
+    // Client-side simplified implementation
+    // In actual Erlang, this would spawn a new process
+    // For client-side, we just return a new PID without actually spawning
+    // We use Sequence.next() to generate unique PIDs
+    const id = Sequence.next();
+    return Type.pid([0, id, 0]);
+  },
+  // End spawn/1
+  // Deps: []
+
+  // Start spawn/3
+  "spawn/3": (module, function_name, args) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(function_name)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isList(args)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    // Client-side simplified implementation
+    // Generate a unique PID for the "spawned" process
+    const id = Sequence.next();
+    return Type.pid([0, id, 0]);
+  },
+  // End spawn/3
+  // Deps: []
+
+  // Start setelement/3
+  "setelement/3": (index, tuple, value) => {
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    }
+
+    const idx = Number(index.value);
+    const size = tuple.data.length;
+
+    // Erlang uses 1-based indexing
+    if (idx < 1 || idx > size) {
+      Interpreter.raiseArgumentError(
+        `index ${idx} out of range for tuple of size ${size}`,
+      );
+    }
+
+    // Create new tuple with updated element
+    const newData = [...tuple.data];
+    newData[idx - 1] = value;
+
+    return Type.tuple(newData);
+  },
+  // End setelement/3
+  // Deps: []
+
+  // Start self/0
+  "self/0": () => {
+    // Return a fixed PID for client-side (single "process")
+    return Type.pid([0, 0, 0]);
+  },
+  // End self/0
+  // Deps: []
+
+  // Start send/2
+  "send/2": (dest, message) => {
+    // Client-side simplified implementation
+    // In actual Erlang, this would send a message to the dest process
+    // For client-side, we just return the message (no actual message passing)
+    return message;
+  },
+  // End send/2
+  // Deps: []
 
   // Start size/1
   "size/1": (term) => {
