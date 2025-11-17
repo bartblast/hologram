@@ -59,8 +59,7 @@ describe("Erlang_Maps", () => {
       ]);
 
       const map = Type.map([
-          [Type.string("hi"), Type.integer(42)],
-          [key, value],
+          [Type.string("hi"), Type.integer(42)]
       ]);
 
       const result = find(key, map);
