@@ -1885,6 +1885,41 @@ describe("Erlang", () => {
     });
   });
 
+  describe("ceil/1", () => {
+    const testedFun = Erlang["ceil/1"];
+
+    it("rounds positive float with fractional part up", () => {
+      assert.deepStrictEqual(testedFun(Type.float(1.23)), Type.integer(2));
+    });
+
+    it("keeps positive float without fractional part unchanged", () => {
+      assert.deepStrictEqual(testedFun(Type.float(1.0)), Type.integer(1));
+    });
+
+    it("rounds negative float with fractional part up toward zero", () => {
+      assert.deepStrictEqual(testedFun(Type.float(-1.23)), Type.integer(-1));
+    });
+
+    it("keeps integers unchanged", () => {
+      assert.deepStrictEqual(testedFun(Type.integer(1)), Type.integer(1));
+    });
+
+    it("keeps large positive integer unchanged", () => {
+      assert.deepStrictEqual(
+        testedFun(Type.integer(123456789012345678901234567890n)),
+        Type.integer(123456789012345678901234567890n),
+      );
+    });
+
+    it("raises ArgumentError if the argument is not a number", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    });
+  });
+
   describe("div/2", () => {
     const testedFun = Erlang["div/2"];
 
