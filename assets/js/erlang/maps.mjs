@@ -20,7 +20,7 @@ const Erlang_Maps = {
     if (map.data[encodedKey]) {
       return map.data[encodedKey][1];
     }
-    
+
     return Type.atom("error");
   },
   // End find/2

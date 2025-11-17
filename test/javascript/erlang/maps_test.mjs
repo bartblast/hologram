@@ -39,11 +39,11 @@ describe("Erlang_Maps", () => {
     const find = Erlang_Maps["find/2"];
 
     it("successfully find key in map and return ok tuple with value", () => {
-      const key = Type.string("two");
+      const key = Type.atom("two");
       const value = Type.integer(2);
 
       const map = Type.map([
-          [Type.string("one"), Type.integer(1)],
+          [Type.atom("one"), Type.integer(1)],
           [key, value],
       ]);
 
@@ -53,14 +53,10 @@ describe("Erlang_Maps", () => {
     });
 
     it("key does not exist in map", () => {
-      const key = Type.string("hello");
-      const expected = Type.tuple([
-        Type.atom("error")
-      ]);
+      const key = Type.atom("hello");
+      const expected = Type.atom("error")
 
-      const map = Type.map([
-          [Type.string("hi"), Type.integer(42)]
-      ]);
+      const map = Type.map([[Type.atom("one"), Type.integer(1)]]);
 
       const result = find(key, map);
       
