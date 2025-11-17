@@ -7555,6 +7555,84 @@ const Erlang = {
   },
   // End unique_integer/1
   // Deps: [:erlang.unique_integer/0]
+
+  // Start port_open/2
+  "port_open/2": (portName, portSettings) => {
+    // Ports are not supported in browser context
+    // Ports are used for communication with external programs
+    Interpreter.raiseArgumentError(
+      "erlang:port_open/2 is not supported in client-side Hologram runtime."
+    );
+  },
+  // End port_open/2
+  // Deps: []
+
+  // Start halt/2
+  "halt/2": (status, options) => {
+    if (!Type.isInteger(status)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    // In browser context, we can't actually halt the runtime
+    // Just log and return ok
+    console.log("erlang:halt/2 called with status:", status.value);
+    return Type.atom("ok");
+  },
+  // End halt/2
+  // Deps: []
+
+  // Start display/1
+  "display/1": (term) => {
+    // Display writes to standard output without formatting
+    console.log(Interpreter.inspect(term));
+    return Type.atom("true");
+  },
+  // End display/1
+  // Deps: []
+
+  // Start is_builtin/3
+  "is_builtin/3": (module, function, arity) => {
+    if (!Type.isAtom(module)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    }
+
+    if (!Type.isAtom(function)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    if (!Type.isInteger(arity)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    }
+
+    // In the client runtime, check if the function exists in our module system
+    try {
+      const moduleProxy = Interpreter.moduleProxy(module);
+      if (!moduleProxy) {
+        return Type.boolean(false);
+      }
+
+      const functionKey = `${function.value}/${arity.value}`;
+      return Type.boolean(typeof moduleProxy[functionKey] === "function");
+    } catch (error) {
+      return Type.boolean(false);
+    }
+  },
+  // End is_builtin/3
+  // Deps: []
 };
 
 export default Erlang;
