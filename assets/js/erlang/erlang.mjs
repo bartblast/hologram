@@ -359,6 +359,31 @@ const Erlang = {
   // End binary_to_existing_atom/2
   // Deps: [:erlang.binary_to_atom/2]
 
+  // Start binary_to_float/1
+  "binary_to_float/1": (binary) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    const text = Bitstring.toText(binary);
+
+    const floatRegex = /^[+-]?\d+\.\d+([eE][+-]?\d+)?$/;
+
+    if (!floatRegex.test(text)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a textual representation of a float"),
+      );
+    }
+
+    const value = Number(text);
+
+    return Type.float(value);
+  },
+  // End binary_to_float/1
+  // Deps: []
+
   // Start binary_to_integer/1
   "binary_to_integer/1": (binary) => {
     return Erlang["binary_to_integer/2"](binary, Type.integer(10));

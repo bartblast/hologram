@@ -1360,6 +1360,132 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   # The client version works exactly the same as binary_to_atom/2.
   # test "binary_to_existing_atom/2"
 
+  describe "binary_to_float/1" do
+    test "converts a correct binary to a float" do
+      result = :erlang.binary_to_float("10.5")
+      assert result == 10.5
+    end
+
+    test "parses scientific notation" do
+      result = :erlang.binary_to_float("2.2017764e+1")
+      assert result == 22.017764
+    end
+
+    test "parses negative float" do
+      result = :erlang.binary_to_float("-3.14")
+      assert result == -3.14
+    end
+
+    test "parses float with leading zeros" do
+      result = :erlang.binary_to_float("00012.34")
+      assert result == 12.34
+    end
+
+    test "parses + sign float" do
+      result = :erlang.binary_to_float("+15.5")
+      assert result == 15.5
+    end
+
+    test "parses uppercase E scientific notation" do
+      result = :erlang.binary_to_float("1.2E3")
+      assert result == 1200.0
+    end
+
+    test "parses negative exponent" do
+      result = :erlang.binary_to_float("1.23e-3")
+      assert result == 0.00123
+    end
+
+    test "parses negative zero" do
+      result = :erlang.binary_to_float("-0.0")
+      assert result == -0.0
+    end
+
+    test "raises ArgumentError if input is not a binary" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :binary_to_float, [123]}
+    end
+
+    test "raises ArgumentError when float contains underscores" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["1_000.5"]}
+    end
+
+    test "raises ArgumentError for invalid float format" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["12.3.4"]}
+    end
+
+    test "raises ArgumentError for non-numeric text" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["abc"]}
+    end
+
+    test "rejects empty binary" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, [""]}
+    end
+
+    test "rejects decimal point only" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["."]}
+    end
+
+    test "rejects leading dot such as .5" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, [".5"]}
+    end
+
+    test "rejects trailing dot such as 5." do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["5."]}
+    end
+
+    test "rejects scientific notation without a fraction like 3e10" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["3e10"]}
+    end
+
+    test "raises ArgumentError on trailing exponent marker" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["2e"]}
+    end
+
+    test "raises ArgumentError on whitespace around the number" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, [" 12.3"]}
+    end
+
+    test "raises ArgumentError on multiple exponent markers" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["1e2e3"]}
+    end
+
+    test "raises ArgumentError on Infinity text" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["Infinity"]}
+    end
+
+    test "raises ArgumentError on hex-style JS float" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["0x1.fp2"]}
+    end
+  end
+
   describe "binary_to_integer/1" do
     test "delegates to binary_to_integer/2 with base 10" do
       assert :erlang.binary_to_integer("123") == :erlang.binary_to_integer("123", 10)
