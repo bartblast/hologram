@@ -7633,6 +7633,122 @@ const Erlang = {
   },
   // End is_builtin/3
   // Deps: []
+
+  // Start timestamp/0
+  "timestamp/0": () => {
+    // Returns {MegaSecs, Secs, MicroSecs}
+    const now = Date.now(); // milliseconds since epoch
+    const totalMicros = now * 1000;
+    const megaSecs = Math.floor(totalMicros / 1000000000000);
+    const secs = Math.floor((totalMicros % 1000000000000) / 1000000);
+    const microSecs = Math.floor(totalMicros % 1000000);
+
+    return Type.tuple([
+      Type.integer(megaSecs),
+      Type.integer(secs),
+      Type.integer(microSecs),
+    ]);
+  },
+  // End timestamp/0
+  // Deps: []
+
+  // Start universaltime/0
+  "universaltime/0": () => {
+    const now = new Date();
+
+    const date = Type.tuple([
+      Type.integer(now.getUTCFullYear()),
+      Type.integer(now.getUTCMonth() + 1),
+      Type.integer(now.getUTCDate()),
+    ]);
+
+    const time = Type.tuple([
+      Type.integer(now.getUTCHours()),
+      Type.integer(now.getUTCMinutes()),
+      Type.integer(now.getUTCSeconds()),
+    ]);
+
+    return Type.tuple([date, time]);
+  },
+  // End universaltime/0
+  // Deps: []
+
+  // Start localtime/0
+  "localtime/0": () => {
+    const now = new Date();
+
+    const date = Type.tuple([
+      Type.integer(now.getFullYear()),
+      Type.integer(now.getMonth() + 1),
+      Type.integer(now.getDate()),
+    ]);
+
+    const time = Type.tuple([
+      Type.integer(now.getHours()),
+      Type.integer(now.getMinutes()),
+      Type.integer(now.getSeconds()),
+    ]);
+
+    return Type.tuple([date, time]);
+  },
+  // End localtime/0
+  // Deps: []
+
+  // Start date/0
+  "date/0": () => {
+    const now = new Date();
+
+    return Type.tuple([
+      Type.integer(now.getFullYear()),
+      Type.integer(now.getMonth() + 1),
+      Type.integer(now.getDate()),
+    ]);
+  },
+  // End date/0
+  // Deps: []
+
+  // Start time/0
+  "time/0": () => {
+    const now = new Date();
+
+    return Type.tuple([
+      Type.integer(now.getHours()),
+      Type.integer(now.getMinutes()),
+      Type.integer(now.getSeconds()),
+    ]);
+  },
+  // End time/0
+  // Deps: []
+
+  // Start binary_to_term/1
+  "binary_to_term/1": (binary) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    // Binary term format (ETF) is complex
+    // For client-side, raise error as this is typically server-side functionality
+    Interpreter.raiseArgumentError(
+      "erlang:binary_to_term/1 is not supported in client-side Hologram runtime. " +
+      "Binary term format conversion should be done server-side."
+    );
+  },
+  // End binary_to_term/1
+  // Deps: []
+
+  // Start term_to_binary/1
+  "term_to_binary/1": (term) => {
+    // External Term Format (ETF) encoding is complex
+    // For client-side, raise error as this is typically server-side functionality
+    Interpreter.raiseArgumentError(
+      "erlang:term_to_binary/1 is not supported in client-side Hologram runtime. " +
+      "Binary term format conversion should be done server-side."
+    );
+  },
+  // End term_to_binary/1
+  // Deps: []
 };
 
 export default Erlang;
