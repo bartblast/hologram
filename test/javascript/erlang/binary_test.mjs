@@ -39,70 +39,50 @@ describe("Erlang_Binary", () => {
       assertBoxedError(
         () => at(binary, pos),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+        "argument error",
       );
     });
 
-    it("raises FunctionClauseError when subject is nil", () => {
+    it("raises ArgumentError when subject is nil", () => {
       const subject = Type.nil();
-      const pos = Type.integer(0);
-
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":binary.at/2",
-        [subject, pos],
-      );
 
       assertBoxedError(
-        () => at(subject, pos),
-        "FunctionClauseError",
-        expectedMessage,
+        () => at(subject, Type.integer(0)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
-    it("raises FunctionClauseError when bitstring is not a binary", () => {
+    it("raises ArgumentError when bitstring is not a binary", () => {
       const subject = Type.bitstring([1, 0, 1]);
-      const pos = Type.integer(0);
-
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":binary.at/2",
-        [subject, pos],
-      );
 
       assertBoxedError(
-        () => at(subject, pos),
-        "FunctionClauseError",
-        expectedMessage,
+        () => at(subject, Type.integer(0)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "is a bitstring (expected a binary)",
+        ),
       );
     });
 
-    it("raises FunctionClauseError when position is nil", () => {
-      const subject = Type.bitstring([1, 0, 1]);
+    it("raises ArgumentError when position is nil", () => {
       const pos = Type.nil();
-
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":binary.at/2",
-        [subject, pos],
-      );
-
-      assertBoxedError(
-        () => at(subject, pos),
-        "FunctionClauseError",
-        expectedMessage,
-      );
-    });
-
-    it("raises FunctionClauseError when position is negative", () => {
-      const pos = Type.integer(-1);
-
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":binary.at/2",
-        [binary, pos],
-      );
 
       assertBoxedError(
         () => at(binary, pos),
-        "FunctionClauseError",
-        expectedMessage,
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError when position is negative", () => {
+      const pos = Type.integer(-1);
+
+      assertBoxedError(
+        () => at(binary, pos),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
       );
     });
   });

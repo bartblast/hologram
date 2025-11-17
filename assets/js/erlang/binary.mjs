@@ -12,23 +12,28 @@ const Erlang_Binary = {
   // Start at/2
   "at/2": function (subject, pos) {
     if (!Type.isBinary(subject)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":binary.at/2", arguments),
+      const msg = Type.isBitstring(subject)
+        ? "is a bitstring (expected a binary)"
+        : "not a binary";
+      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, msg));
+    }
+
+    if (!Type.isInteger(pos)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
       );
     }
 
-    if (!Type.isInteger(pos) || pos.value < 0n) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":binary.at/2", arguments),
+    if (pos.value < 0n) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
       );
     }
 
     Bitstring.maybeSetBytesFromText(subject);
 
     if (pos.value >= subject.bytes.length) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
-      );
+      Interpreter.raiseArgumentError("argument error");
     }
 
     return Type.integer(subject.bytes[pos.value]);

@@ -29,13 +29,13 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       end
     end
 
-    test "raises FunctionClauseError when subject is nil" do
+    test "raises ArgumentError when subject is nil" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a binary"),
                    fn -> :binary.at(nil, 0) end
     end
 
-    test "raises FunctionClauseError when bitstring is not a binary" do
+    test "raises ArgumentError when bitstring is not a binary" do
       subject = <<1::1, 0::1, 1::1>>
 
       assert_error ArgumentError,
@@ -43,13 +43,13 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
                    fn -> :binary.at(subject, 0) end
     end
 
-    test "raises FunctionClauseError when position is nil" do
+    test "raises ArgumentError when position is nil" do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "not an integer"),
                    fn -> :binary.at(@binary, nil) end
     end
 
-    test "raises FunctionClauseError when position is negative" do
+    test "raises ArgumentError when position is negative" do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "out of range"),
                    fn -> :binary.at(@binary, -1) end
