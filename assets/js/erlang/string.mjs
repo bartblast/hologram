@@ -148,6 +148,155 @@ const Erlang_String = {
   },
   // End replace/4
   // Deps: []
+
+  // Start split/2
+  "split/2": (string, searchPattern) => {
+    try {
+      const str = toString(string);
+      const pattern = toString(searchPattern);
+
+      if (pattern === "") {
+        // Split into individual graphemes/characters
+        const chars = [...str];
+        return Type.list(chars.map((char) => toBinary(char)));
+      }
+
+      const parts = str.split(pattern);
+      return Type.list(parts.map((part) => toBinary(part)));
+    } catch (error) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+  },
+  // End split/2
+  // Deps: []
+
+  // Start split/3
+  "split/3": (string, searchPattern, where) => {
+    if (!Type.isAtom(where)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an atom"),
+      );
+    }
+
+    try {
+      const str = toString(string);
+      const pattern = toString(searchPattern);
+      const whereValue = where.value;
+
+      let parts;
+
+      switch (whereValue) {
+        case "leading":
+          // Split only at the first occurrence
+          const leadingIndex = str.indexOf(pattern);
+          if (leadingIndex === -1) {
+            parts = [str];
+          } else {
+            parts = [
+              str.substring(0, leadingIndex),
+              str.substring(leadingIndex + pattern.length),
+            ];
+          }
+          break;
+
+        case "trailing":
+          // Split only at the last occurrence
+          const trailingIndex = str.lastIndexOf(pattern);
+          if (trailingIndex === -1) {
+            parts = [str];
+          } else {
+            parts = [
+              str.substring(0, trailingIndex),
+              str.substring(trailingIndex + pattern.length),
+            ];
+          }
+          break;
+
+        case "all":
+          // Split at all occurrences
+          parts = str.split(pattern);
+          break;
+
+        default:
+          Interpreter.raiseArgumentError("argument error");
+          return;
+      }
+
+      return Type.list(parts.map((part) => toBinary(part)));
+    } catch (error) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+  },
+  // End split/3
+  // Deps: []
+
+  // Start slice/2
+  "slice/2": (string, start) => {
+    if (!Type.isInteger(start)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    try {
+      const str = toString(string);
+      const startIdx = Number(start.value);
+
+      // Handle negative indices (count from end)
+      const actualStart = startIdx < 0 ? str.length + startIdx : startIdx;
+
+      const result = str.substring(actualStart);
+      return toBinary(result);
+    } catch (error) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+  },
+  // End slice/2
+  // Deps: []
+
+  // Start slice/3
+  "slice/3": (string, start, length) => {
+    if (!Type.isInteger(start)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (!Type.isInteger(length)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    }
+
+    try {
+      const str = toString(string);
+      const startIdx = Number(start.value);
+      const len = Number(length.value);
+
+      // Handle negative indices (count from end)
+      const actualStart = startIdx < 0 ? str.length + startIdx : startIdx;
+
+      const result = str.substring(actualStart, actualStart + len);
+      return toBinary(result);
+    } catch (error) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+  },
+  // End slice/3
+  // Deps: []
+
+  // Start trim/1
+  "trim/1": (string) => {
+    try {
+      const str = toString(string);
+      const result = str.trim();
+      return toBinary(result);
+    } catch (error) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+  },
+  // End trim/1
+  // Deps: []
 };
 
 export default Erlang_String;

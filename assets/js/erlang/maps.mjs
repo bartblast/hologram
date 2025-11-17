@@ -373,6 +373,118 @@ const Erlang_Maps = {
   },
   // End merge_with/3
   // Deps: []
+
+  // Start size/1
+  "size/1": (map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    return Type.integer(Object.keys(map.data).length);
+  },
+  // End size/1
+  // Deps: []
+
+  // Start values/1
+  "values/1": (map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    return Type.list(Object.values(map.data).map(([_key, value]) => value));
+  },
+  // End values/1
+  // Deps: []
+
+  // Start filter/2
+  "filter/2": (predicate, map) => {
+    if (!Type.isAnonymousFunction(predicate) || predicate.arity !== 2) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a fun that takes two arguments",
+        ),
+      );
+    }
+
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    const result = {};
+
+    for (const encodedKey in map.data) {
+      const [key, value] = map.data[encodedKey];
+      const keep = Interpreter.callAnonymousFunction(predicate, [key, value]);
+
+      if (!Type.isFalse(keep)) {
+        result[encodedKey] = [key, value];
+      }
+    }
+
+    return {type: "map", data: result};
+  },
+  // End filter/2
+  // Deps: []
+
+  // Start filtermap/2
+  "filtermap/2": (fun, map) => {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a fun that takes two arguments",
+        ),
+      );
+    }
+
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    const result = {};
+
+    for (const encodedKey in map.data) {
+      const [key, value] = map.data[encodedKey];
+      const funResult = Interpreter.callAnonymousFunction(fun, [key, value]);
+
+      // Check if result is {true, NewValue} or true
+      if (Type.isTuple(funResult) && funResult.data.length === 2) {
+        const [first, newValue] = funResult.data;
+        if (Type.isAtom(first) && first.value === "true") {
+          result[encodedKey] = [key, newValue];
+        }
+      } else if (Type.isAtom(funResult) && funResult.value === "true") {
+        result[encodedKey] = [key, value];
+      }
+      // Otherwise (false or anything else), skip this entry
+    }
+
+    return {type: "map", data: result};
+  },
+  // End filtermap/2
+  // Deps: []
+
+  // Start take/2
+  "take/2": (key, map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    const encodedKey = Type.encodeMapKey(key);
+
+    if (map.data[encodedKey]) {
+      const value = map.data[encodedKey][1];
+      const newMap = Utils.shallowCloneObject(map);
+      delete newMap.data[encodedKey];
+
+      return Type.tuple([value, newMap]);
+    }
+
+    return Type.atom("error");
+  },
+  // End take/2
+  // Deps: []
 };
 
 export default Erlang_Maps;
