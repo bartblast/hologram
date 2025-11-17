@@ -1,5 +1,6 @@
 "use strict";
 
+import Type from "../type.mjs";
 import Erlang_Filename from "./filename.mjs";
 
 // IMPORTANT!
@@ -22,6 +23,47 @@ const Erlang_File = {
   },
   // End basename/2
   // Deps: [:filename.basename/2]
+
+  // Start change_group/2
+  "change_group/2": (name, group) => {
+    // File system operations are not supported in browser context
+    // Return error to match expected behavior
+    return Type.tuple([Type.atom("error"), Type.atom("enotsup")]);
+  },
+  // End change_group/2
+  // Deps: []
+
+  // Start change_mode/2
+  "change_mode/2": (name, mode) => {
+    // File system operations are not supported in browser context
+    return Type.tuple([Type.atom("error"), Type.atom("enotsup")]);
+  },
+  // End change_mode/2
+  // Deps: []
+
+  // Start change_owner/2
+  "change_owner/2": (name, owner) => {
+    // File system operations are not supported in browser context
+    return Type.tuple([Type.atom("error"), Type.atom("enotsup")]);
+  },
+  // End change_owner/2
+  // Deps: []
+
+  // Start copy/2
+  "copy/2": (source, destination) => {
+    // File copying is not supported in browser context
+    return Type.tuple([Type.atom("error"), Type.atom("enotsup")]);
+  },
+  // End copy/2
+  // Deps: []
+
+  // Start copy/3
+  "copy/3": (source, destination, bytesCount) => {
+    // File copying is not supported in browser context
+    return Type.tuple([Type.atom("error"), Type.atom("enotsup")]);
+  },
+  // End copy/3
+  // Deps: []
 };
 
 export default Erlang_File;
