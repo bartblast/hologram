@@ -9,6 +9,34 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
   @moduletag :consistency
 
+  describe "duplicate/2" do
+    test "returns list with the element duplicated N times" do
+      assert :lists.duplicate(3, :a) == [:a, :a, :a]
+    end
+
+    test "returns empty list when N = 0" do
+      assert :lists.duplicate(0, :x) == []
+    end
+
+    test "raises FunctionClauseError when the first argument is negative" do
+      expected_msg =
+        build_function_clause_error_msg(":lists.duplicate/2", [-1, :x])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.duplicate(-1, :x)
+      end
+    end
+
+    test "raises FunctionClauseError when first argument is not an integer" do
+      expected_msg =
+        build_function_clause_error_msg(":lists.duplicate/2", [1.5, :x])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.duplicate(1.5, :x)
+      end
+    end
+  end
+
   describe "filter/2" do
     setup do
       [fun: fn elem -> elem > 1 end]
@@ -460,34 +488,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
       assert_error FunctionClauseError, expected_msg, fn ->
         :lists.sort([1, 2 | 3])
-      end
-    end
-  end
-
-  describe "duplicate/2" do
-    test "returns list with the element duplicated N times" do
-      assert :lists.duplicate(3, :a) == [:a, :a, :a]
-    end
-
-    test "returns empty list when N = 0" do
-      assert :lists.duplicate(0, :x) == []
-    end
-
-    test "raises FunctionClauseError when the first argument is negative" do
-      expected_msg =
-        build_function_clause_error_msg(":lists.duplicate/2", [-1, :x])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.duplicate(-1, :x)
-      end
-    end
-
-    test "raises FunctionClauseError when first argument is not an integer" do
-      expected_msg =
-        build_function_clause_error_msg(":lists.duplicate/2", [1.5, :x])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.duplicate(1.5, :x)
       end
     end
   end
