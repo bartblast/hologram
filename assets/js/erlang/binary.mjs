@@ -443,6 +443,271 @@ const Erlang_Binary = {
   },
   // End replace/4
   // Deps: []
+
+  // Start part/2
+  "part/2": (binary, posLen) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    if (!Type.isTuple(posLen) || posLen.data.length !== 2) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a valid {Pos, Len} tuple"),
+      );
+    }
+
+    const pos = posLen.data[0];
+    const len = posLen.data[1];
+
+    if (!Type.isInteger(pos) || !Type.isInteger(len)) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    return Erlang_Binary["part/3"](binary, pos, len);
+  },
+  // End part/2
+  // Deps: [:binary.part/3]
+
+  // Start part/3
+  "part/3": (binary, pos, len) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    if (!Type.isInteger(pos)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (!Type.isInteger(len)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    }
+
+    Bitstring.maybeSetBytesFromText(binary);
+    const bytes = binary.bytes;
+    const posNum = Number(pos.value);
+    const lenNum = Number(len.value);
+
+    // Negative position means count from end
+    const actualPos = posNum < 0 ? bytes.length + posNum : posNum;
+
+    if (actualPos < 0 || actualPos > bytes.length) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    if (lenNum < 0 || actualPos + lenNum > bytes.length) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    const result = bytes.slice(actualPos, actualPos + lenNum);
+    return Type.bitstring(result, 0);
+  },
+  // End part/3
+  // Deps: []
+
+  // Start split/2
+  "split/2": (binary, pattern) => {
+    return Erlang_Binary["split/3"](binary, pattern, Type.list([]));
+  },
+  // End split/2
+  // Deps: [:binary.split/3]
+
+  // Start split/3
+  "split/3": (binary, pattern, options) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    if (!Type.isList(options)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    // Parse options
+    let global = false;
+    let trim = false;
+    let trim_all = false;
+
+    for (const option of options.data) {
+      if (Type.isAtom(option)) {
+        if (option.value === "global") {
+          global = true;
+        } else if (option.value === "trim") {
+          trim = true;
+        } else if (option.value === "trim_all") {
+          trim_all = true;
+        }
+      }
+    }
+
+    // Get pattern bytes
+    let patterns;
+    if (Type.isBinary(pattern)) {
+      patterns = [{bytes: null, binary: pattern}];
+    } else if (Type.isTuple(pattern) && pattern.data.length === 2) {
+      const marker = pattern.data[0];
+      if (Type.isAtom(marker) && marker.value === "binary_compiled_pattern") {
+        const patternList = pattern.data[1];
+        patterns = patternList.data.map((p) => ({
+          bytes: null,
+          binary: p.data[0],
+        }));
+      } else {
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+        );
+      }
+    } else {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a valid pattern"),
+      );
+    }
+
+    Bitstring.maybeSetBytesFromText(binary);
+    const bytes = binary.bytes;
+
+    // Find first (or all if global) match
+    let splitPos = -1;
+    let splitLen = 0;
+
+    const matches = [];
+    for (const patternInfo of patterns) {
+      Bitstring.maybeSetBytesFromText(patternInfo.binary);
+      const patternBytes = patternInfo.binary.bytes;
+
+      for (let i = 0; i <= bytes.length - patternBytes.length; i++) {
+        let match = true;
+        for (let j = 0; j < patternBytes.length; j++) {
+          if (bytes[i + j] !== patternBytes[j]) {
+            match = false;
+            break;
+          }
+        }
+
+        if (match) {
+          if (!global) {
+            // Just find first match
+            splitPos = i;
+            splitLen = patternBytes.length;
+            break;
+          } else {
+            matches.push({pos: i, len: patternBytes.length});
+            i += patternBytes.length - 1; // Skip overlapping
+          }
+        }
+      }
+
+      if (splitPos >= 0 && !global) break;
+    }
+
+    if (!global) {
+      // Split once
+      if (splitPos < 0) {
+        return Type.list([binary]);
+      }
+
+      const part1 = bytes.slice(0, splitPos);
+      const part2 = bytes.slice(splitPos + splitLen);
+
+      return Type.list([
+        Type.bitstring(part1, 0),
+        Type.bitstring(part2, 0),
+      ]);
+    } else {
+      // Split multiple times
+      if (matches.length === 0) {
+        return Type.list([binary]);
+      }
+
+      const parts = [];
+      let lastPos = 0;
+
+      for (const match of matches) {
+        const part = bytes.slice(lastPos, match.pos);
+        parts.push(Type.bitstring(part, 0));
+        lastPos = match.pos + match.len;
+      }
+
+      // Add final part
+      const finalPart = bytes.slice(lastPos);
+      parts.push(Type.bitstring(finalPart, 0));
+
+      // Apply trim options
+      if (trim_all) {
+        return Type.list(parts.filter((p) => p.bytes.length > 0));
+      } else if (trim) {
+        // Remove leading/trailing empty parts
+        while (parts.length > 0 && parts[0].bytes.length === 0) {
+          parts.shift();
+        }
+        while (parts.length > 0 && parts[parts.length - 1].bytes.length === 0) {
+          parts.pop();
+        }
+      }
+
+      return Type.list(parts);
+    }
+  },
+  // End split/3
+  // Deps: []
+
+  // Start decode_unsigned/1
+  "decode_unsigned/1": (binary) => {
+    return Erlang_Binary["decode_unsigned/2"](binary, Type.atom("big"));
+  },
+  // End decode_unsigned/1
+  // Deps: [:binary.decode_unsigned/2]
+
+  // Start decode_unsigned/2
+  "decode_unsigned/2": (binary, endianness) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    if (!Type.isAtom(endianness)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    }
+
+    Bitstring.maybeSetBytesFromText(binary);
+    const bytes = binary.bytes;
+
+    if (bytes.length === 0) {
+      return Type.integer(0);
+    }
+
+    let result = 0n;
+    const isBig = endianness.value === "big";
+
+    if (isBig) {
+      // Big endian: most significant byte first
+      for (let i = 0; i < bytes.length; i++) {
+        result = (result << 8n) | BigInt(bytes[i]);
+      }
+    } else {
+      // Little endian: least significant byte first
+      for (let i = bytes.length - 1; i >= 0; i--) {
+        result = (result << 8n) | BigInt(bytes[i]);
+      }
+    }
+
+    return Type.integer(result);
+  },
+  // End decode_unsigned/2
+  // Deps: []
 };
 
 export default Erlang_Binary;
