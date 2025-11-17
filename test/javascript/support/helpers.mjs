@@ -12,6 +12,7 @@ import Erlang_Lists from "../../../assets/js/erlang/lists.mjs";
 import Erlang_Maps from "../../../assets/js/erlang/maps.mjs";
 import Erlang_Persistent_Term from "../../../assets/js/erlang/persistent_term.mjs";
 import Erlang_Unicode from "../../../assets/js/erlang/unicode.mjs";
+import Erlang_Binary from "../../../assets/js/erlang/binary.mjs";
 import HologramBoxedError from "../../../assets/js/errors/boxed_error.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
@@ -234,6 +235,7 @@ export function defineGlobalErlangAndElixirModules() {
   globalThis.Erlang_Persistent_Term = Erlang_Persistent_Term;
   globalThis.Erlang_Unicode = Erlang_Unicode;
   globalThis.Elixir_Code = Elixir_Code;
+  globalThis.Erlang_Binary = Erlang_Binary;
   globalThis.Elixir_Enum = defineElixirEnumModule();
 
   globalThis.Elixir_Hologram_Router_Helpers =
