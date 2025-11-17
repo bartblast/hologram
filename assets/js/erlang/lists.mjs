@@ -214,6 +214,35 @@ const Erlang_Lists = {
   // End member/2
   // Deps: []
 
+  // Start all/2
+  // https://github.com/erlang/otp/blob/OTP-28.1.1/lib/stdlib/src/lists.erl#L2305
+  //
+  "all/2": (fun, list) => {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.all/2", arguments),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseCaseClauseError(list);
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.all/2"),
+      );
+    }
+
+    return Type.list(
+      list.data.all((elem) =>
+        Type.isTrue(Interpreter.callAnonymousFunction(fun, [elem])),
+      ),
+    );
+  },
+  // End all/2
+  // Deps: []
+
   // Start reverse/1
   "reverse/1": (list) => {
     if (!Type.isList(list)) {

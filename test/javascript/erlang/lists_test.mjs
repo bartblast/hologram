@@ -669,6 +669,24 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("all/2", () => {
+    // tests from original source:
+    // https://github.com/erlang/otp/blob/OTP-28.1.1/lib/stdlib/test/lists_SUITE.erl#L2526
+    const L = [1, 2, 3];
+
+    const all = Erlang_Lists["all/2"];
+    const is_integer = Erlang_Lists["is_integer/1"];
+    const rem = Erlang_Lists["rem/2"];
+
+    it("tests common high order functions", () => {
+      const positive = all((N) => is_integer(N), L);
+      const negative = all((N) => rem(N, 2) == 0, L);
+
+      assertBoxedFalse(negative);
+      assertBoxedTrue(positive);
+    });
+  });
+
   describe("reverse/1", () => {
     const reverse = Erlang_Lists["reverse/1"];
 
