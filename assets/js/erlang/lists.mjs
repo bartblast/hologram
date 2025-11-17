@@ -8,6 +8,28 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_Lists = {
+  // Start duplicate/2
+  "duplicate/2": (count, elem) => {
+    if (!Type.isInteger(count)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (count.value < 0n) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a non-negative integer"),
+      );
+    }
+
+    const size = count.value;
+    const data = new Array(size).fill(elem);
+
+    return Type.list(data);
+  },
+  // End duplicate/2
+  // Deps: []
+  
   // Start filter/2
   "filter/2": function (fun, list) {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
@@ -278,24 +300,6 @@ const Erlang_Lists = {
   },
   // End sort/1
   // Deps: []
-  "duplicate/2": (count, elem) => {
-    if (!Type.isInteger(count)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
-      );
-    }
-
-    if (count.value < 0) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a non-negative integer"),
-      );
-    }
-
-    const size = count.value;
-    const data = new Array(size).fill(elem);
-
-    return Type.list(data);
-  },
 };
 
 export default Erlang_Lists;
