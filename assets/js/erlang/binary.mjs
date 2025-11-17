@@ -17,7 +17,7 @@ const Erlang_Binary = {
       );
     }
 
-    if (!Type.isInteger(pos) || pos.value < 0) {
+    if (!Type.isInteger(pos) || pos.value < 0n) {
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(":binary.at/2", arguments),
       );
