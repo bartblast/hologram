@@ -2133,6 +2133,201 @@ describe("Erlang", () => {
     });
   });
 
+  describe("fun_info/1", () => {
+    const fun_info = Erlang["fun_info/1"];
+
+    describe("external function (function capture)", () => {
+      it("returns function information for external function", () => {
+        const fun = Type.functionCapture(
+          "MyModule",
+          "my_function",
+          2,
+          [
+            {
+              params: (context) => [
+                Type.variablePattern("$1"),
+                Type.variablePattern("$2"),
+              ],
+              guards: [],
+              body: (context) => Type.integer(42),
+            },
+          ],
+          contextFixture(),
+        );
+
+        const result = fun_info(fun);
+
+        assert.ok(Type.isList(result));
+        assert.ok(result.data.length >= 5);
+
+        // Check that all required items are present
+        const infoMap = {};
+        for (const tuple of result.data) {
+          assert.ok(Type.isTuple(tuple));
+          assert.ok(tuple.data.length === 2);
+          assert.ok(Type.isAtom(tuple.data[0]));
+          infoMap[tuple.data[0].value] = tuple.data[1];
+        }
+
+        // Required items
+        assert.ok("arity" in infoMap);
+        assert.deepStrictEqual(infoMap["arity"], Type.integer(2));
+
+        assert.ok("env" in infoMap);
+        assert.ok(Type.isList(infoMap["env"]));
+
+        assert.ok("module" in infoMap);
+        assert.deepStrictEqual(infoMap["module"], Type.atom("MyModule"));
+
+        assert.ok("name" in infoMap);
+        assert.deepStrictEqual(infoMap["name"], Type.atom("my_function"));
+
+        assert.ok("type" in infoMap);
+        assert.deepStrictEqual(infoMap["type"], Type.atom("external"));
+
+        // Additional items (should be undefined for external funs)
+        assert.ok("index" in infoMap);
+        assert.deepStrictEqual(infoMap["index"], Type.atom("undefined"));
+
+        assert.ok("new_index" in infoMap);
+        assert.deepStrictEqual(infoMap["new_index"], Type.atom("undefined"));
+
+        assert.ok("new_uniq" in infoMap);
+        assert.deepStrictEqual(infoMap["new_uniq"], Type.atom("undefined"));
+
+        assert.ok("uniq" in infoMap);
+        assert.deepStrictEqual(infoMap["uniq"], Type.atom("undefined"));
+
+        assert.ok("pid" in infoMap);
+        assert.deepStrictEqual(infoMap["pid"], Type.atom("undefined"));
+      });
+    });
+
+    describe("local function (anonymous function)", () => {
+      it("returns function information for anonymous function", () => {
+        const context = contextFixture({
+          vars: {
+            x: Type.integer(1),
+            y: Type.integer(2),
+          },
+        });
+
+        const fun = Type.anonymousFunction(
+          1,
+          [
+            {
+              params: (context) => [Type.variablePattern("$1")],
+              guards: [],
+              body: (context) => Type.integer(42),
+            },
+          ],
+          context,
+        );
+
+        const result = fun_info(fun);
+
+        assert.ok(Type.isList(result));
+        assert.ok(result.data.length >= 5);
+
+        // Check that all required items are present
+        const infoMap = {};
+        for (const tuple of result.data) {
+          assert.ok(Type.isTuple(tuple));
+          assert.ok(tuple.data.length === 2);
+          assert.ok(Type.isAtom(tuple.data[0]));
+          infoMap[tuple.data[0].value] = tuple.data[1];
+        }
+
+        // Required items
+        assert.ok("arity" in infoMap);
+        assert.deepStrictEqual(infoMap["arity"], Type.integer(1));
+
+        assert.ok("env" in infoMap);
+        assert.ok(Type.isList(infoMap["env"]));
+        // Check that env contains captured variables
+        const envList = infoMap["env"];
+        assert.ok(envList.data.length >= 2);
+        const envMap = {};
+        for (const tuple of envList.data) {
+          assert.ok(Type.isTuple(tuple));
+          assert.ok(tuple.data.length === 2);
+          assert.ok(Type.isAtom(tuple.data[0]));
+          envMap[tuple.data[0].value] = tuple.data[1];
+        }
+        assert.deepStrictEqual(envMap["x"], Type.integer(1));
+        assert.deepStrictEqual(envMap["y"], Type.integer(2));
+
+        assert.ok("module" in infoMap);
+        // For local funs, module is the module where the function was defined
+        assert.ok(Type.isAtom(infoMap["module"]));
+
+        assert.ok("name" in infoMap);
+        assert.deepStrictEqual(infoMap["name"], Type.atom("undefined"));
+
+        assert.ok("type" in infoMap);
+        assert.deepStrictEqual(infoMap["type"], Type.atom("local"));
+
+        // Additional items (undefined in Hologram)
+        assert.ok("index" in infoMap);
+        assert.ok("new_index" in infoMap);
+        assert.ok("new_uniq" in infoMap);
+        assert.ok("uniq" in infoMap);
+        assert.ok("pid" in infoMap);
+      });
+
+      it("returns empty env list for anonymous function with no captured variables", () => {
+        const fun = Type.anonymousFunction(
+          0,
+          [
+            {
+              params: (context) => [],
+              guards: [],
+              body: (context) => Type.integer(42),
+            },
+          ],
+          contextFixture(),
+        );
+
+        const result = fun_info(fun);
+
+        const infoMap = {};
+        for (const tuple of result.data) {
+          infoMap[tuple.data[0].value] = tuple.data[1];
+        }
+
+        assert.ok("env" in infoMap);
+        assert.ok(Type.isList(infoMap["env"]));
+        assert.deepStrictEqual(infoMap["env"], Type.list());
+      });
+    });
+
+    describe("error cases", () => {
+      it("raises ArgumentError if the argument is not a function", () => {
+        assertBoxedError(
+          () => fun_info(Type.atom("not_a_function")),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(1, "not a fun"),
+        );
+      });
+
+      it("raises ArgumentError if the argument is an integer", () => {
+        assertBoxedError(
+          () => fun_info(Type.integer(123)),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(1, "not a fun"),
+        );
+      });
+
+      it("raises ArgumentError if the argument is a list", () => {
+        assertBoxedError(
+          () => fun_info(Type.list([Type.integer(1)])),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(1, "not a fun"),
+        );
+      });
+    });
+  });
+
   describe("hd/1", () => {
     const hd = Erlang["hd/1"];
 
