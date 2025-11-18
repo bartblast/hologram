@@ -884,15 +884,21 @@ const Erlang = {
   // Start setelement/3
   "setelement/3": (index, tuple, value) => {
     if (!Type.isInteger(index)) {
-      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, "not an integer"));
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
     }
 
-    if(!Type.isTuple(tuple)) {
-      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(2, "not a tuple"));
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
     }
 
-    if(index.value <= 0 || index.value > tuple.data.length) {
-      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, "out of range"));
+    if (index.value <= 0 || index.value > tuple.data.length) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
     }
 
     const data = [...tuple.data];

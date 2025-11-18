@@ -2779,7 +2779,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => setelement(atomA, tuple2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer")
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
       );
     });
 
@@ -2787,7 +2787,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => setelement(integer1, atomB, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a tuple")
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
       );
     });
 
@@ -2795,7 +2795,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => setelement(integer3, tuple2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range")
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
     });
 
@@ -2803,7 +2803,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => setelement(Type.integer(0), tuple2, atomA),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "out of range")
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
     });
   });
