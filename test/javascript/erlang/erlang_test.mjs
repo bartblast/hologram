@@ -2133,6 +2133,88 @@ describe("Erlang", () => {
     });
   });
 
+  describe("float_to_list/2", () => {
+    const float_to_list = Erlang["float_to_list/2"];
+
+    const float = Type.float(0.1 + 0.2);
+    const integer = Type.integer(123);
+    const opts = Type.list([Type.atom("short")]);
+
+    it(":short option", () => {
+      const result = float_to_list(float, opts);
+      const expected = Bitstring.toCodepoints(Type.bitstring("0.30000000000000004"));
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if the first argument is not a float", () => {
+      assertBoxedError(
+        () => float_to_list(integer, opts),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a float"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a list", () => {
+      const opts = Type.tuple([Type.atom("short")]);
+
+      assertBoxedError(
+        () => float_to_list(float, opts),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a proper list", () => {
+      const opts = Type.improperList([
+        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+        Type.atom("compact"),
+      ]);
+
+      assertBoxedError(
+        () => float_to_list(float, opts),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
+      );
+    });
+
+    // TODO: remove when other options are supported
+    it("raises HologramInterpreterError if there are 0 options specified", () => {
+      const opts = Type.list();
+
+      assert.throw(
+        () => float_to_list(float, opts),
+        HologramInterpreterError,
+        ":erlang.float_to_list/2 options other than :short are not yet implemented in Hologram",
+      );
+    });
+
+    // TODO: remove when other options are supported
+    it("raises HologramInterpreterError if there are 2+ options specified", () => {
+      const opts = Type.list([
+        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+        Type.atom("compact"),
+      ]);
+
+      assert.throw(
+        () => float_to_list(float, opts),
+        HologramInterpreterError,
+        ":erlang.float_to_list/2 options other than :short are not yet implemented in Hologram",
+      );
+    });
+
+    // TODO: remove when other options are supported
+    it("raises HologramInterpreterError if not yet implemented option is specified", () => {
+      const opts = Type.list([Type.atom("compact")]);
+
+      assert.throw(
+        () => float_to_list(float, opts),
+        HologramInterpreterError,
+        ":erlang.float_to_list/2 options other than :short are not yet implemented in Hologram",
+      );
+    });
+  });
+
   describe("hd/1", () => {
     const hd = Erlang["hd/1"];
 
