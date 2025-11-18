@@ -7,6 +7,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
 
   use Hologram.Test.BasicCase, async: true
 
+  require Integer
+
   @moduletag :consistency
 
   describe "filter/2" do
@@ -370,6 +372,16 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
                    fn ->
                      :lists.member(2, :abc)
                    end
+    end
+  end
+
+  describe "all/2" do
+    test "handles proper functions" do
+      assert :lists.all(&Integer.is_even/1, [1, 2, 3]) == false
+    end
+
+    test "handles anonymous functions" do
+      assert :lists.all(fn v -> is_integer(v) end, [1, 2, 3]) == true
     end
   end
 
