@@ -15,8 +15,9 @@ defineGlobalErlangAndElixirModules();
 
 describe("Erlang_Binary", () => {
   describe("at/2", () => {
-    const binary = Bitstring.fromBytes([5, 19, 72, 33]);
     const at = Erlang_Binary["at/2"];
+
+    const binary = Bitstring.fromBytes([5, 19, 72, 33]);
 
     it("returns first byte", () => {
       const result = at(binary, Type.integer(0));

@@ -8,6 +8,7 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
   use Hologram.Test.BasicCase, async: true
 
   @moduletag :consistency
+
   @binary <<5, 19, 72, 33>>
 
   describe "at/2" do
