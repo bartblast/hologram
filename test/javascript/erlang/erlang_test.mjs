@@ -2185,7 +2185,7 @@ describe("Erlang", () => {
       assert.throw(
         () => float_to_list(float, opts),
         HologramInterpreterError,
-        ":erlang.float_to_list/2 options other than :short are not yet implemented in Hologram",
+        ":erlang.float_to_binary/2 options other than :short are not yet implemented in Hologram",
       );
     });
 
@@ -2199,7 +2199,7 @@ describe("Erlang", () => {
       assert.throw(
         () => float_to_list(float, opts),
         HologramInterpreterError,
-        ":erlang.float_to_list/2 options other than :short are not yet implemented in Hologram",
+        ":erlang.float_to_binary/2 options other than :short are not yet implemented in Hologram",
       );
     });
 
@@ -2210,7 +2210,7 @@ describe("Erlang", () => {
       assert.throw(
         () => float_to_list(float, opts),
         HologramInterpreterError,
-        ":erlang.float_to_list/2 options other than :short are not yet implemented in Hologram",
+        ":erlang.float_to_binary/2 options other than :short are not yet implemented in Hologram",
       );
     });
   });

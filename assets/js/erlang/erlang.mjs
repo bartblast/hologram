@@ -549,39 +549,11 @@ const Erlang = {
 
   // Start float_to_list/2
   "float_to_list/2": (float, opts) => {
-    if (!Type.isFloat(float)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a float"),
-      );
-    }
-
-    if (!Type.isList(opts)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not a list"),
-      );
-    }
-
-    if (!Type.isProperList(opts)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
-      );
-    }
-
-    // TODO: implement other options
-    if (
-      opts.data.length != 1 ||
-      !Interpreter.isStrictlyEqual(opts.data[0], Type.atom("short"))
-    ) {
-      throw new HologramInterpreterError(
-        ":erlang.float_to_list/2 options other than :short are not yet implemented in Hologram",
-      );
-    }
-
-    const binary = Type.bitstring(float.value.toString());
+    const binary = Erlang["float_to_binary/2"](float, opts);
     return Bitstring.toCodepoints(binary);
   },
   // End float_to_list/2
-  // Deps: []
+  // Deps: [:erlang.float_to_binary/2]
 
   // Start hd/1
   "hd/1": (list) => {
