@@ -217,7 +217,7 @@ const Erlang_Lists = {
   // Start all/2
   // https://github.com/erlang/otp/blob/OTP-28.1.1/lib/stdlib/src/lists.erl#L2305
   //
-  "all/2": (fun, list) => {
+  "all/2": function(fun, list) {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(":lists.all/2", arguments),
