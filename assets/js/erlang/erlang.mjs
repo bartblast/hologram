@@ -696,6 +696,13 @@ const Erlang = {
   // End is_map/1
   // Deps: []
 
+  // Start is_map_key/2
+  "is_map_key/2": (key, map) => {
+    return Erlang_Maps["is_key/2"](key, map);
+  },
+  // End is_map_key/2
+  // Deps: [:maps.is_key/2]
+
   // Start is_number/1
   "is_number/1": (term) => {
     return Type.boolean(Type.isNumber(term));

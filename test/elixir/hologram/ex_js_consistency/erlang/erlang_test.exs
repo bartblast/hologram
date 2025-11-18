@@ -1799,6 +1799,20 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "is_map_key/2" do
+    test "returns true if the given map has the given key" do
+      assert :erlang.is_map_key(:b, %{a: 1, b: 2}) == true
+    end
+
+    test "returns false if the given map doesn't have the given key" do
+      assert :erlang.is_map_key(:c, %{a: 1, b: 2}) == false
+    end
+
+    test "raises BadMapError if the second argument is not a map" do
+      assert_error BadMapError, "expected a map, got: :abc", {:erlang, :is_map_key, [:x, :abc]}
+    end
+  end
+
   describe "is_number/1" do
     test "float" do
       assert :erlang.is_number(1.0) == true
