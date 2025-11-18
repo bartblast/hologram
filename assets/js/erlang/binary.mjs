@@ -34,7 +34,7 @@ class Matcher {
 
   // Collect all non-overlapping matches using a findNext callback
   // findNext(pos) should return a match object or null
-  collectMatches(subjectBytes, findNext, limit = Infinity, scope = null) {
+  #collectMatches(subjectBytes, findNext, limit = Infinity, scope = null) {
     const matches = [];
     const scopeStart = scope ? scope.start : 0;
     const scopeEnd = scope ? scope.start + scope.length : subjectBytes.length;
@@ -63,45 +63,67 @@ class Matcher {
     return matches;
   }
 
-  // Split a subject into parts based on matches
-  splitWithMatches(subject, matches, opts) {
+  // Process matches generically - used by both split and replace
+  // processParts callback: (beforePart, match, matchedBytes) => parts to add at match location
+  #processMatches(subject, matches, opts, processParts) {
     const subjectBytes = Erlang_Binary.validate(subject);
 
     if (matches.length === 0) {
-      return Type.list([subject]);
+      return { parts: [subjectBytes], allBytes: true };
     }
 
     const parts = [];
     let lastEnd = 0;
-
     const matchesToUse = opts.global ? matches : matches.slice(0, 1);
 
     for (const match of matchesToUse) {
       // Add the part before this match
-      if (match.start > lastEnd) {
-        parts.push(Bitstring.fromBytes(subjectBytes.subarray(lastEnd, match.start)));
-      } else if (match.start === lastEnd) {
-        // Empty part
-        parts.push(Bitstring.fromBytes(new Uint8Array(0)));
-      }
+      const beforePart = match.start > lastEnd
+        ? subjectBytes.subarray(lastEnd, match.start)
+        : new Uint8Array(0);
+
+      // Get the matched bytes
+      const matchedBytes = subjectBytes.subarray(match.start, match.end);
+
+      // Let the caller determine what parts to add
+      const matchParts = processParts(beforePart, match, matchedBytes);
+      parts.push(...matchParts);
 
       lastEnd = match.end;
     }
 
     // Add the remaining part after the last match
-    if (lastEnd < subjectBytes.length) {
-      parts.push(Bitstring.fromBytes(subjectBytes.subarray(lastEnd)));
-    } else {
-      // Empty part at the end
-      parts.push(Bitstring.fromBytes(new Uint8Array(0)));
+    const remainingPart = lastEnd < subjectBytes.length
+      ? subjectBytes.subarray(lastEnd)
+      : new Uint8Array(0);
+    parts.push(remainingPart);
+
+    return { parts, allBytes: true };
+  }
+
+  // Split a subject into parts based on matches
+  #splitWithMatches(subject, matches, opts) {
+    if (matches.length === 0) {
+      return Type.list([subject]);
     }
 
-    // Apply trim options
-    return this.applyTrimOptions(parts, opts);
+    const { parts } = this.#processMatches(subject, matches, opts, (beforePart, _match, _matchedBytes) => {
+      // For split, we just want the part before the match (the matched part itself is discarded)
+      return [Bitstring.fromBytes(beforePart)];
+    });
+
+    // Convert Uint8Array parts to Bitstring for the last remaining part
+    const bitstringParts = parts.map((part, idx) =>
+      idx === parts.length - 1 && part instanceof Uint8Array
+        ? Bitstring.fromBytes(part)
+        : part
+    );
+
+    return this.#applyTrimOptions(bitstringParts, opts);
   }
 
   // Apply trim or trim_all options to split results
-  applyTrimOptions(parts, opts) {
+  #applyTrimOptions(parts, opts) {
     let result = parts;
 
     if (opts.trim_all) {
@@ -117,54 +139,242 @@ class Matcher {
     return Type.list(result);
   }
 
-  // Parse options (for both split and match)
-  parseSplitOptions(options) {
+  // Apply function replacement to matched part
+  #applyFunctionReplacement(replacement, matchedBytes) {
+    const matchedBitstring = Bitstring.fromBytes(matchedBytes);
+    const result = Interpreter.callAnonymousFunction(replacement, [matchedBitstring]);
+
+    if (!Type.isBitstring(result)) {
+      Interpreter.raiseArgumentError("replacement function must return a binary");
+    }
+
+    return Erlang_Binary.validate(result);
+  }
+
+  // Insert matched bytes into replacement at specified positions
+  #insertMatchedIntoReplacement(replacementBytes, matchedBytes, positions) {
+    // Validate positions first
+    for (const pos of positions) {
+      if (pos > replacementBytes.length) {
+        Interpreter.raiseArgumentError("insert_replaced position is greater than replacement size");
+      }
+    }
+
+    // Build replacement with insertions
+    const replacementParts = [];
+    let lastPos = 0;
+
+    // Sort positions in ascending order for building
+    const sortedPositions = [...positions].sort((a, b) => a - b);
+
+    for (const pos of sortedPositions) {
+      replacementParts.push(replacementBytes.subarray(lastPos, pos));
+      replacementParts.push(matchedBytes);
+      lastPos = pos;
+    }
+    replacementParts.push(replacementBytes.subarray(lastPos));
+
+    return Matcher.#concatenateBytes(replacementParts);
+  }
+
+  // Calculate replacement bytes for a match (handles both function and binary replacements)
+  #calculateReplacement(replacement, matchedBytes, opts, isFunction) {
+    if (isFunction) {
+      return this.#applyFunctionReplacement(replacement, matchedBytes);
+    }
+
+    // Binary replacement
+    let replacementBytes = Erlang_Binary.validate(replacement);
+
+    // Handle insert_replaced option for binary replacements
+    if (opts.insert_replaced && opts.insert_replaced.length > 0) {
+      replacementBytes = this.#insertMatchedIntoReplacement(
+        replacementBytes,
+        matchedBytes,
+        opts.insert_replaced
+      );
+    }
+
+    return replacementBytes;
+  }
+
+  // Replace matched parts in the subject with replacement
+  #replaceWithMatches(subject, matches, replacement, opts) {
+    if (matches.length === 0) {
+      return subject;
+    }
+
+    const isFunction = Type.isAnonymousFunction(replacement);
+    if (!isFunction && !Type.isBitstring(replacement)) {
+      Interpreter.raiseArgumentError("replacement must be a binary or a function");
+    }
+
+    const { parts } = this.#processMatches(subject, matches, opts, (beforePart, _match, matchedBytes) => {
+      const replacementBytes = this.#calculateReplacement(replacement, matchedBytes, opts, isFunction);
+      return [beforePart, replacementBytes];
+    });
+
+    return Bitstring.fromBytes(Matcher.#concatenateBytes(parts));
+  }
+
+  // Helper to concatenate byte arrays efficiently
+  static #concatenateBytes(parts) {
+    const totalLength = parts.reduce((sum, part) => sum + part.length, 0);
+    const result = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const part of parts) {
+      result.set(part, offset);
+      offset += part.length;
+    }
+    return result;
+  }
+
+  // Helper to calculate scope boundaries
+  #getScopeBounds(scope, subjectLength) {
+    const scopeStart = scope ? scope.start : 0;
+    const scopeEnd = scope ? scope.start + scope.length : subjectLength;
+    return { scopeStart, scopeEnd };
+  }
+
+  // Abstract method - subclasses must implement
+  // Returns match object or null
+  findMatch(_subjectBytes, _startPos, _endPos) {
+    throw new Error("Subclasses must implement findMatch");
+  }
+
+  // Generic split implementation
+  split(subject, options) {
+    const opts = this.#parseOptions(options);
+    const subjectBytes = Erlang_Binary.validate(subject);
+    const matches = this.#collectMatches(
+      subjectBytes,
+      (pos, endPos) => this.findMatch(subjectBytes, pos, endPos),
+      opts.global ? Infinity : 1,
+      opts.scope
+    );
+    return this.#splitWithMatches(subject, matches, opts);
+  }
+
+  // Generic match implementation
+  match(subject, options) {
+    const opts = this.#parseOptions(options);
+    const subjectBytes = Erlang_Binary.validate(subject);
+    const { scopeStart, scopeEnd } = this.#getScopeBounds(opts.scope, subjectBytes.length);
+    const match = this.findMatch(subjectBytes, scopeStart, scopeEnd);
+
+    if (!match) {
+      return Type.atom("nomatch");
+    }
+
+    return Type.tuple([Type.integer(match.start), Type.integer(match.length)]);
+  }
+
+  // Generic matches implementation
+  matches(subject, options) {
+    const opts = this.#parseOptions(options);
+    const subjectBytes = Erlang_Binary.validate(subject);
+    const matches = this.#collectMatches(
+      subjectBytes,
+      (pos, endPos) => this.findMatch(subjectBytes, pos, endPos),
+      Infinity,
+      opts.scope
+    );
+
+    return Type.list(
+      matches.map(match =>
+        Type.tuple([Type.integer(match.start), Type.integer(match.length)])
+      )
+    );
+  }
+
+  // Generic replace implementation
+  replace(subject, replacement, options) {
+    const opts = this.#parseOptions(options);
+    const subjectBytes = Erlang_Binary.validate(subject);
+    const matches = this.#collectMatches(
+      subjectBytes,
+      (pos, endPos) => this.findMatch(subjectBytes, pos, endPos),
+      opts.global ? Infinity : 1,
+      opts.scope
+    );
+    return this.#replaceWithMatches(subject, matches, replacement, opts);
+  }
+
+  // Parse scope option {start, length}
+  #parseScope(value) {
+    if (!Type.isTuple(value) || value.data.length !== 2) return null;
+
+    const start = Type.isInteger(value.data[0]) ? Number(value.data[0].value) : 0;
+    const length = Type.isInteger(value.data[1]) ? Number(value.data[1].value) : 0;
+    return { start, length };
+  }
+
+  // Parse insert_replaced option (single integer or list of integers)
+  #parseInsertReplaced(value) {
+    if (Type.isInteger(value)) {
+      return [Number(value.value)];
+    }
+
+    if (Type.isList(value)) {
+      return value.data.map(item => {
+        if (!Type.isInteger(item)) {
+          Interpreter.raiseArgumentError("insert_replaced positions must be integers");
+        }
+        return Number(item.value);
+      });
+    }
+
+    return null;
+  }
+
+  // Parse tuple option {key, value}
+  #parseTupleOption(opt, opts) {
+    if (!Type.isTuple(opt) || opt.data.length !== 2) return;
+
+    const [key, value] = opt.data;
+    if (!Type.isAtom(key)) return;
+
+    const handlers = {
+      scope: () => this.#parseScope(value),
+      insert_replaced: () => this.#parseInsertReplaced(value)
+    };
+
+    const handler = handlers[key.value];
+    if (handler) {
+      opts[key.value] = handler();
+    }
+  }
+
+  // Parse atom option
+  #parseAtomOption(opt, opts) {
+    const booleanOptions = ['global', 'trim', 'trim_all'];
+    if (booleanOptions.includes(opt.value)) {
+      opts[opt.value] = true;
+    }
+  }
+
+  // Parse options for split, replace, match, and matches
+  // unused options are ignored
+  #parseOptions(options) {
     const opts = {
       global: false,
       trim: false,
       trim_all: false,
-      scope: this.parseScope(options)
+      scope: null,
+      insert_replaced: null
     };
 
-    if (Type.isList(options)) {
-      for (const opt of options.data) {
-        if (Type.isAtom(opt)) {
-          if (opt.value === "global") {
-            opts.global = true;
-          } else if (opt.value === "trim") {
-            opts.trim = true;
-          } else if (opt.value === "trim_all") {
-            opts.trim_all = true;
-          }
-        }
+    if (!Type.isList(options)) return opts;
+
+    for (const opt of options.data) {
+      if (Type.isAtom(opt)) {
+        this.#parseAtomOption(opt, opts);
+      } else {
+        this.#parseTupleOption(opt, opts);
       }
     }
 
     return opts;
-  }
-
-  parseMatchOptions(options) {
-    return {
-      scope: this.parseScope(options)
-    }
-  }
-
-  parseScope(options) {
-    if (Type.isList(options)) {
-      for (const opt of options.data) {
-        if (Type.isTuple(opt) && opt.data.length === 2) {
-          const [key, value] = opt.data;
-          if (Type.isAtom(key) && key.value === "scope") {
-            if (Type.isTuple(value) && value.data.length === 2) {
-              const start = Type.isInteger(value.data[0]) ? Number(value.data[0].value) : 0;
-              const length = Type.isInteger(value.data[1]) ? Number(value.data[1].value) : 0;
-              return { start, length };
-            }
-          }
-        }
-      }
-    }
-    return null;
   }
 }
 
@@ -195,7 +405,7 @@ class BoyerMooreMatcher extends Matcher {
 
   // Find next match starting from startPos
   // Returns match object or null if no match found
-  #findMatch(subjectBytes, startPos = 0, endPos = null) {
+  #findMatchInternal(subjectBytes, startPos = 0, endPos = null) {
     const patternLength = this.pattern.length;
     const subjectLength = endPos !== null ? endPos : subjectBytes.length;
 
@@ -231,47 +441,9 @@ class BoyerMooreMatcher extends Matcher {
     return null;
   }
 
-  split(subject, options) {
-    const opts = this.parseSplitOptions(options);
-    const subjectBytes = Erlang_Binary.validate(subject);
-    const matches = this.collectMatches(
-      subjectBytes,
-      (pos, endPos) => this.#findMatch(subjectBytes, pos, endPos),
-      opts.global ? Infinity : 1,
-      opts.scope
-    );
-    return this.splitWithMatches(subject, matches, opts);
-  }
-
-  match(subject, options) {
-    const opts = this.parseMatchOptions(options);
-    const subjectBytes = Erlang_Binary.validate(subject);
-    const scopeStart = opts.scope ? opts.scope.start : 0;
-    const scopeEnd = opts.scope ? opts.scope.start + opts.scope.length : subjectBytes.length;
-    const match = this.#findMatch(subjectBytes, scopeStart, scopeEnd);
-
-    if (!match) {
-      return Type.atom("nomatch");
-    }
-
-    return Type.tuple([Type.integer(match.start), Type.integer(match.length)]);
-  }
-
-  matches(subject, options) {
-    const opts = this.parseMatchOptions(options);
-    const subjectBytes = Erlang_Binary.validate(subject);
-    const matches = this.collectMatches(
-      subjectBytes,
-      (pos, endPos) => this.#findMatch(subjectBytes, pos, endPos),
-      Infinity,
-      opts.scope
-    );
-
-    return Type.list(
-      matches.map(match =>
-        Type.tuple([Type.integer(match.start), Type.integer(match.length)])
-      )
-    );
+  // Implement abstract method
+  findMatch(subjectBytes, startPos, endPos) {
+    return this.#findMatchInternal(subjectBytes, startPos, endPos);
   }
 
   toTuple() {
@@ -377,7 +549,7 @@ class AhoCorasickMatcher extends Matcher {
 
   // Find next match starting from startPos with given automaton state
   // Returns { match, state } or null if no match found
-  #findMatch(subjectBytes, startPos = 0, endPos = null, startNode = this.automaton) {
+  #findMatchInternal(subjectBytes, startPos = 0, endPos = null, startNode = this.automaton) {
     let currentNode = startNode;
     const searchEnd = endPos !== null ? endPos : subjectBytes.length;
 
@@ -423,54 +595,10 @@ class AhoCorasickMatcher extends Matcher {
     return null;
   }
 
-  split(subject, options) {
-    const opts = this.parseSplitOptions(options);
-    const subjectBytes = Erlang_Binary.validate(subject);
-    const matches = this.collectMatches(
-      subjectBytes,
-      (pos, endPos) => {
-        const result = this.#findMatch(subjectBytes, pos, endPos, this.automaton);
-        return result ? result.match : null;
-      },
-      opts.global ? Infinity : 1,
-      opts.scope
-    );
-    return this.splitWithMatches(subject, matches, opts);
-  }
-
-  match(subject, options) {
-    const opts = this.parseMatchOptions(options);
-    const subjectBytes = Erlang_Binary.validate(subject);
-    const scopeStart = opts.scope ? opts.scope.start : 0;
-    const scopeEnd = opts.scope ? opts.scope.start + opts.scope.length : subjectBytes.length;
-    const result = this.#findMatch(subjectBytes, scopeStart, scopeEnd, this.automaton);
-
-    if (!result) {
-      return Type.atom("nomatch");
-    }
-
-    const { match } = result;
-    return Type.tuple([Type.integer(match.start), Type.integer(match.length)]);
-  }
-
-  matches(subject, options) {
-    const opts = this.parseMatchOptions(options);
-    const subjectBytes = Erlang_Binary.validate(subject);
-    const matches = this.collectMatches(
-      subjectBytes,
-      (pos, endPos) => {
-        const result = this.#findMatch(subjectBytes, pos, endPos, this.automaton);
-        return result ? result.match : null;
-      },
-      Infinity,
-      opts.scope
-    );
-
-    return Type.list(
-      matches.map(match =>
-        Type.tuple([Type.integer(match.start), Type.integer(match.length)])
-      )
-    );
+  // Implement abstract method
+  findMatch(subjectBytes, startPos, endPos) {
+    const result = this.#findMatchInternal(subjectBytes, startPos, endPos, this.automaton);
+    return result ? result.match : null;
   }
 
   toTuple() {
@@ -507,6 +635,15 @@ const Erlang_Binary = {
   "matches/3": (subject, pattern, options) => {
     const patternObj = Matcher.create(pattern);
     return patternObj.matches(subject, options);
+  },
+
+  "replace/3": (subject, pattern, replacement) => {
+    return Erlang_Binary["replace/4"](subject, pattern, replacement, Type.list([]));
+  },
+
+  "replace/4": (subject, pattern, replacement, options) => {
+    const patternObj = Matcher.create(pattern);
+    return patternObj.replace(subject, replacement, options);
   },
 
   "split/2": (subject, pattern) => {

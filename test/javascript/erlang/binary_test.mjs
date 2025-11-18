@@ -3,6 +3,7 @@
 import {
   assert,
   assertBoxedError,
+  contextFixture,
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
@@ -478,6 +479,324 @@ describe("Erlang_Binary", () => {
         assert.equal(result.data.length, 2);
         assert.equal(Bitstring.toText(result.data[0]), "hello");
         assert.equal(Bitstring.toText(result.data[1]), "world");
+      });
+    });
+  });
+
+  describe("replace/3", () => {
+    it("delegates to replace/4 with empty options", () => {
+      const subject = Bitstring.fromText("hello world");
+      const pattern = Bitstring.fromText("world");
+      const replacement = Bitstring.fromText("Erlang");
+      const result = Erlang_Binary["replace/3"](subject, pattern, replacement);
+
+      assert.equal(Bitstring.toText(result), "hello Erlang");
+    });
+  });
+
+  describe("replace/4", () => {
+    describe("with binary pattern", () => {
+      it("replaces first occurrence by default", () => {
+        const subject = Bitstring.fromText("abcde");
+        const pattern = Bitstring.fromText("b");
+        const replacement = Bitstring.fromText("X");
+        const options = Type.list([]);
+        const result = Erlang_Binary["replace/4"](subject, pattern, replacement, options);
+
+        assert.equal(Bitstring.toText(result), "aXcde");
+      });
+
+      it("replaces all occurrences with global option", () => {
+        const subject = Bitstring.fromText("aba");
+        const pattern = Bitstring.fromText("a");
+        const replacement = Bitstring.fromText("X");
+        const options = Type.list([Type.atom("global")]);
+        const result = Erlang_Binary["replace/4"](subject, pattern, replacement, options);
+
+        assert.equal(Bitstring.toText(result), "XbX");
+      });
+
+      it("handles empty replacement", () => {
+        const subject = Bitstring.fromText("hello world");
+        const pattern = Bitstring.fromText(" ");
+        const replacement = Bitstring.fromText("");
+        const options = Type.list([]);
+        const result = Erlang_Binary["replace/4"](subject, pattern, replacement, options);
+
+        assert.equal(Bitstring.toText(result), "helloworld");
+      });
+
+      it("returns subject unchanged if no match", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("xyz");
+        const replacement = Bitstring.fromText("X");
+        const options = Type.list([]);
+        const result = Erlang_Binary["replace/4"](subject, pattern, replacement, options);
+
+        assert.equal(Bitstring.toText(result), "hello");
+      });
+
+      it("works with scope option", () => {
+        const subject = Bitstring.fromText("abcabc");
+        const pattern = Bitstring.fromText("b");
+        const replacement = Bitstring.fromText("X");
+        const scope = Type.tuple([Type.integer(3), Type.integer(3)]);
+        const options = Type.list([Type.tuple([Type.atom("scope"), scope])]);
+        const result = Erlang_Binary["replace/4"](subject, pattern, replacement, options);
+
+        assert.equal(Bitstring.toText(result), "abcaXc");
+      });
+    });
+
+    describe("with list of patterns", () => {
+      it("replaces first occurrence of any pattern", () => {
+        const subject = Bitstring.fromText("abcde");
+        const patterns = Type.list([
+          Bitstring.fromText("b"),
+          Bitstring.fromText("d"),
+        ]);
+        const replacement = Bitstring.fromText("X");
+        const options = Type.list([]);
+        const result = Erlang_Binary["replace/4"](subject, patterns, replacement, options);
+
+        assert.equal(Bitstring.toText(result), "aXcde");
+      });
+
+      it("replaces all occurrences with global option", () => {
+        const subject = Bitstring.fromText("abcde");
+        const patterns = Type.list([
+          Bitstring.fromText("b"),
+          Bitstring.fromText("d"),
+        ]);
+        const replacement = Bitstring.fromText("X");
+        const options = Type.list([Type.atom("global")]);
+        const result = Erlang_Binary["replace/4"](subject, patterns, replacement, options);
+
+        assert.equal(Bitstring.toText(result), "aXcXe");
+      });
+    });
+
+    describe("with insert_replaced option", () => {
+      it("inserts matched part at single position", () => {
+        const subject = Bitstring.fromText("abcde");
+        const pattern = Bitstring.fromText("b");
+        const replacement = Bitstring.fromText("[]");
+        const options = Type.list([
+          Type.tuple([Type.atom("insert_replaced"), Type.integer(1)]),
+        ]);
+        const result = Erlang_Binary["replace/4"](subject, pattern, replacement, options);
+
+        assert.equal(Bitstring.toText(result), "a[b]cde");
+      });
+
+      it("inserts matched part at multiple positions globally", () => {
+        const subject = Bitstring.fromText("abcde");
+        const patterns = Type.list([
+          Bitstring.fromText("b"),
+          Bitstring.fromText("d"),
+        ]);
+        const replacement = Bitstring.fromText("[]");
+        const insertPositions = Type.list([Type.integer(1)]);
+        const options = Type.list([
+          Type.atom("global"),
+          Type.tuple([Type.atom("insert_replaced"), insertPositions]),
+        ]);
+        const result = Erlang_Binary["replace/4"](subject, patterns, replacement, options);
+
+        assert.equal(Bitstring.toText(result), "a[b]c[d]e");
+      });
+
+      it("inserts matched part multiple times at same position", () => {
+        const subject = Bitstring.fromText("abcde");
+        const patterns = Type.list([
+          Bitstring.fromText("b"),
+          Bitstring.fromText("d"),
+        ]);
+        const replacement = Bitstring.fromText("[]");
+        const insertPositions = Type.list([Type.integer(1), Type.integer(1)]);
+        const options = Type.list([
+          Type.atom("global"),
+          Type.tuple([Type.atom("insert_replaced"), insertPositions]),
+        ]);
+        const result = Erlang_Binary["replace/4"](subject, patterns, replacement, options);
+
+        assert.equal(Bitstring.toText(result), "a[bb]c[dd]e");
+      });
+
+      it("inserts matched part at multiple different positions", () => {
+        const subject = Bitstring.fromText("abcde");
+        const patterns = Type.list([
+          Bitstring.fromText("b"),
+          Bitstring.fromText("d"),
+        ]);
+        const replacement = Bitstring.fromText("[-]");
+        const insertPositions = Type.list([Type.integer(1), Type.integer(2)]);
+        const options = Type.list([
+          Type.atom("global"),
+          Type.tuple([Type.atom("insert_replaced"), insertPositions]),
+        ]);
+        const result = Erlang_Binary["replace/4"](subject, patterns, replacement, options);
+
+        assert.equal(Bitstring.toText(result), "a[b-b]c[d-d]e");
+      });
+
+      it("raises error if insert position is greater than replacement size", () => {
+        const subject = Bitstring.fromText("abcde");
+        const pattern = Bitstring.fromText("b");
+        const replacement = Bitstring.fromText("X");
+        const options = Type.list([
+          Type.tuple([Type.atom("insert_replaced"), Type.integer(10)]),
+        ]);
+
+        assertBoxedError(
+          () => Erlang_Binary["replace/4"](subject, pattern, replacement, options),
+          "ArgumentError",
+          "insert_replaced position is greater than replacement size",
+        );
+      });
+    });
+
+    describe("with function replacement", () => {
+      it("calls function with matched part", () => {
+        const subject = Bitstring.fromText("abcde");
+        const pattern = Bitstring.fromText("b");
+        const replacement = Type.anonymousFunction(
+          1,
+          [
+            {
+              params: (_context) => [Type.variablePattern("matched")],
+              guards: [],
+              body: (context) => {
+                const leftBracket = Bitstring.fromText("[");
+                const rightBracket = Bitstring.fromText("]");
+                return Bitstring.concat([leftBracket, context.vars.matched, rightBracket]);
+              },
+            },
+          ],
+          contextFixture(),
+        );
+        const options = Type.list([]);
+        const result = Erlang_Binary["replace/4"](subject, pattern, replacement, options);
+
+        assert.equal(Bitstring.toText(result), "a[b]cde");
+      });
+
+      it("calls function for each match with global option", () => {
+        const subject = Bitstring.fromText("abcde");
+        const patterns = Type.list([
+          Bitstring.fromText("b"),
+          Bitstring.fromText("d"),
+        ]);
+        const replacement = Type.anonymousFunction(
+          1,
+          [
+            {
+              params: (_context) => [Type.variablePattern("matched")],
+              guards: [],
+              body: (context) => {
+                const leftBracket = Bitstring.fromText("[");
+                const rightBracket = Bitstring.fromText("]");
+                return Bitstring.concat([leftBracket, context.vars.matched, rightBracket]);
+              },
+            },
+          ],
+          contextFixture(),
+        );
+        const options = Type.list([Type.atom("global")]);
+        const result = Erlang_Binary["replace/4"](subject, patterns, replacement, options);
+
+        assert.equal(Bitstring.toText(result), "a[b]c[d]e");
+      });
+
+      it("ignores insert_replaced option when using function", () => {
+        const subject = Bitstring.fromText("abcde");
+        const pattern = Bitstring.fromText("b");
+        const replacement = Type.anonymousFunction(
+          1,
+          [
+            {
+              params: (_context) => [Type.variablePattern("matched")],
+              guards: [],
+              body: (_context) => {
+                return Bitstring.fromText("X");
+              },
+            },
+          ],
+          contextFixture(),
+        );
+        const options = Type.list([
+          Type.tuple([Type.atom("insert_replaced"), Type.integer(1)]),
+        ]);
+        const result = Erlang_Binary["replace/4"](subject, pattern, replacement, options);
+
+        assert.equal(Bitstring.toText(result), "aXcde");
+      });
+
+      it("raises error if function returns non-binary", () => {
+        const subject = Bitstring.fromText("abcde");
+        const pattern = Bitstring.fromText("b");
+        const replacement = Type.anonymousFunction(
+          1,
+          [
+            {
+              params: (_context) => [Type.variablePattern("matched")],
+              guards: [],
+              body: (_context) => {
+                return Type.integer(42);
+              },
+            },
+          ],
+          contextFixture(),
+        );
+        const options = Type.list([]);
+
+        assertBoxedError(
+          () => Erlang_Binary["replace/4"](subject, pattern, replacement, options),
+          "ArgumentError",
+          "replacement function must return a binary",
+        );
+      });
+    });
+
+    describe("with compiled pattern", () => {
+      it("works with compiled single pattern", () => {
+        const pattern = Bitstring.fromText("world");
+        const compiled = Erlang_Binary["compile_pattern/1"](pattern);
+        const subject = Bitstring.fromText("hello world");
+        const replacement = Bitstring.fromText("Erlang");
+        const options = Type.list([]);
+        const result = Erlang_Binary["replace/4"](subject, compiled, replacement, options);
+
+        assert.equal(Bitstring.toText(result), "hello Erlang");
+      });
+
+      it("works with compiled list of patterns", () => {
+        const patterns = Type.list([
+          Bitstring.fromText("b"),
+          Bitstring.fromText("d"),
+        ]);
+        const compiled = Erlang_Binary["compile_pattern/1"](patterns);
+        const subject = Bitstring.fromText("abcde");
+        const replacement = Bitstring.fromText("X");
+        const options = Type.list([Type.atom("global")]);
+        const result = Erlang_Binary["replace/4"](subject, compiled, replacement, options);
+
+        assert.equal(Bitstring.toText(result), "aXcXe");
+      });
+    });
+
+    describe("error cases", () => {
+      it("raises error if replacement is not a binary or function", () => {
+        const subject = Bitstring.fromText("hello");
+        const pattern = Bitstring.fromText("l");
+        const replacement = Type.integer(42);
+        const options = Type.list([]);
+
+        assertBoxedError(
+          () => Erlang_Binary["replace/4"](subject, pattern, replacement, options),
+          "ArgumentError",
+          "replacement must be a binary or a function",
+        );
       });
     });
   });
