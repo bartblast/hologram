@@ -2260,6 +2260,154 @@ describe("Erlang", () => {
     });
   });
 
+  describe("integer_to_list/1", () => {
+    const int_to_list_1 = Erlang["integer_to_list/1"];
+
+    it("positive integer", () => {
+      const result = int_to_list_1(Type.integer(77));
+      assert.deepStrictEqual(Bitstring.toText(result), "77");
+    });
+
+    it("negative integer", () => {
+      const result = int_to_list_1(Type.integer(-123));
+      assert.deepStrictEqual(Bitstring.toText(result), "-123");
+    });
+
+    it("zero", () => {
+      const result = int_to_list_1(Type.integer(0));
+      assert.deepStrictEqual(Bitstring.toText(result), "0");
+    });
+
+    it("large integer", () => {
+      const big = BigInt("12345678901234567890");
+      const result = int_to_list_1(Type.integer(big));
+      assert.deepStrictEqual(Bitstring.toText(result), "12345678901234567890");
+    });
+
+    it("positive integers do not include a leading plus sign", () => {
+      const result = int_to_list_1(Type.integer(+10));
+      assert.deepStrictEqual(Bitstring.toText(result), "10");
+    });
+
+    it("negative zero outputs '0'", () => {
+      const result = int_to_list_1(Type.integer(-0));
+      assert.deepStrictEqual(Bitstring.toText(result), "0");
+    });
+
+    it("raises ArgumentError for non-integer", () => {
+      assertBoxedError(
+        () => int_to_list_1(Type.float(3.14)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1,"expected an integer")
+      );
+    });
+  });
+
+  describe("integer_to_list/2", () => {
+    const int_to_list_2 = Erlang["integer_to_list/2"];
+
+    it("base 10 standard conversion", () => {
+      const result = int_to_list_2(Type.integer(1234), Type.integer(10));
+      assert.deepStrictEqual(Bitstring.toText(result), "1234");
+    });
+
+    it("base 2 (binary)", () => {
+      const result = int_to_list_2(Type.integer(10), Type.integer(2));
+      assert.deepStrictEqual(Bitstring.toText(result), "1010");
+    });
+
+    it("base 16 (hex uppercase)", () => {
+      const result = int_to_list_2(Type.integer(1023), Type.integer(16));
+      assert.deepStrictEqual(Bitstring.toText(result), "3FF");
+    });
+
+    it("base 36 upper boundary", () => {
+      const result1 = int_to_list_2(Type.integer(35), Type.integer(36));
+      const result2 = int_to_list_2(Type.integer(36), Type.integer(36));
+      assert.deepStrictEqual(Bitstring.toText(result1), "Z");
+      assert.deepStrictEqual(Bitstring.toText(result2), "10");
+    });
+
+    it("base 2 lower boundary", () => {
+      const result = int_to_list_2(Type.integer(1), Type.integer(2));
+      assert.deepStrictEqual(Bitstring.toText(result), "1");
+    });
+
+    it("negative integer in base 2", () => {
+      const result = int_to_list_2(Type.integer(-10), Type.integer(2));
+      assert.deepStrictEqual(Bitstring.toText(result), "-1010");
+    });
+
+    it("negative integer in base 16", () => {
+      const result = int_to_list_2(Type.integer(-255), Type.integer(16));
+      assert.deepStrictEqual(Bitstring.toText(result), "-FF");
+    });
+
+    it("large integer with base conversion", () => {
+      const big = BigInt("4294967295");
+      const result = int_to_list_2(Type.integer(big), Type.integer(16));
+      assert.deepStrictEqual(Bitstring.toText(result), "FFFFFFFF");
+    });
+
+    it("zero with any base", () => {
+      const result1 = int_to_list_2(Type.integer(0), Type.integer(2));
+      const result2 = int_to_list_2(Type.integer(0), Type.integer(36));
+      assert.deepStrictEqual(Bitstring.toText(result1), "0");
+      assert.deepStrictEqual(Bitstring.toText(result2), "0");
+    });
+
+    it("large negative integer with base 16", () => {
+      const big = BigInt("-4294967295");
+      const result = int_to_list_2(Type.integer(big), Type.integer(16));
+      assert.deepStrictEqual(Bitstring.toText(result), "-FFFFFFFF");
+    });
+
+    it("negative integer with base 36", () => {
+      const result = int_to_list_2(Type.integer(-35), Type.integer(36));
+      assert.deepStrictEqual(Bitstring.toText(result), "-Z");
+    });
+
+    it("raises ArgumentError for base < 2", () => {
+      assertBoxedError(
+        () => int_to_list_2(Type.integer(10), Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2,"invalid base")
+      );
+    });
+
+    it("raises ArgumentError for base > 36", () => {
+      assertBoxedError(
+        () => int_to_list_2(Type.integer(10), Type.integer(37)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2,"invalid base")
+      );
+    });
+
+    it("raises ArgumentError when first arg is not integer", () => {
+      assertBoxedError(
+        () => int_to_list_2(Type.float(3.14), Type.integer(10)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1,"expected an integer")
+      );
+    });
+
+    it("raises ArgumentError when second arg is not integer", () => {
+      assertBoxedError(
+        () => int_to_list_2(Type.integer(10), Type.float(3.5)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2,"invalid base")
+      );
+    });
+
+    it("raises ArgumentError when first argument is float even with valid base", () => {
+      assertBoxedError(
+        () => int_to_list_2(Type.float(12.0), Type.integer(16)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1,"expected an integer")
+      );
+    });
+  });
+
   describe("is_atom/1", () => {
     const is_atom = Erlang["is_atom/1"];
 
