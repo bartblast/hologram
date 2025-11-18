@@ -78,7 +78,7 @@ defmodule Hologram.ExJsConsistency.Erlang.FilenameTest do
     end
 
     test "returns basename as list of code points for non-empty list input" do
-      assert :filename.basename(['path/to/', ?f, ?i, ?l, ?e, '.txt']) == ~c"file.txt"
+      assert :filename.basename([~c"path/to/", ?f, ?i, ?l, ?e, ~c".txt"]) == ~c"file.txt"
     end
 
     test "returns basename as list of code points for list input with single segment" do
