@@ -14,14 +14,6 @@ import Type from "../../../assets/js/type.mjs";
 defineGlobalErlangAndElixirModules();
 
 describe("Erlang_Binary", () => {
-<<<<<<< HEAD
-  describe("first/1", () => {
-    const first = Erlang_Binary["first/1"];
-
-    it("raises ArgumentError if the first argument is a integer", () => {
-      assertBoxedError(
-        () => first(Type.integer(1)),
-=======
   describe("at/2", () => {
     const at = Erlang_Binary["at/2"];
 
@@ -63,7 +55,51 @@ describe("Erlang_Binary", () => {
       );
     });
 
-<<<<<<< HEAD
+    it("raises ArgumentError when bitstring is not a binary", () => {
+      const subject = Type.bitstring([1, 0, 1]);
+
+      assertBoxedError(
+        () => at(subject, Type.integer(0)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "is a bitstring (expected a binary)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError when position is nil", () => {
+      const pos = Type.nil();
+
+      assertBoxedError(
+        () => at(binary, pos),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError when position is negative", () => {
+      const pos = Type.integer(-1);
+
+      assertBoxedError(
+        () => at(binary, pos),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    });
+  });
+
+  describe("first/1", () => {
+    const first = Erlang_Binary["first/1"];
+
+    it("raises ArgumentError if the first argument is a integer", () => {
+      assertBoxedError(
+        () => first(Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
     it("raises ArgumentError if the first argument is a float", () => {
       assertBoxedError(
         () => first(Type.float(3.14)),
@@ -107,13 +143,6 @@ describe("Erlang_Binary", () => {
     it("raises ArgumentError if the first argument is a non-binary bitstring", () => {
       assertBoxedError(
         () => first(Type.bitstring([1, 0, 1])),
-=======
-    it("raises ArgumentError when bitstring is not a binary", () => {
-      const subject = Type.bitstring([1, 0, 1]);
-
-      assertBoxedError(
-        () => at(subject, Type.integer(0)),
->>>>>>> origin/dev
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
@@ -213,26 +242,5 @@ describe("Erlang_Binary", () => {
       const result = first(segment);
       assert.deepStrictEqual(result, Type.integer(195));
     });
-=======
-    it("raises ArgumentError when position is nil", () => {
-      const pos = Type.nil();
-
-      assertBoxedError(
-        () => at(binary, pos),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
-      );
-    });
-
-    it("raises ArgumentError when position is negative", () => {
-      const pos = Type.integer(-1);
-
-      assertBoxedError(
-        () => at(binary, pos),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
-      );
-    });
->>>>>>> origin/dev
   });
 });
