@@ -1896,6 +1896,24 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "make_tuple/2" do
+    test "creates tuple of the given size with all elements set to the given value" do
+      assert :erlang.make_tuple(3, :a) === {:a, :a, :a}
+    end
+
+    test "raises ArgumentError when arity is not positive" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "out of range"),
+                   {:erlang, :make_tuple, [0, :a]}
+    end
+
+    test "raises ArgumentError when arity is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "out of range"),
+                   {:erlang, :make_tuple, [:a, :a]}
+    end
+  end
+
   describe "map_size/1" do
     test "returns the number of items in the map" do
       assert :erlang.map_size(%{a: 1, b: 2}) == 2
