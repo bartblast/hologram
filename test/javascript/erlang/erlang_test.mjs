@@ -1397,7 +1397,7 @@ describe("Erlang", () => {
 
     it("returns false if the first argument is false", () => {
       const context = contextFixture({
-        vars: {left: Type.boolean(false), right: Type.atom("abc")},
+        vars: { left: Type.boolean(false), right: Type.atom("abc") },
       });
 
       const result = andalso(
@@ -1411,7 +1411,7 @@ describe("Erlang", () => {
 
     it("returns the second argument if the first argument is true", () => {
       const context = contextFixture({
-        vars: {left: Type.boolean(true), right: Type.atom("abc")},
+        vars: { left: Type.boolean(true), right: Type.atom("abc") },
       });
 
       const result = andalso(
@@ -1437,7 +1437,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the first argument is not a boolean", () => {
       const context = contextFixture({
-        vars: {left: Type.nil(), right: Type.boolean(true)},
+        vars: { left: Type.nil(), right: Type.boolean(true) },
       });
 
       assertBoxedError(
@@ -1535,8 +1535,8 @@ describe("Erlang", () => {
     const testedFun = Erlang["band/2"];
 
     it("valid integers", () => {
-      const left = Type.integer(5n);   // 0b0101
-      const right = Type.integer(3n);  // 0b0011
+      const left = Type.integer(5n); // 0b0101
+      const right = Type.integer(3n); // 0b0011
       const result = testedFun(left, right);
       const expected = Type.integer(1n); // 0b0001
       assert.deepStrictEqual(result, expected);
@@ -1561,23 +1561,22 @@ describe("Erlang", () => {
     it("handles negative integers", () => {
       const left = Type.integer(-1n); // -0b1111
       const right = Type.integer(5n);
-  
+
       const result = testedFun(left, right);
       const expected = Type.integer(5n);
-  
-      assert.deepStrictEqual(result, expected)
+
+      assert.deepStrictEqual(result, expected);
     });
 
     it("handles very large integers", () => {
       const left = Type.integer(2n ** 1990n - 1n);
       const right = Type.integer(2n ** 2000n - 1n);
-    
+
       const result = testedFun(left, right);
-    
+
       const expected = Type.integer(2n ** 1990n - 1n);
       assert.deepStrictEqual(result, expected);
     });
-
 
     it("raises ArgumentError on non-integer left argument", () => {
       const left = Type.float(4.0);
@@ -2688,7 +2687,7 @@ describe("Erlang", () => {
 
     it("returns true if the first argument is true", () => {
       const context = contextFixture({
-        vars: {left: Type.boolean(true), right: Type.atom("abc")},
+        vars: { left: Type.boolean(true), right: Type.atom("abc") },
       });
 
       const result = orelse(
@@ -2702,7 +2701,7 @@ describe("Erlang", () => {
 
     it("returns the second argument if the first argument is false", () => {
       const context = contextFixture({
-        vars: {left: Type.boolean(false), right: Type.atom("abc")},
+        vars: { left: Type.boolean(false), right: Type.atom("abc") },
       });
 
       const result = orelse(
@@ -2728,7 +2727,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the first argument is not a boolean", () => {
       const context = contextFixture({
-        vars: {left: Type.nil(), right: Type.boolean(true)},
+        vars: { left: Type.nil(), right: Type.boolean(true) },
       });
 
       assertBoxedError(
