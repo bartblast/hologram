@@ -591,6 +591,53 @@ const Erlang = {
   // End integer_to_binary/2
   // Deps: []
 
+  // Start integer_to_list/1
+  "integer_to_list/1": (integer) => {
+    if (!Type.isInteger(integer)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "expected an integer"),
+      );
+    }
+
+    const text = integer.value.toString(); 
+
+    return Type.bitstring(text);
+  },
+  // End integer_to_list/1
+  // Deps: []
+
+  // Start integer_to_list/2
+  "integer_to_list/2": (integer, base) => {
+    if (!Type.isInteger(integer)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "expected an integer"),
+      );
+    }
+
+    if (!Type.isInteger(base)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "invalid base"),
+      );
+    }
+
+    const baseValue = Number(base.value);
+
+    if (baseValue < 2 || baseValue > 36) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "invalid base"),
+      );
+    }
+
+    const raw = integer.value.toString(baseValue);
+
+    const text = raw.toUpperCase();
+
+    return Type.bitstring(text);
+  },
+  // End integer_to_list/2
+  // Deps: []
+
+
   // TODO: test
   // Start iolist_to_binary/1
   "iolist_to_binary/1": (ioListOrBinary) => {
