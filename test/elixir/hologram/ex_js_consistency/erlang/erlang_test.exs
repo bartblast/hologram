@@ -1350,12 +1350,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :band, [5.0, 3]}
     end
 
-    test "raises ArithmeticError if the first argument is not an integer" do
-      assert_error ArithmeticError,
-                   "bad argument in arithmetic expression: Bitwise.band(5.0, 3)",
-                   {:erlang, :band, [5.0, 3]}
-    end
-
     test "raises ArithmeticError if the second argument is not an integer" do
       assert_error ArithmeticError,
                    "bad argument in arithmetic expression: Bitwise.band(5, 3.0)",
