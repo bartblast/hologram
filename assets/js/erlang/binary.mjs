@@ -34,14 +34,22 @@ class Matcher {
 
   // Collect all non-overlapping matches using a findNext callback
   // findNext(pos) should return a match object or null
-  collectMatches(subjectBytes, findNext, limit = Infinity) {
+  collectMatches(subjectBytes, findNext, limit = Infinity, scope = null) {
     const matches = [];
-    let pos = 0;
-    let lastEnd = 0;
+    const scopeStart = scope ? scope.start : 0;
+    const scopeEnd = scope ? scope.start + scope.length : subjectBytes.length;
 
-    while (matches.length < limit) {
-      const match = findNext(pos);
+    let pos = scopeStart;
+    let lastEnd = scopeStart;
+
+    while (matches.length < limit && pos < scopeEnd) {
+      const match = findNext(pos, scopeEnd);
       if (!match) break;
+
+      // Check if match is within scope
+      if (match.start < scopeStart || match.start >= scopeEnd) {
+        break;
+      }
 
       // Only keep non-overlapping matches
       if (match.start >= lastEnd) {
@@ -56,7 +64,7 @@ class Matcher {
   }
 
   // Split a subject into parts based on matches
-  splitWithMatches(subject, matches, global) {
+  splitWithMatches(subject, matches, opts) {
     const subjectBytes = Erlang_Binary.validate(subject);
 
     if (matches.length === 0) {
@@ -66,7 +74,7 @@ class Matcher {
     const parts = [];
     let lastEnd = 0;
 
-    const matchesToUse = global ? matches : matches.slice(0, 1);
+    const matchesToUse = opts.global ? matches : matches.slice(0, 1);
 
     for (const match of matchesToUse) {
       // Add the part before this match
@@ -88,7 +96,75 @@ class Matcher {
       parts.push(Bitstring.fromBytes(new Uint8Array(0)));
     }
 
-    return Type.list(parts);
+    // Apply trim options
+    return this.applyTrimOptions(parts, opts);
+  }
+
+  // Apply trim or trim_all options to split results
+  applyTrimOptions(parts, opts) {
+    let result = parts;
+
+    if (opts.trim_all) {
+      // Remove all empty parts
+      result = parts.filter(part => part.bytes.length > 0);
+    } else if (opts.trim) {
+      // Remove trailing empty parts
+      while (result.length > 0 && result[result.length - 1].bytes.length === 0) {
+        result.pop();
+      }
+    }
+
+    return Type.list(result);
+  }
+
+  // Parse options (for both split and match)
+  parseSplitOptions(options) {
+    const opts = {
+      global: false,
+      trim: false,
+      trim_all: false,
+      scope: this.parseScope(options)
+    };
+
+    if (Type.isList(options)) {
+      for (const opt of options.data) {
+        if (Type.isAtom(opt)) {
+          if (opt.value === "global") {
+            opts.global = true;
+          } else if (opt.value === "trim") {
+            opts.trim = true;
+          } else if (opt.value === "trim_all") {
+            opts.trim_all = true;
+          }
+        }
+      }
+    }
+
+    return opts;
+  }
+
+  parseMatchOptions(options) {
+    return {
+      scope: this.parseScope(options)
+    }
+  }
+
+  parseScope(options) {
+    if (Type.isList(options)) {
+      for (const opt of options.data) {
+        if (Type.isTuple(opt) && opt.data.length === 2) {
+          const [key, value] = opt.data;
+          if (Type.isAtom(key) && key.value === "scope") {
+            if (Type.isTuple(value) && value.data.length === 2) {
+              const start = Type.isInteger(value.data[0]) ? Number(value.data[0].value) : 0;
+              const length = Type.isInteger(value.data[1]) ? Number(value.data[1].value) : 0;
+              return { start, length };
+            }
+          }
+        }
+      }
+    }
+    return null;
   }
 }
 
@@ -119,11 +195,11 @@ class BoyerMooreMatcher extends Matcher {
 
   // Find next match starting from startPos
   // Returns match object or null if no match found
-  #findMatch(subjectBytes, startPos = 0) {
+  #findMatch(subjectBytes, startPos = 0, endPos = null) {
     const patternLength = this.pattern.length;
-    const subjectLength = subjectBytes.length;
+    const subjectLength = endPos !== null ? endPos : subjectBytes.length;
 
-    if (patternLength === 0 || patternLength > subjectLength) {
+    if (patternLength === 0 || patternLength > subjectBytes.length) {
       return null;
     }
 
@@ -155,19 +231,24 @@ class BoyerMooreMatcher extends Matcher {
     return null;
   }
 
-  split(subject, global = false) {
+  split(subject, options) {
+    const opts = this.parseSplitOptions(options);
     const subjectBytes = Erlang_Binary.validate(subject);
     const matches = this.collectMatches(
       subjectBytes,
-      (pos) => this.#findMatch(subjectBytes, pos),
-      global ? Infinity : 1
+      (pos, endPos) => this.#findMatch(subjectBytes, pos, endPos),
+      opts.global ? Infinity : 1,
+      opts.scope
     );
-    return this.splitWithMatches(subject, matches, global);
+    return this.splitWithMatches(subject, matches, opts);
   }
 
-  match(subject) {
+  match(subject, options) {
+    const opts = this.parseMatchOptions(options);
     const subjectBytes = Erlang_Binary.validate(subject);
-    const match = this.#findMatch(subjectBytes, 0);
+    const scopeStart = opts.scope ? opts.scope.start : 0;
+    const scopeEnd = opts.scope ? opts.scope.start + opts.scope.length : subjectBytes.length;
+    const match = this.#findMatch(subjectBytes, scopeStart, scopeEnd);
 
     if (!match) {
       return Type.atom("nomatch");
@@ -176,11 +257,14 @@ class BoyerMooreMatcher extends Matcher {
     return Type.tuple([Type.integer(match.start), Type.integer(match.length)]);
   }
 
-  matches(subject) {
+  matches(subject, options) {
+    const opts = this.parseMatchOptions(options);
     const subjectBytes = Erlang_Binary.validate(subject);
     const matches = this.collectMatches(
       subjectBytes,
-      (pos) => this.#findMatch(subjectBytes, pos)
+      (pos, endPos) => this.#findMatch(subjectBytes, pos, endPos),
+      Infinity,
+      opts.scope
     );
 
     return Type.list(
@@ -195,8 +279,7 @@ class BoyerMooreMatcher extends Matcher {
       Type.atom("bm"),
       {
         algorithm: "boyer_moore",
-        pattern: this.pattern,
-        badShift: this.badShift
+        pattern: this.pattern
       }
     ]);
   }
@@ -294,10 +377,11 @@ class AhoCorasickMatcher extends Matcher {
 
   // Find next match starting from startPos with given automaton state
   // Returns { match, state } or null if no match found
-  #findMatch(subjectBytes, startPos = 0, startNode = this.automaton) {
+  #findMatch(subjectBytes, startPos = 0, endPos = null, startNode = this.automaton) {
     let currentNode = startNode;
+    const searchEnd = endPos !== null ? endPos : subjectBytes.length;
 
-    for (let i = startPos; i < subjectBytes.length; i++) {
+    for (let i = startPos; i < searchEnd; i++) {
       const byte = subjectBytes[i];
 
       // Follow failure links until we find a transition or reach root
@@ -316,40 +400,50 @@ class AhoCorasickMatcher extends Matcher {
       if (currentNode.outputs.length > 0) {
         // Return the longest match at this position
         const output = currentNode.outputs[0]; // outputs are inherited, first is usually longest
-        return {
-          match: {
-            start: i - output.length + 1,
-            end: i + 1,
-            length: output.length,
-            patternIdx: output.patternIdx
-          },
-          state: {
-            pos: i + 1,
-            node: currentNode
-          }
-        };
+        const matchStart = i - output.length + 1;
+
+        // Only return match if it starts within the search scope
+        if (matchStart >= startPos) {
+          return {
+            match: {
+              start: matchStart,
+              end: i + 1,
+              length: output.length,
+              patternIdx: output.patternIdx
+            },
+            state: {
+              pos: i + 1,
+              node: currentNode
+            }
+          };
+        }
       }
     }
 
     return null;
   }
 
-  split(subject, global = false) {
+  split(subject, options) {
+    const opts = this.parseSplitOptions(options);
     const subjectBytes = Erlang_Binary.validate(subject);
     const matches = this.collectMatches(
       subjectBytes,
-      (pos) => {
-        const result = this.#findMatch(subjectBytes, pos, this.automaton);
+      (pos, endPos) => {
+        const result = this.#findMatch(subjectBytes, pos, endPos, this.automaton);
         return result ? result.match : null;
       },
-      global ? Infinity : 1
+      opts.global ? Infinity : 1,
+      opts.scope
     );
-    return this.splitWithMatches(subject, matches, global);
+    return this.splitWithMatches(subject, matches, opts);
   }
 
-  match(subject) {
+  match(subject, options) {
+    const opts = this.parseMatchOptions(options);
     const subjectBytes = Erlang_Binary.validate(subject);
-    const result = this.#findMatch(subjectBytes, 0, this.automaton);
+    const scopeStart = opts.scope ? opts.scope.start : 0;
+    const scopeEnd = opts.scope ? opts.scope.start + opts.scope.length : subjectBytes.length;
+    const result = this.#findMatch(subjectBytes, scopeStart, scopeEnd, this.automaton);
 
     if (!result) {
       return Type.atom("nomatch");
@@ -359,14 +453,17 @@ class AhoCorasickMatcher extends Matcher {
     return Type.tuple([Type.integer(match.start), Type.integer(match.length)]);
   }
 
-  matches(subject) {
+  matches(subject, options) {
+    const opts = this.parseMatchOptions(options);
     const subjectBytes = Erlang_Binary.validate(subject);
     const matches = this.collectMatches(
       subjectBytes,
-      (pos) => {
-        const result = this.#findMatch(subjectBytes, pos, this.automaton);
+      (pos, endPos) => {
+        const result = this.#findMatch(subjectBytes, pos, endPos, this.automaton);
         return result ? result.match : null;
-      }
+      },
+      Infinity,
+      opts.scope
     );
 
     return Type.list(
@@ -388,40 +485,37 @@ class AhoCorasickMatcher extends Matcher {
 }
 
 const Erlang_Binary = {
+
+  "compile_pattern/1": (pattern) => {
+    const patternObj = Matcher.create(pattern);
+    return patternObj.toTuple();
+  },
+
+  "match/2": (subject, pattern) => {
+    return Erlang_Binary["match/3"](subject, pattern, Type.list([]));
+  },
+
+  "match/3": (subject, pattern, options) => {
+    const patternObj = Matcher.create(pattern);
+    return patternObj.match(subject, options);
+  },
+
+  "matches/2": (subject, pattern) => {
+    return Erlang_Binary["matches/3"](subject, pattern, Type.list([]));
+  },
+
+  "matches/3": (subject, pattern, options) => {
+    const patternObj = Matcher.create(pattern);
+    return patternObj.matches(subject, options);
+  },
+
   "split/2": (subject, pattern) => {
     return Erlang_Binary["split/3"](subject, pattern, Type.list([]));
   },
 
   "split/3": (subject, pattern, options) => {
-    // Parse options
-    let global = false;
-
-    if (Type.isList(options)) {
-      for (const opt of options.data) {
-        if (Type.isAtom(opt) && opt.value === "global") {
-          global = true;
-        }
-        // TODO: Add support for scope, trim, trim_all options
-      }
-    }
-
     const patternObj = Matcher.create(pattern);
-    return patternObj.split(subject, global);
-  },
-
-  "match/2": (subject, pattern) => {
-    const patternObj = Matcher.create(pattern);
-    return patternObj.match(subject);
-  },
-
-  "matches/2": (subject, pattern) => {
-    const patternObj = Matcher.create(pattern);
-    return patternObj.matches(subject);
-  },
-
-  "compile_pattern/1": (pattern) => {
-    const patternObj = Matcher.create(pattern);
-    return patternObj.toTuple();
+    return patternObj.split(subject, options);
   },
 
   validate: (bitstring) => {

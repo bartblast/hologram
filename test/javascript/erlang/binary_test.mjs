@@ -56,7 +56,7 @@ describe("Erlang_Binary", () => {
     });
   });
 
-  describe("match/2", () => {
+  describe("match/2 and match/3", () => {
     describe("with single pattern (Boyer-Moore)", () => {
       it("finds first match", () => {
         const pattern = Bitstring.fromText("lo");
@@ -66,6 +66,34 @@ describe("Erlang_Binary", () => {
         assert.equal(result.type, "tuple");
         assert.equal(result.data[0].value, 3n); // Position
         assert.equal(result.data[1].value, 2n); // Length
+      });
+
+      it("respects scope option", () => {
+        const pattern = Bitstring.fromText("lo");
+        const subject = Bitstring.fromText("hello world");
+        // scope: {0, 5} means only search in "hello"
+        const options = Type.list([
+          Type.tuple([Type.atom("scope"), Type.tuple([Type.integer(0), Type.integer(5)])])
+        ]);
+        const result = Erlang_Binary["match/3"](subject, pattern, options);
+
+        // Should find "lo" at position 3 in "hello"
+        assert.equal(result.type, "tuple");
+        assert.equal(result.data[0].value, 3n);
+        assert.equal(result.data[1].value, 2n);
+      });
+
+      it("returns nomatch when pattern outside scope", () => {
+        const pattern = Bitstring.fromText("world");
+        const subject = Bitstring.fromText("hello world");
+        // scope: {0, 5} means only search in "hello"
+        const options = Type.list([
+          Type.tuple([Type.atom("scope"), Type.tuple([Type.integer(0), Type.integer(5)])])
+        ]);
+        const result = Erlang_Binary["match/3"](subject, pattern, options);
+
+        assert.equal(result.type, "atom");
+        assert.equal(result.value, "nomatch");
       });
 
       it("returns nomatch when pattern not found", () => {
@@ -137,7 +165,7 @@ describe("Erlang_Binary", () => {
     });
   });
 
-  describe("matches/2", () => {
+  describe("matches/2 and matches/3", () => {
     describe("with single pattern", () => {
       it("finds all non-overlapping matches", () => {
         const pattern = Bitstring.fromText("ab");
@@ -155,6 +183,23 @@ describe("Erlang_Binary", () => {
 
         assert.equal(result.data[2].data[0].value, 4n);
         assert.equal(result.data[2].data[1].value, 2n);
+      });
+
+      it("respects scope option", () => {
+        const pattern = Bitstring.fromText("ab");
+        const subject = Bitstring.fromText("ababab");
+        // scope: {2, 4} means start at byte 2, length 4 (covering "abab")
+        const options = Type.list([
+          Type.tuple([Type.atom("scope"), Type.tuple([Type.integer(2), Type.integer(4)])])
+        ]);
+        const result = Erlang_Binary["matches/3"](subject, pattern, options);
+
+        // Should only find matches within the scope at positions 2 and 4
+        assert.equal(result.data.length, 2);
+        assert.equal(result.data[0].data[0].value, 2n);
+        assert.equal(result.data[0].data[1].value, 2n);
+        assert.equal(result.data[1].data[0].value, 4n);
+        assert.equal(result.data[1].data[1].value, 2n);
       });
 
       it("returns empty list when no matches", () => {
@@ -213,6 +258,72 @@ describe("Erlang_Binary", () => {
   });
 
   describe("split/2 and split/3", () => {
+    describe("examples from Erlang documentation", () => {
+      it('binary:split(<<"the quick brown fox">>, <<" ">>, [])', () => {
+        const pattern = Bitstring.fromText(" ");
+        const subject = Bitstring.fromText("the quick brown fox");
+        const result = Erlang_Binary["split/2"](subject, pattern);
+
+        assert.equal(result.data.length, 2);
+        assert.equal(Bitstring.toText(result.data[0]), "the");
+        assert.equal(Bitstring.toText(result.data[1]), "quick brown fox");
+      });
+
+      it('binary:split(<<"the quick brown fox">>, <<" ">>, [global])', () => {
+        const pattern = Bitstring.fromText(" ");
+        const subject = Bitstring.fromText("the quick brown fox");
+        const options = Type.list([Type.atom("global")]);
+        const result = Erlang_Binary["split/3"](subject, pattern, options);
+
+        assert.equal(result.data.length, 4);
+        assert.equal(Bitstring.toText(result.data[0]), "the");
+        assert.equal(Bitstring.toText(result.data[1]), "quick");
+        assert.equal(Bitstring.toText(result.data[2]), "brown");
+        assert.equal(Bitstring.toText(result.data[3]), "fox");
+      });
+
+      it("binary:split(<<1,255,4,0,0,0,2,3>>, [<<0,0,0>>,<<2>>], [])", () => {
+        const patterns = Type.list([
+          Bitstring.fromBytes(new Uint8Array([0, 0, 0])),
+          Bitstring.fromBytes(new Uint8Array([2]))
+        ]);
+        const subject = Bitstring.fromBytes(new Uint8Array([1, 255, 4, 0, 0, 0, 2, 3]));
+        const result = Erlang_Binary["split/2"](subject, patterns);
+
+        assert.equal(result.data.length, 2);
+        assert.deepEqual(result.data[0].bytes, new Uint8Array([1, 255, 4]));
+        assert.deepEqual(result.data[1].bytes, new Uint8Array([2, 3]));
+      });
+
+      it("binary:split(<<0,1,0,0,4,255,255,9>>, [<<0,0>>, <<255,255>>], [global])", () => {
+        const patterns = Type.list([
+          Bitstring.fromBytes(new Uint8Array([0, 0])),
+          Bitstring.fromBytes(new Uint8Array([255, 255]))
+        ]);
+        const subject = Bitstring.fromBytes(new Uint8Array([0, 1, 0, 0, 4, 255, 255, 9]));
+        const options = Type.list([Type.atom("global")]);
+        const result = Erlang_Binary["split/3"](subject, patterns, options);
+
+        assert.equal(result.data.length, 3);
+        assert.deepEqual(result.data[0].bytes, new Uint8Array([0, 1]));
+        assert.deepEqual(result.data[1].bytes, new Uint8Array([4]));
+        assert.deepEqual(result.data[2].bytes, new Uint8Array([9]));
+      });
+
+      it('binary:split(<<"banana">>, [<<"a">>], [{scope,{2,3}}])', () => {
+        const pattern = Bitstring.fromText("a");
+        const subject = Bitstring.fromText("banana");
+        const options = Type.list([
+          Type.tuple([Type.atom("scope"), Type.tuple([Type.integer(2), Type.integer(3)])])
+        ]);
+        const result = Erlang_Binary["split/3"](subject, pattern, options);
+
+        assert.equal(result.data.length, 2);
+        assert.equal(Bitstring.toText(result.data[0]), "ban");
+        assert.equal(Bitstring.toText(result.data[1]), "na");
+      });
+    });
+
     describe("with single pattern", () => {
       it("splits on first match by default", () => {
         const pattern = Bitstring.fromText(" ");
@@ -277,6 +388,53 @@ describe("Erlang_Binary", () => {
         assert.equal(result.data.length, 2);
         assert.equal(Bitstring.toText(result.data[0]), "hello");
         assert.equal(Bitstring.toText(result.data[1]), ""); // Empty part
+      });
+
+      it("removes trailing empty parts with trim option", () => {
+        const pattern = Bitstring.fromText(" ");
+        const subject = Bitstring.fromText("hello ");
+        const options = Type.list([Type.atom("trim")]);
+        const result = Erlang_Binary["split/3"](subject, pattern, options);
+
+        // Should only have "hello", trailing empty part is removed
+        assert.equal(result.data.length, 1);
+        assert.equal(Bitstring.toText(result.data[0]), "hello");
+      });
+
+      it("removes trailing empty parts with trim and global options", () => {
+        const pattern = Bitstring.fromText(" ");
+        const subject = Bitstring.fromText("hello  world  ");
+        const options = Type.list([Type.atom("global"), Type.atom("trim")]);
+        const result = Erlang_Binary["split/3"](subject, pattern, options);
+
+        // Should remove trailing empty parts but keep middle ones
+        assert.equal(result.data.length, 3);
+        assert.equal(Bitstring.toText(result.data[0]), "hello");
+        assert.equal(Bitstring.toText(result.data[1]), "");
+        assert.equal(Bitstring.toText(result.data[2]), "world");
+      });
+
+      it("removes all empty parts with trim_all option", () => {
+        const pattern = Bitstring.fromText(" ");
+        const subject = Bitstring.fromText(" hello  world ");
+        const options = Type.list([Type.atom("global"), Type.atom("trim_all")]);
+        const result = Erlang_Binary["split/3"](subject, pattern, options);
+
+        // Should only have non-empty parts
+        assert.equal(result.data.length, 2);
+        assert.equal(Bitstring.toText(result.data[0]), "hello");
+        assert.equal(Bitstring.toText(result.data[1]), "world");
+      });
+
+      it("trim_all removes leading, trailing, and middle empty parts", () => {
+        const pattern = Bitstring.fromText(",");
+        const subject = Bitstring.fromText(",a,,b,");
+        const options = Type.list([Type.atom("global"), Type.atom("trim_all")]);
+        const result = Erlang_Binary["split/3"](subject, pattern, options);
+
+        assert.equal(result.data.length, 2);
+        assert.equal(Bitstring.toText(result.data[0]), "a");
+        assert.equal(Bitstring.toText(result.data[1]), "b");
       });
     });
 
