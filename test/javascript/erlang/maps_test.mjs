@@ -121,6 +121,31 @@ describe("Erlang_Maps", () => {
     });
   });
 
+  describe("from_keys/2", () => {
+    const from_keys = Erlang_Maps["from_keys/2"];
+    const keys = Type.list([atomA, atomB]);
+
+    it("creates a map with the given keys and value", () => {
+      const map = from_keys(keys, integer1);
+
+      assert.deepStrictEqual(
+        map,
+        Type.map([
+          [atomA, integer1],
+          [atomB, integer1],
+        ]),
+      );
+    });
+
+    it("raises ArgumentError if the first argument is not a list", () => {
+      assertBoxedError(
+        () => from_keys(atomA, integer1),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+  });
+
   describe("from_list/1", () => {
     const from_list = Erlang_Maps["from_list/1"];
 
