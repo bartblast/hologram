@@ -1317,7 +1317,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
-
   describe "band/2" do
     test "valid integers" do
       assert :erlang.band(5, 0) == 0
