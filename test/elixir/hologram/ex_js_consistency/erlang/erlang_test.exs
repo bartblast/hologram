@@ -1317,6 +1317,52 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+
+  describe "band/2" do
+    test "valid integers" do
+      assert :erlang.band(5, 0) == 0
+    end
+
+    test "handles zero correctly (both 0)" do
+      assert :erlang.band(0, 0) == 0
+    end
+
+    test "handles zero correctly (left 0)" do
+      assert :erlang.band(0, 5) == 0
+    end
+
+    test "handles negative integers" do
+      assert :erlang.band(-1, 5) == 5
+    end
+
+    test "handles very large integers" do
+      left = 2 ** 1990 - 1
+      right = 2 ** 2000 - 1
+      result = 2 ** 1990 - 1
+      assert :erlang.band(left, right) == result
+    end
+
+    # Elixir formats ArithmeticError for :erlang.band/2 using Bitwise.band/2 in the message.
+    # We mirror this string for JS/OTP consistency.
+    test "raises ArithmeticError if the first argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.band(5.0, 3)",
+                   {:erlang, :band, [5.0, 3]}
+    end
+
+    test "raises ArithmeticError if the first argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.band(5.0, 3)",
+                   {:erlang, :band, [5.0, 3]}
+    end
+
+    test "raises ArithmeticError if the second argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.band(5, 3.0)",
+                   {:erlang, :band, [5, 3.0]}
+    end
+  end
+
   if SystemUtils.otp_version() >= 23 do
     test "binary_to_atom/1" do
       # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom

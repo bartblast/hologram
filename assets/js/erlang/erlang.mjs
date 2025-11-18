@@ -312,6 +312,20 @@ const Erlang = {
   // End atom_to_list/1
   // Deps: []
 
+  // Start band/2
+  "band/2": (integer1, integer2) => {
+    if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
+      const arg1 = Interpreter.inspect(integer1);
+      const arg2 = Interpreter.inspect(integer2);
+
+      Interpreter.raiseArithmeticError(`Bitwise.band(${arg1}, ${arg2})`);
+    }
+
+    return Type.integer(integer1.value & integer2.value);
+  },
+  // End band/2
+  // Deps: []
+
   // Start binary_to_atom/1
   "binary_to_atom/1": (binary) => {
     return Erlang["binary_to_atom/2"](binary, Type.atom("utf8"));
