@@ -66,7 +66,7 @@ class Matcher {
   // Process matches generically - used by both split and replace
   // processParts callback: (beforePart, match, matchedBytes) => parts to add at match location
   #processMatches(subject, matches, opts, processParts) {
-    const subjectBytes = Erlang_Binary.validate(subject);
+    const subjectBytes = Matcher.validate_binary(subject);
 
     if (matches.length === 0) {
       return { parts: [subjectBytes], allBytes: true };
@@ -148,7 +148,7 @@ class Matcher {
       Interpreter.raiseArgumentError("replacement function must return a binary");
     }
 
-    return Erlang_Binary.validate(result);
+    return Matcher.validate_binary(result);
   }
 
   // Insert matched bytes into replacement at specified positions
@@ -184,7 +184,7 @@ class Matcher {
     }
 
     // Binary replacement
-    let replacementBytes = Erlang_Binary.validate(replacement);
+    let replacementBytes = Matcher.validate_binary(replacement);
 
     // Handle insert_replaced option for binary replacements
     if (opts.insert_replaced && opts.insert_replaced.length > 0) {
@@ -236,6 +236,21 @@ class Matcher {
     return { scopeStart, scopeEnd };
   }
 
+  // Validate that a value is a binary (bitstring with no leftover bits) and return its bytes
+  static validate_binary(bitstring) {
+    if (!Type.isBitstring(bitstring)) {
+      Interpreter.raiseArgumentError(`must be a binary`);
+    }
+
+    Bitstring.maybeSetBytesFromText(bitstring);
+
+    if (bitstring.leftoverBitCount !== 0) {
+      Interpreter.raiseArgumentError(`must be a binary (not a bitstring)`);
+    }
+
+    return bitstring.bytes;
+  }
+
   // Abstract method - subclasses must implement
   // Returns match object or null
   findMatch(_subjectBytes, _startPos, _endPos) {
@@ -245,7 +260,7 @@ class Matcher {
   // Generic split implementation
   split(subject, options) {
     const opts = this.#parseOptions(options);
-    const subjectBytes = Erlang_Binary.validate(subject);
+    const subjectBytes = Matcher.validate_binary(subject);
     const matches = this.#collectMatches(
       subjectBytes,
       (pos, endPos) => this.findMatch(subjectBytes, pos, endPos),
@@ -258,7 +273,7 @@ class Matcher {
   // Generic match implementation
   match(subject, options) {
     const opts = this.#parseOptions(options);
-    const subjectBytes = Erlang_Binary.validate(subject);
+    const subjectBytes = Matcher.validate_binary(subject);
     const { scopeStart, scopeEnd } = this.#getScopeBounds(opts.scope, subjectBytes.length);
     const match = this.findMatch(subjectBytes, scopeStart, scopeEnd);
 
@@ -272,7 +287,7 @@ class Matcher {
   // Generic matches implementation
   matches(subject, options) {
     const opts = this.#parseOptions(options);
-    const subjectBytes = Erlang_Binary.validate(subject);
+    const subjectBytes = Matcher.validate_binary(subject);
     const matches = this.#collectMatches(
       subjectBytes,
       (pos, endPos) => this.findMatch(subjectBytes, pos, endPos),
@@ -290,7 +305,7 @@ class Matcher {
   // Generic replace implementation
   replace(subject, replacement, options) {
     const opts = this.#parseOptions(options);
-    const subjectBytes = Erlang_Binary.validate(subject);
+    const subjectBytes = Matcher.validate_binary(subject);
     const matches = this.#collectMatches(
       subjectBytes,
       (pos, endPos) => this.findMatch(subjectBytes, pos, endPos),
@@ -382,7 +397,7 @@ class Matcher {
 class BoyerMooreMatcher extends Matcher {
   constructor(pattern) {
     super();
-    this.pattern = Erlang_Binary.validate(pattern);
+    this.pattern = Matcher.validate_binary(pattern);
     this.badShift = this.#computeBadShift();
   }
 
@@ -472,7 +487,7 @@ class AhoCorasickMatcher extends Matcher {
     }
 
     this.patterns = patternList.data.map(item =>
-      Erlang_Binary.validate(item)
+      Matcher.validate_binary(item)
     );
 
     this.automaton = this.#buildTrie();
@@ -653,20 +668,6 @@ const Erlang_Binary = {
   "split/3": (subject, pattern, options) => {
     const patternObj = Matcher.create(pattern);
     return patternObj.split(subject, options);
-  },
-
-  validate: (bitstring) => {
-    if (!Type.isBitstring(bitstring)) {
-      Interpreter.raiseArgumentError(`must be a binary`);
-    }
-
-    Bitstring.maybeSetBytesFromText(bitstring);
-
-    if (bitstring.leftoverBitCount !== 0) {
-      Interpreter.raiseArgumentError(`must be a binary (not a bitstring)`);
-    }
-
-    return bitstring.bytes;
   }
 };
 
