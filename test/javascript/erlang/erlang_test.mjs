@@ -2586,9 +2586,15 @@ describe("Erlang", () => {
       assert.deepStrictEqual(tuple, Type.tuple([atomA, atomA, atomA]));
     });
 
-    it("raises ArgumentError when arity is not positive", () => {
+    it("creates an empty tuple when arity is zero", () => {
+      const tuple = make_tuple(Type.integer(0), atomA);
+
+      assert.deepStrictEqual(tuple, Type.tuple());
+    });
+
+    it("raises ArgumentError when arity is negative", () => {
       assertBoxedError(
-        () => make_tuple(Type.integer(0), atomA),
+        () => make_tuple(Type.integer(-1), atomA),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );

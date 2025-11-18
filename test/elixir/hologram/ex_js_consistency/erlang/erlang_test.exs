@@ -1901,10 +1901,14 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.make_tuple(3, :a) === {:a, :a, :a}
     end
 
-    test "raises ArgumentError when arity is not positive" do
+    test "creates an empty tuple when arity is zero" do
+      assert :erlang.make_tuple(0, :a) === {}
+    end
+
+    test "raises ArgumentError when arity is negative" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "out of range"),
-                   {:erlang, :make_tuple, [0, :a]}
+                   {:erlang, :make_tuple, [-1, :a]}
     end
 
     test "raises ArgumentError when arity is not an integer" do
