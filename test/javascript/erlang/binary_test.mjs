@@ -49,7 +49,6 @@ describe("Erlang_Binary", () => {
 
       assertBoxedError(
         () => at(subject, Type.integer(0)),
->>>>>>> origin/dev
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
@@ -151,7 +150,6 @@ describe("Erlang_Binary", () => {
       );
     });
 
-<<<<<<< HEAD
     it("raises ArgumentError if the first argument is a zero-sized binary", () => {
       assertBoxedError(
         () => first(Type.bitstring([])),
