@@ -9,6 +9,24 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
 
   @moduletag :consistency
 
+  describe "find/2" do
+    @map %{"one" => 1, "two" => 2}
+
+    test "key exists in map" do
+      key = "two"
+      assert :maps.find(key, @map) == {:ok, 2}
+    end
+
+    test "key does not exist in map" do
+      key = "hello"
+      assert :maps.find(key, @map) == :error
+    end
+
+    test "raises BadMapError if the second argument is not a map" do
+      assert_error BadMapError, "expected a map, got: 1", {:maps, :find, ["a", 1]}
+    end
+  end
+
   describe "fold/3" do
     @map %{1 => 1, 10 => 2, 100 => 3}
 
@@ -338,6 +356,27 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     test "raises BadMapError if the third argument is not a map" do
       assert_error BadMapError, "expected a map, got: :abc", fn ->
         :maps.update(:a, 1, :abc)
+      end
+    end
+  end
+
+  describe "values/1" do
+    test "empty map" do
+      assert :maps.values(%{}) == []
+    end
+
+    test "non-empty map" do
+      sorted_result =
+        %{a: 1, b: 2}
+        |> :maps.values()
+        |> Enum.sort()
+
+      assert sorted_result == [1, 2]
+    end
+
+    test "not a map" do
+      assert_error BadMapError, "expected a map, got: :abc", fn ->
+        :maps.values(:abc)
       end
     end
   end
