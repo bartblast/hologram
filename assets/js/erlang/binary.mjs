@@ -33,7 +33,7 @@ class Matcher {
   }
 
   // Validate that a value is a binary (bitstring with no leftover bits) and return its bytes
-  static validate_binary(bitstring) {
+  validate_binary(bitstring) {
     if (!Type.isBitstring(bitstring)) {
       Interpreter.raiseArgumentError(`must be a binary`);
     }
@@ -45,6 +45,69 @@ class Matcher {
     }
 
     return bitstring.bytes;
+  }
+  // Abstract method - subclasses must implement
+  // Returns match object or null
+  findMatch(_subjectBytes, _startPos, _endPos) {
+    throw new Error("Subclasses must implement findMatch");
+  }
+
+  // Generic split implementation
+  split(subject, options) {
+    const opts = this.#parseOptions(options);
+    const subjectBytes = this.validate_binary(subject);
+    const matches = this.#collectMatches(
+      subjectBytes,
+      (pos, endPos) => this.findMatch(subjectBytes, pos, endPos),
+      opts.global ? Infinity : 1,
+      opts.scope
+    );
+    return this.#splitWithMatches(subject, matches, opts);
+  }
+
+  // Generic match implementation
+  match(subject, options) {
+    const opts = this.#parseOptions(options);
+    const subjectBytes = this.validate_binary(subject);
+    const { scopeStart, scopeEnd } = this.#getScopeBounds(opts.scope, subjectBytes.length);
+    const match = this.findMatch(subjectBytes, scopeStart, scopeEnd);
+
+    if (!match) {
+      return Type.atom("nomatch");
+    }
+
+    return Type.tuple([Type.integer(match.start), Type.integer(match.length)]);
+  }
+
+  // Generic matches implementation
+  matches(subject, options) {
+    const opts = this.#parseOptions(options);
+    const subjectBytes = this.validate_binary(subject);
+    const matches = this.#collectMatches(
+      subjectBytes,
+      (pos, endPos) => this.findMatch(subjectBytes, pos, endPos),
+      Infinity,
+      opts.scope
+    );
+
+    return Type.list(
+      matches.map(match =>
+        Type.tuple([Type.integer(match.start), Type.integer(match.length)])
+      )
+    );
+  }
+
+  // Generic replace implementation
+  replace(subject, replacement, options) {
+    const opts = this.#parseOptions(options);
+    const subjectBytes = this.validate_binary(subject);
+    const matches = this.#collectMatches(
+      subjectBytes,
+      (pos, endPos) => this.findMatch(subjectBytes, pos, endPos),
+      opts.global ? Infinity : 1,
+      opts.scope
+    );
+    return this.#replaceWithMatches(subject, matches, replacement, opts);
   }
 
   // Collect all non-overlapping matches using a findNext callback
@@ -81,7 +144,7 @@ class Matcher {
   // Process matches generically - used by both split and replace
   // processParts callback: (beforePart, match, matchedBytes) => parts to add at match location
   #processMatches(subject, matches, opts, processParts) {
-    const subjectBytes = Matcher.validate_binary(subject);
+    const subjectBytes = this.validate_binary(subject);
 
     if (matches.length === 0) {
       return { parts: [subjectBytes], allBytes: true };
@@ -163,7 +226,7 @@ class Matcher {
       Interpreter.raiseArgumentError("replacement function must return a binary");
     }
 
-    return Matcher.validate_binary(result);
+    return this.validate_binary(result);
   }
 
   // Insert matched bytes into replacement at specified positions
@@ -189,7 +252,7 @@ class Matcher {
     }
     replacementParts.push(replacementBytes.subarray(lastPos));
 
-    return Matcher.#concatenateBytes(replacementParts);
+    return this.#concatenateBytes(replacementParts);
   }
 
   // Calculate replacement bytes for a match (handles both function and binary replacements)
@@ -199,7 +262,7 @@ class Matcher {
     }
 
     // Binary replacement
-    let replacementBytes = Matcher.validate_binary(replacement);
+    let replacementBytes = this.validate_binary(replacement);
 
     // Handle insert_replaced option for binary replacements
     if (opts.insert_replaced && opts.insert_replaced.length > 0) {
@@ -229,11 +292,11 @@ class Matcher {
       return [beforePart, replacementBytes];
     });
 
-    return Bitstring.fromBytes(Matcher.#concatenateBytes(parts));
+    return Bitstring.fromBytes(this.#concatenateBytes(parts));
   }
 
   // Helper to concatenate byte arrays efficiently
-  static #concatenateBytes(parts) {
+  #concatenateBytes(parts) {
     const totalLength = parts.reduce((sum, part) => sum + part.length, 0);
     const result = new Uint8Array(totalLength);
     let offset = 0;
@@ -249,70 +312,6 @@ class Matcher {
     const scopeStart = scope ? scope.start : 0;
     const scopeEnd = scope ? scope.start + scope.length : subjectLength;
     return { scopeStart, scopeEnd };
-  }
-
-  // Abstract method - subclasses must implement
-  // Returns match object or null
-  findMatch(_subjectBytes, _startPos, _endPos) {
-    throw new Error("Subclasses must implement findMatch");
-  }
-
-  // Generic split implementation
-  split(subject, options) {
-    const opts = this.#parseOptions(options);
-    const subjectBytes = Matcher.validate_binary(subject);
-    const matches = this.#collectMatches(
-      subjectBytes,
-      (pos, endPos) => this.findMatch(subjectBytes, pos, endPos),
-      opts.global ? Infinity : 1,
-      opts.scope
-    );
-    return this.#splitWithMatches(subject, matches, opts);
-  }
-
-  // Generic match implementation
-  match(subject, options) {
-    const opts = this.#parseOptions(options);
-    const subjectBytes = Matcher.validate_binary(subject);
-    const { scopeStart, scopeEnd } = this.#getScopeBounds(opts.scope, subjectBytes.length);
-    const match = this.findMatch(subjectBytes, scopeStart, scopeEnd);
-
-    if (!match) {
-      return Type.atom("nomatch");
-    }
-
-    return Type.tuple([Type.integer(match.start), Type.integer(match.length)]);
-  }
-
-  // Generic matches implementation
-  matches(subject, options) {
-    const opts = this.#parseOptions(options);
-    const subjectBytes = Matcher.validate_binary(subject);
-    const matches = this.#collectMatches(
-      subjectBytes,
-      (pos, endPos) => this.findMatch(subjectBytes, pos, endPos),
-      Infinity,
-      opts.scope
-    );
-
-    return Type.list(
-      matches.map(match =>
-        Type.tuple([Type.integer(match.start), Type.integer(match.length)])
-      )
-    );
-  }
-
-  // Generic replace implementation
-  replace(subject, replacement, options) {
-    const opts = this.#parseOptions(options);
-    const subjectBytes = Matcher.validate_binary(subject);
-    const matches = this.#collectMatches(
-      subjectBytes,
-      (pos, endPos) => this.findMatch(subjectBytes, pos, endPos),
-      opts.global ? Infinity : 1,
-      opts.scope
-    );
-    return this.#replaceWithMatches(subject, matches, replacement, opts);
   }
 
   // Parse scope option {start, length}
@@ -397,8 +396,23 @@ class Matcher {
 class BoyerMooreMatcher extends Matcher {
   constructor(pattern) {
     super();
-    this.pattern = Matcher.validate_binary(pattern);
+    this.pattern = this.validate_binary(pattern);
     this.badShift = this.#computeBadShift();
+  }
+
+  // Implement abstract method
+  findMatch(subjectBytes, startPos, endPos) {
+    return this.#findMatchInternal(subjectBytes, startPos, endPos);
+  }
+
+  toTuple() {
+    return Type.tuple([
+      Type.atom("bm"),
+      {
+        algorithm: "boyer_moore",
+        pattern: this.pattern
+      }
+    ]);
   }
 
   #computeBadShift() {
@@ -455,21 +469,6 @@ class BoyerMooreMatcher extends Matcher {
 
     return null;
   }
-
-  // Implement abstract method
-  findMatch(subjectBytes, startPos, endPos) {
-    return this.#findMatchInternal(subjectBytes, startPos, endPos);
-  }
-
-  toTuple() {
-    return Type.tuple([
-      Type.atom("bm"),
-      {
-        algorithm: "boyer_moore",
-        pattern: this.pattern
-      }
-    ]);
-  }
 }
 
 // Aho-Corasick pattern matching class for multiple patterns
@@ -487,12 +486,28 @@ class AhoCorasickMatcher extends Matcher {
     }
 
     this.patterns = patternList.data.map(item =>
-      Matcher.validate_binary(item)
+      this.validate_binary(item)
     );
 
     this.automaton = this.#buildTrie();
     this.#buildFailureLinks(this.automaton);
   }
+  // Implement abstract method
+  findMatch(subjectBytes, startPos, endPos) {
+    const result = this.#findMatchInternal(subjectBytes, startPos, endPos, this.automaton);
+    return result ? result.match : null;
+  }
+
+  toTuple() {
+    return Type.tuple([
+      Type.atom("ac"),
+      {
+        algorithm: "aho_corasick",
+        patterns: this.patterns
+      }
+    ]);
+  }
+
 
   #buildTrie() {
     const root = { transitions: new Map(), outputs: [], failure: null };
@@ -610,21 +625,6 @@ class AhoCorasickMatcher extends Matcher {
     return null;
   }
 
-  // Implement abstract method
-  findMatch(subjectBytes, startPos, endPos) {
-    const result = this.#findMatchInternal(subjectBytes, startPos, endPos, this.automaton);
-    return result ? result.match : null;
-  }
-
-  toTuple() {
-    return Type.tuple([
-      Type.atom("ac"),
-      {
-        algorithm: "aho_corasick",
-        patterns: this.patterns
-      }
-    ]);
-  }
 }
 
 const Erlang_Binary = {
