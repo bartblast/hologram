@@ -523,6 +523,102 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("keydelete/3", () => {
+    const keydelete = Erlang_Lists["keydelete/3"];
+
+    it("returns a copy of the list with the first matching tuple removed", () => {
+      const tuple = Type.tuple([
+        Type.integer(5),
+        Type.integer(6),
+        Type.integer(7),
+      ]);
+
+      const tuples = Type.list([
+        Type.tuple([Type.integer(1), Type.integer(2)]),
+        Type.atom("abc"),
+        tuple,
+      ]);
+
+      const result = keydelete(Type.integer(7), Type.integer(3), tuples);
+
+      const expected = Type.list([
+        Type.tuple([Type.integer(1), Type.integer(2)]),
+        Type.atom("abc"),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("returns the original list if there is no matching tuple", () => {
+      const result = keydelete(
+        Type.integer(7),
+        Type.integer(3),
+        Type.list([Type.atom("abc")]),
+      );
+
+      const expected = Type.list([Type.atom("abc")]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError if the second argument (index) is not an integer", () => {
+      assertBoxedError(
+        () => keydelete(Type.atom("abc"), Type.atom("xyz"), Type.list()),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.keydelete/3",
+          [Type.atom("abc"), Type.atom("xyz"), Type.list()],
+        ),
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument (index) is smaller than 1", () => {
+      assertBoxedError(
+        () => keydelete(Type.atom("abc"), Type.integer(0), Type.list()),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.keydelete/3",
+          [Type.atom("abc"), Type.integer(0), Type.list()],
+        ),
+      );
+    });
+
+    it("raises FunctionClauseError if the third argument (tuples) is not a list", () => {
+      assertBoxedError(
+        () => keydelete(Type.atom("abc"), Type.integer(1), Type.atom("xyz")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.keydelete3/3",
+          [Type.atom("abc"), Type.integer(1), Type.atom("xyz")],
+        ),
+      );
+    });
+
+    it("raises FunctionClauseError if the third argument (tuples) is an improper list", () => {
+      assertBoxedError(
+        () =>
+          keydelete(
+            Type.integer(7),
+            Type.integer(4),
+            Type.improperList([
+              Type.integer(1),
+              Type.integer(2),
+              Type.integer(3),
+            ]),
+          ),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.keydelete3/3",
+          [Type.integer(7), Type.integer(4), Type.improperList([
+            Type.integer(1),
+            Type.integer(2),
+            Type.integer(3),
+          ])],
+        ),
+      );
+    });
+  });
+
   describe("map/2", () => {
     const fun = Type.anonymousFunction(
       1,

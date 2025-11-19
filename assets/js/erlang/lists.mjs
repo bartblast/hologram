@@ -147,6 +147,53 @@ const Erlang_Lists = {
   // End keyfind/3
   // Deps: []
 
+  // Start keydelete/3
+  "keydelete/3": (key, index, tuples) => {
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keydelete/3", arguments),
+      );
+    }
+
+    if (index.value < 1) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keydelete/3", arguments),
+      );
+    }
+
+    if (!Type.isList(tuples)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keydelete3/3", arguments),
+      );
+    }
+
+    if (!Type.isProperList(tuples)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keydelete3/3", arguments),
+      );
+    }
+
+    const result = [];
+    let found = false;
+
+    for (const tuple of tuples.data) {
+      if (!found && Type.isTuple(tuple)) {
+        if (
+          tuple.data.length >= index.value &&
+          Interpreter.isEqual(tuple.data[Number(index.value) - 1], key)
+        ) {
+          found = true;
+          continue;
+        }
+      }
+      result.push(tuple);
+    }
+
+    return Type.list(result);
+  },
+  // End keydelete/3
+  // Deps: []
+
   // Start keymember/3
   "keymember/3": (value, index, tuples) => {
     return Type.boolean(
@@ -278,6 +325,7 @@ const Erlang_Lists = {
   },
   // End sort/1
   // Deps: []
+
 };
 
 export default Erlang_Lists;

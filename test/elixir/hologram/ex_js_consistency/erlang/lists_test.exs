@@ -271,6 +271,48 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "keydelete/3" do
+    test "returns a copy of the list with the first matching tuple removed" do
+      assert :lists.keydelete(7, 3, [{1, 2}, :abc, {5, 6, 7}]) == [{1, 2}, :abc]
+    end
+
+    test "returns the original list if there is no matching tuple" do
+      assert :lists.keydelete(7, 3, [:abc]) == [:abc]
+    end
+
+    test "raises FunctionClauseError if the second argument (index) is not an integer" do
+      expected_msg = build_function_clause_error_msg(":lists.keydelete/3", [:abc, :xyz, []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keydelete(:abc, :xyz, [])
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument (index) is smaller than 1" do
+      expected_msg = build_function_clause_error_msg(":lists.keydelete/3", [:abc, 0, []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keydelete(:abc, 0, [])
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument (tuples) is not a list" do
+      expected_msg = build_function_clause_error_msg(":lists.keydelete3/3", [:abc, 1, :xyz])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keydelete(:abc, 1, :xyz)
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument (tuples) is an improper list" do
+      expected_msg = build_function_clause_error_msg(":lists.keydelete3/3", [7, 4, 3])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keydelete(7, 4, [1, 2 | 3])
+      end
+    end
+  end
+
   describe "map/2" do
     setup do
       [fun: fn elem -> elem * 10 end]
