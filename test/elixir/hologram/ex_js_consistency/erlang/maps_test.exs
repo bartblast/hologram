@@ -12,7 +12,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
   describe "find/2" do
     @map %{"one" => 1, "two" => 2}
 
-    test "successfully find key in map and return ok tuple with value" do
+    test "key exists in map" do
       key = "two"
       assert :maps.find(key, @map) == {:ok, 2}
     end

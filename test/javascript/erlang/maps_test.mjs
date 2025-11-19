@@ -38,7 +38,7 @@ describe("Erlang_Maps", () => {
   describe("find/2", () => {
     const find = Erlang_Maps["find/2"];
 
-    it("successfully find key in map and return ok tuple with value", () => {
+    it("key exists in map", () => {
       const key = Type.atom("two");
       const value = Type.integer(2);
 
@@ -54,11 +54,10 @@ describe("Erlang_Maps", () => {
 
     it("key does not exist in map", () => {
       const key = Type.atom("hello");
-      const expected = Type.atom("error");
-
       const map = Type.map([[Type.atom("one"), Type.integer(1)]]);
 
       const result = find(key, map);
+      const expected = Type.atom("error");
 
       assert.deepStrictEqual(result, expected);
     });
