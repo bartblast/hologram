@@ -50,6 +50,7 @@ class Matcher {
 
     return bitstring.bytes;
   }
+
   // Abstract method - subclasses must implement
   // Returns match object or null
   findMatch(_subjectBytes, _startPos, _endPos) {
@@ -496,6 +497,7 @@ class AhoCorasickMatcher extends Matcher {
     this.automaton = this.#buildTrie();
     this.#buildFailureLinks(this.automaton);
   }
+
   // Implement abstract method
   findMatch(subjectBytes, startPos, endPos) {
     const result = this.#findMatchInternal(subjectBytes, startPos, endPos, this.automaton);
@@ -511,7 +513,6 @@ class AhoCorasickMatcher extends Matcher {
       }
     ]);
   }
-
 
   #buildTrie() {
     const root = { transitions: new Map(), outputs: [], failure: null };
