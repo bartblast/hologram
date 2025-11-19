@@ -664,46 +664,76 @@ const Erlang_Binary = {
   // End at/2
   // Deps: []
 
+  // Start compile_pattern/1
   "compile_pattern/1": (pattern) => {
     const patternObj = Matcher.create(pattern);
     return patternObj.toTuple();
   },
+  // End compile_pattern/1
+  // Deps: []
 
+  // Start match/2
   "match/2": (subject, pattern) => {
-    return Erlang_Binary["match/3"](subject, pattern, Type.list([]));
+    const patternObj = Matcher.create(pattern);
+    return patternObj.match(subject, Type.list([]));
   },
+  // End match/2
+  // Deps: []
 
+  // Start match/3
   "match/3": (subject, pattern, options) => {
     const patternObj = Matcher.create(pattern);
     return patternObj.match(subject, options);
   },
+  // End match/3
+  // Deps: []
 
+  // Start matches/2
   "matches/2": (subject, pattern) => {
-    return Erlang_Binary["matches/3"](subject, pattern, Type.list([]));
+    const patternObj = Matcher.create(pattern);
+    return patternObj.matches(subject, Type.list([]));
   },
+  // End matches/2
+  // Deps: []
 
+  // Start matches/3
   "matches/3": (subject, pattern, options) => {
     const patternObj = Matcher.create(pattern);
     return patternObj.matches(subject, options);
   },
+  // End matches/3
+  // Deps: []
 
+  // Start replace/3
   "replace/3": (subject, pattern, replacement) => {
-    return Erlang_Binary["replace/4"](subject, pattern, replacement, Type.list([]));
+    const patternObj = Matcher.create(pattern);
+    return patternObj.replace(subject, replacement, Type.list([]));
   },
+  // End replace/3
+  // Deps: []
 
+  // Start replace/4
   "replace/4": (subject, pattern, replacement, options) => {
     const patternObj = Matcher.create(pattern);
     return patternObj.replace(subject, replacement, options);
   },
+  // End replace/4
+  // Deps: []
 
+  // Start split/2
   "split/2": (subject, pattern) => {
-    return Erlang_Binary["split/3"](subject, pattern, Type.list([]));
-  },
+    const patternObj = Matcher.create(pattern);
+    return patternObj.split(subject, Type.list([]));  },
+  // End split/2
+  // Deps: []
 
+  // Start split/3
   "split/3": (subject, pattern, options) => {
     const patternObj = Matcher.create(pattern);
     return patternObj.split(subject, options);
   }
+  // End split/3
+  // Deps: []
 };
 
 export default Erlang_Binary;
