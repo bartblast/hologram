@@ -1499,6 +1499,54 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "ceil/1" do
+    test "rounds positive float with fractional part up" do
+      assert :erlang.ceil(1.23) == 2
+    end
+
+    test "rounds negative float with fractional part up toward zero" do
+      assert :erlang.ceil(-1.23) == -1
+    end
+
+    test "keeps positive float without fractional part unchanged" do
+      assert :erlang.ceil(1.0) == 1
+    end
+
+    test "keeps negative float without fractional part unchanged" do
+      assert :erlang.ceil(-1.0) == -1
+    end
+
+    test "keeps signed negative zero float unchanged" do
+      assert :erlang.ceil(-0.0) == 0
+    end
+
+    test "keeps signed positive zero float unchanged" do
+      assert :erlang.ceil(+0.0) == 0
+    end
+
+    test "keeps unsigned zero float unchanged" do
+      assert :erlang.ceil(0.0) == 0
+    end
+
+    test "keeps positive integer unchanged" do
+      assert :erlang.ceil(1) == 1
+    end
+
+    test "keeps negative integer unchanged" do
+      assert :erlang.ceil(-1) == -1
+    end
+
+    test "keeps zero integer unchanged" do
+      assert :erlang.ceil(0) == 0
+    end
+
+    test "raises ArgumentError if the argument is not a number" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a number"),
+                   {:erlang, :ceil, [:abc]}
+    end
+  end
+
   describe "div/2" do
     test "divides positive integers" do
       assert :erlang.div(10, 3) === 3

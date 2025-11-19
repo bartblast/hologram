@@ -444,6 +444,23 @@ const Erlang = {
   // End byte_size/1
   // Deps: []
 
+  // Start ceil/1
+  "ceil/1": (number) => {
+    if (!Type.isNumber(number)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    }
+
+    if (Type.isInteger(number)) {
+      return number;
+    }
+
+    return Type.integer(Math.ceil(number.value));
+  },
+  // End ceil/1
+  // Deps: []
+
   // Start div/2
   "div/2": (integer1, integer2) => {
     if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
