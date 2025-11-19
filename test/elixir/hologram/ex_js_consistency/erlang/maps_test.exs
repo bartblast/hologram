@@ -9,6 +9,24 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
 
   @moduletag :consistency
 
+  describe "find/2" do
+    @map %{"one" => 1, "two" => 2}
+
+    test "successfully find key in map and return ok tuple with value" do
+      key = "two"
+      assert :maps.find(key, @map) == {:ok, 2}
+    end
+
+    test "key does not exist in map" do
+      key = "hello"
+      assert :maps.find(key, @map) == :error
+    end
+
+    test "raises BadMapError if the second argument is not a map" do
+      assert_error BadMapError, "expected a map, got: 1", {:maps, :find, ["a", 1]}
+    end
+  end
+
   describe "fold/3" do
     @map %{1 => 1, 10 => 2, 100 => 3}
 
