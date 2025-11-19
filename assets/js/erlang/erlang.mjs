@@ -599,7 +599,7 @@ const Erlang = {
       );
     }
 
-    const text = integer.value.toString(); 
+    const text = integer.value.toString();
 
     return Type.bitstring(text);
   },
@@ -636,7 +636,6 @@ const Erlang = {
   },
   // End integer_to_list/2
   // Deps: []
-
 
   // TODO: test
   // Start iolist_to_binary/1
