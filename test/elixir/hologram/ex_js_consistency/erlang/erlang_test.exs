@@ -1600,6 +1600,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "out of range"),
                    {:erlang, :delete_element, [0, {5, 6, 7}]}
+
       assert_error ArgumentError,
                    build_argument_error_msg(1, "out of range"),
                    {:erlang, :delete_element, [-1, {5, 6, 7}]}
