@@ -32,6 +32,21 @@ class Matcher {
     Interpreter.raiseArgumentError("pattern must be a binary or a list of binaries");
   }
 
+  // Validate that a value is a binary (bitstring with no leftover bits) and return its bytes
+  static validate_binary(bitstring) {
+    if (!Type.isBitstring(bitstring)) {
+      Interpreter.raiseArgumentError(`must be a binary`);
+    }
+
+    Bitstring.maybeSetBytesFromText(bitstring);
+
+    if (bitstring.leftoverBitCount !== 0) {
+      Interpreter.raiseArgumentError(`must be a binary (not a bitstring)`);
+    }
+
+    return bitstring.bytes;
+  }
+
   // Collect all non-overlapping matches using a findNext callback
   // findNext(pos) should return a match object or null
   #collectMatches(subjectBytes, findNext, limit = Infinity, scope = null) {
@@ -234,21 +249,6 @@ class Matcher {
     const scopeStart = scope ? scope.start : 0;
     const scopeEnd = scope ? scope.start + scope.length : subjectLength;
     return { scopeStart, scopeEnd };
-  }
-
-  // Validate that a value is a binary (bitstring with no leftover bits) and return its bytes
-  static validate_binary(bitstring) {
-    if (!Type.isBitstring(bitstring)) {
-      Interpreter.raiseArgumentError(`must be a binary`);
-    }
-
-    Bitstring.maybeSetBytesFromText(bitstring);
-
-    if (bitstring.leftoverBitCount !== 0) {
-      Interpreter.raiseArgumentError(`must be a binary (not a bitstring)`);
-    }
-
-    return bitstring.bytes;
   }
 
   // Abstract method - subclasses must implement
@@ -628,7 +628,6 @@ class AhoCorasickMatcher extends Matcher {
 }
 
 const Erlang_Binary = {
-
   "compile_pattern/1": (pattern) => {
     const patternObj = Matcher.create(pattern);
     return patternObj.toTuple();
