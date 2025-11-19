@@ -9,6 +9,7 @@ import {
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_Binary from "../../../assets/js/erlang/binary.mjs";
+import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();

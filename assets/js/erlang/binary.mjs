@@ -638,6 +638,7 @@ const Erlang_Binary = {
       const msg = Type.isBitstring(subject)
         ? "is a bitstring (expected a binary)"
         : "not a binary";
+
       Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, msg));
     }
 
@@ -723,7 +724,8 @@ const Erlang_Binary = {
   // Start split/2
   "split/2": (subject, pattern) => {
     const patternObj = Matcher.create(pattern);
-    return patternObj.split(subject, Type.list([]));  },
+    return patternObj.split(subject, Type.list([]));
+  },
   // End split/2
   // Deps: []
 
