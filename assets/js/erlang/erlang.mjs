@@ -561,9 +561,7 @@ const Erlang = {
     const result = [];
 
     // Always present: arity
-    result.push(
-      Type.tuple([Type.atom("arity"), Type.integer(fun.arity)]),
-    );
+    result.push(Type.tuple([Type.atom("arity"), Type.integer(fun.arity)]));
 
     // Always present: env (environment/captured variables)
     const envVars = fun.context.vars || {};
