@@ -7,6 +7,7 @@ import ComponentRegistry from "../../../assets/js/component_registry.mjs";
 import Elixir_Code from "../../../assets/js/elixir/code.mjs";
 import Elixir_Kernel from "../../../assets/js/elixir/kernel.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
+import Erlang_Binary from "../../../assets/js/erlang/binary.mjs";
 import Erlang_Code from "../../../assets/js/erlang/code.mjs";
 import Erlang_Lists from "../../../assets/js/erlang/lists.mjs";
 import Erlang_Maps from "../../../assets/js/erlang/maps.mjs";
@@ -228,6 +229,7 @@ export function defineGlobalErlangAndElixirModules() {
   globalThis.hologram ??= {};
 
   globalThis.Erlang = Erlang;
+  globalThis.Erlang_Binary = Erlang_Binary;
   globalThis.Erlang_Code = Erlang_Code;
   globalThis.Erlang_Lists = Erlang_Lists;
   globalThis.Erlang_Maps = Erlang_Maps;
