@@ -58,7 +58,7 @@ describe("Erlang_Lists", () => {
       Type.integer(5),
       Type.integer(6),
       Type.integer(7),
-    ])
+    ]);
 
     it("returns true if at least one item in the list results in true when supplied to the anonymous function", () => {
       const fun = Type.anonymousFunction(
@@ -72,7 +72,7 @@ describe("Erlang_Lists", () => {
             },
           },
         ],
-        contextFixture()
+        contextFixture(),
       );
       const result = any(fun, properAnyList);
 
@@ -91,7 +91,7 @@ describe("Erlang_Lists", () => {
             },
           },
         ],
-        contextFixture()
+        contextFixture(),
       );
       const result = any(fun, properAnyList);
 
@@ -102,7 +102,11 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => any(Type.atom("abc"), properList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", Type.atom("abc"), properList),
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.any/2",
+          Type.atom("abc"),
+          properList,
+        ),
       );
     });
 
@@ -110,7 +114,11 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => any(funArity2, properList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", funArity2, properList),
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.any/2",
+          funArity2,
+          properList,
+        ),
       );
     });
 
@@ -126,13 +134,13 @@ describe("Erlang_Lists", () => {
             },
           },
         ],
-        contextFixture()
+        contextFixture(),
       );
       assertBoxedError(
         () => any(fun, Type.atom("abc")),
         "CaseClauseError",
-        "no case clause matching: :abc"
-      )
+        "no case clause matching: :abc",
+      );
     });
 
     it("raises FunctionClauseError if the second argument is an improper list", () => {
@@ -155,7 +163,7 @@ describe("Erlang_Lists", () => {
             },
           },
         ],
-        contextFixture()
+        contextFixture(),
       );
       const result = any(fun, emptyList);
 

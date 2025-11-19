@@ -23,7 +23,7 @@ const Erlang_Lists = {
     if (!Type.isProperList(list)) {
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", [list]),
-      )
+      );
     }
 
     for (let i = 0; i < list.data.length; i++) {
