@@ -752,4 +752,29 @@ describe("Erlang_Maps", () => {
       );
     });
   });
+
+  describe("values/1", () => {
+    const fun = Erlang_Maps["values/1"];
+
+    it("empty map", () => {
+      assert.deepStrictEqual(fun(Type.map()), Type.list());
+    });
+
+    it("non-empty map", () => {
+      const map = Type.map([
+        [atomA, integer1],
+        [atomB, integer2],
+      ]);
+
+      assert.deepStrictEqual(fun(map), Type.list([integer1, integer2]));
+    });
+
+    it("not a map", () => {
+      assertBoxedError(
+        () => fun(atomAbc),
+        "BadMapError",
+        "expected a map, got: :abc",
+      );
+    });
+  });
 });

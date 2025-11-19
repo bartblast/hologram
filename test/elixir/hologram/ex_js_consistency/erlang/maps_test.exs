@@ -359,4 +359,25 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
       end
     end
   end
+
+  describe "values/1" do
+    test "empty map" do
+      assert :maps.values(%{}) == []
+    end
+
+    test "non-empty map" do
+      sorted_result =
+        %{a: 1, b: 2}
+        |> :maps.values()
+        |> Enum.sort()
+
+      assert sorted_result == [1, 2]
+    end
+
+    test "not a map" do
+      assert_error BadMapError, "expected a map, got: :abc", fn ->
+        :maps.values(:abc)
+      end
+    end
+  end
 end
