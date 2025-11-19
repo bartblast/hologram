@@ -68,6 +68,9 @@ const properList = Type.list([
   Type.integer(3),
 ]);
 
+const list1 = Type.list([Type.integer(1)]);
+const list2 = Type.list([Type.integer(1), Type.integer(2)]);
+
 const tupleX = Type.tuple([atomX]);
 
 // IMPORTANT!
@@ -2120,6 +2123,74 @@ describe("Erlang_Lists", () => {
         () => min(emptyList),
         "FunctionClauseError",
         expectedMessage,
+      );
+    });
+  });
+
+  describe("prefix/2", () => {
+    const prefix = Erlang_Lists["prefix/2"];
+
+    it("returns true if the first list is a prefix of the second list", () => {
+      const result = prefix(list1, list2);
+      assertBoxedTrue(result);
+    });
+
+    it("returns true if the lists are the same", () => {
+      const result = prefix(list2, list2);
+      assertBoxedTrue(result);
+    });
+
+    it("returns true when the first list is empty", () => {
+      const result = prefix(Type.list(), list2);
+      assertBoxedTrue(result);
+    });
+
+    it("returns false if the first list is not a prefix of the second list", () => {
+      const result = prefix(list2, list1);
+      assertBoxedFalse(result);
+    });
+
+    it("raises FunctionClauseError if the first argument is not a list", () => {
+      assertBoxedError(
+        () => prefix(Type.atom("a"), list2),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+          Type.atom("a"),
+          list2,
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is not a list", () => {
+      assertBoxedError(
+        () => prefix(list2, Type.atom("a")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+          list2,
+          Type.atom("a"),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument is an improper list", () => {
+      assertBoxedError(
+        () => prefix(improperList, list2),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+          Type.integer(3),
+          emptyList,
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is an improper list", () => {
+      assertBoxedError(
+        () => prefix(list2, improperList),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+          emptyList,
+          Type.integer(3),
+        ]),
       );
     });
   });

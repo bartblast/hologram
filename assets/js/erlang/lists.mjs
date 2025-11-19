@@ -562,6 +562,47 @@ const Erlang_Lists = {
   // End min/1
   // Deps: []
 
+  // Start prefix/2
+  "prefix/2": (list1, list2) => {
+    if (!Type.isList(list1) || !Type.isList(list2)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+          list1,
+          list2,
+        ]),
+      );
+    }
+
+    // Improper lists produce fairly unexpected error messages, this codes handles those cases
+    if (!Type.isProperList(list1) || !Type.isProperList(list2)) {
+      const improper1 = Type.isProperList(list1)
+        ? Type.list()
+        : list1.data[list1.data.length - 1];
+      const improper2 = Type.isProperList(list2)
+        ? Type.list()
+        : list2.data[list2.data.length - 1];
+
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+          improper1,
+          improper2,
+        ]),
+      );
+    }
+
+    if (list1.data.length > list2.data.length) {
+      return Type.boolean(false);
+    }
+
+    const isPrefix = list1.data.every((element, index) =>
+      Interpreter.isStrictlyEqual(element, list2.data[index]),
+    );
+
+    return Type.boolean(isPrefix);
+  },
+  // End prefix/2
+  // Deps: []
+
   // Start reverse/1
   "reverse/1": (list) => {
     if (!Type.isList(list)) {
@@ -654,9 +695,9 @@ const Erlang_Lists = {
       errorMsg =
         list.data.length <= 2
           ? Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2", [
-              fun,
-              list,
-            ])
+            fun,
+            list,
+          ])
           : Interpreter.buildFunctionClauseErrorMsg(":lists.fsplit_1/6");
 
       Interpreter.raiseFunctionClauseError(errorMsg);

@@ -1080,6 +1080,48 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "prefix/2" do
+    test "returns true if the first list is a prefix of the second list" do
+      assert :lists.prefix([1], [1, 2])
+    end
+
+    test "returns true if the lists are the same" do
+      assert :lists.prefix([1, 2], [1, 2])
+    end
+
+    test "returns true when the first list is empty" do
+      assert :lists.prefix([], [1, 2])
+    end
+
+    test "returns false if the first list is not a prefix of the second list" do
+      refute :lists.prefix([1, 2], [1])
+    end
+
+    test "raises FunctionClauseError if the first argument is not a list" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.prefix/2", [:a, [1, 2]]),
+                   {:lists, :prefix, [:a, [1, 2]]}
+    end
+
+    test "raises FunctionClauseError if the second argument is not a list" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.prefix/2", [[1, 2], :a]),
+                   {:lists, :prefix, [[1, 2], :a]}
+    end
+
+    test "raises FunctionClauseError if the first argument is an improper list" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.prefix/2", [3, []]),
+                   {:lists, :prefix, [[1, 2 | 3], [1, 2]]}
+    end
+
+    test "raises FunctionClauseError if the second argument is an improper list" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.prefix/2", [[], 3]),
+                   {:lists, :prefix, [[1, 2], [1, 2 | 3]]}
+    end
+  end
+
   describe "reverse/1" do
     test "returns a list with the elements in the argument in reverse order" do
       assert :lists.reverse([1, 2, 3]) == [3, 2, 1]
