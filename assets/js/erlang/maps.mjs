@@ -9,6 +9,23 @@ import Utils from "../utils.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_Maps = {
+  // Start find/2
+  "find/2": (key, map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    const encodedKey = Type.encodeMapKey(key);
+
+    if (map.data[encodedKey]) {
+      return map.data[encodedKey][1];
+    }
+
+    return Type.atom("error");
+  },
+  // End find/2
+  // Deps: []
+
   // Start fold/3
   "fold/3": (fun, initialAcc, map) => {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 3) {
@@ -232,6 +249,17 @@ const Erlang_Maps = {
   },
   // End update/3
   // Deps: [:maps.is_key/2, :maps.put/3]
+
+  // Start values/1
+  "values/1": (map) => {
+    if (!Type.isMap(map)) {
+      Interpreter.raiseBadMapError(map);
+    }
+
+    return Type.list(Object.values(map.data).map(([_key, value]) => value));
+  },
+  // End values/1
+  // Deps: []
 };
 
 export default Erlang_Maps;
