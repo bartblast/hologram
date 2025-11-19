@@ -373,7 +373,10 @@ const Erlang = {
 
     if (!floatRegex.test(text)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a textual representation of a float"),
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
       );
     }
 

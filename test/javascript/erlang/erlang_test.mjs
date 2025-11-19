@@ -1651,7 +1651,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(term),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1,"not a binary")
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
@@ -1661,7 +1661,10 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(bin),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1,"not a textual representation of a float")
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -1671,7 +1674,10 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(bin),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1,"not a textual representation of a float")
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -1681,7 +1687,10 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(bin),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1,"not a textual representation of a float")
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -1689,7 +1698,10 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(Type.bitstring("")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1,"not a textual representation of a float")
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -1697,7 +1709,10 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(Type.bitstring(".")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1,"not a textual representation of a float")
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -1705,7 +1720,10 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(Type.bitstring(".5")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1,"not a textual representation of a float")
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -1713,7 +1731,10 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(Type.bitstring("5.")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1,"not a textual representation of a float")
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -1721,7 +1742,10 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(Type.bitstring("3e10")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1,"not a textual representation of a float")
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -1729,7 +1753,10 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(Type.bitstring("2e")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1,"not a textual representation of a float")
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -1737,7 +1764,10 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(Type.bitstring(" 12.3")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1,"not a textual representation of a float")
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -1745,7 +1775,10 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(Type.bitstring("1e2e3")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1,"not a textual representation of a float")
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -1753,7 +1786,10 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(Type.bitstring("Infinity")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1,"not a textual representation of a float")
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
       );
     });
 
@@ -1761,7 +1797,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => binary_to_float(Type.bitstring("0x1.fp2")),
         "ArgumentError",
-        "errors were found at the given arguments:\n\n  * 1st argument: not a textual representation of a float\n"
+        "errors were found at the given arguments:\n\n  * 1st argument: not a textual representation of a float\n",
       );
     });
   });
