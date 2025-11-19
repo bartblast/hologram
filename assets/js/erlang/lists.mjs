@@ -8,6 +8,35 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_Lists = {
+  // Start any/2
+  "any/2": (fun, list) => {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", []),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseCaseClauseError(list);
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", [list]),
+      )
+    }
+
+    for (let i = 0; i < list.data.length; i++) {
+      const res = Interpreter.callAnonymousFunction(fun, [list.data[i]]);
+      if (Interpreter.isStrictlyEqual(res, Type.boolean(true))) {
+        return Type.boolean(true);
+      }
+    }
+    return Type.boolean(false);
+  },
+  // End any/2
+  // Deps: []
+
   // Start filter/2
   "filter/2": function (fun, list) {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {

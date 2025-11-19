@@ -51,6 +51,118 @@ const funArity2 = Type.anonymousFunction(
 // Always update both together.
 
 describe("Erlang_Lists", () => {
+  describe("any/2", () => {
+    const any = Erlang_Lists["any/2"];
+
+    const properAnyList = Type.list([
+      Type.integer(5),
+      Type.integer(6),
+      Type.integer(7),
+    ])
+
+    it("returns true if at least one item in the list results in true when supplied to the anonymous function", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return Erlang[">/2"](context.vars.elem, Type.integer(4));
+            },
+          },
+        ],
+        contextFixture()
+      );
+      const result = any(fun, properAnyList);
+
+      assert.deepStrictEqual(result, Type.boolean(true));
+    });
+
+    it("returns false if none of the items results in true when supplied to the anonymous function", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return Erlang["</2"](context.vars.elem, Type.integer(4));
+            },
+          },
+        ],
+        contextFixture()
+      );
+      const result = any(fun, properAnyList);
+
+      assert.deepStrictEqual(result, Type.boolean(false));
+    });
+
+    it("raises FunctionClauseError if the first arg is not an anonymous function", () => {
+      assertBoxedError(
+        () => any(Type.atom("abc"), properList),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", Type.atom("abc"), properList),
+      );
+    });
+
+    it("raises FunctionClauseError if the first arg is an anonymous function with arity different than 1", () => {
+      assertBoxedError(
+        () => any(funArity2, properList),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", funArity2, properList),
+      );
+    });
+
+    it("raises CaseClauseError if the second argument is not a list", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return Erlang["</2"](context.vars.elem, Type.integer(4));
+            },
+          },
+        ],
+        contextFixture()
+      );
+      assertBoxedError(
+        () => any(fun, Type.atom("abc")),
+        "CaseClauseError",
+        "no case clause matching: :abc"
+      )
+    });
+
+    it("raises FunctionClauseError if the second argument is an improper list", () => {
+      assertBoxedError(
+        () => any(improperList),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2"),
+      );
+    });
+
+    it("returns false for empty list", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return Erlang["</2"](context.vars.elem, Type.integer(4));
+            },
+          },
+        ],
+        contextFixture()
+      );
+      const result = any(fun, emptyList);
+
+      assert.deepStrictEqual(result, Type.boolean(false));
+    });
+  });
+
   describe("filter/2", () => {
     const filter = Erlang_Lists["filter/2"];
 
