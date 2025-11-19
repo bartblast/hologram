@@ -25,6 +25,7 @@ const float1 = Type.float(1.0);
 const float2 = Type.float(2.0);
 const float3 = Type.float(3.0);
 const float6 = Type.float(6.0);
+const integer0 = Type.integer(0);
 const integer1 = Type.integer(1);
 const integer2 = Type.integer(2);
 const integer3 = Type.integer(3);
@@ -1889,26 +1890,66 @@ describe("Erlang", () => {
     const testedFun = Erlang["ceil/1"];
 
     it("rounds positive float with fractional part up", () => {
-      assert.deepStrictEqual(testedFun(Type.float(1.23)), Type.integer(2));
-    });
+      const result = testedFun(Type.float(1.23));
 
-    it("keeps positive float without fractional part unchanged", () => {
-      assert.deepStrictEqual(testedFun(Type.float(1.0)), Type.integer(1));
+      assert.deepStrictEqual(result, integer2);
     });
 
     it("rounds negative float with fractional part up toward zero", () => {
-      assert.deepStrictEqual(testedFun(Type.float(-1.23)), Type.integer(-1));
+      const result = testedFun(Type.float(-1.23));
+      const expected = Type.integer(-1);
+
+      assert.deepStrictEqual(result, expected);
     });
 
-    it("keeps integers unchanged", () => {
-      assert.deepStrictEqual(testedFun(Type.integer(1)), Type.integer(1));
+    it("keeps positive float without fractional part unchanged", () => {
+      const result = testedFun(Type.float(1.0));
+
+      assert.deepStrictEqual(result, integer1);
     });
 
-    it("keeps large positive integer unchanged", () => {
-      assert.deepStrictEqual(
-        testedFun(Type.integer(123456789012345678901234567890n)),
-        Type.integer(123456789012345678901234567890n),
-      );
+    it("keeps negative float without fractional part unchanged", () => {
+      const result = testedFun(Type.float(-1.0));
+      const expected = Type.integer(-1);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("keeps signed negative zero float unchanged", () => {
+      const result = testedFun(Type.float(-0.0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("keeps signed positive zero float unchanged", () => {
+      const result = testedFun(Type.float(+0.0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("keeps unsigned zero float unchanged", () => {
+      const result = testedFun(Type.float(0.0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("keeps positive integer unchanged", () => {
+      const result = testedFun(integer1);
+
+      assert.deepStrictEqual(result, integer1);
+    });
+
+    it("keeps negative integer unchanged", () => {
+      const integer = Type.integer(-1);
+      const result = testedFun(integer);
+
+      assert.deepStrictEqual(result, integer);
+    });
+
+    it("keeps zero integer unchanged", () => {
+      const result = testedFun(integer0);
+
+      assert.deepStrictEqual(result, integer0);
     });
 
     it("raises ArgumentError if the argument is not a number", () => {
