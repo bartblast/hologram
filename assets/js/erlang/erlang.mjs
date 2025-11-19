@@ -490,7 +490,8 @@ const Erlang = {
       );
     }
 
-    const data = tuple.data.slice(0, Number(index.value) - 1)
+    const data = tuple.data
+      .slice(0, Number(index.value) - 1)
       .concat(tuple.data.slice(Number(index.value)));
 
     return Type.tuple(data);

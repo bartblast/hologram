@@ -2000,11 +2000,20 @@ describe("Erlang", () => {
 
     it("returns the tuple without the element at the one-based index", () => {
       const resultMiddle = delete_element(Type.integer(2), tuple);
-      assert.deepStrictEqual(resultMiddle, Type.tuple([Type.integer(5), Type.integer(7)]));
+      assert.deepStrictEqual(
+        resultMiddle,
+        Type.tuple([Type.integer(5), Type.integer(7)]),
+      );
       const resultStart = delete_element(Type.integer(1), tuple);
-      assert.deepStrictEqual(resultStart, Type.tuple([Type.integer(6), Type.integer(7)]));
+      assert.deepStrictEqual(
+        resultStart,
+        Type.tuple([Type.integer(6), Type.integer(7)]),
+      );
       const resultEnd = delete_element(Type.integer(3), tuple);
-      assert.deepStrictEqual(resultEnd, Type.tuple([Type.integer(5), Type.integer(6)]));
+      assert.deepStrictEqual(
+        resultEnd,
+        Type.tuple([Type.integer(5), Type.integer(6)]),
+      );
     });
 
     it("raises ArgumentError if the first argument is not an integer", () => {
