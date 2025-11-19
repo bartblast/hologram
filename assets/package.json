@@ -17,6 +17,8 @@
   },
   "scripts": {
     "test": "mocha ../test/javascript/*.mjs ../test/javascript/*/*.mjs ../test/javascript/*/*/*.mjs ../test/javascript/*/*/*/*.mjs --color --require jsdom-global/register",
-    "test-file": "mocha --color --require jsdom-global/register"
+    "test-file": "mocha --color --require jsdom-global/register",
+    "lint": "prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'test/javascript/**' --check --config 'assets/.prettierrc.json' --no-error-on-unmatched-pattern",
+    "lint:fix": "npm run lint -- --write"
   }
 }
