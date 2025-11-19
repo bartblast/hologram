@@ -34,6 +34,7 @@ defmodule Hologram.Test.Helpers do
     quote do
       try do
         unquote(fun).()
+        raise "Expected #{inspect(unquote(error_module))} but no error was raised"
       rescue
         error in unquote(error_module) ->
           assert_error_msg(error, unquote(expected_msg))
@@ -47,6 +48,7 @@ defmodule Hologram.Test.Helpers do
 
       try do
         apply(module, fun, wrap_term(args))
+        raise "Expected #{inspect(unquote(error_module))} but no error was raised"
       rescue
         error in unquote(error_module) ->
           assert_error_msg(error, unquote(expected_msg))
