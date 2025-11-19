@@ -565,10 +565,11 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keydelete(Type.atom("abc"), Type.atom("xyz"), Type.list()),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":lists.keydelete/3",
-          [Type.atom("abc"), Type.atom("xyz"), Type.list()],
-        ),
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keydelete/3", [
+          Type.atom("abc"),
+          Type.atom("xyz"),
+          Type.list(),
+        ]),
       );
     });
 
@@ -576,10 +577,11 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keydelete(Type.atom("abc"), Type.integer(0), Type.list()),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":lists.keydelete/3",
-          [Type.atom("abc"), Type.integer(0), Type.list()],
-        ),
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keydelete/3", [
+          Type.atom("abc"),
+          Type.integer(0),
+          Type.list(),
+        ]),
       );
     });
 
@@ -587,10 +589,11 @@ describe("Erlang_Lists", () => {
       assertBoxedError(
         () => keydelete(Type.atom("abc"), Type.integer(1), Type.atom("xyz")),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":lists.keydelete3/3",
-          [Type.atom("abc"), Type.integer(1), Type.atom("xyz")],
-        ),
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keydelete3/3", [
+          Type.atom("abc"),
+          Type.integer(1),
+          Type.atom("xyz"),
+        ]),
       );
     });
 
@@ -607,14 +610,15 @@ describe("Erlang_Lists", () => {
             ]),
           ),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":lists.keydelete3/3",
-          [Type.integer(7), Type.integer(4), Type.improperList([
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keydelete3/3", [
+          Type.integer(7),
+          Type.integer(4),
+          Type.improperList([
             Type.integer(1),
             Type.integer(2),
             Type.integer(3),
-          ])],
-        ),
+          ]),
+        ]),
       );
     });
   });

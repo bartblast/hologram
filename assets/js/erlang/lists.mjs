@@ -148,28 +148,40 @@ const Erlang_Lists = {
   // Deps: []
 
   // Start keydelete/3
-  "keydelete/3": (key, index, tuples) => {
+  "keydelete/3": function (key, index, tuples) {
     if (!Type.isInteger(index)) {
       Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keydelete/3", arguments),
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.keydelete/3",
+          arguments,
+        ),
       );
     }
 
     if (index.value < 1) {
       Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keydelete/3", arguments),
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.keydelete/3",
+          arguments,
+        ),
       );
     }
 
     if (!Type.isList(tuples)) {
       Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keydelete3/3", arguments),
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.keydelete3/3",
+          arguments,
+        ),
       );
     }
 
     if (!Type.isProperList(tuples)) {
       Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keydelete3/3", arguments),
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.keydelete3/3",
+          arguments,
+        ),
       );
     }
 
@@ -325,7 +337,6 @@ const Erlang_Lists = {
   },
   // End sort/1
   // Deps: []
-
 };
 
 export default Erlang_Lists;
