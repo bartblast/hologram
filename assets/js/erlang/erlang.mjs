@@ -848,12 +848,20 @@ const Erlang = {
 
   // Start xor/2
   "xor/2": (left, right) => {
-    if (!Type.isBoolean(left) || !Type.isBoolean(right)) {
-      Interpreter.raiseArgumentError("argument error");
-    }
+    const normalizeBooleanArg = (term) => {
+      if (typeof term === "boolean") {
+        return term;
+      }
 
-    const leftValue = left.value === "true";
-    const rightValue = right.value === "true";
+      if (term && Type.isBoolean(term)) {
+        return term.value === "true";
+      }
+
+      Interpreter.raiseArgumentError("argument error");
+    };
+
+    const leftValue = normalizeBooleanArg(left);
+    const rightValue = normalizeBooleanArg(right);
 
     return Type.boolean(leftValue !== rightValue);
   },
