@@ -1717,7 +1717,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError for non-integer" do
       assert_error ArgumentError,
-                   build_argument_error_msg(1, "expected an integer"),
+                   build_argument_error_msg(1, "not an integer"),
                    {:erlang, :integer_to_list, [3.14]}
     end
   end
@@ -1772,31 +1772,31 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError for base < 2" do
       assert_error ArgumentError,
-                   build_argument_error_msg(2, "invalid base"),
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
                    {:erlang, :integer_to_list, [10, 1]}
     end
 
     test "raises ArgumentError for base > 36" do
       assert_error ArgumentError,
-                   build_argument_error_msg(2, "invalid base"),
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
                    {:erlang, :integer_to_list, [10, 37]}
     end
 
     test "raises ArgumentError when first arg is not integer" do
       assert_error ArgumentError,
-                   build_argument_error_msg(1, "expected an integer"),
+                   build_argument_error_msg(1, "not an integer"),
                    {:erlang, :integer_to_list, [3.14, 10]}
     end
 
     test "raises ArgumentError when second arg is not integer" do
       assert_error ArgumentError,
-                   build_argument_error_msg(2, "invalid base"),
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
                    {:erlang, :integer_to_list, [10, 3.5]}
     end
 
     test "raises ArgumentError when first argument is float even with valid base" do
       assert_error ArgumentError,
-                   build_argument_error_msg(1, "expected an integer"),
+                   build_argument_error_msg(1, "not an integer"),
                    {:erlang, :integer_to_list, [12.0, 16]}
     end
   end

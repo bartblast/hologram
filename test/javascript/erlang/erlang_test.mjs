@@ -2298,7 +2298,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => int_to_list_1(Type.float(3.14)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "expected an integer"),
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
       );
     });
   });
@@ -2371,7 +2371,10 @@ describe("Erlang", () => {
       assertBoxedError(
         () => int_to_list_2(Type.integer(10), Type.integer(1)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid base"),
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
       );
     });
 
@@ -2379,7 +2382,10 @@ describe("Erlang", () => {
       assertBoxedError(
         () => int_to_list_2(Type.integer(10), Type.integer(37)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid base"),
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
       );
     });
 
@@ -2387,7 +2393,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => int_to_list_2(Type.float(3.14), Type.integer(10)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "expected an integer"),
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
       );
     });
 
@@ -2395,7 +2401,10 @@ describe("Erlang", () => {
       assertBoxedError(
         () => int_to_list_2(Type.integer(10), Type.float(3.5)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "invalid base"),
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
       );
     });
 
@@ -2403,7 +2412,7 @@ describe("Erlang", () => {
       assertBoxedError(
         () => int_to_list_2(Type.float(12.0), Type.integer(16)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "expected an integer"),
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
       );
     });
   });

@@ -595,7 +595,7 @@ const Erlang = {
   "integer_to_list/1": (integer) => {
     if (!Type.isInteger(integer)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "expected an integer"),
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
       );
     }
 
@@ -610,13 +610,16 @@ const Erlang = {
   "integer_to_list/2": (integer, base) => {
     if (!Type.isInteger(integer)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "expected an integer"),
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
       );
     }
 
     if (!Type.isInteger(base)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "invalid base"),
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
       );
     }
 
@@ -624,7 +627,10 @@ const Erlang = {
 
     if (baseValue < 2 || baseValue > 36) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "invalid base"),
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
       );
     }
 
