@@ -32,15 +32,16 @@ const integer2 = Type.integer(2);
 const integer3 = Type.integer(3);
 const integer6 = Type.integer(6);
 const list1 = Type.list([integer1, integer2]);
-const pid1 = Type.pid("my_node@my_host", [0, 11, 111]);
-const pid2 = Type.pid("my_node@my_host", [0, 11, 112]);
-const tuple2 = Type.tuple([Type.integer(1), Type.integer(2)]);
-const tuple3 = Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
 const mapA1B2 = Type.map([
   [atomA, integer1],
   [atomB, integer2],
 ]);
+
+const pid1 = Type.pid("my_node@my_host", [0, 11, 111]);
+const pid2 = Type.pid("my_node@my_host", [0, 11, 112]);
+const tuple2 = Type.tuple([Type.integer(1), Type.integer(2)]);
+const tuple3 = Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/erlang_test.exs
