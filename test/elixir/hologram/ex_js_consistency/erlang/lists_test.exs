@@ -47,10 +47,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       fun = &(&1 > 2)
 
       expected_msg =
-        build_function_clause_error_msg(":lists.any_1/2", [fun, [[1, 2 | 4]]])
+        build_function_clause_error_msg(":lists.any_1/2", [fun, 4])
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.any(fun, [[1, 2 | 4]])
+        :lists.any(fun, [1, 2 | 4])
       end
     end
 
