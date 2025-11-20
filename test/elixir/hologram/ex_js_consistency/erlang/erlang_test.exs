@@ -1673,7 +1673,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "{:scientific, 6}" do
-      assert :erlang.float_to_binary(12345.6, [{:scientific, 6}]) == "1.234560e+04"
+      assert :erlang.float_to_binary(12_345.6, [{:scientific, 6}]) == "1.234560e+04"
     end
 
     test "{:scientific, 10}" do
