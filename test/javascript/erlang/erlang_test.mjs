@@ -21,6 +21,7 @@ defineGlobalErlangAndElixirModules();
 const atomA = Type.atom("a");
 const atomAbc = Type.atom("abc");
 const atomB = Type.atom("b");
+const atomC = Type.atom("c");
 const float1 = Type.float(1.0);
 const float2 = Type.float(2.0);
 const float3 = Type.float(3.0);
@@ -35,6 +36,11 @@ const pid1 = Type.pid("my_node@my_host", [0, 11, 111]);
 const pid2 = Type.pid("my_node@my_host", [0, 11, 112]);
 const tuple2 = Type.tuple([Type.integer(1), Type.integer(2)]);
 const tuple3 = Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]);
+
+const mapA1B2 = Type.map([
+  [atomA, integer1],
+  [atomB, integer2],
+]);
 
 // IMPORTANT!
 // Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/erlang_test.exs
@@ -2477,6 +2483,26 @@ describe("Erlang", () => {
 
     it("non-map", () => {
       assertBoxedFalse(is_map(Type.atom("abc")));
+    });
+  });
+
+  describe("is_map_key/2", () => {
+    const is_map_key = Erlang["is_map_key/2"];
+
+    it("returns true if the given map has the given key", () => {
+      assertBoxedTrue(is_map_key(atomB, mapA1B2));
+    });
+
+    it("returns false if the given map doesn't have the given key", () => {
+      assertBoxedFalse(is_map_key(atomC, mapA1B2));
+    });
+
+    it("raises BadMapError if the second argument is not a map", () => {
+      assertBoxedError(
+        () => is_map_key(atomA, atomAbc),
+        "BadMapError",
+        "expected a map, got: :abc",
+      );
     });
   });
 
