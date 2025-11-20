@@ -1013,6 +1013,19 @@ const Erlang = {
   // End tl/1
   // Deps: []
 
+  // Start tuple_size/1
+  "tuple_size/1": (tuple) => {
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+      );
+    }
+
+    return Type.integer(tuple.data.length);
+  },
+  // End tuple_size/1
+  // Deps: []
+
   // Start tuple_to_list/1
   "tuple_to_list/1": (tuple) => {
     if (!Type.isTuple(tuple)) {
@@ -1024,19 +1037,6 @@ const Erlang = {
     return Type.list(tuple.data);
   },
   // End tuple_to_list/1
-  // Deps: []
-
-  // Start tuple_size/1
-  "tuple_size/1": (tuple) => {
-    if (!Type.isTuple(tuple)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
-      );
-    }
-
-    return tuple.data.length;
-  },
-  // End tuple_size/1
   // Deps: []
 };
 

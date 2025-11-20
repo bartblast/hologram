@@ -3404,6 +3404,45 @@ describe("Erlang", () => {
     });
   });
 
+  describe("tuple_size/1", () => {
+    const tuple_size = Erlang["tuple_size/1"];
+
+    it("proper tuple, 0 item", () => {
+      const data = [];
+      const tuple = Type.tuple(data);
+
+      const result = tuple_size(tuple);
+
+      assert.deepStrictEqual(result, Type.integer(0n));
+    });
+
+    it("proper tuple, 1 item", () => {
+      const data = [Type.integer(1)];
+      const tuple = Type.tuple(data);
+
+      const result = tuple_size(tuple);
+
+      assert.deepStrictEqual(result, Type.integer(1n));
+    });
+
+    it("proper tuple, 2 items", () => {
+      const data = [Type.integer(1), Type.integer(2)];
+      const tuple = Type.tuple(data);
+
+      const result = tuple_size(tuple);
+
+      assert.deepStrictEqual(result, Type.integer(2n));
+    });
+
+    it("raises ArgumentError if the argument is not a tuple", () => {
+      assertBoxedError(
+        () => tuple_size(atomAbc),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
+      );
+    });
+  });
+
   describe("tuple_to_list/1", () => {
     const tuple_to_list = Erlang["tuple_to_list/1"];
 
@@ -3420,28 +3459,6 @@ describe("Erlang", () => {
     it("raises ArgumentError if the argument is not a tuple", () => {
       assertBoxedError(
         () => tuple_to_list(Type.atom("abc")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
-      );
-    });
-  });
-
-  describe("tuple_size/1", () => {
-    const tuple_size = Erlang["tuple_size/1"];
-
-    it("returns the number of elements in the tuple", () => {
-      const data = [Type.integer(1), Type.integer(2), Type.integer(3)];
-      const tuple = Type.tuple(data);
-
-      const result = tuple_size(tuple);
-      const expected = 3;
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("raises ArgumentError if the argument is not a tuple", () => {
-      assertBoxedError(
-        () => tuple_size(atomAbc),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a tuple"),
       );
