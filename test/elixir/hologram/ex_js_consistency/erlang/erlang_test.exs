@@ -1360,6 +1360,178 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   # The client version works exactly the same as binary_to_atom/2.
   # test "binary_to_existing_atom/2"
 
+  describe "binary_to_float/1" do
+    test "positive float without sign in decimal notation" do
+      assert :erlang.binary_to_float("1.23") == 1.23
+    end
+
+    test "positive float with sign in decimal notation" do
+      assert :erlang.binary_to_float("+1.23") == 1.23
+    end
+
+    test "negative float in decimal notation" do
+      assert :erlang.binary_to_float("-1.23") == -1.23
+    end
+
+    test "unsigned zero float in decimal notation" do
+      assert :erlang.binary_to_float("0.0") === 0.0
+    end
+
+    test "signed positive zero float in decimal notation" do
+      assert :erlang.binary_to_float("+0.0") === +0.0
+    end
+
+    test "signed negative zero float in decimal notation" do
+      assert :erlang.binary_to_float("-0.0") === -0.0
+    end
+
+    test "positive float in scientific notation" do
+      assert :erlang.binary_to_float("1.23456e+3") == 1234.56
+    end
+
+    test "negative float in scientific notation" do
+      assert :erlang.binary_to_float("-1.23456e+3") == -1234.56
+    end
+
+    test "unsigned zero float in scientific notation" do
+      assert :erlang.binary_to_float("0.0e+1") === 0.0
+    end
+
+    test "signed positive zero float in scientific notation" do
+      assert :erlang.binary_to_float("+0.0e+1") === +0.0
+    end
+
+    test "signed negative zero float in scientific notation" do
+      assert :erlang.binary_to_float("-0.0e+1") === -0.0
+    end
+
+    test "positive integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["123"]}
+    end
+
+    test "negative integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["-123"]}
+    end
+
+    test "zero integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["0"]}
+    end
+
+    test "with leading zeros" do
+      assert :erlang.binary_to_float("00012.34") == 12.34
+    end
+
+    test "uppercase scientific notation" do
+      assert :erlang.binary_to_float("1.23456E3") == 1234.56
+    end
+
+    test "negative exponent" do
+      assert :erlang.binary_to_float("1.23e-3") == 0.00123
+    end
+
+    test "non-binary bitstring input" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :binary_to_float, [<<1::1, 0::1, 1::1>>]}
+    end
+
+    test "non-bitstring input" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :binary_to_float, [:abc]}
+    end
+
+    test "with underscore" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["1_000.5"]}
+    end
+
+    test "invalid float format" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["12.3.4"]}
+    end
+
+    test "non-numeric text" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["abc"]}
+    end
+
+    test "empty input" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, [""]}
+    end
+
+    test "decimal point only" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["."]}
+    end
+
+    test "with leading dot" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, [".5"]}
+    end
+
+    test "with trailing dot" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["5."]}
+    end
+
+    test "scientific notation without the fractional part" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["3e10"]}
+    end
+
+    test "with trailing exponent marker" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["2e"]}
+    end
+
+    test "with leading whitespace" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, [" 12.3"]}
+    end
+
+    test "with trailing whitespace" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["12.3 "]}
+    end
+
+    test "with multiple exponent markers" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["1e2e3"]}
+    end
+
+    test "Infinity text" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["Infinity"]}
+    end
+
+    test "hex-style JS float" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a float"),
+                   {:erlang, :binary_to_float, ["0x1.fp2"]}
+    end
+  end
+
   describe "binary_to_integer/1" do
     test "delegates to binary_to_integer/2 with base 10" do
       assert :erlang.binary_to_integer("123") == :erlang.binary_to_integer("123", 10)
@@ -1496,6 +1668,54 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a bitstring"),
                    {:erlang, :byte_size, [:abc]}
+    end
+  end
+
+  describe "ceil/1" do
+    test "rounds positive float with fractional part up" do
+      assert :erlang.ceil(1.23) == 2
+    end
+
+    test "rounds negative float with fractional part up toward zero" do
+      assert :erlang.ceil(-1.23) == -1
+    end
+
+    test "keeps positive float without fractional part unchanged" do
+      assert :erlang.ceil(1.0) == 1
+    end
+
+    test "keeps negative float without fractional part unchanged" do
+      assert :erlang.ceil(-1.0) == -1
+    end
+
+    test "keeps signed negative zero float unchanged" do
+      assert :erlang.ceil(-0.0) == 0
+    end
+
+    test "keeps signed positive zero float unchanged" do
+      assert :erlang.ceil(+0.0) == 0
+    end
+
+    test "keeps unsigned zero float unchanged" do
+      assert :erlang.ceil(0.0) == 0
+    end
+
+    test "keeps positive integer unchanged" do
+      assert :erlang.ceil(1) == 1
+    end
+
+    test "keeps negative integer unchanged" do
+      assert :erlang.ceil(-1) == -1
+    end
+
+    test "keeps zero integer unchanged" do
+      assert :erlang.ceil(0) == 0
+    end
+
+    test "raises ArgumentError if the argument is not a number" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a number"),
+                   {:erlang, :ceil, [:abc]}
     end
   end
 
@@ -1796,6 +2016,20 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "non-map" do
       assert :erlang.is_map(:abc) == false
+    end
+  end
+
+  describe "is_map_key/2" do
+    test "returns true if the given map has the given key" do
+      assert :erlang.is_map_key(:b, %{a: 1, b: 2}) == true
+    end
+
+    test "returns false if the given map doesn't have the given key" do
+      assert :erlang.is_map_key(:c, %{a: 1, b: 2}) == false
+    end
+
+    test "raises BadMapError if the second argument is not a map" do
+      assert_error BadMapError, "expected a map, got: :abc", {:erlang, :is_map_key, [:x, :abc]}
     end
   end
 
