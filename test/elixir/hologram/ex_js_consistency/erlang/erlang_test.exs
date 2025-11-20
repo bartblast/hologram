@@ -2082,6 +2082,46 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "float_to_binary/2" do
+    test "{:decimals, 0}" do
+      assert :erlang.float_to_binary(7.12, [{:decimals, 0}]) == "7"
+    end
+
+    test "{:decimals, 1}" do
+      assert :erlang.float_to_binary(7.12, [{:decimals, 1}]) == "7.1"
+    end
+
+    test "{:decimals, 4}" do
+      assert :erlang.float_to_binary(7.12, [{:decimals, 4}]) == "7.1200"
+    end
+
+    test "{:decimals, 10}" do
+      assert :erlang.float_to_binary(1.5, [{:decimals, 10}]) == "1.5000000000"
+    end
+
+    test "{:decimals, 4}, :compact - non-zero decimal" do
+      assert :erlang.float_to_binary(7.120000, [{:decimals, 4}, :compact]) == "7.12"
+    end
+
+    test ":compact, {:decimals, 4} - non-zero decimal" do
+      assert :erlang.float_to_binary(7.120000, [:compact, {:decimals, 4}]) == "7.12"
+    end
+
+    test "{:decimals, 3}, :compact - zero decimal" do
+      assert :erlang.float_to_binary(700.000, [{:decimals, 3}, :compact]) == "700.0"
+    end
+
+    test ":compact, {:decimals, 3} - zero decimal" do
+      assert :erlang.float_to_binary(700.000, [:compact, {:decimals, 3}]) == "700.0"
+    end
+
+    test "{:decimals, 0}, :compact - zero decimal" do
+      assert :erlang.float_to_binary(800.000, [{:decimals, 0}, :compact]) == "800"
+    end
+
+    test ":compact, {:decimals, 0} - zero decimal" do
+      assert :erlang.float_to_binary(800.000, [:compact, {:decimals, 0}]) == "800"
+    end
+
     test "raises ArgumentError if the first argument is not a float" do
       assert_error ArgumentError, build_argument_error_msg(1, "not a float"), fn ->
         :erlang.float_to_binary(123, [:short])
