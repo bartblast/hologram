@@ -1610,6 +1610,206 @@ describe("Erlang", () => {
     });
   });
 
+  describe("binary_to_float/1", () => {
+    const binary_to_float = Erlang["binary_to_float/1"];
+
+    it("converts a correct binary to a float", () => {
+      const result = binary_to_float(Type.bitstring("10.5"));
+      assert.deepStrictEqual(result, Type.float(10.5));
+    });
+
+    it("parses scientific notation", () => {
+      const result = binary_to_float(Type.bitstring("2.2017764e+1"));
+      assert.deepStrictEqual(result, Type.float(22.017764));
+    });
+
+    it("parses negative float", () => {
+      const result = binary_to_float(Type.bitstring("-3.14"));
+      assert.deepStrictEqual(result, Type.float(-3.14));
+    });
+
+    it("parses float with leading zeros", () => {
+      const result = binary_to_float(Type.bitstring("00012.34"));
+      assert.deepStrictEqual(result, Type.float(12.34));
+    });
+
+    it("parses + sign float", () => {
+      const result = binary_to_float(Type.bitstring("+15.5"));
+      assert.deepStrictEqual(result, Type.float(15.5));
+    });
+
+    it("parses uppercase E scientific notation", () => {
+      const result = binary_to_float(Type.bitstring("1.2E3"));
+      assert.deepStrictEqual(result, Type.float(1200.0));
+    });
+
+    it("parses negative exponent", () => {
+      const result = binary_to_float(Type.bitstring("1.23e-3"));
+      assert.deepStrictEqual(result, Type.float(0.00123));
+    });
+
+    it("parses negative zero", () => {
+      const result = binary_to_float(Type.bitstring("-0.0"));
+      assert.isTrue(Interpreter.isEqual(result, Type.float(-0.0)));
+    });
+
+    it("raises ArgumentError if input is not a binary", () => {
+      const term = Type.integer(123);
+
+      assertBoxedError(
+        () => binary_to_float(term),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("raises ArgumentError when float contains underscores", () => {
+      const bin = Type.bitstring("1_000.5");
+
+      assertBoxedError(
+        () => binary_to_float(bin),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("raises ArgumentError for invalid float format", () => {
+      const bin = Type.bitstring("12.3.4");
+
+      assertBoxedError(
+        () => binary_to_float(bin),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("raises ArgumentError for non-numeric text", () => {
+      const bin = Type.bitstring("abc");
+
+      assertBoxedError(
+        () => binary_to_float(bin),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("rejects empty binary", () => {
+      assertBoxedError(
+        () => binary_to_float(Type.bitstring("")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("rejects decimal point only", () => {
+      assertBoxedError(
+        () => binary_to_float(Type.bitstring(".")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("rejects leading dot such as .5", () => {
+      assertBoxedError(
+        () => binary_to_float(Type.bitstring(".5")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("rejects trailing dot such as 5.", () => {
+      assertBoxedError(
+        () => binary_to_float(Type.bitstring("5.")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("rejects scientific notation without a fraction like 3e10", () => {
+      assertBoxedError(
+        () => binary_to_float(Type.bitstring("3e10")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on trailing exponent marker", () => {
+      assertBoxedError(
+        () => binary_to_float(Type.bitstring("2e")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on whitespace around the number", () => {
+      assertBoxedError(
+        () => binary_to_float(Type.bitstring(" 12.3")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on multiple exponent markers", () => {
+      assertBoxedError(
+        () => binary_to_float(Type.bitstring("1e2e3")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on Infinity text", () => {
+      assertBoxedError(
+        () => binary_to_float(Type.bitstring("Infinity")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("raises ArgumentError on hex-style JS float", () => {
+      assertBoxedError(
+        () => binary_to_float(Type.bitstring("0x1.fp2")),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 1st argument: not a textual representation of a float\n",
+      );
+    });
+  });
+
   describe("binary_to_integer/1", () => {
     const binary_to_integer = Erlang["binary_to_integer/1"];
 
