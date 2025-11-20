@@ -380,9 +380,7 @@ const Erlang = {
       );
     }
 
-    const value = Number(text);
-
-    return Type.float(value);
+    return Type.float(Number(text));
   },
   // End binary_to_float/1
   // Deps: []

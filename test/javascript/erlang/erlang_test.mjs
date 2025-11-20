@@ -1613,61 +1613,168 @@ describe("Erlang", () => {
   describe("binary_to_float/1", () => {
     const binary_to_float = Erlang["binary_to_float/1"];
 
-    it("converts a correct binary to a float", () => {
-      const result = binary_to_float(Type.bitstring("10.5"));
-      assert.deepStrictEqual(result, Type.float(10.5));
+    it("positive float without sign in decimal notation", () => {
+      const input = Type.bitstring("1.23");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(1.23));
     });
 
-    it("parses scientific notation", () => {
-      const result = binary_to_float(Type.bitstring("2.2017764e+1"));
-      assert.deepStrictEqual(result, Type.float(22.017764));
+    it("positive float with sign in decimal notation", () => {
+      const input = Type.bitstring("+1.23");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(1.23));
     });
 
-    it("parses negative float", () => {
-      const result = binary_to_float(Type.bitstring("-3.14"));
-      assert.deepStrictEqual(result, Type.float(-3.14));
+    it("negative float in decimal notation", () => {
+      const input = Type.bitstring("-1.23");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(-1.23));
     });
 
-    it("parses float with leading zeros", () => {
-      const result = binary_to_float(Type.bitstring("00012.34"));
+    it("unsigned zero float in decimal notation", () => {
+      const input = Type.bitstring("0.0");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("signed positive zero float in decimal notation", () => {
+      const input = Type.bitstring("+0.0");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(+0.0));
+    });
+
+    it("signed negative zero float in decimal notation", () => {
+      const input = Type.bitstring("-0.0");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(-0.0));
+    });
+
+    it("positive float in scientific notation", () => {
+      const input = Type.bitstring("1.23456e+3");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(1234.56));
+    });
+
+    it("negative float in scientific notation", () => {
+      const input = Type.bitstring("-1.23456e+3");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(-1234.56));
+    });
+
+    it("unsigned zero float in scientific notation", () => {
+      const input = Type.bitstring("0.0e+1");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("signed positive zero float in scientific notation", () => {
+      const input = Type.bitstring("+0.0e+1");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(+0.0));
+    });
+
+    it("signed negative zero float in scientific notation", () => {
+      const input = Type.bitstring("-0.0e+1");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(-0.0));
+    });
+
+    it("positive integer", () => {
+      const input = Type.bitstring("123");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("negative integer", () => {
+      const input = Type.bitstring("-123");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("zero integer", () => {
+      const input = Type.bitstring("0");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with leading zeros", () => {
+      const input = Type.bitstring("00012.34");
+      const result = binary_to_float(input);
+
       assert.deepStrictEqual(result, Type.float(12.34));
     });
 
-    it("parses + sign float", () => {
-      const result = binary_to_float(Type.bitstring("+15.5"));
-      assert.deepStrictEqual(result, Type.float(15.5));
+    it("uppercase scientific notation", () => {
+      const input = Type.bitstring("1.23456E3");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(1234.56));
     });
 
-    it("parses uppercase E scientific notation", () => {
-      const result = binary_to_float(Type.bitstring("1.2E3"));
-      assert.deepStrictEqual(result, Type.float(1200.0));
-    });
+    it("negative exponent", () => {
+      const input = Type.bitstring("1.23e-3");
+      const result = binary_to_float(input);
 
-    it("parses negative exponent", () => {
-      const result = binary_to_float(Type.bitstring("1.23e-3"));
       assert.deepStrictEqual(result, Type.float(0.00123));
     });
 
-    it("parses negative zero", () => {
-      const result = binary_to_float(Type.bitstring("-0.0"));
-      assert.isTrue(Interpreter.isEqual(result, Type.float(-0.0)));
-    });
-
-    it("raises ArgumentError if input is not a binary", () => {
-      const term = Type.integer(123);
+    it("non-binary bitstring input", () => {
+      const input = Bitstring.fromBits([1, 0, 1]);
 
       assertBoxedError(
-        () => binary_to_float(term),
+        () => binary_to_float(input),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
     });
 
-    it("raises ArgumentError when float contains underscores", () => {
-      const bin = Type.bitstring("1_000.5");
+    it("non-bitstring input", () => {
+      const input = Type.atom("abc");
 
       assertBoxedError(
-        () => binary_to_float(bin),
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("with underscore", () => {
+      const input = Type.bitstring("1_000.5");
+
+      assertBoxedError(
+        () => binary_to_float(input),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
@@ -1676,11 +1783,11 @@ describe("Erlang", () => {
       );
     });
 
-    it("raises ArgumentError for invalid float format", () => {
-      const bin = Type.bitstring("12.3.4");
+    it("invalid float format", () => {
+      const input = Type.bitstring("12.3.4");
 
       assertBoxedError(
-        () => binary_to_float(bin),
+        () => binary_to_float(input),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
@@ -1689,11 +1796,11 @@ describe("Erlang", () => {
       );
     });
 
-    it("raises ArgumentError for non-numeric text", () => {
-      const bin = Type.bitstring("abc");
+    it("non-numeric text", () => {
+      const input = Type.bitstring("abc");
 
       assertBoxedError(
-        () => binary_to_float(bin),
+        () => binary_to_float(input),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
@@ -1702,9 +1809,11 @@ describe("Erlang", () => {
       );
     });
 
-    it("rejects empty binary", () => {
+    it("empty input", () => {
+      const input = Type.bitstring("");
+
       assertBoxedError(
-        () => binary_to_float(Type.bitstring("")),
+        () => binary_to_float(input),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
@@ -1713,9 +1822,11 @@ describe("Erlang", () => {
       );
     });
 
-    it("rejects decimal point only", () => {
+    it("decimal point only", () => {
+      const input = Type.bitstring(".");
+
       assertBoxedError(
-        () => binary_to_float(Type.bitstring(".")),
+        () => binary_to_float(input),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
@@ -1724,9 +1835,11 @@ describe("Erlang", () => {
       );
     });
 
-    it("rejects leading dot such as .5", () => {
+    it("with leading dot", () => {
+      const input = Type.bitstring(".5");
+
       assertBoxedError(
-        () => binary_to_float(Type.bitstring(".5")),
+        () => binary_to_float(input),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
@@ -1735,9 +1848,11 @@ describe("Erlang", () => {
       );
     });
 
-    it("rejects trailing dot such as 5.", () => {
+    it("with trailing dot", () => {
+      const input = Type.bitstring("5.");
+
       assertBoxedError(
-        () => binary_to_float(Type.bitstring("5.")),
+        () => binary_to_float(input),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
@@ -1746,9 +1861,11 @@ describe("Erlang", () => {
       );
     });
 
-    it("rejects scientific notation without a fraction like 3e10", () => {
+    it("scientific notation without the fractional part", () => {
+      const input = Type.bitstring("3e10");
+
       assertBoxedError(
-        () => binary_to_float(Type.bitstring("3e10")),
+        () => binary_to_float(input),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
@@ -1757,9 +1874,11 @@ describe("Erlang", () => {
       );
     });
 
-    it("raises ArgumentError on trailing exponent marker", () => {
+    it("with trailing exponent marker", () => {
+      const input = Type.bitstring("2e");
+
       assertBoxedError(
-        () => binary_to_float(Type.bitstring("2e")),
+        () => binary_to_float(input),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
@@ -1768,9 +1887,11 @@ describe("Erlang", () => {
       );
     });
 
-    it("raises ArgumentError on whitespace around the number", () => {
+    it("with leading whitespace", () => {
+      const input = Type.bitstring(" 12.3");
+
       assertBoxedError(
-        () => binary_to_float(Type.bitstring(" 12.3")),
+        () => binary_to_float(input),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
@@ -1779,9 +1900,11 @@ describe("Erlang", () => {
       );
     });
 
-    it("raises ArgumentError on multiple exponent markers", () => {
+    it("with trailing whitespace", () => {
+      const input = Type.bitstring("12.3 ");
+
       assertBoxedError(
-        () => binary_to_float(Type.bitstring("1e2e3")),
+        () => binary_to_float(input),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
@@ -1790,9 +1913,11 @@ describe("Erlang", () => {
       );
     });
 
-    it("raises ArgumentError on Infinity text", () => {
+    it("with multiple exponent markers", () => {
+      const input = Type.bitstring("1e2e3");
+
       assertBoxedError(
-        () => binary_to_float(Type.bitstring("Infinity")),
+        () => binary_to_float(input),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
@@ -1801,11 +1926,29 @@ describe("Erlang", () => {
       );
     });
 
-    it("raises ArgumentError on hex-style JS float", () => {
+    it("Infinity text", () => {
+      const input = Type.bitstring("Infinity");
+
       assertBoxedError(
-        () => binary_to_float(Type.bitstring("0x1.fp2")),
+        () => binary_to_float(input),
         "ArgumentError",
-        "errors were found at the given arguments:\n\n  * 1st argument: not a textual representation of a float\n",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("hex-style JS float", () => {
+      const input = Type.bitstring("0x1.fp2");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
       );
     });
   });
