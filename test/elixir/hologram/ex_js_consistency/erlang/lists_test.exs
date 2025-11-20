@@ -373,6 +373,93 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "min/1" do
+    test "returns the element from a list of length 1" do
+      assert :lists.min([123]) == 123
+    end
+
+    test "returns the smaller element from a list of size 2 with first being smallest" do
+      assert :lists.min([123, 321]) == 123
+    end
+
+    test "returns the smaller element from a list of size 2 with second being smallest" do
+      assert :lists.min([21, 12]) == 12
+    end
+
+    test "returns the element from a list of size 2 when both are the same" do
+      assert :lists.min([16, 16]) == 16
+    end
+
+    test "comparing same typed values to each other" do
+      assert :lists.min(["16", "2"]) == "16"
+
+      assert :lists.min([:abd, :abc]) == :abc
+    end
+
+    test "comparing different typed values against each other" do
+      all = Enum.take_random(["16", :abc, 16, 16.5], 4)
+
+      assert :lists.min(all) == 16
+
+      without_integer = Enum.take_random(["16", :abc, 16.5], 3)
+
+      assert :lists.min(without_integer) == 16.5
+
+      without_integer_and_float = Enum.take_random(["16", :abc], 2)
+
+      assert :lists.min(without_integer_and_float) == :abc
+    end
+
+    test "returns the smallest element from a large list with many duplicates" do
+      list = [
+        42,
+        82,
+        7,
+        91,
+        23,
+        65,
+        14,
+        23,
+        88,
+        3,
+        56,
+        29,
+        71,
+        18,
+        3,
+        35,
+        82,
+        47
+      ]
+
+      assert :lists.min(list) == 3
+    end
+
+    test "raises FunctionClauseError if the argument is not a list" do
+      expected_msg = build_function_clause_error_msg(":lists.min/1")
+
+      assert_raise FunctionClauseError, expected_msg, fn ->
+        :lists.min(:abc)
+      end
+    end
+
+    test "raises FunctionClauseError if the argument is an improper list" do
+      expected_msg = build_function_clause_error_msg(":lists.min/2")
+
+      assert_raise FunctionClauseError, expected_msg, fn ->
+        :lists.min([1 | 2])
+      end
+    end
+
+    test "raises FunctionClauseError if the argument is an empty list" do
+      expected_msg = build_function_clause_error_msg(":lists.min/1")
+
+      assert_raise FunctionClauseError, expected_msg, fn ->
+        :lists.min([])
+      end
+    end
+  end
+
   describe "reverse/1" do
     test "returns a list with the elements in the argument in reverse order" do
       assert :lists.reverse([1, 2, 3]) == [3, 2, 1]

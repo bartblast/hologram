@@ -214,6 +214,28 @@ const Erlang_Lists = {
   // End member/2
   // Deps: []
 
+  // Start min/1
+  "min/1": (list) => {
+    if (!Type.isProperList(list) || list.data.length === 0) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.min/1", [list]),
+      );
+    }
+
+    const first = list.data[0];
+    let min = first;
+
+    for (let i = 1; i < list.data.length; i++) {
+      if (Interpreter.compareTerms(list.data[i], min) < 0) {
+        min = list.data[i];
+      }
+    }
+
+    return min;
+  },
+  // End min/1
+  // Deps: []
+
   // Start reverse/1
   "reverse/1": (list) => {
     if (!Type.isList(list)) {
