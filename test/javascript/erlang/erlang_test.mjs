@@ -2096,40 +2096,172 @@ describe("Erlang", () => {
       );
     });
 
-    // TODO: remove when other options are supported
-    it("raises HologramInterpreterError if there are 0 options specified", () => {
-      const opts = Type.list();
+    it("{:decimals, 0}", () => {
+      const floatVal = Type.float(7.12);
+      const opts = Type.list([Type.tuple([Type.atom("decimals"), Type.integer(0)])]);
+      const result = float_to_binary(floatVal, opts);
+      const expected = Type.bitstring("7");
 
-      assert.throw(
-        () => float_to_binary(float, opts),
-        HologramInterpreterError,
-        ":erlang.float_to_binary/2 options other than :short are not yet implemented in Hologram",
-      );
+      assert.deepStrictEqual(result, expected);
     });
 
-    // TODO: remove when other options are supported
-    it("raises HologramInterpreterError if there are 2+ options specified", () => {
+    it("{:decimals, 1}", () => {
+      const floatVal = Type.float(7.12);
+      const opts = Type.list([Type.tuple([Type.atom("decimals"), Type.integer(1)])]);
+      const result = float_to_binary(floatVal, opts);
+      const expected = Type.bitstring("7.1");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("{:decimals, 4}", () => {
+      const floatVal = Type.float(7.12);
+      const opts = Type.list([Type.tuple([Type.atom("decimals"), Type.integer(4)])]);
+      const result = float_to_binary(floatVal, opts);
+      const expected = Type.bitstring("7.1200");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("{:decimals, 10}", () => {
+      const floatVal = Type.float(1.5);
+      const opts = Type.list([Type.tuple([Type.atom("decimals"), Type.integer(10)])]);
+      const result = float_to_binary(floatVal, opts);
+      const expected = Type.bitstring("1.5000000000");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("{:decimals, 4}, :compact - non-zero decimal", () => {
+      const floatVal = Type.float(7.120000);
       const opts = Type.list([
         Type.tuple([Type.atom("decimals"), Type.integer(4)]),
         Type.atom("compact"),
       ]);
+      const result = float_to_binary(floatVal, opts);
+      const expected = Type.bitstring("7.12");
 
-      assert.throw(
-        () => float_to_binary(float, opts),
-        HologramInterpreterError,
-        ":erlang.float_to_binary/2 options other than :short are not yet implemented in Hologram",
-      );
+      assert.deepStrictEqual(result, expected);
     });
 
-    // TODO: remove when other options are supported
-    it("raises HologramInterpreterError if not yet implemented option is specified", () => {
-      const opts = Type.list([Type.atom("compact")]);
+    it(":compact, {:decimals, 4} - non-zero decimal", () => {
+      const floatVal = Type.float(7.120000);
+      const opts = Type.list([
+        Type.atom("compact"),
+        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+      ]);
+      const result = float_to_binary(floatVal, opts);
+      const expected = Type.bitstring("7.12");
 
-      assert.throw(
-        () => float_to_binary(float, opts),
-        HologramInterpreterError,
-        ":erlang.float_to_binary/2 options other than :short are not yet implemented in Hologram",
-      );
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("{:decimals, 3}, :compact - zero decimal", () => {
+      const floatVal = Type.float(700.000);
+      const opts = Type.list([
+        Type.tuple([Type.atom("decimals"), Type.integer(3)]),
+        Type.atom("compact"),
+      ]);
+      const result = float_to_binary(floatVal, opts);
+      const expected = Type.bitstring("700.0");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it(":compact, {:decimals, 3} - zero decimal", () => {
+      const floatVal = Type.float(700.000);
+      const opts = Type.list([
+        Type.atom("compact"),
+        Type.tuple([Type.atom("decimals"), Type.integer(3)]),
+      ]);
+      const result = float_to_binary(floatVal, opts);
+      const expected = Type.bitstring("700.0");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("{:decimals, 0}, :compact - zero decimal", () => {
+      const floatVal = Type.float(800.000);
+      const opts = Type.list([
+        Type.tuple([Type.atom("decimals"), Type.integer(0)]),
+        Type.atom("compact"),
+      ]);
+      const result = float_to_binary(floatVal, opts);
+      const expected = Type.bitstring("800");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it(":compact, {:decimals, 0} - zero decimal", () => {
+      const floatVal = Type.float(800.000);
+      const opts = Type.list([
+        Type.atom("compact"),
+        Type.tuple([Type.atom("decimals"), Type.integer(0)]),
+      ]);
+      const result = float_to_binary(floatVal, opts);
+      const expected = Type.bitstring("800");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("{:scientific, 4}", () => {
+      const floatVal = Type.float(7.12);
+      const opts = Type.list([Type.tuple([Type.atom("scientific"), Type.integer(4)])]);
+      const result = float_to_binary(floatVal, opts);
+      const expected = Type.bitstring("7.1200e+00");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("{:scientific, 0}", () => {
+      const floatVal = Type.float(7.12);
+      const opts = Type.list([Type.tuple([Type.atom("scientific"), Type.integer(0)])]);
+      const result = float_to_binary(floatVal, opts);
+      const expected = Type.bitstring("7e+00");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("{:scientific, 6}", () => {
+      const floatVal = Type.float(12345.6);
+      const opts = Type.list([Type.tuple([Type.atom("scientific"), Type.integer(6)])]);
+      const result = float_to_binary(floatVal, opts);
+      const expected = Type.bitstring("1.234560e+04");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("{:scientific, 10}", () => {
+      const floatVal = Type.float(0.00012345);
+      const opts = Type.list([Type.tuple([Type.atom("scientific"), Type.integer(10)])]);
+      const result = float_to_binary(floatVal, opts);
+      const expected = Type.bitstring("1.2345000000e-04");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("{:scientific, 4}, :compact - ignore compact option", () => {
+      const floatVal = Type.float(7.12);
+      const opts = Type.list([
+        Type.tuple([Type.atom("scientific"), Type.integer(4)]),
+        Type.atom("compact"),
+      ]);
+      const result = float_to_binary(floatVal, opts);
+      const expected = Type.bitstring("7.1200e+00");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it(":compact, {:scientific, 4} - ignore compact option", () => {
+      const floatVal = Type.float(7.12);
+      const opts = Type.list([
+        Type.atom("compact"),
+        Type.tuple([Type.atom("scientific"), Type.integer(4)]),
+      ]);
+      const result = float_to_binary(floatVal, opts);
+      const expected = Type.bitstring("7.1200e+00");
+
+      assert.deepStrictEqual(result, expected);
     });
   });
 

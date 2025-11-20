@@ -532,17 +532,61 @@ const Erlang = {
       );
     }
 
-    // TODO: implement other options
-    if (
-      opts.data.length != 1 ||
-      !Interpreter.isStrictlyEqual(opts.data[0], Type.atom("short"))
-    ) {
-      throw new HologramInterpreterError(
-        ":erlang.float_to_binary/2 options other than :short are not yet implemented in Hologram",
-      );
+    let decimals = null;
+    let scientific = null;
+    let isCompact = false;
+    let isShort = false;
+
+    // Parse options
+    for (const opt of opts.data) {
+      if (Interpreter.isStrictlyEqual(opt, Type.atom("short"))) {
+        isShort = true;
+      } else if (Interpreter.isStrictlyEqual(opt, Type.atom("compact"))) {
+        isCompact = true;
+      } else if (Type.isTuple(opt) && opt.data.length === 2) {
+        const key = opt.data[0];
+        const value = opt.data[1];
+        if (
+          Interpreter.isStrictlyEqual(key, Type.atom("decimals")) &&
+          Type.isInteger(value)
+        ) {
+          decimals = Number(value.value);
+        } else if (
+          Interpreter.isStrictlyEqual(key, Type.atom("scientific")) &&
+          Type.isInteger(value)
+        ) {
+          scientific = Number(value.value);
+        } else {
+          throw new HologramInterpreterError(
+            `:erlang.float_to_binary/2 option {${key.value}, ${value.value}} is not supported in Hologram`,
+          );
+        }
+      } else {
+        throw new HologramInterpreterError(
+          ":erlang.float_to_binary/2 invalid option format in Hologram",
+        );
+      }
     }
 
-    return Type.bitstring(float.value.toString());
+    let result;
+
+    if (isShort) {
+      result = float.value.toString();
+    } else if (scientific !== null) {
+      result = float.value.toExponential(scientific);
+      // Erlang format uses zero-padded exponents (e.g., e+00, e-04)
+      // JavaScript may use e+0, e-4, so we need to pad the exponent
+      result = result.replace(/e([+-])(\d)$/, "e$10$2");
+    } else if (decimals !== null) {
+      result = float.value.toFixed(decimals);
+      if (isCompact && decimals > 0) {
+        result = result.replace(/0+$/, "").replace(/\.$/, ".0");
+      }
+    } else {
+      result = float.value.toString();
+    }
+
+    return Type.bitstring(result);
   },
   // End float_to_binary/2
   // Deps: []
