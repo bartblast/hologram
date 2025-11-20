@@ -269,13 +269,16 @@ defmodule Hologram.Compiler.IRTest do
     end
 
     test "anonymous function (capture)" do
-      term = &(&1 + &2)
+      term = &(&1 + &2 + &3)
 
-      assert_error ArgumentError,
-                   "term contains a function that is not a named function capture",
-                   fn ->
-                     for_term!(term)
-                   end
+      expected_msg =
+        if SystemUtils.otp_version() >= 23 do
+          "term contains a function that is not a named function capture"
+        else
+          "term contains a function that is not a remote function capture"
+        end
+
+      assert_error ArgumentError, expected_msg, fn -> for_term!(term) end
     end
 
     test "atom" do
