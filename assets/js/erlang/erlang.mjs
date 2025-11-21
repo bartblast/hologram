@@ -359,6 +359,32 @@ const Erlang = {
   // End binary_to_existing_atom/2
   // Deps: [:erlang.binary_to_atom/2]
 
+  // Start binary_to_float/1
+  "binary_to_float/1": (binary) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    const text = Bitstring.toText(binary);
+
+    const floatRegex = /^[+-]?\d+\.\d+([eE][+-]?\d+)?$/;
+
+    if (!floatRegex.test(text)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    }
+
+    return Type.float(Number(text));
+  },
+  // End binary_to_float/1
+  // Deps: []
+
   // Start binary_to_integer/1
   "binary_to_integer/1": (binary) => {
     return Erlang["binary_to_integer/2"](binary, Type.integer(10));
@@ -442,6 +468,23 @@ const Erlang = {
     return Type.integer(bitstring.bytes.length);
   },
   // End byte_size/1
+  // Deps: []
+
+  // Start ceil/1
+  "ceil/1": (number) => {
+    if (!Type.isNumber(number)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    }
+
+    if (Type.isInteger(number)) {
+      return number;
+    }
+
+    return Type.integer(Math.ceil(number.value));
+  },
+  // End ceil/1
   // Deps: []
 
   // Start div/2
@@ -738,6 +781,13 @@ const Erlang = {
   },
   // End is_map/1
   // Deps: []
+
+  // Start is_map_key/2
+  "is_map_key/2": (key, map) => {
+    return Erlang_Maps["is_key/2"](key, map);
+  },
+  // End is_map_key/2
+  // Deps: [:maps.is_key/2]
 
   // Start is_number/1
   "is_number/1": (term) => {
