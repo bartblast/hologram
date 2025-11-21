@@ -902,7 +902,7 @@ const Erlang = {
       Interpreter.raiseArgumentError("argument error");
     }
 
-    return Type.boolean(left.value !== right.value);
+    return Type.boolean(left.value != right.value);
   },
   // End xor/2
   // Deps: []
