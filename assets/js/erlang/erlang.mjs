@@ -1027,7 +1027,7 @@ const Erlang = {
       value = Math.trunc(value);
     }
 
-    // Erlang trunc/1 converts -0 to 0 while native JavasSript does not
+    // Erlang trunc/1 converts -0 to 0 while native JavasScript does not
     value = Object.is(value, -0) ? 0 : value;
 
     return Type.integer(value);
