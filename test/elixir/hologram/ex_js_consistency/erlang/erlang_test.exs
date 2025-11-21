@@ -2130,6 +2130,20 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "map_get/2" do
+    test "returns the value assiociated with the given key if map contains the key" do
+      assert :erlang.map_get(:b, %{a: 1, b: 2}) == 2
+    end
+
+    test "raises BadMapError if the second argument is not a map" do
+      assert_error BadMapError, "expected a map, got: 1", {:erlang, :map_get, [:a, 1]}
+    end
+
+    test "raises KeyError if the map doesn't contain the given key" do
+      assert_error KeyError, build_key_error_msg(:a, %{}), {:erlang, :map_get, [:a, %{}]}
+    end
+  end
+
   describe "map_size/1" do
     test "returns the number of items in the map" do
       assert :erlang.map_size(%{a: 1, b: 2}) == 2

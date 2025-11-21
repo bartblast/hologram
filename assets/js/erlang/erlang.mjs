@@ -6,6 +6,7 @@ import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 import Utils from "../utils.mjs";
+import Erlang_Maps from "./maps.mjs";
 
 // IMPORTANT!
 // If the given ported Erlang function calls other Erlang functions, then list such dependencies in the "Deps" comment (see :erlang./=/2 for an example).
@@ -839,6 +840,13 @@ const Erlang = {
   },
   // End list_to_pid/1
   // Deps: []
+
+  // Start map_get/2
+  "map_get/2": (key, map) => {
+    return Erlang_Maps["get/2"](key, map);
+  },
+  // End map_get/2
+  // Deps: [:maps.get/2]
 
   // Start map_size/1
   "map_size/1": (map) => {
