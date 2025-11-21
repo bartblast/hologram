@@ -1824,6 +1824,70 @@ describe("Erlang", () => {
     });
   });
 
+  describe("binary_to_list/1", () => {
+    const binary_to_list = Erlang["binary_to_list/1"];
+
+    it("converts a binary with bytes to a list of integers", () => {
+      const binary = Bitstring.fromBytes([1, 2, 3]);
+      const result = binary_to_list(binary);
+      const expected = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts a text-based binary to a list of integers", () => {
+      const binary = Type.bitstring("ABC");
+      const result = binary_to_list(binary);
+      const expected = Type.list([
+        Type.integer(65),
+        Type.integer(66),
+        Type.integer(67),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts an empty binary to an empty list", () => {
+      const binary = Type.bitstring("");
+      const result = binary_to_list(binary);
+      const expected = Type.list([]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts a binary with mixed byte values", () => {
+      const binary = Bitstring.fromBytes([0, 127, 255]);
+      const result = binary_to_list(binary);
+      const expected = Type.list([
+        Type.integer(0),
+        Type.integer(127),
+        Type.integer(255),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if the argument is not a binary", () => {
+      assertBoxedError(
+        () => binary_to_list(Type.integer(123)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("raises ArgumentError if the argument is a non-binary bitstring", () => {
+      assertBoxedError(
+        () => binary_to_list(Type.bitstring([1, 0, 1])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+  });
+
   describe("bit_size/1", () => {
     const bit_size = Erlang["bit_size/1"];
 

@@ -416,6 +416,27 @@ const Erlang = {
   // End binary_to_integer/2
   // Deps: []
 
+  // Start binary_to_list/1
+  "binary_to_list/1": (binary) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    Bitstring.maybeSetBytesFromText(binary);
+    const bytes = binary.bytes;
+    const result = [];
+
+    for (let i = 0; i < bytes.length; i++) {
+      result.push(Type.integer(BigInt(bytes[i])));
+    }
+
+    return Type.list(result);
+  },
+  // End binary_to_list/1
+  // Deps: []
+
   // Start bit_size/1
   "bit_size/1": (term) => {
     if (!Type.isBitstring(term)) {
