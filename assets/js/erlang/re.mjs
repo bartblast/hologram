@@ -9,7 +9,8 @@ import Type from "../type.mjs";
 const Erlang_Re = {
   // Start version/0
   "version/0": () => {
-    return Type.bitstring("");
+    // TODO: Replace hardcoded PCRE version with version captured from system at runtime
+    return Type.string("8.44 2020-02-12");
   },
   // End version/0
   // Deps: []

@@ -6,7 +6,7 @@ import {
 } from "../support/helpers.mjs";
 
 import Erlang_Re from "../../../assets/js/erlang/re.mjs";
-import Type from "../../../assets/js/type.mjs";
+// import Type from "../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
@@ -18,10 +18,10 @@ describe("Erlang_Re", () => {
   describe("version/0", () => {
     const version = Erlang_Re["version/0"];
 
-    it("empty string", () => {
+    it("returns supported PCRE version", () => {
       const result = version();
 
-      assert.deepStrictEqual(result, Type.bitstring(""));
+      assert.match(result.value, /^\d+\.\d+\s+\d{4}-\d{2}-\d{2}$/);
     });
   });
 });
