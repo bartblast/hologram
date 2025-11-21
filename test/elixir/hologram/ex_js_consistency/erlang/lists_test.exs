@@ -463,4 +463,83 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       end
     end
   end
+
+  describe "all/2" do
+    setup do
+      [fun: fn elem -> elem > 1 end]
+    end
+
+    test "returns true for empty list", %{fun: fun} do
+      assert :lists.all(fun, []) == true
+    end
+
+    test "returns true when all elements satisfy the predicate", %{fun: fun} do
+      assert :lists.all(fun, [2, 3, 4]) == true
+    end
+
+    test "returns false when some elements don't satisfy the predicate", %{fun: fun} do
+      assert :lists.all(fun, [0, 2, 3]) == false
+    end
+
+    test "returns false when no elements satisfy the predicate", %{fun: fun} do
+      assert :lists.all(fun, [0, 1, -1]) == false
+    end
+
+    test "returns true when all elements satisfy funAlwaysTrue" do
+      assert :lists.all(fn _elem -> true end, [1, 2, 3]) == true
+    end
+
+    test "returns false when all elements don't satisfy funAlwaysFalse" do
+      assert :lists.all(fn _elem -> false end, [1, 2, 3]) == false
+    end
+
+    test "raises FunctionClauseError if the first argument is not an anonymous function" do
+      expected_msg = build_function_clause_error_msg(":lists.all/2", [:abc, []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.all(:abc, [])
+      end
+    end
+
+    # Client error message is intentionally different than server error message.
+    test "raises FunctionClauseError if the first argument is an anonymous function with arity different than 1" do
+      expected_msg = ~r"""
+      no function clause matching in :lists\.all/2
+
+      The following arguments were given to :lists\.all/2:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\."test all/2 raises FunctionClauseError if the first argument is an anonymous function with arity different than 1"/1>
+
+          # 2
+          \[\]
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.all(fn x, y -> x + y > 0 end, [])
+      end
+    end
+
+    test "raises ArgumentError if the second argument is not a list", %{fun: fun} do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a list"),
+                   fn ->
+                     :lists.all(fun, :abc)
+                   end
+    end
+
+    test "raises ArgumentError if the second argument is an improper list", %{fun: fun} do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a proper list"),
+                   fn ->
+                     :lists.all(fun, [1, 2 | 3])
+                   end
+    end
+
+    test "all fun doesn't return a boolean" do
+      assert_error ErlangError, build_erlang_error_msg("{:bad_filter, 4}"), fn ->
+        :lists.all(fn elem -> 2 * elem end, [2, 3, 4])
+      end
+    end
+  end
 end

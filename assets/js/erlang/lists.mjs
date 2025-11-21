@@ -278,6 +278,45 @@ const Erlang_Lists = {
   },
   // End sort/1
   // Deps: []
+
+  // Start all/2
+  "all/2": (fun, list) => {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.all/2", [fun, list]),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
+      );
+    }
+
+    return Type.boolean(
+      list.data.every((elem) => {
+        const result = Interpreter.callAnonymousFunction(fun, [elem]);
+
+        if (!Type.isBoolean(result)) {
+          Interpreter.raiseErlangError(
+            Interpreter.buildErlangErrorMsg(
+              `{:bad_filter, ${Interpreter.inspect(result)}}`,
+            ),
+          );
+        }
+
+        return Type.isTrue(result);
+      }),
+    );
+  },
+  // End all/2
+  // Deps: []
 };
 
 export default Erlang_Lists;
