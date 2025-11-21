@@ -334,3 +334,9 @@ export function registerWebApis() {
 export function waitForEventLoop() {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
+
+export function iolist(string) {
+  return Type.list(
+    Array.from(string, (char) => Type.integer(char.codePointAt(0))),
+  );
+}

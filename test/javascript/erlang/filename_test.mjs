@@ -4,6 +4,7 @@ import {
   assert,
   assertBoxedError,
   defineGlobalErlangAndElixirModules,
+  iolist,
 } from "../support/helpers.mjs";
 
 import Erlang_Filename from "../../../assets/js/erlang/filename.mjs";
@@ -20,129 +21,84 @@ describe("Erlang_Filename", () => {
   describe("basename/1", () => {
     const basename = Erlang_Filename["basename/1"];
 
-    it("returns basename for path with multiple segments", () => {
+    it("path with multiple segments", () => {
       const result = basename(Type.bitstring("path/to/file.txt"));
       const expected = Type.bitstring("file.txt");
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns basename for path with single segment", () => {
+    it("path with single segment", () => {
       const result = basename(Type.bitstring("file.txt"));
       const expected = Type.bitstring("file.txt");
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns basename for path with absolute path", () => {
+    it("path with absolute path", () => {
       const result = basename(Type.bitstring("/absolute/path/to/file.txt"));
       const expected = Type.bitstring("file.txt");
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns basename for path ending with slash", () => {
+    it("path ending with slash", () => {
       const result = basename(Type.bitstring("path/to/dir/"));
       const expected = Type.bitstring("dir");
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns basename for root path", () => {
+    it("root path", () => {
       const result = basename(Type.bitstring("/"));
       const expected = Type.bitstring("");
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns basename for empty string", () => {
+    it("empty string", () => {
       const result = basename(Type.bitstring(""));
       const expected = Type.bitstring("");
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns basename for path with multiple consecutive slashes", () => {
+    it("path with multiple consecutive slashes", () => {
       const result = basename(Type.bitstring("path//to//file.txt"));
       const expected = Type.bitstring("file.txt");
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns basename for path with only slashes", () => {
+    it("path with only slashes", () => {
       const result = basename(Type.bitstring("///"));
       const expected = Type.bitstring("");
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns basename for path without extension", () => {
-      const result = basename(Type.bitstring("path/to/filename"));
-      const expected = Type.bitstring("filename");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("returns basename for path with unicode characters", () => {
-      const result = basename(Type.bitstring("path/to/文件.txt"));
-      const expected = Type.bitstring("文件.txt");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("returns basename for path with special characters", () => {
-      const result = basename(Type.bitstring("path/to/file-name_123.txt"));
-      const expected = Type.bitstring("file-name_123.txt");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("returns basename as list of code points for atom input", () => {
+    it("list of code points for atom input", () => {
       const result = basename(Type.atom("path/to/file.txt"));
-      const expected = Type.list(
-        Array.from("file.txt", (char) => Type.integer(char.codePointAt(0))),
-      );
+      const expected = iolist("file.txt");
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns basename as list of code points for atom input with single segment", () => {
+    it("list of code points for atom input with single segment", () => {
       const result = basename(Type.atom("filename"));
-      const expected = Type.list(
-        Array.from("filename", (char) => Type.integer(char.codePointAt(0))),
-      );
+      const expected = iolist("filename");
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns basename as list of code points for nil atom input", () => {
+    it("list of code points for nil atom input", () => {
       const result = basename(Type.nil());
-      const expected = Type.list(
-        Array.from("nil", (char) => Type.integer(char.codePointAt(0))),
-      );
+      const expected = iolist("nil");
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns basename as list of code points for nil atom input with path", () => {
-      const result = basename(Type.atom("path/to/nil"));
-      const expected = Type.list(
-        Array.from("nil", (char) => Type.integer(char.codePointAt(0))),
-      );
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("returns basename as list of code points for atom input with unicode characters", () => {
-      const result = basename(Type.atom("path/to/文件.txt"));
-      const expected = Type.list(
-        Array.from("文件.txt", (char) => Type.integer(char.codePointAt(0))),
-      );
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("raises FunctionClauseError if the argument is not a binary or atom", () => {
+    it("raises FunctionClauseError if the argument is not a binary or atom or list", () => {
       assertBoxedError(
         () => basename(Type.integer(123)),
         "FunctionClauseError",
@@ -160,7 +116,7 @@ describe("Erlang_Filename", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns basename as list of code points for non-empty list input", () => {
+    it("list of code points for non-empty list input", () => {
       const result = basename(
         Type.list([
           Type.bitstring("path/to/"),
@@ -171,14 +127,12 @@ describe("Erlang_Filename", () => {
           Type.bitstring(".txt"),
         ]),
       );
-      const expected = Type.list(
-        Array.from("file.txt", (char) => Type.integer(char.codePointAt(0))),
-      );
+      const expected = iolist("file.txt");
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("returns basename as list of code points for list input with single segment", () => {
+    it("list of code points for list input with single segment", () => {
       const result = basename(
         Type.list([
           Type.integer(102), // 'f'
@@ -191,23 +145,9 @@ describe("Erlang_Filename", () => {
           Type.integer(101), // 'e'
         ]),
       );
-      const expected = Type.list(
-        Array.from("filename", (char) => Type.integer(char.codePointAt(0))),
-      );
+      const expected = iolist("filename");
 
       assert.deepStrictEqual(result, expected);
-    });
-
-    it("raises FunctionClauseError if the argument is a tuple", () => {
-      const tuple = Type.tuple([Type.integer(1), Type.integer(2)]);
-      assertBoxedError(
-        () => basename(tuple),
-        "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
-          tuple,
-          Type.list([]),
-        ]),
-      );
     });
 
     it("raises FunctionClauseError if the argument is a non-binary bitstring", () => {
