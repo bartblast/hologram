@@ -3023,6 +3023,38 @@ describe("Erlang", () => {
     });
   });
 
+  describe("make_tuple/2", () => {
+    const make_tuple = Erlang["make_tuple/2"];
+
+    it("creates tuple of the given size with all elements set to the given value", () => {
+      const tuple = make_tuple(integer3, atomA);
+
+      assert.deepStrictEqual(tuple, Type.tuple([atomA, atomA, atomA]));
+    });
+
+    it("creates an empty tuple when arity is zero", () => {
+      const tuple = make_tuple(Type.integer(0), atomA);
+
+      assert.deepStrictEqual(tuple, Type.tuple());
+    });
+
+    it("raises ArgumentError when arity is negative", () => {
+      assertBoxedError(
+        () => make_tuple(Type.integer(-1), atomA),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError when arity is not an integer", () => {
+      assertBoxedError(
+        () => make_tuple(atomA, atomA),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+  });
+
   describe("map_size/1", () => {
     const map_size = Erlang["map_size/1"];
 

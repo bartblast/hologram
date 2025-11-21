@@ -840,6 +840,22 @@ const Erlang = {
   // End list_to_pid/1
   // Deps: []
 
+  // Start make_tuple/2
+  "make_tuple/2": (arity, value) => {
+    // The Erlang implementation says that the index is out of range even when it is not an integer
+    if (!Type.isInteger(arity) || arity.value < 0) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    }
+
+    const data = Array(Number(arity.value)).fill(value);
+
+    return Type.tuple(data);
+  },
+  // End make_tuple/2
+  // Deps: []
+
   // Start map_size/1
   "map_size/1": (map) => {
     if (!Type.isMap(map)) {
