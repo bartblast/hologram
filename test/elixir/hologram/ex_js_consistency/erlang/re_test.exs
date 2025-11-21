@@ -10,7 +10,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
   @moduletag :consistency
 
   describe "version/0" do
-    test "empty string", %{fun: fun} do
+    test "empty string" do
       assert :re.version() == ""
     end
   end
