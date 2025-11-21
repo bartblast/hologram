@@ -2054,12 +2054,19 @@ describe("Erlang", () => {
   describe("float_to_binary/2", () => {
     const float_to_binary = Erlang["float_to_binary/2"];
 
-    const float = Type.float(0.1 + 0.2);
-    const integer = Type.integer(123);
-    const opts = Type.list([Type.atom("short")]);
+    it("default option for []", () => {
+      const floatVal = Type.float(7.12);
+      const opts = Type.list([]);
+      const result = float_to_binary(floatVal, opts);
+      const expected = Type.bitstring("7.12000000000000010658e+00");
+
+      assert.deepStrictEqual(result, expected);
+    });
 
     it(":short option", () => {
-      const result = float_to_binary(float, opts);
+      const floatVal = Type.float(0.1 + 0.2);
+      const opts = Type.list([Type.atom("short")]);
+      const result = float_to_binary(floatVal, opts);
       const expected = Type.bitstring("0.30000000000000004");
 
       assert.deepStrictEqual(result, expected);
@@ -2074,23 +2081,25 @@ describe("Erlang", () => {
     });
 
     it("raises ArgumentError if the second argument is not a list", () => {
+      const floatVal = Type.float(0.1 + 0.2);
       const opts = Type.tuple([Type.atom("short")]);
 
       assertBoxedError(
-        () => float_to_binary(float, opts),
+        () => float_to_binary(floatVal, opts),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(2, "not a list"),
       );
     });
 
     it("raises ArgumentError if the second argument is not a proper list", () => {
+      const floatVal = Type.float(0.1 + 0.2);
       const opts = Type.improperList([
         Type.tuple([Type.atom("decimals"), Type.integer(4)]),
         Type.atom("compact"),
       ]);
 
       assertBoxedError(
-        () => float_to_binary(float, opts),
+        () => float_to_binary(floatVal, opts),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(2, "not a proper list"),
       );

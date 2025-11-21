@@ -572,18 +572,17 @@ const Erlang = {
 
     if (isShort) {
       result = float.value.toString();
-    } else if (scientific !== null) {
-      result = float.value.toExponential(scientific);
-      // Erlang format uses zero-padded exponents (e.g., e+00, e-04)
-      // JavaScript may use e+0, e-4, so we need to pad the exponent
-      result = result.replace(/e([+-])(\d)$/, "e$10$2");
     } else if (decimals !== null) {
       result = float.value.toFixed(decimals);
       if (isCompact && decimals > 0) {
         result = result.replace(/0+$/, "").replace(/\.$/, ".0");
       }
     } else {
-      result = float.value.toString();
+      scientific = scientific || 20; // erlang default
+      result = float.value.toExponential(scientific);
+      // Erlang format uses zero-padded exponents (e.g., e+00, e-04)
+      // JavaScript may use e+0, e-4, so we need to pad the exponent
+      result = result.replace(/e([+-])(\d)$/, "e$10$2");
     }
 
     return Type.bitstring(result);
