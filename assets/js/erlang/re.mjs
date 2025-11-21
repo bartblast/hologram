@@ -10,7 +10,7 @@ const Erlang_Re = {
   // Start version/0
   "version/0": () => {
     return Type.bitstring("");
-  }
+  },
   // End version/0
   // Deps: []
 };
