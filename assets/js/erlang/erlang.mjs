@@ -1013,6 +1013,28 @@ const Erlang = {
   // End tl/1
   // Deps: []
 
+  // Start trunc/1
+  "trunc/1": (number) => {
+    if (!Type.isNumber(number)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    }
+
+    let value = number.value;
+
+    if (Type.isFloat(number)) {
+      value = Math.trunc(value);
+    }
+
+    // Erlang trunc/1 converts -0 to 0 while native JavasSript does not
+    value = Object.is(value, -0) ? 0 : value;
+
+    return Type.integer(value);
+  },
+  // End trunc/1
+  // Deps: []
+
   // Start tuple_to_list/1
   "tuple_to_list/1": (tuple) => {
     if (!Type.isTuple(tuple)) {
