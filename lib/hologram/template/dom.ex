@@ -30,6 +30,7 @@ defmodule Hologram.Template.DOM do
     {code, _last_tag_type} =
       Enum.reduce(tags, {"", nil}, fn tag, {code_acc, last_tag_type} ->
         current_tag_type = if is_tuple(tag), do: elem(tag, 0), else: tag
+
         # :skip items are fully elided, as if they did not appear
         case render_code(tag) do
           :skip ->
@@ -68,17 +69,6 @@ defmodule Hologram.Template.DOM do
     |> String.trim()
   end
 
-  # `raw` blocks are useful only in the handling of template sources.
-  # `Parser` emits them so that such source can be reconstructed.
-  # They can be skipped in the building of the AST here.
-  defp render_code({:block_start, "raw"}) do
-    :skip
-  end
-
-  defp render_code({:block_end, "raw"}) do
-    :skip
-  end
-
   defp render_code({:block_start, "else"}) do
     "] else ["
   end
@@ -97,6 +87,17 @@ defmodule Hologram.Template.DOM do
 
   defp render_code({:block_end, "if"}) do
     "] end)"
+  end
+
+  # `raw` blocks are useful only in the handling of template sources.
+  # `Parser` emits them so that such source can be reconstructed.
+  # They can be skipped in the building of the AST here.
+  defp render_code({:block_start, "raw"}) do
+    :skip
+  end
+
+  defp render_code({:block_end, "raw"}) do
+    :skip
   end
 
   defp render_code({:doctype, content}) do
