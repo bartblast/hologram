@@ -2949,6 +2949,8 @@ describe("Erlang", () => {
     const float_to_binary = Erlang["float_to_binary/2"];
 
     it("raises ArgumentError if the first argument is not a float", () => {
+      const opts = Type.list([]);
+
       assertBoxedError(
         () =>
           float_to_binary(Type.integer(123), Type.list([Type.atom("short")])),
