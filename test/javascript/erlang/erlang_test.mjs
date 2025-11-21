@@ -2966,6 +2966,7 @@ describe("Erlang", () => {
     });
 
     it("raises ArgumentError if the second argument is not a proper list", () => {
+      const floatVal = Type.float(0.1 + 0.2);
       const opts = Type.improperList([
         Type.tuple([Type.atom("decimals"), Type.integer(4)]),
         Type.atom("compact"),
