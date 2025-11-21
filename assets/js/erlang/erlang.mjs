@@ -843,7 +843,7 @@ const Erlang = {
   // Start make_tuple/2
   "make_tuple/2": (arity, value) => {
     // The Erlang implementation says that the index is out of range even when it is not an integer
-    if (!Type.isInteger(arity) || arity.value < 0) {
+    if (!Type.isInteger(arity) || arity.value < 0n) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );

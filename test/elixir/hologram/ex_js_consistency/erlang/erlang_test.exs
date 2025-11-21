@@ -2148,7 +2148,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "raises ArgumentError when arity is not an integer" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "out of range"),
-                   {:erlang, :make_tuple, [:a, :a]}
+                   {:erlang, :make_tuple, [2.0, :a]}
     end
   end
 
