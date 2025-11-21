@@ -21,15 +21,23 @@ defineGlobalErlangAndElixirModules();
 const atomA = Type.atom("a");
 const atomAbc = Type.atom("abc");
 const atomB = Type.atom("b");
+const atomC = Type.atom("c");
 const float1 = Type.float(1.0);
 const float2 = Type.float(2.0);
 const float3 = Type.float(3.0);
 const float6 = Type.float(6.0);
+const integer0 = Type.integer(0);
 const integer1 = Type.integer(1);
 const integer2 = Type.integer(2);
 const integer3 = Type.integer(3);
 const integer6 = Type.integer(6);
 const list1 = Type.list([integer1, integer2]);
+
+const mapA1B2 = Type.map([
+  [atomA, integer1],
+  [atomB, integer2],
+]);
+
 const pid1 = Type.pid("my_node@my_host", [0, 11, 111]);
 const pid2 = Type.pid("my_node@my_host", [0, 11, 112]);
 const tuple2 = Type.tuple([Type.integer(1), Type.integer(2)]);
@@ -1602,6 +1610,349 @@ describe("Erlang", () => {
     });
   });
 
+  describe("binary_to_float/1", () => {
+    const binary_to_float = Erlang["binary_to_float/1"];
+
+    it("positive float without sign in decimal notation", () => {
+      const input = Type.bitstring("1.23");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(1.23));
+    });
+
+    it("positive float with sign in decimal notation", () => {
+      const input = Type.bitstring("+1.23");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(1.23));
+    });
+
+    it("negative float in decimal notation", () => {
+      const input = Type.bitstring("-1.23");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(-1.23));
+    });
+
+    it("unsigned zero float in decimal notation", () => {
+      const input = Type.bitstring("0.0");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("signed positive zero float in decimal notation", () => {
+      const input = Type.bitstring("+0.0");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(+0.0));
+    });
+
+    it("signed negative zero float in decimal notation", () => {
+      const input = Type.bitstring("-0.0");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(-0.0));
+    });
+
+    it("positive float in scientific notation", () => {
+      const input = Type.bitstring("1.23456e+3");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(1234.56));
+    });
+
+    it("negative float in scientific notation", () => {
+      const input = Type.bitstring("-1.23456e+3");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(-1234.56));
+    });
+
+    it("unsigned zero float in scientific notation", () => {
+      const input = Type.bitstring("0.0e+1");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("signed positive zero float in scientific notation", () => {
+      const input = Type.bitstring("+0.0e+1");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(+0.0));
+    });
+
+    it("signed negative zero float in scientific notation", () => {
+      const input = Type.bitstring("-0.0e+1");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(-0.0));
+    });
+
+    it("positive integer", () => {
+      const input = Type.bitstring("123");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("negative integer", () => {
+      const input = Type.bitstring("-123");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("zero integer", () => {
+      const input = Type.bitstring("0");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with leading zeros", () => {
+      const input = Type.bitstring("00012.34");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(12.34));
+    });
+
+    it("uppercase scientific notation", () => {
+      const input = Type.bitstring("1.23456E3");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(1234.56));
+    });
+
+    it("negative exponent", () => {
+      const input = Type.bitstring("1.23e-3");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(0.00123));
+    });
+
+    it("non-binary bitstring input", () => {
+      const input = Bitstring.fromBits([1, 0, 1]);
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("non-bitstring input", () => {
+      const input = Type.atom("abc");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("with underscore", () => {
+      const input = Type.bitstring("1_000.5");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("invalid float format", () => {
+      const input = Type.bitstring("12.3.4");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("non-numeric text", () => {
+      const input = Type.bitstring("abc");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("empty input", () => {
+      const input = Type.bitstring("");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("decimal point only", () => {
+      const input = Type.bitstring(".");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with leading dot", () => {
+      const input = Type.bitstring(".5");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with trailing dot", () => {
+      const input = Type.bitstring("5.");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("scientific notation without the fractional part", () => {
+      const input = Type.bitstring("3e10");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with trailing exponent marker", () => {
+      const input = Type.bitstring("2e");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with leading whitespace", () => {
+      const input = Type.bitstring(" 12.3");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with trailing whitespace", () => {
+      const input = Type.bitstring("12.3 ");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with multiple exponent markers", () => {
+      const input = Type.bitstring("1e2e3");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("Infinity text", () => {
+      const input = Type.bitstring("Infinity");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("hex-style JS float", () => {
+      const input = Type.bitstring("0x1.fp2");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+  });
+
   describe("binary_to_integer/1", () => {
     const binary_to_integer = Erlang["binary_to_integer/1"];
 
@@ -1881,6 +2232,81 @@ describe("Erlang", () => {
         () => byte_size(atom),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
+      );
+    });
+  });
+
+  describe("ceil/1", () => {
+    const testedFun = Erlang["ceil/1"];
+
+    it("rounds positive float with fractional part up", () => {
+      const result = testedFun(Type.float(1.23));
+
+      assert.deepStrictEqual(result, integer2);
+    });
+
+    it("rounds negative float with fractional part up toward zero", () => {
+      const result = testedFun(Type.float(-1.23));
+      const expected = Type.integer(-1);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("keeps positive float without fractional part unchanged", () => {
+      const result = testedFun(Type.float(1.0));
+
+      assert.deepStrictEqual(result, integer1);
+    });
+
+    it("keeps negative float without fractional part unchanged", () => {
+      const result = testedFun(Type.float(-1.0));
+      const expected = Type.integer(-1);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("keeps signed negative zero float unchanged", () => {
+      const result = testedFun(Type.float(-0.0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("keeps signed positive zero float unchanged", () => {
+      const result = testedFun(Type.float(+0.0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("keeps unsigned zero float unchanged", () => {
+      const result = testedFun(Type.float(0.0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("keeps positive integer unchanged", () => {
+      const result = testedFun(integer1);
+
+      assert.deepStrictEqual(result, integer1);
+    });
+
+    it("keeps negative integer unchanged", () => {
+      const integer = Type.integer(-1);
+      const result = testedFun(integer);
+
+      assert.deepStrictEqual(result, integer);
+    });
+
+    it("keeps zero integer unchanged", () => {
+      const result = testedFun(integer0);
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("raises ArgumentError if the argument is not a number", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
     });
   });
@@ -2483,6 +2909,26 @@ describe("Erlang", () => {
 
     it("non-map", () => {
       assertBoxedFalse(is_map(Type.atom("abc")));
+    });
+  });
+
+  describe("is_map_key/2", () => {
+    const is_map_key = Erlang["is_map_key/2"];
+
+    it("returns true if the given map has the given key", () => {
+      assertBoxedTrue(is_map_key(atomB, mapA1B2));
+    });
+
+    it("returns false if the given map doesn't have the given key", () => {
+      assertBoxedFalse(is_map_key(atomC, mapA1B2));
+    });
+
+    it("raises BadMapError if the second argument is not a map", () => {
+      assertBoxedError(
+        () => is_map_key(atomA, atomAbc),
+        "BadMapError",
+        "expected a map, got: :abc",
+      );
     });
   });
 
