@@ -576,7 +576,7 @@ const Erlang = {
     }
 
     let decimals = null;
-    let scientific = null;
+    let scientific = 20; // erlang default
     let isCompact = false;
     let isShort = false;
 
@@ -621,7 +621,6 @@ const Erlang = {
         result = result.replace(/0+$/, "").replace(/\.$/, ".0");
       }
     } else {
-      scientific = scientific || 20; // erlang default
       result = float.value.toExponential(scientific);
       // Erlang format uses zero-padded exponents (e.g., e+00, e-04)
       // JavaScript may use e+0, e-4, so we need to pad the exponent

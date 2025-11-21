@@ -2499,8 +2499,10 @@ describe("Erlang", () => {
     });
 
     it("raises ArgumentError if the first argument is not a float", () => {
+      const opts = Type.list([]);
+
       assertBoxedError(
-        () => float_to_binary(integer, opts),
+        () => float_to_binary(opts, opts),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a float"),
       );
@@ -2508,10 +2510,9 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the second argument is not a list", () => {
       const floatVal = Type.float(0.1 + 0.2);
-      const opts = Type.tuple([Type.atom("short")]);
 
       assertBoxedError(
-        () => float_to_binary(floatVal, opts),
+        () => float_to_binary(floatVal, floatVal),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(2, "not a list"),
       );
