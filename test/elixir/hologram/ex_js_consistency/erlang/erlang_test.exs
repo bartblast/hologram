@@ -2012,7 +2012,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
   describe "setelement/3" do
     test "replaces the element at the given index" do
+      assert :erlang.setelement(2, {1, 2, 3}, :a) === {1, :a, 3}
+    end
+
+    test "replaces the first element" do
       assert :erlang.setelement(1, {1, 2}, :a) === {:a, 2}
+    end
+
+    test "replaces the last element" do
+      assert :erlang.setelement(2, {1, 2}, :a) === {1, :a}
     end
 
     test "raises ArgumentError if the first argument is not an integer" do
