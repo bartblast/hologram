@@ -123,13 +123,13 @@ describe("Erlang_Maps", () => {
 
   describe("from_keys/2", () => {
     const from_keys = Erlang_Maps["from_keys/2"];
-    const keys = Type.list([atomA, atomB]);
 
     it("creates a map with the given keys and value", () => {
-      const map = from_keys(keys, integer1);
+      const keys = Type.list([atomA, atomB]);
+      const result = from_keys(keys, integer1);
 
       assert.deepStrictEqual(
-        map,
+        result,
         Type.map([
           [atomA, integer1],
           [atomB, integer1],
@@ -137,11 +137,31 @@ describe("Erlang_Maps", () => {
       );
     });
 
+    it("creates a map with a single key", () => {
+      const result = from_keys(Type.list([atomA]), integer1);
+
+      assert.deepStrictEqual(result, Type.map([[atomA, integer1]]));
+    });
+
+    it("creates an empty map if the list of keys is empty", () => {
+      const result = from_keys(Type.list(), integer1);
+
+      assert.deepStrictEqual(result, Type.map());
+    });
+
     it("raises ArgumentError if the first argument is not a list", () => {
       assertBoxedError(
         () => from_keys(atomA, integer1),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the first argument is not a proper list", () => {
+      assertBoxedError(
+        () => from_keys(Type.improperList([atomA, atomB]), integer1),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
       );
     });
   });
