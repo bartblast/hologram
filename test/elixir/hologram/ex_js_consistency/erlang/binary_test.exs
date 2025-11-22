@@ -58,85 +58,79 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
   end
 
   describe "copy/2" do
-    test "copies an empty, text-based binary zero times" do
-      assert :binary.copy("", 0) === ""
+    test "text-based, empty binary, zero times" do
+      assert :binary.copy("", 0) == ""
     end
 
-    test "copies an empty, text-based binary a single time" do
-      assert :binary.copy("", 1) === ""
+    test "text-based, empty binary, one time" do
+      assert :binary.copy("", 1) == ""
     end
 
-    test "copies an empty, text-based binary multiple times" do
-      assert :binary.copy("", 3) === ""
+    test "text-based, empty binary, multiple times" do
+      assert :binary.copy("", 3) == ""
     end
 
-    test "copies an empty, bytes-based binary zero times" do
-      binary = <<>>
-      assert :binary.copy(binary, 0) === <<>>
+    test "text-based, non-empty binary, zero times" do
+      assert :binary.copy("hello", 0) == ""
     end
 
-    test "copies an empty, bytes-based binary a single time" do
-      binary = <<>>
-      assert :binary.copy(binary, 1) === <<>>
+    test "text-based, non-empty binary, one time" do
+      assert :binary.copy("hello", 1) == "hello"
     end
 
-    test "copies an empty, bytes-based binary multiple times" do
-      binary = <<>>
-      assert :binary.copy(binary, 3) === <<>>
+    test "text-based, non-empty binary, multiple times" do
+      assert :binary.copy("hello", 3) == "hellohellohello"
     end
 
-    test "copies a non-empty, text-based binary zero times" do
-      assert :binary.copy("hello", 0) === ""
+    test "bytes-based, empty binary, zero times" do
+      assert :binary.copy(<<>>, 0) == <<>>
     end
 
-    test "copies a non-empty, text-based binary a single time" do
-      assert :binary.copy("test", 1) === "test"
+    test "bytes-based, empty binary, one time" do
+      assert :binary.copy(<<>>, 1) == <<>>
     end
 
-    test "copies a non-empty, text-based binary multiple times" do
-      assert :binary.copy("hello", 3) === "hellohellohello"
+    test "bytes-based, empty binary, multiple times" do
+      assert :binary.copy(<<>>, 3) == <<>>
     end
 
-    test "copies a non-empty, bytes-based binary zero times" do
-      binary = <<65, 66, 67>>
-      assert :binary.copy(binary, 0) === <<>>
+    test "bytes-based, non-empty binary, zero times" do
+      assert :binary.copy(<<65, 66, 67>>, 0) == <<>>
     end
 
-    test "copies a non-empty, bytes-based binary a single time" do
-      binary = <<65, 66, 67>>
-      assert :binary.copy(binary, 1) === <<65, 66, 67>>
+    test "bytes-based, non-empty binary, one time" do
+      assert :binary.copy(<<65, 66, 67>>, 1) == <<65, 66, 67>>
     end
 
-    test "copies a non-empty, bytes-based binary multiple times" do
-      binary = <<65, 66, 67>>
-      result = :binary.copy(binary, 2)
-      assert result === <<65, 66, 67, 65, 66, 67>>
+    test "bytes-based, non-empty binary, multiple times" do
+      result = :binary.copy(<<65, 66, 67>>, 3)
+      expected = <<65, 66, 67, 65, 66, 67, 65, 66, 67>>
+
+      assert result == expected
     end
 
     test "raises ArgumentError if the first argument is not a bitstring" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a binary"),
-                   {:binary, :copy, [:not_binary, 2]}
+                   {:binary, :copy, [:abc, 3]}
     end
 
     test "raises ArgumentError if the first argument is a non-binary bitstring" do
-      bitstring = <<1::3>>
-
       assert_error ArgumentError,
                    build_argument_error_msg(1, "is a bitstring (expected a binary)"),
-                   {:binary, :copy, [bitstring, 2]}
+                   {:binary, :copy, [<<1::1, 0::1, 1::1>>, 3]}
     end
 
     test "raises ArgumentError if the second argument is not an integer" do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "not an integer"),
-                   {:binary, :copy, ["test", :not_integer]}
+                   {:binary, :copy, ["hello", :abc]}
     end
 
     test "raises ArgumentError if count is negative" do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "out of range"),
-                   {:binary, :copy, ["test", -1]}
+                   {:binary, :copy, ["hello", -1]}
     end
   end
 end

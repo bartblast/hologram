@@ -4,9 +4,13 @@ import Bitstring from "../bitstring.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
+// IMPORTANT!
+// If the given ported Erlang function calls other Erlang functions, then list such dependencies in the "Deps" comment (see :erlang./=/2 for an example).
+// Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
+
 const Erlang_Binary = {
   // Start at/2
-  "at/2": function (subject, pos) {
+  "at/2": (subject, pos) => {
     if (!Type.isBinary(subject)) {
       const msg = Type.isBitstring(subject)
         ? "is a bitstring (expected a binary)"
@@ -39,7 +43,7 @@ const Erlang_Binary = {
   // Deps: []
 
   // Start copy/2
-  "copy/2": function (subject, count) {
+  "copy/2": (subject, count) => {
     if (!Type.isBinary(subject)) {
       const msg = Type.isBitstring(subject)
         ? "is a bitstring (expected a binary)"
