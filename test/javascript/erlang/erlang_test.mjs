@@ -2534,7 +2534,9 @@ describe("Erlang", () => {
 
     it("{:decimals, 0}", () => {
       const floatVal = Type.float(7.12);
-      const opts = Type.list([Type.tuple([Type.atom("decimals"), Type.integer(0)])]);
+      const opts = Type.list([
+        Type.tuple([Type.atom("decimals"), Type.integer(0)]),
+      ]);
       const result = float_to_binary(floatVal, opts);
       const expected = Type.bitstring("7");
 
@@ -2543,7 +2545,9 @@ describe("Erlang", () => {
 
     it("{:decimals, 1}", () => {
       const floatVal = Type.float(7.12);
-      const opts = Type.list([Type.tuple([Type.atom("decimals"), Type.integer(1)])]);
+      const opts = Type.list([
+        Type.tuple([Type.atom("decimals"), Type.integer(1)]),
+      ]);
       const result = float_to_binary(floatVal, opts);
       const expected = Type.bitstring("7.1");
 
@@ -2552,7 +2556,9 @@ describe("Erlang", () => {
 
     it("{:decimals, 4}", () => {
       const floatVal = Type.float(7.12);
-      const opts = Type.list([Type.tuple([Type.atom("decimals"), Type.integer(4)])]);
+      const opts = Type.list([
+        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+      ]);
       const result = float_to_binary(floatVal, opts);
       const expected = Type.bitstring("7.1200");
 
@@ -2561,7 +2567,9 @@ describe("Erlang", () => {
 
     it("{:decimals, 10}", () => {
       const floatVal = Type.float(1.5);
-      const opts = Type.list([Type.tuple([Type.atom("decimals"), Type.integer(10)])]);
+      const opts = Type.list([
+        Type.tuple([Type.atom("decimals"), Type.integer(10)]),
+      ]);
       const result = float_to_binary(floatVal, opts);
       const expected = Type.bitstring("1.5000000000");
 
@@ -2569,7 +2577,7 @@ describe("Erlang", () => {
     });
 
     it("{:decimals, 4}, :compact - non-zero decimal", () => {
-      const floatVal = Type.float(7.120000);
+      const floatVal = Type.float(7.12);
       const opts = Type.list([
         Type.tuple([Type.atom("decimals"), Type.integer(4)]),
         Type.atom("compact"),
@@ -2581,7 +2589,7 @@ describe("Erlang", () => {
     });
 
     it(":compact, {:decimals, 4} - non-zero decimal", () => {
-      const floatVal = Type.float(7.120000);
+      const floatVal = Type.float(7.12);
       const opts = Type.list([
         Type.atom("compact"),
         Type.tuple([Type.atom("decimals"), Type.integer(4)]),
@@ -2593,7 +2601,7 @@ describe("Erlang", () => {
     });
 
     it("{:decimals, 3}, :compact - zero decimal", () => {
-      const floatVal = Type.float(700.000);
+      const floatVal = Type.float(700.0);
       const opts = Type.list([
         Type.tuple([Type.atom("decimals"), Type.integer(3)]),
         Type.atom("compact"),
@@ -2605,7 +2613,7 @@ describe("Erlang", () => {
     });
 
     it(":compact, {:decimals, 3} - zero decimal", () => {
-      const floatVal = Type.float(700.000);
+      const floatVal = Type.float(700.0);
       const opts = Type.list([
         Type.atom("compact"),
         Type.tuple([Type.atom("decimals"), Type.integer(3)]),
@@ -2617,7 +2625,7 @@ describe("Erlang", () => {
     });
 
     it("{:decimals, 0}, :compact - zero decimal", () => {
-      const floatVal = Type.float(800.000);
+      const floatVal = Type.float(800.0);
       const opts = Type.list([
         Type.tuple([Type.atom("decimals"), Type.integer(0)]),
         Type.atom("compact"),
@@ -2629,7 +2637,7 @@ describe("Erlang", () => {
     });
 
     it(":compact, {:decimals, 0} - zero decimal", () => {
-      const floatVal = Type.float(800.000);
+      const floatVal = Type.float(800.0);
       const opts = Type.list([
         Type.atom("compact"),
         Type.tuple([Type.atom("decimals"), Type.integer(0)]),
@@ -2642,7 +2650,9 @@ describe("Erlang", () => {
 
     it("{:scientific, 4}", () => {
       const floatVal = Type.float(7.12);
-      const opts = Type.list([Type.tuple([Type.atom("scientific"), Type.integer(4)])]);
+      const opts = Type.list([
+        Type.tuple([Type.atom("scientific"), Type.integer(4)]),
+      ]);
       const result = float_to_binary(floatVal, opts);
       const expected = Type.bitstring("7.1200e+00");
 
@@ -2651,7 +2661,9 @@ describe("Erlang", () => {
 
     it("{:scientific, 0}", () => {
       const floatVal = Type.float(7.12);
-      const opts = Type.list([Type.tuple([Type.atom("scientific"), Type.integer(0)])]);
+      const opts = Type.list([
+        Type.tuple([Type.atom("scientific"), Type.integer(0)]),
+      ]);
       const result = float_to_binary(floatVal, opts);
       const expected = Type.bitstring("7e+00");
 
@@ -2660,7 +2672,9 @@ describe("Erlang", () => {
 
     it("{:scientific, 6}", () => {
       const floatVal = Type.float(12345.6);
-      const opts = Type.list([Type.tuple([Type.atom("scientific"), Type.integer(6)])]);
+      const opts = Type.list([
+        Type.tuple([Type.atom("scientific"), Type.integer(6)]),
+      ]);
       const result = float_to_binary(floatVal, opts);
       const expected = Type.bitstring("1.234560e+04");
 
@@ -2669,7 +2683,9 @@ describe("Erlang", () => {
 
     it("{:scientific, 10}", () => {
       const floatVal = Type.float(0.00012345);
-      const opts = Type.list([Type.tuple([Type.atom("scientific"), Type.integer(10)])]);
+      const opts = Type.list([
+        Type.tuple([Type.atom("scientific"), Type.integer(10)]),
+      ]);
       const result = float_to_binary(floatVal, opts);
       const expected = Type.bitstring("1.2345000000e-04");
 

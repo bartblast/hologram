@@ -605,8 +605,9 @@ const Erlang = {
           );
         }
       } else {
+        const key = opt.data[0];
         throw new HologramInterpreterError(
-          ":erlang.float_to_binary/2 invalid option format in Hologram",
+          `:erlang.float_to_binary/2 option ${key.value} is not supported in Hologram`,
         );
       }
     }
