@@ -1345,6 +1345,21 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.band(15, -5) == 11
     end
 
+    test "works with large numbers" do
+      # Number.MAX_SAFE_INTEGER = 9007199254740991
+      # = 0b11111111111111111111111111111111111111111111111111111
+      #
+      # 2 * 9007199254740991 = 18014398509481983
+      # = 0b111111111111111111111111111111111111111111111111111111
+      #
+      # 18014398509481982 = 0b111111111111111111111111111111111111111111111111111110  
+
+      left = 18_014_398_509_481_983
+      right = 18_014_398_509_481_982
+
+      assert :erlang.band(left, right) == right
+    end
+
     test "raises ArithmeticError if the first argument is not an integer" do
       assert_error ArithmeticError,
                    "bad argument in arithmetic expression: Bitwise.band(5.0, 3)",

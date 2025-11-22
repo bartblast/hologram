@@ -1589,6 +1589,23 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, integer11);
     });
 
+    it("works with large numbers", () => {
+      // Number.MAX_SAFE_INTEGER = 9007199254740991
+      // = 0b11111111111111111111111111111111111111111111111111111
+      //
+      // 2 * 9007199254740991 = 18014398509481983
+      // = 0b111111111111111111111111111111111111111111111111111111
+      //
+      // 18014398509481982 = 0b111111111111111111111111111111111111111111111111111110
+
+      const left = Type.integer(18014398509481983n);
+      const right = Type.integer(18014398509481982n);
+
+      const result = testedFun(left, right);
+
+      assert.deepStrictEqual(result, right);
+    });
+
     it("raises ArithmeticError if the first argument is not an integer", () => {
       assertBoxedError(
         () => testedFun(float5, integer3),
