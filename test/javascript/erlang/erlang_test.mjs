@@ -2169,15 +2169,39 @@ describe("Erlang", () => {
     const insert_element = Erlang["insert_element/3"];
 
     it("inserts the given value into the tuple at the given index", () => {
-      const tuple = insert_element(integer2, tuple2, atomA);
+      const result = insert_element(integer2, tuple2, atomA);
 
-      assert.deepStrictEqual(tuple, Type.tuple([integer1, atomA, integer2]));
+      assert.deepStrictEqual(result, Type.tuple([integer1, atomA, integer2]));
+    });
+
+    it("inserts the given value at the beginning of the tuple", () => {
+      const result = insert_element(integer1, tuple2, atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([atomA, integer1, integer2]));
     });
 
     it("inserts the given value at the end of the tuple", () => {
-      const tuple = insert_element(integer3, tuple2, atomA);
+      const result = insert_element(integer3, tuple2, atomA);
 
-      assert.deepStrictEqual(tuple, Type.tuple([integer1, integer2, atomA]));
+      assert.deepStrictEqual(result, Type.tuple([integer1, integer2, atomA]));
+    });
+
+    it("inserts the given value into an empty tuple", () => {
+      const result = insert_element(integer1, Type.tuple(), atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([atomA]));
+    });
+
+    it("inserts the given value at the beginning of a one-element tuple", () => {
+      const result = insert_element(integer1, Type.tuple([integer1]), atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([atomA, integer1]));
+    });
+
+    it("inserts the given value at the end of a one-element tuple", () => {
+      const result = insert_element(integer2, Type.tuple([integer1]), atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([integer1, atomA]));
     });
 
     it("raises ArgumentError if the first argument is not an integer", () => {

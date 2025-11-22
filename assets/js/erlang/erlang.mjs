@@ -574,7 +574,7 @@ const Erlang = {
       );
     }
 
-    if (index.value <= 0 || index.value > tuple.data.length + 1) {
+    if (index.value <= 0n || index.value > tuple.data.length + 1) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );

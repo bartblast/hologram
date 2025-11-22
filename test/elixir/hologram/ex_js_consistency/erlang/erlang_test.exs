@@ -1648,8 +1648,24 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.insert_element(2, {1, 2}, :a) === {1, :a, 2}
     end
 
+    test "inserts the given value at the beginning of the tuple" do
+      assert :erlang.insert_element(1, {1, 2}, :a) === {:a, 1, 2}
+    end
+
     test "inserts the given value at the end of the tuple" do
       assert :erlang.insert_element(3, {1, 2}, :a) === {1, 2, :a}
+    end
+
+    test "inserts the given value into an empty tuple" do
+      assert :erlang.insert_element(1, {}, :a) === {:a}
+    end
+
+    test "inserts the given value at the beginning of a one-element tuple" do
+      assert :erlang.insert_element(1, {1}, :a) === {:a, 1}
+    end
+
+    test "inserts the given value at the end of a one-element tuple" do
+      assert :erlang.insert_element(2, {1}, :a) === {1, :a}
     end
 
     test "raises ArgumentError if the first argument is not an integer" do
