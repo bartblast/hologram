@@ -1539,6 +1539,74 @@ describe("Erlang", () => {
     });
   });
 
+  describe("band/2", () => {
+    const testedFun = Erlang["band/2"];
+
+    it("valid integers", () => {
+      const left = Type.integer(5n); // 0b0101
+      const right = Type.integer(3n); // 0b0011
+      const result = testedFun(left, right);
+      const expected = Type.integer(1n); // 0b0001
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles zero correctly (both 0n)", () => {
+      const left = Type.integer(0n);
+      const right = Type.integer(0n);
+      const result = testedFun(left, right);
+      const expected = Type.integer(0n);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles zero correctly (left 0n)", () => {
+      const left = Type.integer(0n);
+      const right = Type.integer(5n);
+      const result = testedFun(left, right);
+      const expected = Type.integer(0n);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles negative integers", () => {
+      const left = Type.integer(-1n); // -0b1111
+      const right = Type.integer(5n);
+
+      const result = testedFun(left, right);
+      const expected = Type.integer(5n);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("handles very large integers", () => {
+      const left = Type.integer(2n ** 1990n - 1n);
+      const right = Type.integer(2n ** 2000n - 1n);
+
+      const result = testedFun(left, right);
+
+      const expected = Type.integer(2n ** 1990n - 1n);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError on non-integer left argument", () => {
+      const left = Type.float(4.0);
+      const right = Type.integer(2n);
+      assertBoxedError(
+        () => testedFun(left, right),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.band(4.0, 2)",
+      );
+    });
+
+    it("raises ArgumentError on non-integer right argument", () => {
+      const left = Type.integer(5n);
+      const right = Type.float(3.0);
+      assertBoxedError(
+        () => testedFun(left, right),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.band(5, 3.0)",
+      );
+    });
+  });
+
   describe("binary_to_atom/1", () => {
     it("delegates to binary_to_atom/2", () => {
       const binary = Type.bitstring("全息图");
