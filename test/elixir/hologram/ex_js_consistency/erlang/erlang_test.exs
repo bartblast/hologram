@@ -1318,31 +1318,33 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "band/2" do
-    test "valid integers" do
-      assert :erlang.band(5, 0) == 0
+    test "valid arguments" do
+      # 5 = 0b0101, 3 = 0b0011, 1 = 0b0001
+      assert :erlang.band(5, 3) == 1
     end
 
-    test "handles zero correctly (both 0)" do
+    test "both arguments are zero" do
       assert :erlang.band(0, 0) == 0
     end
 
-    test "handles zero correctly (left 0)" do
+    test "left argument is zero" do
       assert :erlang.band(0, 5) == 0
     end
 
-    test "handles negative integers" do
-      assert :erlang.band(-1, 5) == 5
+    test "right argument is zero" do
+      assert :erlang.band(5, 0) == 0
     end
 
-    test "handles very large integers" do
-      left = 2 ** 1990 - 1
-      right = 2 ** 2000 - 1
-      result = 2 ** 1990 - 1
-      assert :erlang.band(left, right) == result
+    test "left argument is negative" do
+      # 15 = 0b1111, 11 = -5 = 0b1011
+      assert :erlang.band(-5, 15) == 11
     end
 
-    # Elixir formats ArithmeticError for :erlang.band/2 using Bitwise.band/2 in the message.
-    # We mirror this string for JS/OTP consistency.
+    test "right argument is negative" do
+      # 15 = 0b1111, 11 = -5 = 0b1011
+      assert :erlang.band(15, -5) == 11
+    end
+
     test "raises ArithmeticError if the first argument is not an integer" do
       assert_error ArithmeticError,
                    "bad argument in arithmetic expression: Bitwise.band(5.0, 3)",

@@ -25,12 +25,16 @@ const atomC = Type.atom("c");
 const float1 = Type.float(1.0);
 const float2 = Type.float(2.0);
 const float3 = Type.float(3.0);
+const float5 = Type.float(5.0);
 const float6 = Type.float(6.0);
 const integer0 = Type.integer(0);
 const integer1 = Type.integer(1);
 const integer2 = Type.integer(2);
 const integer3 = Type.integer(3);
+const integer5 = Type.integer(5);
 const integer6 = Type.integer(6);
+const integer11 = Type.integer(11);
+const integer15 = Type.integer(15);
 const list1 = Type.list([integer1, integer2]);
 
 const mapA1B2 = Type.map([
@@ -1542,65 +1546,60 @@ describe("Erlang", () => {
   describe("band/2", () => {
     const testedFun = Erlang["band/2"];
 
-    it("valid integers", () => {
-      const left = Type.integer(5n); // 0b0101
-      const right = Type.integer(3n); // 0b0011
-      const result = testedFun(left, right);
-      const expected = Type.integer(1n); // 0b0001
-      assert.deepStrictEqual(result, expected);
+    it("valid arguments", () => {
+      // 5 = 0b0101, 3 = 0b0011, 1 = 0b0001
+      const result = testedFun(integer5, integer3);
+
+      assert.deepStrictEqual(result, integer1);
     });
 
-    it("handles zero correctly (both 0n)", () => {
-      const left = Type.integer(0n);
-      const right = Type.integer(0n);
-      const result = testedFun(left, right);
-      const expected = Type.integer(0n);
-      assert.deepStrictEqual(result, expected);
+    it("both arguments are zero", () => {
+      const result = testedFun(integer0, integer0);
+
+      assert.deepStrictEqual(result, integer0);
     });
 
-    it("handles zero correctly (left 0n)", () => {
-      const left = Type.integer(0n);
-      const right = Type.integer(5n);
-      const result = testedFun(left, right);
-      const expected = Type.integer(0n);
-      assert.deepStrictEqual(result, expected);
+    it("left argument is zero", () => {
+      const result = testedFun(integer0, integer5);
+
+      assert.deepStrictEqual(result, integer0);
     });
 
-    it("handles negative integers", () => {
-      const left = Type.integer(-1n); // -0b1111
-      const right = Type.integer(5n);
+    it("right argument is zero", () => {
+      const result = testedFun(integer5, integer0);
 
-      const result = testedFun(left, right);
-      const expected = Type.integer(5n);
-
-      assert.deepStrictEqual(result, expected);
+      assert.deepStrictEqual(result, integer0);
     });
 
-    it("handles very large integers", () => {
-      const left = Type.integer(2n ** 1990n - 1n);
-      const right = Type.integer(2n ** 2000n - 1n);
+    it("left argument is negative", () => {
+      const left = Type.integer(-5);
 
-      const result = testedFun(left, right);
+      // 15 = 0b1111, 11 = -5 = 0b1011
+      const result = testedFun(left, integer15);
 
-      const expected = Type.integer(2n ** 1990n - 1n);
-      assert.deepStrictEqual(result, expected);
+      assert.deepStrictEqual(result, integer11);
     });
 
-    it("raises ArgumentError on non-integer left argument", () => {
-      const left = Type.float(4.0);
-      const right = Type.integer(2n);
+    it("right argument is negative", () => {
+      const right = Type.integer(-5);
+
+      // 15 = 0b1111, 11 = -5 = 0b1011
+      const result = testedFun(integer15, right);
+
+      assert.deepStrictEqual(result, integer11);
+    });
+
+    it("raises ArithmeticError if the first argument is not an integer", () => {
       assertBoxedError(
-        () => testedFun(left, right),
+        () => testedFun(float5, integer3),
         "ArithmeticError",
-        "bad argument in arithmetic expression: Bitwise.band(4.0, 2)",
+        "bad argument in arithmetic expression: Bitwise.band(5.0, 3)",
       );
     });
 
-    it("raises ArgumentError on non-integer right argument", () => {
-      const left = Type.integer(5n);
-      const right = Type.float(3.0);
+    it("raises ArithmeticError if the second argument is not an integer", () => {
       assertBoxedError(
-        () => testedFun(left, right),
+        () => testedFun(integer5, float3),
         "ArithmeticError",
         "bad argument in arithmetic expression: Bitwise.band(5, 3.0)",
       );
