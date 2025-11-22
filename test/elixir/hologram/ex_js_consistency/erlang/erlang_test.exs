@@ -1650,6 +1650,134 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "bsr/2" do
+    # Positive integer, positive shift
+    test "positive integer, positive shift: 16 >> 1" do
+      assert :erlang.bsr(16, 1) == 8
+    end
+
+    test "positive integer, positive shift: 255 >> 4" do
+      assert :erlang.bsr(255, 4) == 15
+    end
+
+    test "positive integer, positive shift: large number" do
+      assert :erlang.bsr(1_000_000_000_000_000_000, 1) == 500_000_000_000_000_000
+    end
+
+    # Positive integer, zero shift
+    test "positive integer, zero shift: 16 >> 0" do
+      assert :erlang.bsr(16, 0) == 16
+    end
+
+    test "positive integer, zero shift: 255 >> 0" do
+      assert :erlang.bsr(255, 0) == 255
+    end
+
+    # Positive integer, negative shift (expected left shift)
+    test "positive integer, negative shift: 16 >> -1 (expected 16 << 1)" do
+      assert :erlang.bsr(16, -1) == 32
+    end
+
+    test "positive integer, negative shift: 1 >> -4 (expected 1 << 4)" do
+      assert :erlang.bsr(1, -4) == 16
+    end
+
+    test "positive integer, negative shift: large number" do
+      assert :erlang.bsr(1_000_000_000_000_000_000, -1) == 2_000_000_000_000_000_000
+    end
+
+    # Negative integer, positive shift (arithmetic shift)
+    test "negative integer, positive shift: -16 >> 1" do
+      assert :erlang.bsr(-16, 1) == -8
+    end
+
+    test "negative integer, positive shift: -255 >> 4" do
+      assert :erlang.bsr(-255, 4) == -16
+    end
+
+    test "negative integer, positive shift: large number" do
+      assert :erlang.bsr(-1_000_000_000_000_000_000, 1) == -500_000_000_000_000_000
+    end
+
+    # Negative integer, zero shift
+    test "negative integer, zero shift: -16 >> 0" do
+      assert :erlang.bsr(-16, 0) == -16
+    end
+
+    test "negative integer, zero shift: -255 >> 0" do
+      assert :erlang.bsr(-255, 0) == -255
+    end
+
+    # Negative integer, negative shift (expected left shift)
+    test "negative integer, negative shift: -16 >> -1 (expected -16 << 1)" do
+      assert :erlang.bsr(-16, -1) == -32
+    end
+
+    test "negative integer, negative shift: -1 >> -4 (expected -1 << 4)" do
+      assert :erlang.bsr(-1, -4) == -16
+    end
+
+    test "negative integer, negative shift: large number" do
+      assert :erlang.bsr(-1_000_000_000_000_000_000, -1) == -2_000_000_000_000_000_000
+    end
+
+    # Large shifts
+    test "large shift: 1 >> 64" do
+      assert :erlang.bsr(1, 64) == 0
+    end
+
+    test "large shift: -1 >> 64 (sign extended)" do
+      assert :erlang.bsr(-1, 64) == -1
+    end
+
+    test "large shift: 100 >> 100" do
+      assert :erlang.bsr(100, 100) == 0
+    end
+
+    test "large shift: -100 >> 100 (sign extended)" do
+      assert :erlang.bsr(-100, 100) == -1
+    end
+
+    test "large shift: 1_000_000_000_000_000_000_000_000_000_000_000_000 >> 100" do
+      assert :erlang.bsr(1_000_000_000_000_000_000_000_000_000_000_000_000, 100) == 788_860
+    end
+
+    test "large shift: -1_000_000_000_000_000_000_000_000_000_000_000_000 >> 100 (sign extended)" do
+      assert :erlang.bsr(-1_000_000_000_000_000_000_000_000_000_000_000_000, 100) == -788_861
+    end
+
+    # Non-integer inputs (expect ArithmeticError)
+    test "raises ArithmeticError if the first argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bsr(10.0, 1)",
+                   {:erlang, :bsr, [10.0, 1]}
+    end
+
+    test "raises ArithmeticError if the second argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bsr(10, 1.0)",
+                   {:erlang, :bsr, [10, 1.0]}
+    end
+
+    test "raises ArithmeticError if both arguments are not integers" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bsr(10.0, 1.0)",
+                   {:erlang, :bsr, [10.0, 1.0]}
+    end
+
+    test "raises ArithmeticError if the first argument is not a number" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bsr(:abc, 1)",
+                   {:erlang, :bsr, [:abc, 1]}
+    end
+
+    test "raises ArithmeticError if the second argument is not a number" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bsr(10, :abc)",
+                   {:erlang, :bsr, [10, :abc]}
+    end
+  end
+
   describe "byte_size/1" do
     test "empty bitstring" do
       assert :erlang.byte_size("") == 0
