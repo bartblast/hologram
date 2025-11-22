@@ -41,6 +41,12 @@ const Erlang_Maps = {
       );
     }
 
+    if (!Type.isProperList(keys)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
     return Type.map(keys.data.map((key) => [key, value]));
   },
   // End from_keys/2
