@@ -32,6 +32,7 @@ export default [
         Erlang: "readonly",
         Erlang_Code: "readonly",
         Erlang_Lists: "readonly",
+        Erlang_Math: "readonly",
         Erlang_Maps: "readonly",
       },
       sourceType: "module",
