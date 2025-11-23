@@ -16,7 +16,8 @@ const Erlang_Math = {
       );
     }
 
-    return Type.float(Math.ceil(x.value));
+    const numericValue = Type.isInteger(x) ? Number(x.value) : x.value;
+    return Type.float(Math.ceil(numericValue));
   },
   // End ceil/1
   // Deps: []

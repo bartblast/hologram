@@ -37,7 +37,7 @@ describe("Erlang_Math", () => {
     });
 
     it("keeps signed negative zero float unchanged", () => {
-      assert.deepStrictEqual(testedFun(Type.float(-0.0)), Type.float(0.0));
+      assert.deepStrictEqual(testedFun(Type.float(-0.0)), Type.float(-0.0));
     });
 
     it("keeps signed positive zero float unchanged", () => {
