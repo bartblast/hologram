@@ -312,6 +312,20 @@ const Erlang = {
   // End atom_to_list/1
   // Deps: []
 
+  // Start band/2
+  "band/2": (integer1, integer2) => {
+    if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
+      const arg1 = Interpreter.inspect(integer1);
+      const arg2 = Interpreter.inspect(integer2);
+
+      Interpreter.raiseArithmeticError(`Bitwise.band(${arg1}, ${arg2})`);
+    }
+
+    return Type.integer(integer1.value & integer2.value);
+  },
+  // End band/2
+  // Deps: []
+
   // Start binary_to_atom/1
   "binary_to_atom/1": (binary) => {
     return Erlang["binary_to_atom/2"](binary, Type.atom("utf8"));
@@ -358,6 +372,32 @@ const Erlang = {
   },
   // End binary_to_existing_atom/2
   // Deps: [:erlang.binary_to_atom/2]
+
+  // Start binary_to_float/1
+  "binary_to_float/1": (binary) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    const text = Bitstring.toText(binary);
+
+    const floatRegex = /^[+-]?\d+\.\d+([eE][+-]?\d+)?$/;
+
+    if (!floatRegex.test(text)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    }
+
+    return Type.float(Number(text));
+  },
+  // End binary_to_float/1
+  // Deps: []
 
   // Start binary_to_integer/1
   "binary_to_integer/1": (binary) => {
@@ -442,6 +482,23 @@ const Erlang = {
     return Type.integer(bitstring.bytes.length);
   },
   // End byte_size/1
+  // Deps: []
+
+  // Start ceil/1
+  "ceil/1": (number) => {
+    if (!Type.isNumber(number)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    }
+
+    if (Type.isInteger(number)) {
+      return number;
+    }
+
+    return Type.integer(Math.ceil(number.value));
+  },
+  // End ceil/1
   // Deps: []
 
   // Start div/2
@@ -696,6 +753,13 @@ const Erlang = {
   // End is_map/1
   // Deps: []
 
+  // Start is_map_key/2
+  "is_map_key/2": (key, map) => {
+    return Erlang_Maps["is_key/2"](key, map);
+  },
+  // End is_map_key/2
+  // Deps: [:maps.is_key/2]
+
   // Start is_number/1
   "is_number/1": (term) => {
     return Type.boolean(Type.isNumber(term));
@@ -788,6 +852,22 @@ const Erlang = {
     );
   },
   // End list_to_pid/1
+  // Deps: []
+
+  // Start make_tuple/2
+  "make_tuple/2": (arity, value) => {
+    // The Erlang implementation says that the index is out of range even when it is not an integer
+    if (!Type.isInteger(arity) || arity.value < 0n) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    }
+
+    const data = Array(Number(arity.value)).fill(value);
+
+    return Type.tuple(data);
+  },
+  // End make_tuple/2
   // Deps: []
 
   // Start map_size/1
