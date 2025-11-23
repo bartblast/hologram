@@ -25,12 +25,16 @@ const atomC = Type.atom("c");
 const float1 = Type.float(1.0);
 const float2 = Type.float(2.0);
 const float3 = Type.float(3.0);
+const float5 = Type.float(5.0);
 const float6 = Type.float(6.0);
 const integer0 = Type.integer(0);
 const integer1 = Type.integer(1);
 const integer2 = Type.integer(2);
 const integer3 = Type.integer(3);
+const integer5 = Type.integer(5);
 const integer6 = Type.integer(6);
+const integer11 = Type.integer(11);
+const integer15 = Type.integer(15);
 const list1 = Type.list([integer1, integer2]);
 
 const mapA1B2 = Type.map([
@@ -1535,6 +1539,86 @@ describe("Erlang", () => {
         () => atom_to_list(Type.integer(123)),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    });
+  });
+
+  describe("band/2", () => {
+    const testedFun = Erlang["band/2"];
+
+    it("valid arguments", () => {
+      // 5 = 0b0101, 3 = 0b0011, 1 = 0b0001
+      const result = testedFun(integer5, integer3);
+
+      assert.deepStrictEqual(result, integer1);
+    });
+
+    it("both arguments are zero", () => {
+      const result = testedFun(integer0, integer0);
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("left argument is zero", () => {
+      const result = testedFun(integer0, integer5);
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("right argument is zero", () => {
+      const result = testedFun(integer5, integer0);
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("left argument is negative", () => {
+      const left = Type.integer(-5);
+
+      // 15 = 0b1111, 11 = -5 = 0b1011
+      const result = testedFun(left, integer15);
+
+      assert.deepStrictEqual(result, integer11);
+    });
+
+    it("right argument is negative", () => {
+      const right = Type.integer(-5);
+
+      // 15 = 0b1111, 11 = -5 = 0b1011
+      const result = testedFun(integer15, right);
+
+      assert.deepStrictEqual(result, integer11);
+    });
+
+    it("works with large numbers", () => {
+      // Number.MAX_SAFE_INTEGER = 9007199254740991
+      // = 0b11111111111111111111111111111111111111111111111111111
+      //
+      // 2 * 9007199254740991 = 18014398509481983
+      // = 0b111111111111111111111111111111111111111111111111111111
+      //
+      // 18014398509481982 = 0b111111111111111111111111111111111111111111111111111110
+
+      const left = Type.integer(18014398509481983n);
+      const right = Type.integer(18014398509481982n);
+
+      const result = testedFun(left, right);
+
+      assert.deepStrictEqual(result, right);
+    });
+
+    it("raises ArithmeticError if the first argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(float5, integer3),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.band(5.0, 3)",
+      );
+    });
+
+    it("raises ArithmeticError if the second argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(integer5, float3),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.band(5, 3.0)",
       );
     });
   });

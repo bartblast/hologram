@@ -1317,6 +1317,62 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "band/2" do
+    test "valid arguments" do
+      # 5 = 0b0101, 3 = 0b0011, 1 = 0b0001
+      assert :erlang.band(5, 3) == 1
+    end
+
+    test "both arguments are zero" do
+      assert :erlang.band(0, 0) == 0
+    end
+
+    test "left argument is zero" do
+      assert :erlang.band(0, 5) == 0
+    end
+
+    test "right argument is zero" do
+      assert :erlang.band(5, 0) == 0
+    end
+
+    test "left argument is negative" do
+      # 15 = 0b1111, 11 = -5 = 0b1011
+      assert :erlang.band(-5, 15) == 11
+    end
+
+    test "right argument is negative" do
+      # 15 = 0b1111, 11 = -5 = 0b1011
+      assert :erlang.band(15, -5) == 11
+    end
+
+    test "works with large numbers" do
+      # Number.MAX_SAFE_INTEGER = 9007199254740991
+      # = 0b11111111111111111111111111111111111111111111111111111
+      #
+      # 2 * 9007199254740991 = 18014398509481983
+      # = 0b111111111111111111111111111111111111111111111111111111
+      #
+      # 18014398509481982 = 0b111111111111111111111111111111111111111111111111111110
+
+      left = 18_014_398_509_481_983
+      right = 18_014_398_509_481_982
+
+      assert :erlang.band(left, right) == right
+    end
+
+    test "raises ArithmeticError if the first argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.band(5.0, 3)",
+                   {:erlang, :band, [5.0, 3]}
+    end
+
+    test "raises ArithmeticError if the second argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.band(5, 3.0)",
+                   {:erlang, :band, [5, 3.0]}
+    end
+  end
+
   if SystemUtils.otp_version() >= 23 do
     test "binary_to_atom/1" do
       # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
