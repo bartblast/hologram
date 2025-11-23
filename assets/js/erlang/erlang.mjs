@@ -854,6 +854,7 @@ const Erlang = {
         Interpreter.buildArgumentErrorMsg(1, "not a list"),
       );
     }
+
     if (!Type.isInteger(base) || base.value < 2n || base.value > 36n) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(
@@ -862,6 +863,7 @@ const Erlang = {
         ),
       );
     }
+
     if (list.data.length === 0) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(
