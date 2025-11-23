@@ -569,6 +569,19 @@ const Erlang = {
   // End error/2
   // Deps: []
 
+  // Start float/1
+  "float/1": (number) => {
+    if (!Type.isNumber(number)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    }
+
+    return Type.float(Number(number.value));
+  },
+  // End float/1
+  // Deps: []
+
   // Start float_to_binary/2
   "float_to_binary/2": (float, opts) => {
     if (!Type.isFloat(float)) {

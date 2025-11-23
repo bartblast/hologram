@@ -1,5 +1,10 @@
 "use strict";
 
+import Bitstring from "../../../assets/js/bitstring.mjs";
+import Erlang from "../../../assets/js/erlang/erlang.mjs";
+import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
+import Interpreter from "../../../assets/js/interpreter.mjs";
+import Type from "../../../assets/js/type.mjs";
 import {
   assert,
   assertBoxedError,
@@ -9,12 +14,6 @@ import {
   contextFixture,
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
-
-import Bitstring from "../../../assets/js/bitstring.mjs";
-import Erlang from "../../../assets/js/erlang/erlang.mjs";
-import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
-import Interpreter from "../../../assets/js/interpreter.mjs";
-import Type from "../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
@@ -2559,6 +2558,36 @@ describe("Erlang", () => {
     const args = Type.list([Type.integer(1, Type.integer(2))]);
 
     assertBoxedError(() => error(reason, args), "MyError", "my message");
+  });
+
+  describe("float/1", () => {
+    const float = Erlang["float/1"];
+
+    const integer = Type.integer(123);
+    const floating_num = Type.float(0.1 + 0.2);
+    const atom = Type.atom("abc");
+
+    it("returns float for integer", () => {
+      const result = float(integer);
+      const expected = Type.float(123.0);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("is idempotent for float", () => {
+      const result = float(floating_num);
+      const expected = floating_num;
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if the argument is not a number", () => {
+      assertBoxedError(
+        () => float(atom),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    });
   });
 
   describe("float_to_binary/2", () => {
