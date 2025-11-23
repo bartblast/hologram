@@ -610,15 +610,7 @@ const Erlang = {
 
   // Start integer_to_list/1
   "integer_to_list/1": (integer) => {
-    if (!Type.isInteger(integer)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
-      );
-    }
-
-    const text = integer.value.toString();
-
-    return Type.bitstring(text);
+    return Erlang["integer_to_list/2"](integer, Type.integer(10));
   },
   // End integer_to_list/1
   // Deps: []
@@ -631,7 +623,7 @@ const Erlang = {
       );
     }
 
-    if (!Type.isInteger(base)) {
+    if (!Type.isInteger(base) || base.value < 2n || base.value > 36n) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(
           2,
@@ -640,22 +632,9 @@ const Erlang = {
       );
     }
 
-    const baseValue = Number(base.value);
+    const text = integer.value.toString(Number(base.value)).toUpperCase();
 
-    if (baseValue < 2 || baseValue > 36) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "not an integer in the range 2 through 36",
-        ),
-      );
-    }
-
-    const raw = integer.value.toString(baseValue);
-
-    const text = raw.toUpperCase();
-
-    return Type.bitstring(text);
+    return Bitstring.toCodepoints(Type.bitstring(text));
   },
   // End integer_to_list/2
   // Deps: []

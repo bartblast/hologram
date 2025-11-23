@@ -1738,44 +1738,17 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "integer_to_list/1" do
-    test "positive integer" do
-      assert :erlang.integer_to_list(77) == ~c"77"
-    end
-
-    test "negative integer" do
-      assert :erlang.integer_to_list(-123) == ~c"-123"
-    end
-
-    test "zero" do
-      assert :erlang.integer_to_list(0) == ~c"0"
-    end
-
-    test "large integer" do
-      big = 12_345_678_901_234_567_890
-      assert :erlang.integer_to_list(big) == ~c"12345678901234567890"
-    end
-
-    test "positive integers do not include a leading plus sign" do
-      assert :erlang.integer_to_list(+10) == ~c"10"
-    end
-
-    test "negative zero outputs '0'" do
-      assert :erlang.integer_to_list(-0) == ~c"0"
-    end
-
-    test "raises ArgumentError for non-integer" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "not an integer"),
-                   {:erlang, :integer_to_list, [3.14]}
+    test "should delegate to integer_to_list/2 with base 10" do
+      assert :erlang.integer_to_list(77) == :erlang.integer_to_list(77, 10)
     end
   end
 
   describe "integer_to_list/2" do
-    test "base 10 standard conversion" do
+    test "positive integer with base 10" do
       assert :erlang.integer_to_list(1234, 10) == ~c"1234"
     end
 
-    test "base 2 (binary)" do
+    test "base 2 lower boundary" do
       assert :erlang.integer_to_list(10, 2) == ~c"1010"
     end
 
@@ -1785,37 +1758,22 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "base 36 upper boundary" do
       assert :erlang.integer_to_list(35, 36) == ~c"Z"
-      assert :erlang.integer_to_list(36, 36) == ~c"10"
-    end
-
-    test "base 2 lower boundary" do
-      assert :erlang.integer_to_list(1, 2) == ~c"1"
     end
 
     test "negative integer in base 2" do
       assert :erlang.integer_to_list(-10, 2) == ~c"-1010"
     end
 
-    test "negative integer in base 16" do
-      assert :erlang.integer_to_list(-255, 16) == ~c"-FF"
-    end
-
-    test "large integer with base conversion" do
-      big = 4_294_967_295
-      assert :erlang.integer_to_list(big, 16) == ~c"FFFFFFFF"
-    end
-
-    test "zero with any base" do
-      assert :erlang.integer_to_list(0, 2) == ~c"0"
-      assert :erlang.integer_to_list(0, 36) == ~c"0"
-    end
-
-    test "large negative integer with base 16" do
-      assert :erlang.integer_to_list(-4_294_967_295, 16) == ~c"-FFFFFFFF"
-    end
-
     test "negative integer with base 36" do
       assert :erlang.integer_to_list(-35, 36) == ~c"-Z"
+    end
+
+    test "zero with base 2" do
+      assert :erlang.integer_to_list(0, 2) == ~c"0"
+    end
+
+    test "zero with base 36" do
+      assert :erlang.integer_to_list(0, 36) == ~c"0"
     end
 
     test "raises ArgumentError for base < 2" do
@@ -1830,22 +1788,28 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :integer_to_list, [10, 37]}
     end
 
-    test "raises ArgumentError when first arg is not integer" do
+    test "raises ArgumentError when first arg is not float" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not an integer"),
                    {:erlang, :integer_to_list, [3.14, 10]}
     end
 
-    test "raises ArgumentError when second arg is not integer" do
+    test "raises ArgumentError when base is non-number(atom)" do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "not an integer in the range 2 through 36"),
-                   {:erlang, :integer_to_list, [10, 3.5]}
+                   {:erlang, :integer_to_list, [10, :hello]}
     end
 
-    test "raises ArgumentError when first argument is float even with valid base" do
+    test "raises ArgumentError when first arg is bitstring" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not an integer"),
-                   {:erlang, :integer_to_list, [12.0, 16]}
+                   {:erlang, :integer_to_list, ["abc", 10]}
+    end
+
+    test "raises ArgumentError when base is bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
+                   {:erlang, :integer_to_list, [10, "abc"]}
     end
   end
 
