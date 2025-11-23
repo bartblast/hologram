@@ -51,7 +51,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
 
       assert_error ArgumentError,
                    ~r"errors were found at the given arguments:\n\n  \* 1st argument: not a number",
-                    {:math, :exp, [integer_string]}
+                   {:math, :exp, [integer_string]}
     end
 
     test "raises ArgumentError if the argument is a list" do
@@ -59,7 +59,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
 
       assert_error ArgumentError,
                    ~r"errors were found at the given arguments:\n\n  \* 1st argument: not a number",
-                  {:math, :exp, [list]}
+                   {:math, :exp, [list]}
     end
   end
 end
