@@ -47,19 +47,19 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
     end
 
     test "raises ArgumentError if the argument is a string" do
-      integer_string = "12345"
+      integer_string = prevent_term_typing_violation("12345")
 
-      assert_error ArgumentError, ~r"errors were found at the given arguments:\n\n  \* 1st argument: not a number", fn ->
-        :math.exp(integer_string)
-      end
+      assert_error ArgumentError,
+                   ~r"errors were found at the given arguments:\n\n  \* 1st argument: not a number",
+                    {:math, :exp, [integer_string]}
     end
 
     test "raises ArgumentError if the argument is a list" do
-      list = [1, 2]
+      list = prevent_term_typing_violation([1, 2])
 
-      assert_error ArgumentError, ~r"errors were found at the given arguments:\n\n  \* 1st argument: not a number", fn ->
-        :math.exp(list)
-      end
+      assert_error ArgumentError,
+                   ~r"errors were found at the given arguments:\n\n  \* 1st argument: not a number",
+                  {:math, :exp, [list]}
     end
   end
 end
