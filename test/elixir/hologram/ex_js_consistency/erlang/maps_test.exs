@@ -66,7 +66,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
   end
 
   describe "from_keys/2" do
-    test "creates a map with the given keys and value" do
+    test "creates a map with multiple keys" do
       assert :maps.from_keys([:a, :b], 1) === %{a: 1, b: 1}
     end
 

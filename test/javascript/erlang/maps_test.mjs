@@ -160,7 +160,7 @@ describe("Erlang_Maps", () => {
   describe("from_keys/2", () => {
     const from_keys = Erlang_Maps["from_keys/2"];
 
-    it("creates a map with the given keys and value", () => {
+    it("creates a map with multiple keys", () => {
       const keys = Type.list([atomA, atomB]);
       const result = from_keys(keys, integer1);
 
