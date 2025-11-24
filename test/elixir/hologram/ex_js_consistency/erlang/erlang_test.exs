@@ -2322,6 +2322,44 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "setelement/3" do
+    test "replaces the element at the given index" do
+      assert :erlang.setelement(2, {1, 2, 3}, :a) === {1, :a, 3}
+    end
+
+    test "replaces the first element" do
+      assert :erlang.setelement(1, {1, 2}, :a) === {:a, 2}
+    end
+
+    test "replaces the last element" do
+      assert :erlang.setelement(2, {1, 2}, :a) === {1, :a}
+    end
+
+    test "raises ArgumentError if the first argument is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an integer"),
+                   {:erlang, :setelement, [:a, {1, 2}, :a]}
+    end
+
+    test "raises ArgumentError if the second argument is not a tuple" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a tuple"),
+                   {:erlang, :setelement, [1, :b, :a]}
+    end
+
+    test "raises ArgumentError if the index is larger than the size of the tuple" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "out of range"),
+                   {:erlang, :setelement, [3, {1, 2}, :a]}
+    end
+
+    test "raises ArgumentError if the index is not positive" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "out of range"),
+                   {:erlang, :setelement, [0, {1, 2}, :a]}
+    end
+  end
+
   describe "split_binary/2" do
     test "splits binary at position 0" do
       binary = "0123456789"

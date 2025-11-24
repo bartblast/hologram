@@ -3329,6 +3329,57 @@ describe("Erlang", () => {
     });
   });
 
+  describe("setelement/3", () => {
+    const setelement = Erlang["setelement/3"];
+
+    it("replaces the element at the given index", () => {
+      const replaced = setelement(integer2, tuple3, atomA);
+      assert.deepStrictEqual(replaced, Type.tuple([integer1, atomA, integer3]));
+    });
+
+    it("replaces the first element", () => {
+      const replaced = setelement(integer1, tuple2, atomA);
+      assert.deepStrictEqual(replaced, Type.tuple([atomA, integer2]));
+    });
+
+    it("replaces the last element", () => {
+      const replaced = setelement(integer2, tuple2, atomA);
+      assert.deepStrictEqual(replaced, Type.tuple([integer1, atomA]));
+    });
+
+    it("raises ArgumentError if the first argument is not an integer", () => {
+      assertBoxedError(
+        () => setelement(atomA, tuple2, atomA),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a tuple", () => {
+      assertBoxedError(
+        () => setelement(integer1, atomB, atomA),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    });
+
+    it("raises ArgumentError if the index is larger than the size of the tuple", () => {
+      assertBoxedError(
+        () => setelement(integer3, tuple2, atomA),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if the index is not positive", () => {
+      assertBoxedError(
+        () => setelement(Type.integer(0), tuple2, atomA),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+  });
+
   describe("split_binary/2", () => {
     const split_binary = Erlang["split_binary/2"];
 
