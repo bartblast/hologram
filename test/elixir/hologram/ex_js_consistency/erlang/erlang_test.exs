@@ -2286,6 +2286,32 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "xor/2" do
+    test "true xor false" do
+      assert :erlang.xor(true, false) == true
+    end
+
+    test "false xor true" do
+      assert :erlang.xor(false, true) == true
+    end
+
+    test "true xor true" do
+      assert :erlang.xor(true, true) == false
+    end
+
+    test "false xor false" do
+      assert :erlang.xor(false, false) == false
+    end
+
+    test "raises ArgumentError if the first argument is not a boolean" do
+      assert_error ArgumentError, "argument error", {:erlang, :xor, [:abc, true]}
+    end
+
+    test "raises ArgumentError if the second argument is not a boolean" do
+      assert_error ArgumentError, "argument error", {:erlang, :xor, [true, :abc]}
+    end
+  end
+
   describe "orelse/2" do
     test "returns true if the first argument is true" do
       assert :erlang.orelse(true, :abc) == true
