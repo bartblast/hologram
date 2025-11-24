@@ -31,6 +31,7 @@ const integer0 = Type.integer(0);
 const integer1 = Type.integer(1);
 const integer2 = Type.integer(2);
 const integer3 = Type.integer(3);
+const integer4 = Type.integer(4);
 const integer5 = Type.integer(5);
 const integer6 = Type.integer(6);
 const integer11 = Type.integer(11);
@@ -2678,24 +2679,6 @@ describe("Erlang", () => {
   describe("insert_element/3", () => {
     const insert_element = Erlang["insert_element/3"];
 
-    it("inserts the given value into the tuple at the given index", () => {
-      const result = insert_element(integer2, tuple2, atomA);
-
-      assert.deepStrictEqual(result, Type.tuple([integer1, atomA, integer2]));
-    });
-
-    it("inserts the given value at the beginning of the tuple", () => {
-      const result = insert_element(integer1, tuple2, atomA);
-
-      assert.deepStrictEqual(result, Type.tuple([atomA, integer1, integer2]));
-    });
-
-    it("inserts the given value at the end of the tuple", () => {
-      const result = insert_element(integer3, tuple2, atomA);
-
-      assert.deepStrictEqual(result, Type.tuple([integer1, integer2, atomA]));
-    });
-
     it("inserts the given value into an empty tuple", () => {
       const result = insert_element(integer1, Type.tuple(), atomA);
 
@@ -2714,9 +2697,27 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, Type.tuple([integer1, atomA]));
     });
 
+    it("inserts the given value at the beginning of a multi-element tuple", () => {
+      const result = insert_element(integer1, tuple2, atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([atomA, integer1, integer2]));
+    });
+
+    it("inserts the given value into the middle of a multi-element tuple", () => {
+      const result = insert_element(integer2, tuple2, atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([integer1, atomA, integer2]));
+    });
+
+    it("inserts the given value at the end of a multi-element tuple", () => {
+      const result = insert_element(integer3, tuple2, atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([integer1, integer2, atomA]));
+    });
+
     it("raises ArgumentError if the first argument is not an integer", () => {
       assertBoxedError(
-        () => insert_element(atomA, tuple2, atomA),
+        () => insert_element(atomB, tuple2, atomA),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not an integer"),
       );
@@ -2732,7 +2733,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the index is larger than the size of the tuple plus one", () => {
       assertBoxedError(
-        () => insert_element(Type.integer(4), tuple2, atomA),
+        () => insert_element(integer4, tuple2, atomA),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
@@ -2740,7 +2741,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the index is not positive", () => {
       assertBoxedError(
-        () => insert_element(Type.integer(0), tuple2, atomA),
+        () => insert_element(integer0, tuple2, atomA),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );

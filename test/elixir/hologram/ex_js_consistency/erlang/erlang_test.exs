@@ -1920,18 +1920,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "insert_element/3" do
-    test "inserts the given value into the tuple at the given index" do
-      assert :erlang.insert_element(2, {1, 2}, :a) === {1, :a, 2}
-    end
-
-    test "inserts the given value at the beginning of the tuple" do
-      assert :erlang.insert_element(1, {1, 2}, :a) === {:a, 1, 2}
-    end
-
-    test "inserts the given value at the end of the tuple" do
-      assert :erlang.insert_element(3, {1, 2}, :a) === {1, 2, :a}
-    end
-
     test "inserts the given value into an empty tuple" do
       assert :erlang.insert_element(1, {}, :a) === {:a}
     end
@@ -1944,10 +1932,22 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.insert_element(2, {1}, :a) === {1, :a}
     end
 
+    test "inserts the given value at the beginning of a multi-element tuple" do
+      assert :erlang.insert_element(1, {1, 2}, :a) === {:a, 1, 2}
+    end
+
+    test "inserts the given value into the middle of a multi-element tuple" do
+      assert :erlang.insert_element(2, {1, 2}, :a) === {1, :a, 2}
+    end
+
+    test "inserts the given value at the end of a multi-element tuple" do
+      assert :erlang.insert_element(3, {1, 2}, :a) === {1, 2, :a}
+    end
+
     test "raises ArgumentError if the first argument is not an integer" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not an integer"),
-                   {:erlang, :insert_element, [:a, {1, 2}, :a]}
+                   {:erlang, :insert_element, [:b, {1, 2}, :a]}
     end
 
     test "raises ArgumentError if the second argument is not a tuple" do
