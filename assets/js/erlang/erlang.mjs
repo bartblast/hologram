@@ -617,6 +617,35 @@ const Erlang = {
   // End hd/1
   // Deps: []
 
+  // Start insert_element/3
+  "insert_element/3": (index, tuple, value) => {
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    }
+
+    if (index.value <= 0n || index.value > tuple.data.length + 1) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    }
+
+    const data = [...tuple.data];
+    // The tuple index is one-based, so we need to compensate
+    data.splice(Number(index.value) - 1, 0, value);
+
+    return Type.tuple(data);
+  },
+  // End insert_element/3
+  // Deps: []
+
   // Start integer_to_binary/1
   "integer_to_binary/1": (integer) => {
     return Erlang["integer_to_binary/2"](integer, Type.integer(10));

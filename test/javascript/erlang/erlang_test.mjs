@@ -2675,6 +2675,78 @@ describe("Erlang", () => {
     });
   });
 
+  describe("insert_element/3", () => {
+    const insert_element = Erlang["insert_element/3"];
+
+    it("inserts the given value into the tuple at the given index", () => {
+      const result = insert_element(integer2, tuple2, atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([integer1, atomA, integer2]));
+    });
+
+    it("inserts the given value at the beginning of the tuple", () => {
+      const result = insert_element(integer1, tuple2, atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([atomA, integer1, integer2]));
+    });
+
+    it("inserts the given value at the end of the tuple", () => {
+      const result = insert_element(integer3, tuple2, atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([integer1, integer2, atomA]));
+    });
+
+    it("inserts the given value into an empty tuple", () => {
+      const result = insert_element(integer1, Type.tuple(), atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([atomA]));
+    });
+
+    it("inserts the given value at the beginning of a one-element tuple", () => {
+      const result = insert_element(integer1, Type.tuple([integer1]), atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([atomA, integer1]));
+    });
+
+    it("inserts the given value at the end of a one-element tuple", () => {
+      const result = insert_element(integer2, Type.tuple([integer1]), atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([integer1, atomA]));
+    });
+
+    it("raises ArgumentError if the first argument is not an integer", () => {
+      assertBoxedError(
+        () => insert_element(atomA, tuple2, atomA),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a tuple", () => {
+      assertBoxedError(
+        () => insert_element(integer1, atomB, atomA),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    });
+
+    it("raises ArgumentError if the index is larger than the size of the tuple plus one", () => {
+      assertBoxedError(
+        () => insert_element(Type.integer(4), tuple2, atomA),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if the index is not positive", () => {
+      assertBoxedError(
+        () => insert_element(Type.integer(0), tuple2, atomA),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+  });
+
   describe("integer_to_binary/1", () => {
     it("delegates to integer_to_binary/2", () => {
       const integer = Type.integer(123123);
