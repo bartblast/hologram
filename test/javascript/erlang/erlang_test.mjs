@@ -3332,24 +3332,27 @@ describe("Erlang", () => {
   describe("setelement/3", () => {
     const setelement = Erlang["setelement/3"];
 
-    it("replaces the element at the given index", () => {
-      const replaced = setelement(integer2, tuple3, atomA);
-      assert.deepStrictEqual(replaced, Type.tuple([integer1, atomA, integer3]));
+    it("replaces a middle element", () => {
+      const result = setelement(integer2, tuple3, atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([integer1, atomA, integer3]));
     });
 
     it("replaces the first element", () => {
-      const replaced = setelement(integer1, tuple2, atomA);
-      assert.deepStrictEqual(replaced, Type.tuple([atomA, integer2]));
+      const result = setelement(integer1, tuple2, atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([atomA, integer2]));
     });
 
     it("replaces the last element", () => {
-      const replaced = setelement(integer2, tuple2, atomA);
-      assert.deepStrictEqual(replaced, Type.tuple([integer1, atomA]));
+      const result = setelement(integer2, tuple2, atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([integer1, atomA]));
     });
 
     it("raises ArgumentError if the first argument is not an integer", () => {
       assertBoxedError(
-        () => setelement(atomA, tuple2, atomA),
+        () => setelement(atomB, tuple2, atomA),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not an integer"),
       );
@@ -3373,7 +3376,7 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the index is not positive", () => {
       assertBoxedError(
-        () => setelement(Type.integer(0), tuple2, atomA),
+        () => setelement(integer0, tuple2, atomA),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );

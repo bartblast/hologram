@@ -2323,7 +2323,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "setelement/3" do
-    test "replaces the element at the given index" do
+    test "replaces a middle element" do
       assert :erlang.setelement(2, {1, 2, 3}, :a) === {1, :a, 3}
     end
 
@@ -2338,7 +2338,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "raises ArgumentError if the first argument is not an integer" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not an integer"),
-                   {:erlang, :setelement, [:a, {1, 2}, :a]}
+                   {:erlang, :setelement, [:b, {1, 2}, :a]}
     end
 
     test "raises ArgumentError if the second argument is not a tuple" do
