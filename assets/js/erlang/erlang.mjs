@@ -637,10 +637,8 @@ const Erlang = {
       );
     }
 
-    const data = [...tuple.data];
     // The tuple index is one-based, so we need to compensate
-    data.splice(Number(index.value) - 1, 0, value);
-
+    const data = tuple.data.toSpliced(Number(index.value) - 1, 0, value);
     return Type.tuple(data);
   },
   // End insert_element/3
