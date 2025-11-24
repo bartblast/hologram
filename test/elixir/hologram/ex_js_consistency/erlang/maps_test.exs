@@ -65,6 +65,32 @@ defmodule Hologram.ExJsConsistency.Erlang.MapsTest do
     end
   end
 
+  describe "from_keys/2" do
+    test "creates a map with the given keys and value" do
+      assert :maps.from_keys([:a, :b], 1) === %{a: 1, b: 1}
+    end
+
+    test "creates a map with a single key" do
+      assert :maps.from_keys([:a], 1) === %{a: 1}
+    end
+
+    test "creates an empty map if the list of keys is empty" do
+      assert :maps.from_keys([], 1) === %{}
+    end
+
+    test "raises ArgumentError if the first argument is not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:maps, :from_keys, [:a, 1]}
+    end
+
+    test "raises ArgumentError if the first argument is not a proper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a proper list"),
+                   {:maps, :from_keys, [[:a | :b], 1]}
+    end
+  end
+
   describe "from_list/1" do
     test "builds a map from the given list of key-value tuples" do
       assert :maps.from_list([{:a, 2}, {3, 4.0}]) == %{:a => 2, 3 => 4.0}
