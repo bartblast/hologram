@@ -54,13 +54,14 @@ describe("Erlang_Lists", () => {
   describe("any/2", () => {
     const any = Erlang_Lists["any/2"];
 
-    const properAnyList = Type.list([
-      Type.integer(5),
-      Type.integer(6),
-      Type.integer(7),
-    ]);
+    it("returns true if the first item in the list results in true", () => {
+      const list = Type.list([
+        Type.integer(3),
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(0),
+      ]);
 
-    it("returns true if at least one item in the list results in true when supplied to the anonymous function", () => {
       const fun = Type.anonymousFunction(
         1,
         [
@@ -68,18 +69,80 @@ describe("Erlang_Lists", () => {
             params: (_context) => [Type.variablePattern("elem")],
             guards: [],
             body: (context) => {
-              return Erlang[">/2"](context.vars.elem, Type.integer(4));
+              return Erlang[">/2"](context.vars.elem, Type.integer(2));
             },
           },
         ],
         contextFixture(),
       );
-      const result = any(fun, properAnyList);
+      const result = any(fun, list);
 
-      assert.deepStrictEqual(result, Type.boolean(true));
+      assertBoxedTrue(result);
+    });
+
+    it("returns true if the middle item in the list results in true", () => {
+      const list = Type.list([
+        Type.integer(0),
+        Type.integer(1),
+        Type.integer(3),
+        Type.integer(2),
+        Type.integer(0),
+      ]);
+
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return Erlang[">/2"](context.vars.elem, Type.integer(2));
+            },
+          },
+        ],
+        contextFixture(),
+      );
+      const result = any(fun, list);
+
+      assertBoxedTrue(result);
+    });
+
+    it("returns true if the last item in the list results in true", () => {
+      const list = Type.list([
+        Type.integer(0),
+        Type.integer(1),
+        Type.integer(0),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return Erlang[">/2"](context.vars.elem, Type.integer(2));
+            },
+          },
+        ],
+        contextFixture(),
+      );
+      const result = any(fun, list);
+
+      assertBoxedTrue(result);
     });
 
     it("returns false if none of the items results in true when supplied to the anonymous function", () => {
+      const list = Type.list([
+        Type.integer(0),
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+        Type.integer(4),
+      ]);
+
       const fun = Type.anonymousFunction(
         1,
         [
@@ -87,15 +150,34 @@ describe("Erlang_Lists", () => {
             params: (_context) => [Type.variablePattern("elem")],
             guards: [],
             body: (context) => {
-              return Erlang["</2"](context.vars.elem, Type.integer(4));
+              return Erlang[">/2"](context.vars.elem, Type.integer(5));
             },
           },
         ],
         contextFixture(),
       );
-      const result = any(fun, properAnyList);
+      const result = any(fun, list);
 
-      assert.deepStrictEqual(result, Type.boolean(false));
+      assertBoxedFalse(result);
+    });
+
+    it("returns false for empty list", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return Erlang[">/2"](context.vars.elem, Type.integer(2));
+            },
+          },
+        ],
+        contextFixture(),
+      );
+      const result = any(fun, emptyList);
+
+      assertBoxedFalse(result);
     });
 
     it("raises FunctionClauseError if the first arg is not an anonymous function", () => {
@@ -111,12 +193,29 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the first arg is an anonymous function with arity different than 1", () => {
+      const anonymousCompareFn = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (_context) => [
+              Type.variablePattern("x"),
+              Type.variablePattern("y"),
+            ],
+            guards: [],
+            body: (context) => {
+              return Erlang["==/2"](context.vars.x, context.vars.y);
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
       assertBoxedError(
         () => any(funArity2, properList),
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(
           ":lists.any/2",
-          funArity2,
+          anonymousCompareFn,
           properList,
         ),
       );
@@ -130,12 +229,13 @@ describe("Erlang_Lists", () => {
             params: (_context) => [Type.variablePattern("elem")],
             guards: [],
             body: (context) => {
-              return Erlang["</2"](context.vars.elem, Type.integer(4));
+              return Erlang[">/2"](context.vars.elem, Type.integer(2));
             },
           },
         ],
         contextFixture(),
       );
+
       assertBoxedError(
         () => any(fun, Type.atom("abc")),
         "CaseClauseError",
@@ -149,25 +249,6 @@ describe("Erlang_Lists", () => {
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":lists.any/2"),
       );
-    });
-
-    it("returns false for empty list", () => {
-      const fun = Type.anonymousFunction(
-        1,
-        [
-          {
-            params: (_context) => [Type.variablePattern("elem")],
-            guards: [],
-            body: (context) => {
-              return Erlang["</2"](context.vars.elem, Type.integer(4));
-            },
-          },
-        ],
-        contextFixture(),
-      );
-      const result = any(fun, emptyList);
-
-      assert.deepStrictEqual(result, Type.boolean(false));
     });
   });
 

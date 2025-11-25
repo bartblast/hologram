@@ -28,10 +28,11 @@ const Erlang_Lists = {
 
     for (let i = 0; i < list.data.length; i++) {
       const res = Interpreter.callAnonymousFunction(fun, [list.data[i]]);
-      if (Interpreter.isStrictlyEqual(res, Type.boolean(true))) {
+      if (Type.isTrue(res)) {
         return Type.boolean(true);
       }
     }
+
     return Type.boolean(false);
   },
   // End any/2

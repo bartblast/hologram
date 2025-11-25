@@ -10,8 +10,20 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
   @moduletag :consistency
 
   describe "any/2" do
-    test "returns true if at least one item in the list results in true when supplied to the anonymous function" do
-      assert :lists.any(&(&1 > 2), [0, 1, 2, 3])
+    test "returns true if the first item in the list results in true" do
+      assert :lists.any(&(&1 > 2), [3, 1, 2, 0])
+    end
+
+    test "returns true if the middle item in the list results in true" do
+      assert :lists.any(&(&1 > 2), [0, 1, 3, 2, 0])
+    end
+
+    test "returns true if the last item in the list results in true" do
+      assert :lists.any(&(&1 > 2), [0, 1, 0, 2, 3])
+    end
+
+    test "returns false for empty list" do
+      assert :lists.any(&(&1 > 2), []) == false
     end
 
     test "returns false if none of the items results in true when supplied to the anonymous function" do
@@ -47,15 +59,11 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       fun = &(&1 > 2)
 
       expected_msg =
-        build_function_clause_error_msg(":lists.any_1/2", [fun, 4])
+        build_function_clause_error_msg(":lists.any_1/2", [fun, 3])
 
       assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.any(fun, [1, 2 | 4])
+        :lists.any(fun, [1, 2 | 3])
       end
-    end
-
-    test "returns false for empty list" do
-      assert :lists.any(&(&1 > 2), []) == false
     end
   end
 
