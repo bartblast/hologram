@@ -154,9 +154,7 @@ const Erlang_String = {
   // Start split/3
   "split/3": (string, pattern, direction) => {
     if (!Type.isBinary(string)) {
-      Interpreter.raiseMatchError(
-        `no match of right hand side value: ${string}`,
-      );
+      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
     }
 
     if (!Type.isBinary(pattern)) {
