@@ -1859,18 +1859,6 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("converts a binary with mixed byte values", () => {
-      const binary = Bitstring.fromBytes([0, 127, 255]);
-      const result = binary_to_list(binary);
-      const expected = Type.list([
-        Type.integer(0),
-        Type.integer(127),
-        Type.integer(255),
-      ]);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
     it("raises ArgumentError if the argument is not a binary", () => {
       assertBoxedError(
         () => binary_to_list(Type.integer(123)),

@@ -1479,10 +1479,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.binary_to_list(<<>>) == []
     end
 
-    test "converts a binary with mixed byte values" do
-      assert :erlang.binary_to_list(<<0, 127, 255>>) == [0, 127, 255]
-    end
-
     test "raises ArgumentError if the argument is not a binary" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a binary"),

@@ -426,13 +426,7 @@ const Erlang = {
 
     Bitstring.maybeSetBytesFromText(binary);
     const bytes = binary.bytes;
-    const result = [];
-
-    for (let i = 0; i < bytes.length; i++) {
-      result.push(Type.integer(BigInt(bytes[i])));
-    }
-
-    return Type.list(result);
+    return Type.list(Array.from(bytes).map((b) => Type.integer(b)));
   },
   // End binary_to_list/1
   // Deps: []
