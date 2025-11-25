@@ -9,14 +9,14 @@ import Type from "../type.mjs";
 
 const Erlang_Math = {
   // Start exp/1
-  "exp/1": (x) => {
-    if (!Type.isFloat(x) && !Type.isInteger(x)) {
+  "exp/1": (number) => {
+    if (!Type.isNumber(number)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a number")
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
     }
 
-    return Type.float(Math.exp(x.value));
+    return Type.float(Math.exp(number.value));
   },
   // End exp/1
   // Deps: []
