@@ -9,15 +9,16 @@ import Type from "../type.mjs";
 
 const Erlang_Math = {
   // Start ceil/1
-  "ceil/1": (x) => {
-    if (!Type.isFloat(x) && !Type.isInteger(x)) {
+  "ceil/1": (number) => {
+    if (!Type.isNumber(number)) {
       Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a number")
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
     }
 
-    const numericValue = Type.isInteger(x) ? Number(x.value) : x.value;
-    return Type.float(Math.ceil(numericValue));
+    return Type.isInteger(number)
+      ? Type.float(Number(number.value))
+      : Type.float(Math.ceil(number.value));
   },
   // End ceil/1
   // Deps: []
