@@ -186,7 +186,7 @@ const Erlang_Lists = {
       if (
         Type.isTuple(tuple) &&
         tuple.data.length >= index.value &&
-        Interpreter.isStrictlyEqual(tuple.data[Number(index.value) - 1], key)
+        Interpreter.isEqual(tuple.data[Number(index.value) - 1], key)
       ) {
         result = [...tuples.data.slice(0, i), ...tuples.data.slice(i + 1)];
         break;

@@ -304,9 +304,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
              ]
     end
 
-    test "non-strict equality: 1 vs 1.0" do
-      assert :lists.keydelete(1, 1, [{1.0, 2, 3}, {1, 2, 3}]) == [{1.0, 2, 3}]
-      assert :lists.keydelete(1.0, 1, [{1, 2, 3}, {1.0, 2, 3}]) == [{1, 2, 3}]
+    test "loose equality: 1 == 1.0" do
+      assert :lists.keydelete(1, 1, [{1.0, 2, 3}, {1, 2, 3}]) == [{1, 2, 3}]
+      assert :lists.keydelete(1.0, 1, [{1, 2, 3}, {1.0, 2, 3}]) == [{1.0, 2, 3}]
     end
 
     test "raises FunctionClauseError if the second argument (index) is not an integer" do

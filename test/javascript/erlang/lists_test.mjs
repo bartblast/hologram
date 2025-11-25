@@ -635,7 +635,7 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    it("non-strict equality: 1 vs 1.0", () => {
+    it("loose equality: 1 == 1.0", () => {
       const result1 = keydelete(
         Type.integer(1),
         Type.integer(1),
@@ -647,7 +647,7 @@ describe("Erlang_Lists", () => {
       assert.deepStrictEqual(
         result1,
         Type.list([
-          Type.tuple([Type.float(1.0), Type.integer(2), Type.integer(3)]),
+          Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
         ]),
       );
 
@@ -662,7 +662,7 @@ describe("Erlang_Lists", () => {
       assert.deepStrictEqual(
         result2,
         Type.list([
-          Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+          Type.tuple([Type.float(1.0), Type.integer(2), Type.integer(3)]),
         ]),
       );
     });
