@@ -272,12 +272,41 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
   end
 
   describe "keydelete/3" do
-    test "returns a copy of the list with the first matching tuple removed" do
-      assert :lists.keydelete(7, 3, [{1, 2}, :abc, {5, 6, 7}]) == [{1, 2}, :abc]
+    test "returns the original list if tuples is empty" do
+      assert :lists.keydelete(7, 1, []) == []
     end
 
-    test "returns the original list if there is no matching tuple" do
-      assert :lists.keydelete(7, 3, [:abc]) == [:abc]
+    test "single tuple, match at first index" do
+      assert :lists.keydelete(1, 1, [{1, 2, 3}]) == []
+    end
+
+    test "single tuple, no match" do
+      assert :lists.keydelete(99, 1, [{1, 2, 3}]) == [{1, 2, 3}]
+    end
+
+    test "multiple tuples, match at first index" do
+      assert :lists.keydelete(1, 1, [{1, 2, 3}, {4, 5, 6}, {7, 8, 9}]) == [{4, 5, 6}, {7, 8, 9}]
+    end
+
+    test "multiple tuples, match at middle index" do
+      assert :lists.keydelete(5, 2, [{1, 2, 3}, {4, 5, 6}, {7, 8, 9}]) == [{1, 2, 3}, {7, 8, 9}]
+    end
+
+    test "multiple tuples, match at last index" do
+      assert :lists.keydelete(9, 3, [{1, 2, 3}, {4, 5, 6}, {7, 8, 9}]) == [{1, 2, 3}, {4, 5, 6}]
+    end
+
+    test "multiple tuples, no match" do
+      assert :lists.keydelete(99, 2, [{1, 2, 3}, {4, 5, 6}, {7, 8, 9}]) == [
+               {1, 2, 3},
+               {4, 5, 6},
+               {7, 8, 9}
+             ]
+    end
+
+    test "non-strict equality: 1 vs 1.0" do
+      assert :lists.keydelete(1, 1, [{1.0, 2, 3}, {1, 2, 3}]) == [{1.0, 2, 3}]
+      assert :lists.keydelete(1.0, 1, [{1, 2, 3}, {1.0, 2, 3}]) == [{1, 2, 3}]
     end
 
     test "raises FunctionClauseError if the second argument (index) is not an integer" do

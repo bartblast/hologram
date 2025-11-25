@@ -526,39 +526,145 @@ describe("Erlang_Lists", () => {
   describe("keydelete/3", () => {
     const keydelete = Erlang_Lists["keydelete/3"];
 
-    it("returns a copy of the list with the first matching tuple removed", () => {
-      const tuple = Type.tuple([
-        Type.integer(5),
-        Type.integer(6),
-        Type.integer(7),
-      ]);
-
-      const tuples = Type.list([
-        Type.tuple([Type.integer(1), Type.integer(2)]),
-        Type.atom("abc"),
-        tuple,
-      ]);
-
-      const result = keydelete(Type.integer(7), Type.integer(3), tuples);
-
-      const expected = Type.list([
-        Type.tuple([Type.integer(1), Type.integer(2)]),
-        Type.atom("abc"),
-      ]);
-
-      assert.deepStrictEqual(result, expected);
+    it("returns the original list if tuples is empty", () => {
+      const result = keydelete(Type.integer(7), Type.integer(1), Type.list([]));
+      assert.deepStrictEqual(result, Type.list([]));
     });
 
-    it("returns the original list if there is no matching tuple", () => {
+    it("single tuple, match at first index", () => {
       const result = keydelete(
-        Type.integer(7),
+        Type.integer(1),
+        Type.integer(1),
+        Type.list([
+          Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+        ]),
+      );
+      assert.deepStrictEqual(result, Type.list([]));
+    });
+
+    it("single tuple, no match", () => {
+      const result = keydelete(
+        Type.integer(99),
+        Type.integer(1),
+        Type.list([
+          Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+        ]),
+      );
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+        ]),
+      );
+    });
+
+    it("multiple tuples, match at first index", () => {
+      const result = keydelete(
+        Type.integer(1),
+        Type.integer(1),
+        Type.list([
+          Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+          Type.tuple([Type.integer(4), Type.integer(5), Type.integer(6)]),
+          Type.tuple([Type.integer(7), Type.integer(8), Type.integer(9)]),
+        ]),
+      );
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.tuple([Type.integer(4), Type.integer(5), Type.integer(6)]),
+          Type.tuple([Type.integer(7), Type.integer(8), Type.integer(9)]),
+        ]),
+      );
+    });
+
+    it("multiple tuples, match at middle index", () => {
+      const result = keydelete(
+        Type.integer(5),
+        Type.integer(2),
+        Type.list([
+          Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+          Type.tuple([Type.integer(4), Type.integer(5), Type.integer(6)]),
+          Type.tuple([Type.integer(7), Type.integer(8), Type.integer(9)]),
+        ]),
+      );
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+          Type.tuple([Type.integer(7), Type.integer(8), Type.integer(9)]),
+        ]),
+      );
+    });
+
+    it("multiple tuples, match at last index", () => {
+      const result = keydelete(
+        Type.integer(9),
         Type.integer(3),
-        Type.list([Type.atom("abc")]),
+        Type.list([
+          Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+          Type.tuple([Type.integer(4), Type.integer(5), Type.integer(6)]),
+          Type.tuple([Type.integer(7), Type.integer(8), Type.integer(9)]),
+        ]),
+      );
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+          Type.tuple([Type.integer(4), Type.integer(5), Type.integer(6)]),
+        ]),
+      );
+    });
+
+    it("multiple tuples, no match", () => {
+      const result = keydelete(
+        Type.integer(99),
+        Type.integer(2),
+        Type.list([
+          Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+          Type.tuple([Type.integer(4), Type.integer(5), Type.integer(6)]),
+          Type.tuple([Type.integer(7), Type.integer(8), Type.integer(9)]),
+        ]),
+      );
+      assert.deepStrictEqual(
+        result,
+        Type.list([
+          Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+          Type.tuple([Type.integer(4), Type.integer(5), Type.integer(6)]),
+          Type.tuple([Type.integer(7), Type.integer(8), Type.integer(9)]),
+        ]),
+      );
+    });
+
+    it("non-strict equality: 1 vs 1.0", () => {
+      const result1 = keydelete(
+        Type.integer(1),
+        Type.integer(1),
+        Type.list([
+          Type.tuple([Type.float(1.0), Type.integer(2), Type.integer(3)]),
+          Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+        ]),
+      );
+      assert.deepStrictEqual(
+        result1,
+        Type.list([
+          Type.tuple([Type.float(1.0), Type.integer(2), Type.integer(3)]),
+        ]),
       );
 
-      const expected = Type.list([Type.atom("abc")]);
-
-      assert.deepStrictEqual(result, expected);
+      const result2 = keydelete(
+        Type.float(1.0),
+        Type.integer(1),
+        Type.list([
+          Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+          Type.tuple([Type.float(1.0), Type.integer(2), Type.integer(3)]),
+        ]),
+      );
+      assert.deepStrictEqual(
+        result2,
+        Type.list([
+          Type.tuple([Type.integer(1), Type.integer(2), Type.integer(3)]),
+        ]),
+      );
     });
 
     it("raises FunctionClauseError if the second argument (index) is not an integer", () => {
@@ -598,6 +704,11 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the third argument (tuples) is an improper list", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.keydelete3/3",
+        [Type.integer(7), Type.integer(4), Type.integer(3)],
+      );
+
       assertBoxedError(
         () =>
           keydelete(
@@ -610,15 +721,7 @@ describe("Erlang_Lists", () => {
             ]),
           ),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.keydelete3/3", [
-          Type.integer(7),
-          Type.integer(4),
-          Type.improperList([
-            Type.integer(1),
-            Type.integer(2),
-            Type.integer(3),
-          ]),
-        ]),
+        expectedMessage,
       );
     });
   });

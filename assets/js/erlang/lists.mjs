@@ -158,7 +158,7 @@ const Erlang_Lists = {
       );
     }
 
-    if (index.value < 1) {
+    if (index.value < 1n) {
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(
           ":lists.keydelete/3",
@@ -167,38 +167,30 @@ const Erlang_Lists = {
       );
     }
 
-    if (!Type.isList(tuples)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":lists.keydelete3/3",
-          arguments,
-        ),
-      );
-    }
-
     if (!Type.isProperList(tuples)) {
+      const thirdArg = tuples.data?.at(-1) ?? tuples;
       Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(
-          ":lists.keydelete3/3",
-          arguments,
-        ),
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keydelete3/3", [
+          key,
+          index,
+          thirdArg,
+        ]),
       );
     }
 
-    const result = [];
-    let found = false;
+    let result = tuples.data;
 
-    for (const tuple of tuples.data) {
-      if (!found && Type.isTuple(tuple)) {
-        if (
-          tuple.data.length >= index.value &&
-          Interpreter.isEqual(tuple.data[Number(index.value) - 1], key)
-        ) {
-          found = true;
-          continue;
-        }
+    for (let i = 0; i < tuples.data.length; i++) {
+      const tuple = tuples.data[i];
+
+      if (
+        Type.isTuple(tuple) &&
+        tuple.data.length >= index.value &&
+        Interpreter.isStrictlyEqual(tuple.data[Number(index.value) - 1], key)
+      ) {
+        result = [...tuples.data.slice(0, i), ...tuples.data.slice(i + 1)];
+        break;
       }
-      result.push(tuple);
     }
 
     return Type.list(result);
