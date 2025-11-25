@@ -16,7 +16,9 @@ const Erlang_Math = {
       );
     }
 
-    return Type.float(Math.exp(number.value));
+    const value = Type.isInteger(number) ? Number(number.value) : number.value;
+
+    return Type.float(Math.exp(value));
   },
   // End exp/1
   // Deps: []
