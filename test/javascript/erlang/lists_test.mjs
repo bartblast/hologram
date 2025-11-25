@@ -70,6 +70,7 @@ const properList = Type.list([
 
 const list1 = Type.list([Type.integer(1)]);
 const list2 = Type.list([Type.integer(1), Type.integer(2)]);
+const list3 = Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]);
 
 const tupleX = Type.tuple([atomX]);
 
@@ -2130,13 +2131,28 @@ describe("Erlang_Lists", () => {
   describe("prefix/2", () => {
     const prefix = Erlang_Lists["prefix/2"];
 
-    it("returns true if the first list is a prefix of the second list", () => {
+    it("returns true if the first one-element list is a prefix of the second list", () => {
       const result = prefix(list1, list2);
+      assertBoxedTrue(result);
+    });
+
+    it("returns true if the first multiple-element list is a prefix of the second list", () => {
+      const result = prefix(list2, list3);
       assertBoxedTrue(result);
     });
 
     it("returns true if the lists are the same", () => {
       const result = prefix(list2, list2);
+      assertBoxedTrue(result);
+    });
+
+    it("returns true if both lists contain the same single element", () => {
+      const result = prefix(list1, list1);
+      assertBoxedTrue(result);
+    });
+
+    it("returns true if both lists are empty", () => {
+      const result = prefix(Type.list(), Type.list());
       assertBoxedTrue(result);
     });
 

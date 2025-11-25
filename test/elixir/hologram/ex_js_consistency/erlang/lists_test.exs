@@ -1081,12 +1081,24 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
   end
 
   describe "prefix/2" do
-    test "returns true if the first list is a prefix of the second list" do
+    test "returns true if the first one-element list is a prefix of the second list" do
       assert :lists.prefix([1], [1, 2])
+    end
+
+    test "returns true if the first multiple-element list is a prefix of the second list" do
+      assert :lists.prefix([1, 2], [1, 2, 3])
     end
 
     test "returns true if the lists are the same" do
       assert :lists.prefix([1, 2], [1, 2])
+    end
+
+    test "returns true if both lists contain the same single element" do
+      assert :lists.prefix([1], [1])
+    end
+
+    test "returns true if both lists are empty" do
+      assert :lists.prefix([], [])
     end
 
     test "returns true when the first list is empty" do
