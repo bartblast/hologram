@@ -167,7 +167,7 @@ const Erlang_String = {
       Interpreter.raiseCaseClauseError(direction);
     };
 
-    if (pattern === "" || !string.includes(pattern)) {
+    if (Bitstring.isEmpty(Type.bitstring(pattern)) || !string.includes(pattern)) {
       return Type.list([string]);
     };
 
