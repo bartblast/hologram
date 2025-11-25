@@ -10,7 +10,7 @@ const Erlang_Re = {
   // Start version/0
   "version/0": () => {
     // TODO: Replace hardcoded PCRE version with version captured from system at runtime
-    return Type.string("8.44 2020-02-12");
+    return Type.bitstring("8.44 2020-02-12");
   },
   // End version/0
   // Deps: []

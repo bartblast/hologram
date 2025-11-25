@@ -11,7 +11,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ReTest do
 
   describe "version/0" do
     test "returns supported PCRE version" do
-      assert String.match?(:re.version(), ~r/^\d+\.\d+\s+\d{4}-\d{2}-\d{2}$/)
+      assert :re.version() =~ ~r/^\d+\.\d+ \d{4}-\d{2}-\d{2}$/
     end
   end
 end
