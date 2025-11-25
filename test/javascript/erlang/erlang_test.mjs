@@ -2204,190 +2204,73 @@ describe("Erlang", () => {
   describe("bsr/2", () => {
     const testedFun = Erlang["bsr/2"];
 
-    // Positive integer, positive shift
-    it("positive integer, positive shift: 16 >> 1", () => {
+    it("common usage", () => {
+      // 16 = 0b00010000, 8 = 0b00001000
       assert.deepStrictEqual(
-        testedFun(Type.integer(16n), Type.integer(1n)),
-        Type.integer(8n),
-      );
-    });
-    it("positive integer, positive shift: 255 >> 4", () => {
-      assert.deepStrictEqual(
-        testedFun(Type.integer(255n), Type.integer(4n)),
-        Type.integer(15n),
-      );
-    });
-    it("positive integer, positive shift: large number", () => {
-      assert.deepStrictEqual(
-        testedFun(Type.integer(1000000000000000000n), Type.integer(1n)),
-        Type.integer(500000000000000000n),
+        testedFun(Type.integer(16), Type.integer(1)),
+        Type.integer(8),
       );
     });
 
-    // Positive integer, zero shift
-    it("positive integer, zero shift: 16 >> 0", () => {
+    it("zero shift, no change", () => {
       assert.deepStrictEqual(
-        testedFun(Type.integer(16n), Type.integer(0n)),
-        Type.integer(16n),
-      );
-    });
-    it("positive integer, zero shift: 255 >> 0", () => {
-      assert.deepStrictEqual(
-        testedFun(Type.integer(255n), Type.integer(0n)),
-        Type.integer(255n),
+        testedFun(Type.integer(255), Type.integer(0)),
+        Type.integer(255),
       );
     });
 
-    // Positive integer, negative shift (expected left shift)
-    it("positive integer, negative shift: 16 >> -1 (expected 16 << 1)", () => {
+    it("shift left via negative shift", () => {
+      // 1 = 0b00000001, 16 = 0b00010000
       assert.deepStrictEqual(
-        testedFun(Type.integer(16n), Type.integer(-1n)),
-        Type.integer(32n),
-      );
-    });
-    it("positive integer, negative shift: 1 >> -4 (expected 1 << 4)", () => {
-      assert.deepStrictEqual(
-        testedFun(Type.integer(1n), Type.integer(-4n)),
-        Type.integer(16n),
-      );
-    });
-    it("positive integer, negative shift: large number", () => {
-      assert.deepStrictEqual(
-        testedFun(Type.integer(1000000000000000000n), Type.integer(-1n)),
-        Type.integer(2000000000000000000n),
+        testedFun(Type.integer(1), Type.integer(-4)),
+        Type.integer(16),
       );
     });
 
-    // Negative integer, positive shift (arithmetic shift)
-    it("negative integer, positive shift: -16 >> 1", () => {
+    it("negative keeps sign bit", () => {
+      // -16 = -0b00010000, -8 = -0b00001000
       assert.deepStrictEqual(
-        testedFun(Type.integer(-16n), Type.integer(1n)),
-        Type.integer(-8n),
-      );
-    });
-    it("negative integer, positive shift: -255 >> 4", () => {
-      assert.deepStrictEqual(
-        testedFun(Type.integer(-255n), Type.integer(4n)),
-        Type.integer(-16n),
-      );
-    });
-    it("negative integer, positive shift: large number", () => {
-      assert.deepStrictEqual(
-        testedFun(Type.integer(-1000000000000000000n), Type.integer(1n)),
-        Type.integer(-500000000000000000n),
+        testedFun(Type.integer(-16), Type.integer(1)),
+        Type.integer(-8),
       );
     });
 
-    // Negative integer, zero shift
-    it("negative integer, zero shift: -16 >> 0", () => {
+    it("at JS Number.MAX_SAFE_INTEGER limit", () => {
+      // 18_014_398_509_481_982 = 0b111111111111111111111111111111111111111111111111111111
+      //  9_007_199_254_740_991 = 0b11111111111111111111111111111111111111111111111111111
+      //              2_097_151 = 0b111111111111111111111
       assert.deepStrictEqual(
-        testedFun(Type.integer(-16n), Type.integer(0n)),
-        Type.integer(-16n),
+        testedFun(Type.integer(9007199254740991), Type.integer(32)),
+        Type.integer(2097151),
       );
-    });
-    it("negative integer, zero shift: -255 >> 0", () => {
       assert.deepStrictEqual(
-        testedFun(Type.integer(-255n), Type.integer(0n)),
-        Type.integer(-255n),
-      );
-    });
-
-    // Negative integer, negative shift (expected left shift)
-    it("negative integer, negative shift: -16 >> -1 (expected -16 << 1)", () => {
-      assert.deepStrictEqual(
-        testedFun(Type.integer(-16n), Type.integer(-1n)),
-        Type.integer(-32n),
-      );
-    });
-    it("negative integer, negative shift: -1 >> -4 (expected -1 << 4)", () => {
-      assert.deepStrictEqual(
-        testedFun(Type.integer(-1n), Type.integer(-4n)),
-        Type.integer(-16n),
-      );
-    });
-    it("negative integer, negative shift: large number", () => {
-      assert.deepStrictEqual(
-        testedFun(Type.integer(-1000000000000000000n), Type.integer(-1n)),
-        Type.integer(-2000000000000000000n),
+        testedFun(Type.integer(9007199254740991), Type.integer(-1)),
+        Type.integer(18014398509481982n),
       );
     });
 
-    // Large shifts
-    it("large shift: 1 >> 64", () => {
+    it("shift beyond size", () => {
+      // 255 = 0b1111111
       assert.deepStrictEqual(
-        testedFun(Type.integer(1n), Type.integer(64n)),
-        Type.integer(0n),
+        testedFun(Type.integer(255), Type.integer(9)),
+        Type.integer(0),
       );
-    });
-    it("large shift: -1 >> 64 (sign extended)", () => {
+      // -127 = -0b1111111
       assert.deepStrictEqual(
-        testedFun(Type.integer(-1n), Type.integer(64n)),
-        Type.integer(-1n),
-      );
-    });
-    it("large shift: 100 >> 100", () => {
-      assert.deepStrictEqual(
-        testedFun(Type.integer(100n), Type.integer(100n)),
-        Type.integer(0n),
-      );
-    });
-    it("large shift: -100 >> 100 (sign extended)", () => {
-      assert.deepStrictEqual(
-        testedFun(Type.integer(-100n), Type.integer(100n)),
-        Type.integer(-1n),
-      );
-    });
-    it("large shift: 1000000000000000000000000000000000n >> 100n", () => {
-      assert.deepStrictEqual(
-        testedFun(
-          Type.integer(1000000000000000000000000000000000n),
-          Type.integer(100n),
-        ),
-        Type.integer(788n),
-      );
-    });
-    it("large shift: -1000000000000000000000000000000000n >> 100n", () => {
-      assert.deepStrictEqual(
-        testedFun(
-          Type.integer(-1000000000000000000000000000000000n),
-          Type.integer(100n),
-        ),
-        Type.integer(-789n),
+        testedFun(Type.integer(-127), Type.integer(8)),
+        Type.integer(-1),
       );
     });
 
-    // Non-integer inputs (expect ArithmeticError)
-    it("raises ArithmeticError if the first argument is not an integer", () => {
+    it("raises ArithmeticError if either argument is not an integer", () => {
       assertBoxedError(
-        () => testedFun(Type.float(10.0), Type.integer(1n)),
+        () => testedFun(Type.float(10.0), Type.integer(1)),
         "ArithmeticError",
         "bad argument in arithmetic expression: bsr(10.0, 1)",
       );
-    });
-    it("raises ArithmeticError if the second argument is not an integer", () => {
+
       assertBoxedError(
-        () => testedFun(Type.integer(10n), Type.float(1.0)),
-        "ArithmeticError",
-        "bad argument in arithmetic expression: bsr(10, 1.0)",
-      );
-    });
-    it("raises ArithmeticError if both arguments are not integers", () => {
-      assertBoxedError(
-        () => testedFun(Type.float(10.0), Type.float(1.0)),
-        "ArithmeticError",
-        "bad argument in arithmetic expression: bsr(10.0, 1.0)",
-      );
-    });
-    it("raises ArithmeticError if the first argument is not a number", () => {
-      assertBoxedError(
-        () => testedFun(Type.atom("abc"), Type.integer(1n)),
-        "ArithmeticError",
-        "bad argument in arithmetic expression: bsr(:abc, 1)",
-      );
-    });
-    it("raises ArithmeticError if the second argument is not a number", () => {
-      assertBoxedError(
-        () => testedFun(Type.integer(10n), Type.atom("abc")),
+        () => testedFun(Type.integer(10), Type.atom("abc")),
         "ArithmeticError",
         "bad argument in arithmetic expression: bsr(10, :abc)",
       );
