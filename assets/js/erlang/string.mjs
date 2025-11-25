@@ -154,46 +154,42 @@ const Erlang_String = {
   // Start split/3
   "split": (string, pattern, direction) => {
     if (!Type.isBinary(string)) {
-      Interpreter.raiseMatchError(`no match of right hand side value: ${string}`)
+      Interpreter.raiseMatchError(`no match of right hand side value: ${string}`);
     };
 
     if (!Type.isBinary(pattern)) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(1, "not valid character data (an iodata term)")
-      )
+      );
     };
 
     if (!Type.isAtom(direction)) {
-      Interpreter.raiseCaseClauseError(direction)
-    }
-
-    let splited_list = [string];
-
-
-    if (pattern === "" || !string.includes(pattern)) {
-      return splited_list
+      Interpreter.raiseCaseClauseError(direction);
     };
 
-    let index;
+    if (pattern === "" || !string.includes(pattern)) {
+      return Type.list([string]);
+    };
+
+    let splitted_string_list, index;
     switch (direction) {
       case "all":
-        splited_list = string.split(pattern);
+        splitted_string_list = string.split(pattern);
         break;
 
       case "trailing":
         index = string.lastIndexOf(pattern);
-        splited_list = Type.list([string.slice(0, index), string.slice(index + pattern.length)]);
+        splitted_string_list = [string.slice(0, index), string.slice(index + pattern.length)];
         break;
 
       case "leading":
       default:
-        // "leading" default case
         index = string.indexOf(pattern);
-        splited_list = Type.list([string.slice(0, index), string.slice(index + pattern.length)]);
+        splitted_string_list = [string.slice(0, index), string.slice(index + pattern.length)];
         break;
     }
 
-    return Type.list(splited_list);
+    return Type.list(splitted_string_list);
   },
   // End split/3
   // Deps: []
