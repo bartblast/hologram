@@ -571,13 +571,15 @@ const Erlang = {
 
   // Start float/1
   "float/1": (number) => {
-    if (!Type.isNumber(number)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
-      );
+    if (Type.isInteger(number)) {
+      return Type.float(Number(number.value));
+    } else if (Type.isFloat(number)) {
+      return number;
     }
 
-    return Type.float(Number(number.value));
+    Interpreter.raiseArgumentError(
+      Interpreter.buildArgumentErrorMsg(1, "not a number"),
+    );
   },
   // End float/1
   // Deps: []
