@@ -157,6 +157,51 @@ describe("Erlang_Maps", () => {
     });
   });
 
+  describe("from_keys/2", () => {
+    const from_keys = Erlang_Maps["from_keys/2"];
+
+    it("creates a map with multiple keys", () => {
+      const keys = Type.list([atomA, atomB]);
+      const result = from_keys(keys, integer1);
+
+      assert.deepStrictEqual(
+        result,
+        Type.map([
+          [atomA, integer1],
+          [atomB, integer1],
+        ]),
+      );
+    });
+
+    it("creates a map with a single key", () => {
+      const result = from_keys(Type.list([atomA]), integer1);
+
+      assert.deepStrictEqual(result, Type.map([[atomA, integer1]]));
+    });
+
+    it("creates an empty map if the list of keys is empty", () => {
+      const result = from_keys(Type.list(), integer1);
+
+      assert.deepStrictEqual(result, Type.map());
+    });
+
+    it("raises ArgumentError if the first argument is not a list", () => {
+      assertBoxedError(
+        () => from_keys(atomA, integer1),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the first argument is not a proper list", () => {
+      assertBoxedError(
+        () => from_keys(Type.improperList([atomA, atomB]), integer1),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    });
+  });
+
   describe("from_list/1", () => {
     const from_list = Erlang_Maps["from_list/1"];
 
