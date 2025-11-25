@@ -276,6 +276,12 @@ export function inspectJs(term) {
   return term;
 }
 
+export function iolist(string) {
+  return Type.list(
+    Array.from(string, (char) => Type.integer(char.codePointAt(0))),
+  );
+}
+
 export function putAction(component, action) {
   return Erlang_Maps["put/3"](Type.atom("next_action"), action, component);
 }
@@ -333,10 +339,4 @@ export function registerWebApis() {
 // to run on the next tick of the event loop.
 export function waitForEventLoop() {
   return new Promise((resolve) => setTimeout(resolve, 0));
-}
-
-export function iolist(string) {
-  return Type.list(
-    Array.from(string, (char) => Type.integer(char.codePointAt(0))),
-  );
 }
