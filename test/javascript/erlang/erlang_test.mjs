@@ -2605,7 +2605,7 @@ describe("Erlang", () => {
       );
     });
 
-    it("default option for []", () => {
+    it("opts = []", () => {
       const opts = Type.list([]);
       const result = float_to_binary(Type.float(0.1 + 0.2), opts);
       const expected = Type.bitstring("3.00000000000000044409e-01");
@@ -2613,7 +2613,7 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it(":short option", () => {
+    it("opts = [:short]", () => {
       const opts = Type.list([Type.atom("short")]);
       const result = float_to_binary(Type.float(0.1 + 0.2), opts);
       const expected = Type.bitstring("0.30000000000000004");
@@ -2621,7 +2621,7 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("{:decimals, 4}", () => {
+    it("opts = [{:decimals, 4}]", () => {
       const opts = Type.list([
         Type.tuple([Type.atom("decimals"), Type.integer(4)]),
       ]);
@@ -2631,7 +2631,7 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("{:decimals, 4}, :compact", () => {
+    it("opts = [{:decimals, 4}, :compact]", () => {
       const opts = Type.list([
         Type.tuple([Type.atom("decimals"), Type.integer(4)]),
         Type.atom("compact"),
@@ -2642,7 +2642,7 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("{:scientific, 3}", () => {
+    it("opts = [{:scientific, 3}]", () => {
       const opts = Type.list([
         Type.tuple([Type.atom("scientific"), Type.integer(3)]),
       ]);
