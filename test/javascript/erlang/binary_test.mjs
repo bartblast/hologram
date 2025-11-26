@@ -202,7 +202,7 @@ describe("Erlang_Binary", () => {
       it("raises ArgumentError for unknown algorithm atom", () => {
         const unknownAlgoPattern = Type.tuple([
           Type.atom("unknown_algo"),
-          { pattern: [72, 101] },
+          {pattern: [72, 101]},
         ]);
 
         assertBoxedError(
