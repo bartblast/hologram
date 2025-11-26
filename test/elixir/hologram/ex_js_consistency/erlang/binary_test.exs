@@ -84,13 +84,13 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
     test "uses Boyer-Moore algorithm for single patterns" do
       compiled_pattern = :binary.compile_pattern("hello")
       assert elem(compiled_pattern, 0) == :bm
-      assert elem(compiled_pattern, 1) |> is_reference()
+      assert is_reference(elem(compiled_pattern, 1))
     end
 
     test "uses Aro-Corsick algorithm for multiple patterns" do
       compiled_pattern = :binary.compile_pattern(["hello", "world"])
       assert elem(compiled_pattern, 0) == :ac
-      assert elem(compiled_pattern, 1) |> is_reference()
+      assert is_reference(elem(compiled_pattern, 1))
     end
 
     test "raises ArgumentError when pattern is not a binary" do
