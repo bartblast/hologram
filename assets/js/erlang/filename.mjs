@@ -28,9 +28,7 @@ const Erlang_Filename = {
       filepathText = binary.text;
       returnAsCodepoints = true;
     } else if (Type.isAtom(filename)) {
-      const binary = Erlang["atom_to_binary/1"](filename);
-      Bitstring.maybeSetTextFromBytes(binary);
-      filepathText = binary.text;
+      filepathText = filename.value;
       returnAsCodepoints = true;
     } else {
       Interpreter.raiseFunctionClauseError(
@@ -50,7 +48,7 @@ const Erlang_Filename = {
       : basenameBinary;
   },
   // End basename/1
-  // Deps: [:erlang.atom_to_binary/1, :erlang.iolist_to_binary/1]
+  // Deps: [:erlang.iolist_to_binary/1]
 };
 
 export default Erlang_Filename;
