@@ -110,12 +110,6 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
                    build_argument_error_msg(1, "not a valid pattern"),
                    fn -> :binary.compile_pattern(["hello", 123]) end
     end
-
-    test "raises ArgumentError when pattern is a list but contains non-binary elements" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "not a valid pattern"),
-                   fn -> :binary.compile_pattern(["hello", 123]) end
-    end
   end
 
   describe "copy/2" do
