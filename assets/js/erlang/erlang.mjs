@@ -614,14 +614,13 @@ const Erlang = {
         ) {
           scientific = Number(value.value);
         } else {
-          throw new HologramInterpreterError(
-            `:erlang.float_to_binary/2 option {${key.value}, ${value.value}} is not supported in Hologram`,
+          Interpreter.raiseArgumentError(
+            Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
           );
         }
       } else {
-        const key = opt.data[0];
-        throw new HologramInterpreterError(
-          `:erlang.float_to_binary/2 option ${key.value} is not supported in Hologram`,
+        Interpreter.raiseArgumentError(
+          Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
         );
       }
     }

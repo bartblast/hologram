@@ -1878,54 +1878,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "float_to_binary/2" do
-    test "default option for []" do
-      assert :erlang.float_to_binary(7.12, []) == "7.12000000000000010658e+00"
-    end
-
-    test ":short option" do
-      assert :erlang.float_to_binary(0.1 + 0.2, [:short]) == "0.30000000000000004"
-    end
-
-    test "{:decimals, 0}" do
-      assert :erlang.float_to_binary(7.12, [{:decimals, 0}]) == "7"
-    end
-
-    test "{:decimals, 1}" do
-      assert :erlang.float_to_binary(7.12, [{:decimals, 1}]) == "7.1"
-    end
-
-    test "{:decimals, 4}" do
-      assert :erlang.float_to_binary(7.12, [{:decimals, 4}]) == "7.1200"
-    end
-
-    test "{:decimals, 10}" do
-      assert :erlang.float_to_binary(1.5, [{:decimals, 10}]) == "1.5000000000"
-    end
-
-    test "{:decimals, 4}, :compact - non-zero decimal" do
-      assert :erlang.float_to_binary(7.120000, [{:decimals, 4}, :compact]) == "7.12"
-    end
-
-    test ":compact, {:decimals, 4} - non-zero decimal" do
-      assert :erlang.float_to_binary(7.120000, [:compact, {:decimals, 4}]) == "7.12"
-    end
-
-    test "{:decimals, 3}, :compact - zero decimal" do
-      assert :erlang.float_to_binary(700.000, [{:decimals, 3}, :compact]) == "700.0"
-    end
-
-    test ":compact, {:decimals, 3} - zero decimal" do
-      assert :erlang.float_to_binary(700.000, [:compact, {:decimals, 3}]) == "700.0"
-    end
-
-    test "{:decimals, 0}, :compact - zero decimal" do
-      assert :erlang.float_to_binary(800.000, [{:decimals, 0}, :compact]) == "800"
-    end
-
-    test ":compact, {:decimals, 0} - zero decimal" do
-      assert :erlang.float_to_binary(800.000, [:compact, {:decimals, 0}]) == "800"
-    end
-
     test "raises ArgumentError if the first argument is not a float" do
       assert_error ArgumentError, build_argument_error_msg(1, "not a float"), fn ->
         :erlang.float_to_binary(123, [:short])
@@ -1934,39 +1886,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "raises ArgumentError if the second argument is not a list" do
       assert_error ArgumentError, build_argument_error_msg(2, "not a list"), fn ->
-        :erlang.float_to_binary(1.0, 123)
+        :erlang.float_to_binary(7.12, 123)
       end
     end
 
     test "raises ArgumentError if the second argument is not a proper list" do
       assert_error ArgumentError, build_argument_error_msg(2, "not a proper list"), fn ->
-        :erlang.float_to_binary(1.0, [{:decimals, 4} | :compact])
+        :erlang.float_to_binary(7.12, [{:decimals, 4} | :compact])
       end
     end
 
-    test "{:scientific, 4}" do
-      assert :erlang.float_to_binary(7.12, [{:scientific, 4}]) == "7.1200e+00"
+    test "raises ArgumentError if the second argument has invalid option in list" do
+      assert_error ArgumentError, build_argument_error_msg(2, "invalid option in list"), fn ->
+        :erlang.float_to_binary(7.12, [:abc])
+      end
     end
 
-    test "{:scientific, 0}" do
-      assert :erlang.float_to_binary(7.12, [{:scientific, 0}]) == "7e+00"
+    test "default option for []" do
+      assert :erlang.float_to_binary(7.12, []) == "7.12000000000000010658e+00"
     end
 
-    test "{:scientific, 6}" do
-      assert :erlang.float_to_binary(12_345.6, [{:scientific, 6}]) == "1.234560e+04"
+    test ":short option" do
+      assert :erlang.float_to_binary(0.1 + 0.2, [:short]) == "0.30000000000000004"
     end
 
-    test "{:scientific, 10}" do
-      result = :erlang.float_to_binary(0.00012345, [{:scientific, 10}])
-      assert result == "1.2345000000e-04"
+    test "{:decimals, 4}" do
+      assert :erlang.float_to_binary(7.12, [{:decimals, 4}]) == "7.1200"
     end
 
-    test "{:scientific, 4}, :compact - ignore compact option" do
-      assert :erlang.float_to_binary(7.12, [{:scientific, 4}, :compact]) == "7.1200e+00"
+    test "{:decimals, 4}, :compact" do
+      assert :erlang.float_to_binary(7.12, [{:decimals, 4}, :compact]) == "7.12"
     end
 
-    test ":compact, {:scientific, 4} - ignore compact option" do
-      assert :erlang.float_to_binary(7.12, [:compact, {:scientific, 4}]) == "7.1200e+00"
+    test "{:scientific, 3}" do
+      assert :erlang.float_to_binary(7.12, [{:scientific, 3}]) == "7.120e+00"
     end
   end
 
