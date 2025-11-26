@@ -71,7 +71,7 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
     test "returns a tuple for a compiled pattern" do
       base_pattern = :binary.compile_pattern("hello")
       # At the moment its imposible to make this work
-      # see:
+      # see: https://github.com/bartblast/hologram/pull/374#issuecomment-3578359261
       #
       # compiled_pattern = :binary.compile_pattern(base_pattern)
       # assert is_tuple(compiled_pattern)
