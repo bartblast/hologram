@@ -2607,8 +2607,8 @@ describe("Erlang", () => {
 
     it("default option for []", () => {
       const opts = Type.list([]);
-      const result = float_to_binary(Type.float(7.12), opts);
-      const expected = Type.bitstring("7.12000000000000010658e+00");
+      const result = float_to_binary(Type.float(0.1 + 0.2), opts);
+      const expected = Type.bitstring("3.00000000000000044409e-01");
 
       assert.deepStrictEqual(result, expected);
     });

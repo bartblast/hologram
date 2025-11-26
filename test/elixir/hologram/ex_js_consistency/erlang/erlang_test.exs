@@ -1903,7 +1903,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "default option for []" do
-      assert :erlang.float_to_binary(7.12, []) == "7.12000000000000010658e+00"
+      assert :erlang.float_to_binary(0.1 + 0.2, []) == "3.00000000000000044409e-01"
     end
 
     test ":short option" do
