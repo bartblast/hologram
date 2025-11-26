@@ -14,6 +14,11 @@ defmodule Hologram.MixProject do
       f: ["format", "prettier", "cmd cd test/features && mix format"],
       prettier:
         "cmd assets/node_modules/.bin/prettier '*.yml' '.github/**' 'assets/*.json' 'assets/*.mjs' 'assets/js/**' 'benchmarks/javascript/**' 'test/javascript/**' --config 'assets/.prettierrc.json' --write",
+      setup: [
+        "deps.get",
+        "cmd cd assets && npm install",
+        "cmd cd test/features && mix deps.get"
+      ],
       t: ["test", "test.js"],
       "test.js": [&test_js/1]
     ]
