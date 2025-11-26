@@ -22,12 +22,12 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert :lists.any(&(&1 > 2), [0, 1, 0, 2, 3])
     end
 
-    test "returns false for empty list" do
-      assert :lists.any(&(&1 > 2), []) == false
-    end
-
     test "returns false if none of the items results in true when supplied to the anonymous function" do
       assert :lists.any(&(&1 > 5), [0, 1, 2, 3, 4]) == false
+    end
+
+    test "returns false for empty list" do
+      assert :lists.any(&(&1 > 2), []) == false
     end
 
     test "raises FunctionClauseError if the first arg is not an anonymous function" do

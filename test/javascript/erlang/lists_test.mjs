@@ -244,10 +244,24 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the second argument is an improper list", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("elem")],
+            guards: [],
+            body: (context) => {
+              return Erlang[">/2"](context.vars.elem, Type.integer(2));
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
       assertBoxedError(
-        () => any(improperList),
+        () => any(fun, improperList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2"),
+        Interpreter.buildFunctionClauseErrorMsg(":lists.any/2", [improperList]),
       );
     });
   });
