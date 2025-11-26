@@ -7,7 +7,6 @@ import Type from "../type.mjs";
 // IMPORTANT!
 // If the given ported Erlang function calls other Erlang functions, then list such dependencies in the "Deps" comment (see :erlang./=/2 for an example).
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
-// Base class and factory for Matchers (used in match, matches, replace, and split)
 
 const Erlang_Binary = {
   // Start at/2
