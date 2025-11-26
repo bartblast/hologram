@@ -1277,6 +1277,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  @spec apply3_target_fun(number, number) :: number
   def apply3_target_fun(left, right), do: left + right
 
   describe "apply/3" do
