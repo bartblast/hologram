@@ -1277,6 +1277,43 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  def apply3_target_fun(left, right), do: left + right
+
+  describe "apply/3" do
+    test "invokes the named function with the provided arguments" do
+      assert :erlang.apply(__MODULE__, :apply3_target_fun, [1, 2]) == 3
+    end
+
+    test "raises ArgumentError if the module is not an atom" do
+      invalid_module = prevent_term_typing_violation(123)
+
+      expected_msg =
+        "you attempted to apply a function on 123. Modules (the first argument of apply) must always be an atom"
+
+      assert_error ArgumentError, expected_msg, fn ->
+        :erlang.apply(invalid_module, :apply3_target_fun, [1, 2])
+      end
+    end
+
+    test "raises ArgumentError if the function is not an atom" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an atom"),
+                   {:erlang, :apply, [__MODULE__, 123, [1, 2]]}
+    end
+
+    test "raises ArgumentError if the args term is not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not a list"),
+                   {:erlang, :apply, [__MODULE__, :apply3_target_fun, 123]}
+    end
+
+    test "raises ArgumentError if the args term is not a proper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not a proper list"),
+                   {:erlang, :apply, [__MODULE__, :apply3_target_fun, [1 | 2]]}
+    end
+  end
+
   if SystemUtils.otp_version() >= 23 do
     describe "atom_to_binary/1" do
       test "delegates to atom_to_binary/2" do

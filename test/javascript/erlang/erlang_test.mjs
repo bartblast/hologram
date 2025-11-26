@@ -1466,6 +1466,76 @@ describe("Erlang", () => {
     });
   });
 
+  describe("apply/3", () => {
+    const apply = Erlang["apply/3"];
+    const applyModuleAlias = Type.alias("ApplyTargetModule");
+    const applyModuleJsName = Interpreter.moduleJsName(applyModuleAlias);
+    const funName = Type.atom("my_fun");
+
+    beforeEach(() => {
+      globalThis[applyModuleJsName] = {
+        __exports__: new Set(["my_fun/2"]),
+        "my_fun/2": (arg1, arg2) => Type.integer(arg1.value + arg2.value),
+      };
+    });
+
+    afterEach(() => {
+      delete globalThis[applyModuleJsName];
+    });
+
+    it("invokes the named function with the provided arguments", () => {
+      const context = contextFixture();
+      const args = Type.list([Type.integer(1), Type.integer(2)]);
+
+      const result = apply(applyModuleAlias, funName, args, context);
+
+      assert.deepStrictEqual(result, Type.integer(3));
+    });
+
+    it("raises ArgumentError if the module is not an atom", () => {
+      const context = contextFixture();
+      const args = Type.list([]);
+
+      assertBoxedError(
+        () => apply(Type.integer(1), funName, args, context),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an atom"),
+      );
+    });
+
+    it("raises ArgumentError if the function is not an atom", () => {
+      const context = contextFixture();
+      const args = Type.list([]);
+
+      assertBoxedError(
+        () => apply(applyModuleAlias, Type.integer(1), args, context),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an atom"),
+      );
+    });
+
+    it("raises ArgumentError if the args term is not a list", () => {
+      const context = contextFixture();
+
+      assertBoxedError(
+        () => apply(applyModuleAlias, funName, Type.integer(1), context),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the args term is not a proper list", () => {
+      const context = contextFixture();
+      const args = Type.improperList([Type.integer(1), Type.integer(2)]);
+
+      assertBoxedError(
+        () => apply(applyModuleAlias, funName, args, context),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+      );
+    });
+  });
+
   describe("atom_to_binary/1", () => {
     it("delegates to atom_to_binary/2", () => {
       const atom = Type.atom("全息图");
