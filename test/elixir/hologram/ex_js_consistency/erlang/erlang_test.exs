@@ -1901,6 +1901,50 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "float_to_list/2" do
+    test ":short option" do
+      assert :erlang.float_to_list(0.1 + 0.2, [:short]) == [
+               48,
+               46,
+               51,
+               48,
+               48,
+               48,
+               48,
+               48,
+               48,
+               48,
+               48,
+               48,
+               48,
+               48,
+               48,
+               48,
+               48,
+               48,
+               52
+             ]
+    end
+
+    test "raises ArgumentError if the first argument is not a float" do
+      assert_error ArgumentError, build_argument_error_msg(1, "not a float"), fn ->
+        :erlang.float_to_list(123, [:short])
+      end
+    end
+
+    test "raises ArgumentError if the second argument is not a list" do
+      assert_error ArgumentError, build_argument_error_msg(2, "not a list"), fn ->
+        :erlang.float_to_list(1.0, 123)
+      end
+    end
+
+    test "raises ArgumentError if the second argument is not a proper list" do
+      assert_error ArgumentError, build_argument_error_msg(2, "not a proper list"), fn ->
+        :erlang.float_to_list(1.0, [{:decimals, 4} | :compact])
+      end
+    end
+  end
+
   describe "hd/1" do
     test "returns the first item in the list" do
       assert :erlang.hd([1, 2, 3]) === 1
