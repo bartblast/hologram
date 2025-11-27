@@ -179,38 +179,38 @@ const Erlang_String = {
       Interpreter.raiseCaseClauseError(direction);
     }
 
-    if (
-      Bitstring.isEmpty(Type.bitstring(pattern)) ||
-      !string.includes(pattern)
-    ) {
+    const stringText = Bitstring.toText(string);
+    const patternText = Bitstring.toText(pattern);
+
+    if (Bitstring.isEmpty(pattern) || !stringText.includes(patternText)) {
       return Type.list([string]);
     }
 
-    let splitted_string_list, index;
-    switch (direction) {
+    let splittedStringList, index;
+    switch (direction.value) {
       case "all":
-        splitted_string_list = string.split(pattern);
+        splittedStringList = stringText.split(patternText);
         break;
 
       case "trailing":
-        index = string.lastIndexOf(pattern);
-        splitted_string_list = [
-          string.slice(0, index),
-          string.slice(index + pattern.length),
+        index = stringText.lastIndexOf(patternText);
+        splittedStringList = [
+          stringText.slice(0, index),
+          stringText.slice(index + patternText.length),
         ];
         break;
 
       case "leading":
       default:
-        index = string.indexOf(pattern);
-        splitted_string_list = [
-          string.slice(0, index),
-          string.slice(index + pattern.length),
+        index = stringText.indexOf(patternText);
+        splittedStringList = [
+          stringText.slice(0, index),
+          stringText.slice(index + patternText.length),
         ];
         break;
     }
 
-    return Type.list(splitted_string_list);
+    return Type.list(splittedStringList);
   },
   // End split/3
   // Deps: []
