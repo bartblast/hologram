@@ -151,6 +151,15 @@ const Erlang_String = {
   // End replace/4
   // Deps: [:unicode.characters_to_binary/1]
 
+  // Start split/2
+  "split/2": (string, pattern) => {
+    const split = Erlang_String["split/3"];
+
+    return split(string, pattern, Type.atom("leading"));
+  },
+  // End split/2
+  // Deps: []
+
   // Start split/3
   "split/3": (string, pattern, direction) => {
     if (!Type.isBinary(string)) {
