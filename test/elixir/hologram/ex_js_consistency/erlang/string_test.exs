@@ -195,6 +195,95 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
     end
   end
 
+  describe "split/2" do
+    test "raises MatchError if the first argument is not a string" do
+      assert_error MatchError, "no match of right hand side value: :hello_world", fn ->
+        :string.split(:hello_world, "_")
+      end
+    end
+
+    test "raises ArgumentError if the second argument is not a string" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not valid character data (an iodata term)"),
+                   fn ->
+                     :string.split("Hello_World_!", :_)
+                   end
+    end
+
+    test "returns inchanged string inside a list if the pattern is empty" do
+      result = :string.split("Hello World !", "")
+
+      assert result == ["Hello World !"]
+    end
+
+    test "returns a two-elements list with the first word at the begining and the tail at the end" do
+      [head | [tail]] = result = :string.split("Hello World !", " ")
+
+      assert length(result) == 2
+      assert head == "Hello"
+      assert tail == "World !"
+    end
+  end
+
+  describe "split/3" do
+    test "raises MatchError if the first argument is not a string" do
+      assert_error MatchError, "no match of right hand side value: :hello_world", fn ->
+        :string.split(:hello_world, "_", :all)
+      end
+    end
+
+    test "raises ArgumentError if the second argument is not a string" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not valid character data (an iodata term)"),
+                   fn ->
+                     :string.split("Hello_World_!", :_, :all)
+                   end
+    end
+
+    test "raises CaseClauseError if the third argument is not a atom" do
+      assert_error CaseClauseError, "no case clause matching: \"all\"", fn ->
+        :string.split("Hello World !", " ", "all")
+      end
+    end
+
+    test "returns inchanged string inside a list if the pattern is empty" do
+      result = :string.split("Hello World !", "", :all)
+
+      assert result == ["Hello World !"]
+    end
+
+    test "returns inchanged string inside a list if the pattern is not present inside the string" do
+      result = :string.split("Hello World !", ".", :all)
+
+      assert result == ["Hello World !"]
+    end
+
+    test "returns a list which length is equal to the number of words inside the string with the direction set to :all" do
+      [head | [middle | [tail]]] = result = :string.split("Hello World !", " ", :all)
+
+      assert length(result) == 3
+      assert head == "Hello"
+      assert middle == "World"
+      assert tail == "!"
+    end
+
+    test "returns a two-elements list with the first word at the begining and the tail at the end when the direction is set to :leading" do
+      [head | [tail]] = result = :string.split("Hello World !", " ", :leading)
+
+      assert length(result) == 2
+      assert head == "Hello"
+      assert tail == "World !"
+    end
+
+    test "returns a two-elements list with the last word at the end and the rest at the begining when the direction is set to :trailing" do
+      [head | [tail]] = result = :string.split("Hello World !", " ", :trailing)
+
+      assert length(result) == 2
+      assert head == "Hello World"
+      assert tail == "!"
+    end
+  end
+
   describe "titlecase/1" do
     # Section: with binary input
 

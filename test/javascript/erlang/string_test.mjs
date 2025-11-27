@@ -510,6 +510,130 @@ describe("Erlang_String", () => {
     });
   });
 
+  describe("split/2", () => {
+    const split = Erlang_String["split/2"];
+    const string_test = Type.bitstring("Hello World !");
+
+    it("raises MatchError if the first argument is not a string", () => {
+      assertBoxedError(
+        () => split(Type.atom("hello_world"), Type.bitstring("_")),
+        "MatchError",
+        "no match of right hand side value: :hello_world",
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a string", () => {
+      assertBoxedError(
+        () => split(Type.bitstring("hello_world"), Type.atom("_")),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 1st argument: not valid character data (an iodata term)\n",
+      );
+    });
+
+    it("returns inchanged string inside a list if the pattern is empty", () => {
+      const result = split(string_test, Type.bitstring(""));
+
+      assert.deepStrictEqual(result, Type.list([string_test]));
+    });
+
+    it("returns a two-elements list with the first word at the begining and the tail at the end", () => {
+      const result = split(string_test, Type.bitstring(" "));
+
+      assert.deepStrictEqual(result.data.length, 2);
+      assert.deepStrictEqual(result.data[0], "Hello");
+      assert.deepStrictEqual(result.data[1], "World !");
+    });
+  });
+
+  describe("split/3", () => {
+    const split = Erlang_String["split/3"];
+    const string_test = Type.bitstring("Hello World !");
+
+    it("raises MatchError if the first argument is not a string", () => {
+      assertBoxedError(
+        () =>
+          split(
+            Type.atom("hello_world"),
+            Type.bitstring("_"),
+            Type.atom("all"),
+          ),
+        "MatchError",
+        "no match of right hand side value: :hello_world",
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a string", () => {
+      assertBoxedError(
+        () =>
+          split(
+            Type.bitstring("hello_world"),
+            Type.atom("_"),
+            Type.atom("all"),
+          ),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 1st argument: not valid character data (an iodata term)\n",
+      );
+    });
+
+    it("raises CaseClauseError if the third argument is not a atom", () => {
+      assertBoxedError(
+        () =>
+          split(
+            Type.bitstring("hello world"),
+            Type.bitstring(" "),
+            Type.bitstring("all"),
+          ),
+        "CaseClauseError",
+        'no case clause matching: "all"',
+      );
+    });
+
+    it("returns inchanged string inside a list if the pattern is empty", () => {
+      const result = split(string_test, Type.bitstring(""), Type.atom("all"));
+
+      assert.deepStrictEqual(result, Type.list([string_test]));
+    });
+
+    it("returns inchanged string inside a list if the pattern is not present inside the string", () => {
+      const result = split(string_test, Type.bitstring("."), Type.atom("all"));
+
+      assert.deepStrictEqual(result, Type.list([string_test]));
+    });
+
+    it("returns a list which length is equal to the number of words inside the string with the direction set to :all", () => {
+      const result = split(string_test, Type.bitstring(" "), Type.atom("all"));
+
+      assert.deepStrictEqual(result.data.length, 3);
+      assert.deepStrictEqual(result.data[0], "Hello");
+      assert.deepStrictEqual(result.data[1], "World");
+      assert.deepStrictEqual(result.data[2], "!");
+    });
+
+    it("returns a two-elements list with the first word at the begining and the tail at the end when the direction is set to :leading", () => {
+      const result = split(
+        string_test,
+        Type.bitstring(" "),
+        Type.atom("leading"),
+      );
+
+      assert.deepStrictEqual(result.data.length, 2);
+      assert.deepStrictEqual(result.data[0], "Hello");
+      assert.deepStrictEqual(result.data[1], "World !");
+    });
+
+    it("returns a two-elements list with the last word at the end and the rest at the begining when the direction is set to :trailing", () => {
+      const result = split(
+        string_test,
+        Type.bitstring(" "),
+        Type.atom("trailing"),
+      );
+
+      assert.deepStrictEqual(result.data.length, 2);
+      assert.deepStrictEqual(result.data[0], "Hello World");
+      assert.deepStrictEqual(result.data[1], "!");
+    });
+  });
+
   describe("titlecase/1", () => {
     const titlecase = Erlang_String["titlecase/1"];
 
@@ -842,8 +966,8 @@ describe("Erlang_String", () => {
 
       it("expands ligature ﬁ (64257) to nested list when binary has trailing content", () => {
         const segments = [
-          Type.bitstringSegment(Type.integer(64_257), {type: "utf8"}),
-          Type.bitstringSegment(Type.bitstring("le"), {type: "bitstring"}),
+          Type.bitstringSegment(Type.integer(64_257), { type: "utf8" }),
+          Type.bitstringSegment(Type.bitstring("le"), { type: "bitstring" }),
         ];
 
         const input = Type.list([Bitstring.fromSegments(segments)]);
@@ -928,8 +1052,8 @@ describe("Erlang_String", () => {
 
       it("expands ligature ﬀ (64256) to nested list when binary has trailing content", () => {
         const segments = [
-          Type.bitstringSegment(Type.integer(64_256), {type: "utf8"}),
-          Type.bitstringSegment(Type.bitstring("ox"), {type: "bitstring"}),
+          Type.bitstringSegment(Type.integer(64_256), { type: "utf8" }),
+          Type.bitstringSegment(Type.bitstring("ox"), { type: "bitstring" }),
         ];
 
         const input = Type.list([Bitstring.fromSegments(segments)]);
@@ -966,8 +1090,8 @@ describe("Erlang_String", () => {
 
       it("expands ligature ﬄ (64260) to nested list when binary has trailing content", () => {
         const segments = [
-          Type.bitstringSegment(Type.integer(64_260), {type: "utf8"}),
-          Type.bitstringSegment(Type.bitstring("at"), {type: "bitstring"}),
+          Type.bitstringSegment(Type.integer(64_260), { type: "utf8" }),
+          Type.bitstringSegment(Type.bitstring("at"), { type: "bitstring" }),
         ];
 
         const input = Type.list([Bitstring.fromSegments(segments)]);
