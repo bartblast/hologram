@@ -158,7 +158,7 @@ const Erlang_String = {
     return split(string, pattern, Type.atom("leading"));
   },
   // End split/2
-  // Deps: []
+  // Deps: [:string.split/3]
 
   // Start split/3
   "split/3": (string, pattern, direction) => {
