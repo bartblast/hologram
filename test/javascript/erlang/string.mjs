@@ -1,7 +1,6 @@
 "use strict";
 
 import {
-  assert,
   assertBoxedError,
   assertBoxedStrictEqual,
   defineGlobalErlangAndElixirModules,

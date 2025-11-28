@@ -1,6 +1,5 @@
 "use strict";
 
-import Bitstring from "../bitstring.mjs";
 import Interpreter from "../interpreter.mjs";
 import Utils from "../utils.mjs";
 import Type from "../type.mjs";
