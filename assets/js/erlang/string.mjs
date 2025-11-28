@@ -82,7 +82,7 @@ const Erlang_String = {
     return replace(string, pattern, replacement, Type.atom("leading"));
   },
   // End replace/3
-  // Deps: []
+  // Deps: [:string.replace/4]
 
   // Start replace/4
   "replace/4": (string, pattern, replacement, direction) => {
