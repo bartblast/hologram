@@ -99,15 +99,6 @@ const Erlang_String = {
       );
     }
 
-    if (!Type.isBinary(replacement)) {
-      // Interpreter.raiseArgumentError(
-      //     Interpreter.buildArgumentErrorMsg(
-      //         1,
-      //         "not valid character data (an iodata term)",
-      //     ),
-      // );
-    }
-
     if (!Type.isAtom(direction)) {
       Interpreter.raiseCaseClauseError(direction);
     }
@@ -122,13 +113,15 @@ const Erlang_String = {
     let splittedStringList, index;
     switch (direction.value) {
       case "all":
-        splittedStringList = stringText.split(patternText);
+        splittedStringList = stringText.split(patternText).flatMap(elem, index => {
+          index === tempStringList.length ? [replacement, elem] : elem
+        })
         break;
 
       case "trailing":
         index = stringText.lastIndexOf(patternText);
         splittedStringList = [
-          stringText.slice(0, index),
+          stringText.slice(0, index), replacement,
           stringText.slice(index + patternText.length),
         ];
         break;
@@ -137,7 +130,7 @@ const Erlang_String = {
       default:
         index = stringText.indexOf(patternText);
         splittedStringList = [
-          stringText.slice(0, index),
+          stringText.slice(0, index), replacement,
           stringText.slice(index + patternText.length),
         ];
         break;
