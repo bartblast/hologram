@@ -75,6 +75,79 @@ const Erlang_String = {
   // End join/2
   // Deps: []
 
+  // Start replace/3
+  "replace/3": (string, pattern, replacement) => {
+    const replace = Erlang_String["replace/4"];
+
+    return replace(string, pattern, replacement, Type.atom("leading"));
+  },
+  // End replace/3
+  // Deps: []
+
+  // Start replace/4
+  "replace/4": (string, pattern, replacement, direction) => {
+    if (!Type.isBinary(string)) {
+      Interpreter.raiseMatchError(Interpreter.buildMatchErrorMsg(string));
+    }
+
+    if (!Type.isBinary(pattern)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not valid character data (an iodata term)",
+        ),
+      );
+    }
+
+    if (!Type.isBinary(replacement)) {
+      // Interpreter.raiseArgumentError(
+      //     Interpreter.buildArgumentErrorMsg(
+      //         1,
+      //         "not valid character data (an iodata term)",
+      //     ),
+      // );
+    }
+
+    if (!Type.isAtom(direction)) {
+      Interpreter.raiseCaseClauseError(direction);
+    }
+
+    const stringText = Bitstring.toText(string);
+    const patternText = Bitstring.toText(pattern);
+
+    if (Bitstring.isEmpty(pattern) || !stringText.includes(patternText)) {
+      return Type.list([string]);
+    }
+
+    let splittedStringList, index;
+    switch (direction.value) {
+      case "all":
+        splittedStringList = stringText.split(patternText);
+        break;
+
+      case "trailing":
+        index = stringText.lastIndexOf(patternText);
+        splittedStringList = [
+          stringText.slice(0, index),
+          stringText.slice(index + patternText.length),
+        ];
+        break;
+
+      case "leading":
+      default:
+        index = stringText.indexOf(patternText);
+        splittedStringList = [
+          stringText.slice(0, index),
+          stringText.slice(index + patternText.length),
+        ];
+        break;
+    }
+
+    return Type.list(splittedStringList);
+  },
+  // End replace/4
+  // Deps: []
+
   // Start titlecase/1
   "titlecase/1": (subject) => {
     // Custom uppercase mapping where Erlang differs from JavaScript's toUpperCase()
@@ -179,7 +252,7 @@ const Erlang_String = {
       const codepointNum = Number(firstCodepoint.value);
       const rest = cpResult.data.slice(1);
 
-      return {codepointNum, rest};
+      return { codepointNum, rest };
     };
 
     // Helper: Uppercase a single codepoint and return array of uppercased codepoints
@@ -209,7 +282,7 @@ const Erlang_String = {
         return Type.bitstring("");
       }
 
-      const {codepointNum, rest} = extraction;
+      const { codepointNum, rest } = extraction;
       const restBinary = rest[0]; // Tail of the improper list
       const restText = Bitstring.toText(restBinary);
 
@@ -227,7 +300,7 @@ const Erlang_String = {
         return Type.list();
       }
 
-      const {codepointNum, rest} = extraction;
+      const { codepointNum, rest } = extraction;
       const uppercasedCodepoints = uppercaseCodepoint(codepointNum).map((cp) =>
         Type.integer(cp),
       );
