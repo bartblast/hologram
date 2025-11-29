@@ -2641,6 +2641,211 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("seq/2", () => {
+    const seq = Erlang_Lists["seq/2"];
+
+    it("generates ascending sequence", () => {
+      const result = seq(Type.integer(1), Type.integer(5));
+      const expected = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+        Type.integer(4),
+        Type.integer(5),
+      ]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises FunctionClauseError when from > to + 1", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.seq/2",
+        [Type.integer(10), Type.integer(5)],
+      );
+
+      assertBoxedError(
+        () => seq(Type.integer(10), Type.integer(5)),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument is not an integer", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.seq/2",
+        [Type.atom("abc"), Type.integer(5)],
+      );
+
+      assertBoxedError(
+        () => seq(Type.atom("abc"), Type.integer(5)),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is not an integer", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.seq/2",
+        [Type.integer(1), Type.atom("abc")],
+      );
+
+      assertBoxedError(
+        () => seq(Type.integer(1), Type.atom("abc")),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+  });
+
+  describe("seq/3", () => {
+    const seq = Erlang_Lists["seq/3"];
+
+    it("generates ascending sequence with increment 1", () => {
+      const result = seq(Type.integer(1), Type.integer(5), Type.integer(1));
+      const expected = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+        Type.integer(4),
+        Type.integer(5),
+      ]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("generates ascending sequence with increment 2", () => {
+      const result = seq(Type.integer(1), Type.integer(10), Type.integer(2));
+      const expected = Type.list([
+        Type.integer(1),
+        Type.integer(3),
+        Type.integer(5),
+        Type.integer(7),
+        Type.integer(9),
+      ]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("generates ascending sequence from negative to positive", () => {
+      const result = seq(Type.integer(-5), Type.integer(5), Type.integer(2));
+      const expected = Type.list([
+        Type.integer(-5),
+        Type.integer(-3),
+        Type.integer(-1),
+        Type.integer(1),
+        Type.integer(3),
+        Type.integer(5),
+      ]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("generates descending sequence with negative increment", () => {
+      const result = seq(Type.integer(10), Type.integer(5), Type.integer(-1));
+      const expected = Type.list([
+        Type.integer(10),
+        Type.integer(9),
+        Type.integer(8),
+        Type.integer(7),
+        Type.integer(6),
+        Type.integer(5),
+      ]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("generates descending sequence with negative increment of -2", () => {
+      const result = seq(Type.integer(10), Type.integer(1), Type.integer(-2));
+      const expected = Type.list([
+        Type.integer(10),
+        Type.integer(8),
+        Type.integer(6),
+        Type.integer(4),
+        Type.integer(2),
+      ]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("generates descending sequence in negative range", () => {
+      const result = seq(Type.integer(-1), Type.integer(-10), Type.integer(-2));
+      const expected = Type.list([
+        Type.integer(-1),
+        Type.integer(-3),
+        Type.integer(-5),
+        Type.integer(-7),
+        Type.integer(-9),
+      ]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("generates single element sequence when from equals to", () => {
+      const result = seq(Type.integer(5), Type.integer(5), Type.integer(1));
+      const expected = Type.list([Type.integer(5)]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("generates single element sequence when from equals to with increment 0", () => {
+      const result = seq(Type.integer(5), Type.integer(5), Type.integer(0));
+      const expected = Type.list([Type.integer(5)]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("generates empty sequence if from > to with positive increment", () => {
+      const result = seq(Type.integer(10), Type.integer(6), Type.integer(4));
+      const expected = Type.list([]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("generates empty sequence when from - incr equals to (boundary case)", () => {
+      const result = seq(Type.integer(2), Type.integer(1), Type.integer(1));
+      const expected = Type.list([]);
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if from > to with positive increment", () => {
+      assertBoxedError(
+        () => seq(Type.integer(10), Type.integer(1), Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a negative increment"),
+      );
+    });
+
+    it("raises ArgumentError if from < to with negative increment", () => {
+      assertBoxedError(
+        () => seq(Type.integer(1), Type.integer(10), Type.integer(-1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a positive increment"),
+      );
+    });
+
+    it("raises ArgumentError if increment is 0", () => {
+      assertBoxedError(
+        () => seq(Type.integer(1), Type.integer(5), Type.integer(0)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a positive increment"),
+      );
+    });
+
+    it("raises ArgumentError if the first argument is not an integer", () => {
+      assertBoxedError(
+        () => seq(Type.atom("abc"), Type.integer(5), Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not an integer", () => {
+      assertBoxedError(
+        () => seq(Type.integer(1), Type.atom("abc"), Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if the third argument is not an integer", () => {
+      assertBoxedError(
+        () => seq(Type.integer(1), Type.integer(5), Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    });
+  });
+
   describe("sort/2", () => {
     const sort = Erlang_Lists["sort/2"];
 
