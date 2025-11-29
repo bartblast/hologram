@@ -110,135 +110,78 @@ describe("Erlang_Binary", () => {
         const pattern = Bitstring.fromBytes([72, 101, 108, 108, 111]); // "Hello"
         const result = compilePattern(pattern);
 
-        assert(Type.isTuple(result));
-        assert.strictEqual(result.data.length, 2);
-        assert(Type.isAtom(result.data[0]));
+        assert(Type.isCompiledPattern(result));
         assert.strictEqual(result.data[0].value, "bm");
-        assert.strictEqual(result.data[1].node.words, pattern);
       });
 
-      it("handles empty binary pattern", () => {
-        const pattern = Bitstring.fromBytes([]);
+      it("stores the pattern in the binaryPattern registry", () => {
+        const pattern = Bitstring.fromBytes([72, 101, 108, 108, 111]); // "Hello"
         const result = compilePattern(pattern);
+        const reference = result.data[1];
+        const words = Hologram.binaryPatterns.get(reference);
 
-        assert(Type.isTuple(result));
-        assert.strictEqual(result.data[0].value, "bm");
-        assert.strictEqual(result.data[1].node.words, pattern);
+        assert.strictEqual(words, pattern);
       });
     });
 
     describe("with list of binary patterns", () => {
+      const pattern1 = Bitstring.fromBytes([72, 101]); // "He"
+      const pattern2 = Bitstring.fromBytes([108, 108, 111]); // "llo"
+      const patternList = Type.list([pattern1, pattern2]);
+
       it("returns Aho-Corasick compiled pattern tuple", () => {
-        const pattern1 = Bitstring.fromBytes([72, 101]); // "He"
-        const pattern2 = Bitstring.fromBytes([108, 108]); // "ll"
-        const patternList = Type.list([pattern1, pattern2]);
         const result = compilePattern(patternList);
 
-        assert(Type.isTuple(result));
-        assert.strictEqual(result.data.length, 2);
-        assert(Type.isAtom(result.data[0]));
+        assert(Type.isCompiledPattern(result));
         assert.strictEqual(result.data[0].value, "ac");
-        assert.deepStrictEqual(result.data[1].node.words, patternList);
       });
 
-      it("handles single pattern in list", () => {
-        const pattern = Bitstring.fromBytes([72, 101, 108, 108, 111]);
-        const patternList = Type.list([pattern]);
+      it("stores the pattern in the binaryPattern registry", () => {
         const result = compilePattern(patternList);
+        const reference = result.data[1];
+        const words = Hologram.binaryPatterns.get(reference);
 
-        assert(Type.isTuple(result));
-        assert.strictEqual(result.data[0].value, "ac");
-        assert.deepStrictEqual(result.data[1].node.words, patternList);
+        assert.strictEqual(words, patternList);
       });
 
-      it("raises ArgumentError for list containing non-binary", () => {
-        const validPattern = Bitstring.fromBytes([72, 101]);
-        const invalidPattern = Type.atom("not_binary");
-        const patternList = Type.list([validPattern, invalidPattern]);
-
-        assertBoxedError(
-          () => compilePattern(patternList),
-          "ArgumentError",
-          "is not a valid pattern",
-        );
-      });
-
-      it("raises ArgumentError for list containing bitstring", () => {
-        const validPattern = Bitstring.fromBytes([72, 101]);
-        const bitstringPattern = Type.bitstring([1, 0, 1]); // 3 bits, not a binary
-        const patternList = Type.list([validPattern, bitstringPattern]);
-
-        assertBoxedError(
-          () => compilePattern(patternList),
-          "ArgumentError",
-          "is not a valid pattern",
-        );
+      it("accepts a list with only one element", () => {
+        const oneItemList = Type.list([pattern1]);
+        const result = compilePattern(oneItemList);
+        assert(Type.isCompiledPattern(result));
       });
     });
 
-    describe("with compiled pattern tuple", () => {
-      it("recreates Boyer-Moore matcher from bm tuple", () => {
-        const pattern = Bitstring.fromBytes([72, 101, 108, 108, 111]);
-        const compiledPattern = compilePattern(pattern);
-        const result = compilePattern(compiledPattern);
+    describe("Raises for invalid pattern types", () => {
+      const invalidPatternTypes = {
+        "nonbinary bitstring": Type.bitstring([1, 0, 1]),
+        "empty binary": Bitstring.fromText(""),
+        "empty list": Type.list([]),
+        integer: Type.integer(1),
+        atom: Type.atom("hello"),
+        tuple: Type.tuple(["ab", "cd"]),
+      };
 
-        assert(Type.isTuple(result));
-        assert.strictEqual(result.data[0].value, "bm");
-        assert.strictEqual(result.data[1].node.words, pattern);
-      });
+      for (const name in invalidPatternTypes) {
+        it(`raises ArgumentError when pattern is ${name}`, () => {
+          assertBoxedError(
+            () => compilePattern(invalidPatternTypes[name]),
+            "ArgumentError",
+            "is not a valid pattern",
+          );
+        });
 
-      it("recreates Aho-Corasick matcher from ac tuple", () => {
-        const pattern1 = Bitstring.fromBytes([72, 101]); // "He"
-        const pattern2 = Bitstring.fromBytes([108, 108]); // "ll"
-        const patternList = Type.list([pattern1, pattern2]);
-        const compiledPattern = compilePattern(patternList);
-        const result = compilePattern(compiledPattern);
-
-        assert(Type.isTuple(result));
-        assert.strictEqual(result.data[0].value, "ac");
-        assert.deepStrictEqual(result.data[1].node.words, patternList);
-      });
-
-      it("raises ArgumentError for unknown algorithm atom", () => {
-        const unknownAlgoPattern = Type.tuple([
-          Type.atom("unknown_algo"),
-          {pattern: [72, 101]},
-        ]);
-
-        assertBoxedError(
-          () => compilePattern(unknownAlgoPattern),
-          "ArgumentError",
-          "is not a valid pattern",
-        );
-      });
-    });
-
-    describe("with invalid pattern types", () => {
-      it("raises ArgumentError for integer", () => {
-        assertBoxedError(
-          () => compilePattern(Type.integer(123)),
-          "ArgumentError",
-          "is not a valid pattern",
-        );
-      });
-
-      it("raises ArgumentError for atom", () => {
-        assertBoxedError(
-          () => compilePattern(Type.atom("invalid")),
-          "ArgumentError",
-          "is not a valid pattern",
-        );
-      });
-
-      it("raises ArgumentError for bitstring (non-binary)", () => {
-        const bitstring = Type.bitstring([1, 0, 1]); // 3 bits
-
-        assertBoxedError(
-          () => compilePattern(bitstring),
-          "ArgumentError",
-          "is not a valid pattern",
-        );
-      });
+        it(`raises ArgumentError when pattern is a list containing ${name}`, () => {
+          const patternList = [
+            Bitstring.fromText("Hello"),
+            invalidPatternTypes[name],
+          ];
+          assertBoxedError(
+            () => compilePattern(patternList),
+            "ArgumentError",
+            "is not a valid pattern",
+          );
+        });
+      }
     });
   });
 
@@ -380,38 +323,21 @@ describe("Erlang_Binary", () => {
     });
   });
 
-  describe("_boyerMoorePatternMatcher", () => {
+  describe("_boyer_moore_pattern_matcher", () => {
     it("computes bad shift table correctly", () => {
       const pattern = Bitstring.fromBytes([104, 101, 108, 108, 111]);
-      const compiled = Erlang_Binary._boyerMoorePatternMatcher(pattern);
-
-      assert.strictEqual(compiled.data[0].value, "bm");
-      assert.strictEqual(compiled.data[1].node.algorithm, "boyer_moore");
-      assert.strictEqual(compiled.data[1].node.words, pattern);
+      const result = Erlang_Binary._boyer_moore_pattern_matcher(pattern);
+      assert(Type.isCompiledPattern(result));
     });
   });
 
-  describe("_ahoCorasickPatternMatcher", () => {
+  describe("_aho_corasick_pattern_matcher", () => {
     it("builds trie structure for multiple patterns", () => {
       const pattern1 = Bitstring.fromBytes([104, 101]); // "he"
-      const pattern2 = Bitstring.fromBytes([115, 104, 101]); // "she"
-      const pattern3 = Bitstring.fromBytes([104, 105, 115]); // "his"
-      const patternList = Type.list([pattern1, pattern2, pattern3]);
-      const compiled = Erlang_Binary._ahoCorasickPatternMatcher(patternList);
-
-      assert.strictEqual(compiled.data[0].value, "ac");
-      assert.strictEqual(compiled.data[1].node.algorithm, "aho_corasick");
-      assert.deepStrictEqual(compiled.data[1].node.words, patternList);
-    });
-
-    it("handles overlapping patterns", () => {
-      const pattern1 = Bitstring.fromBytes([97, 98]); // "ab"
-      const pattern2 = Bitstring.fromBytes([97, 98, 99]); // "abc"
+      const pattern2 = Bitstring.fromBytes([115, 104, 101]); // "she
       const patternList = Type.list([pattern1, pattern2]);
-      const compiled = Erlang_Binary._ahoCorasickPatternMatcher(patternList);
-
-      assert.strictEqual(compiled.data[0].value, "ac");
-      assert.deepStrictEqual(compiled.data[1].node.words, patternList);
+      const result = Erlang_Binary._aho_corasick_pattern_matcher(patternList);
+      assert(Type.isCompiledPattern(result));
     });
   });
 });

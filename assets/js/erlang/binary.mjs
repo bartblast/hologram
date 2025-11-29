@@ -45,21 +45,25 @@ const Erlang_Binary = {
   // Start compile_pattern/1
   "compile_pattern/1": (pattern) => {
     if (Type.isBinary(pattern)) {
-      return Erlang_Binary._boyerMoorePatternMatcher(pattern);
+      return Erlang_Binary._boyer_moore_pattern_matcher(pattern);
+    } else if (
+      Type.isList(pattern) &&
+      pattern.data.length == 1 &&
+      Type.isBinary(pattern.data[0])
+    ) {
+      return Erlang_Binary._boyer_moore_pattern_matcher(pattern.data[0]);
     } else if (
       Type.isList(pattern) &&
       pattern.data.length > 0 &&
       pattern.data.every((i) => Type.isBinary(i))
     ) {
-      return Erlang_Binary._ahoCorasickPatternMatcher(pattern);
-    } else if (Type.isCompiledPattern(pattern)) {
-      return pattern;
+      return Erlang_Binary._aho_corasick_pattern_matcher(pattern);
     }
 
     Interpreter.raiseArgumentError("is not a valid pattern");
   },
   // End compile_pattern/1
-  // Deps: [Erlang_Binary._ahoCorasickPatternMatcher, Erlang_Binary._boyerMoorePatternMatcher]
+  // Deps: [:binary._aho_corasick_pattern_matcher/1, :binary._boyer_moore_pattern_matcher/1]
 
   // Start copy/2
   "copy/2": (subject, count) => {
@@ -115,37 +119,39 @@ const Erlang_Binary = {
   // End copy/2
   // Deps: []
 
-  // Start _boyerMoorePatternMatcher
   // Boyer-Moore matcher implementation for single patterns
-  _boyerMoorePatternMatcher: (pattern) => {
+  // Start _boyer_moore_pattern_matcher/1
+  _boyer_moore_pattern_matcher: (pattern) => {
     Bitstring.maybeSetBytesFromText(pattern);
+
+    if (pattern.bytes.length == 0) {
+      Interpreter.raiseArgumentError("is not a valid pattern");
+    }
+
     const length = pattern.bytes.length - 1;
 
-    // Seed badShift with initial values
-    const badShift = Object.fromEntries(
-      Array.from({length: 256}, (_, i) => [i, -1]),
-    );
+    // Seed the badShift object with an initial value of -1 for each byte
+    const badShift = {};
+    for (let i = 0; i < 256; i++) {
+      badShift[i] = -1;
+    }
 
-    // Assign bad shift values for each byte in the pattern
+    // Overwrite with the actual value for each byte in the pattern
     pattern.bytes.forEach((byte, index) => {
       badShift[byte] = length - index;
     });
 
-    return Type.tuple([
-      Type.atom("bm"),
-      Type.reference({
-        algorithm: "boyer_moore",
-        words: pattern,
-        badShift: badShift,
-      }),
-    ]);
+    const patternReference = Type.reference();
+    // Hologram.binaryPatterns.put(patternReference, pattern)
+
+    return Type.tuple([Type.atom("bm"), patternReference]);
   },
-  // End _boyerMoorePatternMatcher
+  // End _boyer_moore_pattern_matcher/1
   // Deps: []
 
-  // Start _ahoCorasickPatternMatcher
   // Aho-Corasick matcher implementation for multiple patterns
-  _ahoCorasickPatternMatcher: (patterns) => {
+  // Start _aho_corasick_pattern_matcher/1
+  _aho_corasick_pattern_matcher: (patterns) => {
     const root = {
       children: new Map(),
       output: [],
@@ -155,6 +161,11 @@ const Erlang_Binary = {
     // Build tries for each pattern
     patterns.data.forEach((pattern) => {
       Bitstring.maybeSetBytesFromText(pattern);
+
+      if (pattern.bytes.length === 0) {
+        Interpreter.raiseArgumentError("is not a valid pattern");
+      }
+
       let node = root;
       pattern.bytes.forEach((byte) => {
         if (!node.children.has(byte)) {
@@ -195,16 +206,12 @@ const Erlang_Binary = {
       }
     }
 
-    return Type.tuple([
-      Type.atom("ac"),
-      Type.reference({
-        algorithm: "aho_corasick",
-        words: patterns,
-        trie: root,
-      }),
-    ]);
+    const patternReference = Type.reference();
+    // Hologram.binaryPatterns.put(patternReference, pattern)
+
+    return Type.tuple([Type.atom("ac"), patternReference]);
   },
-  // End _ahoCorasickPatternMatcher
+  // End _aho_corasick_pattern_matcher/1
   // Deps: []
 };
 

@@ -58,57 +58,62 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
   end
 
   describe "compile_pattern/1" do
-    test "returns a tuple for a single binary" do
+    test "single binary pattern returns Boyer-Moore compiled pattern tuple" do
       compiled_pattern = :binary.compile_pattern("hello")
       assert is_tuple(compiled_pattern)
-    end
-
-    test "returns a tuple for a list of binaries" do
-      compiled_pattern = :binary.compile_pattern(["hello", "world"])
-      assert is_tuple(compiled_pattern)
-    end
-
-    test "returns a tuple for a compiled pattern" do
-      base_pattern = :binary.compile_pattern("hello")
-      # At the moment its imposible to make this work
-      # see: https://github.com/bartblast/hologram/pull/374#issuecomment-3578359261
-      #
-      # compiled_pattern = :binary.compile_pattern(base_pattern)
-      # assert is_tuple(compiled_pattern)
-
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "not a valid pattern"),
-                   fn -> :binary.compile_pattern(base_pattern) end
-    end
-
-    test "uses Boyer-Moore algorithm for single patterns" do
-      compiled_pattern = :binary.compile_pattern("hello")
       assert elem(compiled_pattern, 0) == :bm
       assert is_reference(elem(compiled_pattern, 1))
     end
 
-    test "uses Aro-Corsick algorithm for multiple patterns" do
+    test "with a list of binary patterns returns Aho-Corasick compiled pattern tuple" do
       compiled_pattern = :binary.compile_pattern(["hello", "world"])
+      assert is_tuple(compiled_pattern)
       assert elem(compiled_pattern, 0) == :ac
       assert is_reference(elem(compiled_pattern, 1))
     end
 
-    test "raises ArgumentError when pattern is not a binary" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "not a valid pattern"),
-                   fn -> :binary.compile_pattern(123) end
+    test "A list with only one element returns Boyer-Moore compiled pattern tuple" do
+      compiled_pattern = :binary.compile_pattern(["hello"])
+      assert is_tuple(compiled_pattern)
+      assert elem(compiled_pattern, 0) == :bm
+      assert is_reference(elem(compiled_pattern, 1))
     end
 
-    test "raises ArgumentError when pattern is an empty list" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "not a valid pattern"),
-                   fn -> :binary.compile_pattern([]) end
+    invalidPatternTypes = %{
+      "empty binary" => "",
+      "empty list" => [],
+      :integer => 1,
+      :atom => :hello,
+      :tuple => {"ab", "cd"}
+    }
+
+    Enum.each(invalidPatternTypes, fn {type, pattern} ->
+      quote do
+        test "raises ArgumentError when pattern is #{unquote(type)}" do
+          assert_raise ArgumentError, fn ->
+            :binary.compile_pattern(unquote(pattern))
+          end
+        end
+
+        test "raises ArgumentError when pattern is a list containing #{unquote(type)}" do
+          assert_raise ArgumentError, fn ->
+            :binary.compile_pattern(["hello", unquote(pattern)])
+          end
+        end
+      end
+    end)
+
+    # Difficult to unquote a non-binary bitstring, so broken out
+    test "raises ArgumentError when pattern is non-binary bitstring" do
+      assert_raise ArgumentError, fn ->
+        :binary.compile_pattern(<<1::1, 0::1, 1::1>>)
+      end
     end
 
-    test "raises ArgumentError when pattern is a list but contains non-binary elements" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "not a valid pattern"),
-                   fn -> :binary.compile_pattern(["hello", 123]) end
+    test "raises ArgumentError when pattern is a list containing non-binary bitstring" do
+      assert_raise ArgumentError, fn ->
+        :binary.compile_pattern(["hello", <<1::1, 0::1, 1::1>>])
+      end
     end
   end
 
