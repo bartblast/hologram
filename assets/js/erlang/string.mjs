@@ -2,6 +2,7 @@
 
 import Bitstring from "../bitstring.mjs";
 import Erlang_UnicodeUtil from "./unicode_util.mjs";
+import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
@@ -99,12 +100,19 @@ const Erlang_String = {
       );
     }
 
+    if (!Type.isBinary(replacement)) {
+      throw new HologramInterpreterError(
+        "using :string.replace/3 or :string.replace/4 replacement argument other than binary is not yet implemented in Hologram",
+      );
+    }
+
     if (!Type.isAtom(direction)) {
       Interpreter.raiseCaseClauseError(direction);
     }
 
     const stringText = Bitstring.toText(string);
     const patternText = Bitstring.toText(pattern);
+    const replacementText = Bitstring.toText(replacement);
 
     if (Bitstring.isEmpty(pattern) || !stringText.includes(patternText)) {
       return Type.list([string]);
@@ -113,15 +121,18 @@ const Erlang_String = {
     let splittedStringList, index;
     switch (direction.value) {
       case "all":
-        splittedStringList = stringText.split(patternText).flatMap(elem, index => {
-          index === tempStringList.length ? [replacement, elem] : elem
-        })
+        const tempStringList = stringText.split(patternText);
+
+        splittedStringList = tempStringList.flatMap((elem, index) => {
+          return index === 0 ? elem : [replacementText, elem];
+        });
         break;
 
       case "trailing":
         index = stringText.lastIndexOf(patternText);
         splittedStringList = [
-          stringText.slice(0, index), replacement,
+          stringText.slice(0, index),
+          replacementText,
           stringText.slice(index + patternText.length),
         ];
         break;
@@ -130,7 +141,8 @@ const Erlang_String = {
       default:
         index = stringText.indexOf(patternText);
         splittedStringList = [
-          stringText.slice(0, index), replacement,
+          stringText.slice(0, index),
+          replacementText,
           stringText.slice(index + patternText.length),
         ];
         break;
