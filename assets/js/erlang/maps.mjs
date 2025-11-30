@@ -50,6 +50,25 @@ const Erlang_Maps = {
   // End fold/3
   // Deps: []
 
+  // Start from_keys/2
+  "from_keys/2": (keys, value) => {
+    if (!Type.isList(keys)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(keys)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a proper list"),
+      );
+    }
+
+    return Type.map(keys.data.map((key) => [key, value]));
+  },
+  // End from_keys/2
+  // Deps: []
+
   // Start from_list/1
   "from_list/1": (list) => {
     if (!Type.isList(list)) {
