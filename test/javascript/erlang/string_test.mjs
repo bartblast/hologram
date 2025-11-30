@@ -8,13 +8,14 @@ import {
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_String from "../../../assets/js/erlang/string.mjs";
+import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
 // IMPORTANT!
-// Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/string_test.exs
+// Each JavaScript test has a related Elixir consistency test in test/elixir/hologram/ex_js_consistency/erlang/lists_test.exs
 // Always update both together.
 
 describe("Erlang_String", () => {
@@ -190,6 +191,184 @@ describe("Erlang_String", () => {
         "ArgumentError",
         "argument error",
       );
+    });
+  });
+
+  describe("replace/3", () => {
+    const replace = Erlang_String["replace/3"];
+    const string_test = Type.bitstring("Hello World !");
+
+    it("raises MatchError if the first argument is not a string", () => {
+      assertBoxedError(
+        () =>
+          replace(
+            Type.atom("hello_world"),
+            Type.bitstring("_"),
+            Type.bitstring(" "),
+          ),
+        "MatchError",
+        "no match of right hand side value: :hello_world",
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a string", () => {
+      assertBoxedError(
+        () =>
+          replace(
+            Type.bitstring("hello_world"),
+            Type.atom("_"),
+            Type.bitstring(" "),
+          ),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 1st argument: not valid character data (an iodata term)\n",
+      );
+    });
+
+    it("raises HologramInterpreterError if third argument is not a binary", () => {
+      assert.throw(
+        () => replace(string_test, Type.bitstring(" "), Type.atom("_")),
+        HologramInterpreterError,
+        "using :string.replace/3 or :string.replace/4 replacement argument other than binary is not yet implemented in Hologram",
+      );
+    });
+
+    it("returns inchanged string inside a list if the pattern is empty", () => {
+      const result = replace(
+        string_test,
+        Type.bitstring(""),
+        Type.bitstring("."),
+      );
+
+      assert.deepStrictEqual(result, Type.list([string_test]));
+    });
+
+    it("returns a three-elements list with the first word at the begining, the replacement at the middle and the tail at the end", () => {
+      const result = replace(
+        string_test,
+        Type.bitstring(" "),
+        Type.bitstring("."),
+      );
+
+      assert.deepStrictEqual(result, Type.list(["Hello", ".", "World !"]));
+    });
+  });
+
+  describe("replace/4", () => {
+    const replace = Erlang_String["replace/4"];
+    const string_test = Type.bitstring("Hello World !");
+
+    it("raises MatchError if the first argument is not a string", () => {
+      assertBoxedError(
+        () =>
+          replace(
+            Type.atom("hello_world"),
+            Type.bitstring("_"),
+            Type.bitstring("."),
+            Type.atom("all"),
+          ),
+        "MatchError",
+        "no match of right hand side value: :hello_world",
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a string", () => {
+      assertBoxedError(
+        () =>
+          replace(
+            Type.bitstring("hello_world"),
+            Type.atom("_"),
+            Type.bitstring("."),
+            Type.atom("all"),
+          ),
+        "ArgumentError",
+        "errors were found at the given arguments:\n\n  * 1st argument: not valid character data (an iodata term)\n",
+      );
+    });
+
+    it("raises HologramInterpreterError if third argument is not a binary", () => {
+      assert.throw(
+        () =>
+          replace(
+            string_test,
+            Type.bitstring(" "),
+            Type.atom("_"),
+            Type.atom("all"),
+          ),
+        HologramInterpreterError,
+        "using :string.replace/3 or :string.replace/4 replacement argument other than binary is not yet implemented in Hologram",
+      );
+    });
+
+    it("raises CaseClauseError if the third argument is not a atom", () => {
+      assertBoxedError(
+        () =>
+          replace(
+            Type.bitstring("hello world"),
+            Type.bitstring(" "),
+            Type.bitstring("."),
+            Type.bitstring("all"),
+          ),
+        "CaseClauseError",
+        'no case clause matching: "all"',
+      );
+    });
+
+    it("returns inchanged string inside a list if the pattern is empty", () => {
+      const result = replace(
+        string_test,
+        Type.bitstring(""),
+        Type.bitstring("."),
+        Type.atom("all"),
+      );
+
+      assert.deepStrictEqual(result, Type.list([string_test]));
+    });
+
+    it("returns inchanged string inside a list if the pattern is not present inside the string", () => {
+      const result = replace(
+        string_test,
+        Type.bitstring("_"),
+        Type.bitstring("."),
+        Type.atom("all"),
+      );
+
+      assert.deepStrictEqual(result, Type.list([string_test]));
+    });
+
+    it("returns a list of each words separated by the replacement with the direction set to :all", () => {
+      const result = replace(
+        string_test,
+        Type.bitstring(" "),
+        Type.bitstring("."),
+        Type.atom("all"),
+      );
+
+      assert.deepStrictEqual(
+        result,
+        Type.list(["Hello", ".", "World", ".", "!"]),
+      );
+    });
+
+    it("returns a two-elements list with the first word at the begining and the tail at the end when the direction is set to :leading", () => {
+      const result = replace(
+        string_test,
+        Type.bitstring(" "),
+        Type.bitstring("."),
+        Type.atom("leading"),
+      );
+
+      assert.deepStrictEqual(result, Type.list(["Hello", ".", "World !"]));
+    });
+
+    it("returns a two-elements list with the last word at the end and the rest at the begining when the direction is set to :trailing", () => {
+      const result = replace(
+        string_test,
+        Type.bitstring(" "),
+        Type.bitstring("."),
+        Type.atom("trailing"),
+      );
+
+      assert.deepStrictEqual(result, Type.list(["Hello World", ".", "!"]));
     });
   });
 
@@ -525,8 +704,8 @@ describe("Erlang_String", () => {
 
       it("expands ligature ﬁ (64257) to nested list when binary has trailing content", () => {
         const segments = [
-          Type.bitstringSegment(Type.integer(64_257), {type: "utf8"}),
-          Type.bitstringSegment(Type.bitstring("le"), {type: "bitstring"}),
+          Type.bitstringSegment(Type.integer(64_257), { type: "utf8" }),
+          Type.bitstringSegment(Type.bitstring("le"), { type: "bitstring" }),
         ];
 
         const input = Type.list([Bitstring.fromSegments(segments)]);
@@ -611,8 +790,8 @@ describe("Erlang_String", () => {
 
       it("expands ligature ﬀ (64256) to nested list when binary has trailing content", () => {
         const segments = [
-          Type.bitstringSegment(Type.integer(64_256), {type: "utf8"}),
-          Type.bitstringSegment(Type.bitstring("ox"), {type: "bitstring"}),
+          Type.bitstringSegment(Type.integer(64_256), { type: "utf8" }),
+          Type.bitstringSegment(Type.bitstring("ox"), { type: "bitstring" }),
         ];
 
         const input = Type.list([Bitstring.fromSegments(segments)]);
@@ -649,8 +828,8 @@ describe("Erlang_String", () => {
 
       it("expands ligature ﬄ (64260) to nested list when binary has trailing content", () => {
         const segments = [
-          Type.bitstringSegment(Type.integer(64_260), {type: "utf8"}),
-          Type.bitstringSegment(Type.bitstring("at"), {type: "bitstring"}),
+          Type.bitstringSegment(Type.integer(64_260), { type: "utf8" }),
+          Type.bitstringSegment(Type.bitstring("at"), { type: "bitstring" }),
         ];
 
         const input = Type.list([Bitstring.fromSegments(segments)]);
