@@ -605,7 +605,8 @@ const Erlang = {
         const value = opt.data[1];
         if (
           Interpreter.isStrictlyEqual(key, Type.atom("decimals")) &&
-          Type.isInteger(value)
+          Type.isInteger(value) &&
+          value.value >= 0n
         ) {
           decimals = Number(value.value);
         } else if (
@@ -628,14 +629,26 @@ const Erlang = {
     let result;
 
     if (isShort) {
-      result = float.value.toString();
+      // For :short format, Erlang uses exponential notation for |x| < 0.001 or |x| >= 1e21
+      const absVal = Math.abs(float.value);
+      if ((absVal > 0 && absVal < 0.001) || absVal >= 1e21) {
+        // Use exponential notation with maximum precision to match Erlang
+        result = float.value.toExponential();
+        // Remove trailing zeros after decimal point
+        result = result.replace(/(\.\d*?)0+e/, "$1e").replace(/\.e/, "e");
+      } else {
+        result = float.value.toString();
+      }
     } else if (decimals !== null) {
       result = float.value.toFixed(decimals);
       if (isCompact && decimals > 0) {
         result = result.replace(/0+$/, "").replace(/\.$/, ".0");
       }
     } else {
-      result = float.value.toExponential(scientific);
+      // For negative scientific, Erlang uses fixed precision of 6 decimal places
+      // (as per Erlang/OTP behavior for distinguishing floating point values)
+      const precision = scientific < 0 ? 6 : scientific;
+      result = float.value.toExponential(precision);
       // Erlang format uses zero-padded exponents (e.g., e+00, e-04)
       // JavaScript may use e+0, e-4, so we need to pad the exponent
       result = result.replace(/e([+-])(\d)$/, "e$10$2");

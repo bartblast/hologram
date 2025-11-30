@@ -1902,24 +1902,80 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       end
     end
 
-    test "opts = []" do
-      assert :erlang.float_to_binary(0.1 + 0.2, []) == "3.00000000000000044409e-01"
+    test "raises ArgumentError if scientific option is not an integer" do
+      assert_error ArgumentError, build_argument_error_msg(2, "invalid option in list"), fn ->
+        :erlang.float_to_binary(7.12, [{:scientific, "abc"}])
+      end
     end
 
-    test "opts = [:short]" do
-      assert :erlang.float_to_binary(0.1 + 0.2, [:short]) == "0.30000000000000004"
+    test "raises ArgumentError if decimals option is not an integer" do
+      assert_error ArgumentError, build_argument_error_msg(2, "invalid option in list"), fn ->
+        :erlang.float_to_binary(7.12, [{:decimals, "abc"}])
+      end
     end
 
-    test "opts = [{:decimals, 4}]" do
-      assert :erlang.float_to_binary(7.12, [{:decimals, 4}]) == "7.1200"
+    test "raises ArgumentError if decimals option is less than zero" do
+      assert_error ArgumentError, build_argument_error_msg(2, "invalid option in list"), fn ->
+        :erlang.float_to_binary(7.12, [{:decimals, -1}])
+      end
     end
 
-    test "opts = [{:decimals, 4}, :compact]" do
-      assert :erlang.float_to_binary(7.12, [{:decimals, 4}, :compact]) == "7.12"
+    test "opts = [] with large number" do
+      assert :erlang.float_to_binary(7000.12, []) == "7.00011999999999989086e+03"
     end
 
-    test "opts = [{:scientific, 3}]" do
-      assert :erlang.float_to_binary(7.12, [{:scientific, 3}]) == "7.120e+00"
+    test "opts = [] with small number" do
+      assert :erlang.float_to_binary(0.099, []) == "9.90000000000000046629e-02"
+    end
+
+    test "opts = [:short] with large number" do
+      assert :erlang.float_to_binary(7000.12, [:short]) == "7000.12"
+    end
+
+    test "opts = [:short] with small number" do
+      assert :erlang.float_to_binary(0.099, [:short]) == "0.099"
+    end
+
+    test "opts = [{:decimals, 0}] - remove all decimals" do
+      assert :erlang.float_to_binary(7000.12, [{:decimals, 0}]) == "7000"
+    end
+
+    test "opts = [{:decimals, 4}] with large number" do
+      assert :erlang.float_to_binary(7000.12, [{:decimals, 4}]) == "7000.1200"
+    end
+
+    test "opts = [{:decimals, 4}] with small number" do
+      assert :erlang.float_to_binary(0.099, [{:decimals, 4}]) == "0.0990"
+    end
+
+    test "opts = [{:decimals, 4}, :compact] with large number" do
+      x = 7000.12
+      expected = "7000.12"
+      assert :erlang.float_to_binary(x, [{:decimals, 4}, :compact]) == expected
+      assert :erlang.float_to_binary(x, [:compact, {:decimals, 4}]) == expected
+    end
+
+    test "opts = [{:decimals, 4}, :compact] with small number" do
+      x = 0.099
+      expected = "0.099"
+      assert :erlang.float_to_binary(x, [{:decimals, 4}, :compact]) == expected
+      assert :erlang.float_to_binary(x, [:compact, {:decimals, 4}]) == expected
+    end
+
+    test "opts = [{:scientific, 3}] with large number - scientific option > 0" do
+      assert :erlang.float_to_binary(7000.12, [{:scientific, 3}]) == "7.000e+03"
+    end
+
+    test "opts = [{:scientific, -3}] with large number - scientific option < 0" do
+      assert :erlang.float_to_binary(7000.12, [{:scientific, -3}]) == "7.000120e+03"
+    end
+
+    test "opts = [{:scientific, 3}] with small number - scientific option > 0" do
+      assert :erlang.float_to_binary(0.099, [{:scientific, 3}]) == "9.900e-02"
+    end
+
+    test "opts = [{:scientific, -3}] with small number - scientific option < 0" do
+      assert :erlang.float_to_binary(0.099, [{:scientific, -3}]) == "9.900000e-02"
     end
   end
 
