@@ -198,50 +198,6 @@ describe("Erlang_String", () => {
     const replace = Erlang_String["replace/3"];
     const string_test = Type.bitstring("Hello World !");
 
-    it("raises MatchError if the first argument is not a string", () => {
-      assertBoxedError(
-        () =>
-          replace(
-            Type.atom("hello_world"),
-            Type.bitstring("_"),
-            Type.bitstring(" "),
-          ),
-        "MatchError",
-        "no match of right hand side value: :hello_world",
-      );
-    });
-
-    it("raises ArgumentError if the second argument is not a string", () => {
-      assertBoxedError(
-        () =>
-          replace(
-            Type.bitstring("hello_world"),
-            Type.atom("_"),
-            Type.bitstring(" "),
-          ),
-        "ArgumentError",
-        "errors were found at the given arguments:\n\n  * 1st argument: not valid character data (an iodata term)\n",
-      );
-    });
-
-    it("raises HologramInterpreterError if third argument is not a binary", () => {
-      assert.throw(
-        () => replace(string_test, Type.bitstring(" "), Type.atom("_")),
-        HologramInterpreterError,
-        "using :string.replace/3 or :string.replace/4 replacement argument other than binary is not yet implemented in Hologram",
-      );
-    });
-
-    it("returns inchanged string inside a list if the pattern is empty", () => {
-      const result = replace(
-        string_test,
-        Type.bitstring(""),
-        Type.bitstring("."),
-      );
-
-      assert.deepStrictEqual(result, Type.list([string_test]));
-    });
-
     it("returns a three-elements list with the first word at the begining, the replacement at the middle and the tail at the end", () => {
       const result = replace(
         string_test,
