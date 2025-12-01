@@ -217,11 +217,9 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
     end
 
     test "returns a two-elements list with the first word at the begining and the tail at the end" do
-      [head | [tail]] = result = :string.split("Hello World !", " ")
+      result = :string.split("Hello World !", " ")
 
-      assert length(result) == 2
-      assert head == "Hello"
-      assert tail == "World !"
+      assert result == ["Hello", "World !"]
     end
   end
 
@@ -259,28 +257,21 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
     end
 
     test "returns a list which length is equal to the number of words inside the string with the direction set to :all" do
-      [head | [middle | [tail]]] = result = :string.split("Hello World !", " ", :all)
+      result = :string.split("Hello World !", " ", :all)
 
-      assert length(result) == 3
-      assert head == "Hello"
-      assert middle == "World"
-      assert tail == "!"
+      assert result == ["Hello", "World", "!"]
     end
 
     test "returns a two-elements list with the first word at the begining and the tail at the end when the direction is set to :leading" do
-      [head | [tail]] = result = :string.split("Hello World !", " ", :leading)
+      result = :string.split("Hello World !", " ", :leading)
 
-      assert length(result) == 2
-      assert head == "Hello"
-      assert tail == "World !"
+      assert result == ["Hello", "World !"]
     end
 
     test "returns a two-elements list with the last word at the end and the rest at the begining when the direction is set to :trailing" do
-      [head | [tail]] = result = :string.split("Hello World !", " ", :trailing)
+      result = :string.split("Hello World !", " ", :trailing)
 
-      assert length(result) == 2
-      assert head == "Hello World"
-      assert tail == "!"
+      assert result == ["Hello World", "!"]
     end
   end
 

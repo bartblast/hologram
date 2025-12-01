@@ -539,9 +539,7 @@ describe("Erlang_String", () => {
     it("returns a two-elements list with the first word at the begining and the tail at the end", () => {
       const result = split(string_test, Type.bitstring(" "));
 
-      assert.deepStrictEqual(result.data.length, 2);
-      assert.deepStrictEqual(result.data[0], "Hello");
-      assert.deepStrictEqual(result.data[1], "World !");
+      assert.deepStrictEqual(result, Type.list(["Hello", "World !"]));
     });
   });
 
@@ -603,10 +601,7 @@ describe("Erlang_String", () => {
     it("returns a list which length is equal to the number of words inside the string with the direction set to :all", () => {
       const result = split(string_test, Type.bitstring(" "), Type.atom("all"));
 
-      assert.deepStrictEqual(result.data.length, 3);
-      assert.deepStrictEqual(result.data[0], "Hello");
-      assert.deepStrictEqual(result.data[1], "World");
-      assert.deepStrictEqual(result.data[2], "!");
+      assert.deepStrictEqual(result, Type.list(["Hello", "World", "!"]));
     });
 
     it("returns a two-elements list with the first word at the begining and the tail at the end when the direction is set to :leading", () => {
@@ -616,9 +611,7 @@ describe("Erlang_String", () => {
         Type.atom("leading"),
       );
 
-      assert.deepStrictEqual(result.data.length, 2);
-      assert.deepStrictEqual(result.data[0], "Hello");
-      assert.deepStrictEqual(result.data[1], "World !");
+      assert.deepStrictEqual(result, Type.list(["Hello", "World !"]));
     });
 
     it("returns a two-elements list with the last word at the end and the rest at the begining when the direction is set to :trailing", () => {
@@ -628,9 +621,7 @@ describe("Erlang_String", () => {
         Type.atom("trailing"),
       );
 
-      assert.deepStrictEqual(result.data.length, 2);
-      assert.deepStrictEqual(result.data[0], "Hello World");
-      assert.deepStrictEqual(result.data[1], "!");
+      assert.deepStrictEqual(result, Type.list(["Hello World", "!"]));
     });
   });
 
