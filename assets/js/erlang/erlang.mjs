@@ -326,6 +326,20 @@ const Erlang = {
   // End band/2
   // Deps: []
 
+  // Start bor/2
+  "bor/2": (integer1, integer2) => {
+    if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
+      const arg1 = Interpreter.inspect(integer1);
+      const arg2 = Interpreter.inspect(integer2);
+
+      Interpreter.raiseArithmeticError(`Bitwise.bor(${arg1}, ${arg2})`);
+    }
+
+    return Type.integer(integer1.value | integer2.value);
+  },
+  // End bor/2
+  // Deps: []
+
   // Start binary_to_atom/1
   "binary_to_atom/1": (binary) => {
     return Erlang["binary_to_atom/2"](binary, Type.atom("utf8"));
@@ -962,19 +976,6 @@ const Erlang = {
     return Type.boolean(left.value != right.value);
   },
   // End xor/2
-  // Deps: []
-
-  // Start bor/2
-  "bor/2": (left, right) => {
-    if (!Type.isInteger(left) || !Type.isInteger(right)) {
-      Interpreter.raiseArgumentError(
-        `bad argument in arithmetic expression: Bitwise.bor(${Interpreter.inspect(left)}, ${Interpreter.inspect(right)})`,
-      );
-    }
-
-    return Type.integer(left.value | right.value);
-  },
-  // End bor/2
   // Deps: []
 
   // Start orelse/2

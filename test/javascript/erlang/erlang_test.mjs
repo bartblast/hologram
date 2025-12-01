@@ -1624,6 +1624,53 @@ describe("Erlang", () => {
     });
   });
 
+  describe("bor/2", () => {
+    const bor = Erlang["bor/2"];
+
+    it("sample bitwise ors are correct", () => {
+      assert.deepStrictEqual(
+        bor(Type.integer(4), Type.integer(3)),
+        Type.integer(7),
+      );
+      assert.deepStrictEqual(
+        bor(Type.integer(-4), Type.integer(3)),
+        Type.integer(-1),
+      );
+      assert.deepStrictEqual(
+        bor(Type.integer(23), Type.integer(45)),
+        Type.integer(63),
+      );
+      assert.deepStrictEqual(
+        bor(Type.integer(13), Type.integer(17)),
+        Type.integer(29),
+      );
+      assert.deepStrictEqual(
+        bor(Type.integer(101), Type.integer(93)),
+        Type.integer(125),
+      );
+      assert.deepStrictEqual(
+        bor(Type.integer(33), Type.integer(349)),
+        Type.integer(381),
+      );
+    });
+
+    it("raises ArithmeticError if the first argument is not an integer", () => {
+      assertBoxedError(
+        () => bor(atomAbc, integer1),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.bor(:abc, 1)",
+      );
+    });
+
+    it("raises ArithmeticError if the second argument is not an integer", () => {
+      assertBoxedError(
+        () => bor(integer1, atomAbc),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.bor(1, :abc)",
+      );
+    });
+  });
+
   describe("binary_to_atom/1", () => {
     it("delegates to binary_to_atom/2", () => {
       const binary = Type.bitstring("全息图");
@@ -3281,53 +3328,6 @@ describe("Erlang", () => {
         () => xor(Type.boolean(true), atomAbc),
         "ArgumentError",
         "argument error",
-      );
-    });
-  });
-
-  describe("bor/2", () => {
-    const bor = Erlang["bor/2"];
-
-    it("sample bitwise ors are correct", () => {
-      assert.deepStrictEqual(
-        bor(Type.integer(4), Type.integer(3)),
-        Type.integer(7),
-      );
-      assert.deepStrictEqual(
-        bor(Type.integer(-4), Type.integer(3)),
-        Type.integer(-1),
-      );
-      assert.deepStrictEqual(
-        bor(Type.integer(23), Type.integer(45)),
-        Type.integer(63),
-      );
-      assert.deepStrictEqual(
-        bor(Type.integer(13), Type.integer(17)),
-        Type.integer(29),
-      );
-      assert.deepStrictEqual(
-        bor(Type.integer(101), Type.integer(93)),
-        Type.integer(125),
-      );
-      assert.deepStrictEqual(
-        bor(Type.integer(33), Type.integer(349)),
-        Type.integer(381),
-      );
-    });
-
-    it("raises ArgumentError if the first argument is not an integer", () => {
-      assertBoxedError(
-        () => bor(atomAbc, integer1),
-        "ArgumentError",
-        "bad argument in arithmetic expression: Bitwise.bor(:abc, 1)",
-      );
-    });
-
-    it("raises ArgumentError if the second argument is not an integer", () => {
-      assertBoxedError(
-        () => bor(integer1, atomAbc),
-        "ArgumentError",
-        "bad argument in arithmetic expression: Bitwise.bor(1, :abc)",
       );
     });
   });
