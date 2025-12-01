@@ -3289,33 +3289,33 @@ describe("Erlang", () => {
     const bor = Erlang["bor/2"];
 
     it("sample bitwise ors are correct", () => {
-      assertBoxedStrictEqual(
-        bor(Type.integer(4), Type.boolean(false)),
+      assert.deepStrictEqual(
+        bor(Type.integer(4), Type.integer(3)),
         Type.integer(7),
       );
-      assertBoxedStrictEqual(
-        bor(Type.integer(-4), Type.boolean(3)),
+      assert.deepStrictEqual(
+        bor(Type.integer(-4), Type.integer(3)),
         Type.integer(-1),
       );
-      assertBoxedStrictEqual(
-        bor(Type.integer(23), Type.boolean(45)),
+      assert.deepStrictEqual(
+        bor(Type.integer(23), Type.integer(45)),
         Type.integer(63),
       );
-      assertBoxedStrictEqual(
-        bor(Type.integer(13), Type.boolean(17)),
+      assert.deepStrictEqual(
+        bor(Type.integer(13), Type.integer(17)),
         Type.integer(29),
       );
-      assertBoxedStrictEqual(
-        bor(Type.integer(101), Type.boolean(93)),
+      assert.deepStrictEqual(
+        bor(Type.integer(101), Type.integer(93)),
         Type.integer(125),
       );
-      assertBoxedStrictEqual(
-        bor(Type.integer(33), Type.boolean(349)),
+      assert.deepStrictEqual(
+        bor(Type.integer(33), Type.integer(349)),
         Type.integer(381),
       );
     });
 
-    it("raises ArgumentError if the first argument is not a boolean", () => {
+    it("raises ArgumentError if the first argument is not an integer", () => {
       assertBoxedError(
         () => bor(atomAbc, Type.boolean(true)),
         "ArgumentError",
@@ -3323,7 +3323,7 @@ describe("Erlang", () => {
       );
     });
 
-    it("raises ArgumentError if the second argument is not a boolean", () => {
+    it("raises ArgumentError if the second argument is not an integer", () => {
       assertBoxedError(
         () => bor(Type.boolean(true), atomAbc),
         "ArgumentError",
