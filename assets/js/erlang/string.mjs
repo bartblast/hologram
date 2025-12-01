@@ -121,11 +121,11 @@ const Erlang_String = {
     let splittedStringList, index;
     switch (direction.value) {
       case "all":
-        const tempStringList = stringText.split(patternText);
-
-        splittedStringList = tempStringList.flatMap((elem, index) => {
-          return index === 0 ? elem : [replacementText, elem];
-        });
+        splittedStringList = stringText
+          .split(patternText)
+          .flatMap((elem, index) => {
+            return index === 0 ? elem : [replacementText, elem];
+          });
         break;
 
       case "trailing":
