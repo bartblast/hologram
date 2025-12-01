@@ -964,6 +964,17 @@ const Erlang = {
   // End xor/2
   // Deps: []
 
+  // Start bor/2
+  "bor/2": (left, right) => {
+    if (!Type.isInteger(left) || !Type.isInteger(right)) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    return Type.integer(left.value | right.value);
+  },
+  // End bor/2
+  // Deps: []
+
   // Start orelse/2
   "orelse/2": (leftFun, rightFun, context) => {
     const left = leftFun(context);
