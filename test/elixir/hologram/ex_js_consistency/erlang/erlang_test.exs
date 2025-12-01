@@ -1694,6 +1694,32 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "binary_to_list/1" do
+    test "converts a binary with bytes to a list of integers" do
+      assert :erlang.binary_to_list(<<1, 2, 3>>) == [1, 2, 3]
+    end
+
+    test "converts a text-based binary to a list of integers" do
+      assert :erlang.binary_to_list("ABC") == [65, 66, 67]
+    end
+
+    test "converts an empty binary to an empty list" do
+      assert :erlang.binary_to_list(<<>>) == []
+    end
+
+    test "raises ArgumentError if the argument is not a binary" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :binary_to_list, [123]}
+    end
+
+    test "raises ArgumentError if the argument is a non-binary bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :binary_to_list, [<<5::size(3)>>]}
+    end
+  end
+
   describe "bit_size/1" do
     test "bitstring" do
       assert :erlang.bit_size(<<2::7>>) == 7
