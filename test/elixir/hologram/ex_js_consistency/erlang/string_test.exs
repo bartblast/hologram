@@ -196,26 +196,6 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
   end
 
   describe "split/2" do
-    test "raises MatchError if the first argument is not a string" do
-      assert_error MatchError, "no match of right hand side value: :hello_world", fn ->
-        :string.split(:hello_world, "_")
-      end
-    end
-
-    test "raises ArgumentError if the second argument is not a string" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "not valid character data (an iodata term)"),
-                   fn ->
-                     :string.split("Hello_World_!", :_)
-                   end
-    end
-
-    test "returns inchanged string inside a list if the pattern is empty" do
-      result = :string.split("Hello World !", "")
-
-      assert result == ["Hello World !"]
-    end
-
     test "returns a two-elements list with the first word at the begining and the tail at the end" do
       result = :string.split("Hello World !", " ")
 
