@@ -34,8 +34,12 @@ const integer3 = Type.integer(3);
 const integer4 = Type.integer(4);
 const integer5 = Type.integer(5);
 const integer6 = Type.integer(6);
+const integer10 = Type.integer(10);
 const integer11 = Type.integer(11);
 const integer15 = Type.integer(15);
+const integer16 = Type.integer(16);
+const integer36 = Type.integer(36);
+const integer123 = Type.integer(123);
 const list1 = Type.list([integer1, integer2]);
 
 const mapA1B2 = Type.map([
@@ -2847,118 +2851,103 @@ describe("Erlang", () => {
     const integer_to_list_1 = Erlang["integer_to_list/1"];
     const integer_to_list_2 = Erlang["integer_to_list/2"];
 
-    it("should delegate to integer_to_list/2 with base 10", () => {
-      const integer = Type.integer(77);
-      const base = Type.integer(10);
+    it("delegates to integer_to_list/2 with base 10", () => {
+      const result = integer_to_list_1(integer123);
+      const expected = integer_to_list_2(integer123, integer10);
 
-      const result = integer_to_list_1(integer);
-      const expected = integer_to_list_2(integer, base);
       assert.deepStrictEqual(result, expected);
     });
   });
 
   describe("integer_to_list/2", () => {
     const integer_to_list_2 = Erlang["integer_to_list/2"];
+
     const toCharlist = (str) =>
-      Type.list([...str].map((c) => Type.integer(c.charCodeAt(0))));
+      Type.list([...str].map((char) => Type.integer(char.charCodeAt(0))));
 
-    it("positive integer with base 10", () => {
-      const result = integer_to_list_2(Type.integer(1234), Type.integer(10));
-      assert.deepStrictEqual(result, toCharlist("1234"));
+    it("base 2 (min allowed value for base param)", () => {
+      const result = integer_to_list_2(integer123, integer2);
+
+      assert.deepStrictEqual(result, toCharlist("1111011"));
     });
 
-    it("base 2 lower boundary", () => {
-      const result = integer_to_list_2(Type.integer(10), Type.integer(2));
-      assert.deepStrictEqual(result, toCharlist("1010"));
+    it("base 10", () => {
+      const result = integer_to_list_2(integer123, integer10);
+
+      assert.deepStrictEqual(result, toCharlist("123"));
     });
 
-    it("base 16 (hex uppercase)", () => {
-      const result = integer_to_list_2(Type.integer(1023), Type.integer(16));
-      assert.deepStrictEqual(result, toCharlist("3FF"));
+    it("base 36 (max allowed value for base param)", () => {
+      const result = integer_to_list_2(integer123, Type.integer(36));
+
+      assert.deepStrictEqual(result, toCharlist("3F"));
     });
 
-    it("base 36 upper boundary", () => {
-      const result = integer_to_list_2(Type.integer(35), Type.integer(36));
-      assert.deepStrictEqual(result, toCharlist("Z"));
+    it("negative integer, base 10", () => {
+      const result = integer_to_list_2(Type.integer(-123), integer10);
+
+      assert.deepStrictEqual(result, toCharlist("-123"));
     });
 
-    it("negative integer in base 2", () => {
-      const result = integer_to_list_2(Type.integer(-10), Type.integer(2));
-      assert.deepStrictEqual(result, toCharlist("-1010"));
+    it("negative integer, base other than 10", () => {
+      const result = integer_to_list_2(Type.integer(-123), integer16);
+
+      assert.deepStrictEqual(result, toCharlist("-7B"));
     });
 
-    it("negative integer with base 36", () => {
-      const result = integer_to_list_2(Type.integer(-35), Type.integer(36));
-      assert.deepStrictEqual(result, toCharlist("-Z"));
-    });
+    it("zero, base 10", () => {
+      const result = integer_to_list_2(integer0, integer10);
 
-    it("zero with base 2", () => {
-      const result = integer_to_list_2(Type.integer(0), Type.integer(2));
       assert.deepStrictEqual(result, toCharlist("0"));
     });
 
-    it("zero with base 36", () => {
-      const result = integer_to_list_2(Type.integer(0), Type.integer(36));
+    it("zero, base other than 10", () => {
+      const result = integer_to_list_2(integer0, integer16);
+
       assert.deepStrictEqual(result, toCharlist("0"));
     });
 
-    it("raises ArgumentError for base < 2", () => {
-      assertBoxedError(
-        () => integer_to_list_2(Type.integer(10), Type.integer(1)),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "not an integer in the range 2 through 36",
-        ),
-      );
-    });
+    describe("error cases", () => {
+      it("raises ArgumentError when the first argument is not an integer", () => {
+        assertBoxedError(
+          () => integer_to_list_2(Type.float(3.14), integer10),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+        );
+      });
 
-    it("raises ArgumentError for base > 36", () => {
-      assertBoxedError(
-        () => integer_to_list_2(Type.integer(10), Type.integer(37)),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "not an integer in the range 2 through 36",
-        ),
-      );
-    });
+      it("raises ArgumentError when base is not an integer", () => {
+        assertBoxedError(
+          () => integer_to_list_2(integer123, Type.float(3.14)),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            2,
+            "not an integer in the range 2 through 36",
+          ),
+        );
+      });
 
-    it("raises ArgumentError when first arg is float", () => {
-      assertBoxedError(
-        () => integer_to_list_2(Type.float(3.14), Type.integer(10)),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
-      );
-    });
+      it("raises ArgumentError for base < 2", () => {
+        assertBoxedError(
+          () => integer_to_list_2(integer123, integer1),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            2,
+            "not an integer in the range 2 through 36",
+          ),
+        );
+      });
 
-    it("raises ArgumentError when base is non-number(atom)", () => {
-      assertBoxedError(
-        () => integer_to_list_2(Type.integer(10), Type.atom("hello")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "not an integer in the range 2 through 36",
-        ),
-      );
-    });
-
-    it("raises ArgumentError when first arg is bitstring", () => {
-      assertBoxedError(
-        () => integer_to_list_2(Type.bitstring("abc"), Type.integer(10)),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
-      );
-    });
-    it("raises ArgumentError when base is bitstring", () => {
-      assertBoxedError(
-        () => integer_to_list_2(Type.integer(10), Type.bitstring("abc")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(
-          2,
-          "not an integer in the range 2 through 36",
-        ),
-      );
+      it("raises ArgumentError for base > 36", () => {
+        assertBoxedError(
+          () => integer_to_list_2(integer123, Type.integer(37)),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            2,
+            "not an integer in the range 2 through 36",
+          ),
+        );
+      });
     });
   });
 

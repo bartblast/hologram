@@ -680,7 +680,7 @@ const Erlang = {
     return Erlang["integer_to_list/2"](integer, Type.integer(10));
   },
   // End integer_to_list/1
-  // Deps: []
+  // Deps: [:erlang.integer_to_list/2]
 
   // Start integer_to_list/2
   "integer_to_list/2": (integer, base) => {
