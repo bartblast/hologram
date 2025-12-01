@@ -1021,16 +1021,12 @@ const Erlang = {
       );
     }
 
-    let value = number.value;
-
     if (Type.isFloat(number)) {
-      value = Math.trunc(value);
+      // Erlang trunc/1 converts -0 to 0 while native JavasScript does not
+      return Type.integer(Math.trunc(number.value) + 0);
     }
 
-    // Erlang trunc/1 converts -0 to 0 while native JavasScript does not
-    value = Object.is(value, -0) ? 0 : value;
-
-    return Type.integer(value);
+    return number;
   },
   // End trunc/1
   // Deps: []

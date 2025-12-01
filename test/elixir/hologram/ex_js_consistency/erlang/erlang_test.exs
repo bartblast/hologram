@@ -2373,6 +2373,10 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.trunc(-0) == 0
     end
 
+    test "converts signed-plus zero integer to positive zero integer" do
+      assert :erlang.trunc(+0) == 0
+    end
+
     test "raises ArgumentError if the argument is not a number" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a number"),

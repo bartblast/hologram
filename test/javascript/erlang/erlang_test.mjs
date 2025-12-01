@@ -3463,6 +3463,12 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, integer0);
     });
 
+    it("converts signed-plus zero integer to positive zero integer", () => {
+      const result = testedFun(Type.integer(+0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
     it("raises ArgumentError if the argument is not a number", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc")),
