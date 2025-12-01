@@ -675,6 +675,37 @@ const Erlang = {
   // End integer_to_binary/2
   // Deps: []
 
+  // Start integer_to_list/1
+  "integer_to_list/1": (integer) => {
+    return Erlang["integer_to_list/2"](integer, Type.integer(10));
+  },
+  // End integer_to_list/1
+  // Deps: []
+
+  // Start integer_to_list/2
+  "integer_to_list/2": (integer, base) => {
+    if (!Type.isInteger(integer)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isInteger(base) || base.value < 2n || base.value > 36n) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    }
+
+    const text = integer.value.toString(Number(base.value)).toUpperCase();
+
+    return Bitstring.toCodepoints(Type.bitstring(text));
+  },
+  // End integer_to_list/2
+  // Deps: []
+
   // TODO: test
   // Start iolist_to_binary/1
   "iolist_to_binary/1": (ioListOrBinary) => {

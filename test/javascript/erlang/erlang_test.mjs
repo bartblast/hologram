@@ -2843,6 +2843,125 @@ describe("Erlang", () => {
     });
   });
 
+  describe("integer_to_list/1", () => {
+    const integer_to_list_1 = Erlang["integer_to_list/1"];
+    const integer_to_list_2 = Erlang["integer_to_list/2"];
+
+    it("should delegate to integer_to_list/2 with base 10", () => {
+      const integer = Type.integer(77);
+      const base = Type.integer(10);
+
+      const result = integer_to_list_1(integer);
+      const expected = integer_to_list_2(integer, base);
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("integer_to_list/2", () => {
+    const integer_to_list_2 = Erlang["integer_to_list/2"];
+    const toCharlist = (str) =>
+      Type.list([...str].map((c) => Type.integer(c.charCodeAt(0))));
+
+    it("positive integer with base 10", () => {
+      const result = integer_to_list_2(Type.integer(1234), Type.integer(10));
+      assert.deepStrictEqual(result, toCharlist("1234"));
+    });
+
+    it("base 2 lower boundary", () => {
+      const result = integer_to_list_2(Type.integer(10), Type.integer(2));
+      assert.deepStrictEqual(result, toCharlist("1010"));
+    });
+
+    it("base 16 (hex uppercase)", () => {
+      const result = integer_to_list_2(Type.integer(1023), Type.integer(16));
+      assert.deepStrictEqual(result, toCharlist("3FF"));
+    });
+
+    it("base 36 upper boundary", () => {
+      const result = integer_to_list_2(Type.integer(35), Type.integer(36));
+      assert.deepStrictEqual(result, toCharlist("Z"));
+    });
+
+    it("negative integer in base 2", () => {
+      const result = integer_to_list_2(Type.integer(-10), Type.integer(2));
+      assert.deepStrictEqual(result, toCharlist("-1010"));
+    });
+
+    it("negative integer with base 36", () => {
+      const result = integer_to_list_2(Type.integer(-35), Type.integer(36));
+      assert.deepStrictEqual(result, toCharlist("-Z"));
+    });
+
+    it("zero with base 2", () => {
+      const result = integer_to_list_2(Type.integer(0), Type.integer(2));
+      assert.deepStrictEqual(result, toCharlist("0"));
+    });
+
+    it("zero with base 36", () => {
+      const result = integer_to_list_2(Type.integer(0), Type.integer(36));
+      assert.deepStrictEqual(result, toCharlist("0"));
+    });
+
+    it("raises ArgumentError for base < 2", () => {
+      assertBoxedError(
+        () => integer_to_list_2(Type.integer(10), Type.integer(1)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    });
+
+    it("raises ArgumentError for base > 36", () => {
+      assertBoxedError(
+        () => integer_to_list_2(Type.integer(10), Type.integer(37)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    });
+
+    it("raises ArgumentError when first arg is float", () => {
+      assertBoxedError(
+        () => integer_to_list_2(Type.float(3.14), Type.integer(10)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError when base is non-number(atom)", () => {
+      assertBoxedError(
+        () => integer_to_list_2(Type.integer(10), Type.atom("hello")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    });
+
+    it("raises ArgumentError when first arg is bitstring", () => {
+      assertBoxedError(
+        () => integer_to_list_2(Type.bitstring("abc"), Type.integer(10)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    });
+    it("raises ArgumentError when base is bitstring", () => {
+      assertBoxedError(
+        () => integer_to_list_2(Type.integer(10), Type.bitstring("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    });
+  });
+
   describe("is_atom/1", () => {
     const is_atom = Erlang["is_atom/1"];
 

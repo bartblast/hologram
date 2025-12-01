@@ -2015,6 +2015,82 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "integer_to_list/1" do
+    test "should delegate to integer_to_list/2 with base 10" do
+      assert :erlang.integer_to_list(77) == :erlang.integer_to_list(77, 10)
+    end
+  end
+
+  describe "integer_to_list/2" do
+    test "positive integer with base 10" do
+      assert :erlang.integer_to_list(1234, 10) == ~c"1234"
+    end
+
+    test "base 2 lower boundary" do
+      assert :erlang.integer_to_list(10, 2) == ~c"1010"
+    end
+
+    test "base 16 (hex uppercase)" do
+      assert :erlang.integer_to_list(1023, 16) == ~c"3FF"
+    end
+
+    test "base 36 upper boundary" do
+      assert :erlang.integer_to_list(35, 36) == ~c"Z"
+    end
+
+    test "negative integer in base 2" do
+      assert :erlang.integer_to_list(-10, 2) == ~c"-1010"
+    end
+
+    test "negative integer with base 36" do
+      assert :erlang.integer_to_list(-35, 36) == ~c"-Z"
+    end
+
+    test "zero with base 2" do
+      assert :erlang.integer_to_list(0, 2) == ~c"0"
+    end
+
+    test "zero with base 36" do
+      assert :erlang.integer_to_list(0, 36) == ~c"0"
+    end
+
+    test "raises ArgumentError for base < 2" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
+                   {:erlang, :integer_to_list, [10, 1]}
+    end
+
+    test "raises ArgumentError for base > 36" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
+                   {:erlang, :integer_to_list, [10, 37]}
+    end
+
+    test "raises ArgumentError when first arg is not float" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an integer"),
+                   {:erlang, :integer_to_list, [3.14, 10]}
+    end
+
+    test "raises ArgumentError when base is non-number(atom)" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
+                   {:erlang, :integer_to_list, [10, :hello]}
+    end
+
+    test "raises ArgumentError when first arg is bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an integer"),
+                   {:erlang, :integer_to_list, ["abc", 10]}
+    end
+
+    test "raises ArgumentError when base is bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
+                   {:erlang, :integer_to_list, [10, "abc"]}
+    end
+  end
+
   describe "is_atom/1" do
     test "atom" do
       assert :erlang.is_atom(:abc) == true
