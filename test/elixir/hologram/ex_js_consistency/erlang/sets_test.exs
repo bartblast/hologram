@@ -74,6 +74,87 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
     end
   end
 
+  describe "intersection/2" do
+    test "returns common elements from both sets" do
+      set1 = :sets.from_list([1, 2, 3])
+      set2 = :sets.from_list([2, 3, 4])
+
+      result = :sets.intersection(set1, set2)
+
+      assert result
+             |> :sets.to_list()
+             |> Enum.sort() == [2, 3]
+    end
+
+    test "returns empty set when sets have no common elements" do
+      set1 = :sets.from_list([1, 2])
+      set2 = :sets.from_list([3, 4])
+
+      result = :sets.intersection(set1, set2)
+
+      assert :sets.size(result) == 0
+    end
+
+    test "returns a new set without modifying the original sets" do
+      set1 = :sets.from_list([1, 2])
+      set2 = :sets.from_list([2, 3])
+
+      result = :sets.intersection(set1, set2)
+
+      # Original sets should remain unchanged
+      assert set1
+             |> :sets.to_list()
+             |> Enum.sort() == [1, 2]
+
+      assert set2
+             |> :sets.to_list()
+             |> Enum.sort() == [2, 3]
+
+      # Result should only contain common element
+      assert result
+             |> :sets.to_list()
+             |> Enum.sort() == [2]
+    end
+
+    test "returns empty set when first set is empty" do
+      set1 = :sets.new()
+      set2 = :sets.from_list([1, 2])
+
+      result = :sets.intersection(set1, set2)
+
+      assert :sets.size(result) == 0
+    end
+
+    test "returns empty set when second set is empty" do
+      set1 = :sets.from_list([1, 2])
+      set2 = :sets.new()
+
+      result = :sets.intersection(set1, set2)
+
+      assert :sets.size(result) == 0
+    end
+
+    test "returns empty set when both sets are empty" do
+      set1 = :sets.new()
+      set2 = :sets.new()
+
+      result = :sets.intersection(set1, set2)
+
+      assert :sets.size(result) == 0
+    end
+
+    test "returns same elements when sets are identical" do
+      set1 = :sets.from_list([1, 2])
+      set2 = :sets.from_list([1, 2])
+
+      result = :sets.intersection(set1, set2)
+
+      assert result
+             |> :sets.to_list()
+             |> Enum.sort() == [1, 2]
+    end
+  end
+
   describe "union/2" do
     test "combines elements from both sets" do
       set1 = :sets.from_list([1, 2])
