@@ -312,6 +312,20 @@ const Erlang = {
   // End atom_to_list/1
   // Deps: []
 
+  // Start band/2
+  "band/2": (integer1, integer2) => {
+    if (!Type.isInteger(integer1) || !Type.isInteger(integer2)) {
+      const arg1 = Interpreter.inspect(integer1);
+      const arg2 = Interpreter.inspect(integer2);
+
+      Interpreter.raiseArithmeticError(`Bitwise.band(${arg1}, ${arg2})`);
+    }
+
+    return Type.integer(integer1.value & integer2.value);
+  },
+  // End band/2
+  // Deps: []
+
   // Start binary_to_atom/1
   "binary_to_atom/1": (binary) => {
     return Erlang["binary_to_atom/2"](binary, Type.atom("utf8"));
@@ -603,6 +617,33 @@ const Erlang = {
   // End hd/1
   // Deps: []
 
+  // Start insert_element/3
+  "insert_element/3": (index, tuple, value) => {
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    }
+
+    if (index.value <= 0n || index.value > tuple.data.length + 1) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    }
+
+    // The tuple index is one-based, so we need to compensate
+    const data = tuple.data.toSpliced(Number(index.value) - 1, 0, value);
+    return Type.tuple(data);
+  },
+  // End insert_element/3
+  // Deps: []
+
   // Start integer_to_binary/1
   "integer_to_binary/1": (integer) => {
     return Erlang["integer_to_binary/2"](integer, Type.integer(10));
@@ -840,6 +881,22 @@ const Erlang = {
   // End list_to_pid/1
   // Deps: []
 
+  // Start make_tuple/2
+  "make_tuple/2": (arity, value) => {
+    // The Erlang implementation says that the index is out of range even when it is not an integer
+    if (!Type.isInteger(arity) || arity.value < 0n) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    }
+
+    const data = Array(Number(arity.value)).fill(value);
+
+    return Type.tuple(data);
+  },
+  // End make_tuple/2
+  // Deps: []
+
   // Start map_size/1
   "map_size/1": (map) => {
     if (!Type.isMap(map)) {
@@ -896,6 +953,17 @@ const Erlang = {
   // End not/1
   // Deps: []
 
+  // Start xor/2
+  "xor/2": (left, right) => {
+    if (!Type.isBoolean(left) || !Type.isBoolean(right)) {
+      Interpreter.raiseArgumentError("argument error");
+    }
+
+    return Type.boolean(left.value != right.value);
+  },
+  // End xor/2
+  // Deps: []
+
   // Start orelse/2
   "orelse/2": (leftFun, rightFun, context) => {
     const left = leftFun(context);
@@ -929,6 +997,35 @@ const Erlang = {
     return Type.integer(integer1.value % integer2.value);
   },
   // End rem/2
+  // Deps: []
+
+  // Start setelement/3
+  "setelement/3": (index, tuple, value) => {
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isTuple(tuple)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    }
+
+    if (index.value <= 0n || index.value > tuple.data.length) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    }
+
+    const data = [...tuple.data];
+    // The tuple index is one-based, so we need to compensate
+    data[Number(index.value) - 1] = value;
+
+    return Type.tuple(data);
+  },
+  // End setelement/3
   // Deps: []
 
   // Start split_binary/2
