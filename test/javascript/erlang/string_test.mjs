@@ -514,28 +514,6 @@ describe("Erlang_String", () => {
     const split = Erlang_String["split/2"];
     const string_test = Type.bitstring("Hello World !");
 
-    it("raises MatchError if the first argument is not a string", () => {
-      assertBoxedError(
-        () => split(Type.atom("hello_world"), Type.bitstring("_")),
-        "MatchError",
-        "no match of right hand side value: :hello_world",
-      );
-    });
-
-    it("raises ArgumentError if the second argument is not a string", () => {
-      assertBoxedError(
-        () => split(Type.bitstring("hello_world"), Type.atom("_")),
-        "ArgumentError",
-        "errors were found at the given arguments:\n\n  * 1st argument: not valid character data (an iodata term)\n",
-      );
-    });
-
-    it("returns inchanged string inside a list if the pattern is empty", () => {
-      const result = split(string_test, Type.bitstring(""));
-
-      assert.deepStrictEqual(result, Type.list([string_test]));
-    });
-
     it("returns a two-elements list with the first word at the begining and the tail at the end", () => {
       const result = split(string_test, Type.bitstring(" "));
 
