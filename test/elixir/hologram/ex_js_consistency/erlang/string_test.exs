@@ -75,6 +75,14 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
     end
   end
 
+  describe "replace/3" do
+    test "returns a three-elements list with the first word at the begining, the replacement in the middle and the tail at the end when the direction is set to :leading" do
+      result = :string.replace("Hello World !", " ", "_", :leading)
+
+      assert result == ["Hello", "_", "World !"]
+    end
+  end
+
   describe "replace/4" do
     test "raise MatchError if first param is not a string" do
       assert_error MatchError, "no match of right hand side value: :hello_world", fn ->
