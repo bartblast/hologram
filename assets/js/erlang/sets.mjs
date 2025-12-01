@@ -1,28 +1,47 @@
-// Start subtract/2
-export function subtract(set1, set2) {
-  // Sets are stored internally as JS Maps representing Erlang sets
-  const result = new Map(set1);
-  for (const elem of set2.keys()) {
-    result.delete(elem);
-  }
-  return result;
-}
-// End subtract/2
-// Deps: []
+"use strict";
 
-// Start union/2
-export function union(set1, set2) {
-  // Sets are stored internally as JS Maps representing Erlang sets
-  const result = new Map(set1);
-  for (const elem of set2.keys()) {
-    result.set(elem, true);
-  }
-  return result;
-}
-// End union/2
-// Deps: []
+import Interpreter from "../interpreter.mjs";
+import Type from "../type.mjs";
+import Utils from "../utils.mjs";
 
-export default {
-  "subtract/2": subtract,
-  "union/2": union,
+const Erlang_Sets = {
+  // Start subtract/2
+  "subtract/2": (set1, set2) => {
+    if (!Type.isMap(set1)) {
+      Interpreter.raiseBadMapError(set1);
+    }
+
+    if (!Type.isMap(set2)) {
+      Interpreter.raiseBadMapError(set2);
+    }
+
+    const result = Utils.shallowCloneObject(set1);
+    // Need to clone the data object as well since we'll be mutating it
+    result.data = {...set1.data};
+
+    for (const encodedKey of Object.keys(set2.data)) {
+      delete result.data[encodedKey];
+    }
+
+    return result;
+  },
+  // End subtract/2
+  // Deps: []
+
+  // Start union/2
+  "union/2": (set1, set2) => {
+    if (!Type.isMap(set1)) {
+      Interpreter.raiseBadMapError(set1);
+    }
+
+    if (!Type.isMap(set2)) {
+      Interpreter.raiseBadMapError(set2);
+    }
+
+    return {type: "map", data: {...set1.data, ...set2.data}};
+  },
+  // End union/2
+  // Deps: []
 };
+
+export default Erlang_Sets;
