@@ -2338,11 +2338,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "raises ArgumentError if the first argument is not an integer" do
-      assert_error ArgumentError, "argument error", {:erlang, :bor, [:abc, true]}
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bor(:abc, 1)",
+                   {:erlang, :bor, [:abc, 1]}
     end
 
     test "raises ArgumentError if the second argument is not an integer" do
-      assert_error ArgumentError, "argument error", {:erlang, :bor, [true, :abc]}
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bor(1, :abc)",
+                   {:erlang, :bor, [1, :abc]}
     end
   end
 

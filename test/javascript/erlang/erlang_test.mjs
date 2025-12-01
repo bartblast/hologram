@@ -3317,17 +3317,17 @@ describe("Erlang", () => {
 
     it("raises ArgumentError if the first argument is not an integer", () => {
       assertBoxedError(
-        () => bor(atomAbc, Type.boolean(true)),
+        () => bor(atomAbc, integer1),
         "ArgumentError",
-        "argument error",
+        "bad argument in arithmetic expression: Bitwise.bor(:abc, 1)",
       );
     });
 
     it("raises ArgumentError if the second argument is not an integer", () => {
       assertBoxedError(
-        () => bor(Type.boolean(true), atomAbc),
+        () => bor(integer1, atomAbc),
         "ArgumentError",
-        "argument error",
+        "bad argument in arithmetic expression: Bitwise.bor(1, :abc)",
       );
     });
   });

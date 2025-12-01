@@ -967,7 +967,9 @@ const Erlang = {
   // Start bor/2
   "bor/2": (left, right) => {
     if (!Type.isInteger(left) || !Type.isInteger(right)) {
-      Interpreter.raiseArgumentError("argument error");
+      Interpreter.raiseArgumentError(
+        `bad argument in arithmetic expression: Bitwise.bor(${Interpreter.inspect(left)}, ${Interpreter.inspect(right)})`,
+      );
     }
 
     return Type.integer(left.value | right.value);
