@@ -16,7 +16,9 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
 
       result = :sets.subtract(set1, set2)
 
-      assert :sets.to_list(result) |> Enum.sort() == [1, 3]
+      assert result
+             |> :sets.to_list()
+             |> Enum.sort() == [1, 3]
     end
 
     test "returns a new set without modifying the original sets" do
@@ -26,11 +28,18 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
       result = :sets.subtract(set1, set2)
 
       # Original sets should remain unchanged
-      assert :sets.to_list(set1) |> Enum.sort() == [1, 2]
-      assert :sets.to_list(set2) |> Enum.sort() == [2]
+      assert set1
+             |> :sets.to_list()
+             |> Enum.sort() == [1, 2]
+
+      assert set2
+             |> :sets.to_list()
+             |> Enum.sort() == [2]
 
       # Result should be different
-      assert :sets.to_list(result) |> Enum.sort() == [1]
+      assert result
+             |> :sets.to_list()
+             |> Enum.sort() == [1]
     end
 
     test "returns empty set when both sets are the same" do
@@ -48,7 +57,10 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
 
       result = :sets.subtract(set1, set2)
 
-      assert :sets.to_list(result) |> Enum.sort() == [1, 2]
+      assert result
+             |> :sets.to_list()
+             |> Enum.sort() == [1, 2]
+
       assert :sets.size(result) == 2
     end
 
