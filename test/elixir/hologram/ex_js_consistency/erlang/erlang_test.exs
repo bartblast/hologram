@@ -1694,6 +1694,32 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "binary_to_list/1" do
+    test "converts a binary with bytes to a list of integers" do
+      assert :erlang.binary_to_list(<<1, 2, 3>>) == [1, 2, 3]
+    end
+
+    test "converts a text-based binary to a list of integers" do
+      assert :erlang.binary_to_list("ABC") == [65, 66, 67]
+    end
+
+    test "converts an empty binary to an empty list" do
+      assert :erlang.binary_to_list(<<>>) == []
+    end
+
+    test "raises ArgumentError if the argument is not a binary" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :binary_to_list, [123]}
+    end
+
+    test "raises ArgumentError if the argument is a non-binary bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :binary_to_list, [<<5::size(3)>>]}
+    end
+  end
+
   describe "bit_size/1" do
     test "bitstring" do
       assert :erlang.bit_size(<<2::7>>) == 7
@@ -2090,6 +2116,66 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "not an integer in the range 2 through 36"),
                    {:erlang, :integer_to_binary, [123_123, :abc]}
+    end
+  end
+
+  describe "integer_to_list/1" do
+    test "delegates to integer_to_list/2 with base 10" do
+      assert :erlang.integer_to_list(123) == :erlang.integer_to_list(123, 10)
+    end
+  end
+
+  describe "integer_to_list/2" do
+    test "base 2 (min allowed value for base param)" do
+      assert :erlang.integer_to_list(123, 2) == ~c"1111011"
+    end
+
+    test "base 10" do
+      assert :erlang.integer_to_list(123, 10) == ~c"123"
+    end
+
+    test "base 36 (max allowed value for base param)" do
+      assert :erlang.integer_to_list(123, 36) == ~c"3F"
+    end
+
+    test "negative integer, base 10" do
+      assert :erlang.integer_to_list(-123, 10) == ~c"-123"
+    end
+
+    test "negative integer, base other than 10" do
+      assert :erlang.integer_to_list(-123, 16) == ~c"-7B"
+    end
+
+    test "zero, base 10" do
+      assert :erlang.integer_to_list(0, 10) == ~c"0"
+    end
+
+    test "zero, base other than 10" do
+      assert :erlang.integer_to_list(0, 16) == ~c"0"
+    end
+
+    test "raises ArgumentError when the first argument is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an integer"),
+                   {:erlang, :integer_to_list, [3.14, 10]}
+    end
+
+    test "raises ArgumentError when base is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
+                   {:erlang, :integer_to_list, [123, 3.14]}
+    end
+
+    test "raises ArgumentError for base < 2" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
+                   {:erlang, :integer_to_list, [123, 1]}
+    end
+
+    test "raises ArgumentError for base > 36" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
+                   {:erlang, :integer_to_list, [123, 37]}
     end
   end
 

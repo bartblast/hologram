@@ -34,8 +34,12 @@ const integer3 = Type.integer(3);
 const integer4 = Type.integer(4);
 const integer5 = Type.integer(5);
 const integer6 = Type.integer(6);
+const integer10 = Type.integer(10);
 const integer11 = Type.integer(11);
 const integer15 = Type.integer(15);
+const integer16 = Type.integer(16);
+const integer36 = Type.integer(36);
+const integer123 = Type.integer(123);
 const list1 = Type.list([integer1, integer2]);
 
 const mapA1B2 = Type.map([
@@ -2259,6 +2263,58 @@ describe("Erlang", () => {
     });
   });
 
+  describe("binary_to_list/1", () => {
+    const binary_to_list = Erlang["binary_to_list/1"];
+
+    it("converts a binary with bytes to a list of integers", () => {
+      const binary = Bitstring.fromBytes([1, 2, 3]);
+      const result = binary_to_list(binary);
+      const expected = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts a text-based binary to a list of integers", () => {
+      const binary = Type.bitstring("ABC");
+      const result = binary_to_list(binary);
+      const expected = Type.list([
+        Type.integer(65),
+        Type.integer(66),
+        Type.integer(67),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts an empty binary to an empty list", () => {
+      const binary = Type.bitstring("");
+      const result = binary_to_list(binary);
+      const expected = Type.list([]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if the argument is not a binary", () => {
+      assertBoxedError(
+        () => binary_to_list(Type.integer(123)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("raises ArgumentError if the argument is a non-binary bitstring", () => {
+      assertBoxedError(
+        () => binary_to_list(Type.bitstring([1, 0, 1])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+  });
+
   describe("bit_size/1", () => {
     const bit_size = Erlang["bit_size/1"];
 
@@ -2964,6 +3020,110 @@ describe("Erlang", () => {
           "not an integer in the range 2 through 36",
         ),
       );
+    });
+  });
+
+  describe("integer_to_list/1", () => {
+    const integer_to_list_1 = Erlang["integer_to_list/1"];
+    const integer_to_list_2 = Erlang["integer_to_list/2"];
+
+    it("delegates to integer_to_list/2 with base 10", () => {
+      const result = integer_to_list_1(integer123);
+      const expected = integer_to_list_2(integer123, integer10);
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("integer_to_list/2", () => {
+    const integer_to_list_2 = Erlang["integer_to_list/2"];
+
+    const toCharlist = (str) =>
+      Type.list([...str].map((char) => Type.integer(char.charCodeAt(0))));
+
+    it("base 2 (min allowed value for base param)", () => {
+      const result = integer_to_list_2(integer123, integer2);
+
+      assert.deepStrictEqual(result, toCharlist("1111011"));
+    });
+
+    it("base 10", () => {
+      const result = integer_to_list_2(integer123, integer10);
+
+      assert.deepStrictEqual(result, toCharlist("123"));
+    });
+
+    it("base 36 (max allowed value for base param)", () => {
+      const result = integer_to_list_2(integer123, Type.integer(36));
+
+      assert.deepStrictEqual(result, toCharlist("3F"));
+    });
+
+    it("negative integer, base 10", () => {
+      const result = integer_to_list_2(Type.integer(-123), integer10);
+
+      assert.deepStrictEqual(result, toCharlist("-123"));
+    });
+
+    it("negative integer, base other than 10", () => {
+      const result = integer_to_list_2(Type.integer(-123), integer16);
+
+      assert.deepStrictEqual(result, toCharlist("-7B"));
+    });
+
+    it("zero, base 10", () => {
+      const result = integer_to_list_2(integer0, integer10);
+
+      assert.deepStrictEqual(result, toCharlist("0"));
+    });
+
+    it("zero, base other than 10", () => {
+      const result = integer_to_list_2(integer0, integer16);
+
+      assert.deepStrictEqual(result, toCharlist("0"));
+    });
+
+    describe("error cases", () => {
+      it("raises ArgumentError when the first argument is not an integer", () => {
+        assertBoxedError(
+          () => integer_to_list_2(Type.float(3.14), integer10),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+        );
+      });
+
+      it("raises ArgumentError when base is not an integer", () => {
+        assertBoxedError(
+          () => integer_to_list_2(integer123, Type.float(3.14)),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            2,
+            "not an integer in the range 2 through 36",
+          ),
+        );
+      });
+
+      it("raises ArgumentError for base < 2", () => {
+        assertBoxedError(
+          () => integer_to_list_2(integer123, integer1),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            2,
+            "not an integer in the range 2 through 36",
+          ),
+        );
+      });
+
+      it("raises ArgumentError for base > 36", () => {
+        assertBoxedError(
+          () => integer_to_list_2(integer123, Type.integer(37)),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            2,
+            "not an integer in the range 2 through 36",
+          ),
+        );
+      });
     });
   });
 
