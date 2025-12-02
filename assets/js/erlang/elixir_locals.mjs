@@ -1,8 +1,8 @@
 "use strict";
 
+import Erlang_Maps from "./maps.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
-import Erlang_Maps from "./maps.mjs";
 
 // IMPORTANT!
 // If the given ported Erlang function calls other Erlang functions, then list such dependencies in the "Deps" comment (see :erlang./=/2 for an example).
@@ -22,8 +22,9 @@ const Erlang_Elixir_Locals = {
     }
 
     const value = locals.data[encodedKey][1];
+    const newLocals = Erlang_Maps["remove/2"](key, locals);
 
-    return Type.tuple([value, Erlang_Maps["remove/2"](key, locals)]);
+    return Type.tuple([value, newLocals]);
   },
   // End yank/2
   // Deps: [:maps.remove/2]

@@ -8,23 +8,24 @@ defmodule Hologram.ExJsConsistency.Erlang.ElixirLocalsTest do
   use Hologram.Test.BasicCase, async: true
 
   @moduletag :consistency
+
   if Version.match?(System.version(), "< 1.18.0") do
     describe "yank/2" do
-      test "returns the removed value and the map without the key" do
-        locals = %{foo: 1}
+      test "returns the removed value and updated locals as a tuple" do
+        locals = %{a: 1, b: 2}
 
-        assert :elixir_locals.yank(locals, :foo) == {1, %{}}
+        assert :elixir_locals.yank(locals, :b) == {2, %{a: 1}}
       end
 
       test "returns :error when the key is not present" do
-        locals = %{foo: 1}
+        locals = %{a: 1}
 
-        assert :elixir_locals.yank(locals, :bar) == :error
+        assert :elixir_locals.yank(locals, :b) == :error
       end
 
       test "raises BadMapError when the first argument is not a map" do
-        assert_error BadMapError, "expected a map, got: :abc", fn ->
-          :elixir_locals.yank(:abc, :foo)
+        assert_error BadMapError, "expected a map, got: :x", fn ->
+          :elixir_locals.yank(:x, :b)
         end
       end
     end

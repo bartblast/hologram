@@ -1908,7 +1908,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "float/1" do
-    test "returns float for integer" do
+    test "converts integer to float" do
       assert :erlang.float(1) == 1.0
     end
 
@@ -1919,7 +1919,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     test "raises ArgumentError if the argument is not a number" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a number"),
-                   {:erlang, :float, [:a]}
+                   {:erlang, :float, [:abc]}
     end
   end
 
