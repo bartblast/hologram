@@ -2096,8 +2096,7 @@ describe("Erlang", () => {
 
       it("base 36", () => {
         const binary = Type.bitstring("ZZ");
-        const base = Type.integer(36);
-        const result = binary_to_integer(binary, base);
+        const result = binary_to_integer(binary, integer36);
         const expected = Type.integer(1295);
 
         assert.deepStrictEqual(result, expected);
@@ -2849,11 +2848,7 @@ describe("Erlang", () => {
       });
 
       it("base = 36", () => {
-        const result = integer_to_binary(
-          Type.integer(123123),
-          Type.integer(36),
-        );
-
+        const result = integer_to_binary(Type.integer(123123), integer36);
         const expected = Type.bitstring("2N03");
 
         assert.deepStrictEqual(result, expected);
@@ -2930,7 +2925,7 @@ describe("Erlang", () => {
     });
 
     it("base 36 (max allowed value for base param)", () => {
-      const result = integer_to_list_2(integer123, Type.integer(36));
+      const result = integer_to_list_2(integer123, integer36);
 
       assert.deepStrictEqual(result, toCharlist("3F"));
     });
