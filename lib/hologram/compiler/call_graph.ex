@@ -18,6 +18,7 @@ defmodule Hologram.Compiler.CallGraph do
 
   # TODO: Determine automatically based on deps annotations next to function implementations
   @erlang_mfa_edges [
+    {{:elixir_locals, :yank, 2}, {:maps, :remove, 2}},
     {{:erlang, :"=<", 2}, {:erlang, :<, 2}},
     {{:erlang, :"=<", 2}, {:erlang, :==, 2}},
     {{:erlang, :>=, 2}, {:erlang, :==, 2}},

@@ -2628,6 +2628,30 @@ describe("Erlang", () => {
     assertBoxedError(() => error(reason, args), "MyError", "my message");
   });
 
+  describe("float/1", () => {
+    const float = Erlang["float/1"];
+
+    it("converts integer to float", () => {
+      const result = float(integer1);
+
+      assert.deepStrictEqual(result, float1);
+    });
+
+    it("is idempotent for float", () => {
+      const result = float(float1);
+
+      assert.deepStrictEqual(result, float1);
+    });
+
+    it("raises ArgumentError if the argument is not a number", () => {
+      assertBoxedError(
+        () => float(atomAbc),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    });
+  });
+
   describe("float_to_binary/2", () => {
     const float_to_binary = Erlang["float_to_binary/2"];
 
