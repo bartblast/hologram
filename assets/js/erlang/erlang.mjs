@@ -641,6 +641,9 @@ const Erlang = {
       }
     }
 
+    // Check if we have negative zero (JavaScript preserves signed zero)
+    const isNegativeZero = Object.is(float.value, -0);
+
     let result;
 
     if (isShort) {
@@ -653,6 +656,10 @@ const Erlang = {
         result = result.replace(/(\.\d*?)0+e/, "$1e").replace(/\.e/, "e");
       } else {
         result = float.value.toString();
+        // For zero values with :short format, ensure we get "0.0" not "0"
+        if (result === "0") {
+          result = "0.0";
+        }
       }
     } else if (decimals !== null) {
       result = float.value.toFixed(decimals);
@@ -667,6 +674,12 @@ const Erlang = {
       // Erlang format uses zero-padded exponents (e.g., e+00, e-04)
       // JavaScript may use e+0, e-4, so we need to pad the exponent
       result = result.replace(/e([+-])(\d)$/, "e$10$2");
+    }
+
+    // Preserve negative zero sign if needed
+    // JavaScript's toString/toFixed/toExponential lose the sign of -0, so we restore it
+    if (isNegativeZero && !result.startsWith("-")) {
+      result = "-" + result;
     }
 
     return Type.bitstring(result);

@@ -2697,7 +2697,7 @@ describe("Erlang", () => {
       );
     });
 
-    it("opts = [] with large number", () => {
+    it("default format - input > 1", () => {
       const opts = Type.list([]);
       const result = float_to_binary(Type.float(7000.12), opts);
       const expected = Type.bitstring("7.00011999999999989086e+03");
@@ -2705,7 +2705,7 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("opts = [] with small number", () => {
+    it("default format - input < 1", () => {
       const opts = Type.list([]);
       const result = float_to_binary(Type.float(0.099), opts);
       const expected = Type.bitstring("9.90000000000000046629e-02");
@@ -2713,15 +2713,31 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("opts = [:short] with large number", () => {
-      const opts = Type.list([Type.atom("short")]);
-      const result = float_to_binary(Type.float(7000.12), opts);
-      const expected = Type.bitstring("7000.12");
+    it("default format - input is positive zero", () => {
+      const opts = Type.list([]);
+      const result = float_to_binary(Type.float(+0.0), opts);
+      const expected = Type.bitstring("0.00000000000000000000e+00");
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("opts = [:short] with small number", () => {
+    it("default format - input is negative zero", () => {
+      const opts = Type.list([]);
+      const result = float_to_binary(Type.float(-0.0), opts);
+      const expected = Type.bitstring("-0.00000000000000000000e+00");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it(":short format - input > 1", () => {
+      const opts = Type.list([Type.atom("short")]);
+      const result = float_to_binary(Type.float(7.12), opts);
+      const expected = Type.bitstring("7.12");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it(":short format - input < 1", () => {
       const opts = Type.list([Type.atom("short")]);
       const result = float_to_binary(Type.float(0.099), opts);
       const expected = Type.bitstring("0.099");
@@ -2729,7 +2745,23 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("opts = [{:decimals, 0}] - remove all decimals", () => {
+    it(":short format - input is positive zero", () => {
+      const opts = Type.list([Type.atom("short")]);
+      const result = float_to_binary(Type.float(+0.0), opts);
+      const expected = Type.bitstring("0.0");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it(":short format - input is negative zero", () => {
+      const opts = Type.list([Type.atom("short")]);
+      const result = float_to_binary(Type.float(-0.0), opts);
+      const expected = Type.bitstring("-0.0");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it(":decimals format - preserve trailing zeroes in whole number part", () => {
       const opts = Type.list([
         Type.tuple([Type.atom("decimals"), Type.integer(0)]),
       ]);
@@ -2739,17 +2771,17 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("opts = [{:decimals, 4}] with large number", () => {
+    it(":decimals format - input > 1", () => {
       const opts = Type.list([
         Type.tuple([Type.atom("decimals"), Type.integer(4)]),
       ]);
-      const result = float_to_binary(Type.float(7000.12), opts);
-      const expected = Type.bitstring("7000.1200");
+      const result = float_to_binary(Type.float(7.12), opts);
+      const expected = Type.bitstring("7.1200");
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("opts = [{:decimals, 4}] with small number", () => {
+    it(":decimals format - input < 1", () => {
       const opts = Type.list([
         Type.tuple([Type.atom("decimals"), Type.integer(4)]),
       ]);
@@ -2759,51 +2791,109 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("opts = [{:decimals, 4}, :compact] with large number", () => {
-      const x = Type.float(7000.12);
+    it(":decimals format - input is positive zero", () => {
       const opts = Type.list([
         Type.tuple([Type.atom("decimals"), Type.integer(4)]),
-        Type.atom("compact"),
       ]);
-      const result = float_to_binary(x, opts);
-      const expected = Type.bitstring("7000.12");
+      const result = float_to_binary(Type.float(+0.0), opts);
+      const expected = Type.bitstring("0.0000");
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("opts = [{:decimals, 4}, :compact] with small number", () => {
-      const x = Type.float(0.099);
+    it(":decimals format - input is negative zero", () => {
       const opts = Type.list([
+        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+      ]);
+      const result = float_to_binary(Type.float(-0.0), opts);
+      const expected = Type.bitstring("-0.0000");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("compact :decimals format - input > 1", () => {
+      const x = Type.float(7.12);
+      const opts1 = Type.list([
         Type.tuple([Type.atom("decimals"), Type.integer(4)]),
         Type.atom("compact"),
       ]);
-      const result = float_to_binary(x, opts);
+      const opts2 = Type.list([
+        Type.atom("compact"),
+        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+      ]);
+      const result1 = float_to_binary(x, opts1);
+      const result2 = float_to_binary(x, opts2);
+      const expected = Type.bitstring("7.12");
+
+      assert.deepStrictEqual(result1, expected);
+      assert.deepStrictEqual(result2, expected);
+    });
+
+    it("compact :decimals format - input < 1", () => {
+      const x = Type.float(0.099);
+      const opts1 = Type.list([
+        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+        Type.atom("compact"),
+      ]);
+      const opts2 = Type.list([
+        Type.atom("compact"),
+        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+      ]);
+      const result1 = float_to_binary(x, opts1);
+      const result2 = float_to_binary(x, opts2);
       const expected = Type.bitstring("0.099");
 
-      assert.deepStrictEqual(result, expected);
+      assert.deepStrictEqual(result1, expected);
+      assert.deepStrictEqual(result2, expected);
     });
 
-    it("opts = [{:scientific, 3}] with large number - scientific option > 0", () => {
+    it("compact :decimals format - input is positive zero", () => {
+      const x = Type.float(+0.0);
+      const opts1 = Type.list([
+        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+        Type.atom("compact"),
+      ]);
+      const opts2 = Type.list([
+        Type.atom("compact"),
+        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+      ]);
+      const result1 = float_to_binary(x, opts1);
+      const result2 = float_to_binary(x, opts2);
+      const expected = Type.bitstring("0.0");
+
+      assert.deepStrictEqual(result1, expected);
+      assert.deepStrictEqual(result2, expected);
+    });
+
+    it("compact :decimals format - input is negative zero", () => {
+      const x = Type.float(-0.0);
+      const opts1 = Type.list([
+        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+        Type.atom("compact"),
+      ]);
+      const opts2 = Type.list([
+        Type.atom("compact"),
+        Type.tuple([Type.atom("decimals"), Type.integer(4)]),
+      ]);
+      const result1 = float_to_binary(x, opts1);
+      const result2 = float_to_binary(x, opts2);
+      const expected = Type.bitstring("-0.0");
+
+      assert.deepStrictEqual(result1, expected);
+      assert.deepStrictEqual(result2, expected);
+    });
+
+    it(":scientific format - input > 1 to positive digits of precision", () => {
       const opts = Type.list([
         Type.tuple([Type.atom("scientific"), Type.integer(3)]),
       ]);
-      const result = float_to_binary(Type.float(7000.12), opts);
-      const expected = Type.bitstring("7.000e+03");
+      const result = float_to_binary(Type.float(7.12), opts);
+      const expected = Type.bitstring("7.120e+00");
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("opts = [{:scientific, -3}] with large number - scientific option < 0", () => {
-      const opts = Type.list([
-        Type.tuple([Type.atom("scientific"), Type.integer(-3)]),
-      ]);
-      const result = float_to_binary(Type.float(7000.12), opts);
-      const expected = Type.bitstring("7.000120e+03");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("opts = [{:scientific, 3}] with small number - scientific option > 0", () => {
+    it(":scientific format - input < 1 to positive digits of precision", () => {
       const opts = Type.list([
         Type.tuple([Type.atom("scientific"), Type.integer(3)]),
       ]);
@@ -2813,12 +2903,62 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, expected);
     });
 
-    it("opts = [{:scientific, -3}] with small number - scientific option < 0", () => {
+    it(":scientific format - input > 1 to negative digits of precision", () => {
+      const opts = Type.list([
+        Type.tuple([Type.atom("scientific"), Type.integer(-3)]),
+      ]);
+      const result = float_to_binary(Type.float(7.12), opts);
+      const expected = Type.bitstring("7.120000e+00");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it(":scientific format - input < 1 to negative digits of precision", () => {
       const opts = Type.list([
         Type.tuple([Type.atom("scientific"), Type.integer(-3)]),
       ]);
       const result = float_to_binary(Type.float(0.099), opts);
       const expected = Type.bitstring("9.900000e-02");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it(":scientific format - input is positive zero to positive digits of precision", () => {
+      const opts = Type.list([
+        Type.tuple([Type.atom("scientific"), Type.integer(3)]),
+      ]);
+      const result = float_to_binary(Type.float(+0.0), opts);
+      const expected = Type.bitstring("0.000e+00");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it(":scientific format - input is negative zero to positive digits of precision", () => {
+      const opts = Type.list([
+        Type.tuple([Type.atom("scientific"), Type.integer(3)]),
+      ]);
+      const result = float_to_binary(Type.float(-0.0), opts);
+      const expected = Type.bitstring("-0.000e+00");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it(":scientific format - input is positive zero to negative digits of precision", () => {
+      const opts = Type.list([
+        Type.tuple([Type.atom("scientific"), Type.integer(-3)]),
+      ]);
+      const result = float_to_binary(Type.float(+0.0), opts);
+      const expected = Type.bitstring("0.000000e+00");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it(":scientific format - input is negative zero to negative digits of precision", () => {
+      const opts = Type.list([
+        Type.tuple([Type.atom("scientific"), Type.integer(-3)]),
+      ]);
+      const result = float_to_binary(Type.float(-0.0), opts);
+      const expected = Type.bitstring("-0.000000e+00");
 
       assert.deepStrictEqual(result, expected);
     });
