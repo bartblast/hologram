@@ -1907,6 +1907,22 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "float/1" do
+    test "returns float for integer" do
+      assert :erlang.float(1) == 1.0
+    end
+
+    test "is idempotent for float" do
+      assert :erlang.float(1.0) == 1.0
+    end
+
+    test "raises ArgumentError if the argument is not a number" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a number"),
+                   {:erlang, :float, [:a]}
+    end
+  end
+
   describe "float_to_binary/2" do
     test ":short option" do
       assert :erlang.float_to_binary(0.1 + 0.2, [:short]) == "0.30000000000000004"
