@@ -2265,9 +2265,10 @@ describe("Erlang", () => {
   describe("binary_to_list/1", () => {
     const binary_to_list = Erlang["binary_to_list/1"];
 
-    it("converts a binary with bytes to a list of integers", () => {
+    it("converts a bytes-based binary to a list of integers", () => {
       const binary = Bitstring.fromBytes([1, 2, 3]);
       const result = binary_to_list(binary);
+
       const expected = Type.list([
         Type.integer(1),
         Type.integer(2),
@@ -2278,26 +2279,36 @@ describe("Erlang", () => {
     });
 
     it("converts a text-based binary to a list of integers", () => {
-      const binary = Type.bitstring("ABC");
+      const binary = Type.bitstring("abc");
       const result = binary_to_list(binary);
+
       const expected = Type.list([
-        Type.integer(65),
-        Type.integer(66),
-        Type.integer(67),
+        Type.integer(97),
+        Type.integer(98),
+        Type.integer(99),
       ]);
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("converts an empty binary to an empty list", () => {
-      const binary = Type.bitstring("");
+    it("converts an empty bytes-based binary to an empty list", () => {
+      const binary = Bitstring.fromBytes([]);
+
       const result = binary_to_list(binary);
-      const expected = Type.list([]);
+      const expected = Type.list();
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("raises ArgumentError if the argument is not a binary", () => {
+    it("converts an empty text-based binary to an empty list", () => {
+      const binary = Type.bitstring("");
+      const result = binary_to_list(binary);
+      const expected = Type.list();
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if the argument is not a bitstring", () => {
       assertBoxedError(
         () => binary_to_list(Type.integer(123)),
         "ArgumentError",
