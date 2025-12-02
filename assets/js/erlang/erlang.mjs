@@ -456,6 +456,21 @@ const Erlang = {
   // End binary_to_integer/2
   // Deps: []
 
+  // Start binary_to_list/1
+  "binary_to_list/1": (binary) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    Bitstring.maybeSetBytesFromText(binary);
+
+    return Type.list(Array.from(binary.bytes).map((b) => Type.integer(b)));
+  },
+  // End binary_to_list/1
+  // Deps: []
+
   // Start bit_size/1
   "bit_size/1": (term) => {
     if (!Type.isBitstring(term)) {
@@ -569,6 +584,21 @@ const Erlang = {
   // End error/2
   // Deps: []
 
+  // Start float/1
+  "float/1": (number) => {
+    if (Type.isInteger(number)) {
+      return Type.float(Number(number.value));
+    } else if (Type.isFloat(number)) {
+      return number;
+    }
+
+    Interpreter.raiseArgumentError(
+      Interpreter.buildArgumentErrorMsg(1, "not a number"),
+    );
+  },
+  // End float/1
+  // Deps: []
+
   // Start float_to_binary/2
   "float_to_binary/2": (float, opts) => {
     if (!Type.isFloat(float)) {
@@ -673,6 +703,37 @@ const Erlang = {
     return Type.bitstring(str);
   },
   // End integer_to_binary/2
+  // Deps: []
+
+  // Start integer_to_list/1
+  "integer_to_list/1": (integer) => {
+    return Erlang["integer_to_list/2"](integer, Type.integer(10));
+  },
+  // End integer_to_list/1
+  // Deps: [:erlang.integer_to_list/2]
+
+  // Start integer_to_list/2
+  "integer_to_list/2": (integer, base) => {
+    if (!Type.isInteger(integer)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    }
+
+    if (!Type.isInteger(base) || base.value < 2n || base.value > 36n) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          2,
+          "not an integer in the range 2 through 36",
+        ),
+      );
+    }
+
+    const text = integer.value.toString(Number(base.value)).toUpperCase();
+
+    return Bitstring.toCodepoints(Type.bitstring(text));
+  },
+  // End integer_to_list/2
   // Deps: []
 
   // TODO: test
