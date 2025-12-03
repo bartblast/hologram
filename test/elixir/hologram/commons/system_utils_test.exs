@@ -26,12 +26,15 @@ defmodule Hologram.Commons.SystemUtilsTest do
       assert String.trim_trailing(result) == "hello"
     end
 
+    # Note: We use 'elixir --version' instead of 'echo' because on Windows,
+    # echo.exe (from Git Bash/MSYS2) has flaky I/O buffering when executed via
+    # full path, causing intermittent test failures where output is not captured.
     test "executes a command with full path" do
-      echo_path = System.find_executable("echo")
-      {result, exit_status} = cmd_cross_platform(echo_path, ["world"], [])
+      command_path = System.find_executable("elixir")
+      {result, exit_status} = cmd_cross_platform(command_path, ["--version"], [])
 
       assert exit_status == 0
-      assert String.trim_trailing(result) == "world"
+      assert result =~ "Elixir"
     end
 
     test "returns non-zero exit status for failing commands" do
