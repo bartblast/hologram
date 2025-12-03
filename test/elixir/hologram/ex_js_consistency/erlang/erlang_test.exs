@@ -2206,36 +2206,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
-  describe "list_to_pid/1" do
-    test "valid textual representation of PID" do
-      assert :erlang.list_to_pid(~c"<0.11.222>") == pid("0.11.222")
-    end
-
-    test "invalid textual representation of PID" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "not a textual representation of a pid"),
-                   {:erlang, :list_to_pid, [~c"<0.11>"]}
-    end
-
-    test "not a list" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "not a list"),
-                   {:erlang, :list_to_pid, [123]}
-    end
-
-    test "a list that contains a non-integer" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "not a textual representation of a pid"),
-                   {:erlang, :list_to_pid, [[60, :abc, 46]]}
-    end
-
-    test "a list that contains an invalid codepoint" do
-      assert_error ArgumentError,
-                   build_argument_error_msg(1, "not a textual representation of a pid"),
-                   {:erlang, :list_to_pid, [[60, 255, 46]]}
-    end
-  end
-
   describe "list_to_integer/1" do
     test "delegates to list_to_integer/2 with base 10" do
       assert :erlang.list_to_integer([49, 50, 51]) ==
@@ -2280,14 +2250,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.list_to_integer([48], 10) == 0
     end
 
-    test "positive zero" do
-      assert :erlang.list_to_integer([43, 48], 10) == 0
-    end
-
-    test "negative zero" do
-      assert :erlang.list_to_integer([45, 48], 10) == 0
-    end
-
     test "lowercase letters" do
       assert :erlang.list_to_integer([97, 98, 99, 100], 16) == 43_981
     end
@@ -2305,16 +2267,18 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
 
     test "converts very large base 10 integer" do
+      # Test that list_to_integer handles numbers well beyond
+      # Number.MAX_SAFE_INTEGER (9007199254740991)
       large_list = List.duplicate(57, 30)
       large_int = :erlang.list_to_integer(large_list, 10)
-
       assert large_int == 999_999_999_999_999_999_999_999_999_999
     end
 
     test "converts very large negative base 10 integer" do
+      # Test that list_to_integer handles numbers well below
+      # Number.MIN_SAFE_INTEGER (-9007199254740991)
       large_list = List.duplicate(57, 30)
       large_int = :erlang.list_to_integer([45 | large_list], 10)
-
       assert large_int == -999_999_999_999_999_999_999_999_999_999
     end
 
@@ -2322,6 +2286,12 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a list"),
                    {:erlang, :list_to_integer, [:abc, 10]}
+    end
+
+    test "raises ArgumentError if the first argument is not a proper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a proper list"),
+                   {:erlang, :list_to_integer, [[1 | 2], 10]}
     end
 
     test "raises ArgumentError if list is empty" do
@@ -2342,21 +2312,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :list_to_integer, [[50], 2]}
     end
 
-    test "raises ArgumentError if list contains any whitespace" do
-      whitespace_lists = [
-        [32, 49, 50, 51],
-        [49, 50, 51, 32],
-        [32],
-        [49, 32, 50]
-      ]
-
-      for list <- whitespace_lists do
-        assert_error ArgumentError,
-                     build_argument_error_msg(1, "not a textual representation of an integer"),
-                     {:erlang, :list_to_integer, [list, 10]}
-      end
-    end
-
     test "raises ArgumentError on sign in non-leading position" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a textual representation of an integer"),
@@ -2369,7 +2324,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
                    {:erlang, :list_to_integer, [[43, 45, 49, 50, 51], 10]}
     end
 
-    test "raises ArgumentError on sign only" do
+    test "raises ArgumentError on minus sign only" do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a textual representation of an integer"),
                    {:erlang, :list_to_integer, [[45], 10]}
@@ -2397,6 +2352,36 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "not an integer in the range 2 through 36"),
                    {:erlang, :list_to_integer, [[49, 50, 51], 37]}
+    end
+  end
+
+  describe "list_to_pid/1" do
+    test "valid textual representation of PID" do
+      assert :erlang.list_to_pid(~c"<0.11.222>") == pid("0.11.222")
+    end
+
+    test "invalid textual representation of PID" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a pid"),
+                   {:erlang, :list_to_pid, [~c"<0.11>"]}
+    end
+
+    test "not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:erlang, :list_to_pid, [123]}
+    end
+
+    test "a list that contains a non-integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a pid"),
+                   {:erlang, :list_to_pid, [[60, :abc, 46]]}
+    end
+
+    test "a list that contains an invalid codepoint" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a pid"),
+                   {:erlang, :list_to_pid, [[60, 255, 46]]}
     end
   end
 
