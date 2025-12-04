@@ -88,4 +88,44 @@ describe("Erlang_Math", () => {
       );
     });
   });
+
+  describe("pow/2", () => {
+    const testedFun = Erlang_Math["pow/2"];
+
+    it("returns base value raised to exponent integer value", () => {
+      const result = testedFun(Type.integer(7), Type.integer(3));
+
+      assert.deepStrictEqual(result, Type.float(343.0));
+    });
+
+    it("returns base value raised to exponent float value", () => {
+      const result = testedFun(Type.integer(4), Type.float(0.5));
+
+      assert.deepStrictEqual(result, Type.float(2.0));
+    });
+
+    it("raises ArgumentError if the first argument is not a number", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc"), Type.integer(3)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a number", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(7), Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a number"),
+      );
+    });
+
+    it("raises ArithmeticError if the base is less than zero and exponent is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(-7), Type.float(0.5)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression",
+      );
+    });
+  });
 });
