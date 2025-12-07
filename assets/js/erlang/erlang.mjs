@@ -2,6 +2,7 @@
 
 import Bitstring from "../bitstring.mjs";
 import HologramBoxedError from "../errors/boxed_error.mjs";
+import HologramExitError from "../errors/exit_error.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
@@ -582,6 +583,13 @@ const Erlang = {
     throw new HologramBoxedError(reason);
   },
   // End error/2
+  // Deps: []
+
+  // Start exit/1
+  "exit/1": (reason) => {
+    throw new HologramExitError(reason);
+  },
+  // End exit/1
   // Deps: []
 
   // Start float/1
