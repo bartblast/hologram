@@ -2633,20 +2633,14 @@ describe("Erlang", () => {
     const exit = Erlang["exit/1"];
     const reason = Type.atom("normal");
 
-    assert.throws(
-      () => exit(reason),
-      HologramExitError,
-    );
+    assert.throws(() => exit(reason), HologramExitError);
   });
 
   it("exit/1 with tuple reason", () => {
     const exit = Erlang["exit/1"];
     const reason = Type.tuple([Type.atom("error"), Type.atom("reason")]);
 
-    assert.throws(
-      () => exit(reason),
-      HologramExitError,
-    );
+    assert.throws(() => exit(reason), HologramExitError);
   });
 
   describe("float/1", () => {
