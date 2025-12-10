@@ -573,32 +573,59 @@ const Erlang_Lists = {
       );
     }
 
-    // Improper lists produce fairly unexpected error messages, this codes handles those cases
-    if (!Type.isProperList(list1) || !Type.isProperList(list2)) {
-      const improper1 = Type.isProperList(list1)
-        ? Type.list()
-        : list1.data[list1.data.length - 1];
-      const improper2 = Type.isProperList(list2)
-        ? Type.list()
-        : list2.data[list2.data.length - 1];
+    for (let i = 0; i < list1.data.length; i++) {
+      // Special case handling for improper lists to align with the Erlang implementation
+      if (!list1.isProper && i === list1.data.length - 1) {
+        if (!list2.isProper) {
+          const tail =
+            i === list2.data.length - 1
+              ? list2.data.at(-1)
+              : Type.improperList(list2.data.slice(i, list2.data.length));
+
+          Interpreter.raiseFunctionClauseError(
+            Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+              list1.data.at(-1),
+              tail,
+            ]),
+          );
+        } else {
+          const tail = Type.list(list2.data.slice(i, list2.data.length));
+
+          Interpreter.raiseFunctionClauseError(
+            Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
+              list1.data.at(-1),
+              tail,
+            ]),
+          );
+        }
+      }
+
+      // Not a prefix if the first list is longer than the second
+      if (i >= list2.data.length) {
+        return Type.boolean(false);
+      }
+
+      // Elements at the same index do not match
+      if (!Interpreter.isStrictlyEqual(list1.data[i], list2.data[i])) {
+        return Type.boolean(false);
+      }
+    }
+
+    // Special case handling for only the second list being improper
+    if (!list2.isProper && list2.data.length === list1.data.length + 1) {
+      const tail = Type.list(
+        list1.data.slice(list2.data.length, list1.data.length),
+      );
 
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(":lists.prefix/2", [
-          improper1,
-          improper2,
+          tail,
+          list2.data.at(-1),
         ]),
       );
     }
 
-    if (list1.data.length > list2.data.length) {
-      return Type.boolean(false);
-    }
-
-    const isPrefix = list1.data.every((element, index) =>
-      Interpreter.isStrictlyEqual(element, list2.data[index]),
-    );
-
-    return Type.boolean(isPrefix);
+    return Type.boolean(true);
   },
   // End prefix/2
   // Deps: []

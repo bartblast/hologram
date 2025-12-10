@@ -1121,16 +1121,52 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
                    {:lists, :prefix, [[1, 2], :a]}
     end
 
-    test "raises FunctionClauseError if the first argument is an improper list" do
+    test "returns false if the first argument is an improper list that has no common prefix with the second proper list" do
+      refute :lists.prefix([1 | 2], [3, 4])
+    end
+
+    test "returns false if the first argument is an improper list that shares a shorter prefix with the second proper list" do
+      refute :lists.prefix([1, 2 | 3], [1, 4])
+    end
+
+    test "returns false if the second argument is an improper list that has no common prefix with the first proper list" do
+      refute :lists.prefix([1, 2], [3 | 4])
+    end
+
+    test "returns false if the second argument is an improper list that shares a shorter prefix with the first proper list" do
+      refute :lists.prefix([1, 4], [1, 2 | 3])
+    end
+
+    test "returns false if both lists are improper with no common prefix" do
+      refute :lists.prefix([1 | 2], [3 | 4])
+    end
+
+    test "returns false if both lists are improper with a common shorter prefix" do
+      refute :lists.prefix([1, 2 | 3], [1, 4 | 3])
+    end
+
+    test "raises FunctionClauseError if the first argument is an improper list where everything but the last element is a prefix of the second proper list" do
       assert_error FunctionClauseError,
                    build_function_clause_error_msg(":lists.prefix/2", [3, []]),
                    {:lists, :prefix, [[1, 2 | 3], [1, 2]]}
     end
 
-    test "raises FunctionClauseError if the second argument is an improper list" do
+    test "raises FunctionClauseError if the second argument is an improper list where everything but the last element is a prefix of the first proper list" do
       assert_error FunctionClauseError,
                    build_function_clause_error_msg(":lists.prefix/2", [[], 3]),
                    {:lists, :prefix, [[1, 2], [1, 2 | 3]]}
+    end
+
+    test "raises FunctionClauseError if both lists are improper and have a common prefix made of everything but the last element" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.prefix/2", [3, 4]),
+                   {:lists, :prefix, [[1, 2 | 3], [1, 2 | 4]]}
+    end
+
+    test "raises FunctionClauseError if the first improper list would be a prefix of the second improper list had the first list been proper" do
+      assert_error FunctionClauseError,
+                   build_function_clause_error_msg(":lists.prefix/2", [3, [3 | 4]]),
+                   {:lists, :prefix, [[1, 2 | 3], [1, 2, 3 | 4]]}
     end
   end
 
