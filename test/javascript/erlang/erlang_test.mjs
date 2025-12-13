@@ -2734,6 +2734,67 @@ describe("Erlang", () => {
     });
   });
 
+  describe("floor/1", () => {
+    const testedFun = Erlang["floor/1"];
+
+    it("rounds positive float with fractional part down", () => {
+      const result = testedFun(Type.float(1.23));
+      const expected = Type.integer(1);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("rounds negative float with fractional part down away from zero", () => {
+      const result = testedFun(Type.float(-1.23));
+      const expected = Type.integer(-2);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("keeps positive float without fractional part unchanged", () => {
+      const result = testedFun(Type.float(1.0));
+      const expected = Type.integer(1);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("keeps negative float without fractional part unchanged", () => {
+      const result = testedFun(Type.float(-1.0));
+      const expected = Type.integer(-1);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("keeps positive integer unchanged", () => {
+      const result = testedFun(Type.integer(1));
+      const expected = Type.integer(1);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("keeps negative integer unchanged", () => {
+      const result = testedFun(Type.integer(-1));
+      const expected = Type.integer(-1);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("keeps zero integer unchanged", () => {
+      const result = testedFun(Type.integer(0));
+      const expected = Type.integer(0);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if the argument is not a number", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    });
+  });
+
   describe("hd/1", () => {
     const hd = Erlang["hd/1"];
 
