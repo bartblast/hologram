@@ -2737,7 +2737,7 @@ describe("Erlang", () => {
   describe("floor/1", () => {
     const testedFun = Erlang["floor/1"];
 
-      it("rounds positive float with fractional part down", () => {
+    it("rounds positive float with fractional part down", () => {
       const result = testedFun(Type.float(1.23));
 
       assert.deepStrictEqual(result, integer1);
