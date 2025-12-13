@@ -1742,7 +1742,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.bsr(16, 1) == 8
     end
 
-    test "zero shift, no change" do
+    test "zero shift" do
       assert :erlang.bsr(255, 0) == 255
     end
 
@@ -1756,30 +1756,40 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.bsr(-16, 1) == -8
     end
 
-    test "at JS Number.MAX_SAFE_INTEGER limit" do
-      # 18_014_398_509_481_982 = 0b111111111111111111111111111111111111111111111111111111
-      #  9_007_199_254_740_991 = 0b11111111111111111111111111111111111111111111111111111
-      #              2_097_151 = 0b111111111111111111111
-      assert :erlang.bsr(9_007_199_254_740_991, 32) == 2_097_151
-      assert :erlang.bsr(9_007_199_254_740_991, -1) == 18_014_398_509_481_982
+    test "above JS Number.MAX_SAFE_INTEGER" do
+      # Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      # 18_014_398_509_481_984 = 0b1000000000000000000000000000000000000000000000000000000
+      #  9_007_199_254_740_992 = 0b100000000000000000000000000000000000000000000000000000
+      assert :erlang.bsr(18_014_398_509_481_984, 1) == 9_007_199_254_740_992
     end
 
-    test "shift beyond size" do
+    test "below JS Number.MIN_SAFE_INTEGER" do
+      # Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      # -18_014_398_509_481_984 = -0b1000000000000000000000000000000000000000000000000000000
+      #  -9_007_199_254_740_992 = -0b100000000000000000000000000000000000000000000000000000
+      assert :erlang.bsr(-18_014_398_509_481_984, 1) == -9_007_199_254_740_992
+    end
+
+    test "shift beyond size for positive integer" do
       # 255 = 0b1111111
       assert :erlang.bsr(255, 9) == 0
+    end
+
+    test "shift beyond size for negative integer" do
       # -127 = -0b1111111
       assert :erlang.bsr(-127, 8) == -1
     end
 
-    # Non-integer inputs (expect ArithmeticError)
-    test "raises ArithmeticError if either argument is not an integer" do
+    test "raises ArithmeticError if the first argument is not an integer" do
       assert_error ArithmeticError,
-                   "bad argument in arithmetic expression: Bitwise.bsr(10.0, 1)",
-                   {:erlang, :bsr, [10.0, 1]}
+                   "bad argument in arithmetic expression: Bitwise.bsr(1.0, 2)",
+                   {:erlang, :bsr, [1.0, 2]}
+    end
 
+    test "raises ArithmeticError if the second argument is not an integer" do
       assert_error ArithmeticError,
-                   "bad argument in arithmetic expression: Bitwise.bsr(10, :abc)",
-                   {:erlang, :bsr, [10, :abc]}
+                   "bad argument in arithmetic expression: Bitwise.bsr(1, 2.0)",
+                   {:erlang, :bsr, [1, 2.0]}
     end
   end
 

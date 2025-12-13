@@ -2363,7 +2363,7 @@ describe("Erlang", () => {
       );
     });
 
-    it("zero shift, no change", () => {
+    it("zero shift", () => {
       assert.deepStrictEqual(
         testedFun(Type.integer(255), Type.integer(0)),
         Type.integer(255),
@@ -2386,26 +2386,35 @@ describe("Erlang", () => {
       );
     });
 
-    it("at JS Number.MAX_SAFE_INTEGER limit", () => {
-      // 18_014_398_509_481_982 = 0b111111111111111111111111111111111111111111111111111111
-      //  9_007_199_254_740_991 = 0b11111111111111111111111111111111111111111111111111111
-      //              2_097_151 = 0b111111111111111111111
+    it("above JS Number.MAX_SAFE_INTEGER", () => {
+      // Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      // 18_014_398_509_481_984 = 0b1000000000000000000000000000000000000000000000000000000
+      //  9_007_199_254_740_992 = 0b100000000000000000000000000000000000000000000000000000
       assert.deepStrictEqual(
-        testedFun(Type.integer(9007199254740991), Type.integer(32)),
-        Type.integer(2097151),
-      );
-      assert.deepStrictEqual(
-        testedFun(Type.integer(9007199254740991), Type.integer(-1)),
-        Type.integer(18014398509481982n),
+        testedFun(Type.integer(18_014_398_509_481_984n), Type.integer(1)),
+        Type.integer(9_007_199_254_740_992n),
       );
     });
 
-    it("shift beyond size", () => {
+    it("below JS Number.MIN_SAFE_INTEGER", () => {
+      // Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      // -18_014_398_509_481_984 = -0b1000000000000000000000000000000000000000000000000000000
+      //  -9_007_199_254_740_992 = -0b100000000000000000000000000000000000000000000000000000
+      assert.deepStrictEqual(
+        testedFun(Type.integer(-18_014_398_509_481_984n), Type.integer(1)),
+        Type.integer(-9_007_199_254_740_992n),
+      );
+    });
+
+    it("shift beyond size for positive integer", () => {
       // 255 = 0b1111111
       assert.deepStrictEqual(
         testedFun(Type.integer(255), Type.integer(9)),
         Type.integer(0),
       );
+    });
+
+    it("shift beyond size for negative integer", () => {
       // -127 = -0b1111111
       assert.deepStrictEqual(
         testedFun(Type.integer(-127), Type.integer(8)),
@@ -2413,17 +2422,19 @@ describe("Erlang", () => {
       );
     });
 
-    it("raises ArithmeticError if either argument is not an integer", () => {
+    it("raises ArithmeticError if the first argument is not an integer", () => {
       assertBoxedError(
-        () => testedFun(Type.float(10.0), Type.integer(1)),
+        () => testedFun(Type.float(1.0), Type.integer(2)),
         "ArithmeticError",
-        "bad argument in arithmetic expression: bsr(10.0, 1)",
+        "bad argument in arithmetic expression: Bitwise.bsr(1.0, 2)",
       );
+    });
 
+    it("raises ArithmeticError if the second argument is not an integer", () => {
       assertBoxedError(
-        () => testedFun(Type.integer(10), Type.atom("abc")),
+        () => testedFun(Type.integer(1), Type.float(2.0)),
         "ArithmeticError",
-        "bad argument in arithmetic expression: bsr(10, :abc)",
+        "bad argument in arithmetic expression: Bitwise.bsr(1, 2.0)",
       );
     });
   });
