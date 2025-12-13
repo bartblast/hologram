@@ -1736,6 +1736,53 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "bsr/2" do
+    test "common usage" do
+      # 16 = 0b00010000, 8 = 0b00001000
+      assert :erlang.bsr(16, 1) == 8
+    end
+
+    test "zero shift, no change" do
+      assert :erlang.bsr(255, 0) == 255
+    end
+
+    test "shift left via negative shift" do
+      # 1 = 0b00000001, 16 = 0b00010000
+      assert :erlang.bsr(1, -4) == 16
+    end
+
+    test "negative keeps sign bit" do
+      # -16 = -0b00010000, -8 = -0b00001000
+      assert :erlang.bsr(-16, 1) == -8
+    end
+
+    test "at JS Number.MAX_SAFE_INTEGER limit" do
+      # 18_014_398_509_481_982 = 0b111111111111111111111111111111111111111111111111111111
+      #  9_007_199_254_740_991 = 0b11111111111111111111111111111111111111111111111111111
+      #              2_097_151 = 0b111111111111111111111
+      assert :erlang.bsr(9_007_199_254_740_991, 32) == 2_097_151
+      assert :erlang.bsr(9_007_199_254_740_991, -1) == 18_014_398_509_481_982
+    end
+
+    test "shift beyond size" do
+      # 255 = 0b1111111
+      assert :erlang.bsr(255, 9) == 0
+      # -127 = -0b1111111
+      assert :erlang.bsr(-127, 8) == -1
+    end
+
+    # Non-integer inputs (expect ArithmeticError)
+    test "raises ArithmeticError if either argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bsr(10.0, 1)",
+                   {:erlang, :bsr, [10.0, 1]}
+
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bsr(10, :abc)",
+                   {:erlang, :bsr, [10, :abc]}
+    end
+  end
+
   describe "byte_size/1" do
     test "empty bitstring" do
       assert :erlang.byte_size("") == 0

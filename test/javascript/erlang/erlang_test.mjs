@@ -2352,6 +2352,82 @@ describe("Erlang", () => {
     });
   });
 
+  describe("bsr/2", () => {
+    const testedFun = Erlang["bsr/2"];
+
+    it("common usage", () => {
+      // 16 = 0b00010000, 8 = 0b00001000
+      assert.deepStrictEqual(
+        testedFun(Type.integer(16), Type.integer(1)),
+        Type.integer(8),
+      );
+    });
+
+    it("zero shift, no change", () => {
+      assert.deepStrictEqual(
+        testedFun(Type.integer(255), Type.integer(0)),
+        Type.integer(255),
+      );
+    });
+
+    it("shift left via negative shift", () => {
+      // 1 = 0b00000001, 16 = 0b00010000
+      assert.deepStrictEqual(
+        testedFun(Type.integer(1), Type.integer(-4)),
+        Type.integer(16),
+      );
+    });
+
+    it("negative keeps sign bit", () => {
+      // -16 = -0b00010000, -8 = -0b00001000
+      assert.deepStrictEqual(
+        testedFun(Type.integer(-16), Type.integer(1)),
+        Type.integer(-8),
+      );
+    });
+
+    it("at JS Number.MAX_SAFE_INTEGER limit", () => {
+      // 18_014_398_509_481_982 = 0b111111111111111111111111111111111111111111111111111111
+      //  9_007_199_254_740_991 = 0b11111111111111111111111111111111111111111111111111111
+      //              2_097_151 = 0b111111111111111111111
+      assert.deepStrictEqual(
+        testedFun(Type.integer(9007199254740991), Type.integer(32)),
+        Type.integer(2097151),
+      );
+      assert.deepStrictEqual(
+        testedFun(Type.integer(9007199254740991), Type.integer(-1)),
+        Type.integer(18014398509481982n),
+      );
+    });
+
+    it("shift beyond size", () => {
+      // 255 = 0b1111111
+      assert.deepStrictEqual(
+        testedFun(Type.integer(255), Type.integer(9)),
+        Type.integer(0),
+      );
+      // -127 = -0b1111111
+      assert.deepStrictEqual(
+        testedFun(Type.integer(-127), Type.integer(8)),
+        Type.integer(-1),
+      );
+    });
+
+    it("raises ArithmeticError if either argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.float(10.0), Type.integer(1)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: bsr(10.0, 1)",
+      );
+
+      assertBoxedError(
+        () => testedFun(Type.integer(10), Type.atom("abc")),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: bsr(10, :abc)",
+      );
+    });
+  });
+
   describe("byte_size/1", () => {
     const byte_size = Erlang["byte_size/1"];
 
