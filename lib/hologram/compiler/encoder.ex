@@ -374,16 +374,14 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   def encode_ir(%IR.ReferenceType{value: value}, context) do
-    segments =
-      value
-      |> :erlang.ref_to_list()
-      |> Enum.drop(5)
-      |> List.delete_at(-1)
-      |> to_string()
-      |> String.split(".")
-      |> Enum.map(&IntegerUtils.parse!/1)
+    binary = :erlang.term_to_binary(value)
+    {node_name, creation, id_words} = parse_reference_binary(binary)
 
-    encode_identifier(:reference, value, segments, context)
+    node_js = encode_as_string(node_name, true)
+    creation_js = to_string(creation)
+    id_words_js = encode_as_array(id_words, context, fn word, _ctx -> to_string(word) end)
+
+    "Type.reference(#{node_js}, #{creation_js}, #{id_words_js})"
   end
 
   def encode_ir(
@@ -790,4 +788,53 @@ defmodule Hologram.Compiler.Encoder do
   end
 
   defp has_match_operator?(_ast), do: false
+
+  # Parses NEWER_REFERENCE_EXT binary format to extract node name, creation number, and ID words
+  # See: https://www.erlang.org/doc/apps/erts/erl_ext_dist.html
+  #
+  # Format structure:
+  # - 131: VERSION_NUMBER (Erlang External Term Format version tag)
+  # - 90: NEWER_REFERENCE_EXT tag
+  # - len: number of ID words (16-bit big-endian)
+  # - atom tag (119 or 100): node name encoding format
+  #   - 119: SMALL_ATOM_UTF8_EXT (1-byte length, UTF-8 encoded)
+  #   - 100: ATOM_EXT (2-byte length, Latin-1 encoded)
+  # - atom_len: length of node name
+  # - atom_bytes: node name bytes
+  # - creation: creation number (32-bit big-endian)
+  # - rest: ID words (each 32-bit big-endian)
+  defp parse_reference_binary(binary) do
+    case binary do
+      # NEWER_REFERENCE_EXT with SMALL_ATOM_UTF8_EXT (tag 119)
+      <<131, 90, len::16, 119, atom_len::8, atom_bytes::binary-size(atom_len), creation::32,
+        rest::binary>> ->
+        id_words = parse_id_words(rest, len)
+        {atom_bytes, creation, id_words}
+
+      # NEWER_REFERENCE_EXT with ATOM_EXT (tag 100)
+      <<131, 90, len::16, 100, atom_len::16, atom_bytes::binary-size(atom_len), creation::32,
+        rest::binary>> ->
+        id_words = parse_id_words(rest, len)
+        {atom_bytes, creation, id_words}
+
+      _ ->
+        raise ArgumentError,
+              "Unsupported reference format (only NEWER_REFERENCE_EXT is supported)"
+    end
+  end
+
+  # Parses ID words from the binary (each word is 32-bit big-endian)
+  defp parse_id_words(binary, count)
+
+  defp parse_id_words(binary, count) do
+    parse_id_words(binary, count, [])
+  end
+
+  defp parse_id_words(_binary, 0, acc) do
+    Enum.reverse(acc)
+  end
+
+  defp parse_id_words(<<word::32, rest::binary>>, count, acc) do
+    parse_id_words(rest, count - 1, [word | acc])
+  end
 end
