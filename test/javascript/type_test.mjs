@@ -1054,7 +1054,7 @@ describe("Type", () => {
 
   describe("isReference()", () => {
     it("returns true if the term is a reference", () => {
-      const term = Type.reference("nonode@nohost", [0, 1, 2, 3]);
+      const term = Type.reference(Hologram.CLIENT_NODE, 0, [1, 2, 3]);
       assert.isTrue(Type.isReference(term));
     });
 
