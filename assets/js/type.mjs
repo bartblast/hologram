@@ -450,8 +450,13 @@ export default class Type {
     ]);
   }
 
-  static reference(node, segments, origin = "server") {
-    return {type: "reference", node: node, origin: origin, segments: segments};
+  static reference(node, creation, idWords) {
+    return {
+      type: "reference",
+      node: node,
+      creation: creation,
+      idWords: idWords,
+    };
   }
 
   static string(value) {

@@ -1324,13 +1324,13 @@ describe("Type", () => {
   });
 
   it("reference()", () => {
-    const result = Type.reference("nonode@nohost", [0, 1, 2, 3], "client");
+    const result = Type.reference("hologram_client", 0, [1, 2, 3]);
 
     const expected = {
       type: "reference",
-      node: "nonode@nohost",
-      segments: [0, 1, 2, 3],
-      origin: "client",
+      node: "hologram_client",
+      creation: 0,
+      idWords: [1, 2, 3],
     };
 
     assert.deepStrictEqual(result, expected);
