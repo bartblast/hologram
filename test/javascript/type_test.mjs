@@ -6,6 +6,7 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
+import Hologram from "../../assets/js/hologram.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Sequence from "../../assets/js/sequence.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -1324,11 +1325,11 @@ describe("Type", () => {
   });
 
   it("reference()", () => {
-    const result = Type.reference("hologram_client", 0, [1, 2, 3]);
+    const result = Type.reference(Hologram.CLIENT_NODE, 0, [1, 2, 3]);
 
     const expected = {
       type: "reference",
-      node: "hologram_client",
+      node: Hologram.CLIENT_NODE,
       creation: 0,
       idWords: [1, 2, 3],
     };
