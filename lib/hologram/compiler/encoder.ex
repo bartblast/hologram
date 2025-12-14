@@ -803,6 +803,11 @@ defmodule Hologram.Compiler.Encoder do
   # - atom_bytes: node name bytes
   # - creation: creation number (32-bit big-endian)
   # - rest: ID words (each 32-bit big-endian)
+  #
+  # Note: Modern BEAM always produces NEWER_REFERENCE_EXT (tag 90) when serializing references.
+  # Even if a reference was originally encoded with an older format (e.g., NEW_REFERENCE_EXT tag 114),
+  # the BEAM automatically normalizes it to NEWER_REFERENCE_EXT when re-serializing.
+  # Therefore, we only need to handle this format.
   defp parse_reference_binary(binary) do
     case binary do
       # NEWER_REFERENCE_EXT with SMALL_ATOM_UTF8_EXT (tag 119)
@@ -816,10 +821,6 @@ defmodule Hologram.Compiler.Encoder do
         rest::binary>> ->
         id_words = parse_id_words(rest, len)
         {atom_bytes, creation, id_words}
-
-      _ ->
-        raise ArgumentError,
-              "Unsupported reference format (only NEWER_REFERENCE_EXT is supported)"
     end
   end
 
