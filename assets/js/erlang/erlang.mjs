@@ -599,6 +599,19 @@ const Erlang = {
   // End binary_to_list/1
   // Deps: []
 
+  // Start binary_to_term/1
+  "binary_to_term/1": (binary) => {
+    if (!Type.isBinary(binary)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    }
+
+    return EtfDecoder.decode(binary);
+  },
+  // End binary_to_term/1
+  // Deps: []
+
   // Start bit_size/1
   "bit_size/1": (term) => {
     if (!Type.isBitstring(term)) {

@@ -1946,6 +1946,153 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "binary_to_term/1" do
+    test "decodes small positive integer (SMALL_INTEGER_EXT)" do
+      binary = :erlang.term_to_binary(42)
+      assert :erlang.binary_to_term(binary) == 42
+    end
+
+    test "decodes small positive integer (max value 255)" do
+      binary = :erlang.term_to_binary(255)
+      assert :erlang.binary_to_term(binary) == 255
+    end
+
+    test "decodes positive integer (INTEGER_EXT)" do
+      binary = :erlang.term_to_binary(1000)
+      assert :erlang.binary_to_term(binary) == 1000
+    end
+
+    test "decodes negative integer (INTEGER_EXT)" do
+      binary = :erlang.term_to_binary(-100)
+      assert :erlang.binary_to_term(binary) == -100
+    end
+
+    test "decodes large positive integer (SMALL_BIG_EXT)" do
+      binary = :erlang.term_to_binary(1_000_000_000_000)
+      assert :erlang.binary_to_term(binary) == 1_000_000_000_000
+    end
+
+    test "decodes large negative integer (SMALL_BIG_EXT)" do
+      binary = :erlang.term_to_binary(-1_000_000_000_000)
+      assert :erlang.binary_to_term(binary) == -1_000_000_000_000
+    end
+
+    test "decodes UTF-8 atom (SMALL_ATOM_UTF8_EXT)" do
+      binary = :erlang.term_to_binary(:test)
+      assert :erlang.binary_to_term(binary) == :test
+    end
+
+    test "decodes longer atom" do
+      binary = :erlang.term_to_binary(:test_atom)
+      assert :erlang.binary_to_term(binary) == :test_atom
+    end
+
+    test "decodes true atom" do
+      binary = :erlang.term_to_binary(true)
+      assert :erlang.binary_to_term(binary) == true
+    end
+
+    test "decodes false atom" do
+      binary = :erlang.term_to_binary(false)
+      assert :erlang.binary_to_term(binary) == false
+    end
+
+    test "decodes binary string (BINARY_EXT)" do
+      binary = :erlang.term_to_binary("hello")
+      assert :erlang.binary_to_term(binary) == "hello"
+    end
+
+    test "decodes empty binary" do
+      binary = :erlang.term_to_binary("")
+      assert :erlang.binary_to_term(binary) == ""
+    end
+
+    test "decodes small tuple (SMALL_TUPLE_EXT)" do
+      binary = :erlang.term_to_binary({1, 2, 3})
+      assert :erlang.binary_to_term(binary) == {1, 2, 3}
+    end
+
+    test "decodes empty tuple" do
+      binary = :erlang.term_to_binary({})
+      assert :erlang.binary_to_term(binary) == {}
+    end
+
+    test "decodes nested tuple" do
+      binary = :erlang.term_to_binary({1, {2, 3}})
+      assert :erlang.binary_to_term(binary) == {1, {2, 3}}
+    end
+
+    test "decodes empty list (NIL_EXT)" do
+      binary = :erlang.term_to_binary([])
+      assert :erlang.binary_to_term(binary) == []
+    end
+
+    test "decodes string list (STRING_EXT)" do
+      binary = :erlang.term_to_binary([1, 2, 3])
+      assert :erlang.binary_to_term(binary) == [1, 2, 3]
+    end
+
+    test "decodes proper list (LIST_EXT)" do
+      binary = :erlang.term_to_binary([100, 200, 300])
+      assert :erlang.binary_to_term(binary) == [100, 200, 300]
+    end
+
+    test "decodes empty map" do
+      binary = :erlang.term_to_binary(%{})
+      assert :erlang.binary_to_term(binary) == %{}
+    end
+
+    test "decodes map with atom keys" do
+      binary = :erlang.term_to_binary(%{a: 1, b: 2})
+      assert :erlang.binary_to_term(binary) == %{a: 1, b: 2}
+    end
+
+    test "decodes Code.fetch_docs/1 style tuple" do
+      term = {:docs_v1, 1, :elixir, "text/markdown", %{}, %{}, []}
+      binary = :erlang.term_to_binary(term)
+      assert :erlang.binary_to_term(binary) == term
+    end
+
+    test "decodes complex nested structure" do
+      term =
+        {:docs_v1, 1, :elixir, "text/markdown", %{"en" => "Module docs"}, %{since: "1.0.0"},
+         [{{:function, :my_func, 2}, 10, ["signature"], %{}, %{}}]}
+
+      binary = :erlang.term_to_binary(term)
+      assert :erlang.binary_to_term(binary) == term
+    end
+
+    test "raises ArgumentError if argument is not a binary" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :binary_to_term, [:test]}
+    end
+
+    test "raises ArgumentError if argument is a non-binary bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :binary_to_term, [<<1::1, 0::1, 1::1>>]}
+    end
+
+    test "raises ArgumentError if binary has invalid version byte" do
+      # Wrong version byte (130 instead of 131)
+      binary = <<130, 97, 42>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+
+    test "raises ArgumentError if binary is truncated" do
+      # Only version byte, no data
+      binary = <<131>>
+
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "invalid external representation of a term"),
+                   {:erlang, :binary_to_term, [binary]}
+    end
+  end
+
   describe "bit_size/1" do
     test "bitstring" do
       assert :erlang.bit_size(<<2::7>>) == 7
