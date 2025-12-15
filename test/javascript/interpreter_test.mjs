@@ -2083,7 +2083,7 @@ describe("Interpreter", () => {
       assert.equal(result, "#Port<0.11>");
     });
 
-    describe.only("reference", () => {
+    describe("reference", () => {
       it("client node", () => {
         const term = Type.reference(NodeTable.CLIENT_NODE, 4, [3, 2, 1]);
         const result = Interpreter.inspect(term);
