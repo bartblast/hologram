@@ -1917,7 +1917,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "binary_to_list/1" do
-    @describetag :binary
     test "converts a bytes-based binary to a list of integers" do
       assert :erlang.binary_to_list(<<1, 2, 3>>) == [1, 2, 3]
     end
