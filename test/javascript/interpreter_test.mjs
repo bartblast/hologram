@@ -16,6 +16,7 @@ import Bitstring from "../../assets/js/bitstring.mjs";
 import Erlang from "../../assets/js/erlang/erlang.mjs";
 import HologramBoxedError from "../../assets/js/errors/boxed_error.mjs";
 import Interpreter from "../../assets/js/interpreter.mjs";
+import NodeTable from "../../assets/js/erts/node_table.mjs";
 import Type from "../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
@@ -2082,11 +2083,20 @@ describe("Interpreter", () => {
       assert.equal(result, "#Port<0.11>");
     });
 
-    it("reference", () => {
-      const term = Type.reference("my_node", [0, 1, 2, 3], "server");
-      const result = Interpreter.inspect(term);
+    describe.only("reference", () => {
+      it("client node", () => {
+        const term = Type.reference(NodeTable.CLIENT_NODE, 4, [3, 2, 1]);
+        const result = Interpreter.inspect(term);
 
-      assert.equal(result, "#Reference<0.1.2.3>");
+        assert.equal(result, "#Reference<0.1.2.3>");
+      });
+
+      it("server node", () => {
+        const term = Type.reference("my_node@my_host", 7, [6, 5, 4]);
+        const result = Interpreter.inspect(term);
+
+        assert.equal(result, "#Reference<1.4.5.6>");
+      });
     });
 
     describe("tuple", () => {

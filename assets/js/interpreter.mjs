@@ -2,6 +2,7 @@
 
 import Bitstring from "./bitstring.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
+import NodeTable from "./erts/node_table.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
@@ -548,7 +549,7 @@ export default class Interpreter {
         return `#PID<${term.segments.join(".")}>`;
 
       case "reference":
-        return `#Reference<${term.segments.join(".")}>`;
+        return Interpreter.#inspectReference(term, opts);
 
       case "port":
         return `#Port<${term.segments.join(".")}>`;
@@ -1276,6 +1277,15 @@ export default class Interpreter {
       step.value > 1 ? `//${Interpreter.inspect(step, opts)}` : "";
 
     return `${Interpreter.inspect(first, opts)}..${Interpreter.inspect(last, opts)}${stepStr}`;
+  }
+
+  static #inspectReference(term, _opts) {
+    const localIncarnationId = NodeTable.getLocalIncarnationId(
+      term.node,
+      term.creation,
+    );
+
+    return `#Reference<${localIncarnationId}.${term.idWords.toReversed().join(".")}>`;
   }
 
   static #inspectTuple(term, opts) {
