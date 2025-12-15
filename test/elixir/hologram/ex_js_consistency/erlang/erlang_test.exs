@@ -1917,6 +1917,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "binary_to_list/1" do
+    @describetag :binary
     test "converts a bytes-based binary to a list of integers" do
       assert :erlang.binary_to_list(<<1, 2, 3>>) == [1, 2, 3]
     end
@@ -1947,6 +1948,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
   end
 
   describe "binary_to_term/1" do
+    @describetag :binary
     test "decodes small positive integer (SMALL_INTEGER_EXT)" do
       binary = :erlang.term_to_binary(42)
       assert :erlang.binary_to_term(binary) == 42
