@@ -68,6 +68,8 @@ const Erlang_Binary = {
     return Type.integer(subject.bytes[0]);
   },
   // End first/1
+  // Deps: []
+
   // Start copy/2
   "copy/2": (subject, count) => {
     if (!Type.isBinary(subject)) {
