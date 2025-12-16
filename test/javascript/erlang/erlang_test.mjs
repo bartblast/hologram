@@ -21,15 +21,32 @@ defineGlobalErlangAndElixirModules();
 const atomA = Type.atom("a");
 const atomAbc = Type.atom("abc");
 const atomB = Type.atom("b");
+const atomC = Type.atom("c");
 const float1 = Type.float(1.0);
 const float2 = Type.float(2.0);
 const float3 = Type.float(3.0);
+const float5 = Type.float(5.0);
 const float6 = Type.float(6.0);
+const integer0 = Type.integer(0);
 const integer1 = Type.integer(1);
 const integer2 = Type.integer(2);
 const integer3 = Type.integer(3);
+const integer4 = Type.integer(4);
+const integer5 = Type.integer(5);
 const integer6 = Type.integer(6);
+const integer10 = Type.integer(10);
+const integer11 = Type.integer(11);
+const integer15 = Type.integer(15);
+const integer16 = Type.integer(16);
+const integer36 = Type.integer(36);
+const integer123 = Type.integer(123);
 const list1 = Type.list([integer1, integer2]);
+
+const mapA1B2 = Type.map([
+  [atomA, integer1],
+  [atomB, integer2],
+]);
+
 const pid1 = Type.pid("my_node@my_host", [0, 11, 111]);
 const pid2 = Type.pid("my_node@my_host", [0, 11, 112]);
 const tuple2 = Type.tuple([Type.integer(1), Type.integer(2)]);
@@ -1531,6 +1548,86 @@ describe("Erlang", () => {
     });
   });
 
+  describe("band/2", () => {
+    const testedFun = Erlang["band/2"];
+
+    it("valid arguments", () => {
+      // 5 = 0b0101, 3 = 0b0011, 1 = 0b0001
+      const result = testedFun(integer5, integer3);
+
+      assert.deepStrictEqual(result, integer1);
+    });
+
+    it("both arguments are zero", () => {
+      const result = testedFun(integer0, integer0);
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("left argument is zero", () => {
+      const result = testedFun(integer0, integer5);
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("right argument is zero", () => {
+      const result = testedFun(integer5, integer0);
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("left argument is negative", () => {
+      const left = Type.integer(-5);
+
+      // 15 = 0b1111, 11 = -5 = 0b1011
+      const result = testedFun(left, integer15);
+
+      assert.deepStrictEqual(result, integer11);
+    });
+
+    it("right argument is negative", () => {
+      const right = Type.integer(-5);
+
+      // 15 = 0b1111, 11 = -5 = 0b1011
+      const result = testedFun(integer15, right);
+
+      assert.deepStrictEqual(result, integer11);
+    });
+
+    it("works with large numbers", () => {
+      // Number.MAX_SAFE_INTEGER = 9007199254740991
+      // = 0b11111111111111111111111111111111111111111111111111111
+      //
+      // 2 * 9007199254740991 = 18014398509481983
+      // = 0b111111111111111111111111111111111111111111111111111111
+      //
+      // 18014398509481982 = 0b111111111111111111111111111111111111111111111111111110
+
+      const left = Type.integer(18014398509481983n);
+      const right = Type.integer(18014398509481982n);
+
+      const result = testedFun(left, right);
+
+      assert.deepStrictEqual(result, right);
+    });
+
+    it("raises ArithmeticError if the first argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(float5, integer3),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.band(5.0, 3)",
+      );
+    });
+
+    it("raises ArithmeticError if the second argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(integer5, float3),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.band(5, 3.0)",
+      );
+    });
+  });
+
   describe("binary_to_atom/1", () => {
     it("delegates to binary_to_atom/2", () => {
       const binary = Type.bitstring("全息图");
@@ -1602,6 +1699,349 @@ describe("Erlang", () => {
     });
   });
 
+  describe("binary_to_float/1", () => {
+    const binary_to_float = Erlang["binary_to_float/1"];
+
+    it("positive float without sign in decimal notation", () => {
+      const input = Type.bitstring("1.23");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(1.23));
+    });
+
+    it("positive float with sign in decimal notation", () => {
+      const input = Type.bitstring("+1.23");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(1.23));
+    });
+
+    it("negative float in decimal notation", () => {
+      const input = Type.bitstring("-1.23");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(-1.23));
+    });
+
+    it("unsigned zero float in decimal notation", () => {
+      const input = Type.bitstring("0.0");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("signed positive zero float in decimal notation", () => {
+      const input = Type.bitstring("+0.0");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(+0.0));
+    });
+
+    it("signed negative zero float in decimal notation", () => {
+      const input = Type.bitstring("-0.0");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(-0.0));
+    });
+
+    it("positive float in scientific notation", () => {
+      const input = Type.bitstring("1.23456e+3");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(1234.56));
+    });
+
+    it("negative float in scientific notation", () => {
+      const input = Type.bitstring("-1.23456e+3");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(-1234.56));
+    });
+
+    it("unsigned zero float in scientific notation", () => {
+      const input = Type.bitstring("0.0e+1");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("signed positive zero float in scientific notation", () => {
+      const input = Type.bitstring("+0.0e+1");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(+0.0));
+    });
+
+    it("signed negative zero float in scientific notation", () => {
+      const input = Type.bitstring("-0.0e+1");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(-0.0));
+    });
+
+    it("positive integer", () => {
+      const input = Type.bitstring("123");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("negative integer", () => {
+      const input = Type.bitstring("-123");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("zero integer", () => {
+      const input = Type.bitstring("0");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with leading zeros", () => {
+      const input = Type.bitstring("00012.34");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(12.34));
+    });
+
+    it("uppercase scientific notation", () => {
+      const input = Type.bitstring("1.23456E3");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(1234.56));
+    });
+
+    it("negative exponent", () => {
+      const input = Type.bitstring("1.23e-3");
+      const result = binary_to_float(input);
+
+      assert.deepStrictEqual(result, Type.float(0.00123));
+    });
+
+    it("non-binary bitstring input", () => {
+      const input = Bitstring.fromBits([1, 0, 1]);
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("non-bitstring input", () => {
+      const input = Type.atom("abc");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("with underscore", () => {
+      const input = Type.bitstring("1_000.5");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("invalid float format", () => {
+      const input = Type.bitstring("12.3.4");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("non-numeric text", () => {
+      const input = Type.bitstring("abc");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("empty input", () => {
+      const input = Type.bitstring("");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("decimal point only", () => {
+      const input = Type.bitstring(".");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with leading dot", () => {
+      const input = Type.bitstring(".5");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with trailing dot", () => {
+      const input = Type.bitstring("5.");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("scientific notation without the fractional part", () => {
+      const input = Type.bitstring("3e10");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with trailing exponent marker", () => {
+      const input = Type.bitstring("2e");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with leading whitespace", () => {
+      const input = Type.bitstring(" 12.3");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with trailing whitespace", () => {
+      const input = Type.bitstring("12.3 ");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("with multiple exponent markers", () => {
+      const input = Type.bitstring("1e2e3");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("Infinity text", () => {
+      const input = Type.bitstring("Infinity");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+
+    it("hex-style JS float", () => {
+      const input = Type.bitstring("0x1.fp2");
+
+      assertBoxedError(
+        () => binary_to_float(input),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a float",
+        ),
+      );
+    });
+  });
+
   describe("binary_to_integer/1", () => {
     const binary_to_integer = Erlang["binary_to_integer/1"];
 
@@ -1656,8 +2096,7 @@ describe("Erlang", () => {
 
       it("base 36", () => {
         const binary = Type.bitstring("ZZ");
-        const base = Type.integer(36);
-        const result = binary_to_integer(binary, base);
+        const result = binary_to_integer(binary, integer36);
         const expected = Type.integer(1295);
 
         assert.deepStrictEqual(result, expected);
@@ -1823,6 +2262,69 @@ describe("Erlang", () => {
     });
   });
 
+  describe("binary_to_list/1", () => {
+    const binary_to_list = Erlang["binary_to_list/1"];
+
+    it("converts a bytes-based binary to a list of integers", () => {
+      const binary = Bitstring.fromBytes([1, 2, 3]);
+      const result = binary_to_list(binary);
+
+      const expected = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts a text-based binary to a list of integers", () => {
+      const binary = Type.bitstring("abc");
+      const result = binary_to_list(binary);
+
+      const expected = Type.list([
+        Type.integer(97),
+        Type.integer(98),
+        Type.integer(99),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts an empty bytes-based binary to an empty list", () => {
+      const binary = Bitstring.fromBytes([]);
+
+      const result = binary_to_list(binary);
+      const expected = Type.list();
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts an empty text-based binary to an empty list", () => {
+      const binary = Type.bitstring("");
+      const result = binary_to_list(binary);
+      const expected = Type.list();
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if the argument is not a bitstring", () => {
+      assertBoxedError(
+        () => binary_to_list(Type.integer(123)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("raises ArgumentError if the argument is a non-binary bitstring", () => {
+      assertBoxedError(
+        () => binary_to_list(Type.bitstring([1, 0, 1])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+  });
+
   describe("bit_size/1", () => {
     const bit_size = Erlang["bit_size/1"];
 
@@ -1846,6 +2348,93 @@ describe("Erlang", () => {
         () => bit_size(myAtom),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
+      );
+    });
+  });
+
+  describe("bsr/2", () => {
+    const testedFun = Erlang["bsr/2"];
+
+    it("common usage", () => {
+      // 16 = 0b00010000, 8 = 0b00001000
+      assert.deepStrictEqual(
+        testedFun(Type.integer(16), Type.integer(1)),
+        Type.integer(8),
+      );
+    });
+
+    it("zero shift", () => {
+      assert.deepStrictEqual(
+        testedFun(Type.integer(255), Type.integer(0)),
+        Type.integer(255),
+      );
+    });
+
+    it("shift left via negative shift", () => {
+      // 1 = 0b00000001, 16 = 0b00010000
+      assert.deepStrictEqual(
+        testedFun(Type.integer(1), Type.integer(-4)),
+        Type.integer(16),
+      );
+    });
+
+    it("negative keeps sign bit", () => {
+      // -16 = -0b00010000, -8 = -0b00001000
+      assert.deepStrictEqual(
+        testedFun(Type.integer(-16), Type.integer(1)),
+        Type.integer(-8),
+      );
+    });
+
+    it("above JS Number.MAX_SAFE_INTEGER", () => {
+      // Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      // 18_014_398_509_481_984 = 0b1000000000000000000000000000000000000000000000000000000
+      //  9_007_199_254_740_992 = 0b100000000000000000000000000000000000000000000000000000
+      assert.deepStrictEqual(
+        testedFun(Type.integer(18_014_398_509_481_984n), Type.integer(1)),
+        Type.integer(9_007_199_254_740_992n),
+      );
+    });
+
+    it("below JS Number.MIN_SAFE_INTEGER", () => {
+      // Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      // -18_014_398_509_481_984 = -0b1000000000000000000000000000000000000000000000000000000
+      //  -9_007_199_254_740_992 = -0b100000000000000000000000000000000000000000000000000000
+      assert.deepStrictEqual(
+        testedFun(Type.integer(-18_014_398_509_481_984n), Type.integer(1)),
+        Type.integer(-9_007_199_254_740_992n),
+      );
+    });
+
+    it("shift beyond size for positive integer", () => {
+      // 255 = 0b1111111
+      assert.deepStrictEqual(
+        testedFun(Type.integer(255), Type.integer(9)),
+        Type.integer(0),
+      );
+    });
+
+    it("shift beyond size for negative integer", () => {
+      // -127 = -0b1111111
+      assert.deepStrictEqual(
+        testedFun(Type.integer(-127), Type.integer(8)),
+        Type.integer(-1),
+      );
+    });
+
+    it("raises ArithmeticError if the first argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.float(1.0), Type.integer(2)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.bsr(1.0, 2)",
+      );
+    });
+
+    it("raises ArithmeticError if the second argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.float(2.0)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.bsr(1, 2.0)",
       );
     });
   });
@@ -1881,6 +2470,81 @@ describe("Erlang", () => {
         () => byte_size(atom),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
+      );
+    });
+  });
+
+  describe("ceil/1", () => {
+    const testedFun = Erlang["ceil/1"];
+
+    it("rounds positive float with fractional part up", () => {
+      const result = testedFun(Type.float(1.23));
+
+      assert.deepStrictEqual(result, integer2);
+    });
+
+    it("rounds negative float with fractional part up toward zero", () => {
+      const result = testedFun(Type.float(-1.23));
+      const expected = Type.integer(-1);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("keeps positive float without fractional part unchanged", () => {
+      const result = testedFun(Type.float(1.0));
+
+      assert.deepStrictEqual(result, integer1);
+    });
+
+    it("keeps negative float without fractional part unchanged", () => {
+      const result = testedFun(Type.float(-1.0));
+      const expected = Type.integer(-1);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("keeps signed negative zero float unchanged", () => {
+      const result = testedFun(Type.float(-0.0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("keeps signed positive zero float unchanged", () => {
+      const result = testedFun(Type.float(+0.0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("keeps unsigned zero float unchanged", () => {
+      const result = testedFun(Type.float(0.0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("keeps positive integer unchanged", () => {
+      const result = testedFun(integer1);
+
+      assert.deepStrictEqual(result, integer1);
+    });
+
+    it("keeps negative integer unchanged", () => {
+      const integer = Type.integer(-1);
+      const result = testedFun(integer);
+
+      assert.deepStrictEqual(result, integer);
+    });
+
+    it("keeps zero integer unchanged", () => {
+      const result = testedFun(integer0);
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("raises ArgumentError if the argument is not a number", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
     });
   });
@@ -2051,6 +2715,30 @@ describe("Erlang", () => {
     assertBoxedError(() => error(reason, args), "MyError", "my message");
   });
 
+  describe("float/1", () => {
+    const float = Erlang["float/1"];
+
+    it("converts integer to float", () => {
+      const result = float(integer1);
+
+      assert.deepStrictEqual(result, float1);
+    });
+
+    it("is idempotent for float", () => {
+      const result = float(float1);
+
+      assert.deepStrictEqual(result, float1);
+    });
+
+    it("raises ArgumentError if the argument is not a number", () => {
+      assertBoxedError(
+        () => float(atomAbc),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    });
+  });
+
   describe("float_to_binary/2", () => {
     const float_to_binary = Erlang["float_to_binary/2"];
 
@@ -2165,6 +2853,78 @@ describe("Erlang", () => {
     });
   });
 
+  describe("insert_element/3", () => {
+    const insert_element = Erlang["insert_element/3"];
+
+    it("inserts the given value into an empty tuple", () => {
+      const result = insert_element(integer1, Type.tuple(), atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([atomA]));
+    });
+
+    it("inserts the given value at the beginning of a one-element tuple", () => {
+      const result = insert_element(integer1, Type.tuple([integer1]), atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([atomA, integer1]));
+    });
+
+    it("inserts the given value at the end of a one-element tuple", () => {
+      const result = insert_element(integer2, Type.tuple([integer1]), atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([integer1, atomA]));
+    });
+
+    it("inserts the given value at the beginning of a multi-element tuple", () => {
+      const result = insert_element(integer1, tuple2, atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([atomA, integer1, integer2]));
+    });
+
+    it("inserts the given value into the middle of a multi-element tuple", () => {
+      const result = insert_element(integer2, tuple2, atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([integer1, atomA, integer2]));
+    });
+
+    it("inserts the given value at the end of a multi-element tuple", () => {
+      const result = insert_element(integer3, tuple2, atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([integer1, integer2, atomA]));
+    });
+
+    it("raises ArgumentError if the first argument is not an integer", () => {
+      assertBoxedError(
+        () => insert_element(atomB, tuple2, atomA),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a tuple", () => {
+      assertBoxedError(
+        () => insert_element(integer1, atomB, atomA),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    });
+
+    it("raises ArgumentError if the index is larger than the size of the tuple plus one", () => {
+      assertBoxedError(
+        () => insert_element(integer4, tuple2, atomA),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if the index is not positive", () => {
+      assertBoxedError(
+        () => insert_element(integer0, tuple2, atomA),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+  });
+
   describe("integer_to_binary/1", () => {
     it("delegates to integer_to_binary/2", () => {
       const integer = Type.integer(123123);
@@ -2210,11 +2970,7 @@ describe("Erlang", () => {
       });
 
       it("base = 36", () => {
-        const result = integer_to_binary(
-          Type.integer(123123),
-          Type.integer(36),
-        );
-
+        const result = integer_to_binary(Type.integer(123123), integer36);
         const expected = Type.bitstring("2N03");
 
         assert.deepStrictEqual(result, expected);
@@ -2257,6 +3013,110 @@ describe("Erlang", () => {
           "not an integer in the range 2 through 36",
         ),
       );
+    });
+  });
+
+  describe("integer_to_list/1", () => {
+    const integer_to_list_1 = Erlang["integer_to_list/1"];
+    const integer_to_list_2 = Erlang["integer_to_list/2"];
+
+    it("delegates to integer_to_list/2 with base 10", () => {
+      const result = integer_to_list_1(integer123);
+      const expected = integer_to_list_2(integer123, integer10);
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("integer_to_list/2", () => {
+    const integer_to_list_2 = Erlang["integer_to_list/2"];
+
+    const toCharlist = (str) =>
+      Type.list([...str].map((char) => Type.integer(char.charCodeAt(0))));
+
+    it("base 2 (min allowed value for base param)", () => {
+      const result = integer_to_list_2(integer123, integer2);
+
+      assert.deepStrictEqual(result, toCharlist("1111011"));
+    });
+
+    it("base 10", () => {
+      const result = integer_to_list_2(integer123, integer10);
+
+      assert.deepStrictEqual(result, toCharlist("123"));
+    });
+
+    it("base 36 (max allowed value for base param)", () => {
+      const result = integer_to_list_2(integer123, integer36);
+
+      assert.deepStrictEqual(result, toCharlist("3F"));
+    });
+
+    it("negative integer, base 10", () => {
+      const result = integer_to_list_2(Type.integer(-123), integer10);
+
+      assert.deepStrictEqual(result, toCharlist("-123"));
+    });
+
+    it("negative integer, base other than 10", () => {
+      const result = integer_to_list_2(Type.integer(-123), integer16);
+
+      assert.deepStrictEqual(result, toCharlist("-7B"));
+    });
+
+    it("zero, base 10", () => {
+      const result = integer_to_list_2(integer0, integer10);
+
+      assert.deepStrictEqual(result, toCharlist("0"));
+    });
+
+    it("zero, base other than 10", () => {
+      const result = integer_to_list_2(integer0, integer16);
+
+      assert.deepStrictEqual(result, toCharlist("0"));
+    });
+
+    describe("error cases", () => {
+      it("raises ArgumentError when the first argument is not an integer", () => {
+        assertBoxedError(
+          () => integer_to_list_2(Type.float(3.14), integer10),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+        );
+      });
+
+      it("raises ArgumentError when base is not an integer", () => {
+        assertBoxedError(
+          () => integer_to_list_2(integer123, Type.float(3.14)),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            2,
+            "not an integer in the range 2 through 36",
+          ),
+        );
+      });
+
+      it("raises ArgumentError for base < 2", () => {
+        assertBoxedError(
+          () => integer_to_list_2(integer123, integer1),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            2,
+            "not an integer in the range 2 through 36",
+          ),
+        );
+      });
+
+      it("raises ArgumentError for base > 36", () => {
+        assertBoxedError(
+          () => integer_to_list_2(integer123, Type.integer(37)),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            2,
+            "not an integer in the range 2 through 36",
+          ),
+        );
+      });
     });
   });
 
@@ -2401,6 +3261,26 @@ describe("Erlang", () => {
 
     it("non-map", () => {
       assertBoxedFalse(is_map(Type.atom("abc")));
+    });
+  });
+
+  describe("is_map_key/2", () => {
+    const is_map_key = Erlang["is_map_key/2"];
+
+    it("returns true if the given map has the given key", () => {
+      assertBoxedTrue(is_map_key(atomB, mapA1B2));
+    });
+
+    it("returns false if the given map doesn't have the given key", () => {
+      assertBoxedFalse(is_map_key(atomC, mapA1B2));
+    });
+
+    it("raises BadMapError if the second argument is not a map", () => {
+      assertBoxedError(
+        () => is_map_key(atomA, atomAbc),
+        "BadMapError",
+        "expected a map, got: :abc",
+      );
     });
   });
 
@@ -2577,6 +3457,38 @@ describe("Erlang", () => {
     });
   });
 
+  describe("make_tuple/2", () => {
+    const make_tuple = Erlang["make_tuple/2"];
+
+    it("creates tuple of the given size with all elements set to the given value", () => {
+      const tuple = make_tuple(integer3, atomA);
+
+      assert.deepStrictEqual(tuple, Type.tuple([atomA, atomA, atomA]));
+    });
+
+    it("creates an empty tuple when arity is zero", () => {
+      const tuple = make_tuple(integer0, atomA);
+
+      assert.deepStrictEqual(tuple, Type.tuple());
+    });
+
+    it("raises ArgumentError when arity is negative", () => {
+      assertBoxedError(
+        () => make_tuple(Type.integer(-1), atomA),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError when arity is not an integer", () => {
+      assertBoxedError(
+        () => make_tuple(float2, atomA),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+  });
+
   describe("map_size/1", () => {
     const map_size = Erlang["map_size/1"];
 
@@ -2611,6 +3523,42 @@ describe("Erlang", () => {
 
     it("not boolean", () => {
       assertBoxedError(() => not(atomAbc), "ArgumentError", "argument error");
+    });
+  });
+
+  describe("xor/2", () => {
+    const xor = Erlang["xor/2"];
+
+    it("true xor false", () => {
+      assertBoxedTrue(xor(Type.boolean(true), Type.boolean(false)));
+    });
+
+    it("false xor true", () => {
+      assertBoxedTrue(xor(Type.boolean(false), Type.boolean(true)));
+    });
+
+    it("true xor true", () => {
+      assertBoxedFalse(xor(Type.boolean(true), Type.boolean(true)));
+    });
+
+    it("false xor false", () => {
+      assertBoxedFalse(xor(Type.boolean(false), Type.boolean(false)));
+    });
+
+    it("raises ArgumentError if the first argument is not a boolean", () => {
+      assertBoxedError(
+        () => xor(atomAbc, Type.boolean(true)),
+        "ArgumentError",
+        "argument error",
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a boolean", () => {
+      assertBoxedError(
+        () => xor(Type.boolean(true), atomAbc),
+        "ArgumentError",
+        "argument error",
+      );
     });
   });
 
@@ -2763,6 +3711,60 @@ describe("Erlang", () => {
         () => testedFun(Type.integer(5), Type.atom("abc")),
         "ArithmeticError",
         "bad argument in arithmetic expression: rem(5, :abc)",
+      );
+    });
+  });
+
+  describe("setelement/3", () => {
+    const setelement = Erlang["setelement/3"];
+
+    it("replaces a middle element", () => {
+      const result = setelement(integer2, tuple3, atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([integer1, atomA, integer3]));
+    });
+
+    it("replaces the first element", () => {
+      const result = setelement(integer1, tuple2, atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([atomA, integer2]));
+    });
+
+    it("replaces the last element", () => {
+      const result = setelement(integer2, tuple2, atomA);
+
+      assert.deepStrictEqual(result, Type.tuple([integer1, atomA]));
+    });
+
+    it("raises ArgumentError if the first argument is not an integer", () => {
+      assertBoxedError(
+        () => setelement(atomB, tuple2, atomA),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not a tuple", () => {
+      assertBoxedError(
+        () => setelement(integer1, atomB, atomA),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not a tuple"),
+      );
+    });
+
+    it("raises ArgumentError if the index is larger than the size of the tuple", () => {
+      assertBoxedError(
+        () => setelement(integer3, tuple2, atomA),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if the index is not positive", () => {
+      assertBoxedError(
+        () => setelement(integer0, tuple2, atomA),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "out of range"),
       );
     });
   });

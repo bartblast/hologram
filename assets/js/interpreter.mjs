@@ -229,7 +229,8 @@ export default class Interpreter {
     return {module: context.module, vars: {...context.vars}};
   }
 
-  // TODO: Implement structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
+  // Implements structural comparison, see: https://hexdocs.pm/elixir/main/Kernel.html#module-structural-comparison
+  // TODO: support comparing the remaining types: anonymous function, list, map, port, reference
   static compareTerms(term1, term2) {
     Interpreter.assertStructuralComparisonSupportedType(term1);
     Interpreter.assertStructuralComparisonSupportedType(term2);

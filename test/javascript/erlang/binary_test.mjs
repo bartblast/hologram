@@ -3,6 +3,7 @@
 import {
   assert,
   assertBoxedError,
+  assertBoxedStrictEqual,
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
@@ -13,6 +14,19 @@ import Type from "../../../assets/js/type.mjs";
 
 defineGlobalErlangAndElixirModules();
 
+const atomAbc = Type.atom("abc");
+
+const integer0 = Type.integer(0);
+const integer1 = Type.integer(1);
+const integer3 = Type.integer(3);
+
+const bytesBasedEmptyBinary = Bitstring.fromBytes([]);
+const textBasedEmptyBinary = Bitstring.fromText("");
+
+// IMPORTANT!
+// Each JavaScript test has a related Elixir consistency test in test/elixir/ex_js_consistency/erlang/binary_test.exs
+// Always update both together.
+
 describe("Erlang_Binary", () => {
   describe("at/2", () => {
     const at = Erlang_Binary["at/2"];
@@ -20,17 +34,17 @@ describe("Erlang_Binary", () => {
     const binary = Bitstring.fromBytes([5, 19, 72, 33]);
 
     it("returns first byte", () => {
-      const result = at(binary, Type.integer(0));
+      const result = at(binary, integer0);
       assert.deepStrictEqual(result, Type.integer(5));
     });
 
     it("returns middle byte", () => {
-      const result = at(binary, Type.integer(1));
+      const result = at(binary, integer1);
       assert.deepStrictEqual(result, Type.integer(19));
     });
 
     it("returns last byte", () => {
-      const result = at(binary, Type.integer(3));
+      const result = at(binary, integer3);
       assert.deepStrictEqual(result, Type.integer(33));
     });
 
@@ -48,7 +62,7 @@ describe("Erlang_Binary", () => {
       const subject = Type.nil();
 
       assertBoxedError(
-        () => at(subject, Type.integer(0)),
+        () => at(subject, integer0),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
@@ -58,7 +72,7 @@ describe("Erlang_Binary", () => {
       const subject = Type.bitstring([1, 0, 1]);
 
       assertBoxedError(
-        () => at(subject, Type.integer(0)),
+        () => at(subject, integer0),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(
           1,
@@ -88,6 +102,7 @@ describe("Erlang_Binary", () => {
     });
   });
 
+<<<<<<< HEAD
   describe("first/1", () => {
     const first = Erlang_Binary["first/1"];
 
@@ -239,6 +254,143 @@ describe("Erlang_Binary", () => {
       const segment = Bitstring.fromText("é");
       const result = first(segment);
       assert.deepStrictEqual(result, Type.integer(195));
+=======
+  describe("copy/2", () => {
+    const testedFun = Erlang_Binary["copy/2"];
+
+    describe("text-based", () => {
+      describe("empty binary", () => {
+        it("zero times", () => {
+          const result = testedFun(textBasedEmptyBinary, integer0);
+
+          assertBoxedStrictEqual(result, textBasedEmptyBinary);
+        });
+
+        it("one time", () => {
+          const result = testedFun(textBasedEmptyBinary, integer1);
+
+          assertBoxedStrictEqual(result, textBasedEmptyBinary);
+        });
+
+        it("multiple times", () => {
+          const result = testedFun(textBasedEmptyBinary, integer3);
+
+          assertBoxedStrictEqual(result, textBasedEmptyBinary);
+        });
+      });
+
+      describe("non-empty binary", () => {
+        const subject = Bitstring.fromText("hello");
+
+        it("zero times", () => {
+          const result = testedFun(subject, integer0);
+
+          assertBoxedStrictEqual(result, textBasedEmptyBinary);
+        });
+
+        it("one time", () => {
+          const result = testedFun(subject, integer1);
+
+          assertBoxedStrictEqual(result, subject);
+        });
+
+        it("multiple times", () => {
+          const result = testedFun(subject, integer3);
+          const expected = Bitstring.fromText("hellohellohello");
+
+          assertBoxedStrictEqual(result, expected);
+        });
+      });
+    });
+
+    describe("bytes-based", () => {
+      describe("empty binary", () => {
+        it("zero times", () => {
+          const result = testedFun(bytesBasedEmptyBinary, integer0);
+
+          assertBoxedStrictEqual(result, textBasedEmptyBinary);
+        });
+
+        it("one time", () => {
+          const result = testedFun(bytesBasedEmptyBinary, integer1);
+
+          assertBoxedStrictEqual(result, textBasedEmptyBinary);
+        });
+
+        it("multiple times", () => {
+          const result = testedFun(bytesBasedEmptyBinary, integer3);
+
+          assertBoxedStrictEqual(result, textBasedEmptyBinary);
+        });
+      });
+
+      describe("non-empty binary", () => {
+        const subject = Bitstring.fromBytes([65, 66, 67]);
+
+        it("zero times", () => {
+          const result = testedFun(subject, integer0);
+
+          assertBoxedStrictEqual(result, textBasedEmptyBinary);
+        });
+
+        it("one time", () => {
+          const result = testedFun(subject, integer1);
+
+          assertBoxedStrictEqual(result, subject);
+        });
+
+        it("multiple times", () => {
+          const result = testedFun(subject, integer3);
+
+          const expected = Bitstring.fromBytes([
+            65, 66, 67, 65, 66, 67, 65, 66, 67,
+          ]);
+
+          assertBoxedStrictEqual(result, expected);
+        });
+      });
+    });
+
+    describe("invalid arguments", () => {
+      const subject = Type.bitstring("hello");
+
+      it("raises ArgumentError if the first argument is not a bitstring", () => {
+        assertBoxedError(
+          () => testedFun(atomAbc, integer3),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        );
+      });
+
+      it("raises ArgumentError if the first argument is a non-binary bitstring", () => {
+        assertBoxedError(
+          () => testedFun(Type.bitstring([1, 0, 1]), integer3),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            1,
+            "is a bitstring (expected a binary)",
+          ),
+        );
+      });
+
+      it("raises ArgumentError if the second argument is not an integer", () => {
+        assertBoxedError(
+          () => testedFun(subject, atomAbc),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+        );
+      });
+
+      it("raises ArgumentError if count is negative", () => {
+        const count = Type.integer(-1);
+
+        assertBoxedError(
+          () => testedFun(subject, count),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(2, "out of range"),
+        );
+      });
+>>>>>>> origin/dev
     });
   });
 });

@@ -147,6 +147,80 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
 
     test "returns first byte of UTF-8 multi-byte character" do
       assert :binary.first("é") == 195
+  describe "copy/2" do
+    test "text-based, empty binary, zero times" do
+      assert :binary.copy("", 0) == ""
+    end
+
+    test "text-based, empty binary, one time" do
+      assert :binary.copy("", 1) == ""
+    end
+
+    test "text-based, empty binary, multiple times" do
+      assert :binary.copy("", 3) == ""
+    end
+
+    test "text-based, non-empty binary, zero times" do
+      assert :binary.copy("hello", 0) == ""
+    end
+
+    test "text-based, non-empty binary, one time" do
+      assert :binary.copy("hello", 1) == "hello"
+    end
+
+    test "text-based, non-empty binary, multiple times" do
+      assert :binary.copy("hello", 3) == "hellohellohello"
+    end
+
+    test "bytes-based, empty binary, zero times" do
+      assert :binary.copy(<<>>, 0) == <<>>
+    end
+
+    test "bytes-based, empty binary, one time" do
+      assert :binary.copy(<<>>, 1) == <<>>
+    end
+
+    test "bytes-based, empty binary, multiple times" do
+      assert :binary.copy(<<>>, 3) == <<>>
+    end
+
+    test "bytes-based, non-empty binary, zero times" do
+      assert :binary.copy(<<65, 66, 67>>, 0) == <<>>
+    end
+
+    test "bytes-based, non-empty binary, one time" do
+      assert :binary.copy(<<65, 66, 67>>, 1) == <<65, 66, 67>>
+    end
+
+    test "bytes-based, non-empty binary, multiple times" do
+      result = :binary.copy(<<65, 66, 67>>, 3)
+      expected = <<65, 66, 67, 65, 66, 67, 65, 66, 67>>
+
+      assert result == expected
+    end
+
+    test "raises ArgumentError if the first argument is not a bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:binary, :copy, [:abc, 3]}
+    end
+
+    test "raises ArgumentError if the first argument is a non-binary bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "is a bitstring (expected a binary)"),
+                   {:binary, :copy, [<<1::1, 0::1, 1::1>>, 3]}
+    end
+
+    test "raises ArgumentError if the second argument is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer"),
+                   {:binary, :copy, ["hello", :abc]}
+    end
+
+    test "raises ArgumentError if count is negative" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "out of range"),
+                   {:binary, :copy, ["hello", -1]}
     end
   end
 end
