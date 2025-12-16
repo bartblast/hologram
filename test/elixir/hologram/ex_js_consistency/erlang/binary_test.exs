@@ -147,6 +147,9 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
 
     test "returns first byte of UTF-8 multi-byte character" do
       assert :binary.first("é") == 195
+    end
+  end
+
   describe "copy/2" do
     test "text-based, empty binary, zero times" do
       assert :binary.copy("", 0) == ""
