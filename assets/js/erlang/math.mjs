@@ -8,6 +8,21 @@ import Type from "../type.mjs";
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
 const Erlang_Math = {
+  // Start ceil/1
+  "ceil/1": (number) => {
+    if (!Type.isNumber(number)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    }
+
+    return Type.isInteger(number)
+      ? Type.float(Number(number.value))
+      : Type.float(Math.ceil(number.value));
+  },
+  // End ceil/1
+  // Deps: []
+
   // Start exp/1
   "exp/1": (number) => {
     if (!Type.isNumber(number)) {

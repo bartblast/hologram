@@ -1694,6 +1694,36 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "binary_to_list/1" do
+    test "converts a bytes-based binary to a list of integers" do
+      assert :erlang.binary_to_list(<<1, 2, 3>>) == [1, 2, 3]
+    end
+
+    test "converts a text-based binary to a list of integers" do
+      assert :erlang.binary_to_list("abc") == [97, 98, 99]
+    end
+
+    test "converts an empty bytes-based binary to an empty list" do
+      assert :erlang.binary_to_list(<<>>) == []
+    end
+
+    test "converts an empty text-based binary to an empty list" do
+      assert :erlang.binary_to_list("") == []
+    end
+
+    test "raises ArgumentError if the argument is not a bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :binary_to_list, [123]}
+    end
+
+    test "raises ArgumentError if the argument is a non-binary bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :binary_to_list, [<<5::size(3)>>]}
+    end
+  end
+
   describe "bit_size/1" do
     test "bitstring" do
       assert :erlang.bit_size(<<2::7>>) == 7
@@ -1703,6 +1733,63 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a bitstring"),
                    {:erlang, :bit_size, [:abc]}
+    end
+  end
+
+  describe "bsr/2" do
+    test "common usage" do
+      # 16 = 0b00010000, 8 = 0b00001000
+      assert :erlang.bsr(16, 1) == 8
+    end
+
+    test "zero shift" do
+      assert :erlang.bsr(255, 0) == 255
+    end
+
+    test "shift left via negative shift" do
+      # 1 = 0b00000001, 16 = 0b00010000
+      assert :erlang.bsr(1, -4) == 16
+    end
+
+    test "negative keeps sign bit" do
+      # -16 = -0b00010000, -8 = -0b00001000
+      assert :erlang.bsr(-16, 1) == -8
+    end
+
+    test "above JS Number.MAX_SAFE_INTEGER" do
+      # Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      # 18_014_398_509_481_984 = 0b1000000000000000000000000000000000000000000000000000000
+      #  9_007_199_254_740_992 = 0b100000000000000000000000000000000000000000000000000000
+      assert :erlang.bsr(18_014_398_509_481_984, 1) == 9_007_199_254_740_992
+    end
+
+    test "below JS Number.MIN_SAFE_INTEGER" do
+      # Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      # -18_014_398_509_481_984 = -0b1000000000000000000000000000000000000000000000000000000
+      #  -9_007_199_254_740_992 = -0b100000000000000000000000000000000000000000000000000000
+      assert :erlang.bsr(-18_014_398_509_481_984, 1) == -9_007_199_254_740_992
+    end
+
+    test "shift beyond size for positive integer" do
+      # 255 = 0b1111111
+      assert :erlang.bsr(255, 9) == 0
+    end
+
+    test "shift beyond size for negative integer" do
+      # -127 = -0b1111111
+      assert :erlang.bsr(-127, 8) == -1
+    end
+
+    test "raises ArithmeticError if the first argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bsr(1.0, 2)",
+                   {:erlang, :bsr, [1.0, 2]}
+    end
+
+    test "raises ArithmeticError if the second argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bsr(1, 2.0)",
+                   {:erlang, :bsr, [1, 2.0]}
     end
   end
 
@@ -1877,6 +1964,22 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "float/1" do
+    test "converts integer to float" do
+      assert :erlang.float(1) == 1.0
+    end
+
+    test "is idempotent for float" do
+      assert :erlang.float(1.0) == 1.0
+    end
+
+    test "raises ArgumentError if the argument is not a number" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a number"),
+                   {:erlang, :float, [:abc]}
+    end
+  end
+
   describe "float_to_binary/2" do
     test ":short option" do
       assert :erlang.float_to_binary(0.1 + 0.2, [:short]) == "0.30000000000000004"
@@ -1916,6 +2019,56 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a nonempty list"),
                    {:erlang, :hd, [123]}
+    end
+  end
+
+  describe "insert_element/3" do
+    test "inserts the given value into an empty tuple" do
+      assert :erlang.insert_element(1, {}, :a) === {:a}
+    end
+
+    test "inserts the given value at the beginning of a one-element tuple" do
+      assert :erlang.insert_element(1, {1}, :a) === {:a, 1}
+    end
+
+    test "inserts the given value at the end of a one-element tuple" do
+      assert :erlang.insert_element(2, {1}, :a) === {1, :a}
+    end
+
+    test "inserts the given value at the beginning of a multi-element tuple" do
+      assert :erlang.insert_element(1, {1, 2}, :a) === {:a, 1, 2}
+    end
+
+    test "inserts the given value into the middle of a multi-element tuple" do
+      assert :erlang.insert_element(2, {1, 2}, :a) === {1, :a, 2}
+    end
+
+    test "inserts the given value at the end of a multi-element tuple" do
+      assert :erlang.insert_element(3, {1, 2}, :a) === {1, 2, :a}
+    end
+
+    test "raises ArgumentError if the first argument is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an integer"),
+                   {:erlang, :insert_element, [:b, {1, 2}, :a]}
+    end
+
+    test "raises ArgumentError if the second argument is not a tuple" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a tuple"),
+                   {:erlang, :insert_element, [1, :b, :a]}
+    end
+
+    test "raises ArgumentError if the index is larger than the size of the tuple plus one" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "out of range"),
+                   {:erlang, :insert_element, [4, {1, 2}, :a]}
+    end
+
+    test "raises ArgumentError if the index is not positive" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "out of range"),
+                   {:erlang, :insert_element, [0, {1, 2}, :a]}
     end
   end
 
@@ -1962,6 +2115,66 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "not an integer in the range 2 through 36"),
                    {:erlang, :integer_to_binary, [123_123, :abc]}
+    end
+  end
+
+  describe "integer_to_list/1" do
+    test "delegates to integer_to_list/2 with base 10" do
+      assert :erlang.integer_to_list(123) == :erlang.integer_to_list(123, 10)
+    end
+  end
+
+  describe "integer_to_list/2" do
+    test "base 2 (min allowed value for base param)" do
+      assert :erlang.integer_to_list(123, 2) == ~c"1111011"
+    end
+
+    test "base 10" do
+      assert :erlang.integer_to_list(123, 10) == ~c"123"
+    end
+
+    test "base 36 (max allowed value for base param)" do
+      assert :erlang.integer_to_list(123, 36) == ~c"3F"
+    end
+
+    test "negative integer, base 10" do
+      assert :erlang.integer_to_list(-123, 10) == ~c"-123"
+    end
+
+    test "negative integer, base other than 10" do
+      assert :erlang.integer_to_list(-123, 16) == ~c"-7B"
+    end
+
+    test "zero, base 10" do
+      assert :erlang.integer_to_list(0, 10) == ~c"0"
+    end
+
+    test "zero, base other than 10" do
+      assert :erlang.integer_to_list(0, 16) == ~c"0"
+    end
+
+    test "raises ArgumentError when the first argument is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an integer"),
+                   {:erlang, :integer_to_list, [3.14, 10]}
+    end
+
+    test "raises ArgumentError when base is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
+                   {:erlang, :integer_to_list, [123, 3.14]}
+    end
+
+    test "raises ArgumentError for base < 2" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
+                   {:erlang, :integer_to_list, [123, 1]}
+    end
+
+    test "raises ArgumentError for base > 36" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
+                   {:erlang, :integer_to_list, [123, 37]}
     end
   end
 
@@ -2236,6 +2449,32 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "xor/2" do
+    test "true xor false" do
+      assert :erlang.xor(true, false) == true
+    end
+
+    test "false xor true" do
+      assert :erlang.xor(false, true) == true
+    end
+
+    test "true xor true" do
+      assert :erlang.xor(true, true) == false
+    end
+
+    test "false xor false" do
+      assert :erlang.xor(false, false) == false
+    end
+
+    test "raises ArgumentError if the first argument is not a boolean" do
+      assert_error ArgumentError, "argument error", {:erlang, :xor, [:abc, true]}
+    end
+
+    test "raises ArgumentError if the second argument is not a boolean" do
+      assert_error ArgumentError, "argument error", {:erlang, :xor, [true, :abc]}
+    end
+  end
+
   describe "orelse/2" do
     test "returns true if the first argument is true" do
       assert :erlang.orelse(true, :abc) == true
@@ -2319,6 +2558,44 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArithmeticError, "bad argument in arithmetic expression: rem(5, :abc)", fn ->
         assert :erlang.rem(5, :abc)
       end
+    end
+  end
+
+  describe "setelement/3" do
+    test "replaces a middle element" do
+      assert :erlang.setelement(2, {1, 2, 3}, :a) === {1, :a, 3}
+    end
+
+    test "replaces the first element" do
+      assert :erlang.setelement(1, {1, 2}, :a) === {:a, 2}
+    end
+
+    test "replaces the last element" do
+      assert :erlang.setelement(2, {1, 2}, :a) === {1, :a}
+    end
+
+    test "raises ArgumentError if the first argument is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an integer"),
+                   {:erlang, :setelement, [:b, {1, 2}, :a]}
+    end
+
+    test "raises ArgumentError if the second argument is not a tuple" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a tuple"),
+                   {:erlang, :setelement, [1, :b, :a]}
+    end
+
+    test "raises ArgumentError if the index is larger than the size of the tuple" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "out of range"),
+                   {:erlang, :setelement, [3, {1, 2}, :a]}
+    end
+
+    test "raises ArgumentError if the index is not positive" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "out of range"),
+                   {:erlang, :setelement, [0, {1, 2}, :a]}
     end
   end
 
