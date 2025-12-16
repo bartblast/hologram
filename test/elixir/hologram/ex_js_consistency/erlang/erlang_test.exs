@@ -1964,6 +1964,35 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "exit/1" do
+    test "raises with atom reason" do
+      try do
+        :erlang.exit(:normal)
+        flunk("expected exit to be raised")
+      catch
+        :exit, reason -> assert reason == :normal
+      end
+    end
+
+    test "raises with tuple reason" do
+      try do
+        :erlang.exit({:error, :reason})
+        flunk("expected exit to be raised")
+      catch
+        :exit, reason -> assert reason == {:error, :reason}
+      end
+    end
+
+    test "raises with integer reason" do
+      try do
+        :erlang.exit(1)
+        flunk("expected exit to be raised")
+      catch
+        :exit, reason -> assert reason == 1
+      end
+    end
+  end
+
   describe "float/1" do
     test "converts integer to float" do
       assert :erlang.float(1) == 1.0
