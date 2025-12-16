@@ -4,6 +4,26 @@ defmodule Hologram.Runtime.DeserializerTest do
 
   @delimiter delimiter()
 
+  describe "version 3" do
+    test "top-level data, raw JSON" do
+      assert deserialize(~s'[3,"axyz"]') == :xyz
+    end
+
+    test "top-level data, already JSON-decoded" do
+      assert deserialize([3, "axyz"]) == :xyz
+    end
+
+    test "reference" do
+      data = %{"t" => "r", "n" => "nonode@nohost", "c" => 0, "i" => [3, 2, 1]}
+
+      assert deserialize(3, data) == ref("0.1.2.3")
+    end
+
+    test "delegates non-reference types to version 2" do
+      assert deserialize(3, "i123") == 123
+    end
+  end
+
   describe "version 2" do
     test "top-level data, raw JSON" do
       assert deserialize(~s'[2,"axyz"]') == :xyz

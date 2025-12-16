@@ -71,6 +71,30 @@ defmodule Hologram.Runtime.Deserializer do
   @spec deserialize(integer, map | String.t()) :: any
   def deserialize(version, data)
 
+  def deserialize(3, %{"t" => "r", "n" => node, "c" => creation, "i" => id_words}) do
+    node_len = byte_size(node)
+    len = length(id_words)
+    id_words_binary = for word <- id_words, into: <<>>, do: <<word::32>>
+
+    # Build Erlang external term format for reference:
+    # - 131: VERSION_NUMBER (ETF version)
+    # - 90: NEWER_REFERENCE_EXT tag
+    # - len::16: number of ID words (16-bit unsigned)
+    # - 119: SMALL_ATOM_UTF8_EXT tag
+    # - node_len::8: length of node name (8-bit unsigned)
+    # - node::binary: node name as UTF-8 bytes
+    # - creation::32: creation timestamp (32-bit unsigned)
+    # - id_words_binary::binary: ID words, each 32-bit big-endian
+    binary =
+      <<131, 90, len::16, 119, node_len::8, node::binary, creation::32, id_words_binary::binary>>
+
+    :erlang.binary_to_term(binary, [:safe])
+  end
+
+  def deserialize(3, data) do
+    deserialize(2, data)
+  end
+
   def deserialize(2, "a" <> value) do
     String.to_existing_atom(value)
   end
