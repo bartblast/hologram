@@ -44,22 +44,15 @@ const Erlang_Binary = {
 
   // Start first/1
   "first/1": (subject) => {
-    if (!Type.isBinary(subject) && Type.isBitstring(subject)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(
-          1,
-          "is a bitstring (expected a binary)",
-        ),
-      );
-    }
-
     if (!Type.isBinary(subject)) {
+      let message = Type.isBitstring(subject)
+        ? "is a bitstring (expected a binary)"
+        : "not a binary";
+
       Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+        Interpreter.buildArgumentErrorMsg(1, message),
       );
     }
-
-    Bitstring.maybeSetBytesFromText(subject);
 
     if (Bitstring.isEmpty(subject)) {
       Interpreter.raiseArgumentError(
@@ -69,6 +62,8 @@ const Erlang_Binary = {
         ),
       );
     }
+
+    Bitstring.maybeSetBytesFromText(subject);
 
     return Type.integer(subject.bytes[0]);
   },
