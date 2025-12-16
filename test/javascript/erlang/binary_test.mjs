@@ -102,7 +102,6 @@ describe("Erlang_Binary", () => {
     });
   });
 
-<<<<<<< HEAD
   describe("first/1", () => {
     const first = Erlang_Binary["first/1"];
 
@@ -254,7 +253,8 @@ describe("Erlang_Binary", () => {
       const segment = Bitstring.fromText("é");
       const result = first(segment);
       assert.deepStrictEqual(result, Type.integer(195));
-=======
+    });
+  });
   describe("copy/2", () => {
     const testedFun = Erlang_Binary["copy/2"];
 
@@ -390,7 +390,6 @@ describe("Erlang_Binary", () => {
           Interpreter.buildArgumentErrorMsg(2, "out of range"),
         );
       });
->>>>>>> origin/dev
     });
   });
 });
