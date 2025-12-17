@@ -9,6 +9,9 @@ defmodule Hologram.Runtime.Deserializer do
     # change event, select event
     :value,
 
+    # client-side ERTS node name
+    :hologram_client,
+
     # mouse event, mouse move event, pointer event
     :page_x,
     :page_y,
