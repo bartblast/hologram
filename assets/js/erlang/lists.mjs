@@ -186,6 +186,68 @@ const Erlang_Lists = {
   // End keymember/3
   // Deps: [:lists.keyfind/3]
 
+  // Start keyreplace/4
+  "keyreplace/4": function (key, index, tuples, newtuple) {
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.keyreplace/4",
+          arguments,
+        ),
+      );
+    }
+
+    if (index.value < 1n) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.keyreplace/4",
+          arguments,
+        ),
+      );
+    }
+
+    if (!Type.isList(tuples)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.keyreplace/4",
+          arguments,
+        ),
+      );
+    }
+
+    if (!Type.isProperList(tuples)) {
+      const thirdArg = tuples.data.at(-1);
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keyreplace3/4", [
+          key,
+          index,
+          thirdArg,
+          newtuple,
+        ]),
+      );
+    }
+
+    const result = [];
+    let found = false;
+
+    for (const tuple of tuples.data) {
+      if (!found && Type.isTuple(tuple)) {
+        if (
+          tuple.data.length >= index.value &&
+          Interpreter.isEqual(tuple.data[Number(index.value) - 1], key)
+        ) {
+          found = true;
+          result.push(newtuple);
+          continue;
+        }
+      }
+      result.push(tuple);
+    }
+    return Type.list(result);
+  },
+  // End keyreplace/4
+  // Deps: []
+
   // Start map/2
   "map/2": function (fun, list) {
     if (!Type.isAnonymousFunction(fun) || fun.arity !== 1) {
