@@ -83,7 +83,7 @@ defmodule Hologram.Runtime.Deserializer do
     # - 119: SMALL_ATOM_UTF8_EXT tag
     # - node_len::8: length of node name (8-bit unsigned)
     # - node::binary: node name as UTF-8 bytes
-    # - creation::32: creation timestamp (32-bit unsigned)
+    # - creation::32: creation number (32-bit unsigned)
     # - id_words_binary::binary: ID words, each 32-bit big-endian
     binary =
       <<131, 90, len::16, 119, node_len::8, node::binary, creation::32, id_words_binary::binary>>

@@ -29,7 +29,7 @@ describe("NodeTable", () => {
       assert.equal(result2, 2);
     });
 
-    it("returns the same ID for the same node name and creation", () => {
+    it("returns the same ID for the same node name and creation number", () => {
       const result1 = NodeTable.getLocalIncarnationId("server1", 2);
       const result2 = NodeTable.getLocalIncarnationId("server1", 2);
 
@@ -37,7 +37,7 @@ describe("NodeTable", () => {
       assert.equal(result2, 1);
     });
 
-    it("returns different IDs for the same node name but different creation", () => {
+    it("returns different IDs for the same node name but different creation number", () => {
       const result1 = NodeTable.getLocalIncarnationId("server1", 3);
       const result2 = NodeTable.getLocalIncarnationId("server1", 4);
 
