@@ -12,7 +12,7 @@ import {
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
-import NodeTable from "../../../assets/js/erts/node_table.mjs";
+import ERTS from "../../../assets/js/erts.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
@@ -3462,7 +3462,7 @@ describe("Erlang", () => {
     const list_to_ref = Erlang["list_to_ref/1"];
 
     beforeEach(() => {
-      NodeTable.reset();
+      ERTS.nodeTable.reset();
     });
 
     it("valid textual representation of reference for local node", () => {
@@ -3485,14 +3485,14 @@ describe("Erlang", () => {
       ]);
 
       const result = list_to_ref(list);
-      const expected = Type.reference(NodeTable.CLIENT_NODE, 0, [3, 2, 1]);
+      const expected = Type.reference(ERTS.nodeTable.CLIENT_NODE, 0, [3, 2, 1]);
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("valid textual representation of reference for remote node", () => {
       // First create a server node mapping
-      NodeTable.getLocalIncarnationId("server1", 5);
+      ERTS.nodeTable.getLocalIncarnationId("server1", 5);
 
       // prettier-ignore
       // ~c"#Ref<1.111.222.333>"
