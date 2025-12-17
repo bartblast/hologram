@@ -71,6 +71,7 @@ defmodule Hologram.Runtime.Deserializer do
   @spec deserialize(integer, map | String.t()) :: any
   def deserialize(version, data)
 
+  # sobelow_skip ["Misc.BinToTerm"]
   def deserialize(3, %{"t" => "r", "n" => node, "c" => creation, "i" => id_words}) do
     node_len = byte_size(node)
     len = length(id_words)
