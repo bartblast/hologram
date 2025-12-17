@@ -11,9 +11,7 @@ defineGlobalErlangAndElixirModules();
 
 describe("NodeTable", () => {
   beforeEach(() => {
-    NodeTable.data.clear();
-    NodeTable.reverseData.clear();
-    NodeTable.sequence = 0;
+    NodeTable.reset();
   });
 
   describe("getLocalIncarnationId()", () => {
@@ -78,13 +76,13 @@ describe("NodeTable", () => {
 
       // Verify data was added
       assert.equal(NodeTable.data.size, 2);
-      assert.equal(NodeTable.reverseData.size, 2);
+      assert.equal(NodeTable.reverseData.size, 3);
       assert.equal(NodeTable.sequence, 2);
 
       NodeTable.reset();
 
       assert.equal(NodeTable.data.size, 0);
-      assert.equal(NodeTable.reverseData.size, 0);
+      assert.equal(NodeTable.reverseData.size, 1);
       assert.equal(NodeTable.sequence, 0);
     });
   });

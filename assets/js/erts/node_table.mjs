@@ -8,7 +8,9 @@ export default class NodeTable {
 
   // Reverse lookup: localIncarnationId -> {node, creation}
   // Made public to make tests easier
-  static reverseData = new Map();
+  static reverseData = new Map([
+    [0, {node: NodeTable.CLIENT_NODE, creation: 0}],
+  ]);
 
   // Made public to make tests easier
   static sequence = 0;
@@ -31,16 +33,12 @@ export default class NodeTable {
   }
 
   static getNodeAndCreation(localIncarnationId) {
-    if (localIncarnationId === 0) {
-      return {node: $.CLIENT_NODE, creation: 0};
-    }
-
     return $.reverseData.get(localIncarnationId) || null;
   }
 
   static reset() {
     $.data = new Map();
-    $.reverseData = new Map();
+    $.reverseData = new Map([[0, {node: $.CLIENT_NODE, creation: 0}]]);
     $.sequence = 0;
   }
 }
