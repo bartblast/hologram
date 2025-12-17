@@ -6,6 +6,7 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
+import ERTS from "../../assets/js/erts.mjs";
 import Hologram from "../../assets/js/hologram.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Sequence from "../../assets/js/sequence.mjs";
@@ -340,6 +341,7 @@ describe("Type", () => {
     assert.deepStrictEqual(result, expected);
   });
 
+  // TODO: refactor test names - use the same pattern as for reference type
   describe("encodeMapKey()", () => {
     it("encodes boxed anonymous function value as map key", () => {
       Sequence.reset();
@@ -411,6 +413,16 @@ describe("Type", () => {
       const result = Type.encodeMapKey(map);
 
       assert.equal(result, "map(atom(a):integer(1),atom(b):integer(2))");
+    });
+
+    it("reference type", () => {
+      ERTS.nodeTable.reset();
+
+      const node = ERTS.nodeTable.CLIENT_NODE;
+      const ref = Type.reference(node, 4, [3, 2, 1]);
+      const result = Type.encodeMapKey(ref);
+
+      assert.equal(result, "r0.1.2.3");
     });
 
     it("encodes empty boxed tuple value as map key", () => {
