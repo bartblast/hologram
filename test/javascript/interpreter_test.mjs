@@ -2634,30 +2634,44 @@ describe("Interpreter", () => {
 
     describe("references", () => {
       it("equal", () => {
-        const ref1 = Type.reference("my_node", [0, 1, 2, 3], "server");
-        const ref2 = Type.reference("my_node", [0, 1, 2, 3], "server");
+        const ref1 = Type.reference("my_node", 0, [3, 2, 1]);
+        const ref2 = Type.reference("my_node", 0, [3, 2, 1]);
 
         assert.isTrue(isStrictlyEqual(ref1, ref2));
       });
 
       describe("not equal", () => {
         it("different node", () => {
-          const ref1 = Type.reference("my_node_1", [0, 1, 2, 3], "server");
-          const ref2 = Type.reference("my_node_2", [0, 1, 2, 3], "server");
+          const ref1 = Type.reference("my_node_1", 0, [3, 2, 1]);
+          const ref2 = Type.reference("my_node_2", 0, [3, 2, 1]);
 
           assert.isFalse(isStrictlyEqual(ref1, ref2));
         });
 
-        it("different segments", () => {
-          const ref1 = Type.reference("my_node", [0, 1, 2, 3], "server");
-          const ref2 = Type.reference("my_node", [0, 1, 2, 4], "server");
+        it("different creation number", () => {
+          const ref1 = Type.reference("my_node", 0, [3, 2, 1]);
+          const ref2 = Type.reference("my_node", 4, [3, 2, 1]);
 
           assert.isFalse(isStrictlyEqual(ref1, ref2));
         });
 
-        it("different origin", () => {
-          const ref1 = Type.reference("my_node", [0, 1, 2, 3], "server");
-          const ref2 = Type.reference("my_node", [0, 1, 2, 3], "client");
+        it("different ID word 1", () => {
+          const ref1 = Type.reference("my_node", 0, [3, 2, 1]);
+          const ref2 = Type.reference("my_node", 0, [4, 2, 1]);
+
+          assert.isFalse(isStrictlyEqual(ref1, ref2));
+        });
+
+        it("different ID word 2", () => {
+          const ref1 = Type.reference("my_node", 0, [3, 2, 1]);
+          const ref2 = Type.reference("my_node", 0, [3, 4, 1]);
+
+          assert.isFalse(isStrictlyEqual(ref1, ref2));
+        });
+
+        it("different ID word 3", () => {
+          const ref1 = Type.reference("my_node", 0, [3, 2, 1]);
+          const ref2 = Type.reference("my_node", 0, [3, 2, 4]);
 
           assert.isFalse(isStrictlyEqual(ref1, ref2));
         });

@@ -620,7 +620,7 @@ export default class Interpreter {
         return $.#areIdentifiersEqual(left, right);
 
       case "reference":
-        return $.#areIdentifiersEqual(left, right);
+        return $.#areReferencesEqual(left, right);
 
       case "port":
         return $.#areIdentifiersEqual(left, right);
@@ -992,6 +992,14 @@ export default class Interpreter {
     }
 
     return true;
+  }
+
+  static #areReferencesEqual(ref1, ref2) {
+    return (
+      $.#areIntegerArraysEqual(ref1.idWords, ref2.idWords) &&
+      ref1.node === ref2.node &&
+      ref1.creation === ref2.creation
+    );
   }
 
   static #comparePids(pid1, pid2) {
