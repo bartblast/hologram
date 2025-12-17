@@ -965,6 +965,68 @@ const Erlang = {
   // End list_to_pid/1
   // Deps: []
 
+  // Start list_to_ref/1
+  "list_to_ref/1": (codePoints) => {
+    if (!Type.isProperList(codePoints)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    const areCodePointsValid = codePoints.data.every(
+      (item) => Type.isInteger(item) && Bitstring.validateCodePoint(item.value),
+    );
+
+    if (!areCodePointsValid) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a reference",
+        ),
+      );
+    }
+
+    const segments = codePoints.data.map((codePoint) =>
+      Type.bitstringSegment(codePoint, {type: "utf8"}),
+    );
+
+    const regex = /^#Ref<([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)>$/;
+    const matches = Bitstring.toText(Type.bitstring(segments)).match(regex);
+
+    if (matches === null) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a reference",
+        ),
+      );
+    }
+
+    const localIncarnationId = Number(matches[1]);
+
+    // The idWords in the string representation are in reversed order
+    const idWords = [
+      Number(matches[4]),
+      Number(matches[3]),
+      Number(matches[2]),
+    ];
+
+    const refInfo = ERTS.nodeTable.getNodeAndCreation(localIncarnationId);
+
+    if (refInfo === null) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a reference",
+        ),
+      );
+    }
+
+    return Type.reference(refInfo.node, refInfo.creation, idWords);
+  },
+  // End list_to_ref/1
+  // Deps: []
+
   // Start make_ref/0
   "make_ref/0": () => {
     const node = ERTS.nodeTable.CLIENT_NODE;
