@@ -13,14 +13,75 @@ defmodule Hologram.Runtime.DeserializerTest do
       assert deserialize([3, "axyz"]) == :xyz
     end
 
+    test "atom" do
+      assert deserialize(3, "axyz") == :xyz
+    end
+
+    test "bitstring, empty" do
+      assert deserialize(3, "b") == ""
+    end
+
+    test "bitstring, single-byte, without leftover bits" do
+      assert deserialize(3, "b061") == "a"
+    end
+
+    test "bitstring, single-byte, with leftover bits" do
+      assert deserialize(3, "b3a0") == <<5::size(3)>>
+    end
+
+    test "bitstring, multiple-byte, without leftover bits" do
+      assert deserialize(3, "b0486f6c6f6772616d") == "Hologram"
+    end
+
+    test "bitstring, multiple-byte, with leftover bits" do
+      assert deserialize(3, "b3616263a0") == <<97, 98, 99, 5::size(3)>>
+    end
+
+    test "float, encoded as float" do
+      assert deserialize(3, "f1.23") === 1.23
+    end
+
+    test "float, encoded as integer" do
+      assert deserialize(3, "f123") === 123.0
+    end
+
+    test "function capture" do
+      data = "cCalendar.ISO#{@delimiter}parse_date#{@delimiter}2"
+      assert deserialize(3, data) == (&Calendar.ISO.parse_date/2)
+    end
+
+    test "integer" do
+      assert deserialize(3, "i123") == 123
+    end
+
+    test "list" do
+      data = %{"t" => "l", "d" => ["i1", "f2.34"]}
+      assert deserialize(3, data) == [1, 2.34]
+    end
+
+    test "map" do
+      data = %{"t" => "m", "d" => [["ax", "i1"], ["b079", "f2.34"]]}
+      assert deserialize(3, data) == %{:x => 1, "y" => 2.34}
+    end
+
+    test "pid" do
+      data = "pmy_node@my_host#{@delimiter}0,11,222#{@delimiter}server"
+      assert deserialize(3, data) == pid("0.11.222")
+    end
+
+    test "port" do
+      data = "omy_node@my_host#{@delimiter}0,11#{@delimiter}server"
+      assert deserialize(3, data) == port("0.11")
+    end
+
     test "reference" do
       data = %{"t" => "r", "n" => "nonode@nohost", "c" => 0, "i" => [3, 2, 1]}
-
       assert deserialize(3, data) == ref("0.1.2.3")
     end
 
-    test "delegates non-reference types to version 2" do
-      assert deserialize(3, "i123") == 123
+    test "tuple" do
+      data = %{"t" => "t", "d" => ["i1", "f2.34"]}
+      assert deserialize(3, data) == {1, 2.34}
     end
   end
 
