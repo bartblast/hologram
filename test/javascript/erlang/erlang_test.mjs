@@ -3457,6 +3457,23 @@ describe("Erlang", () => {
     });
   });
 
+  describe("make_ref/0", () => {
+    const make_ref = Erlang["make_ref/0"];
+
+    it("returns a reference", () => {
+      const result = make_ref();
+
+      assert.isTrue(Type.isReference(result));
+    });
+
+    it("consecutive calls return unique references", () => {
+      const ref1 = make_ref();
+      const ref2 = make_ref();
+
+      assert.isFalse(Interpreter.isEqual(ref1, ref2));
+    });
+  });
+
   describe("make_tuple/2", () => {
     const make_tuple = Erlang["make_tuple/2"];
 
