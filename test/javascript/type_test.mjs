@@ -500,7 +500,7 @@ describe("Type", () => {
       assert.throw(
         () => Type.improperList([]),
         HologramInterpreterError,
-        "improper list must have at least 2 items, received [2,[]]",
+        "improper list must have at least 2 items, received [3,[]]",
       );
     });
 
@@ -508,7 +508,7 @@ describe("Type", () => {
       assert.throw(
         () => Type.improperList([Type.integer(1)]),
         HologramInterpreterError,
-        'improper list must have at least 2 items, received [2,["i1"]]',
+        'improper list must have at least 2 items, received [3,["i1"]]',
       );
     });
 
