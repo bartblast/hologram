@@ -12,6 +12,7 @@ defineGlobalErlangAndElixirModules();
 describe("NodeTable", () => {
   beforeEach(() => {
     NodeTable.data.clear();
+    NodeTable.reverseData.clear();
     NodeTable.sequence = 0;
   });
 
@@ -46,6 +47,29 @@ describe("NodeTable", () => {
     });
   });
 
+  describe("getNodeAndCreation()", () => {
+    it("returns node and creation number for client node (localIncarnationId 0)", () => {
+      const result = NodeTable.getNodeAndCreation(0);
+
+      assert.deepEqual(result, {node: NodeTable.CLIENT_NODE, creation: 0});
+    });
+
+    it("returns node and creation number for server node", () => {
+      NodeTable.getLocalIncarnationId("server1", 5);
+      const localIncarnationId = NodeTable.getLocalIncarnationId("server2", 6);
+
+      const result = NodeTable.getNodeAndCreation(localIncarnationId);
+
+      assert.deepEqual(result, {node: "server2", creation: 6});
+    });
+
+    it("returns null for non-existent localIncarnationId", () => {
+      const result = NodeTable.getNodeAndCreation(999);
+
+      assert.equal(result, null);
+    });
+  });
+
   describe("reset()", () => {
     it("clears the data and resets the sequence", () => {
       // Populate the NodeTable with some data
@@ -54,11 +78,13 @@ describe("NodeTable", () => {
 
       // Verify data was added
       assert.equal(NodeTable.data.size, 2);
+      assert.equal(NodeTable.reverseData.size, 2);
       assert.equal(NodeTable.sequence, 2);
 
       NodeTable.reset();
 
       assert.equal(NodeTable.data.size, 0);
+      assert.equal(NodeTable.reverseData.size, 0);
       assert.equal(NodeTable.sequence, 0);
     });
   });
