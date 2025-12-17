@@ -45,4 +45,21 @@ describe("NodeTable", () => {
       assert.equal(result2, 2);
     });
   });
+
+  describe("reset()", () => {
+    it("clears the data and resets the sequence", () => {
+      // Populate the NodeTable with some data
+      NodeTable.getLocalIncarnationId("server1", 1);
+      NodeTable.getLocalIncarnationId("server2", 2);
+
+      // Verify data was added
+      assert.equal(NodeTable.data.size, 2);
+      assert.equal(NodeTable.sequence, 2);
+
+      NodeTable.reset();
+
+      assert.equal(NodeTable.data.size, 0);
+      assert.equal(NodeTable.sequence, 0);
+    });
+  });
 });

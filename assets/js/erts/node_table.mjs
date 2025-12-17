@@ -24,6 +24,11 @@ export default class NodeTable {
 
     return $.data.get(key);
   }
+
+  static reset() {
+    $.data = new Map();
+    $.sequence = 0;
+  }
 }
 
 const $ = NodeTable;
