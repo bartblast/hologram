@@ -75,7 +75,7 @@ defmodule Hologram.Runtime.DeserializerTest do
     end
 
     test "reference" do
-      data = %{"t" => "r", "n" => "nonode@nohost", "c" => 0, "i" => [3, 2, 1]}
+      data = %{"t" => "r", "n" => "snonode@nohost", "c" => 0, "i" => [3, 2, 1]}
       assert deserialize(3, data) == ref("0.1.2.3")
     end
 

@@ -75,7 +75,7 @@ defmodule Hologram.Runtime.Deserializer do
   def deserialize(version, data)
 
   # sobelow_skip ["Misc.BinToTerm"]
-  def deserialize(3, %{"t" => "r", "n" => node, "c" => creation, "i" => id_words}) do
+  def deserialize(3, %{"t" => "r", "n" => "s" <> node, "c" => creation, "i" => id_words}) do
     node_len = byte_size(node)
     len = length(id_words)
     id_words_binary = for word <- id_words, into: <<>>, do: <<word::32>>
