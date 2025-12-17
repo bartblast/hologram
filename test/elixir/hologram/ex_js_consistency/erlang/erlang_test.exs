@@ -2399,6 +2399,21 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "make_ref/0" do
+    test "returns a reference" do
+      result = :erlang.make_ref()
+
+      assert is_reference(result)
+    end
+
+    test "consecutive calls return unique references" do
+      ref1 = :erlang.make_ref()
+      ref2 = :erlang.make_ref()
+
+      assert ref1 != ref2
+    end
+  end
+
   describe "make_tuple/2" do
     test "creates tuple of the given size with all elements set to the given value" do
       assert :erlang.make_tuple(3, :a) === {:a, :a, :a}

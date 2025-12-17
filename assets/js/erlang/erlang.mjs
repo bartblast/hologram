@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
+import ERTS from "../erts.mjs";
 import HologramBoxedError from "../errors/boxed_error.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
@@ -962,6 +963,23 @@ const Erlang = {
     );
   },
   // End list_to_pid/1
+  // Deps: []
+
+  // Start make_ref/0
+  "make_ref/0": () => {
+    const node = ERTS.nodeTable.CLIENT_NODE;
+    const creation = 0;
+
+    // TODO: implement ID words similarly to how it's done in Erlang
+    const idWords = [
+      Utils.randomUint32(),
+      Utils.randomUint32(),
+      ERTS.referenceSequence.next(),
+    ];
+
+    return Type.reference(node, creation, idWords);
+  },
+  // End make_ref/0
   // Deps: []
 
   // Start make_tuple/2
