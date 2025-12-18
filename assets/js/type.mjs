@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "./bitstring.mjs";
+import ERTS from "./erts.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
 import Interpreter from "./interpreter.mjs";
 import Sequence from "./sequence.mjs";
@@ -161,6 +162,9 @@ export default class Type {
 
       case "map":
         return Type.#encodeMapTypeMapKey(term);
+
+      case "reference":
+        return Type.#encodeReferenceTypeMapKey(term);
     }
   }
 
@@ -450,8 +454,13 @@ export default class Type {
     ]);
   }
 
-  static reference(node, segments, origin = "server") {
-    return {type: "reference", node: node, origin: origin, segments: segments};
+  static reference(node, creation, idWords) {
+    return {
+      type: "reference",
+      node: node,
+      creation: creation,
+      idWords: idWords,
+    };
   }
 
   static string(value) {
@@ -494,6 +503,15 @@ export default class Type {
 
   static #encodePrimitiveTypeMapKey(term) {
     return `${term.type}(${term.value})`;
+  }
+
+  static #encodeReferenceTypeMapKey(term) {
+    const localIncarnationId = ERTS.nodeTable.getLocalIncarnationId(
+      term.node,
+      term.creation,
+    );
+
+    return `r${localIncarnationId}.${term.idWords.toReversed().join(".")}`;
   }
 
   static #getOption(options, key) {

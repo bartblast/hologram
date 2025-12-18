@@ -63,6 +63,10 @@ export default class Utils {
     }
   }
 
+  static randomUint32() {
+    return (Math.random() * 0x100000000) >>> 0;
+  }
+
   static async runAsyncTask(task) {
     return new Promise((resolve) => {
       setTimeout(() => {

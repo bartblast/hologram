@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
+import ERTS from "../erts.mjs";
 import HologramBoxedError from "../errors/boxed_error.mjs";
 import HologramInterpreterError from "../errors/interpreter_error.mjs";
 import Interpreter from "../interpreter.mjs";
@@ -962,6 +963,85 @@ const Erlang = {
     );
   },
   // End list_to_pid/1
+  // Deps: []
+
+  // Start list_to_ref/1
+  "list_to_ref/1": (codePoints) => {
+    if (!Type.isProperList(codePoints)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    }
+
+    const areCodePointsValid = codePoints.data.every(
+      (item) => Type.isInteger(item) && Bitstring.validateCodePoint(item.value),
+    );
+
+    if (!areCodePointsValid) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a reference",
+        ),
+      );
+    }
+
+    const segments = codePoints.data.map((codePoint) =>
+      Type.bitstringSegment(codePoint, {type: "utf8"}),
+    );
+
+    const regex = /^#Ref<([0-9]+)\.([0-9]+)\.([0-9]+)\.([0-9]+)>$/;
+    const matches = Bitstring.toText(Type.bitstring(segments)).match(regex);
+
+    if (matches === null) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a reference",
+        ),
+      );
+    }
+
+    const localIncarnationId = Number(matches[1]);
+
+    // The idWords in the string representation are in reversed order
+    const idWords = [
+      Number(matches[4]),
+      Number(matches[3]),
+      Number(matches[2]),
+    ];
+
+    const refInfo = ERTS.nodeTable.getNodeAndCreation(localIncarnationId);
+
+    if (refInfo === null) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a reference",
+        ),
+      );
+    }
+
+    return Type.reference(refInfo.node, refInfo.creation, idWords);
+  },
+  // End list_to_ref/1
+  // Deps: []
+
+  // Start make_ref/0
+  "make_ref/0": () => {
+    const node = ERTS.nodeTable.CLIENT_NODE;
+    const creation = 0;
+
+    // TODO: implement ID words similarly to how it's done in Erlang
+    const idWords = [
+      Utils.randomUint32(),
+      Utils.randomUint32(),
+      ERTS.referenceSequence.next(),
+    ];
+
+    return Type.reference(node, creation, idWords);
+  },
+  // End make_ref/0
   // Deps: []
 
   // Start make_tuple/2

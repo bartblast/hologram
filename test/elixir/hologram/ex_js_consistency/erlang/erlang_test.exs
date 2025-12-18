@@ -2399,6 +2399,68 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "list_to_ref/1" do
+    test "valid textual representation of reference for local node" do
+      assert :erlang.list_to_ref(~c"#Ref<0.1.2.3>") == ref("0.1.2.3")
+    end
+
+    # Not testable in a practical way
+    # test "valid textual representation of reference for remote node"
+
+    test "invalid textual representation of reference (missing parts)" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a reference"),
+                   {:erlang, :list_to_ref, [~c"#Ref<0.1>"]}
+    end
+
+    test "non-existent local incarnation ID" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a reference"),
+                   {:erlang, :list_to_ref, [~c"#Ref<999.1.2.3>"]}
+    end
+
+    test "not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:erlang, :list_to_ref, [123]}
+    end
+
+    test "not a proper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:erlang, :list_to_ref, [[123 | 124]]}
+    end
+
+    test "a list that contains a non-integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a reference"),
+                   # 36 = $, 82 = R
+                   {:erlang, :list_to_ref, [[36, :abc, 82]]}
+    end
+
+    test "a list that contains an invalid codepoint" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a reference"),
+                   # 36 = $, 82 = R
+                   {:erlang, :list_to_ref, [[36, 255, 82]]}
+    end
+  end
+
+  describe "make_ref/0" do
+    test "returns a reference" do
+      result = :erlang.make_ref()
+
+      assert is_reference(result)
+    end
+
+    test "consecutive calls return unique references" do
+      ref1 = :erlang.make_ref()
+      ref2 = :erlang.make_ref()
+
+      assert ref1 != ref2
+    end
+  end
+
   describe "make_tuple/2" do
     test "creates tuple of the given size with all elements set to the given value" do
       assert :erlang.make_tuple(3, :a) === {:a, :a, :a}

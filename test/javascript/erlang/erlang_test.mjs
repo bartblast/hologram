@@ -12,6 +12,7 @@ import {
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
+import ERTS from "../../../assets/js/erts.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
@@ -3454,6 +3455,199 @@ describe("Erlang", () => {
           "not a textual representation of a pid",
         ),
       );
+    });
+  });
+
+  describe("list_to_ref/1", () => {
+    const list_to_ref = Erlang["list_to_ref/1"];
+
+    beforeEach(() => {
+      ERTS.nodeTable.reset();
+    });
+
+    it("valid textual representation of reference for local node", () => {
+      // prettier-ignore
+      // ~c"#Ref<0.1.2.3>"
+      const list = Type.list([
+        Type.integer(35),  // #
+        Type.integer(82),  // R
+        Type.integer(101), // e
+        Type.integer(102), // f
+        Type.integer(60),  // <
+        Type.integer(48),  // 0
+        Type.integer(46),  // .
+        Type.integer(49),  // 1
+        Type.integer(46),  // .
+        Type.integer(50),  // 2
+        Type.integer(46),  // .
+        Type.integer(51),  // 3
+        Type.integer(62),  // >
+      ]);
+
+      const result = list_to_ref(list);
+      const expected = Type.reference(ERTS.nodeTable.CLIENT_NODE, 0, [3, 2, 1]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("valid textual representation of reference for remote node", () => {
+      // First create a server node mapping
+      ERTS.nodeTable.getLocalIncarnationId("server1", 5);
+
+      // prettier-ignore
+      // ~c"#Ref<1.111.222.333>"
+      const list = Type.list([
+        Type.integer(35),  // #
+        Type.integer(82),  // R
+        Type.integer(101), // e
+        Type.integer(102), // f
+        Type.integer(60),  // <
+        Type.integer(49),  // 1
+        Type.integer(46),  // .
+        Type.integer(49),  // 1
+        Type.integer(49),  // 1
+        Type.integer(49),  // 1
+        Type.integer(46),  // .
+        Type.integer(50),  // 2
+        Type.integer(50),  // 2
+        Type.integer(50),  // 2
+        Type.integer(46),  // .
+        Type.integer(51),  // 3
+        Type.integer(51),  // 3
+        Type.integer(51),  // 3
+        Type.integer(62),  // >
+      ]);
+
+      const result = list_to_ref(list);
+      const expected = Type.reference("server1", 5, [333, 222, 111]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("invalid textual representation of reference (missing parts)", () => {
+      // prettier-ignore
+      // ~c"#Ref<0.1>"
+      const list = Type.list([
+        Type.integer(35),  // #
+        Type.integer(82),  // R
+        Type.integer(101), // e
+        Type.integer(102), // f
+        Type.integer(60),  // <
+        Type.integer(48),  // 0
+        Type.integer(46),  // .
+        Type.integer(49),  // 1
+        Type.integer(62),  // >
+      ]);
+
+      assertBoxedError(
+        () => list_to_ref(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a reference",
+        ),
+      );
+    });
+
+    it("non-existent local incarnation ID", () => {
+      // prettier-ignore
+      // ~c"#Ref<999.1.2.3>"
+      const list = Type.list([
+        Type.integer(35),  // #
+        Type.integer(82),  // R
+        Type.integer(101), // e
+        Type.integer(102), // f
+        Type.integer(60),  // <
+        Type.integer(57),  // 9
+        Type.integer(57),  // 9
+        Type.integer(57),  // 9
+        Type.integer(46),  // .
+        Type.integer(49),  // 1
+        Type.integer(46),  // .
+        Type.integer(50),  // 2
+        Type.integer(46),  // .
+        Type.integer(51),  // 3
+        Type.integer(62),  // >
+      ]);
+
+      assertBoxedError(
+        () => list_to_ref(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a reference",
+        ),
+      );
+    });
+
+    it("not a list", () => {
+      assertBoxedError(
+        () => list_to_ref(Type.integer(123)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("not a proper list", () => {
+      const arg = Type.improperList([Type.integer(123), Type.integer(124)]);
+
+      assertBoxedError(
+        () => list_to_ref(arg),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("a list that contains a non-integer", () => {
+      const list = Type.list([
+        Type.integer(36), // $
+        Type.atom("abc"),
+        Type.integer(82), // R
+      ]);
+
+      assertBoxedError(
+        () => list_to_ref(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a reference",
+        ),
+      );
+    });
+
+    it("a list that contains an invalid codepoint", () => {
+      // prettier-ignore
+      const list = Type.list([
+        Type.integer(36),  // $
+        Type.integer(255),
+        Type.integer(82),  // R
+      ]);
+
+      assertBoxedError(
+        () => list_to_ref(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a reference",
+        ),
+      );
+    });
+  });
+
+  describe("make_ref/0", () => {
+    const make_ref = Erlang["make_ref/0"];
+
+    it("returns a reference", () => {
+      const result = make_ref();
+
+      assert.isTrue(Type.isReference(result));
+    });
+
+    it("consecutive calls return unique references", () => {
+      const ref1 = make_ref();
+      const ref2 = make_ref();
+
+      assert.isFalse(Interpreter.isEqual(ref1, ref2));
     });
   });
 
