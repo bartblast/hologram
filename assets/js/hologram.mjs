@@ -47,8 +47,6 @@ import {toVNode} from "snabbdom";
 
 // TODO: test
 export default class Hologram {
-  static CLIENT_NODE = "hologram_client";
-
   static #PAGE_SNAPSHOT_KEY_PREFIX = "hologram_page_snapshot_";
 
   // Made public to make tests easier

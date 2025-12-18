@@ -7,7 +7,6 @@ import {
 } from "./support/helpers.mjs";
 
 import ERTS from "../../assets/js/erts.mjs";
-import Hologram from "../../assets/js/hologram.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Sequence from "../../assets/js/sequence.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -1066,7 +1065,7 @@ describe("Type", () => {
 
   describe("isReference()", () => {
     it("returns true if the term is a reference", () => {
-      const term = Type.reference(Hologram.CLIENT_NODE, 0, [1, 2, 3]);
+      const term = Type.reference(ERTS.nodeTable.CLIENT_NODE, 0, [1, 2, 3]);
       assert.isTrue(Type.isReference(term));
     });
 
@@ -1337,11 +1336,11 @@ describe("Type", () => {
   });
 
   it("reference()", () => {
-    const result = Type.reference(Hologram.CLIENT_NODE, 0, [1, 2, 3]);
+    const result = Type.reference(ERTS.nodeTable.CLIENT_NODE, 0, [1, 2, 3]);
 
     const expected = {
       type: "reference",
-      node: Hologram.CLIENT_NODE,
+      node: ERTS.nodeTable.CLIENT_NODE,
       creation: 0,
       idWords: [1, 2, 3],
     };
