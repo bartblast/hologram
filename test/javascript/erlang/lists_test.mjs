@@ -609,152 +609,6 @@ describe("Erlang_Lists", () => {
     });
   });
 
-  describe("keyfind/3", () => {
-    const keyfind = Erlang_Lists["keyfind/3"];
-
-    it("returns the tuple that contains the given value at the given one-based index", () => {
-      const tuple = Type.tuple([
-        Type.integer(5),
-        Type.integer(6),
-        Type.integer(7),
-      ]);
-
-      const tuples = Type.list([
-        Type.tuple([Type.integer(1), Type.integer(2)]),
-        Type.atom("abc"),
-        tuple,
-      ]);
-
-      const result = keyfind(Type.integer(7), Type.integer(3), tuples);
-
-      assert.deepStrictEqual(result, tuple);
-    });
-
-    it("returns false if there is no tuple that fulfills the given conditions", () => {
-      const result = keyfind(
-        Type.integer(7),
-        Type.integer(3),
-        Type.list([Type.atom("abc")]),
-      );
-
-      assertBoxedFalse(result);
-    });
-
-    it("raises ArgumentError if the second argument (index) is not an integer", () => {
-      assertBoxedError(
-        () => keyfind(Type.atom("abc"), Type.atom("xyz"), Type.list()),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
-      );
-    });
-
-    it("raises ArgumentError if the second argument (index) is smaller than 1", () => {
-      assertBoxedError(
-        () => keyfind(Type.atom("abc"), Type.integer(0), Type.list()),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
-      );
-    });
-
-    it("raises ArgumentError if the third argument (tuples) is not a list", () => {
-      assertBoxedError(
-        () => keyfind(Type.atom("abc"), Type.integer(1), Type.atom("xyz")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not a list"),
-      );
-    });
-
-    it("raises ArgumentError if the third argument (tuples) is an improper list", () => {
-      assertBoxedError(
-        () =>
-          keyfind(
-            Type.integer(7),
-            Type.integer(4),
-            Type.improperList([
-              Type.integer(1),
-              Type.integer(2),
-              Type.integer(3),
-            ]),
-          ),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
-      );
-    });
-  });
-
-  describe("keymember/3", () => {
-    const keymember = Erlang_Lists["keymember/3"];
-
-    it("returns true if there is a tuple that fulfills the given conditions", () => {
-      const tuple = Type.tuple([
-        Type.integer(5),
-        Type.integer(6),
-        Type.integer(7),
-      ]);
-
-      const tuples = Type.list([
-        Type.tuple([Type.integer(1), Type.integer(2)]),
-        Type.atom("abc"),
-        tuple,
-      ]);
-
-      const result = keymember(Type.integer(7), Type.integer(3), tuples);
-
-      assertBoxedTrue(result);
-    });
-
-    it("returns false if there is no tuple that fulfills the given conditions", () => {
-      const result = keymember(
-        Type.integer(7),
-        Type.integer(3),
-        Type.list([Type.atom("abc")]),
-      );
-
-      assertBoxedFalse(result);
-    });
-
-    it("raises ArgumentError if the second argument (index) is not an integer", () => {
-      assertBoxedError(
-        () => keymember(Type.atom("abc"), Type.atom("xyz"), Type.list()),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
-      );
-    });
-
-    it("raises ArgumentError if the second argument (index) is smaller than 1", () => {
-      assertBoxedError(
-        () => keymember(Type.atom("abc"), Type.integer(0), Type.list()),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
-      );
-    });
-
-    it("raises ArgumentError if the third argument (tuples) is not a list", () => {
-      assertBoxedError(
-        () => keymember(Type.atom("abc"), Type.integer(1), Type.atom("xyz")),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not a list"),
-      );
-    });
-
-    it("raises ArgumentError if the third argument (tuples) is an improper list", () => {
-      assertBoxedError(
-        () =>
-          keymember(
-            Type.integer(7),
-            Type.integer(4),
-            Type.improperList([
-              Type.integer(1),
-              Type.integer(2),
-              Type.integer(3),
-            ]),
-          ),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
-      );
-    });
-  });
-
   describe("keydelete/3", () => {
     const keydelete = Erlang_Lists["keydelete/3"];
 
@@ -914,6 +768,152 @@ describe("Erlang_Lists", () => {
         () => keydelete(atomA, integer1, tuples),
         "FunctionClauseError",
         expectedMsg,
+      );
+    });
+  });
+
+  describe("keyfind/3", () => {
+    const keyfind = Erlang_Lists["keyfind/3"];
+
+    it("returns the tuple that contains the given value at the given one-based index", () => {
+      const tuple = Type.tuple([
+        Type.integer(5),
+        Type.integer(6),
+        Type.integer(7),
+      ]);
+
+      const tuples = Type.list([
+        Type.tuple([Type.integer(1), Type.integer(2)]),
+        Type.atom("abc"),
+        tuple,
+      ]);
+
+      const result = keyfind(Type.integer(7), Type.integer(3), tuples);
+
+      assert.deepStrictEqual(result, tuple);
+    });
+
+    it("returns false if there is no tuple that fulfills the given conditions", () => {
+      const result = keyfind(
+        Type.integer(7),
+        Type.integer(3),
+        Type.list([Type.atom("abc")]),
+      );
+
+      assertBoxedFalse(result);
+    });
+
+    it("raises ArgumentError if the second argument (index) is not an integer", () => {
+      assertBoxedError(
+        () => keyfind(Type.atom("abc"), Type.atom("xyz"), Type.list()),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument (index) is smaller than 1", () => {
+      assertBoxedError(
+        () => keyfind(Type.atom("abc"), Type.integer(0), Type.list()),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if the third argument (tuples) is not a list", () => {
+      assertBoxedError(
+        () => keyfind(Type.atom("abc"), Type.integer(1), Type.atom("xyz")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the third argument (tuples) is an improper list", () => {
+      assertBoxedError(
+        () =>
+          keyfind(
+            Type.integer(7),
+            Type.integer(4),
+            Type.improperList([
+              Type.integer(1),
+              Type.integer(2),
+              Type.integer(3),
+            ]),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+      );
+    });
+  });
+
+  describe("keymember/3", () => {
+    const keymember = Erlang_Lists["keymember/3"];
+
+    it("returns true if there is a tuple that fulfills the given conditions", () => {
+      const tuple = Type.tuple([
+        Type.integer(5),
+        Type.integer(6),
+        Type.integer(7),
+      ]);
+
+      const tuples = Type.list([
+        Type.tuple([Type.integer(1), Type.integer(2)]),
+        Type.atom("abc"),
+        tuple,
+      ]);
+
+      const result = keymember(Type.integer(7), Type.integer(3), tuples);
+
+      assertBoxedTrue(result);
+    });
+
+    it("returns false if there is no tuple that fulfills the given conditions", () => {
+      const result = keymember(
+        Type.integer(7),
+        Type.integer(3),
+        Type.list([Type.atom("abc")]),
+      );
+
+      assertBoxedFalse(result);
+    });
+
+    it("raises ArgumentError if the second argument (index) is not an integer", () => {
+      assertBoxedError(
+        () => keymember(Type.atom("abc"), Type.atom("xyz"), Type.list()),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument (index) is smaller than 1", () => {
+      assertBoxedError(
+        () => keymember(Type.atom("abc"), Type.integer(0), Type.list()),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if the third argument (tuples) is not a list", () => {
+      assertBoxedError(
+        () => keymember(Type.atom("abc"), Type.integer(1), Type.atom("xyz")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    });
+
+    it("raises ArgumentError if the third argument (tuples) is an improper list", () => {
+      assertBoxedError(
+        () =>
+          keymember(
+            Type.integer(7),
+            Type.integer(4),
+            Type.improperList([
+              Type.integer(1),
+              Type.integer(2),
+              Type.integer(3),
+            ]),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
       );
     });
   });

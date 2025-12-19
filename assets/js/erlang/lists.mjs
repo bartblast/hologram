@@ -135,48 +135,6 @@ const Erlang_Lists = {
   // End foldl/3
   // Deps: []
 
-  // Start keyfind/3
-  "keyfind/3": (value, index, tuples) => {
-    if (!Type.isInteger(index)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
-      );
-    }
-
-    if (index.value < 1) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(2, "out of range"),
-      );
-    }
-
-    if (!Type.isList(tuples)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "not a list"),
-      );
-    }
-
-    if (!Type.isProperList(tuples)) {
-      Interpreter.raiseArgumentError(
-        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
-      );
-    }
-
-    for (const tuple of tuples.data) {
-      if (Type.isTuple(tuple)) {
-        if (
-          tuple.data.length >= index.value &&
-          Interpreter.isEqual(tuple.data[Number(index.value) - 1], value)
-        ) {
-          return tuple;
-        }
-      }
-    }
-
-    return Type.boolean(false);
-  },
-  // End keyfind/3
-  // Deps: []
-
   // Start keydelete/3
   "keydelete/3": function (key, index, tuples) {
     if (!Type.isInteger(index)) {
@@ -227,6 +185,48 @@ const Erlang_Lists = {
     return Type.list(result);
   },
   // End keydelete/3
+  // Deps: []
+
+  // Start keyfind/3
+  "keyfind/3": (value, index, tuples) => {
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    }
+
+    if (index.value < 1) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    }
+
+    if (!Type.isList(tuples)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a list"),
+      );
+    }
+
+    if (!Type.isProperList(tuples)) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(3, "not a proper list"),
+      );
+    }
+
+    for (const tuple of tuples.data) {
+      if (Type.isTuple(tuple)) {
+        if (
+          tuple.data.length >= index.value &&
+          Interpreter.isEqual(tuple.data[Number(index.value) - 1], value)
+        ) {
+          return tuple;
+        }
+      }
+    }
+
+    return Type.boolean(false);
+  },
+  // End keyfind/3
   // Deps: []
 
   // Start keymember/3

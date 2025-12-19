@@ -245,6 +245,88 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "keydelete/3" do
+    test "returns the original list if tuples list is empty" do
+      assert :lists.keydelete(:c, 1, []) == []
+    end
+
+    test "single tuple, no match" do
+      assert :lists.keydelete(:c, 1, [{:a, 2, 3.0}]) == [{:a, 2, 3.0}]
+    end
+
+    test "single tuple, match at first index" do
+      assert :lists.keydelete(:a, 1, [{:a, 2, 3.0}]) == []
+    end
+
+    test "single tuple, match at middle index" do
+      assert :lists.keydelete(:b, 2, [{1, :b, 3.0}]) == []
+    end
+
+    test "single tuple, match at last index" do
+      assert :lists.keydelete(:c, 3, [{1, 2.0, :c}]) == []
+    end
+
+    test "multiple tuples, no match" do
+      tuples = [{:a, 2, 3.0}, {:d, :e, :f}, {:g, :h, :i}]
+
+      assert :lists.keydelete(:c, 1, tuples) == [{:a, 2, 3.0}, {:d, :e, :f}, {:g, :h, :i}]
+    end
+
+    test "multiple tuples, match first tuple" do
+      tuples = [{:a, 2, 3.0}, {:d, :e, :f}, {:g, :h, :i}]
+
+      assert :lists.keydelete(:a, 1, tuples) == [{:d, :e, :f}, {:g, :h, :i}]
+    end
+
+    test "multiple tuples, match middle tuple" do
+      tuples = [{:d, :e, :f}, {:a, 2, 3.0}, {:g, :h, :i}]
+
+      assert :lists.keydelete(:a, 1, tuples) == [{:d, :e, :f}, {:g, :h, :i}]
+    end
+
+    test "multiple tuples, match last tuple" do
+      tuples = [{:d, :e, :f}, {:g, :h, :i}, {:a, 2, 3.0}]
+
+      assert :lists.keydelete(:a, 1, tuples) == [{:d, :e, :f}, {:g, :h, :i}]
+    end
+
+    test "applies non-strict comparison" do
+      assert :lists.keydelete(2, 1, [{2.0}]) == []
+    end
+
+    test "raises FunctionClauseError if the second argument (index) is not an integer" do
+      expected_msg = build_function_clause_error_msg(":lists.keydelete/3", [:a, 2.0, []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keydelete(:a, 2.0, [])
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument (index) is smaller than 1" do
+      expected_msg = build_function_clause_error_msg(":lists.keydelete/3", [:a, 0, []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keydelete(:a, 0, [])
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument (tuples) is not a list" do
+      expected_msg = build_function_clause_error_msg(":lists.keydelete3/3", [:a, 1, {{:b}, {:c}}])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keydelete(:a, 1, {{:b}, {:c}})
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument (tuples) is an improper list" do
+      expected_msg = build_function_clause_error_msg(":lists.keydelete3/3", [:a, 1, {:d}])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.keydelete(:a, 1, [{:b}, {:c} | {:d}])
+      end
+    end
+  end
+
   describe "keyfind/3" do
     test "returns the tuple that contains the given value at the given one-based index" do
       assert :lists.keyfind(7, 3, [{1, 2}, :abc, {5, 6, 7}]) == {5, 6, 7}
@@ -326,88 +408,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
                    fn ->
                      :lists.keymember(7, 4, [1, 2 | 3])
                    end
-    end
-  end
-
-  describe "keydelete/3" do
-    test "returns the original list if tuples list is empty" do
-      assert :lists.keydelete(:c, 1, []) == []
-    end
-
-    test "single tuple, no match" do
-      assert :lists.keydelete(:c, 1, [{:a, 2, 3.0}]) == [{:a, 2, 3.0}]
-    end
-
-    test "single tuple, match at first index" do
-      assert :lists.keydelete(:a, 1, [{:a, 2, 3.0}]) == []
-    end
-
-    test "single tuple, match at middle index" do
-      assert :lists.keydelete(:b, 2, [{1, :b, 3.0}]) == []
-    end
-
-    test "single tuple, match at last index" do
-      assert :lists.keydelete(:c, 3, [{1, 2.0, :c}]) == []
-    end
-
-    test "multiple tuples, no match" do
-      tuples = [{:a, 2, 3.0}, {:d, :e, :f}, {:g, :h, :i}]
-
-      assert :lists.keydelete(:c, 1, tuples) == [{:a, 2, 3.0}, {:d, :e, :f}, {:g, :h, :i}]
-    end
-
-    test "multiple tuples, match first tuple" do
-      tuples = [{:a, 2, 3.0}, {:d, :e, :f}, {:g, :h, :i}]
-
-      assert :lists.keydelete(:a, 1, tuples) == [{:d, :e, :f}, {:g, :h, :i}]
-    end
-
-    test "multiple tuples, match middle tuple" do
-      tuples = [{:d, :e, :f}, {:a, 2, 3.0}, {:g, :h, :i}]
-
-      assert :lists.keydelete(:a, 1, tuples) == [{:d, :e, :f}, {:g, :h, :i}]
-    end
-
-    test "multiple tuples, match last tuple" do
-      tuples = [{:d, :e, :f}, {:g, :h, :i}, {:a, 2, 3.0}]
-
-      assert :lists.keydelete(:a, 1, tuples) == [{:d, :e, :f}, {:g, :h, :i}]
-    end
-
-    test "applies non-strict comparison" do
-      assert :lists.keydelete(2, 1, [{2.0}]) == []
-    end
-
-    test "raises FunctionClauseError if the second argument (index) is not an integer" do
-      expected_msg = build_function_clause_error_msg(":lists.keydelete/3", [:a, 2.0, []])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.keydelete(:a, 2.0, [])
-      end
-    end
-
-    test "raises FunctionClauseError if the second argument (index) is smaller than 1" do
-      expected_msg = build_function_clause_error_msg(":lists.keydelete/3", [:a, 0, []])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.keydelete(:a, 0, [])
-      end
-    end
-
-    test "raises FunctionClauseError if the third argument (tuples) is not a list" do
-      expected_msg = build_function_clause_error_msg(":lists.keydelete3/3", [:a, 1, {{:b}, {:c}}])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.keydelete(:a, 1, {{:b}, {:c}})
-      end
-    end
-
-    test "raises FunctionClauseError if the third argument (tuples) is an improper list" do
-      expected_msg = build_function_clause_error_msg(":lists.keydelete3/3", [:a, 1, {:d}])
-
-      assert_error FunctionClauseError, expected_msg, fn ->
-        :lists.keydelete(:a, 1, [{:b}, {:c} | {:d}])
-      end
     end
   end
 
