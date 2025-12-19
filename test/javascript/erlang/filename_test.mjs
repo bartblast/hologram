@@ -7,6 +7,7 @@ import {
   iolist,
 } from "../support/helpers.mjs";
 
+import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_Filename from "../../../assets/js/erlang/filename.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
@@ -22,142 +23,134 @@ describe("Erlang_Filename", () => {
     const basename = Erlang_Filename["basename/1"];
 
     it("path with multiple segments", () => {
-      const result = basename(Type.bitstring("path/to/file.txt"));
+      const filename = Type.bitstring("path/to/file.txt");
+      const result = basename(filename);
       const expected = Type.bitstring("file.txt");
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("path with single segment", () => {
-      const result = basename(Type.bitstring("file.txt"));
+      const filename = Type.bitstring("file.txt");
+      const result = basename(filename);
       const expected = Type.bitstring("file.txt");
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("path with absolute path", () => {
-      const result = basename(Type.bitstring("/absolute/path/to/file.txt"));
+      const filename = Type.bitstring("/absolute/path/to/file.txt");
+      const result = basename(filename);
       const expected = Type.bitstring("file.txt");
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("path ending with slash", () => {
-      const result = basename(Type.bitstring("path/to/dir/"));
+      const filename = Type.bitstring("path/to/dir/");
+      const result = basename(filename);
       const expected = Type.bitstring("dir");
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("root path", () => {
-      const result = basename(Type.bitstring("/"));
+      const filename = Type.bitstring("/");
+      const result = basename(filename);
       const expected = Type.bitstring("");
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("empty string", () => {
-      const result = basename(Type.bitstring(""));
-      const expected = Type.bitstring("");
+      const emptyString = Type.bitstring("");
+      const result = basename(emptyString);
 
-      assert.deepStrictEqual(result, expected);
+      assert.deepStrictEqual(result, emptyString);
     });
 
     it("path with multiple consecutive slashes", () => {
-      const result = basename(Type.bitstring("path//to//file.txt"));
+      const filename = Type.bitstring("path//to//file.txt");
+      const result = basename(filename);
       const expected = Type.bitstring("file.txt");
 
       assert.deepStrictEqual(result, expected);
     });
 
     it("path with only slashes", () => {
-      const result = basename(Type.bitstring("///"));
+      const filename = Type.bitstring("///");
+      const result = basename(filename);
       const expected = Type.bitstring("");
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("list of code points for atom input", () => {
-      const result = basename(Type.atom("path/to/file.txt"));
+    it("bitstring input", () => {
+      // "path/to/file.txt"
+      const filename = Bitstring.fromBytes([
+        112, 97, 116, 104, 47, 116, 111, 47, 102, 105, 108, 101, 46, 116, 120,
+        116,
+      ]);
+
+      const result = basename(filename);
+      const expected = Type.bitstring("file.txt");
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("atom input", () => {
+      const filename = Type.atom("path/to/file.txt");
+      const result = basename(filename);
       const expected = iolist("file.txt");
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("list of code points for atom input with single segment", () => {
-      const result = basename(Type.atom("filename"));
-      const expected = iolist("filename");
+    it("empty list input", () => {
+      const emptyList = Type.list();
+      const result = basename(emptyList);
+
+      assert.deepStrictEqual(result, emptyList);
+    });
+
+    it("non-empty iolist input", () => {
+      const filename = Type.list([
+        Type.bitstring("path/to/"),
+        Type.integer(102), // 'f'
+        Type.integer(105), // 'i'
+        Type.integer(108), // 'l'
+        Type.integer(101), // 'e'
+        Type.bitstring(".txt"),
+      ]);
+
+      const result = basename(filename);
+      const expected = iolist("file.txt");
 
       assert.deepStrictEqual(result, expected);
     });
 
-    it("list of code points for nil atom input", () => {
-      const result = basename(Type.nil());
-      const expected = iolist("nil");
+    it("raises FunctionClauseError if the argument is not a bitstring or atom or list", () => {
+      const arg = Type.integer(123);
 
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("raises FunctionClauseError if the argument is not a binary or atom or list", () => {
       assertBoxedError(
-        () => basename(Type.integer(123)),
+        () => basename(arg),
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
-          Type.integer(123),
-          Type.list([]),
+          arg,
+          Type.list(),
         ]),
       );
-    });
-
-    it("returns empty list for empty list input", () => {
-      const result = basename(Type.list([]));
-      const expected = Type.list([]);
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("list of code points for non-empty list input", () => {
-      const result = basename(
-        Type.list([
-          Type.bitstring("path/to/"),
-          Type.integer(102), // 'f'
-          Type.integer(105), // 'i'
-          Type.integer(108), // 'l'
-          Type.integer(101), // 'e'
-          Type.bitstring(".txt"),
-        ]),
-      );
-      const expected = iolist("file.txt");
-
-      assert.deepStrictEqual(result, expected);
-    });
-
-    it("list of code points for list input with single segment", () => {
-      const result = basename(
-        Type.list([
-          Type.integer(102), // 'f'
-          Type.integer(105), // 'i'
-          Type.integer(108), // 'l'
-          Type.integer(101), // 'e'
-          Type.integer(110), // 'n'
-          Type.integer(97), // 'a'
-          Type.integer(109), // 'm'
-          Type.integer(101), // 'e'
-        ]),
-      );
-      const expected = iolist("filename");
-
-      assert.deepStrictEqual(result, expected);
     });
 
     it("raises FunctionClauseError if the argument is a non-binary bitstring", () => {
-      const nonBinaryBitstring = Type.bitstring([1, 0, 1]);
+      const arg = Type.bitstring([1, 0, 1]);
+
       assertBoxedError(
-        () => basename(nonBinaryBitstring),
+        () => basename(arg),
         "FunctionClauseError",
         Interpreter.buildFunctionClauseErrorMsg(":filename.do_flatten/2", [
-          nonBinaryBitstring,
-          Type.list([]),
+          arg,
+          Type.list(),
         ]),
       );
     });

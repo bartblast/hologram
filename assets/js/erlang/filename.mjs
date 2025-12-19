@@ -41,11 +41,11 @@ const Erlang_Filename = {
 
     const parts = filepathText.split("/").filter((part) => part !== "");
     const basenameText = parts.length > 0 ? parts.at(-1) : "";
-    const basenameBinary = Type.bitstring(basenameText);
+    const basenameBitstring = Type.bitstring(basenameText);
 
     return returnAsCodepoints
-      ? Bitstring.toCodepoints(basenameBinary)
-      : basenameBinary;
+      ? Bitstring.toCodepoints(basenameBitstring)
+      : basenameBitstring;
   },
   // End basename/1
   // Deps: [:erlang.iolist_to_binary/1]
