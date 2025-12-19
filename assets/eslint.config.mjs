@@ -31,6 +31,7 @@ export default [
         Elixir_String_Chars: "readonly",
         Erlang: "readonly",
         Erlang_Code: "readonly",
+        Erlang_Filename: "readonly",
         Erlang_Lists: "readonly",
         Erlang_Maps: "readonly",
         Erlang_Math: "readonly",
