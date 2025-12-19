@@ -177,6 +177,57 @@ const Erlang_Lists = {
   // End keyfind/3
   // Deps: []
 
+  // Start keydelete/3
+  "keydelete/3": function (key, index, tuples) {
+    if (!Type.isInteger(index)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.keydelete/3",
+          arguments,
+        ),
+      );
+    }
+
+    if (index.value < 1n) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(
+          ":lists.keydelete/3",
+          arguments,
+        ),
+      );
+    }
+
+    if (!Type.isProperList(tuples)) {
+      const thirdArg = tuples.data?.at(-1) ?? tuples;
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.keydelete3/3", [
+          key,
+          index,
+          thirdArg,
+        ]),
+      );
+    }
+
+    let result = tuples.data;
+
+    for (let i = 0; i < tuples.data.length; i++) {
+      const tuple = tuples.data[i];
+
+      if (
+        Type.isTuple(tuple) &&
+        tuple.data.length >= index.value &&
+        Interpreter.isEqual(tuple.data[Number(index.value) - 1], key)
+      ) {
+        result = [...tuples.data.slice(0, i), ...tuples.data.slice(i + 1)];
+        break;
+      }
+    }
+
+    return Type.list(result);
+  },
+  // End keydelete/3
+  // Deps: []
+
   // Start keymember/3
   "keymember/3": (value, index, tuples) => {
     return Type.boolean(
