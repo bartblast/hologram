@@ -198,7 +198,8 @@ const Erlang_Lists = {
     }
 
     if (!Type.isProperList(tuples)) {
-      const thirdArg = tuples.data?.at(-1) ?? tuples;
+      const thirdArg = Type.isList(tuples) ? tuples.data.at(-1) : tuples;
+
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(":lists.keydelete3/3", [
           key,
