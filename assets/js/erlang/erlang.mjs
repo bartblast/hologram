@@ -1335,7 +1335,7 @@ const Erlang = {
     }
 
     if (Type.isFloat(number)) {
-      // Erlang trunc/1 converts -0 to 0 while native JavasScript does not
+      // Erlang :erlang.trunc/1 converts -0 to 0 while JavaScript Math.trunc() does not
       return Type.integer(Math.trunc(number.value) + 0);
     }
 

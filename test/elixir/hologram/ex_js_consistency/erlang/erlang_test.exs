@@ -2887,12 +2887,8 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.trunc(0) == 0
     end
 
-    test "converts negative zero integer to positive zero integer" do
-      assert :erlang.trunc(-0) == 0
-    end
-
-    test "converts signed-plus zero integer to positive zero integer" do
-      assert :erlang.trunc(+0) == 0
+    test "demonstrates floating-point precision limits for large numbers" do
+      assert :erlang.trunc(36_028_797_018_963_969.0) == 36_028_797_018_963_968
     end
 
     test "raises ArgumentError if the argument is not a number" do

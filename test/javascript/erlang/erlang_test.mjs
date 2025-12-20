@@ -4412,16 +4412,11 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, integer0);
     });
 
-    it("converts negative zero integer to positive zero integer", () => {
-      const result = testedFun(Type.integer(-0));
+    it("demonstrates floating-point precision limits for large numbers", () => {
+      const result = testedFun(Type.float(36028797018963969.0));
+      const expected = Type.integer(36028797018963968n);
 
-      assert.deepStrictEqual(result, integer0);
-    });
-
-    it("converts signed-plus zero integer to positive zero integer", () => {
-      const result = testedFun(Type.integer(+0));
-
-      assert.deepStrictEqual(result, integer0);
+      assert.deepStrictEqual(result, expected);
     });
 
     it("raises ArgumentError if the argument is not a number", () => {
