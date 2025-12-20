@@ -298,9 +298,17 @@ const Erlang_Lists = {
 
   // Start min/1
   "min/1": (list) => {
-    if (!Type.isProperList(list) || list.data.length === 0) {
+    if (!Type.isList(list) || list.data.length === 0) {
       Interpreter.raiseFunctionClauseError(
         Interpreter.buildFunctionClauseErrorMsg(":lists.min/1", [list]),
+      );
+    }
+
+    // Notice that the error message says :lists.min/2 (not :lists.min/1)
+    // :lists.min/2 is (probably) a private Erlang function that get's called by :lists.min/1
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.min/2", [list]),
       );
     }
 

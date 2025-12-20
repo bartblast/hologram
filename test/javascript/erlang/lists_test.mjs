@@ -1141,8 +1141,10 @@ describe("Erlang_Lists", () => {
     });
 
     it("raises FunctionClauseError if the argument is an improper list", () => {
+      // Notice that the error message says :lists.min/2 (not :lists.min/1)
+      // :lists.min/2 is (probably) a private Erlang function that get's called by :lists.min/1
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.min/1",
+        ":lists.min/2",
         [improperList],
       );
 

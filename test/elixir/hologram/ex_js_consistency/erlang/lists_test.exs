@@ -551,7 +551,9 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "raises FunctionClauseError if the argument is an improper list" do
-      expected_msg = build_function_clause_error_msg(":lists.min/1")
+      # Notice that the error message says :lists.min/2 (not :lists.min/1)
+      # :lists.min/2 is (probably) a private Erlang function that get's called by :lists.min/1         
+      expected_msg = build_function_clause_error_msg(":lists.min/2")
 
       assert_raise FunctionClauseError, expected_msg, fn ->
         :lists.min([1, 2 | 3])
