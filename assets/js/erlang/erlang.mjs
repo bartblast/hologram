@@ -356,8 +356,10 @@ const Erlang = {
     }
 
     const isReverse = length.value < 0n;
+
     const outOfRangeForward =
       !isReverse && start.value + length.value > totalBytes;
+
     const outOfRangeReverse = isReverse && start.value + length.value < 0n;
 
     if (outOfRangeForward || outOfRangeReverse) {

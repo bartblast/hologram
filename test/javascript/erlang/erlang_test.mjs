@@ -1632,15 +1632,15 @@ describe("Erlang", () => {
   describe("binary_part/3", () => {
     const binary_part = Erlang["binary_part/3"];
 
-    it("first argument is a text binary", () => {
-      const binary = Bitstring.fromText("goldfish");
-      const result = binary_part(binary, Type.integer(4), Type.integer(4));
+    it("subject is a text binary", () => {
+      const subject = Bitstring.fromText("mygoldfish");
+      const result = binary_part(subject, Type.integer(6), Type.integer(4));
       const expected = Bitstring.fromText("fish");
 
       assertBoxedStrictEqual(result, expected);
     });
 
-    it("first argument is a byte binary", () => {
+    it("subject is a byte binary", () => {
       const binary = Bitstring.fromBytes([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
       const result = binary_part(binary, Type.integer(4), Type.integer(2));
       const expected = Bitstring.fromBytes([5, 6]);
@@ -1648,7 +1648,7 @@ describe("Erlang", () => {
       assertBoxedStrictEqual(result, expected);
     });
 
-    it("first argument is empty", () => {
+    it("subject is empty", () => {
       const binary = Bitstring.fromText("");
       const result = binary_part(binary, Type.integer(0), Type.integer(0));
       const expected = Bitstring.fromText("");
@@ -1656,7 +1656,7 @@ describe("Erlang", () => {
       assertBoxedStrictEqual(result, expected);
     });
 
-    it("first argument contains multi-byte unicode characters", () => {
+    it("subject contains multi-byte unicode characters", () => {
       // The character "á" is represented in UTF-8 as two bytes: [195, 161]
       const binary = Bitstring.fromText("á");
       const result = binary_part(binary, Type.integer(0), Type.integer(1));
@@ -1665,7 +1665,7 @@ describe("Erlang", () => {
       assertBoxedStrictEqual(result, expected);
     });
 
-    it("second argument is zero", () => {
+    it("start is zero", () => {
       const binary = Bitstring.fromText("goldfish");
       const result = binary_part(binary, Type.integer(0), Type.integer(4));
       const expected = Bitstring.fromText("gold");
@@ -1681,7 +1681,7 @@ describe("Erlang", () => {
       assertBoxedStrictEqual(result, expected);
     });
 
-    it("third argument is negative", () => {
+    it("length is negative", () => {
       const binary = Bitstring.fromText("golden retriever");
       const result = binary_part(binary, Type.integer(16), Type.integer(-9));
       const expected = Bitstring.fromText("retriever");
@@ -1689,7 +1689,7 @@ describe("Erlang", () => {
       assertBoxedStrictEqual(result, expected);
     });
 
-    it("third argument is zero", () => {
+    it("length is zero", () => {
       const binary = Bitstring.fromText("goldfish");
       const result = binary_part(binary, Type.integer(2), Type.integer(0));
       const expected = Bitstring.fromText("");
@@ -1721,9 +1721,9 @@ describe("Erlang", () => {
       assertBoxedStrictEqual(result, expected);
     });
 
-    it("raises ArgumentError if the first argument is not a binary", () => {
+    it("raises ArgumentError if the first argument is not a bitstring", () => {
       assertBoxedError(
-        () => binary_part(Type.integer(1), Type.integer(1), Type.integer(1)),
+        () => binary_part(Type.atom("abc"), Type.integer(1), Type.integer(2)),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a binary"),
       );
@@ -1735,7 +1735,7 @@ describe("Erlang", () => {
           binary_part(
             Type.bitstring([1, 0, 1]),
             Type.integer(1),
-            Type.integer(1),
+            Type.integer(2),
           ),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a binary"),
@@ -1747,24 +1747,11 @@ describe("Erlang", () => {
         () =>
           binary_part(
             Type.bitstring("goldfish"),
-            Type.boolean(true),
+            Type.float(1.0),
             Type.integer(2),
           ),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(2, "not an integer"),
-      );
-    });
-
-    it("raises ArgumentError if the third argument is not an integer", () => {
-      assertBoxedError(
-        () =>
-          binary_part(
-            Type.bitstring("goldfish"),
-            Type.integer(1),
-            Type.boolean(true),
-          ),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
       );
     });
 
@@ -1794,19 +1781,6 @@ describe("Erlang", () => {
       );
     });
 
-    it("raises ArgumentError if the third argument is positive and the second and third arguments summed is larger than the size of the first argument", () => {
-      assertBoxedError(
-        () =>
-          binary_part(
-            Type.bitstring("goldfish"),
-            Type.integer(1),
-            Type.integer(8),
-          ),
-        "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(3, "out of range"),
-      );
-    });
-
     it("raises ArgumentError if the second argument is zero and third argument is larger than the size of the first argument", () => {
       assertBoxedError(
         () =>
@@ -1814,6 +1788,32 @@ describe("Erlang", () => {
             Type.bitstring("goldfish"),
             Type.integer(0),
             Type.integer(9),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if the third argument is not an integer", () => {
+      assertBoxedError(
+        () =>
+          binary_part(
+            Type.bitstring("goldfish"),
+            Type.integer(1),
+            Type.float(2.0),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if the third argument is positive and the second and third arguments summed is larger than the size of the first argument", () => {
+      assertBoxedError(
+        () =>
+          binary_part(
+            Type.bitstring("goldfish"),
+            Type.integer(1),
+            Type.integer(8),
           ),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(3, "out of range"),
