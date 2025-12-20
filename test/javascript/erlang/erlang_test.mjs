@@ -4413,7 +4413,9 @@ describe("Erlang", () => {
     });
 
     it("demonstrates floating-point precision limits for large numbers", () => {
+      // eslint-disable-next-line no-loss-of-precision
       const result = testedFun(Type.float(36028797018963969.0));
+
       const expected = Type.integer(36028797018963968n);
 
       assert.deepStrictEqual(result, expected);
