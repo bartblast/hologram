@@ -17,6 +17,7 @@ import Type from "../../../assets/js/type.mjs";
 defineGlobalErlangAndElixirModules();
 
 const atomA = Type.atom("a");
+const atomAbc = Type.atom("abc");
 const atomB = Type.atom("b");
 const atomC = Type.atom("c");
 const atomD = Type.atom("d");
@@ -40,6 +41,8 @@ const integer0 = Type.integer(0);
 const integer1 = Type.integer(1);
 const integer2 = Type.integer(2);
 const integer3 = Type.integer(3);
+const integer4 = Type.integer(4);
+const integer5 = Type.integer(5);
 
 const properList = Type.list([
   Type.integer(1),
@@ -1067,94 +1070,71 @@ describe("Erlang_Lists", () => {
 
   describe("min/1", () => {
     const min = Erlang_Lists["min/1"];
+    const shuffle = (array) => array.sort(() => Math.random() - 0.5);
 
     it("returns the element from a list of length 1", () => {
-      const result = min(Type.list([Type.integer(123)]));
+      const list = Type.list([integer3]);
+      const result = min(list);
 
-      assert.deepStrictEqual(result, Type.integer(123));
+      assert.deepStrictEqual(result, integer3);
     });
 
     it("returns the smaller element from a list of size 2 with first being smallest", () => {
-      assertBoxedStrictEqual(
-        min(Type.list([Type.integer(123), Type.integer(321)])),
-        Type.integer(123),
-      );
+      const list = Type.list([integer1, integer3]);
+      const result = min(list);
+
+      assertBoxedStrictEqual(result, integer1);
     });
 
     it("returns the smaller element from a list of size 2 with second being smallest", () => {
-      assertBoxedStrictEqual(
-        min(Type.list([Type.integer(21), Type.integer(12)])),
-        Type.integer(12),
-      );
+      const list = Type.list([integer3, integer1]);
+      const result = min(list);
+
+      assertBoxedStrictEqual(result, integer1);
     });
 
     it("returns the element from a list of size 2 when both are the same", () => {
-      assertBoxedStrictEqual(
-        min(Type.list([Type.integer(16), Type.integer(16)])),
-        Type.integer(16),
-      );
+      const list = Type.list([integer3, integer3]);
+      const result = min(list);
+
+      assertBoxedStrictEqual(result, integer3);
     });
 
-    it("comparing same typed values to each other", () => {
-      assertBoxedStrictEqual(
-        min(Type.list([Type.bitstring("16"), Type.bitstring("2")])),
-        Type.bitstring("16"),
-      );
-
-      assertBoxedStrictEqual(
-        min(Type.list([Type.atom("abd"), Type.atom("abc")])),
-        Type.atom("abc"),
-      );
-    });
-
-    it("comparing different typed values against each other", () => {
-      const shuffle = (array) => array.sort(() => Math.random() - 0.5);
-
-      const all = [
-        Type.bitstring("16"),
-        Type.atom("abc"),
-        Type.integer(16),
-        Type.float(16.5),
+    it("applies structural comparison", () => {
+      const data = [
+        atomA,
+        float2,
+        integer3,
+        Type.bitstring("d"),
+        Type.pid("my_node", [0, 1, 2]),
+        Type.tuple([integer0, integer1]),
       ];
 
-      assertBoxedStrictEqual(min(Type.list(shuffle(all))), Type.integer(16));
+      const list = Type.list(shuffle(data));
+      const result = min(list);
 
-      const withoutInteger = [
-        Type.bitstring("16"),
-        Type.atom("abc"),
-        Type.float(16.5),
-      ];
-
-      assertBoxedStrictEqual(
-        min(Type.list(shuffle(withoutInteger))),
-        Type.float(16.5),
-      );
-
-      const withoutIntegerAndFloat = [Type.bitstring("16"), Type.atom("abc")];
-
-      assertBoxedStrictEqual(
-        min(Type.list(shuffle(withoutIntegerAndFloat))),
-        Type.atom("abc"),
-      );
+      assertBoxedStrictEqual(result, float2);
     });
 
     it("returns the smallest element from a large list with many duplicates", () => {
-      const list = Type.list(
-        [
-          42, 82, 7, 91, 23, 65, 14, 23, 88, 3, 56, 29, 71, 18, 3, 35, 82, 47,
-        ].map(Type.integer),
+      const data = [1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4, 5, 5, 5].map(
+        Type.integer,
       );
-      assertBoxedStrictEqual(min(list), Type.integer(3));
+
+      const list = Type.list(shuffle(data));
+      const result = min(list);
+
+      assertBoxedStrictEqual(result, integer1);
     });
 
     it("raises FunctionClauseError if the argument is not a list", () => {
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
         ":lists.min/1",
-        [Type.atom("abc")],
+        [atomAbc],
       );
 
       assertBoxedError(
-        () => min(Type.atom("abc")),
+        () => min(atomAbc),
         "FunctionClauseError",
         expectedMessage,
       );
@@ -1176,11 +1156,11 @@ describe("Erlang_Lists", () => {
     it("raises FunctionClauseError if the argument is an empty list", () => {
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
         ":lists.min/1",
-        [Type.list([])],
+        [emptyList],
       );
 
       assertBoxedError(
-        () => min(Type.list([])),
+        () => min(emptyList),
         "FunctionClauseError",
         expectedMessage,
       );
@@ -1226,12 +1206,6 @@ describe("Erlang_Lists", () => {
 
   describe("reverse/2", () => {
     const reverse = Erlang_Lists["reverse/2"];
-
-    const integer1 = Type.integer(1);
-    const integer2 = Type.integer(2);
-    const integer3 = Type.integer(3);
-    const integer4 = Type.integer(4);
-    const integer5 = Type.integer(5);
 
     const list12 = Type.list([integer1, integer2]);
     const list34 = Type.list([integer3, integer4]);

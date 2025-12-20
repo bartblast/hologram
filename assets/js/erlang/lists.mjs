@@ -304,8 +304,7 @@ const Erlang_Lists = {
       );
     }
 
-    const first = list.data[0];
-    let min = first;
+    let min = list.data[0];
 
     for (let i = 1; i < list.data.length; i++) {
       if (Interpreter.compareTerms(list.data[i], min) < 0) {
