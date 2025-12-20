@@ -2854,6 +2854,54 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "trunc/1" do
+    test "drops fractional part of positive float" do
+      assert :erlang.trunc(1.23) == 1
+    end
+
+    test "drops fractional part of negative float" do
+      assert :erlang.trunc(-1.23) == -1
+    end
+
+    test "drops fractional part of negative zero float" do
+      assert :erlang.trunc(-0.0) == 0
+    end
+
+    test "drops fractional part of positive zero float" do
+      assert :erlang.trunc(+0.0) == 0
+    end
+
+    test "drops fractional part of unsigned zero float" do
+      assert :erlang.trunc(0.0) == 0
+    end
+
+    test "keeps positive integer unchanged" do
+      assert :erlang.trunc(1) == 1
+    end
+
+    test "keeps negative integer unchanged" do
+      assert :erlang.trunc(-1) == -1
+    end
+
+    test "keeps zero integer unchanged" do
+      assert :erlang.trunc(0) == 0
+    end
+
+    test "converts negative zero integer to positive zero integer" do
+      assert :erlang.trunc(-0) == 0
+    end
+
+    test "converts signed-plus zero integer to positive zero integer" do
+      assert :erlang.trunc(+0) == 0
+    end
+
+    test "raises ArgumentError if the argument is not a number" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a number"),
+                   {:erlang, :trunc, [:abc]}
+    end
+  end
+
   describe "tuple_to_list/1" do
     test "returns a list corresponding to the given tuple" do
       assert :erlang.tuple_to_list({1, 2, 3}) == [1, 2, 3]

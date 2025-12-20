@@ -4359,6 +4359,80 @@ describe("Erlang", () => {
     });
   });
 
+  describe("trunc/1", () => {
+    const testedFun = Erlang["trunc/1"];
+
+    it("drops fractional part of positive float", () => {
+      const result = testedFun(Type.float(1.23));
+
+      assert.deepStrictEqual(result, integer1);
+    });
+
+    it("drops fractional part of negative float", () => {
+      const result = testedFun(Type.float(-1.23));
+      const expected = Type.integer(-1);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("drops fractional part of negative zero float", () => {
+      const result = testedFun(Type.float(-0.0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("drops fractional part of positive zero float", () => {
+      const result = testedFun(Type.float(+0.0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("drops fractional part of unsigned zero float", () => {
+      const result = testedFun(Type.float(0.0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("keeps positive integer unchanged", () => {
+      const result = testedFun(integer1);
+
+      assert.deepStrictEqual(result, integer1);
+    });
+
+    it("keeps negative integer unchanged", () => {
+      const integer = Type.integer(-1);
+      const result = testedFun(integer);
+
+      assert.deepStrictEqual(result, integer);
+    });
+
+    it("keeps zero integer unchanged", () => {
+      const result = testedFun(integer0);
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("converts negative zero integer to positive zero integer", () => {
+      const result = testedFun(Type.integer(-0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("converts signed-plus zero integer to positive zero integer", () => {
+      const result = testedFun(Type.integer(+0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("raises ArgumentError if the argument is not a number", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    });
+  });
+
   describe("tuple_to_list/1", () => {
     const tuple_to_list = Erlang["tuple_to_list/1"];
 
