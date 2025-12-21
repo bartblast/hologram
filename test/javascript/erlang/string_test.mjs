@@ -4,7 +4,6 @@ import {
   assert,
   assertBoxedError,
   charlistFixture,
-  contextFixture,
   defineGlobalErlangAndElixirModules,
 } from "../support/helpers.mjs";
 
