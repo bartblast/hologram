@@ -389,6 +389,36 @@ const Erlang_Lists = {
   },
   // End sort/1
   // Deps: []
+
+  //Start sort/2
+  "sort/2": (fun, list) => {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2", [fun, list]),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2", [fun, list]),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2"),
+      );
+    }
+
+    return Type.list(
+      list.data.sort((a, b) => {
+        const result = Interpreter.callAnonymousFunction(fun, [a, b]);
+        return Type.isTrue(result) ? -1 : 1;
+      }),
+    );
+  },
+  //End sort/2
+  //Deps: []
 };
 
 export default Erlang_Lists;

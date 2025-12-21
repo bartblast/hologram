@@ -1328,4 +1328,105 @@ describe("Erlang_Lists", () => {
       );
     });
   });
+
+  describe("sort/2", () => {
+    const sort = Erlang_Lists["sort/2"];
+
+    const fun = Type.anonymousFunction(
+      2,
+      [
+        {
+          params: (_context) => [
+            Type.variablePattern("a"),
+            Type.variablePattern("b"),
+          ],
+          guards: [],
+          body: (context) => {
+            return Erlang["=</2"](context.vars.a, context.vars.b);
+          },
+        },
+      ],
+      contextFixture(),
+    );
+
+    it("sorts items in the list using comparison function", () => {
+      const list = Type.list([
+        Type.integer(4),
+        Type.integer(1),
+        Type.integer(3),
+        Type.integer(2),
+      ]);
+
+      assert.deepStrictEqual(
+        sort(fun, list),
+        Type.list([
+          Type.integer(1),
+          Type.integer(2),
+          Type.integer(3),
+          Type.integer(4),
+        ]),
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.sort/2",
+        [Type.atom("abc"), emptyList],
+      );
+
+      assertBoxedError(
+        () => sort(Type.atom("abc"), emptyList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the first argument is an anonymous function with arity different than 2", () => {
+      const wrongArityFun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("x")],
+            guards: [],
+            body: (context) => {
+              return context.vars.x;
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.sort/2",
+        [wrongArityFun, emptyList],
+      );
+
+      assertBoxedError(
+        () => sort(wrongArityFun, emptyList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is not a list", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.sort/2",
+        [fun, Type.atom("abc")],
+      );
+
+      assertBoxedError(
+        () => sort(fun, Type.atom("abc")),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the second argument is an improper list", () => {
+      assertBoxedError(
+        () => sort(fun, improperList),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2"),
+      );
+    });
+  });
 });
