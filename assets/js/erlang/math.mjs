@@ -7,12 +7,10 @@ import Type from "../type.mjs";
 // If the given ported Erlang function calls other Erlang functions, then list such dependencies in the "Deps" comment (see :erlang./=/2 for an example).
 // Also, in such case add respective call graph edges in Hologram.CallGraph.list_runtime_mfas/1.
 
-// NOTE!
-// BigInt values are similar to Number values in some ways, but also differ in a few key matters: A BigInt value cannot
-// be used with methods in the built-in Math object and cannot be mixed with a Number value in operations; they must be
-// coerced to the same type. Be careful coercing values back and forth, however, as the precision of a BigInt value may
-// be lost when it is coerced to a Number value.
-// re: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt
+// NOTE: Math methods and BigInt incompatibility
+// Hologram integers use BigInt internally, but JavaScript's Math methods cannot work with BigInt values.
+// All numeric values must be converted to Number before passing to Math methods.
+// Be aware that this conversion may lose precision for very large integers.
 
 const Erlang_Math = {
   // Start ceil/1
@@ -31,8 +29,8 @@ const Erlang_Math = {
   // Deps: []
 
   // Start pow/2
-  "pow/2": (number, exponent) => {
-    if (!Type.isNumber(number)) {
+  "pow/2": (base, exponent) => {
+    if (!Type.isNumber(base)) {
       Interpreter.raiseArgumentError(
         Interpreter.buildArgumentErrorMsg(1, "not a number"),
       );
@@ -44,11 +42,14 @@ const Erlang_Math = {
       );
     }
 
-    if (number.value < 0 && Type.isFloat(exponent)) {
+    const exponentValue = Number(exponent.value);
+    const hasFractionalPart = exponentValue % 1 !== 0;
+
+    if (base.value < 0 && hasFractionalPart) {
       Interpreter.raiseArithmeticError();
     }
 
-    return Type.float(Math.pow(Number(number.value), Number(exponent.value)));
+    return Type.float(Math.pow(Number(base.value), exponentValue));
   },
   // End pow/2
   // Deps: []

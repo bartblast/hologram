@@ -92,16 +92,76 @@ describe("Erlang_Math", () => {
   describe("pow/2", () => {
     const testedFun = Erlang_Math["pow/2"];
 
-    it("returns base value raised to exponent integer value", () => {
+    it("returns base integer value raised to exponent integer value", () => {
       const result = testedFun(Type.integer(7), Type.integer(3));
 
       assert.deepStrictEqual(result, Type.float(343.0));
     });
 
-    it("returns base value raised to exponent float value", () => {
+    it("returns base integer value raised to exponent float value", () => {
       const result = testedFun(Type.integer(4), Type.float(0.5));
 
       assert.deepStrictEqual(result, Type.float(2.0));
+    });
+
+    it("returns base float value raised to exponent integer value", () => {
+      const result = testedFun(Type.float(2.5), Type.integer(2));
+
+      assert.deepStrictEqual(result, Type.float(6.25));
+    });
+
+    it("returns base float value raised to exponent float value", () => {
+      const result = testedFun(Type.float(9.0), Type.float(0.5));
+
+      assert.deepStrictEqual(result, Type.float(3.0));
+    });
+
+    it("returns negative base integer value raised to integer exponent", () => {
+      const result = testedFun(Type.integer(-2), Type.integer(3));
+
+      assert.deepStrictEqual(result, Type.float(-8.0));
+    });
+
+    it("returns negative base integer value raised to float exponent with no fractional part", () => {
+      const result = testedFun(Type.integer(-2), Type.float(3.0));
+
+      assert.deepStrictEqual(result, Type.float(-8.0));
+    });
+
+    it("returns negative base float value raised to integer exponent", () => {
+      const result = testedFun(Type.float(-2.5), Type.integer(2));
+
+      assert.deepStrictEqual(result, Type.float(6.25));
+    });
+
+    it("returns base value raised to zero exponent", () => {
+      const result = testedFun(Type.integer(7), Type.integer(0));
+
+      assert.deepStrictEqual(result, Type.float(1.0));
+    });
+
+    it("returns zero base raised to zero exponent", () => {
+      const result = testedFun(Type.integer(0), Type.integer(0));
+
+      assert.deepStrictEqual(result, Type.float(1.0));
+    });
+
+    it("returns zero base raised to positive exponent", () => {
+      const result = testedFun(Type.integer(0), Type.integer(5));
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("returns base value raised to negative integer exponent", () => {
+      const result = testedFun(Type.integer(2), Type.integer(-3));
+
+      assert.deepStrictEqual(result, Type.float(0.125));
+    });
+
+    it("returns base value raised to negative float exponent", () => {
+      const result = testedFun(Type.integer(8), Type.float(-0.5));
+
+      assert.deepStrictEqual(result, Type.float(0.3535533905932738));
     });
 
     it("raises ArgumentError if the first argument is not a number", () => {
@@ -120,7 +180,7 @@ describe("Erlang_Math", () => {
       );
     });
 
-    it("raises ArithmeticError if the base is less than zero and exponent is not an integer", () => {
+    it("raises ArithmeticError if the base is less than zero and exponent has a fractional part", () => {
       assertBoxedError(
         () => testedFun(Type.integer(-7), Type.float(0.5)),
         "ArithmeticError",
