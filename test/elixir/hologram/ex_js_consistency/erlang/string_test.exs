@@ -27,7 +27,8 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
     end
 
     test "multi-character separator" do
-      assert :string.join([~c"apple", ~c"banana", ~c"cherry"], ~c" and ") == ~c"apple and banana and cherry"
+      assert :string.join([~c"apple", ~c"banana", ~c"cherry"], ~c" and ") ==
+               ~c"apple and banana and cherry"
     end
 
     test "empty list" do
