@@ -3,6 +3,10 @@ import path from "node:path";
 import {fileURLToPath} from "node:url";
 import js from "@eslint/js";
 import {FlatCompat} from "@eslint/eslintrc";
+import Erlang_Elixir_Aliases from "./js/erlang/elixir_aliases.mjs";
+import Erlang_Elixir_Locals from "./js/erlang/elixir_locals.mjs";
+import Erlang_Persistent_Term from "./js/erlang/persistent_term.mjs";
+import Erlang_Rand from "./js/erlang/rand.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 
@@ -30,11 +34,19 @@ export default [
         Elixir_Map: "readonly",
         Elixir_String_Chars: "readonly",
         Erlang: "readonly",
+        Erlang_Binary: "readonly",
         Erlang_Code: "readonly",
+        Erlang_Elixir_Aliases: "readonly",
+        Erlang_Elixir_Locals: "readonly",
         Erlang_Filename: "readonly",
         Erlang_Lists: "readonly",
         Erlang_Maps: "readonly",
         Erlang_Math: "readonly",
+        Erlang_Persistent_Term: "readonly",
+        Erlang_Rand: "readonly",
+        Erlang_Re: "readonly",
+        Erlang_Sets: "readonly",
+        Erlang_Unicode: "readonly",
       },
       sourceType: "module",
     },
