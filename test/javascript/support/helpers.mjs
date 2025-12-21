@@ -43,38 +43,49 @@ export function assertBoxedError(
   expectedErrorType,
   expectedErrorMessage,
 ) {
-  let isErrorThrown = false;
-  let isAnyAssertFailed = false;
-  let failMessage = `\nexpected:\n${expectedErrorType}: ${expectedErrorMessage}\n`;
+  const isRegex = expectedErrorMessage instanceof RegExp;
+
+  const expectedMessageDisplay = isRegex
+    ? expectedErrorMessage.toString()
+    : expectedErrorMessage;
+
+  const failMessagePrefix = `\nexpected:\n${expectedErrorType}: ${expectedMessageDisplay}\n`;
+
+  let error;
 
   try {
     callable();
-  } catch (error) {
-    isErrorThrown = true;
-
-    const errorStruct = Type.errorStruct(
-      expectedErrorType,
-      expectedErrorMessage,
-    );
-
-    if (!(error instanceof HologramBoxedError)) {
-      isAnyAssertFailed = true;
-      failMessage += `but got:\n${error.name}: ${error.message}`;
-    } else if (!Interpreter.isStrictlyEqual(error.struct, errorStruct)) {
-      isAnyAssertFailed = true;
-
-      const receivedErrorType = Interpreter.getErrorType(error);
-      const receivedErrorMessage = Interpreter.getErrorMessage(error);
-      failMessage += `but got:\n${receivedErrorType}: ${receivedErrorMessage}`;
-    }
+  } catch (e) {
+    error = e;
   }
 
-  if (isErrorThrown) {
-    if (isAnyAssertFailed) {
-      assert.fail(failMessage);
-    }
-  } else {
-    assert.fail(failMessage + "but got no error");
+  if (!error) {
+    assert.fail(failMessagePrefix + "but got no error");
+  }
+
+  if (!(error instanceof HologramBoxedError)) {
+    assert.fail(
+      failMessagePrefix + `but got:\n${error.name}: ${error.message}`,
+    );
+  }
+
+  const receivedErrorType = Interpreter.getErrorType(error);
+  const receivedErrorMessage = Interpreter.getErrorMessage(error);
+
+  const typeMatches = receivedErrorType === expectedErrorType;
+
+  const messageMatches = isRegex
+    ? expectedErrorMessage.test(receivedErrorMessage)
+    : Interpreter.isStrictlyEqual(
+        error.struct,
+        Type.errorStruct(expectedErrorType, expectedErrorMessage),
+      );
+
+  if (!typeMatches || !messageMatches) {
+    assert.fail(
+      failMessagePrefix +
+        `but got:\n${receivedErrorType}: ${receivedErrorMessage}`,
+    );
   }
 }
 
