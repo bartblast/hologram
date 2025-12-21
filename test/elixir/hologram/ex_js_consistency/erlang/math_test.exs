@@ -56,4 +56,32 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
                    {:math, :ceil, [:abc]}
     end
   end
+
+  describe "pow/2" do
+    test "returns base integer value raised to exponent integer value" do
+      assert :math.pow(7, 3) == 343.0
+    end
+
+    test "returns base integer value raised to exponent float value" do
+      assert :math.pow(4, 0.5) == 2.0
+    end
+
+    test "raises ArgumentError if the first argument is not a number" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a number"),
+                   {:math, :pow, [:abc, 3]}
+    end
+
+    test "raises ArgumentError if the second argument is not a number" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not a number"),
+                   {:math, :pow, [7, :abc]}
+    end
+
+    test "raises ArithmeticError if the base is less than zero and exponent is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression",
+                   {:math, :pow, [-7, 0.5]}
+    end
+  end
 end
