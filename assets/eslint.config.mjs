@@ -3,10 +3,6 @@ import path from "node:path";
 import {fileURLToPath} from "node:url";
 import js from "@eslint/js";
 import {FlatCompat} from "@eslint/eslintrc";
-import Erlang_Elixir_Aliases from "./js/erlang/elixir_aliases.mjs";
-import Erlang_Elixir_Locals from "./js/erlang/elixir_locals.mjs";
-import Erlang_Persistent_Term from "./js/erlang/persistent_term.mjs";
-import Erlang_Rand from "./js/erlang/rand.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 
