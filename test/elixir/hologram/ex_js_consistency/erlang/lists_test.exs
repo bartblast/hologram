@@ -245,6 +245,96 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
   end
 
+  describe "foldr/3" do
+    setup do
+      [fun: fn elem, acc -> [elem | acc] end]
+    end
+
+    test "reduces empty list", %{fun: fun} do
+      assert :lists.foldr(fun, [], []) == []
+    end
+
+    test "reduces non-empty list", %{fun: fun} do
+      assert :lists.foldr(fun, [], [1, 2, 3]) == [1, 2, 3]
+    end
+
+    # Client error message is intentionally different than server error message.
+    test "raises FunctionClauseError if the first argument is not an anonymous function" do
+      expected_msg = build_function_clause_error_msg(":lists.foldr/3", [:abc, [], []])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.foldr(:abc, [], [])
+      end
+    end
+
+    # Client error message is intentionally different than server error message.
+    test "raises FunctionClauseError if the first argument is an anonymous function with arity different than 2" do
+      expected_msg = ~r"""
+      no function clause matching in :lists\.foldr/3
+
+      The following arguments were given to :lists\.foldr/3:
+
+          # 1
+          #Function<[0-9]+\.[0-9]+/1 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\."test foldr/3 raises FunctionClauseError if the first argument is an anonymous function with arity different than 2"/1>
+
+          # 2
+          \[\]
+
+          # 3
+          \[\]
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.foldr(fn x -> x end, [], [])
+      end
+    end
+
+    test "raises FunctionClauseError if the third argument is not a list", %{fun: fun} do
+      expected_msg = ~r"""
+      no function clause matching in :lists\.foldr_1/3
+
+      The following arguments were given to :lists\.foldr_1/3:
+
+          # 1
+          #Function<[0-9]+.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\.__ex_unit_setup_[0-9]+_0/1>
+
+          # 2
+          \[\]
+
+          # 3
+          :abc
+      """s
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.foldr(fun, [], :abc)
+      end
+    end
+
+    # Client error message is intentionally different than server error message.
+    test "raises FunctionClauseError if the third argument is an improper list", %{fun: fun} do
+      expected_msg = ~r"""
+      no function clause matching in :lists\.foldr_1/3
+
+      The following arguments were given to :lists\.foldr_1/3:
+
+          # 1
+          #Function<[0-9]+.[0-9]+/2 in Hologram\.ExJsConsistency\.Erlang\.ListsTest\.__ex_unit_setup_[0-9]+_0/1>
+
+          # 2
+          \[\]
+
+          # 3
+          3
+      """s
+
+      assert_error FunctionClauseError,
+                   expected_msg,
+                   fn ->
+                     :lists.foldr(fun, [], [1, 2 | 3])
+                   end
+    end
+  end
+
   describe "keydelete/3" do
     test "returns the original list if tuples list is empty" do
       assert :lists.keydelete(:c, 1, []) == []

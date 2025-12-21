@@ -135,6 +135,42 @@ const Erlang_Lists = {
   // End foldl/3
   // Deps: []
 
+  // Start foldr/3
+  "foldr/3": function (fun, initialAcc, list) {
+    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr/3", arguments),
+      );
+    }
+
+    if (!Type.isList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3", [
+          fun,
+          initialAcc,
+          list,
+        ]),
+      );
+    }
+
+    if (!Type.isProperList(list)) {
+      Interpreter.raiseFunctionClauseError(
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3", [
+          fun,
+          initialAcc,
+          list.data.at(-1),
+        ]),
+      );
+    }
+
+    return list.data.reduceRight(
+      (acc, elem) => Interpreter.callAnonymousFunction(fun, [elem, acc]),
+      initialAcc,
+    );
+  },
+  // End foldr/3
+  // Deps: []
+
   // Start keydelete/3
   "keydelete/3": function (key, index, tuples) {
     if (!Type.isInteger(index)) {

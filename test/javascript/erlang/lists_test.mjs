@@ -613,6 +613,121 @@ describe("Erlang_Lists", () => {
     });
   });
 
+  describe("foldr/3", () => {
+    const foldr = Erlang_Lists["foldr/3"];
+
+    const fun = Type.anonymousFunction(
+      2,
+      [
+        {
+          params: (_context) => [
+            Type.variablePattern("elem"),
+            Type.variablePattern("acc"),
+          ],
+          guards: [],
+          body: (context) => {
+            return Type.list([context.vars.elem, ...context.vars.acc.data]);
+          },
+        },
+      ],
+      contextFixture(),
+    );
+
+    const acc = Type.list([]);
+
+    it("reduces empty list", () => {
+      const result = foldr(fun, acc, emptyList);
+      assert.deepStrictEqual(result, acc);
+    });
+
+    it("reduces non-empty list", () => {
+      const list = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+      const result = foldr(fun, acc, list);
+
+      assert.deepStrictEqual(
+        result,
+        Type.list([Type.integer(1), Type.integer(2), Type.integer(3)]),
+      );
+    });
+
+    // Client error message is intentionally different than server error message.
+    it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.foldr/3",
+        [Type.atom("abc"), acc, emptyList],
+      );
+
+      assertBoxedError(
+        () => foldr(Type.atom("abc"), acc, emptyList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    // Client error message is intentionally different than server error message.
+    it("raises FunctionClauseError if the first argument is an anonymous function with arity different than 2", () => {
+      const fun = Type.anonymousFunction(
+        1,
+        [
+          {
+            params: (_context) => [Type.variablePattern("x")],
+            guards: [],
+            body: (context) => {
+              return context.vars.x;
+            },
+          },
+        ],
+        contextFixture(),
+      );
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.foldr/3",
+        [fun, acc, emptyList],
+      );
+
+      assertBoxedError(
+        () => foldr(fun, acc, emptyList),
+        "FunctionClauseError",
+        expectedMessage,
+      );
+    });
+
+    it("raises FunctionClauseError if the third argument is not a list", () => {
+      assertBoxedError(
+        () => foldr(fun, acc, Type.atom("abc")),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3", [
+          fun,
+          acc,
+          Type.atom("abc"),
+        ]),
+      );
+    });
+
+    // Client error message is intentionally different than server error message.
+    it("raises FunctionClauseError if the third argument is an improper list", () => {
+      const improperList = Type.improperList([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assertBoxedError(
+        () => foldr(fun, acc, improperList),
+        "FunctionClauseError",
+        Interpreter.buildFunctionClauseErrorMsg(":lists.foldr_1/3", [
+          fun,
+          acc,
+          improperList.data.at(-1),
+        ]),
+      );
+    });
+  });
+
   describe("keydelete/3", () => {
     const keydelete = Erlang_Lists["keydelete/3"];
 
