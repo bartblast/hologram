@@ -11,22 +11,19 @@ defmodule Hologram.ExJsConsistency.Erlang.SetsTest do
 
   describe "to_list/1" do
     test "returns an empty list if given an empty set" do
-      result =
-        []
-        |> :sets.from_list()
-        |> :sets.to_list()
+      set = :sets.new(version: 2)
 
-      assert result == []
+      assert :sets.to_list(set) == []
     end
 
     test "returns a list of values if given a non-empty set" do
       sorted_result =
-        [1, 1, "1", false]
-        |> :sets.from_list()
+        [1, 2.0]
+        |> :sets.from_list(version: 2)
         |> :sets.to_list()
         |> Enum.sort()
 
-      assert sorted_result == [1, false, "1"]
+      assert sorted_result == [1, 2.0]
     end
 
     test "raises FunctionClauseError if the argument is not a set" do

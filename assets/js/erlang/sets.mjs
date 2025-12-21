@@ -1,5 +1,6 @@
 "use strict";
 
+import Erlang_Maps from "../erlang/maps.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
