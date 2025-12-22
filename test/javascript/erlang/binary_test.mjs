@@ -20,6 +20,7 @@ const integer0 = Type.integer(0);
 const integer1 = Type.integer(1);
 const integer3 = Type.integer(3);
 
+const bytesBasedBinary = Bitstring.fromBytes([5, 19, 72, 33]);
 const bytesBasedEmptyBinary = Bitstring.fromBytes([]);
 const textBasedEmptyBinary = Bitstring.fromText("");
 
@@ -31,20 +32,18 @@ describe("Erlang_Binary", () => {
   describe("at/2", () => {
     const at = Erlang_Binary["at/2"];
 
-    const binary = Bitstring.fromBytes([5, 19, 72, 33]);
-
     it("returns first byte", () => {
-      const result = at(binary, integer0);
+      const result = at(bytesBasedBinary, integer0);
       assert.deepStrictEqual(result, Type.integer(5));
     });
 
     it("returns middle byte", () => {
-      const result = at(binary, integer1);
+      const result = at(bytesBasedBinary, integer1);
       assert.deepStrictEqual(result, Type.integer(19));
     });
 
     it("returns last byte", () => {
-      const result = at(binary, integer3);
+      const result = at(bytesBasedBinary, integer3);
       assert.deepStrictEqual(result, Type.integer(33));
     });
 
@@ -52,7 +51,7 @@ describe("Erlang_Binary", () => {
       const pos = Type.integer(4);
 
       assertBoxedError(
-        () => at(binary, pos),
+        () => at(bytesBasedBinary, pos),
         "ArgumentError",
         "argument error",
       );
@@ -85,7 +84,7 @@ describe("Erlang_Binary", () => {
       const pos = Type.nil();
 
       assertBoxedError(
-        () => at(binary, pos),
+        () => at(bytesBasedBinary, pos),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(2, "not an integer"),
       );
@@ -95,7 +94,7 @@ describe("Erlang_Binary", () => {
       const pos = Type.integer(-1);
 
       assertBoxedError(
-        () => at(binary, pos),
+        () => at(bytesBasedBinary, pos),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(2, "out of range"),
       );
@@ -237,6 +236,45 @@ describe("Erlang_Binary", () => {
           Interpreter.buildArgumentErrorMsg(2, "out of range"),
         );
       });
+    });
+  });
+
+  describe("last/1", () => {
+    const testedFun = Erlang_Binary["last/1"];
+
+    it("raises ArgumentError if the subject is not a bitstring", () => {
+      assertBoxedError(
+        () => testedFun(atomAbc),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("raises ArgumentError if the subject is a non-binary bitstring", () => {
+      assertBoxedError(
+        () => testedFun(Type.bitstring([1, 0, 1])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "is a bitstring (expected a binary)",
+        ),
+      );
+    });
+
+    it("raises ArgumentError if the subject is zero-length", () => {
+      assertBoxedError(
+        () => testedFun(textBasedEmptyBinary),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "a zero-sized binary is not allowed",
+        ),
+      );
+    });
+
+    it("returns last byte", () => {
+      const result = testedFun(bytesBasedBinary);
+      assert.deepStrictEqual(result, Type.integer(33));
     });
   });
 });

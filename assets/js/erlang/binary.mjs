@@ -95,6 +95,30 @@ const Erlang_Binary = {
   },
   // End copy/2
   // Deps: []
+
+  // Start last/1
+  "last/1": (subject) => {
+    if (!Type.isBinary(subject)) {
+      const msg = Type.isBitstring(subject)
+        ? "is a bitstring (expected a binary)"
+        : "not a binary";
+
+      Interpreter.raiseArgumentError(Interpreter.buildArgumentErrorMsg(1, msg));
+    }
+
+    if (subject.bytes.length < 1) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "a zero-sized binary is not allowed",
+        ),
+      );
+    }
+
+    return Type.integer(subject.bytes[subject.bytes.length - 1]);
+  },
+  // End last/1
+  // Deps: []
 };
 
 export default Erlang_Binary;
