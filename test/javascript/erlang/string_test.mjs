@@ -40,7 +40,10 @@ describe("Erlang_String", () => {
       });
 
       it("empty separator", () => {
-        const stringList = Type.list([charlistFixture("hello"), charlistFixture("world")]);
+        const stringList = Type.list([
+          charlistFixture("hello"),
+          charlistFixture("world"),
+        ]);
         const separator = charlistFixture("");
         const result = Erlang_String["join/2"](stringList, separator);
 
@@ -70,7 +73,10 @@ describe("Erlang_String", () => {
         const separator = charlistFixture(" and ");
         const result = Erlang_String["join/2"](stringList, separator);
 
-        assert.deepStrictEqual(result, charlistFixture("apple and banana and cherry"));
+        assert.deepStrictEqual(
+          result,
+          charlistFixture("apple and banana and cherry"),
+        );
       });
     });
 
