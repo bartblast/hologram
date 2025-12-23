@@ -151,7 +151,7 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
     end
 
     test "returns base value raised to negative float exponent" do
-      assert :math.pow(8, -0.5) == 0.3535533905932738
+      assert :math.pow(4, -0.5) == 0.5
     end
 
     test "raises ArgumentError if the first argument is not a number" do

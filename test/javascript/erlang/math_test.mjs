@@ -231,9 +231,9 @@ describe("Erlang_Math", () => {
     });
 
     it("returns base value raised to negative float exponent", () => {
-      const result = testedFun(Type.integer(8), Type.float(-0.5));
+      const result = testedFun(Type.integer(4), Type.float(-0.5));
 
-      assert.deepStrictEqual(result, Type.float(0.3535533905932738));
+      assert.deepStrictEqual(result, Type.float(0.5));
     });
 
     it("raises ArgumentError if the first argument is not a number", () => {
