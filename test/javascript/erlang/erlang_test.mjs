@@ -12,6 +12,7 @@ import {
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang from "../../../assets/js/erlang/erlang.mjs";
+import ERTS from "../../../assets/js/erts.mjs";
 import HologramInterpreterError from "../../../assets/js/errors/interpreter_error.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
@@ -34,8 +35,12 @@ const integer3 = Type.integer(3);
 const integer4 = Type.integer(4);
 const integer5 = Type.integer(5);
 const integer6 = Type.integer(6);
+const integer10 = Type.integer(10);
 const integer11 = Type.integer(11);
 const integer15 = Type.integer(15);
+const integer16 = Type.integer(16);
+const integer36 = Type.integer(36);
+const integer123 = Type.integer(123);
 const list1 = Type.list([integer1, integer2]);
 
 const mapA1B2 = Type.map([
@@ -1624,6 +1629,211 @@ describe("Erlang", () => {
     });
   });
 
+  describe("binary_part/3", () => {
+    const binary_part = Erlang["binary_part/3"];
+
+    it("subject is a text binary", () => {
+      const subject = Bitstring.fromText("mygoldfish");
+      const result = binary_part(subject, Type.integer(6), Type.integer(4));
+      const expected = Bitstring.fromText("fish");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("subject is a byte binary", () => {
+      const binary = Bitstring.fromBytes([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      const result = binary_part(binary, Type.integer(4), Type.integer(2));
+      const expected = Bitstring.fromBytes([5, 6]);
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("subject is empty", () => {
+      const binary = Bitstring.fromText("");
+      const result = binary_part(binary, Type.integer(0), Type.integer(0));
+      const expected = Bitstring.fromText("");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("subject contains multi-byte unicode characters", () => {
+      // The character "á" is represented in UTF-8 as two bytes: [195, 161]
+      const binary = Bitstring.fromText("á");
+      const result = binary_part(binary, Type.integer(0), Type.integer(1));
+      const expected = Bitstring.fromBytes([195]);
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("start is zero", () => {
+      const binary = Bitstring.fromText("goldfish");
+      const result = binary_part(binary, Type.integer(0), Type.integer(4));
+      const expected = Bitstring.fromText("gold");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("start is at the end of the binary", () => {
+      const binary = Bitstring.fromText("goldfish");
+      const result = binary_part(binary, Type.integer(8), Type.integer(-4));
+      const expected = Bitstring.fromText("fish");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("length is negative", () => {
+      const binary = Bitstring.fromText("golden retriever");
+      const result = binary_part(binary, Type.integer(16), Type.integer(-9));
+      const expected = Bitstring.fromText("retriever");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("length is zero", () => {
+      const binary = Bitstring.fromText("goldfish");
+      const result = binary_part(binary, Type.integer(2), Type.integer(0));
+      const expected = Bitstring.fromText("");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("from the middle of the binary", () => {
+      const binary = Bitstring.fromText("golden retriever");
+      const result = binary_part(binary, Type.integer(7), Type.integer(9));
+      const expected = Bitstring.fromText("retriever");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("takes whole binary", () => {
+      const binary = Bitstring.fromText("goldfish");
+      const result = binary_part(binary, Type.integer(0), Type.integer(8));
+      const expected = Bitstring.fromText("goldfish");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("takes whole binary reversed", () => {
+      const binary = Bitstring.fromText("goldfish");
+      const result = binary_part(binary, Type.integer(8), Type.integer(-8));
+      const expected = Bitstring.fromText("goldfish");
+
+      assertBoxedStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if the first argument is not a bitstring", () => {
+      assertBoxedError(
+        () => binary_part(Type.atom("abc"), Type.integer(1), Type.integer(2)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("raises ArgumentError if the first argument is a non-binary bitstring", () => {
+      assertBoxedError(
+        () =>
+          binary_part(
+            Type.bitstring([1, 0, 1]),
+            Type.integer(1),
+            Type.integer(2),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is not an integer", () => {
+      assertBoxedError(
+        () =>
+          binary_part(
+            Type.bitstring("goldfish"),
+            Type.float(1.0),
+            Type.integer(2),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is negative", () => {
+      assertBoxedError(
+        () =>
+          binary_part(
+            Type.bitstring("goldfish"),
+            Type.integer(-1),
+            Type.integer(2),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is larger than the size of the first argument", () => {
+      assertBoxedError(
+        () =>
+          binary_part(
+            Type.bitstring("goldfish"),
+            Type.integer(9),
+            Type.integer(2),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if the second argument is zero and third argument is larger than the size of the first argument", () => {
+      assertBoxedError(
+        () =>
+          binary_part(
+            Type.bitstring("goldfish"),
+            Type.integer(0),
+            Type.integer(9),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if the third argument is not an integer", () => {
+      assertBoxedError(
+        () =>
+          binary_part(
+            Type.bitstring("goldfish"),
+            Type.integer(1),
+            Type.float(2.0),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "not an integer"),
+      );
+    });
+
+    it("raises ArgumentError if the third argument is positive and the second and third arguments summed is larger than the size of the first argument", () => {
+      assertBoxedError(
+        () =>
+          binary_part(
+            Type.bitstring("goldfish"),
+            Type.integer(1),
+            Type.integer(8),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "out of range"),
+      );
+    });
+
+    it("raises ArgumentError if the third argument is negative and the second and third arguments summed is smaller than zero", () => {
+      assertBoxedError(
+        () =>
+          binary_part(
+            Type.bitstring("goldfish"),
+            Type.integer(4),
+            Type.integer(-5),
+          ),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(3, "out of range"),
+      );
+    });
+  });
+
   describe("binary_to_atom/1", () => {
     it("delegates to binary_to_atom/2", () => {
       const binary = Type.bitstring("全息图");
@@ -2092,8 +2302,7 @@ describe("Erlang", () => {
 
       it("base 36", () => {
         const binary = Type.bitstring("ZZ");
-        const base = Type.integer(36);
-        const result = binary_to_integer(binary, base);
+        const result = binary_to_integer(binary, integer36);
         const expected = Type.integer(1295);
 
         assert.deepStrictEqual(result, expected);
@@ -2259,6 +2468,69 @@ describe("Erlang", () => {
     });
   });
 
+  describe("binary_to_list/1", () => {
+    const binary_to_list = Erlang["binary_to_list/1"];
+
+    it("converts a bytes-based binary to a list of integers", () => {
+      const binary = Bitstring.fromBytes([1, 2, 3]);
+      const result = binary_to_list(binary);
+
+      const expected = Type.list([
+        Type.integer(1),
+        Type.integer(2),
+        Type.integer(3),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts a text-based binary to a list of integers", () => {
+      const binary = Type.bitstring("abc");
+      const result = binary_to_list(binary);
+
+      const expected = Type.list([
+        Type.integer(97),
+        Type.integer(98),
+        Type.integer(99),
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts an empty bytes-based binary to an empty list", () => {
+      const binary = Bitstring.fromBytes([]);
+
+      const result = binary_to_list(binary);
+      const expected = Type.list();
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("converts an empty text-based binary to an empty list", () => {
+      const binary = Type.bitstring("");
+      const result = binary_to_list(binary);
+      const expected = Type.list();
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if the argument is not a bitstring", () => {
+      assertBoxedError(
+        () => binary_to_list(Type.integer(123)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+
+    it("raises ArgumentError if the argument is a non-binary bitstring", () => {
+      assertBoxedError(
+        () => binary_to_list(Type.bitstring([1, 0, 1])),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a binary"),
+      );
+    });
+  });
+
   describe("bit_size/1", () => {
     const bit_size = Erlang["bit_size/1"];
 
@@ -2282,6 +2554,93 @@ describe("Erlang", () => {
         () => bit_size(myAtom),
         "ArgumentError",
         Interpreter.buildArgumentErrorMsg(1, "not a bitstring"),
+      );
+    });
+  });
+
+  describe("bsr/2", () => {
+    const testedFun = Erlang["bsr/2"];
+
+    it("common usage", () => {
+      // 16 = 0b00010000, 8 = 0b00001000
+      assert.deepStrictEqual(
+        testedFun(Type.integer(16), Type.integer(1)),
+        Type.integer(8),
+      );
+    });
+
+    it("zero shift", () => {
+      assert.deepStrictEqual(
+        testedFun(Type.integer(255), Type.integer(0)),
+        Type.integer(255),
+      );
+    });
+
+    it("shift left via negative shift", () => {
+      // 1 = 0b00000001, 16 = 0b00010000
+      assert.deepStrictEqual(
+        testedFun(Type.integer(1), Type.integer(-4)),
+        Type.integer(16),
+      );
+    });
+
+    it("negative keeps sign bit", () => {
+      // -16 = -0b00010000, -8 = -0b00001000
+      assert.deepStrictEqual(
+        testedFun(Type.integer(-16), Type.integer(1)),
+        Type.integer(-8),
+      );
+    });
+
+    it("above JS Number.MAX_SAFE_INTEGER", () => {
+      // Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      // 18_014_398_509_481_984 = 0b1000000000000000000000000000000000000000000000000000000
+      //  9_007_199_254_740_992 = 0b100000000000000000000000000000000000000000000000000000
+      assert.deepStrictEqual(
+        testedFun(Type.integer(18_014_398_509_481_984n), Type.integer(1)),
+        Type.integer(9_007_199_254_740_992n),
+      );
+    });
+
+    it("below JS Number.MIN_SAFE_INTEGER", () => {
+      // Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      // -18_014_398_509_481_984 = -0b1000000000000000000000000000000000000000000000000000000
+      //  -9_007_199_254_740_992 = -0b100000000000000000000000000000000000000000000000000000
+      assert.deepStrictEqual(
+        testedFun(Type.integer(-18_014_398_509_481_984n), Type.integer(1)),
+        Type.integer(-9_007_199_254_740_992n),
+      );
+    });
+
+    it("shift beyond size for positive integer", () => {
+      // 255 = 0b1111111
+      assert.deepStrictEqual(
+        testedFun(Type.integer(255), Type.integer(9)),
+        Type.integer(0),
+      );
+    });
+
+    it("shift beyond size for negative integer", () => {
+      // -127 = -0b1111111
+      assert.deepStrictEqual(
+        testedFun(Type.integer(-127), Type.integer(8)),
+        Type.integer(-1),
+      );
+    });
+
+    it("raises ArithmeticError if the first argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.float(1.0), Type.integer(2)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.bsr(1.0, 2)",
+      );
+    });
+
+    it("raises ArithmeticError if the second argument is not an integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(1), Type.float(2.0)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression: Bitwise.bsr(1, 2.0)",
       );
     });
   });
@@ -2562,6 +2921,30 @@ describe("Erlang", () => {
     assertBoxedError(() => error(reason, args), "MyError", "my message");
   });
 
+  describe("float/1", () => {
+    const float = Erlang["float/1"];
+
+    it("converts integer to float", () => {
+      const result = float(integer1);
+
+      assert.deepStrictEqual(result, float1);
+    });
+
+    it("is idempotent for float", () => {
+      const result = float(float1);
+
+      assert.deepStrictEqual(result, float1);
+    });
+
+    it("raises ArgumentError if the argument is not a number", () => {
+      assertBoxedError(
+        () => float(atomAbc),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    });
+  });
+
   describe("float_to_binary/2", () => {
     const float_to_binary = Erlang["float_to_binary/2"];
 
@@ -2793,11 +3176,7 @@ describe("Erlang", () => {
       });
 
       it("base = 36", () => {
-        const result = integer_to_binary(
-          Type.integer(123123),
-          Type.integer(36),
-        );
-
+        const result = integer_to_binary(Type.integer(123123), integer36);
         const expected = Type.bitstring("2N03");
 
         assert.deepStrictEqual(result, expected);
@@ -2840,6 +3219,110 @@ describe("Erlang", () => {
           "not an integer in the range 2 through 36",
         ),
       );
+    });
+  });
+
+  describe("integer_to_list/1", () => {
+    const integer_to_list_1 = Erlang["integer_to_list/1"];
+    const integer_to_list_2 = Erlang["integer_to_list/2"];
+
+    it("delegates to integer_to_list/2 with base 10", () => {
+      const result = integer_to_list_1(integer123);
+      const expected = integer_to_list_2(integer123, integer10);
+
+      assert.deepStrictEqual(result, expected);
+    });
+  });
+
+  describe("integer_to_list/2", () => {
+    const integer_to_list_2 = Erlang["integer_to_list/2"];
+
+    const toCharlist = (str) =>
+      Type.list([...str].map((char) => Type.integer(char.charCodeAt(0))));
+
+    it("base 2 (min allowed value for base param)", () => {
+      const result = integer_to_list_2(integer123, integer2);
+
+      assert.deepStrictEqual(result, toCharlist("1111011"));
+    });
+
+    it("base 10", () => {
+      const result = integer_to_list_2(integer123, integer10);
+
+      assert.deepStrictEqual(result, toCharlist("123"));
+    });
+
+    it("base 36 (max allowed value for base param)", () => {
+      const result = integer_to_list_2(integer123, integer36);
+
+      assert.deepStrictEqual(result, toCharlist("3F"));
+    });
+
+    it("negative integer, base 10", () => {
+      const result = integer_to_list_2(Type.integer(-123), integer10);
+
+      assert.deepStrictEqual(result, toCharlist("-123"));
+    });
+
+    it("negative integer, base other than 10", () => {
+      const result = integer_to_list_2(Type.integer(-123), integer16);
+
+      assert.deepStrictEqual(result, toCharlist("-7B"));
+    });
+
+    it("zero, base 10", () => {
+      const result = integer_to_list_2(integer0, integer10);
+
+      assert.deepStrictEqual(result, toCharlist("0"));
+    });
+
+    it("zero, base other than 10", () => {
+      const result = integer_to_list_2(integer0, integer16);
+
+      assert.deepStrictEqual(result, toCharlist("0"));
+    });
+
+    describe("error cases", () => {
+      it("raises ArgumentError when the first argument is not an integer", () => {
+        assertBoxedError(
+          () => integer_to_list_2(Type.float(3.14), integer10),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(1, "not an integer"),
+        );
+      });
+
+      it("raises ArgumentError when base is not an integer", () => {
+        assertBoxedError(
+          () => integer_to_list_2(integer123, Type.float(3.14)),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            2,
+            "not an integer in the range 2 through 36",
+          ),
+        );
+      });
+
+      it("raises ArgumentError for base < 2", () => {
+        assertBoxedError(
+          () => integer_to_list_2(integer123, integer1),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            2,
+            "not an integer in the range 2 through 36",
+          ),
+        );
+      });
+
+      it("raises ArgumentError for base > 36", () => {
+        assertBoxedError(
+          () => integer_to_list_2(integer123, Type.integer(37)),
+          "ArgumentError",
+          Interpreter.buildArgumentErrorMsg(
+            2,
+            "not an integer in the range 2 through 36",
+          ),
+        );
+      });
     });
   });
 
@@ -3177,6 +3660,199 @@ describe("Erlang", () => {
           "not a textual representation of a pid",
         ),
       );
+    });
+  });
+
+  describe("list_to_ref/1", () => {
+    const list_to_ref = Erlang["list_to_ref/1"];
+
+    beforeEach(() => {
+      ERTS.nodeTable.reset();
+    });
+
+    it("valid textual representation of reference for local node", () => {
+      // prettier-ignore
+      // ~c"#Ref<0.1.2.3>"
+      const list = Type.list([
+        Type.integer(35),  // #
+        Type.integer(82),  // R
+        Type.integer(101), // e
+        Type.integer(102), // f
+        Type.integer(60),  // <
+        Type.integer(48),  // 0
+        Type.integer(46),  // .
+        Type.integer(49),  // 1
+        Type.integer(46),  // .
+        Type.integer(50),  // 2
+        Type.integer(46),  // .
+        Type.integer(51),  // 3
+        Type.integer(62),  // >
+      ]);
+
+      const result = list_to_ref(list);
+      const expected = Type.reference(ERTS.nodeTable.CLIENT_NODE, 0, [3, 2, 1]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("valid textual representation of reference for remote node", () => {
+      // First create a server node mapping
+      ERTS.nodeTable.getLocalIncarnationId("server1", 5);
+
+      // prettier-ignore
+      // ~c"#Ref<1.111.222.333>"
+      const list = Type.list([
+        Type.integer(35),  // #
+        Type.integer(82),  // R
+        Type.integer(101), // e
+        Type.integer(102), // f
+        Type.integer(60),  // <
+        Type.integer(49),  // 1
+        Type.integer(46),  // .
+        Type.integer(49),  // 1
+        Type.integer(49),  // 1
+        Type.integer(49),  // 1
+        Type.integer(46),  // .
+        Type.integer(50),  // 2
+        Type.integer(50),  // 2
+        Type.integer(50),  // 2
+        Type.integer(46),  // .
+        Type.integer(51),  // 3
+        Type.integer(51),  // 3
+        Type.integer(51),  // 3
+        Type.integer(62),  // >
+      ]);
+
+      const result = list_to_ref(list);
+      const expected = Type.reference("server1", 5, [333, 222, 111]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("invalid textual representation of reference (missing parts)", () => {
+      // prettier-ignore
+      // ~c"#Ref<0.1>"
+      const list = Type.list([
+        Type.integer(35),  // #
+        Type.integer(82),  // R
+        Type.integer(101), // e
+        Type.integer(102), // f
+        Type.integer(60),  // <
+        Type.integer(48),  // 0
+        Type.integer(46),  // .
+        Type.integer(49),  // 1
+        Type.integer(62),  // >
+      ]);
+
+      assertBoxedError(
+        () => list_to_ref(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a reference",
+        ),
+      );
+    });
+
+    it("non-existent local incarnation ID", () => {
+      // prettier-ignore
+      // ~c"#Ref<999.1.2.3>"
+      const list = Type.list([
+        Type.integer(35),  // #
+        Type.integer(82),  // R
+        Type.integer(101), // e
+        Type.integer(102), // f
+        Type.integer(60),  // <
+        Type.integer(57),  // 9
+        Type.integer(57),  // 9
+        Type.integer(57),  // 9
+        Type.integer(46),  // .
+        Type.integer(49),  // 1
+        Type.integer(46),  // .
+        Type.integer(50),  // 2
+        Type.integer(46),  // .
+        Type.integer(51),  // 3
+        Type.integer(62),  // >
+      ]);
+
+      assertBoxedError(
+        () => list_to_ref(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a reference",
+        ),
+      );
+    });
+
+    it("not a list", () => {
+      assertBoxedError(
+        () => list_to_ref(Type.integer(123)),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("not a proper list", () => {
+      const arg = Type.improperList([Type.integer(123), Type.integer(124)]);
+
+      assertBoxedError(
+        () => list_to_ref(arg),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a list"),
+      );
+    });
+
+    it("a list that contains a non-integer", () => {
+      const list = Type.list([
+        Type.integer(36), // $
+        Type.atom("abc"),
+        Type.integer(82), // R
+      ]);
+
+      assertBoxedError(
+        () => list_to_ref(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a reference",
+        ),
+      );
+    });
+
+    it("a list that contains an invalid codepoint", () => {
+      // prettier-ignore
+      const list = Type.list([
+        Type.integer(36),  // $
+        Type.integer(255),
+        Type.integer(82),  // R
+      ]);
+
+      assertBoxedError(
+        () => list_to_ref(list),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(
+          1,
+          "not a textual representation of a reference",
+        ),
+      );
+    });
+  });
+
+  describe("make_ref/0", () => {
+    const make_ref = Erlang["make_ref/0"];
+
+    it("returns a reference", () => {
+      const result = make_ref();
+
+      assert.isTrue(Type.isReference(result));
+    });
+
+    it("consecutive calls return unique references", () => {
+      const ref1 = make_ref();
+      const ref2 = make_ref();
+
+      assert.isFalse(Interpreter.isEqual(ref1, ref2));
     });
   });
 
@@ -3680,6 +4356,77 @@ describe("Erlang", () => {
           Interpreter.buildArgumentErrorMsg(1, "not a nonempty list"),
         );
       });
+    });
+  });
+
+  describe("trunc/1", () => {
+    const testedFun = Erlang["trunc/1"];
+
+    it("drops fractional part of positive float", () => {
+      const result = testedFun(Type.float(1.23));
+
+      assert.deepStrictEqual(result, integer1);
+    });
+
+    it("drops fractional part of negative float", () => {
+      const result = testedFun(Type.float(-1.23));
+      const expected = Type.integer(-1);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("drops fractional part of negative zero float", () => {
+      const result = testedFun(Type.float(-0.0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("drops fractional part of positive zero float", () => {
+      const result = testedFun(Type.float(+0.0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("drops fractional part of unsigned zero float", () => {
+      const result = testedFun(Type.float(0.0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("keeps positive integer unchanged", () => {
+      const result = testedFun(integer1);
+
+      assert.deepStrictEqual(result, integer1);
+    });
+
+    it("keeps negative integer unchanged", () => {
+      const integer = Type.integer(-1);
+      const result = testedFun(integer);
+
+      assert.deepStrictEqual(result, integer);
+    });
+
+    it("keeps zero integer unchanged", () => {
+      const result = testedFun(integer0);
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("demonstrates floating-point precision limits for large numbers", () => {
+      // eslint-disable-next-line no-loss-of-precision
+      const result = testedFun(Type.float(36028797018963969.0));
+
+      const expected = Type.integer(36028797018963968n);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises ArgumentError if the argument is not a number", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
     });
   });
 

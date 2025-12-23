@@ -2,6 +2,7 @@
 
 import Bitstring from "./bitstring.mjs";
 import HologramInterpreterError from "./errors/interpreter_error.mjs";
+import NodeTable from "./erts/node_table.mjs";
 import PerformanceTimer from "./performance_timer.mjs";
 import Type from "./type.mjs";
 import Utils from "./utils.mjs";
@@ -66,10 +67,10 @@ export default class Interpreter {
   }
 
   // TODO: include attempted function clauses info
-  static buildFunctionClauseErrorMsg(funName, args = []) {
+  static buildFunctionClauseErrorMsg(funName, args = null) {
     let argsInfo = "";
 
-    if (args.length > 0) {
+    if (args && args.length > 0) {
       argsInfo = Array.from(args).reduce(
         (acc, arg, idx) =>
           `${acc}\n    # ${idx + 1}\n    ${Interpreter.inspect(arg)}\n`,
@@ -548,7 +549,7 @@ export default class Interpreter {
         return `#PID<${term.segments.join(".")}>`;
 
       case "reference":
-        return `#Reference<${term.segments.join(".")}>`;
+        return Interpreter.#inspectReference(term, opts);
 
       case "port":
         return `#Port<${term.segments.join(".")}>`;
@@ -619,7 +620,7 @@ export default class Interpreter {
         return $.#areIdentifiersEqual(left, right);
 
       case "reference":
-        return $.#areIdentifiersEqual(left, right);
+        return $.#areReferencesEqual(left, right);
 
       case "port":
         return $.#areIdentifiersEqual(left, right);
@@ -993,6 +994,14 @@ export default class Interpreter {
     return true;
   }
 
+  static #areReferencesEqual(ref1, ref2) {
+    return (
+      $.#areIntegerArraysEqual(ref1.idWords, ref2.idWords) &&
+      ref1.node === ref2.node &&
+      ref1.creation === ref2.creation
+    );
+  }
+
   static #comparePids(pid1, pid2) {
     for (let i = 2; i >= 0; --i) {
       if (pid1.segments[i] === pid2.segments[i]) {
@@ -1276,6 +1285,15 @@ export default class Interpreter {
       step.value > 1 ? `//${Interpreter.inspect(step, opts)}` : "";
 
     return `${Interpreter.inspect(first, opts)}..${Interpreter.inspect(last, opts)}${stepStr}`;
+  }
+
+  static #inspectReference(term, _opts) {
+    const localIncarnationId = NodeTable.getLocalIncarnationId(
+      term.node,
+      term.creation,
+    );
+
+    return `#Reference<${localIncarnationId}.${term.idWords.toReversed().join(".")}>`;
   }
 
   static #inspectTuple(term, opts) {

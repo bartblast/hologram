@@ -6,6 +6,7 @@ import {
   defineGlobalErlangAndElixirModules,
 } from "./support/helpers.mjs";
 
+import ERTS from "../../assets/js/erts.mjs";
 import HologramInterpreterError from "../../assets/js/errors/interpreter_error.mjs";
 import Sequence from "../../assets/js/sequence.mjs";
 import Type from "../../assets/js/type.mjs";
@@ -339,6 +340,7 @@ describe("Type", () => {
     assert.deepStrictEqual(result, expected);
   });
 
+  // TODO: refactor test names - use the same pattern as for reference type
   describe("encodeMapKey()", () => {
     it("encodes boxed anonymous function value as map key", () => {
       Sequence.reset();
@@ -410,6 +412,16 @@ describe("Type", () => {
       const result = Type.encodeMapKey(map);
 
       assert.equal(result, "map(atom(a):integer(1),atom(b):integer(2))");
+    });
+
+    it("reference type", () => {
+      ERTS.nodeTable.reset();
+
+      const node = ERTS.nodeTable.CLIENT_NODE;
+      const ref = Type.reference(node, 4, [3, 2, 1]);
+      const result = Type.encodeMapKey(ref);
+
+      assert.equal(result, "r0.1.2.3");
     });
 
     it("encodes empty boxed tuple value as map key", () => {
@@ -487,7 +499,7 @@ describe("Type", () => {
       assert.throw(
         () => Type.improperList([]),
         HologramInterpreterError,
-        "improper list must have at least 2 items, received [2,[]]",
+        "improper list must have at least 2 items, received [3,[]]",
       );
     });
 
@@ -495,7 +507,7 @@ describe("Type", () => {
       assert.throw(
         () => Type.improperList([Type.integer(1)]),
         HologramInterpreterError,
-        'improper list must have at least 2 items, received [2,["i1"]]',
+        'improper list must have at least 2 items, received [3,["i1"]]',
       );
     });
 
@@ -1053,7 +1065,7 @@ describe("Type", () => {
 
   describe("isReference()", () => {
     it("returns true if the term is a reference", () => {
-      const term = Type.reference("nonode@nohost", [0, 1, 2, 3]);
+      const term = Type.reference(ERTS.nodeTable.CLIENT_NODE, 0, [1, 2, 3]);
       assert.isTrue(Type.isReference(term));
     });
 
@@ -1324,13 +1336,13 @@ describe("Type", () => {
   });
 
   it("reference()", () => {
-    const result = Type.reference("nonode@nohost", [0, 1, 2, 3], "client");
+    const result = Type.reference(ERTS.nodeTable.CLIENT_NODE, 0, [1, 2, 3]);
 
     const expected = {
       type: "reference",
-      node: "nonode@nohost",
-      segments: [0, 1, 2, 3],
-      origin: "client",
+      node: ERTS.nodeTable.CLIENT_NODE,
+      creation: 0,
+      idWords: [1, 2, 3],
     };
 
     assert.deepStrictEqual(result, expected);

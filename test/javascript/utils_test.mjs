@@ -149,6 +149,14 @@ describe("Utils", () => {
     });
   });
 
+  it("randomUint32()", () => {
+    const result = Utils.randomUint32();
+
+    assert.isTrue(Number.isInteger(result));
+    assert.isAtLeast(result, 0);
+    assert.isAtMost(result, 4_294_967_295);
+  });
+
   it("runAsyncTask()", async () => {
     const obj = {a: 1, b: 2};
     const task = () => (obj.b = 3);

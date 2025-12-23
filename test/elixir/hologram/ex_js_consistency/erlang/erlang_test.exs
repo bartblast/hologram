@@ -1373,6 +1373,107 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "binary_part/3" do
+    test "subject is a text binary" do
+      assert :erlang.binary_part("mygoldfish", 6, 4) == "fish"
+    end
+
+    test "subject is a byte binary" do
+      assert :erlang.binary_part(<<1, 2, 3, 4, 5, 6, 7, 8, 9, 10>>, 4, 2) == <<5, 6>>
+    end
+
+    test "subject is empty" do
+      assert :erlang.binary_part("", 0, 0) == ""
+    end
+
+    test "subject contains multi-byte unicode characters" do
+      # The character "á" is represented in UTF-8 as two bytes: <<195, 161>>
+      assert :erlang.binary_part("á", 0, 1) == <<195>>
+    end
+
+    test "start is zero" do
+      assert :erlang.binary_part("goldfish", 0, 4) == "gold"
+    end
+
+    test "start is at the end of the binary" do
+      assert :erlang.binary_part("goldfish", 8, -4) == "fish"
+    end
+
+    test "length is negative" do
+      assert :erlang.binary_part("golden retriever", 16, -9) == "retriever"
+    end
+
+    test "length is zero" do
+      assert :erlang.binary_part("goldfish", 2, 0) == ""
+    end
+
+    test "from the middle of the binary" do
+      assert :erlang.binary_part("golden retriever", 7, 9) == "retriever"
+    end
+
+    test "takes whole binary" do
+      assert :erlang.binary_part("goldfish", 0, 8) == "goldfish"
+    end
+
+    test "takes whole binary reversed" do
+      assert :erlang.binary_part("goldfish", 8, -8) == "goldfish"
+    end
+
+    test "raises ArgumentError if the first argument is not a bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :binary_part, [:abc, 1, 2]}
+    end
+
+    test "raises ArgumentError if the first argument is a non-binary bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :binary_part, [<<1::1, 0::1, 1::1>>, 1, 2]}
+    end
+
+    test "raises ArgumentError if the second argument is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer"),
+                   {:erlang, :binary_part, ["goldfish", 1.0, 2]}
+    end
+
+    test "raises ArgumentError if the second argument is negative" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "out of range"),
+                   {:erlang, :binary_part, ["goldfish", -1, 2]}
+    end
+
+    test "raises ArgumentError if the second argument is larger than the size of the first argument" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "out of range"),
+                   {:erlang, :binary_part, ["goldfish", 9, 2]}
+    end
+
+    test "raises ArgumentError if the second argument is zero and third argument is larger than the size of the first argument" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "out of range"),
+                   {:erlang, :binary_part, ["goldfish", 0, 9]}
+    end
+
+    test "raises ArgumentError if the third argument is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "not an integer"),
+                   {:erlang, :binary_part, ["goldfish", 1, 2.0]}
+    end
+
+    test "raises ArgumentError if the third argument is positive and the second and third arguments summed is larger than the size of the first argument" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "out of range"),
+                   {:erlang, :binary_part, ["goldfish", 1, 8]}
+    end
+
+    test "raises ArgumentError if the third argument is negative and the second and third arguments summed is smaller than zero" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(3, "out of range"),
+                   {:erlang, :binary_part, ["goldfish", 4, -5]}
+    end
+  end
+
   if SystemUtils.otp_version() >= 23 do
     test "binary_to_atom/1" do
       # credo:disable-for-next-line Credo.Check.Warning.UnsafeToAtom
@@ -1694,6 +1795,36 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "binary_to_list/1" do
+    test "converts a bytes-based binary to a list of integers" do
+      assert :erlang.binary_to_list(<<1, 2, 3>>) == [1, 2, 3]
+    end
+
+    test "converts a text-based binary to a list of integers" do
+      assert :erlang.binary_to_list("abc") == [97, 98, 99]
+    end
+
+    test "converts an empty bytes-based binary to an empty list" do
+      assert :erlang.binary_to_list(<<>>) == []
+    end
+
+    test "converts an empty text-based binary to an empty list" do
+      assert :erlang.binary_to_list("") == []
+    end
+
+    test "raises ArgumentError if the argument is not a bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :binary_to_list, [123]}
+    end
+
+    test "raises ArgumentError if the argument is a non-binary bitstring" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a binary"),
+                   {:erlang, :binary_to_list, [<<5::size(3)>>]}
+    end
+  end
+
   describe "bit_size/1" do
     test "bitstring" do
       assert :erlang.bit_size(<<2::7>>) == 7
@@ -1703,6 +1834,63 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a bitstring"),
                    {:erlang, :bit_size, [:abc]}
+    end
+  end
+
+  describe "bsr/2" do
+    test "common usage" do
+      # 16 = 0b00010000, 8 = 0b00001000
+      assert :erlang.bsr(16, 1) == 8
+    end
+
+    test "zero shift" do
+      assert :erlang.bsr(255, 0) == 255
+    end
+
+    test "shift left via negative shift" do
+      # 1 = 0b00000001, 16 = 0b00010000
+      assert :erlang.bsr(1, -4) == 16
+    end
+
+    test "negative keeps sign bit" do
+      # -16 = -0b00010000, -8 = -0b00001000
+      assert :erlang.bsr(-16, 1) == -8
+    end
+
+    test "above JS Number.MAX_SAFE_INTEGER" do
+      # Number.MAX_SAFE_INTEGER == 9_007_199_254_740_991
+      # 18_014_398_509_481_984 = 0b1000000000000000000000000000000000000000000000000000000
+      #  9_007_199_254_740_992 = 0b100000000000000000000000000000000000000000000000000000
+      assert :erlang.bsr(18_014_398_509_481_984, 1) == 9_007_199_254_740_992
+    end
+
+    test "below JS Number.MIN_SAFE_INTEGER" do
+      # Number.MIN_SAFE_INTEGER == -9_007_199_254_740_991
+      # -18_014_398_509_481_984 = -0b1000000000000000000000000000000000000000000000000000000
+      #  -9_007_199_254_740_992 = -0b100000000000000000000000000000000000000000000000000000
+      assert :erlang.bsr(-18_014_398_509_481_984, 1) == -9_007_199_254_740_992
+    end
+
+    test "shift beyond size for positive integer" do
+      # 255 = 0b1111111
+      assert :erlang.bsr(255, 9) == 0
+    end
+
+    test "shift beyond size for negative integer" do
+      # -127 = -0b1111111
+      assert :erlang.bsr(-127, 8) == -1
+    end
+
+    test "raises ArithmeticError if the first argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bsr(1.0, 2)",
+                   {:erlang, :bsr, [1.0, 2]}
+    end
+
+    test "raises ArithmeticError if the second argument is not an integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression: Bitwise.bsr(1, 2.0)",
+                   {:erlang, :bsr, [1, 2.0]}
     end
   end
 
@@ -1877,6 +2065,22 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
     end
   end
 
+  describe "float/1" do
+    test "converts integer to float" do
+      assert :erlang.float(1) == 1.0
+    end
+
+    test "is idempotent for float" do
+      assert :erlang.float(1.0) == 1.0
+    end
+
+    test "raises ArgumentError if the argument is not a number" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a number"),
+                   {:erlang, :float, [:abc]}
+    end
+  end
+
   describe "float_to_binary/2" do
     test ":short option" do
       assert :erlang.float_to_binary(0.1 + 0.2, [:short]) == "0.30000000000000004"
@@ -2012,6 +2216,66 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "not an integer in the range 2 through 36"),
                    {:erlang, :integer_to_binary, [123_123, :abc]}
+    end
+  end
+
+  describe "integer_to_list/1" do
+    test "delegates to integer_to_list/2 with base 10" do
+      assert :erlang.integer_to_list(123) == :erlang.integer_to_list(123, 10)
+    end
+  end
+
+  describe "integer_to_list/2" do
+    test "base 2 (min allowed value for base param)" do
+      assert :erlang.integer_to_list(123, 2) == ~c"1111011"
+    end
+
+    test "base 10" do
+      assert :erlang.integer_to_list(123, 10) == ~c"123"
+    end
+
+    test "base 36 (max allowed value for base param)" do
+      assert :erlang.integer_to_list(123, 36) == ~c"3F"
+    end
+
+    test "negative integer, base 10" do
+      assert :erlang.integer_to_list(-123, 10) == ~c"-123"
+    end
+
+    test "negative integer, base other than 10" do
+      assert :erlang.integer_to_list(-123, 16) == ~c"-7B"
+    end
+
+    test "zero, base 10" do
+      assert :erlang.integer_to_list(0, 10) == ~c"0"
+    end
+
+    test "zero, base other than 10" do
+      assert :erlang.integer_to_list(0, 16) == ~c"0"
+    end
+
+    test "raises ArgumentError when the first argument is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not an integer"),
+                   {:erlang, :integer_to_list, [3.14, 10]}
+    end
+
+    test "raises ArgumentError when base is not an integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
+                   {:erlang, :integer_to_list, [123, 3.14]}
+    end
+
+    test "raises ArgumentError for base < 2" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
+                   {:erlang, :integer_to_list, [123, 1]}
+    end
+
+    test "raises ArgumentError for base > 36" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(2, "not an integer in the range 2 through 36"),
+                   {:erlang, :integer_to_list, [123, 37]}
     end
   end
 
@@ -2233,6 +2497,68 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert_error ArgumentError,
                    build_argument_error_msg(1, "not a textual representation of a pid"),
                    {:erlang, :list_to_pid, [[60, 255, 46]]}
+    end
+  end
+
+  describe "list_to_ref/1" do
+    test "valid textual representation of reference for local node" do
+      assert :erlang.list_to_ref(~c"#Ref<0.1.2.3>") == ref("0.1.2.3")
+    end
+
+    # Not testable in a practical way
+    # test "valid textual representation of reference for remote node"
+
+    test "invalid textual representation of reference (missing parts)" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a reference"),
+                   {:erlang, :list_to_ref, [~c"#Ref<0.1>"]}
+    end
+
+    test "non-existent local incarnation ID" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a reference"),
+                   {:erlang, :list_to_ref, [~c"#Ref<999.1.2.3>"]}
+    end
+
+    test "not a list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:erlang, :list_to_ref, [123]}
+    end
+
+    test "not a proper list" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a list"),
+                   {:erlang, :list_to_ref, [[123 | 124]]}
+    end
+
+    test "a list that contains a non-integer" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a reference"),
+                   # 36 = $, 82 = R
+                   {:erlang, :list_to_ref, [[36, :abc, 82]]}
+    end
+
+    test "a list that contains an invalid codepoint" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a textual representation of a reference"),
+                   # 36 = $, 82 = R
+                   {:erlang, :list_to_ref, [[36, 255, 82]]}
+    end
+  end
+
+  describe "make_ref/0" do
+    test "returns a reference" do
+      result = :erlang.make_ref()
+
+      assert is_reference(result)
+    end
+
+    test "consecutive calls return unique references" do
+      ref1 = :erlang.make_ref()
+      ref2 = :erlang.make_ref()
+
+      assert ref1 != ref2
     end
   end
 
@@ -2525,6 +2851,50 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
 
     test "improper list, 3 items" do
       assert :erlang.tl([1, 2 | 3]) == [2 | 3]
+    end
+  end
+
+  describe "trunc/1" do
+    test "drops fractional part of positive float" do
+      assert :erlang.trunc(1.23) == 1
+    end
+
+    test "drops fractional part of negative float" do
+      assert :erlang.trunc(-1.23) == -1
+    end
+
+    test "drops fractional part of negative zero float" do
+      assert :erlang.trunc(-0.0) == 0
+    end
+
+    test "drops fractional part of positive zero float" do
+      assert :erlang.trunc(+0.0) == 0
+    end
+
+    test "drops fractional part of unsigned zero float" do
+      assert :erlang.trunc(0.0) == 0
+    end
+
+    test "keeps positive integer unchanged" do
+      assert :erlang.trunc(1) == 1
+    end
+
+    test "keeps negative integer unchanged" do
+      assert :erlang.trunc(-1) == -1
+    end
+
+    test "keeps zero integer unchanged" do
+      assert :erlang.trunc(0) == 0
+    end
+
+    test "demonstrates floating-point precision limits for large numbers" do
+      assert :erlang.trunc(36_028_797_018_963_969.0) == 36_028_797_018_963_968
+    end
+
+    test "raises ArgumentError if the argument is not a number" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a number"),
+                   {:erlang, :trunc, [:abc]}
     end
   end
 
