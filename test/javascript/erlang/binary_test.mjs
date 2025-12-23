@@ -9,6 +9,7 @@ import {
 
 import Bitstring from "../../../assets/js/bitstring.mjs";
 import Erlang_Binary from "../../../assets/js/erlang/binary.mjs";
+import ERTS from "../../../assets/js/erts.mjs";
 import Interpreter from "../../../assets/js/interpreter.mjs";
 import Type from "../../../assets/js/type.mjs";
 
@@ -117,8 +118,8 @@ describe("Erlang_Binary", () => {
       it("stores the pattern in the binaryPattern registry", () => {
         const pattern = Bitstring.fromBytes([72, 101, 108, 108, 111]); // "Hello"
         const result = compilePattern(pattern);
-        const reference = result.data[1];
-        const words = Hologram.binaryPatterns.get(reference);
+        const ref = result.data[1];
+        const words = ERTS.binaryPatternRegistry.get(ref);
 
         assert.strictEqual(words, pattern);
       });
@@ -138,8 +139,8 @@ describe("Erlang_Binary", () => {
 
       it("stores the pattern in the binaryPattern registry", () => {
         const result = compilePattern(patternList);
-        const reference = result.data[1];
-        const words = Hologram.binaryPatterns.get(reference);
+        const ref = result.data[1];
+        const words = ERTS.binaryPatternRegistry.get(ref);
 
         assert.strictEqual(words, patternList);
       });

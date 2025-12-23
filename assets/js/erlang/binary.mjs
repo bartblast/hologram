@@ -1,6 +1,7 @@
 "use strict";
 
 import Bitstring from "../bitstring.mjs";
+import ERTS from "../erts.mjs";
 import Interpreter from "../interpreter.mjs";
 import Type from "../type.mjs";
 
@@ -137,10 +138,10 @@ const Erlang_Binary = {
       badShift[byte] = length - index;
     });
 
-    const patternReference = Type.reference();
-    // Hologram.binaryPatterns.put(patternReference, pattern)
+    const ref = Erlang["make_ref/0"]();
+    ERTS.binaryPatternRegistry.put(ref, pattern);
 
-    return Type.tuple([Type.atom("bm"), patternReference]);
+    return Type.tuple([Type.atom("bm"), ref]);
   },
   // End _boyer_moore_pattern_matcher/1
   // Deps: []
@@ -202,10 +203,10 @@ const Erlang_Binary = {
       }
     }
 
-    const patternReference = Type.reference();
-    // Hologram.binaryPatterns.put(patternReference, pattern)
+    const ref = Erlang["make_ref/0"]();
+    ERTS.binaryPatternRegistry.put(ref, patterns);
 
-    return Type.tuple([Type.atom("ac"), patternReference]);
+    return Type.tuple([Type.atom("ac"), ref]);
   },
   // End _aho_corasick_pattern_matcher/1
   // Deps: []
