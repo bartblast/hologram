@@ -385,7 +385,7 @@ const Erlang_Lists = {
       );
     }
 
-    return Type.list(list.data.sort(Interpreter.compareTerms));
+    return Type.list(list.data.slice().sort(Interpreter.compareTerms));
   },
   // End sort/1
   // Deps: []
@@ -426,7 +426,7 @@ const Erlang_Lists = {
     }
 
     return Type.list(
-      list.data.sort((a, b) => {
+      list.data.slice().sort((a, b) => {
         const result = Interpreter.callAnonymousFunction(fun, [a, b]);
         return Type.isTrue(result) ? -1 : 1;
       }),
