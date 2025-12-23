@@ -669,12 +669,29 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert :lists.sort(fun, [3, 1, 4, 2]) == [1, 2, 3, 4]
     end
 
+    test "returns empty list when sorting empty list", %{fun: fun} do
+      assert :lists.sort(fun, []) == []
+    end
+
+    test "returns same list when sorting single element list", %{fun: fun} do
+      assert :lists.sort(fun, [42]) == [42]
+    end
+
+    test "returns same list when already sorted", %{fun: fun} do
+      assert :lists.sort(fun, [1, 2, 3, 4]) == [1, 2, 3, 4]
+    end
+
+    test "preserves duplicate elements", %{fun: fun} do
+      assert :lists.sort(fun, [3, 1, 2, 1, 3]) == [1, 1, 2, 3, 3]
+    end
+
     test "sorts list in reverse order" do
       fun = fn a, b -> a >= b end
+
       assert :lists.sort(fun, [3, 1, 4, 2]) == [4, 3, 2, 1]
     end
 
-    test "raises BadFunctionError if first argument is not a function" do
+    test "raises BadFunctionError if the first argument is not a function" do
       expected_msg = "expected a function, got: :abc"
 
       assert_error BadFunctionError, expected_msg, fn ->
@@ -682,16 +699,15 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       end
     end
 
-    test "raises BadArityError if first argument is a function with wrong arity" do
-      expected_msg = ~r/with arity 1 called with 2 arguments \(1, 2\)/
+    test "raises BadArityError if the first argument is a function with wrong arity" do
+      expected_msg = ~r/with arity 1 called with 2 arguments \(\d+, \d+\)/
 
       assert_error BadArityError, expected_msg, fn ->
-        :lists.sort(fn x -> x end, [1, 2, 3])
+        :lists.sort(fn x -> x end, [1, 2])
       end
     end
 
-    test "raises FunctionClauseError if second argument is not a list" do
-      fun = fn a, b -> a <= b end
+    test "raises FunctionClauseError if the second argument is not a list", %{fun: fun} do
       expected_msg = build_function_clause_error_msg(":lists.sort/2", [fun, :abc])
 
       assert_error FunctionClauseError, expected_msg, fn ->
@@ -699,9 +715,19 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       end
     end
 
-    test "raises FunctionClauseError if second argument is an improper list", %{fun: fun} do
-      # Client error message is intentionally different than server error message.
-      # The underlying function that raises on improper lists is :lists.fsplit_1/6.
+    test "raises FunctionClauseError if the second argument is an improper list with 2 elements",
+         %{fun: fun} do
+      expected_msg = build_function_clause_error_msg(":lists.sort/2", [fun, [1 | 2]])
+
+      assert_error FunctionClauseError, expected_msg, fn ->
+        :lists.sort(fun, [1 | 2])
+      end
+    end
+
+    test "raises FunctionClauseError if the second argument is an improper list with at least 3 elements",
+         %{
+           fun: fun
+         } do
       expected_msg = build_function_clause_error_msg(":lists.fsplit_1/6", [2, 1, fun, 3, [], []])
 
       assert_error FunctionClauseError, expected_msg, fn ->

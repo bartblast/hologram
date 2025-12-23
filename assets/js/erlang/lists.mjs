@@ -390,11 +390,15 @@ const Erlang_Lists = {
   // End sort/1
   // Deps: []
 
-  //Start sort/2
+  // Client-side implementation uses simplified error details (for improper list with 2+ elements case)
+  // Start sort/2
   "sort/2": (fun, list) => {
-    if (!Type.isAnonymousFunction(fun) || fun.arity !== 2) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2", [fun, list]),
+    // Only validate that the first argument is an anonymous function (type check)
+    // Let arity validation happen naturally when the function is called
+    if (!Type.isAnonymousFunction(fun)) {
+      Interpreter.raiseError(
+        "BadFunctionError",
+        `expected a function, got: ${Interpreter.inspect(fun)}`,
       );
     }
 
@@ -405,9 +409,20 @@ const Erlang_Lists = {
     }
 
     if (!Type.isProperList(list)) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2"),
-      );
+      let errorMsg;
+
+      // Match server behavior for improper lists:
+      // - For lists with 1 element, raise error in :lists.sort/2
+      // - For lists with 2+ elements, raise error in :lists.fsplit_1/6
+      errorMsg =
+        list.data.length <= 2
+          ? Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2", [
+              fun,
+              list,
+            ])
+          : Interpreter.buildFunctionClauseErrorMsg(":lists.fsplit_1/6");
+
+      Interpreter.raiseFunctionClauseError(errorMsg);
     }
 
     return Type.list(
@@ -417,8 +432,8 @@ const Erlang_Lists = {
       }),
     );
   },
-  //End sort/2
-  //Deps: []
+  // End sort/2
+  // Deps: []
 };
 
 export default Erlang_Lists;

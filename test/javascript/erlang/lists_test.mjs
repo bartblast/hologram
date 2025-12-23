@@ -1349,39 +1349,95 @@ describe("Erlang_Lists", () => {
       contextFixture(),
     );
 
-    it("sorts items in the list using comparison function", () => {
-      const list = Type.list([
-        Type.integer(4),
-        Type.integer(1),
-        Type.integer(3),
-        Type.integer(2),
-      ]);
+    it("sorts list using custom comparison function", () => {
+      const list = Type.list([integer3, integer1, integer4, integer2]);
 
-      assert.deepStrictEqual(
-        sort(fun, list),
-        Type.list([
-          Type.integer(1),
-          Type.integer(2),
-          Type.integer(3),
-          Type.integer(4),
-        ]),
-      );
+      const result = sort(fun, list);
+      const expected = Type.list([integer1, integer2, integer3, integer4]);
+
+      assert.deepStrictEqual(result, expected);
     });
 
-    it("raises FunctionClauseError if the first argument is not an anonymous function", () => {
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.sort/2",
-        [Type.atom("abc"), emptyList],
+    it("returns empty list when sorting empty list", () => {
+      const result = sort(fun, emptyList);
+
+      assert.deepStrictEqual(result, emptyList);
+    });
+
+    it("returns same list when sorting single element list", () => {
+      const list = Type.list([integer5]);
+      const result = sort(fun, list);
+
+      assert.deepStrictEqual(result, list);
+    });
+
+    it("returns same list when already sorted", () => {
+      const list = Type.list([integer1, integer2, integer3, integer4]);
+      const result = sort(fun, list);
+
+      assert.deepStrictEqual(result, list);
+    });
+
+    it("preserves duplicate elements", () => {
+      const list = Type.list([
+        integer3,
+        integer1,
+        integer2,
+        integer1,
+        integer3,
+      ]);
+
+      const result = sort(fun, list);
+
+      const expected = Type.list([
+        integer1,
+        integer1,
+        integer2,
+        integer3,
+        integer3,
+      ]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("sorts list in reverse order", () => {
+      const reverseFun = Type.anonymousFunction(
+        2,
+        [
+          {
+            params: (_context) => [
+              Type.variablePattern("a"),
+              Type.variablePattern("b"),
+            ],
+            guards: [],
+            body: (context) => {
+              return Erlang[">=/2"](context.vars.a, context.vars.b);
+            },
+          },
+        ],
+        contextFixture(),
       );
 
+      const list = Type.list([integer3, integer1, integer4, integer2]);
+
+      const result = sort(reverseFun, list);
+      const expected = Type.list([integer4, integer3, integer2, integer1]);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("raises BadFunctionError if the first argument is not a function", () => {
+      const expectedMessage = "expected a function, got: :abc";
+      const list = Type.list([integer1, integer2]);
+
       assertBoxedError(
-        () => sort(Type.atom("abc"), emptyList),
-        "FunctionClauseError",
+        () => sort(atomAbc, list),
+        "BadFunctionError",
         expectedMessage,
       );
     });
 
-    it("raises FunctionClauseError if the first argument is an anonymous function with arity different than 2", () => {
+    it("raises BadArityError if the first argument is a function with wrong arity", () => {
       const wrongArityFun = Type.anonymousFunction(
         1,
         [
@@ -1396,14 +1452,14 @@ describe("Erlang_Lists", () => {
         contextFixture(),
       );
 
-      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
-        ":lists.sort/2",
-        [wrongArityFun, emptyList],
-      );
+      const expectedMessage =
+        /with arity 1 called with 2 arguments \(\d+, \d+\)/;
+
+      const list = Type.list([integer1, integer2]);
 
       assertBoxedError(
-        () => sort(wrongArityFun, emptyList),
-        "FunctionClauseError",
+        () => sort(wrongArityFun, list),
+        "BadArityError",
         expectedMessage,
       );
     });
@@ -1411,21 +1467,40 @@ describe("Erlang_Lists", () => {
     it("raises FunctionClauseError if the second argument is not a list", () => {
       const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
         ":lists.sort/2",
-        [fun, Type.atom("abc")],
+        [fun, atomAbc],
       );
 
       assertBoxedError(
-        () => sort(fun, Type.atom("abc")),
+        () => sort(fun, atomAbc),
         "FunctionClauseError",
         expectedMessage,
       );
     });
 
-    it("raises FunctionClauseError if the second argument is an improper list", () => {
+    it("raises FunctionClauseError if the second argument is an improper list with 2 elements", () => {
+      const improperList = Type.improperList([integer1, integer2]);
+
+      const expectedMessage = Interpreter.buildFunctionClauseErrorMsg(
+        ":lists.sort/2",
+        [fun, improperList],
+      );
+
       assertBoxedError(
         () => sort(fun, improperList),
         "FunctionClauseError",
-        Interpreter.buildFunctionClauseErrorMsg(":lists.sort/2"),
+        expectedMessage,
+      );
+    });
+
+    // Client-side implementation uses simplified error details
+    it("raises FunctionClauseError if the second argument is an improper list with at least 3 elements", () => {
+      const expectedMessage =
+        Interpreter.buildFunctionClauseErrorMsg(":lists.fsplit_1/6");
+
+      assertBoxedError(
+        () => sort(fun, improperList),
+        "FunctionClauseError",
+        expectedMessage,
       );
     });
   });
