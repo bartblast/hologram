@@ -538,6 +538,28 @@ const Erlang = {
   // End bit_size/1
   // Deps: []
 
+  // Start bsl/2
+  "bsl/2": (integer, shift) => {
+    if (!Type.isInteger(integer) || !Type.isInteger(shift)) {
+      const arg1 = Interpreter.inspect(integer);
+      const arg2 = Interpreter.inspect(shift);
+
+      Interpreter.raiseArithmeticError(`Bitwise.bsl(${arg1}, ${arg2})`);
+    }
+
+    const integerValue = integer.value;
+    const shiftValue = shift.value;
+
+    if (shiftValue < 0n) {
+      // Erlang's bsl with negative shift is equivalent to bsr with positive shift
+      return Type.integer(integerValue >> -shiftValue);
+    } else {
+      return Type.integer(integerValue << shiftValue);
+    }
+  },
+  // End bsl/2
+  // Deps: []
+
   // Start bsr/2
   "bsr/2": (integer, shift) => {
     if (!Type.isInteger(integer) || !Type.isInteger(shift)) {
