@@ -674,7 +674,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
     end
 
     test "returns same list when sorting single element list", %{fun: fun} do
-      assert :lists.sort(fun, [42]) == [42]
+      assert :lists.sort(fun, [5]) == [5]
     end
 
     test "returns same list when already sorted", %{fun: fun} do
@@ -695,7 +695,7 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       expected_msg = "expected a function, got: :abc"
 
       assert_error BadFunctionError, expected_msg, fn ->
-        :lists.sort(:abc, [1, 2, 3])
+        :lists.sort(:abc, [1, 2])
       end
     end
 
