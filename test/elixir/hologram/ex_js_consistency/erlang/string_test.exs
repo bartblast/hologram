@@ -32,11 +32,7 @@ defmodule Hologram.ExJsConsistency.Erlang.StringTest do
     end
 
     test "empty list" do
-      assert_error FunctionClauseError,
-                   build_function_clause_error_msg(":string.join/2", [[], ~c", "]),
-                   fn ->
-                     :string.join([], ~c", ")
-                   end
+      assert :string.join([], ~c", ") == []
     end
 
     test "first argument is not a list" do

@@ -17,11 +17,9 @@ const Erlang_String = {
       );
     }
 
-    // Handle empty list case - Erlang's string:join/2 requires non-empty list
+    // Handle empty list case - return empty list
     if (stringList.data.length === 0) {
-      Interpreter.raiseFunctionClauseError(
-        Interpreter.buildFunctionClauseErrorMsg(":string.join/2", arguments),
-      );
+      return Type.list([]);
     }
 
     // Join the strings (charlists) with separator

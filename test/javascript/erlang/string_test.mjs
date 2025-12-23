@@ -78,23 +78,17 @@ describe("Erlang_String", () => {
           charlistFixture("apple and banana and cherry"),
         );
       });
-    });
 
-    describe("error conditions", () => {
       it("empty list", () => {
         const stringList = Type.list([]);
         const separator = charlistFixture(", ");
+        const result = Erlang_String["join/2"](stringList, separator);
 
-        assertBoxedError(
-          () => Erlang_String["join/2"](stringList, separator),
-          "FunctionClauseError",
-          Interpreter.buildFunctionClauseErrorMsg(":string.join/2", [
-            stringList,
-            separator,
-          ]),
-        );
+        assert.deepStrictEqual(result, Type.list([]));
       });
+    });
 
+    describe("error conditions", () => {
       it("first argument is not a list", () => {
         const stringList = Type.atom("not_a_list");
         const separator = charlistFixture(", ");
