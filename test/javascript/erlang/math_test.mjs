@@ -84,7 +84,99 @@ describe("Erlang_Math", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        Interpreter.buildArgumentErrorMsg(1, "not a number")
+      );
+    });
+  });
+
+  describe("log/1", () => {
+    const testedFun = Erlang_Math["log/1"];
+
+    it("returns natural logarithm of positive integer one", () => {
+      const result = testedFun(Type.integer(1));
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("returns natural logarithm of positive float one", () => {
+      const result = testedFun(Type.float(1.0));
+
+      assert.deepStrictEqual(result, Type.float(0.0));
+    });
+
+    it("returns natural logarithm of e (approximately 1.0)", () => {
+      const result = testedFun(Type.float(2.718281828459045));
+
+      assert.ok(Math.abs(result.value - 1.0) < 0.0000001);
+    });
+
+    it("returns natural logarithm of positive integer", () => {
+      const result = testedFun(Type.integer(10));
+
+      assert.ok(result.value > 2.0 && result.value < 2.5);
+    });
+
+    it("returns natural logarithm of positive float", () => {
+      const result = testedFun(Type.float(10.5));
+
+      assert.ok(result.value > 2.3 && result.value < 2.4);
+    });
+
+    it("returns natural logarithm of large positive integer", () => {
+      const result = testedFun(Type.integer(100));
+
+      assert.ok(result.value > 4.6 && result.value < 4.7);
+    });
+
+    it("returns natural logarithm of large positive float", () => {
+      const result = testedFun(Type.float(100.0));
+
+      assert.ok(result.value > 4.6 && result.value < 4.7);
+    });
+
+    it("returns natural logarithm of small positive float", () => {
+      const result = testedFun(Type.float(0.5));
+
+      assert.ok(result.value < 0 && result.value > -1);
+    });
+
+    it("raises ArgumentError if the argument is not a number", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number")
+      );
+    });
+
+    it("raises ArithmeticError for zero integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(0)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression"
+      );
+    });
+
+    it("raises ArithmeticError for zero float", () => {
+      assertBoxedError(
+        () => testedFun(Type.float(0.0)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression"
+      );
+    });
+
+    it("raises ArithmeticError for negative integer", () => {
+      assertBoxedError(
+        () => testedFun(Type.integer(-1)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression"
+      );
+    });
+
+    it("raises ArithmeticError for negative float", () => {
+      assertBoxedError(
+        () => testedFun(Type.float(-1.0)),
+        "ArithmeticError",
+        "bad argument in arithmetic expression"
       );
     });
   });
@@ -168,7 +260,7 @@ describe("Erlang_Math", () => {
       assertBoxedError(
         () => testedFun(Type.atom("abc"), Type.integer(3)),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+        Interpreter.buildArgumentErrorMsg(1, "not a number")
       );
     });
 
@@ -176,7 +268,7 @@ describe("Erlang_Math", () => {
       assertBoxedError(
         () => testedFun(Type.integer(7), Type.atom("abc")),
         "ArgumentError",
-        Interpreter.buildArgumentErrorMsg(2, "not a number"),
+        Interpreter.buildArgumentErrorMsg(2, "not a number")
       );
     });
 
@@ -184,7 +276,7 @@ describe("Erlang_Math", () => {
       assertBoxedError(
         () => testedFun(Type.integer(-7), Type.float(0.5)),
         "ArithmeticError",
-        "bad argument in arithmetic expression",
+        "bad argument in arithmetic expression"
       );
     });
   });

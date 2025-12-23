@@ -57,6 +57,76 @@ defmodule Hologram.ExJsConsistency.Erlang.MathTest do
     end
   end
 
+  describe "log/1" do
+    test "returns natural logarithm of positive integer one" do
+      assert :math.log(1) == 0.0
+    end
+
+    test "returns natural logarithm of positive float one" do
+      assert :math.log(1.0) == 0.0
+    end
+
+    test "returns natural logarithm of e (approximately 1.0)" do
+      result = :math.log(2.718281828459045)
+      assert abs(result - 1.0) < 0.0000001
+    end
+
+    test "returns natural logarithm of positive integer" do
+      result = :math.log(10)
+      assert result > 2.0 && result < 2.5
+    end
+
+    test "returns natural logarithm of positive float" do
+      result = :math.log(10.5)
+      assert result > 2.3 && result < 2.4
+    end
+
+    test "returns natural logarithm of large positive integer" do
+      result = :math.log(100)
+      assert result > 4.6 && result < 4.7
+    end
+
+    test "returns natural logarithm of large positive float" do
+      result = :math.log(100.0)
+      assert result > 4.6 && result < 4.7
+    end
+
+    test "returns natural logarithm of small positive float" do
+      result = :math.log(0.5)
+      assert result < 0 && result > -1
+    end
+
+    test "raises ArgumentError if the argument is not a number" do
+      assert_error ArgumentError,
+                   build_argument_error_msg(1, "not a number"),
+                   {:math, :log, [:abc]}
+    end
+
+    test "raises ArithmeticError for zero integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression",
+                   {:math, :log, [0]}
+    end
+
+    test "raises ArithmeticError for zero float" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression",
+                   {:math, :log, [0.0]}
+    end
+
+    test "raises ArithmeticError for negative integer" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression",
+                   {:math, :log, [-1]}
+    end
+
+    test "raises ArithmeticError for negative float" do
+      assert_error ArithmeticError,
+                   "bad argument in arithmetic expression",
+                   {:math, :log, [-1.0]}
+    end
+  end
+
   describe "pow/2" do
     test "returns base integer value raised to exponent integer value" do
       assert :math.pow(7, 3) == 343.0
