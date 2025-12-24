@@ -79,15 +79,15 @@ defmodule Hologram.ExJsConsistency.Erlang.BinaryTest do
       assert is_reference(elem(compiled_pattern, 1))
     end
 
-    invalid_pattern_types = %{
+    # Invalid pattern types
+    %{
       "empty binary" => "",
       "empty list" => [],
       :integer => 1,
       :atom => :hello,
       :tuple => {"ab", "cd"}
     }
-
-    Enum.each(invalid_pattern_types, fn {type, pattern} ->
+    |> Enum.each(fn {type, pattern} ->
       quote do
         test "raises ArgumentError when pattern is #{unquote(type)}" do
           assert_raise ArgumentError, fn ->
