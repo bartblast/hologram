@@ -3027,6 +3027,81 @@ describe("Erlang", () => {
     });
   });
 
+  describe("floor/1", () => {
+    const testedFun = Erlang["floor/1"];
+
+    it("rounds positive float with fractional part down", () => {
+      const result = testedFun(Type.float(1.23));
+
+      assert.deepStrictEqual(result, integer1);
+    });
+
+    it("rounds negative float with fractional part down", () => {
+      const result = testedFun(Type.float(-1.23));
+      const expected = Type.integer(-2);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("keeps positive float without fractional part unchanged", () => {
+      const result = testedFun(Type.float(1.0));
+
+      assert.deepStrictEqual(result, integer1);
+    });
+
+    it("keeps negative float without fractional part unchanged", () => {
+      const result = testedFun(Type.float(-1.0));
+      const expected = Type.integer(-1);
+
+      assert.deepStrictEqual(result, expected);
+    });
+
+    it("keeps signed negative zero float unchanged", () => {
+      const result = testedFun(Type.float(-0.0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("keeps signed positive zero float unchanged", () => {
+      const result = testedFun(Type.float(+0.0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("keeps unsigned zero float unchanged", () => {
+      const result = testedFun(Type.float(0.0));
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("keeps positive integer unchanged", () => {
+      const result = testedFun(integer1);
+
+      assert.deepStrictEqual(result, integer1);
+    });
+
+    it("keeps negative integer unchanged", () => {
+      const integer = Type.integer(-1);
+      const result = testedFun(integer);
+
+      assert.deepStrictEqual(result, integer);
+    });
+
+    it("keeps zero integer unchanged", () => {
+      const result = testedFun(integer0);
+
+      assert.deepStrictEqual(result, integer0);
+    });
+
+    it("raises ArgumentError if the argument is not a number", () => {
+      assertBoxedError(
+        () => testedFun(Type.atom("abc")),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(1, "not a number"),
+      );
+    });
+  });
+
   describe("hd/1", () => {
     const hd = Erlang["hd/1"];
 
