@@ -569,6 +569,10 @@ export default class Interpreter {
   }
 
   static isEqual(left, right) {
+    if (left === null || right === null) {
+      return left === right;
+    }
+
     if (Type.isNumber(left)) {
       if (Type.isNumber(right)) {
         return left.value == right.value;
