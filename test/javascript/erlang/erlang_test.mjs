@@ -3162,6 +3162,17 @@ describe("Erlang", () => {
       assert.deepStrictEqual(result, expected);
     });
 
+    it(":decimals format - decimals > 100 (manual padding)", () => {
+      const opts = Type.list([
+        Type.tuple([Type.atom("decimals"), Type.integer(150)]),
+      ]);
+      const result = float_to_binary(Type.float(1.5), opts);
+      // Should be "1.5" followed by 149 zeros
+      const expected = Type.bitstring("1.5" + "0".repeat(149));
+
+      assert.deepStrictEqual(result, expected);
+    });
+
     it("compact :decimals format - input > 1", () => {
       const x = Type.float(7.12);
       const opts1 = Type.list([

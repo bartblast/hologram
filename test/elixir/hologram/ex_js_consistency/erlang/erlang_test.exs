@@ -2188,6 +2188,12 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       assert :erlang.float_to_binary(-0.0, [{:decimals, 4}]) == "-0.0000"
     end
 
+    test ":decimals format - decimals > 100 (manual padding)" do
+      result = :erlang.float_to_binary(1.5, [{:decimals, 150}])
+      expected = "1.5" <> String.duplicate("0", 149)
+      assert result == expected
+    end
+
     test "compact :decimals format - input > 1" do
       x = 7.12
       expected = "7.12"

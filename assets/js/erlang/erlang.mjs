@@ -755,7 +755,16 @@ const Erlang = {
         }
       }
     } else if (decimals !== null) {
-      result = float.value.toFixed(decimals);
+      // JavaScript's toFixed() has a limit of 100, but Erlang allows up to 253.
+      // For values > 100, we use toFixed(100) and manually pad with zeros.
+      if (decimals > 100) {
+        result = float.value.toFixed(100);
+        // Add the remaining zeros needed
+        const additionalZeros = decimals - 100;
+        result = result + "0".repeat(additionalZeros);
+      } else {
+        result = float.value.toFixed(decimals);
+      }
       if (isCompact && decimals > 0) {
         result = result.replace(/0+$/, "").replace(/\.$/, ".0");
       }
