@@ -284,6 +284,18 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert :lists.keysort(3, [:a]) === [:a]
     end
 
+    test "sorts the list by the first element of each tuple" do
+      assert :lists.keysort(1, [{:b, 1}, {:a, 2}]) === [{:a, 2}, {:b, 1}]
+    end
+
+    test "sorts the list by the middle element of each tuple" do
+      assert :lists.keysort(2, [{:a, 2, :c}, {:b, 1, :d}]) === [{:b, 1, :d}, {:a, 2, :c}]
+    end
+
+    test "sorts the list by the last element of each tuple" do
+      assert :lists.keysort(2, [{:a, 2}, {:b, 1}]) === [{:b, 1}, {:a, 2}]
+    end
+
     test "raises FunctionClauseError if the first argument is not an integer" do
       assert_error FunctionClauseError,
                    build_function_clause_error_msg(":lists.keysort/2", [:a, []]),
@@ -327,10 +339,6 @@ defmodule Hologram.ExJsConsistency.Erlang.ListsTest do
       assert_error ArgumentError,
                    build_argument_error_msg(2, "not a tuple"),
                    fn -> :lists.keysort(1, [1, 2 | 3]) end
-    end
-
-    test "sorts the list by the n-th element of each tuple" do
-      assert :lists.keysort(2, [{:b, 2}, {:a, 1}]) === [{:a, 1}, {:b, 2}]
     end
 
     test "raises ArgumentError if an element of the list is not a tuple" do
