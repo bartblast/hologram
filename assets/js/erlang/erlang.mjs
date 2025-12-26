@@ -712,12 +712,14 @@ const Erlang = {
         if (
           Interpreter.isStrictlyEqual(key, Type.atom("decimals")) &&
           Type.isInteger(value) &&
-          value.value >= 0n
+          value.value >= 0n &&
+          value.value <= 253n
         ) {
           decimals = Number(value.value);
         } else if (
           Interpreter.isStrictlyEqual(key, Type.atom("scientific")) &&
-          Type.isInteger(value)
+          Type.isInteger(value) &&
+          value.value <= 249n
         ) {
           scientific = Number(value.value);
         } else {
@@ -771,6 +773,13 @@ const Erlang = {
     // JavaScript's toString/toFixed/toExponential lose the sign of -0, so we restore it
     if (isNegativeZero && !result.startsWith("-")) {
       result = "-" + result;
+    }
+
+    // Erlang enforces a 256-byte buffer limit for the result
+    if (result.length > 256) {
+      Interpreter.raiseArgumentError(
+        Interpreter.buildArgumentErrorMsg(1, "float value out of range"),
+      );
     }
 
     return Type.bitstring(result);

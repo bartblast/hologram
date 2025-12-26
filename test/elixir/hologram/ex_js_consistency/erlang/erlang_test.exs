@@ -2124,6 +2124,18 @@ defmodule Hologram.ExJsConsistency.Erlang.ErlangTest do
       end
     end
 
+    test "raises ArgumentError if decimals option is greater than 253" do
+      assert_error ArgumentError, build_argument_error_msg(2, "invalid option in list"), fn ->
+        :erlang.float_to_binary(7.12, [{:decimals, 254}])
+      end
+    end
+
+    test "raises ArgumentError if scientific option is greater than 249" do
+      assert_error ArgumentError, build_argument_error_msg(2, "invalid option in list"), fn ->
+        :erlang.float_to_binary(7.12, [{:scientific, 250}])
+      end
+    end
+
     test "default format - input > 1" do
       assert :erlang.float_to_binary(7000.12, []) == "7.00011999999999989086e+03"
     end

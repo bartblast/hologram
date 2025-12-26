@@ -3024,6 +3024,30 @@ describe("Erlang", () => {
       );
     });
 
+    it("raises ArgumentError if decimals option is greater than 253", () => {
+      const opts = Type.list([
+        Type.tuple([Type.atom("decimals"), Type.integer(254)]),
+      ]);
+
+      assertBoxedError(
+        () => float_to_binary(Type.float(7.12), opts),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+      );
+    });
+
+    it("raises ArgumentError if scientific option is greater than 249", () => {
+      const opts = Type.list([
+        Type.tuple([Type.atom("scientific"), Type.integer(250)]),
+      ]);
+
+      assertBoxedError(
+        () => float_to_binary(Type.float(7.12), opts),
+        "ArgumentError",
+        Interpreter.buildArgumentErrorMsg(2, "invalid option in list"),
+      );
+    });
+
     it("default format - input > 1", () => {
       const opts = Type.list([]);
       const result = float_to_binary(Type.float(7000.12), opts);
