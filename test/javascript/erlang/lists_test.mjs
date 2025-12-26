@@ -526,6 +526,26 @@ describe("Erlang_Lists", () => {
   describe("keysort/2", () => {
     const keysort = Erlang_Lists["keysort/2"];
 
+    it("returns the empty list if the input is the empty list", () => {
+      const result = keysort(Type.integer(3), emptyList);
+
+      assert.deepStrictEqual(result, emptyList);
+    });
+
+    it("returns the unchanged one-element list even if the index is out of range of the tuple", () => {
+      const input = Type.list([Type.tuple([Type.atom("a")])]);
+      const result = keysort(Type.integer(3), input);
+
+      assert.deepStrictEqual(result, input);
+    });
+
+    it("returns the unchanged one-element list even if the element is not a tuple", () => {
+      const input = Type.list([Type.atom("a")]);
+      const result = keysort(Type.integer(3), input);
+
+      assert.deepStrictEqual(result, input);
+    });
+
     it("raises FunctionClauseError if the first argument is not an integer", () => {
       assertBoxedError(
         () => keysort(Type.atom("a"), emptyList),
@@ -548,27 +568,7 @@ describe("Erlang_Lists", () => {
       );
     });
 
-    it("returns the empty list if the input is the empty list", () => {
-      const result = keysort(Type.integer(3), emptyList);
-
-      assert.deepStrictEqual(result, emptyList);
-    });
-
-    it("returns the unchanged one-element list even if the index is out of range of the tuple", () => {
-      const input = Type.list([Type.tuple([Type.atom("a")])]);
-      const result = keysort(Type.integer(3), input);
-
-      assert.deepStrictEqual(result, input);
-    });
-
-    it("returns the unchanged one-element list even if the element is not a tuple", () => {
-      const input = Type.list([Type.atom("a")]);
-      const result = keysort(Type.integer(3), input);
-
-      assert.deepStrictEqual(result, input);
-    });
-
-    it("raises CauseClauseError if the second argument is not a list", () => {
+    it("raises CaseClauseError if the second argument is not a list", () => {
       assertBoxedError(
         () => keysort(Type.integer(1), Type.atom("a")),
         "CaseClauseError",
